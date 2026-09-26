@@ -135,14 +135,14 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   it goes up, so they arrive on Pixelfed where you put them.
 - **Photos and Videos are timelines of their own**, drawn as grids and asked of the
   server rather than filtered out of a page you already have.
-- **Watch** turns the Videos grid into a stack: one video at a time, full height,
-  playing as it comes past and stopping as it goes — the shape somebody arriving from
-  TikTok already knows. The same timeline at the same scope, so the way across changes
-  how the videos are watched and not which ones they are. Muted until you ask, one
-  playing at a time and the rest paused rather than left buffering, and reachable with
-  the arrow keys and the space bar. A heart button likes the video and sends hearts up
-  the edge; a double tap on the video likes it and puts a heart where your finger was
-  (and never takes a like back); `l` does the same from the keyboard.
+- **Shorts**, in the sidebar under Videos, is the same videos as a stack: one at a
+  time, full height, playing as it comes past and stopping as it goes — the shape
+  somebody arriving from TikTok or YouTube Shorts already knows. A switch in the corner
+  picks whose videos: the people you follow, this server, or everywhere. One playing at
+  a time and the rest paused rather than left buffering, and reachable with the arrow
+  keys and the space bar. A heart button likes the video and sends hearts up the edge;
+  a double tap on the video likes it and puts a heart where your finger was (and never
+  takes a like back); `l` does the same from the keyboard.
 ![Videos, including federated PeerTube channels](img/readme/videos.jpg)
 
 - **PeerTube, properly — in both directions.** A PeerTube video arrives with its

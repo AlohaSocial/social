@@ -161,6 +161,7 @@ OC.L10N.register(
     "Activities" : "Aktivitäten",
     "Discover" : "Entdecken",
     "Subscriptions" : "Abonnements",
+    "Shorts" : "Shorts",
     "My profile" : "Mein Profil",
     "Follow requests" : "Folgeanfragen",
     "Bookmarks" : "Lesezeichen",

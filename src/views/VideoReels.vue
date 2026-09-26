@@ -117,14 +117,20 @@
 			</div>
 		</div>
 
-		<NcButton
-			class="reels__close"
-			:aria-label="t('social', 'Back to Videos')"
-			:to="{ name: 'timeline', params: { type: 'videos' } }">
-			<template #icon>
-				<IconClose :size="20" />
-			</template>
-		</NcButton>
+		<!-- whose videos: the three circles the Videos page is read at. Shorts
+		     is its own entry in the sidebar, so this page is where the choice
+		     is made rather than something carried over from the grid -->
+		<nav class="reels__scopes" :aria-label="t('social', 'Whose videos')">
+			<router-link
+				v-for="option in scopes"
+				:key="option.value"
+				class="reels__scope"
+				:class="{ 'reels__scope--current': option.value === scope }"
+				:aria-current="option.value === scope ? 'page' : undefined"
+				:to="{ name: 'reels', query: { scope: option.value } }">
+				{{ option.label }}
+			</router-link>
+		</nav>
 	</div>
 </template>
 
@@ -157,12 +163,12 @@ import { mapStores } from 'pinia'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import IconClose from 'vue-material-design-icons/Close.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
@@ -190,7 +196,6 @@ let heartSerial = 0
 export default {
 	name: 'VideoReels',
 	components: {
-		IconClose,
 		IconHeart,
 		IconHeartOutline,
 		IconRefresh,
@@ -237,7 +242,24 @@ export default {
 	},
 
 	computed: {
-		...mapStores(useTimelineStore),
+		...mapStores(useSettingsStore, useTimelineStore),
+
+		/**
+		 * The circles a reader can watch: the people they follow, this server,
+		 * everywhere. Somebody reading without a session follows nobody, so
+		 * they are offered the other two.
+		 *
+		 * @return {Array<{ value: string, label: string }>}
+		 */
+		scopes() {
+			const all = [
+				{ value: 'home', label: t('social', 'My Feed') },
+				{ value: 'timeline', label: t('social', 'Local') },
+				{ value: 'federated', label: t('social', 'Global') },
+			]
+
+			return this.settingsStore.getServerData?.public ? all.slice(1) : all
+		},
 
 		/**
 		 * One entry per video, not per post: a post with three videos on it is
@@ -652,10 +674,35 @@ export default {
 		color: #fff;
 	}
 
-	&__close {
+	/* top right, over the video, where every short-video app keeps it */
+	&__scopes {
 		position: absolute;
 		inset-block-start: 12px;
 		inset-inline-end: 12px;
+		display: flex;
+		gap: 2px;
+		padding: 3px;
+		border-radius: var(--border-radius-pill, 999px);
+		background: rgba(0, 0, 0, 0.55);
+	}
+
+	&__scope {
+		padding: 4px 12px;
+		border-radius: var(--border-radius-pill, 999px);
+		color: rgba(255, 255, 255, 0.8);
+		font-size: 13px;
+		font-weight: 600;
+		text-decoration: none;
+
+		&--current {
+			background: #fff;
+			color: #000;
+		}
+
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: 2px;
+		}
 	}
 }
 

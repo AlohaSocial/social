@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import VideoReels from '../../../src/views/VideoReels.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
 vi.mock('../../../src/services/logger.js', () => ({
@@ -47,7 +48,7 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 	})
 
 	const wrapper = mount(VideoReels, {
-		global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: true } },
+		global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: RouterLinkStub } },
 	})
 	await flushPromises()
 
@@ -87,7 +88,7 @@ describe('VideoReels', () => {
 
 		mount(VideoReels, {
 			props: { scope: 'federated' },
-			global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: true } },
+			global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: RouterLinkStub } },
 		})
 		await flushPromises()
 
@@ -310,6 +311,7 @@ describe('VideoReels', () => {
 				{ path: '/timeline/:type?', name: 'timeline', component: empty },
 				{ path: '/@:account', name: 'profile', component: empty },
 				{ path: '/@:account/:id', name: 'single-post', component: empty },
+				{ path: '/reels', name: 'reels', component: empty },
 			],
 		})
 		await router.push('/')
@@ -329,7 +331,7 @@ describe('VideoReels', () => {
 		store.fetchTimeline = vi.fn(() => new Promise(() => {}))
 
 		const wrapper = mount(VideoReels, {
-			global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: true } },
+			global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: RouterLinkStub } },
 		})
 		await flushPromises()
 
@@ -454,6 +456,45 @@ describe('VideoReels', () => {
 			await flushPromises()
 
 			expect(store.postLike).toHaveBeenCalledWith({ status: expect.objectContaining({ id: wrapper.vm.reels[0].status.id }) })
+		})
+	})
+
+	/**
+	 * Shorts is its own entry in the sidebar, so the circle of people whose
+	 * videos these are is chosen here rather than carried over from the grid.
+	 */
+	describe('whose videos', () => {
+		const scopeLinks = (wrapper) => wrapper.findAllComponents(RouterLinkStub)
+			.filter((link) => link.classes().includes('reels__scope'))
+
+		it('offers the three circles, and marks the one on screen', async () => {
+			const { wrapper } = await mountReels()
+			await wrapper.setProps({ scope: 'federated' })
+
+			const links = wrapper.findAll('.reels__scope')
+			expect(links.map((link) => link.text())).toEqual(['My Feed', 'Local', 'Global'])
+			expect(links[2].classes()).toContain('reels__scope--current')
+			expect(links[2].attributes('aria-current')).toBe('page')
+		})
+
+		it('offers a reader without a session only the two they can read', async () => {
+			const { wrapper } = await mountReels()
+			useSettingsStore().setServerData({ public: true })
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.findAll('.reels__scope').map((link) => link.text())).toEqual(['Local', 'Global'])
+		})
+
+		it('links each circle to this page at that scope', async () => {
+			const { wrapper } = await mountReels()
+
+			expect(scopeLinks(wrapper).map((link) => link.props('to'))).toEqual([
+				{ name: 'reels', query: { scope: 'home' } },
+				{ name: 'reels', query: { scope: 'timeline' } },
+				{ name: 'reels', query: { scope: 'federated' } },
+			])
+			// the corner used to hold a way back to the Videos grid
+			expect(wrapper.find('.reels__close').exists()).toBe(false)
 		})
 	})
 })

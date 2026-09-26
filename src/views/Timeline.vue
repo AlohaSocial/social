@@ -42,22 +42,6 @@
 				v-if="type === 'tags'"
 				:tag="$route.params.tag"
 				@changed="onHashtagFollowChanged" />
-			<!--
-				The grid is for choosing and the stack is for watching, and
-				which of the two somebody wants is not something the page can
-				answer for them — so Videos, and only Videos, carries the way
-				across. The scope goes with it: leaving the grid for the stack
-				must not quietly change whose videos are in it.
-			-->
-			<NcButton
-				v-if="type === 'videos'"
-				class="timeline-heading-row__watch"
-				:to="{ name: 'reels', query: { scope } }">
-				<template #icon>
-					<IconPlayCircleOutline :size="20" />
-				</template>
-				{{ t('social', 'Watch') }}
-			</NcButton>
 		</div>
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
@@ -125,7 +109,6 @@ import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
-import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.vue'
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
@@ -164,7 +147,6 @@ export default {
 		Announcements,
 		Composer,
 		IconCheckAll,
-		IconPlayCircleOutline,
 		NcButton,
 		FirstPostCelebration,
 		FirstRun,
@@ -693,11 +675,6 @@ export default {
 	justify-content: space-between;
 	gap: calc(var(--default-grid-baseline) * 2);
 	margin-inline-end: calc(var(--default-grid-baseline) * 2);
-}
-
-/* the heading grows to fill the row, so the way across keeps its own width */
-.timeline-heading-row__watch {
-	flex: 0 0 auto;
 }
 
 .timeline-heading {

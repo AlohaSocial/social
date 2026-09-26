@@ -302,6 +302,7 @@ import IconHome from 'vue-material-design-icons/Home.vue'
 import IconCompass from 'vue-material-design-icons/Compass.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultiple.vue'
+import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.vue'
 import IconRss from 'vue-material-design-icons/Rss.vue'
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
@@ -634,6 +635,20 @@ export default {
 						icon: IconPlayBoxMultiple,
 						title: t('social', 'Videos'),
 						to: { name: 'timeline', params: { type: 'videos' } },
+					},
+					// the same videos again, watched one at a time rather than
+					// chosen from a grid. Its own entry under Videos, not a
+					// button on that page: it is where somebody arriving from
+					// TikTok or YouTube Shorts goes first, and a way in that
+					// only shows once you are already on another page is one
+					// most people never find. Offered with Videos, since it is
+					// the same videos.
+					{
+						key: 'social-shorts',
+						offered: this.offers('videos'),
+						icon: IconPlayCircleOutline,
+						title: t('social', 'Shorts'),
+						to: { name: 'reels' },
 					},
 					// the last of the things to read, after the two kind
 					// filters: what this account follows off the fediverse

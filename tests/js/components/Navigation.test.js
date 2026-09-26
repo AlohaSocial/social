@@ -773,10 +773,9 @@ describe('Navigation', () => {
 	/**
 	 * Subscriptions had a client route, a view and a server route, and nothing
 	 * anywhere linked to it — so the only way to the page was typing the
-	 * address. The three routes that arrived together each need a way in, and
-	 * the other two have one: Videos carries a **Watch** button to the reel
-	 * stack, and Migration carries one to the switch wizard. This is the one
-	 * that had none.
+	 * address. The three routes that arrived together each need a way in:
+	 * Subscriptions and the reel stack (as Shorts) have a sidebar entry each,
+	 * and Migration carries a button to the switch wizard.
 	 */
 	it('offers a way to every page that has no other one', () => {
 		const wrapper = mountNavigation()
@@ -785,6 +784,21 @@ describe('Navigation', () => {
 			.map((entry) => entry.to?.name)
 
 		expect(destinations).toContain('subscriptions')
+		expect(destinations).toContain('reels')
+	})
+
+	/**
+	 * Shorts is the Videos timeline watched one at a time, so it is offered
+	 * exactly when Videos is: an instance that turned Videos off has nothing
+	 * for the stack to show.
+	 */
+	it('offers Shorts beside Videos, and not without it', () => {
+		useSettingsStore().setServerData({ public: false, sections: { section_videos: false } })
+		expect(itemNames(mountNavigation())).not.toContain('Shorts')
+	})
+
+	it('lights Shorts on the reel stack and nothing else', () => {
+		expect(activeNames(mountNavigation({}, appRouter.resolve('/reels')))).toEqual(['Shorts'])
 	})
 
 	it('lists the fixed entries in order, without an errors entry when there are none', () => {
@@ -792,6 +806,7 @@ describe('Navigation', () => {
 			'My Feed',
 			'Photos',
 			'Videos',
+			'Shorts',
 			'Subscriptions',
 			'Direct messages',
 			'Discover',
@@ -832,6 +847,7 @@ describe('Navigation', () => {
 			'My Feed',
 			'Photos',
 			'Videos',
+			'Shorts',
 			'Subscriptions',
 			'Direct messages',
 			'Discover',
