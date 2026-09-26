@@ -3760,6 +3760,49 @@ class ApiControllerTest extends TestCase {
 	}
 
 	/**
+	 * A cover for a video arrives as `thumbnail`, the field Mastodon's API
+	 * names, and is handed to the store once the video is in it.
+	 */
+	public function testMediaNewHandsACoverToTheStore(): void {
+		$this->loggedInAs();
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example');
+		$saved = null;
+		$tmpSeen = null;
+		$this->expectDocumentSaved($saved, $tmpSeen);
+		$this->instanceService->method('maxVideoUploadSize')->willReturn(2048 * 1048576);
+		$video = tempnam(sys_get_temp_dir(), 'social-itest');
+		$cover = tempnam(sys_get_temp_dir(), 'social-itest');
+		$this->tempFiles[] = $video;
+		$this->tempFiles[] = $cover;
+		$_FILES['file'] = ['tmp_name' => $video, 'size' => 10, 'type' => 'video/mp4', 'error' => UPLOAD_ERR_OK, 'name' => 'short.mp4'];
+		$_FILES['thumbnail'] = ['tmp_name' => $cover, 'size' => 10, 'type' => 'image/jpeg', 'error' => UPLOAD_ERR_OK];
+
+		$this->cacheDocumentService->expects($this->once())
+			->method('applyCustomPoster')
+			->with($this->isInstanceOf(Document::class), $cover);
+
+		$response = $this->controller()->mediaNew();
+		unset($_FILES['thumbnail']);
+		$this->assertSame(Http::STATUS_OK, $response->getStatus(), json_encode($response->getData()));
+	}
+
+	public function testMediaNewWithoutACoverKeepsThePosterItMade(): void {
+		$this->loggedInAs();
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example');
+		$saved = null;
+		$tmpSeen = null;
+		$this->expectDocumentSaved($saved, $tmpSeen);
+		$this->instanceService->method('maxVideoUploadSize')->willReturn(2048 * 1048576);
+		$video = tempnam(sys_get_temp_dir(), 'social-itest');
+		$this->tempFiles[] = $video;
+		$_FILES['file'] = ['tmp_name' => $video, 'size' => 10, 'type' => 'video/mp4', 'error' => UPLOAD_ERR_OK, 'name' => 'short.mp4'];
+
+		$this->cacheDocumentService->expects($this->never())->method('applyCustomPoster');
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->mediaNew()->getStatus());
+	}
+
+	/**
 	 * Mastodon sends the banner as `header` on this route, and it used to be
 	 * accepted with a 200 and dropped — so changing it in a client appeared to
 	 * work and did nothing.

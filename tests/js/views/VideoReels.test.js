@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import VideoReels from '../../../src/views/VideoReels.vue'
-import eventBus, { COMPOSE_WITH_FILES } from '../../../src/services/eventBus.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
@@ -49,7 +48,15 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 	})
 
 	const wrapper = mount(VideoReels, {
-		global: { plugins: [pinia], stubs: { NcButton: true, RouterLink: RouterLinkStub } },
+		global: { plugins: [pinia], stubs: {
+			NcButton: true,
+			RouterLink: RouterLinkStub,
+			ShortComposerDialog: {
+				props: ['open'],
+				emits: ['update:open', 'posted'],
+				template: '<div class="short-stub" :data-open="String(open)" @click="$emit(\'posted\')" />',
+			},
+		} },
 	})
 	await flushPromises()
 
@@ -223,21 +230,21 @@ describe('VideoReels', () => {
 		expect(wrapper.findAll('video')[0].element.muted).toBe(false)
 	})
 
-	/** a new short: the picked video goes to the New post dialog the sidebar owns */
-	it('hands a picked video to the New post dialog', async () => {
-		const { wrapper } = await mountReels()
-		const heard = vi.fn()
-		eventBus.on(COMPOSE_WITH_FILES, heard)
-		const clip = new File(['v'], 'short.mp4', { type: 'video/mp4' })
-		const input = wrapper.find('input[type="file"]')
-		Object.defineProperty(input.element, 'files', { value: [clip], configurable: true })
-
-		await input.trigger('change')
-		eventBus.off(COMPOSE_WITH_FILES, heard)
-
+	/** a new short: the + opens the dialog made for one, and a posted short refreshes the stack */
+	it('opens the New short dialog, and reloads once a short is posted', async () => {
+		const { wrapper, store } = await mountReels()
+		const stub = () => wrapper.find('.short-stub')
+		expect(stub().attributes('data-open')).toBe('false')
 		expect(wrapper.find('.reels__create').attributes('aria-label')).toBe('New short')
-		expect(input.attributes('accept')).toContain('video/')
-		expect(heard).toHaveBeenCalledWith([clip])
+
+		await wrapper.find('.reels__create').trigger('click')
+		expect(stub().attributes('data-open')).toBe('true')
+		expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled()
+
+		const before = store.fetchTimeline.mock.calls.length
+		await stub().trigger('click')
+		await flushPromises()
+		expect(store.fetchTimeline.mock.calls.length).toBeGreaterThan(before)
 	})
 
 	/** A stack is reachable from a keyboard or it is reachable by nobody using one. */

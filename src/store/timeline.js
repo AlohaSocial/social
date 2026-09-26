@@ -702,15 +702,20 @@ export const useTimelineStore = defineStore('timeline', {
 		/**
 		 * Uploads one attachment.
 		 *
-		 * @param {File|{file: File, onProgress?: (fraction: number) => void}} payload the file, or `{file, onProgress}`
+		 * @param {File|{file: File, onProgress?: (fraction: number) => void, thumbnail?: Blob|null}} payload the file, or `{file, onProgress, thumbnail}`, the thumbnail being a chosen cover for a video
 		 * @return {Promise<object|undefined>} the media entity, or undefined when the server refused
 		 */
 		async createMedia(payload) {
 			const file = payload instanceof File ? payload : payload.file
 			const onProgress = payload instanceof File ? undefined : payload.onProgress
+			// a cover for a video, sent as Mastodon names it
+			const thumbnail = payload instanceof File ? null : (payload.thumbnail ?? null)
 			try {
 				const formData = new FormData()
 				formData.append('file', file)
+				if (thumbnail instanceof Blob) {
+					formData.append('thumbnail', thumbnail, 'cover.jpg')
+				}
 				const { data } = await axios.post(
 					generateUrl('apps/social/api/v1/media'),
 					formData,

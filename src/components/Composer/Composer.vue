@@ -731,16 +731,6 @@ export default {
 		},
 
 		/**
-		 * Files already chosen somewhere else -- a video picked on the Shorts
-		 * page -- to attach the moment the composer opens, as if they had been
-		 * dropped on it.
-		 */
-		initialFiles: {
-			type: Array,
-			default: () => [],
-		},
-
-		/**
 		 * Where floating-vue teleports the emoji picker popper. The inline
 		 * composer keeps it in the themed app root (`#content`): inside the
 		 * toolbar row (`.options`, `max-height` + `overflow: hidden`) an
@@ -1358,13 +1348,6 @@ export default {
 		if (paths.length > 0) {
 			this.expand()
 			this.attachPaths(paths)
-		}
-
-		// and a video picked on the Shorts page, likewise
-		const files = this.initialFiles.filter((file) => file instanceof File)
-		if (files.length > 0) {
-			this.expand()
-			this.attachFiles(files)
 		}
 
 		// a click anywhere else closes it again, which focusout cannot do on its

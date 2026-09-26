@@ -141,8 +141,15 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   picks whose videos: the people you follow, this server, or everywhere. It plays with
   sound, or muted with a "Tap for sound" hint when the browser will not start with it,
   one video at a time with the rest paused rather than left buffering, and reachable
-  with the arrow keys and the space bar. A **+** picks a video and opens New post with
-  it attached, to post a short of your own. A heart button likes the video and sends hearts up the edge;
+  with the arrow keys and the space bar. The **+** opens a composer made for a short:
+  upload a video, drop one on it, or record one with the camera (a 3-2-1 countdown,
+  front or back camera, 15 s, 60 s or 3 min; browsers offer the camera over https
+  only). Then trim it with two handles over a
+  strip of stills, pick the frame people see before it plays as its cover, write a
+  caption with one-press trending hashtags, choose who can watch and whether it is
+  sensitive, and post, with progress while it is cut, uploaded and published. The
+  trimming happens in the browser, so what goes up is what you watched; a browser
+  that cannot cut a video posts the whole one and says so. A heart button likes the video and sends hearts up the edge;
   a double tap on the video likes it and puts a heart where your finger was (and never
   takes a like back); `l` does the same from the keyboard.
 ![Videos, including federated PeerTube channels](img/readme/videos.jpg)

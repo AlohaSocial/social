@@ -118,6 +118,15 @@ class CacheDocumentServiceTest extends TestCase {
 		return $this->domainQuota;
 	}
 
+	/** A real temporary file holding the given bytes, removed after the test. */
+	private function tempFile(string $content): string {
+		$path = tempnam(sys_get_temp_dir(), 'social-test-');
+		file_put_contents($path, $content);
+		$this->tempFiles[] = $path;
+
+		return $path;
+	}
+
 	/** A small real PNG, so mime detection and the resizer see a genuine image. */
 	private function pngBytes(int $width = 16, int $height = 10): string {
 		$image = imagecreatetruecolor($width, $height);
@@ -508,6 +517,49 @@ class CacheDocumentServiceTest extends TestCase {
 		} finally {
 			unlink($tmp);
 		}
+	}
+
+	/**
+	 * A cover the uploader chose -- Mastodon's `thumbnail`, and a short's
+	 * cover frame -- replaces the frame ffmpeg picked. It is decoded and
+	 * written out again as a JPEG, so nothing in the original survives, and
+	 * the poster it replaces is removed.
+	 */
+	public function testAChosenCoverReplacesAVideosPoster(): void {
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->expects($this->once())->method('generateBlurHash')->willReturn('LEHV6nWB2yk8pyo0adR*.7kCMdnj');
+		$cover = $this->tempFile($this->pngBytes(40, 70));
+		$document = new Document();
+		$document->setMediaType('video/mp4');
+		$document->setLocalCopy('stored-video-uuid');
+		$document->setResizedCopy('');
+
+		$this->assertTrue($this->service->applyCustomPoster($document, $cover));
+
+		$this->assertMatchesRegularExpression(self::UUID_PATTERN, $document->getResizedCopy());
+		$stored = array_merge(...array_values($written))[$document->getResizedCopy()];
+		$this->assertStringStartsWith("\xFF\xD8", $stored, 'written out again as a JPEG');
+		$this->assertSame([40, 70], $document->getResizedCopySize());
+		$this->assertSame('LEHV6nWB2yk8pyo0adR*.7kCMdnj', $document->getBlurHash());
+	}
+
+	public function testACoverIsOnlyForAVideo(): void {
+		$document = new Document();
+		$document->setMediaType('image/png');
+
+		$this->assertFalse($this->service->applyCustomPoster($document, $this->tempFile($this->pngBytes())));
+		$this->assertSame('', $document->getResizedCopy());
+	}
+
+	/** a cover that is not a picture costs the cover, never the upload */
+	public function testACoverThatIsNotAPictureIsIgnored(): void {
+		$document = new Document();
+		$document->setMediaType('video/mp4');
+		$document->setResizedCopy('ffmpeg-poster');
+
+		$this->assertFalse($this->service->applyCustomPoster($document, $this->tempFile('<?php echo 1;')));
+		$this->assertSame('ffmpeg-poster', $document->getResizedCopy());
 	}
 
 	/**

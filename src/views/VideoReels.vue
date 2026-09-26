@@ -121,29 +121,20 @@
 			</div>
 		</div>
 
-		<!-- whose videos: the three circles the Videos page is read at. Shorts
-		     is its own entry in the sidebar, so this page is where the choice
-		     is made rather than something carried over from the grid -->
-		<!-- a new short: pick a video and the New post dialog opens with it
-		     attached. The input stays out of the tab order; the button is the
-		     control a keyboard and a screen reader reach. -->
-		<input
-			ref="upload"
-			type="file"
-			accept="video/mp4,video/webm,video/quicktime,video/*"
-			class="hidden-visually"
-			tabindex="-1"
-			aria-hidden="true"
-			@change="chooseShort">
+		<!-- a new short: its own dialog, made for a video -->
 		<button
 			type="button"
 			class="reels__create"
 			:title="t('social', 'New short')"
 			:aria-label="t('social', 'New short')"
-			@click="pickShort">
+			@click="startShort">
 			<IconPlus :size="24" />
 		</button>
+		<ShortComposerDialog v-model:open="composing" @posted="open" />
 
+		<!-- whose videos: the three circles the Videos page is read at. Shorts
+		     is its own entry in the sidebar, so this page is where the choice
+		     is made rather than something carried over from the grid -->
 		<nav class="reels__scopes" :aria-label="t('social', 'Whose videos')">
 			<router-link
 				v-for="option in scopes"
@@ -202,7 +193,7 @@ import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
-import eventBus, { COMPOSE_WITH_FILES } from '../services/eventBus.js'
+import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 
 /** How close to the end the reader gets before the next page is asked for. */
 const LOOK_AHEAD = 3
@@ -233,6 +224,7 @@ export default {
 		IconVolumeOff,
 		NcButton,
 		NcLoadingIcon,
+		ShortComposerDialog,
 	},
 
 	props: {
@@ -251,6 +243,8 @@ export default {
 	data() {
 		return {
 			muted: false,
+			/** the New short dialog is open */
+			composing: false,
 			/** the browser refused to start with sound, so it was muted for it */
 			soundHeld: false,
 			playing: 0,
@@ -578,26 +572,10 @@ export default {
 			}, HEART_MS + delay)
 		},
 
-		/** Opens the file chooser behind the + button. */
-		pickShort() {
-			const input = /** @type {HTMLInputElement|undefined} */ (this.$refs.upload)
-			input?.click()
-		},
-
-		/**
-		 * A video picked for a new short goes to the New post dialog, which the
-		 * sidebar owns; once it is posted the stack refreshes like any timeline.
-		 *
-		 * @param {Event} event the file input's change
-		 */
-		chooseShort(event) {
-			const input = /** @type {HTMLInputElement} */ (event.target)
-			const files = [...(input?.files ?? [])]
-			// picking the same file twice in a row would otherwise do nothing
-			input.value = ''
-			if (files.length > 0) {
-				eventBus.emit(COMPOSE_WITH_FILES, files)
-			}
+		/** Opens the New short dialog, with the stack paused behind it. */
+		startShort() {
+			this.videos[this.playing]?.pause?.()
+			this.composing = true
 		},
 
 		togglePlay(index) {

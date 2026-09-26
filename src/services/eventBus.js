@@ -50,11 +50,3 @@ export const NOTIFICATIONS_READ = 'social:notifications-read'
  * about it here, so a list that is gone stops listening with its component.
  */
 export const TIMELINE_PUSHED = 'social:timeline-pushed'
-
-/**
- * Somebody chose files to post from a page that has no composer of its own --
- * the Shorts stack, where the + button picks a video. The sidebar owns the New
- * post dialog, so it opens it with the files already attached. The payload is
- * the `File`s.
- */
-export const COMPOSE_WITH_FILES = 'social:compose-with-files'
