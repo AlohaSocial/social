@@ -81,6 +81,7 @@ function rememberCelebrated() {
  * @property {string} searchQuery what is being searched for
  * @property {boolean} firstPostCelebration whether the celebration is on screen
  * @property {boolean} firstPostCelebrated whether this session has celebrated already
+ * @property {string} arrivedId the post this reader has just published, while it makes its entrance
  */
 
 /**
@@ -197,6 +198,11 @@ export const useTimelineStore = defineStore('timeline', {
 		 * when the browser refuses to remember anything
 		 */
 		firstPostCelebrated: false,
+		/**
+		 * The post this reader has just published, for the moment it takes to
+		 * make its entrance at the top of the timeline; '' the rest of the time.
+		 */
+		arrivedId: '',
 	}),
 
 	getters: {
@@ -426,6 +432,22 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 		setSearchQuery(query) {
 			this.searchQuery = query
+		},
+		/**
+		 * Marks a post as the one just published, and unmarks it once its
+		 * entrance is over -- so a timeline that is reloaded a minute later
+		 * does not play it a second time.
+		 *
+		 * @param {string} id the new post's id
+		 * @param {number} [lasts] how long the entrance runs, in milliseconds
+		 */
+		markArrived(id, lasts = 2400) {
+			this.arrivedId = String(id ?? '')
+			window.setTimeout(() => {
+				if (this.arrivedId === String(id ?? '')) {
+					this.arrivedId = ''
+				}
+			}, lasts)
 		},
 		startFirstPostCelebration() {
 			this.firstPostCelebration = true

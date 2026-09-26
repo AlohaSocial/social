@@ -92,6 +92,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import { translate } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
+import { feel } from '../services/senses.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useAccount } from '../composables/useAccount.js'
@@ -225,6 +226,7 @@ export default {
 				// which is the only signal this component gets
 				if (this.relationship?.following || this.relationship?.requested) {
 					this.celebrate()
+					feel('follow')
 				} else {
 					this.refuse()
 				}

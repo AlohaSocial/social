@@ -28,7 +28,7 @@ Nextcloud Social is a federated social networking app built on the W3C ActivityP
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.77
+**App version:** 0.26.78
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1716,6 +1716,50 @@ description in an `alt` attribute and nowhere else.
 **The foot of a card** is one row: the reactions somebody left at the near end, the counts and their controls at the far one, wrapping to a second line only when a post has collected enough reactions to need it. It was two rows while the second was revealed by the pointer and had to live in the card's bottom padding, which cost every card in the timeline the height of both.
 
 **The action row.** How many replies, boosts and likes a post has is a fact *about the post*, so it is always drawn — as type: no button, no border, no surface, the glyphs dimmed to a hairline and the whole row out of the tab order's way until it is wanted. What arrives on hover (and on `:focus-within`, which is the entire keyboard path) is the **controls**: a pill fades in *behind* the row at the size the row already occupies, the glyphs come up to full, and the overflow menu appears. **Nothing moves** — no track widens, no digit shifts, so a pointer is never chasing a button that is still travelling, and a reader scanning a timeline can see which posts landed without pointing at each one in turn. The surface is a `::before` rather than the row's own background, border and shadow, so the whole thing arrives as one `opacity` — one compositor property on a page that can be showing a hundred of these — and it leaves in 100ms flat, because a pointer crossing four cards on its way somewhere else must not leave four pills fading behind it. The one thing lit at rest is a like or a boost this reader has already given (`[aria-pressed="true"]`), which is state rather than chrome. Touch gets none of it: the `@media (hover: none)` block turns the row back into a row with everything visible, since no pointer will ever arrive to reveal anything.
+
+**Sound and touch.** `src/services/senses.js` is the one place that makes a
+sound or vibrates: `play(moment)`, `buzz(moment)`, and `feel(moment)` for both,
+over a fixed list of moments (`like`, `boost`, `react`, `post`, `follow`, `dm`,
+`heart`, `roll`). The sounds are synthesised with the Web Audio API — a few
+oscillators and an envelope each, a band-passed noise sweep for `post` — so
+nothing is downloaded or decoded, and one `AudioContext` is made on the first
+press, which is the only moment a browser lets one start. The two switches are
+per device and per account in `localStorage` (`userKey()`), not on the server:
+sound is off until turned on, vibration on unless turned off (the app vibrated
+on a like before the switch existed), and `buzz()` also answers
+`prefers-reduced-motion`. The DM chime rides on
+`fetchUnreadDirectMessages()`: it sounds when the count rises, never for the
+first count a page reads. `SensesSettings.vue` is the Settings section.
+
+**Words and stickers drawn to a picture.** `src/utils/textCard.js` draws a text
+card (a story at 1080×1920, a post at 1080×1080) and bakes stickers into a
+picture, on a canvas, and hands back a `File` that goes up through the ordinary
+`/api/v1/media` like any attachment. So nothing new federates: a Mastodon or
+Pixelfed reader gets a picture. The words travel as the picture's description
+(and, for a card post, in the post itself). `wrapLines()` and `fitText()` are
+the layout, kept pure for the tests; the drawing returns `null`, or the original
+file for stickers, where a browser cannot draw, and the caller says so rather
+than posting something other than what was on screen.
+
+**The games.** `src/utils/composerCommands.js` resolves `/dice [n]`, `/roll`,
+`/flip` and `/pick a, b` in `Composer::createPost()` before anything is sent, so
+the result is plain text in the post and cannot be re-rolled. A command is one
+only at the start of a line or after a space (a URL containing `/dice` is left
+alone), and only `/pick` runs to the end of its line. The tumble the writer sees
+is `tumble()` on a timer; the result was decided before it started.
+
+**Arrivals.** `timelineStore.markArrived(id)` names the post this reader has just
+published for 2.4 seconds; `TimelinePost` plays `post-arrive` and a ring in the
+author's hue while it matches, so a reload afterwards does not replay it.
+
+**The constellation.** `src/utils/constellation.js` is a small force layout in a
+unit square — repulsion softened so two nodes on one spot part gently, springs
+along the ties, a pull to the middle, a speed cap, and a node that meets an edge
+stops there so the whole thing comes to rest. `FollowConstellation.vue` draws it
+(an async chunk, `constellation`, so the Discover page does not carry it until
+**Constellation** is pressed) with a star per suggestion as a real button whose
+label says who and why; `prefers-reduced-motion` gets `settle()` at once instead
+of the animation.
 
 **Phone layout.** One breakpoint, 600px, stated twice on purpose: as `PHONE_WIDTH` in `src/services/phone.js` (a shared `matchMedia` query with `isPhone()` and `onPhoneChange()`) and as the `@media (max-width: 600px)` rule in the stylesheets that lay themselves out differently on a phone — `TimelineEntry.vue` (the avatar column goes; the face, 36px, sits inside the card over the corner `.post-header` leaves for it, which is why `TimelineAvatar` takes a `size`), `TimelinePost.vue` (less padding), `TimelineSinglePost.vue` (the 64px the fine print and the spine kept for the avatar column), and `Composer.vue` (the toolbar wraps, the visibility menu is icon-only, Post keeps the end of its row). Nextcloud's own mobile breakpoint, 1024px, is where the sidebar collapses; the only rule at that width is `Timeline.vue`'s, which starts the page's first element below the sidebar toggle. A tablet in portrait is between the two and keeps the avatar column.
 

@@ -30,7 +30,11 @@ What it does:
 - 🗂️ Collections, stories and places
 - 📱 Pixelfed's own routes — the config its app reads on launch, discover, the story carousel, collections, mutuals, reports, direct-message threads, push (honestly off) and its admin screens — so its app finds what it looks for once the API is at the domain root
 - 🖼️ Stories, collections and places in the web app: a row of faces above your feed with a player and a way to post one; albums as the fourth tab of a profile, each a page of its posts; a pin in the composer that says where a picture was taken, and a page for every place — with nothing ever sent to a map service
-- 🧭 A Discover page: who to follow, with starter packs you can follow in one go
+- 🧭 A Discover page: who to follow, with starter packs you can follow in one go, and the people your follows follow drawn as a constellation you can drag around and follow from
+- 🎲 A composer that plays: /dice, /flip and /pick are rolled when the post goes out and sent as plain text, a short post can go out as a card drawn on colour, and a new post makes an entrance at the top of the timeline
+- ✨ Text stories on a coloured card, and stickers dragged onto a picture story — both drawn into the picture, so they arrive elsewhere as you made them
+- ❤️ Hearts on the video stack: a like button, and double tap to like with a heart where your finger was
+- 🔊 Sound and touch, per device: a tick on a like, a chime for a direct message, a tap in the hand on a phone. Sound is off until you turn it on
 - 📤 Share to Social from the Files app: pick pictures or videos there and the composer opens with them attached
 - 👥 Lists, and the Nextcloud groups an administrator chooses as lists of their own — kept in step with the group automatically; you make, rename, delete and fill your own in Settings
 - ⚙️ Account settings: the name you publish under, whether people ask before they follow you, whether other servers may suggest you and index your public posts, and the audience every new post starts with
@@ -60,7 +64,7 @@ What it does:
 - 🛡️ For moderators: what may trend (a hashtag, a link or a post kept out of Explore), the instance's custom emoji and its rules, all from the administration page rather than from occ
 
 You can pin your own posts to the top of your profile, bookmark any post, and see which hashtags the instance is using most. This is a partial implementation of ActivityPub and of the Mastodon client API. Blocking, muting and reporting (with a moderation panel in the administration settings) are supported, as are locked accounts with approvable follow requests. Polls are fully supported: create your own, and view and vote on federated ones. Profiles carry an avatar, a banner image and up to four profile metadata fields, edited in the profile editor; a field naming a web page is marked as verified once that page links back with rel="me". Posts that link somewhere get a link preview card. Image (JPEG, PNG, GIF, WebP, AVIF, and HEIC from an iPhone where the server can read it), video (MP4, WebM, QuickTime) and audio attachments are supported, up to ten per post, each with alt text and a focal point. Quote posts carry the original author's permission on the wire, and the author decides who may quote each post and can take one back afterwards. Mastodon apps work once the web server maps /api and /oauth at the domain root onto the app — the rules ship in contrib/webserver/ and Administration → Overview says whether they are in place; there is no streaming API and no push subscriptions. A post can be translated where this Nextcloud has a translation provider.]]></description>
-	<version>0.26.77</version>
+	<version>0.26.78</version>
 	<licence>agpl</licence>
 	<author mail="benedikt.schaechner@web.de" homepage="https://benedikt.xn--schchner-2za.de">Benedikt Schächner</author>
 	<namespace>Social</namespace>

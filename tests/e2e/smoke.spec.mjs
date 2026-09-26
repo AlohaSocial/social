@@ -38,7 +38,7 @@ test.describe('Social, in a browser', () => {
 		await expect(composer).toBeVisible()
 		await composer.locator('.message').click()
 		await page.keyboard.type(text)
-		await composer.getByRole('button', { name: /^Post/ }).click()
+		await composer.getByRole('button', { name: /^Post(?! as)/ }).click()
 
 		// the dialog closes on success, and the post is the newest thing in the feed
 		await expect(composer).toBeHidden()

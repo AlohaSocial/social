@@ -13,6 +13,8 @@ import { useTimelineStore } from '../../../src/store/timeline.js'
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
+const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
+vi.mock('../../../src/services/senses.js', () => ({ feel }))
 
 /** The observers each mount made, so a test can fire one by hand. */
 let observers = []
@@ -371,5 +373,87 @@ describe('VideoReels', () => {
 		const { wrapper } = await mountReels([])
 
 		expect(wrapper.text()).toContain('No videos here yet.')
+	})
+
+	describe('hearts', () => {
+		const likeable = (store) => {
+			store.postLike = vi.fn(async ({ status }) => {
+				store.likeStatus({ status })
+				return {}
+			})
+			store.postUnlike = vi.fn(async () => ({}))
+		}
+
+		it('likes from the heart button and sends hearts up the edge', async () => {
+			const { wrapper, store } = await mountReels()
+			likeable(store)
+			feel.mockClear()
+
+			const button = wrapper.findAll('.reel__like')[0]
+			expect(button.attributes('aria-pressed')).toBe('false')
+			await button.trigger('click')
+			await flushPromises()
+
+			expect(store.postLike).toHaveBeenCalledWith({ status: expect.objectContaining({ id: wrapper.vm.reels[0].status.id }) })
+			expect(wrapper.findAll('.reel')[0].findAll('.reel__heart--float')).toHaveLength(3)
+			expect(wrapper.findAll('.reel__like')[0].attributes('aria-pressed')).toBe('true')
+			expect(feel).toHaveBeenCalledWith('like')
+		})
+
+		it('takes the like back quietly, without hearts', async () => {
+			const { wrapper, store } = await mountReels([{ ...video('1'), favourited: true, favourites_count: 4 }])
+			likeable(store)
+
+			expect(wrapper.find('.reel__like-count').text()).toBe('4')
+			await wrapper.find('.reel__like').trigger('click')
+			await flushPromises()
+
+			expect(store.postUnlike).toHaveBeenCalled()
+			expect(wrapper.findAll('.reel__heart')).toHaveLength(0)
+		})
+
+		/** a double tap is "I love this", and doing it again must not undo it */
+		it('likes on a double tap, puts a heart where the finger was, and never unlikes', async () => {
+			vi.useFakeTimers()
+			const { wrapper, store } = await mountReels([{ ...video('1'), favourited: true }])
+			likeable(store)
+			const clip = wrapper.find('video')
+
+			await clip.trigger('click', { clientX: 40, clientY: 60 })
+			await clip.trigger('click', { clientX: 40, clientY: 60 })
+
+			expect(wrapper.findAll('.reel__heart--burst')).toHaveLength(1)
+			expect(store.postUnlike).not.toHaveBeenCalled()
+			expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled()
+
+			vi.advanceTimersByTime(2000)
+			await flushPromises()
+			expect(wrapper.findAll('.reel__heart')).toHaveLength(0)
+			vi.useRealTimers()
+		})
+
+		it('still pauses on a single tap, once it is sure no second one is coming', async () => {
+			vi.useFakeTimers()
+			const { wrapper } = await mountReels()
+			const first = wrapper.findAll('video')[0]
+			Object.defineProperty(first.element, 'paused', { value: false, configurable: true })
+
+			await first.trigger('click')
+			expect(first.element.pause).not.toHaveBeenCalled()
+
+			vi.advanceTimersByTime(300)
+			expect(first.element.pause).toHaveBeenCalled()
+			vi.useRealTimers()
+		})
+
+		it('likes the playing video with the l key', async () => {
+			const { wrapper, store } = await mountReels()
+			likeable(store)
+
+			await wrapper.find('.reels__track').trigger('keydown', { key: 'l' })
+			await flushPromises()
+
+			expect(store.postLike).toHaveBeenCalledWith({ status: expect.objectContaining({ id: wrapper.vm.reels[0].status.id }) })
+		})
 	})
 })

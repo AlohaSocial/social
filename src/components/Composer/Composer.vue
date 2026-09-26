@@ -9,6 +9,7 @@
 			'new-post--collapsed': !expanded,
 			'new-post--drop-target': draggingFiles,
 			'new-post--refused': refusedDrop,
+			'new-post--posted': justPosted,
 		}"
 		data-id=""
 		@focusin="expand"
@@ -200,6 +201,49 @@
 				@paste="handlePaste"
 				@tribute-replaced="updatePostFromTribute" />
 
+			<!-- /dice, /flip and /pick are played when the post goes out; this
+			     says so while one is in the box, and shows the roll itself -->
+			<div
+				v-if="rolling.length > 0"
+				class="composer-roll"
+				:class="{ 'composer-roll--landed': rollLanded }"
+				role="status"
+				aria-live="polite">
+				<span v-for="(die, index) in rolling" :key="index" class="composer-roll__die">
+					<span aria-hidden="true">{{ die.icon }}</span> {{ die.shown }}
+				</span>
+			</div>
+			<p v-else-if="gamesInPost.length > 0" class="composer-games">
+				{{ t('social', 'Played when you post. Everybody sees the same result.') }}
+			</p>
+
+			<div v-if="asCard && canBeCard" class="composer-card">
+				<div
+					class="composer-card__preview"
+					:style="{ background: cardBackground, color: cardGradient.ink, '--card-length': statusText.length }"
+					aria-hidden="true">
+					<p class="composer-card__text">
+						{{ statusText }}
+					</p>
+				</div>
+				<div class="composer-card__gradients" role="radiogroup" :aria-label="t('social', 'Background')">
+					<button
+						v-for="option in cardGradients"
+						:key="option.id"
+						type="button"
+						role="radio"
+						class="composer-card__gradient"
+						:aria-checked="option.id === cardGradientId"
+						:aria-label="option.name"
+						:title="option.name"
+						:style="{ background: backgroundOf(option) }"
+						@click="cardGradientId = option.id" />
+				</div>
+				<p class="composer-card__hint">
+					{{ t('social', 'Sent as a picture of these words, with the words as its description and as the post, so every server shows the card and every reader can still hear it.') }}
+				</p>
+			</div>
+
 			<GifPicker
 				v-if="showGifs"
 				@close="showGifs = false"
@@ -299,6 +343,20 @@
 					@click.prevent="showPreview = !showPreview">
 					<template #icon>
 						<EyeOutline :size="22" decorative title="" />
+					</template>
+				</NcButton>
+				<!-- a short post, drawn big on colour; only offered while the
+				     post is short enough to look good that way -->
+				<NcButton
+					v-if="canBeCard"
+					:title="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
+					variant="tertiary"
+					class="card-toggle"
+					:aria-label="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
+					:aria-pressed="asCard"
+					@click.prevent="asCard = !asCard">
+					<template #icon>
+						<CardTextOutline :size="22" decorative title="" />
 					</template>
 				</NcButton>
 				<NcButton
@@ -440,6 +498,7 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AlertOutline from 'vue-material-design-icons/AlertOutline.vue'
 import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import PollIcon from 'vue-material-design-icons/Poll.vue'
+import CardTextOutline from 'vue-material-design-icons/CardTextOutline.vue'
 import PlacePicker from './PlacePicker.vue'
 import SchedulePicker from './SchedulePicker.vue'
 import { defineAsyncComponent } from 'vue'
@@ -463,6 +522,10 @@ import Tribute from 'tributejs'
 import eventBus from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
+import { feel } from '../../services/senses.js'
+import { commandsIn, resolveCommands, tumble } from '../../utils/composerCommands.js'
+import { accountHue } from '../../services/accountColour.js'
+import { cardGradients, findGradient, gradientCss, renderTextCard } from '../../utils/textCard.js'
 import { clearDraft, loadDraft, saveDraft } from '../../services/draft.js'
 import { mapStores } from 'pinia'
 import { useInstanceStore } from '../../store/instance.js'
@@ -571,6 +634,9 @@ function contentWarningPresets() {
 let gifPicker = null
 const gifPickerModule = () => (gifPicker ??= import('./GifPicker.vue'))
 
+/** the longest a post may be and still be offered as a card */
+export const CARD_MAX = 120
+
 export default {
 	name: 'Composer',
 	components: {
@@ -599,6 +665,7 @@ export default {
 		AlertOutline,
 		EyeOutline,
 		PollIcon,
+		CardTextOutline,
 		PollEditor,
 		PreviewGrid,
 		ComposerPreview,
@@ -706,6 +773,15 @@ export default {
 			statusContent: '',
 			/** what would actually be sent — the string the counter measures */
 			statusText: '',
+			/** true for the moment after a post went out, for the flourish */
+			justPosted: false,
+			/** whether a short post goes out drawn as a card */
+			asCard: false,
+			cardGradientId: 'account',
+			/** the games in the post while they are being played, [] otherwise */
+			rolling: [],
+			/** whether the dice have come to rest */
+			rollLanded: false,
 			// what a click into the box opens up; the composer is also expanded
 			// by anything it already holds — see expanded()
 			openedByHand: this.startExpanded,
@@ -1118,6 +1194,40 @@ export default {
 		},
 
 		/**
+		 * Whether the post is short enough, and plain enough, to be a card: a
+		 * few words and nothing else. A picture already has its own look, a
+		 * poll has its own shape, and three paragraphs on a gradient are a
+		 * poster nobody reads.
+		 *
+		 * @return {boolean}
+		 */
+		canBeCard() {
+			const length = this.statusText.trim().length
+
+			return length > 0 && length <= CARD_MAX && !this.hasAttachments && !this.showPoll
+		},
+
+		/** @return {object[]} the backgrounds a card can have, the writer's own first */
+		cardGradients() {
+			return cardGradients(accountHue(this.accountStore.currentAccount?.acct ?? ''))
+		},
+
+		/** @return {object} the one chosen */
+		cardGradient() {
+			return findGradient(this.cardGradientId, accountHue(this.accountStore.currentAccount?.acct ?? ''))
+		},
+
+		/** @return {string} it, as CSS */
+		cardBackground() {
+			return gradientCss(this.cardGradient)
+		},
+
+		/** @return {string[]} the games typed into the box, for the hint under it */
+		gamesInPost() {
+			return commandsIn(this.statusText)
+		},
+
+		/**
 		 * Measured on what is sent, not on the markup that produces it. A
 		 * mention pill from a reply is ~200 characters of HTML and every line
 		 * break adds a <div>, so counting innerHTML burned half the allowance
@@ -1292,6 +1402,7 @@ export default {
 			this.scheduledAt = null
 			this.placing = false
 			this.place = null
+			this.asCard = false
 			clearDraft()
 			this.updateStatusContent()
 		},
@@ -2191,7 +2302,14 @@ export default {
 				return
 			}
 
-			const status = this.plainText()
+			// the games are played before anything is sent, so the result is
+			// part of the post and every server shows the same one
+			const played = resolveCommands(this.plainText())
+			if (played.results.length > 0) {
+				this.loading = true
+				await this.roll(played.results)
+			}
+			const status = played.text
 			const warning = this.showWarning ? this.spoilerText.trim() : ''
 
 			const statusData = {
@@ -2235,6 +2353,17 @@ export default {
 			// works in the reader's zone and the Date carries the conversion
 			if (this.scheduling && this.scheduledAt instanceof Date) {
 				statusData.scheduled_at = this.scheduledAt.toISOString()
+			}
+
+			// a short post as a card: the words drawn on colour and attached
+			// as a picture, described with those same words
+			if (this.asCard && this.canBeCard) {
+				const card = await this.uploadCard(status)
+				if (card === null) {
+					this.loading = false
+					return
+				}
+				statusData.media_ids = [...statusData.media_ids, card]
 			}
 
 			const pollOptions = this.pollOptions.map((option) => option.trim()).filter((option) => option !== '')
@@ -2304,6 +2433,16 @@ export default {
 				return
 			}
 
+			// heard, felt and seen: the box answers, and the post makes an
+			// entrance at the top of the timeline instead of simply being there
+			feel('post')
+			this.justPosted = true
+			window.setTimeout(() => {
+				this.justPosted = false
+			}, 700)
+			if (created?.id) {
+				this.timelineStore.markArrived(created.id)
+			}
 			this.timelineStore.refreshTimeline()
 			eventBus.emit('post-published', created)
 		},
@@ -2318,6 +2457,68 @@ export default {
 		 * a pin that is not pressed says the post has no place, and it should
 		 * mean it.
 		 */
+		/**
+		 * Plays the games in a post where the writer can watch: each one
+		 * tumbles through what it could land on for half a second and then
+		 * lands on what it did. The result was decided before the tumble
+		 * started; this is only the showing of it.
+		 *
+		 * @param {Array<{ kind: string, result: string }>} results what was played
+		 * @return {Promise<void>}
+		 */
+		/** @param {object} option a background @return {string} it as CSS */
+		backgroundOf(option) {
+			return gradientCss(option)
+		},
+
+		/**
+		 * Draws the post as a card and uploads it.
+		 *
+		 * @param {string} words what the card says
+		 * @return {Promise<string|null>} the attachment's id, or null when it
+		 *         could not be drawn or uploaded -- the post then does not go
+		 *         out, rather than going out without the card it was meant to be
+		 */
+		async uploadCard(words) {
+			this.loading = true
+			const file = await renderTextCard(words, this.cardGradient, { width: 1080, height: 1080 })
+			if (file === null) {
+				showError(translate('social', 'This browser could not draw the card'))
+				return null
+			}
+
+			const media = await this.timelineStore.createMedia(file)
+			if (!media?.id) {
+				return null
+			}
+
+			await this.timelineStore.describeMedia({ id: media.id, description: words })
+
+			return media.id
+		},
+
+		async roll(results) {
+			const icons = { dice: '🎲', flip: '🪙', pick: '🎯' }
+			const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+			const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+
+			this.rollLanded = false
+			this.rolling = results.map((played) => ({ icon: icons[played.kind], shown: tumble(played), played }))
+			feel('roll')
+
+			if (!still) {
+				for (let step = 0; step < 8; step++) {
+					await wait(65)
+					this.rolling = this.rolling.map((die) => ({ ...die, shown: tumble(die.played) }))
+				}
+			}
+
+			this.rolling = this.rolling.map((die) => ({ ...die, shown: die.played.result }))
+			this.rollLanded = true
+			await wait(still ? 250 : 500)
+			this.rolling = []
+		},
+
 		togglePlace() {
 			this.placing = !this.placing
 			if (!this.placing) {
@@ -3123,6 +3324,161 @@ $composer-duration: 220ms;
 @media (prefers-reduced-motion: reduce) {
 	.char-ring {
 		transition: none;
+	}
+}
+
+/*
+ * The box answers a post that went out: a quick bright sweep across it, in the
+ * primary colour, the way a stamp lands. A pseudo-element so the composer's
+ * own layout and elevation are left alone.
+ */
+@keyframes new-post-sent {
+	0% { opacity: 0; transform: translateX(-100%); }
+	30% { opacity: .5; }
+	100% { opacity: 0; transform: translateX(100%); }
+}
+
+.new-post--posted {
+	overflow: hidden;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(100deg, transparent 20%, var(--color-primary-element-light) 50%, transparent 80%);
+		pointer-events: none;
+		animation: new-post-sent .6s ease-out both;
+	}
+}
+
+/* a short post as a card: the square it will be drawn as, and its colours */
+.composer-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	margin-block: 10px 0;
+
+	&__preview {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		inline-size: min(100%, 280px);
+		aspect-ratio: 1;
+		padding: 10%;
+		border-radius: var(--border-radius-large, 12px);
+		animation: composer-card-in .35s cubic-bezier(.3, 1.3, .5, 1) both;
+	}
+
+	&__text {
+		margin: 0;
+		font-size: clamp(15px, calc(34px - var(--card-length, 0) * .15px), 30px);
+		font-weight: 700;
+		line-height: 1.25;
+		text-align: center;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	&__gradients {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px;
+	}
+
+	&__gradient {
+		inline-size: 30px;
+		block-size: 30px;
+		padding: 0;
+		border: 3px solid var(--color-main-background);
+		border-radius: 50%;
+		outline: 2px solid transparent;
+		cursor: pointer;
+
+		&[aria-checked="true"] {
+			outline-color: var(--color-primary-element);
+		}
+
+		&:focus-visible {
+			outline-color: var(--color-main-text);
+		}
+	}
+
+	&__hint {
+		max-inline-size: 42ch;
+		margin: 0;
+		font-size: 12px;
+		text-align: center;
+		color: var(--color-text-maxcontrast);
+	}
+}
+
+@keyframes composer-card-in {
+	from { opacity: 0; transform: scale(.85) rotate(-3deg); }
+	to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.composer-card__preview {
+		animation: none;
+	}
+}
+
+/* the games: a quiet line while one is typed, a row of tumbling dice when played */
+.composer-games {
+	margin-block: 4px 0;
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+}
+
+@keyframes composer-tumble {
+	0%, 100% { transform: rotate(0); }
+	25% { transform: rotate(-14deg) translateY(-2px); }
+	75% { transform: rotate(12deg) translateY(1px); }
+}
+
+@keyframes composer-land {
+	0% { transform: scale(1); }
+	45% { transform: scale(1.25); }
+	100% { transform: scale(1); }
+}
+
+.composer-roll {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-block: 8px 0;
+
+	&__die {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 12px;
+		border-radius: var(--border-radius-pill, 999px);
+		background: var(--color-primary-element-light);
+		color: var(--color-primary-element-light-text);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		animation: composer-tumble .26s linear infinite;
+	}
+
+	&--landed &__die {
+		animation: composer-land .32s cubic-bezier(.3, 1.4, .5, 1) both;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.composer-roll__die,
+	.composer-roll--landed .composer-roll__die {
+		animation: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.new-post--posted::after {
+		animation: none;
+		display: none;
 	}
 }
 

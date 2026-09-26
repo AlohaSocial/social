@@ -2,7 +2,7 @@
 	"name": "nextcloud/social",
 	"description": "Social app",
 	"license": "AGPL-3.0-or-later",
-	"version": "0.26.77",
+	"version": "0.26.78",
 	"minimum-stability": "stable",
 	"authors": [
 		{

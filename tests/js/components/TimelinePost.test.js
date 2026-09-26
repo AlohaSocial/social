@@ -24,6 +24,8 @@ vi.mock('../../../src/services/toast.js', async (importOriginal) => ({
 	showSuccess: vi.fn(),
 }))
 
+const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
+vi.mock('../../../src/services/senses.js', () => ({ feel }))
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }))
@@ -1857,6 +1859,40 @@ describe('TimelinePost', () => {
 			})
 
 			expect(actionButton(wrapper, 'Undo Like').exists()).toBe(true)
+		})
+	})
+
+	describe('sound, touch and arrival', () => {
+		/** a like is heard and felt where the reader allows it; the undoing is quiet */
+		it('answers a like with the like feeling, and an unlike with nothing', async () => {
+			feel.mockClear()
+			const { wrapper, item } = mountPost()
+			eventBus.emit('timeline:focused', item)
+			await wrapper.vm.$nextTick()
+
+			eventBus.emit('shortcut:like')
+			await flushPromises()
+			expect(feel).toHaveBeenCalledWith('like')
+			eventBus.all.clear()
+
+			feel.mockClear()
+			const liked = mountPost({ item: makeItem({ favourited: true }) })
+			eventBus.emit('timeline:focused', liked.item)
+			await liked.wrapper.vm.$nextTick()
+			eventBus.emit('shortcut:like')
+			await flushPromises()
+			expect(feel).not.toHaveBeenCalled()
+			eventBus.all.clear()
+		})
+
+		it('makes an entrance when it is the post the reader just published', async () => {
+			const { wrapper, item, store } = mountPost()
+			expect(wrapper.classes()).not.toContain('post-content--arrived')
+
+			store.arrivedId = String(item.id)
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.classes()).toContain('post-content--arrived')
 		})
 	})
 })

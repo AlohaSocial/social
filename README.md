@@ -76,6 +76,18 @@ One box, and everything a post can carry.
 - **Quote a post**, with the original author's permission carried on the wire (FEP-044f).
 - **Say what language it is in**, starting from your Nextcloud language.
 - **Send it later.** Pick a time at least five minutes out and Post becomes Schedule.
+- **A short post as a card.** Anything up to 120 characters, with nothing attached, can
+  go out drawn big on colour — six backgrounds, the first in your own colour. It is
+  sent as a picture of the words with the words as its description, and the words stay
+  in the post too, so every server shows the card and every reader can still search it
+  and hear it read aloud.
+- **`/dice`, `/flip` and `/pick`.** Type `/dice` (or `/dice 20`), `/flip`, or
+  `/pick pizza, pasta, sushi` and the game is played when the post goes out: the dice
+  tumble in the composer for half a second and land, and what is posted is plain
+  text — `🎲 4`, `🪙 heads`, `🎯 pasta` — so a Mastodon reader sees the same result.
+- **Posting feels like posting.** The box answers with a quick sweep of light, and the
+  new post drops into place at the top of the timeline with a glow in your colour,
+  instead of simply being there.
 - **Mentions and hashtags** typed by hand become real recipients and real tags.
 
 ## 📖 Read
@@ -116,6 +128,11 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   and the poster is told and sees what was said; watching one posted elsewhere sends a
   receipt to its author, so their own server can count it. The other direction is not ours to fix: Pixelfed sends
   stories only to instances it has identified as Pixelfed.
+- **Text stories and stickers.** A story can be a few words on a coloured card instead
+  of a picture — the type shrinks as you write, the way the picture will — and a
+  picture story can carry stickers: eight emoji and a line of your own words, dragged
+  where you want them (or moved with the arrow keys) and baked into the picture before
+  it goes up, so they arrive on Pixelfed where you put them.
 - **Photos and Videos are timelines of their own**, drawn as grids and asked of the
   server rather than filtered out of a page you already have.
 - **Watch** turns the Videos grid into a stack: one video at a time, full height,
@@ -123,7 +140,9 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   TikTok already knows. The same timeline at the same scope, so the way across changes
   how the videos are watched and not which ones they are. Muted until you ask, one
   playing at a time and the rest paused rather than left buffering, and reachable with
-  the arrow keys and the space bar.
+  the arrow keys and the space bar. A heart button likes the video and sends hearts up
+  the edge; a double tap on the video likes it and puts a heart where your finger was
+  (and never takes a like back); `l` does the same from the keyboard.
 ![Videos, including federated PeerTube channels](img/readme/videos.jpg)
 
 - **PeerTube, properly — in both directions.** A PeerTube video arrives with its
@@ -476,6 +495,13 @@ Under 600px the avatar moves inside the card, the card takes the width of the sc
 the composer's toolbar wraps instead of pushing Post off the edge, and a post's page
 gives up the column it kept for an avatar that is no longer beside it. Dark mode is
 the same app, not a second design.
+
+**Sound and touch**, in Settings: a soft tick on a like, a breath of air when a post
+goes out, a two-note chime when a direct message arrives, and a short tap in the hand
+on a phone. Sound is off until you turn it on; vibration is on, and your system's
+setting for less motion turns it off too. Both are kept on the device rather than the
+account, so the laptop at work can stay quiet while your phone taps back. The sounds
+are synthesised in the browser, so there is nothing to download.
 
 ## 🧩 It is a Nextcloud app, so it behaves like one
 

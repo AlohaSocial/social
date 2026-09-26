@@ -42,6 +42,17 @@ vi.mock('../../../src/services/toast.js', () => ({
 	showSuccess: vi.fn(),
 }))
 
+// sound and touch are the device's business, and jsdom has neither
+const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
+vi.mock('../../../src/services/senses.js', () => ({ feel }))
+
+// jsdom has no canvas, so the card is stood in for
+const { renderTextCard } = vi.hoisted(() => ({ renderTextCard: vi.fn() }))
+vi.mock('../../../src/utils/textCard.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	renderTextCard,
+}))
+
 // the composer asks the server which team accounts this account may post as,
 // and the mention/hashtag pickers reach for the same client
 const { get } = vi.hoisted(() => ({ get: vi.fn() }))
@@ -2631,6 +2642,105 @@ describe('Composer', () => {
 			await flushPromises()
 
 			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ post_as: 'press' }))
+		})
+	})
+
+	describe('the composer as a toy', () => {
+		/** the roll plays at the speed a reader who asked for less motion gets */
+		const quickRoll = () => vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+			matches: query.includes('reduce'),
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}))
+
+		beforeEach(() => {
+			feel.mockReset()
+			renderTextCard.mockReset().mockResolvedValue(new File(['png'], 'card.png', { type: 'image/png' }))
+		})
+
+		afterEach(() => {
+			vi.restoreAllMocks()
+		})
+
+		it('says a game in the box is played when the post goes out', async () => {
+			const { wrapper } = mountComposer()
+
+			await setContent(wrapper, 'Lunch?')
+			expect(wrapper.find('.composer-games').exists()).toBe(false)
+
+			await setContent(wrapper, 'Who pays? /dice')
+			expect(wrapper.find('.composer-games').text()).toContain('Played when you post')
+		})
+
+		/** the result is decided here and sent as text, so every server shows the same one */
+		it('plays the games before sending, and sends the result', async () => {
+			quickRoll()
+			vi.spyOn(Math, 'random').mockReturnValue(0.1)
+			const { wrapper, store } = mountComposer()
+
+			await setContent(wrapper, 'Toss for it: /flip')
+			await submitButton(wrapper).trigger('click')
+			await vi.waitUntil(() => store.post.mock.calls.length > 0, { timeout: 3000 })
+
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Toss for it: 🪙 heads' }))
+			expect(feel).toHaveBeenCalledWith('roll')
+		})
+
+		it('offers a card only for a short post with nothing else in it', async () => {
+			const { wrapper } = mountComposer()
+
+			await setContent(wrapper, 'Friday!')
+			expect(wrapper.find('.card-toggle').exists()).toBe(true)
+
+			await setContent(wrapper, 'x'.repeat(121))
+			expect(wrapper.find('.card-toggle').exists()).toBe(false)
+		})
+
+		/**
+		 * The card is the words drawn as a picture, described with those same
+		 * words; the post keeps them too, so they are searchable and read aloud.
+		 */
+		it('posts a card as a picture of the words, described with them', async () => {
+			const { wrapper, store } = mountComposer()
+
+			await setContent(wrapper, 'Friday!')
+			await wrapper.find('.card-toggle').trigger('click')
+			expect(wrapper.find('.composer-card__text').text()).toBe('Friday!')
+
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(renderTextCard).toHaveBeenCalledWith('Friday!', expect.objectContaining({ id: 'account' }), { width: 1080, height: 1080 })
+			expect(store.createMedia).toHaveBeenCalledWith(expect.objectContaining({ name: 'card.png' }))
+			expect(store.describeMedia).toHaveBeenCalledWith({ id: 'media-1', description: 'Friday!' })
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ status: 'Friday!', media_ids: ['media-1'] }))
+		})
+
+		it('does not post at all when the card could not be drawn', async () => {
+			renderTextCard.mockResolvedValue(null)
+			const { wrapper, store } = mountComposer()
+
+			await setContent(wrapper, 'Friday!')
+			await wrapper.find('.card-toggle').trigger('click')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('This browser could not draw the card')
+			expect(store.post).not.toHaveBeenCalled()
+		})
+
+		/** the box answers, and the post makes an entrance at the top of the timeline */
+		it('marks the new post as just arrived and answers the press', async () => {
+			const { wrapper, store } = mountComposer()
+			const markArrived = vi.spyOn(store, 'markArrived')
+
+			await setContent(wrapper, 'Hello')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(markArrived).toHaveBeenCalledWith('new-1')
+			expect(feel).toHaveBeenCalledWith('post')
+			expect(wrapper.find('.new-post').classes()).toContain('new-post--posted')
 		})
 	})
 })

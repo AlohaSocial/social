@@ -137,4 +137,37 @@ describe('FollowGraphSuggestions', () => {
 		expect(follow).toHaveBeenCalledWith({ accountToFollow: 'jens@chaos.social' })
 		expect(wrapper.find('.person__follow').text()).toContain('Following')
 	})
+
+	/**
+	 * The same people, as a sky to play with. The list stays the default:
+	 * it is the view to read, and the one every existing reader knows.
+	 */
+	it('offers the suggestions as a constellation as well as a list', async () => {
+		window.matchMedia = vi.fn((query) => ({ matches: query.includes('reduce') }))
+		const wrapper = mountGraph()
+		await flushPromises()
+		axios.get.mockResolvedValue({
+			data: { needs: 0, suggestions: [suggestion('jens@chaos.social'), suggestion('mara@example.org')] },
+		})
+		await wrapper.findComponent({ name: 'NcButton' }).trigger('click')
+		await flushPromises()
+
+		const views = wrapper.findAll('.graph__view')
+		expect(views.map((view) => view.attributes('aria-checked'))).toEqual(['true', 'false'])
+		expect(wrapper.find('.graph__list').exists()).toBe(true)
+
+		await views[1].trigger('click')
+		await vi.waitUntil(() => wrapper.find('.constellation').exists(), { timeout: 5000 })
+		await flushPromises()
+
+		expect(wrapper.find('.graph__list').exists()).toBe(false)
+		expect(wrapper.findAll('.constellation__star')).toHaveLength(2)
+	})
+
+	it('shows no view switch before there is anything to show', async () => {
+		const wrapper = mountGraph()
+		await flushPromises()
+
+		expect(wrapper.find('.graph__views').exists()).toBe(false)
+	})
 })

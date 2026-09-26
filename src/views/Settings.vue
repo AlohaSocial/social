@@ -94,6 +94,7 @@ import IconPortfolio from 'vue-material-design-icons/ImageMultipleOutline.vue'
 import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
 import IconScheduled from 'vue-material-design-icons/ClockOutline.vue'
+import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
 import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
 import { t } from '@nextcloud/l10n'
@@ -113,6 +114,8 @@ const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkNa
 // and again: the cloud, its popovers and the language picker are only ever
 // drawn on this page
 const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InterestsSettings.vue'))
+// and again: two switches and a button, only ever drawn on this page
+const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
 
 /**
  * Settings: what this app holds about how the reader uses it.
@@ -152,10 +155,12 @@ export default {
 		IconRecap,
 		IconReview,
 		IconScheduled,
+		IconSenses,
 		IconTags,
 		ListsSettings,
 		PortfolioSettings,
 		RecapSettings,
+		SensesSettings,
 		ScheduledPosts,
 		ShortcutList,
 	},
@@ -257,6 +262,13 @@ export default {
 					component: 'RecapSettings',
 					title: t('social', 'Looking back'),
 					lede: t('social', 'Posts you wrote on this day in earlier years appear at the top of your feed on their own. This is the other half: a note about the week just gone, if you want one.'),
+				},
+				{
+					id: 'senses',
+					icon: 'IconSenses',
+					component: 'SensesSettings',
+					title: t('social', 'Sound and touch'),
+					lede: t('social', 'Small confirmations you hear or feel. They are kept on this device only, so a laptop at work can stay quiet while your phone taps back.'),
 				},
 				{
 					id: 'apps',

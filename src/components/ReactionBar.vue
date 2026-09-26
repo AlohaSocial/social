@@ -45,6 +45,7 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import EmoticonPlusOutline from 'vue-material-design-icons/EmoticonPlusOutline.vue'
 import eventBus, { REACTION_PICK } from '../services/eventBus.js'
 import logger from '../services/logger.js'
+import { feel } from '../services/senses.js'
 import { showError } from '../services/toast.js'
 
 /**
@@ -183,6 +184,9 @@ export default {
 				)
 
 				this.$emit('update:modelValue', Array.isArray(data?.reactions) ? data.reactions : [])
+				if (add) {
+					feel('react')
+				}
 			} catch (error) {
 				logger.error('Could not change the reaction', { error })
 				showError(add

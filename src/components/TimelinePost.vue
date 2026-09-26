@@ -5,7 +5,7 @@
 <template>
 	<article
 		class="post-content"
-		:class="{ 'post-content--openable': postRoute !== null }"
+		:class="{ 'post-content--openable': postRoute !== null, 'post-content--arrived': hasJustArrived }"
 		:style="authorStyle"
 		:data-social-status="item.id"
 		:aria-label="postLabel"
@@ -503,6 +503,7 @@ import { mapStores } from 'pinia'
 import { htmlToPlainText } from '../utils/plainText.js'
 import { defaultLanguage, languageName } from '../utils/postLanguage.js'
 import { useAccountStore } from '../store/account.js'
+import { feel } from '../services/senses.js'
 import { useInstanceStore } from '../store/instance.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
@@ -640,6 +641,16 @@ export default {
 
 	computed: {
 		...mapStores(useAccountStore, useInstanceStore, useTimelineStore),
+
+		/**
+		 * Whether this is the post the reader has just published, so it
+		 * arrives at the top of the timeline rather than simply being there.
+		 *
+		 * @return {boolean}
+		 */
+		hasJustArrived() {
+			return this.timelineStore.arrivedId !== '' && this.timelineStore.arrivedId === String(this.item?.id ?? '')
+		},
 
 		/** @return {number} what the server accepts in one status, as the composer shows it */
 		maxLength() {
@@ -1523,10 +1534,8 @@ export default {
 		async act(name, action, celebrating) {
 			if (celebrating) {
 				this.celebrate = name
-				// a touch device can feel the confirmation as well as see it
-				if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-					window.navigator.vibrate?.(8)
-				}
+				// heard and felt as well as seen, where the reader allows it
+				feel(name)
 				window.setTimeout(() => {
 					if (this.celebrate === name) {
 						this.celebrate = ''
@@ -2288,7 +2297,44 @@ export default {
  * still have to arrive when the pointer does, they just stop easing into it.
  * Nothing here moves in the first place, so there is no movement left to cut.
  */
+/*
+ * A post the reader has just published drops into place from above and glows
+ * once in their colour, so the thing they made is visibly the thing that
+ * arrived. The glow is a pseudo-element ring rather than a shadow: a shadow in
+ * a keyframe is exactly what the shared elevation tokens exist to prevent.
+ */
+@keyframes post-arrive {
+	0% { opacity: 0; transform: translateY(-18px) scale(.97); }
+	60% { opacity: 1; transform: translateY(3px) scale(1.005); }
+	100% { opacity: 1; transform: none; }
+}
+
+@keyframes post-arrive-glow {
+	0% { opacity: 0; }
+	25% { opacity: .9; }
+	100% { opacity: 0; }
+}
+
+.post-content--arrived {
+	animation: post-arrive .56s cubic-bezier(.2, .9, .3, 1.15) both;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: -3px;
+		border-radius: inherit;
+		border: 2px solid hsl(var(--account-hue, 210) 70% 55%);
+		pointer-events: none;
+		animation: post-arrive-glow 1.8s ease-out both;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
+	.post-content--arrived,
+	.post-content--arrived::after {
+		animation: none;
+	}
+
 	.post-content .post-actions-reveal::before,
 	.post-content .post-actions :deep(.button-vue__icon),
 	.post-content .post-actions :deep(.action-item),

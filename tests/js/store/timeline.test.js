@@ -45,6 +45,33 @@ describe('timeline store state changes', () => {
 		store = useTimelineStore()
 	})
 
+	/**
+	 * The post a reader has just published makes an entrance, once: the
+	 * mark comes off by itself, so a reload a minute later does not replay it.
+	 */
+	it('marks a post as just arrived, and unmarks it when the entrance is over', () => {
+		vi.useFakeTimers()
+		store.markArrived('9', 1000)
+		expect(store.arrivedId).toBe('9')
+
+		vi.advanceTimersByTime(999)
+		expect(store.arrivedId).toBe('9')
+		vi.advanceTimersByTime(1)
+		expect(store.arrivedId).toBe('')
+		vi.useRealTimers()
+	})
+
+	it('does not unmark a newer post when an older entrance ends', () => {
+		vi.useFakeTimers()
+		store.markArrived('9', 1000)
+		vi.advanceTimersByTime(500)
+		store.markArrived('10', 1000)
+		vi.advanceTimersByTime(500)
+
+		expect(store.arrivedId).toBe('10')
+		vi.useRealTimers()
+	})
+
 	it('addToStatuses indexes a status by id and also the boosted status of a boost wrapper', () => {
 		const inner = makeStatus('1')
 		const wrapper = makeStatus('2', { reblog: inner, content: '' })

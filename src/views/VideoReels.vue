@@ -26,7 +26,37 @@
 					playsinline
 					loop
 					preload="none"
-					@click="togglePlay(index)" />
+					@click="onVideoTap(index, $event)" />
+
+				<!-- the hearts a like releases: one where a double tap landed,
+				     and a few rising up the edge, the way live video does it.
+				     Decoration only; the button below is what a screen reader
+				     is told about. -->
+				<div class="reel__hearts" aria-hidden="true">
+					<svg
+						v-for="heart in heartsOn(index)"
+						:key="heart.id"
+						class="reel__heart"
+						:class="heart.big ? 'reel__heart--burst' : 'reel__heart--float'"
+						:style="heart.style"
+						viewBox="0 0 24 24">
+						<path fill="currentColor" :d="HEART_PATH" />
+					</svg>
+				</div>
+
+				<button
+					type="button"
+					class="reel__like"
+					:class="{ 'reel__like--on': entry.status.favourited === true }"
+					:aria-pressed="entry.status.favourited === true"
+					:aria-label="entry.status.favourited === true ? t('social', 'Unlike') : t('social', 'Like')"
+					@click.stop="toggleLike(index)">
+					<IconHeart v-if="entry.status.favourited === true" :size="24" />
+					<IconHeartOutline v-else :size="24" />
+					<span v-if="entry.status.favourites_count > 0" class="reel__like-count">
+						{{ entry.status.favourites_count }}
+					</span>
+				</button>
 
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
 				<button
@@ -128,6 +158,8 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconClose from 'vue-material-design-icons/Close.vue'
+import IconHeart from 'vue-material-design-icons/Heart.vue'
+import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
@@ -135,14 +167,32 @@ import { useTimelineStore } from '../store/timeline.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
+import { feel } from '../services/senses.js'
 
 /** How close to the end the reader gets before the next page is asked for. */
 const LOOK_AHEAD = 3
+
+/**
+ * How long a second tap may take to count as a double tap. A single tap waits
+ * this long before it pauses, which is the price every app with double-tap to
+ * like pays, and at this length nobody notices it.
+ */
+export const DOUBLE_TAP_MS = 280
+
+/** How long a heart is on screen, in milliseconds; the longer of the two animations. */
+export const HEART_MS = 1600
+
+/** mdi's heart, drawn inline so a dozen of them cost no component each */
+const HEART_PATH = 'M12,21.35L10.55,20.03C5.4,15.36 2,12.28 2,8.5C2,5.42 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.09C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.42 22,8.5C22,12.28 18.6,15.36 13.45,20.04L12,21.35Z'
+
+let heartSerial = 0
 
 export default {
 	name: 'VideoReels',
 	components: {
 		IconClose,
+		IconHeart,
+		IconHeartOutline,
 		IconRefresh,
 		IconVolumeHigh,
 		IconVolumeOff,
@@ -176,6 +226,13 @@ export default {
 			slides: [],
 			/** tells onVisible which slide is on screen */
 			observer: null,
+			/** the hearts on screen, each with the slide it belongs to */
+			hearts: [],
+			/** the first tap of what may become a double tap */
+			lastTap: null,
+			/** the pause a single tap is waiting to do */
+			tapTimer: null,
+			HEART_PATH,
 		}
 	},
 
@@ -230,6 +287,7 @@ export default {
 	},
 
 	beforeUnmount() {
+		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
 		for (const video of this.videos) {
 			video?.pause?.()
@@ -320,6 +378,142 @@ export default {
 			}
 		},
 
+		/**
+		 * One tap pauses; two tap-taps like. The first tap has to wait to see
+		 * whether a second follows, or a double tap would also pause and play.
+		 *
+		 * @param {number} index the slide
+		 * @param {MouseEvent} event the tap, for where the heart goes
+		 */
+		onVideoTap(index, event) {
+			const now = Date.now()
+			if (this.lastTap !== null && this.lastTap.index === index && now - this.lastTap.at < DOUBLE_TAP_MS) {
+				window.clearTimeout(this.tapTimer)
+				this.tapTimer = null
+				this.lastTap = null
+				this.doubleTap(index, event)
+
+				return
+			}
+
+			window.clearTimeout(this.tapTimer)
+			this.lastTap = { index, at: now }
+			this.tapTimer = window.setTimeout(() => {
+				this.tapTimer = null
+				this.lastTap = null
+				this.togglePlay(index)
+			}, DOUBLE_TAP_MS)
+		},
+
+		/**
+		 * A double tap likes, and never unlikes: it is the gesture for "I love
+		 * this", done again because it is fun, and taking the like back on the
+		 * second go would punish exactly that. The heart goes where the
+		 * finger was.
+		 *
+		 * @param {number} index the slide
+		 * @param {MouseEvent} event the second tap
+		 */
+		doubleTap(index, event) {
+			const target = /** @type {HTMLElement|null} */ (event?.currentTarget)
+			const box = target?.getBoundingClientRect?.()
+			const x = box ? event.clientX - box.left : null
+			const y = box ? event.clientY - box.top : null
+
+			this.addHeart(index, { big: true, x, y })
+			this.releaseHearts(index, 2)
+			if (this.reels[index]?.status?.favourited !== true) {
+				this.like(index)
+			}
+		},
+
+		/**
+		 * The heart button: a like with hearts rising from it, or the like
+		 * taken back quietly.
+		 *
+		 * @param {number} index the slide
+		 */
+		async toggleLike(index) {
+			const status = this.reels[index]?.status
+			if (!status) {
+				return
+			}
+
+			if (status.favourited === true) {
+				await this.timelineStore.postUnlike({ status })
+
+				return
+			}
+
+			this.releaseHearts(index, 3)
+			await this.like(index)
+		},
+
+		/** @param {number} index the slide whose post to like */
+		async like(index) {
+			const status = this.reels[index]?.status
+			if (!status) {
+				return
+			}
+
+			feel('like')
+			await this.timelineStore.postLike({ status })
+		},
+
+		/**
+		 * @param {number} index the slide
+		 * @return {object[]} the hearts drawn over it
+		 */
+		heartsOn(index) {
+			return this.hearts.filter((heart) => heart.index === index)
+		},
+
+		/**
+		 * @param {number} index the slide
+		 * @param {number} count how many hearts to send up the edge
+		 */
+		releaseHearts(index, count) {
+			for (let i = 0; i < count; i++) {
+				this.addHeart(index, { big: false, delay: i * 120 })
+			}
+		},
+
+		/**
+		 * Puts one heart on screen and takes it off again when its animation
+		 * is over.
+		 *
+		 * @param {number} index the slide
+		 * @param {object} heart what kind
+		 * @param {boolean} heart.big the burst where a tap landed, or one that floats up
+		 * @param {number|null} [heart.x] where, for a burst, from the slide's left
+		 * @param {number|null} [heart.y] where, for a burst, from the slide's top
+		 * @param {number} [heart.delay] how long to wait before it sets off, in ms
+		 */
+		addHeart(index, { big, x = null, y = null, delay = 0 }) {
+			const id = ++heartSerial
+			// a little sideways drift, a tilt and a size each, so a handful of
+			// hearts reads as a handful and not as one heart drawn five times
+			const drift = Math.round((Math.random() - 0.5) * 60)
+			const tilt = Math.round((Math.random() - 0.5) * 30)
+			const size = big ? 96 : 26 + Math.round(Math.random() * 12)
+			const style = {
+				'--drift': drift + 'px',
+				'--tilt': tilt + 'deg',
+				'--size': size + 'px',
+				animationDelay: delay + 'ms',
+			}
+			if (big && x !== null && y !== null) {
+				style.left = x + 'px'
+				style.top = y + 'px'
+			}
+
+			this.hearts.push({ id, index, big, style })
+			feel('heart')
+			window.setTimeout(() => {
+				this.hearts = this.hearts.filter((heart) => heart.id !== id)
+			}, HEART_MS + delay)
+		},
+
 		togglePlay(index) {
 			const video = this.videos[index]
 			if (!video) {
@@ -359,6 +553,8 @@ export default {
 				this.togglePlay(this.playing)
 			} else if (event.key === 'm') {
 				this.toggleSound()
+			} else if (event.key === 'l') {
+				this.toggleLike(this.playing)
 			}
 		},
 
@@ -499,6 +695,75 @@ export default {
 		cursor: pointer;
 	}
 
+	/* above the sound button, the column every short-video app keeps its
+	   actions in */
+	&__like {
+		position: absolute;
+		inset-block-end: 68px;
+		inset-inline-end: 16px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		min-inline-size: 40px;
+		padding: 8px 0 6px;
+		border: none;
+		border-radius: 20px;
+		background: rgba(0, 0, 0, 0.55);
+		color: #fff;
+		cursor: pointer;
+		transition: transform .15s ease;
+
+		&:active {
+			transform: scale(.9);
+		}
+
+		&--on {
+			color: #ff3b5c;
+		}
+
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: 2px;
+		}
+	}
+
+	&__like-count {
+		font-size: 12px;
+		font-weight: 600;
+		color: #fff;
+		font-variant-numeric: tabular-nums;
+	}
+
+	&__hearts {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		pointer-events: none;
+	}
+
+	&__heart {
+		position: absolute;
+		inline-size: var(--size);
+		block-size: var(--size);
+		color: #ff3b5c;
+		filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+
+		/* where a double tap landed: it swells, holds, and lifts away */
+		&--burst {
+			left: 50%;
+			top: 45%;
+			animation: reel-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
+		}
+
+		/* up the edge from the heart button, drifting as it goes */
+		&--float {
+			inset-inline-end: 24px;
+			inset-block-end: 120px;
+			animation: reel-heart-float 1.6s ease-out both;
+		}
+	}
+
 	&__caption {
 		position: absolute;
 		inset-block-end: 0;
@@ -555,6 +820,32 @@ export default {
 	&__open {
 		color: #fff;
 		text-decoration: underline;
+	}
+}
+
+@keyframes reel-heart-burst {
+	0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt)); }
+	25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt)); }
+	45% { transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt)); }
+	70% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(var(--tilt)); }
+	100% { opacity: 0; transform: translate(-50%, -140%) scale(.8) rotate(var(--tilt)); }
+}
+
+@keyframes reel-heart-float {
+	0% { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0); }
+	15% { opacity: 1; transform: translate(calc(var(--drift) * .2), -20px) scale(1) rotate(var(--tilt)); }
+	100% { opacity: 0; transform: translate(var(--drift), -45vh) scale(.8) rotate(calc(var(--tilt) * -1)); }
+}
+
+/* the like still lands; only the flight is taken away */
+@media (prefers-reduced-motion: reduce) {
+	.reel__heart {
+		animation: none;
+		display: none;
+	}
+
+	.reel__like {
+		transition: none;
 	}
 }
 </style>

@@ -29,16 +29,50 @@
 
 			<NcLoadingIcon v-else-if="loading" class="graph__loading" :size="32" />
 
-			<ul v-else-if="suggestions.length" class="graph__list">
-				<PersonCard
-					v-for="suggestion in suggestions"
-					:key="suggestion.account.acct"
-					:account="suggestion.account"
-					:reason="why(suggestion)"
-					:followed="isFollowed(suggestion.account)"
-					:pending="isPending(suggestion.account)"
-					@follow="follow" />
-			</ul>
+			<!-- two ways of looking at the same people: a list to read, or a
+			     sky to play with. Same buttons, same labels, same follow. -->
+			<template v-else-if="suggestions.length">
+				<div class="graph__views" role="radiogroup" :aria-label="t('social', 'Show as')">
+					<button
+						type="button"
+						role="radio"
+						class="graph__view"
+						:aria-checked="view === 'list'"
+						@click="view = 'list'">
+						<IconViewList :size="18" />
+						{{ t('social', 'List') }}
+					</button>
+					<button
+						type="button"
+						role="radio"
+						class="graph__view"
+						:aria-checked="view === 'sky'"
+						@click="view = 'sky'">
+						<IconStarFourPoints :size="18" />
+						{{ t('social', 'Constellation') }}
+					</button>
+				</div>
+
+				<FollowConstellation
+					v-if="view === 'sky'"
+					:suggestions="suggestions"
+					:youAvatar="youAvatar"
+					:isFollowed="isFollowed"
+					:isPending="isPending"
+					:reasonFor="why"
+					@follow="followFromSky" />
+
+				<ul v-else class="graph__list">
+					<PersonCard
+						v-for="suggestion in suggestions"
+						:key="suggestion.account.acct"
+						:account="suggestion.account"
+						:reason="why(suggestion)"
+						:followed="isFollowed(suggestion.account)"
+						:pending="isPending(suggestion.account)"
+						@follow="follow" />
+				</ul>
+			</template>
 
 			<p v-else class="graph__hint">
 				{{ t('social', 'Nobody new came out of it. Many servers do not publish who an account follows, so this works better the more people you follow.') }}
@@ -54,9 +88,14 @@ import { translate, translatePlural } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
+import IconStarFourPoints from 'vue-material-design-icons/StarFourPoints.vue'
+import IconViewList from 'vue-material-design-icons/ViewList.vue'
 import PersonCard from './PersonCard.vue'
+import { feel } from '../services/senses.js'
+import { useAccountStore } from '../store/account.js'
 import logger from '../services/logger.js'
 import { useFollowByHandle } from '../composables/useFollowByHandle.js'
+import { defineAsyncComponent } from 'vue'
 
 /**
  * "Whom to follow", asked of the fediverse rather than of this server.
@@ -70,13 +109,16 @@ export default {
 
 	components: {
 		AccountMultiplePlus,
+		FollowConstellation: defineAsyncComponent(() => import(/* webpackChunkName: "constellation" */'./FollowConstellation.vue')),
+		IconStarFourPoints,
+		IconViewList,
 		NcButton,
 		NcLoadingIcon,
 		PersonCard,
 	},
 
 	setup() {
-		return useFollowByHandle()
+		return { ...useFollowByHandle(), accountStore: useAccountStore() }
 	},
 
 	data() {
@@ -89,7 +131,16 @@ export default {
 			asked: false,
 			loading: false,
 			suggestions: [],
+			/** 'list' to read them, 'sky' to see them as a constellation */
+			view: 'list',
 		}
+	},
+
+	computed: {
+		/** @return {string} the reader's own face, for the middle of the sky */
+		youAvatar() {
+			return this.accountStore.currentAccount?.avatar ?? ''
+		},
 	},
 
 	async mounted() {
@@ -101,6 +152,19 @@ export default {
 	methods: {
 		t: translate,
 		n: translatePlural,
+
+		/**
+		 * A follow from the sky is the same follow the list makes, with the
+		 * chime and the tap it has everywhere else.
+		 *
+		 * @param {object} account the star pressed
+		 */
+		async followFromSky(account) {
+			await this.follow(account)
+			if (this.isFollowed(account)) {
+				feel('follow')
+			}
+		},
 
 		/**
 		 * @param {boolean} walk whether to accept the cost of asking other
@@ -174,6 +238,35 @@ export default {
 </script>
 
 <style scoped lang="scss">
+.graph__views {
+	display: flex;
+	gap: 6px;
+}
+
+.graph__view {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 12px;
+	border: 2px solid var(--color-border);
+	border-radius: var(--border-radius-pill, 999px);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	cursor: pointer;
+
+	&[aria-checked="true"] {
+		border-color: var(--color-primary-element);
+		background: var(--color-primary-element-light);
+		color: var(--color-primary-element-light-text);
+		font-weight: 600;
+	}
+
+	&:focus-visible {
+		outline: 2px solid var(--color-primary-element);
+		outline-offset: 2px;
+	}
+}
+
 .graph {
 	display: flex;
 	flex-direction: column;

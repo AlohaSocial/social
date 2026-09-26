@@ -14,6 +14,8 @@ vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn() }))
+const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
+vi.mock('../../../src/services/senses.js', () => ({ feel }))
 
 let store
 
@@ -214,6 +216,26 @@ describe('notifications store', () => {
 			await store.fetchUnreadDirectMessages()
 
 			expect(store.unreadDirectMessages).toBe(0)
+		})
+
+		/**
+		 * A chime for a conversation that became unread since the last look,
+		 * and never for the count the page opened with: that one is news to
+		 * nobody.
+		 */
+		it('chimes when a conversation becomes unread, not for the first count', async () => {
+			const store = useNotificationsStore()
+
+			axios.get.mockResolvedValue({ data: { count: 2 } })
+			await store.fetchUnreadDirectMessages()
+			expect(feel).not.toHaveBeenCalled()
+
+			await store.fetchUnreadDirectMessages()
+			expect(feel).not.toHaveBeenCalled()
+
+			axios.get.mockResolvedValue({ data: { count: 3 } })
+			await store.fetchUnreadDirectMessages()
+			expect(feel).toHaveBeenCalledWith('dm')
 		})
 
 		/**

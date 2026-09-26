@@ -63,7 +63,7 @@ test.describe('filters, and writing a post again', () => {
 		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await page.keyboard.type(text)
-		await composer.getByRole('button', { name: /^Post/ }).click()
+		await composer.getByRole('button', { name: /^Post(?! as)/ }).click()
 
 		const post = page.locator('.timeline-entry', { hasText: text }).first()
 		await expect(post).toBeVisible({ timeout: 20_000 })

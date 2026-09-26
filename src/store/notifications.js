@@ -10,6 +10,7 @@ import { generateUrl } from '@nextcloud/router'
 import { defineStore } from 'pinia'
 
 import logger from '../services/logger.js'
+import { feel } from '../services/senses.js'
 import { isNewerId, newerId } from '../utils/snowflake.js'
 
 /**
@@ -18,6 +19,7 @@ import { isNewerId, newerId } from '../utils/snowflake.js'
  * @typedef {object} NotificationState
  * @property {number} unread how many notifications have not been read
  * @property {number} unreadDirect how many conversations have something unread in them
+ * @property {boolean} directCounted whether the direct message count has been read once
  * @property {string} lastReadId the row the reader had read up to, '0' while unknown
  */
 
@@ -41,6 +43,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		 * somebody looking for four conversations that are not there.
 		 */
 		unreadDirect: 0,
+		/** whether the count has been read once, so a rise can be told from a first answer */
+		directCounted: false,
 		/**
 		 * The row id the reader had read up to, the last time the server was
 		 * asked; '0' while unknown or when nothing has ever been read. What
@@ -86,7 +90,15 @@ export const useNotificationsStore = defineStore('notifications', {
 		async fetchUnreadDirectMessages() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/conversations/unread_count'))
-				this.setUnreadDirectMessages(Number(data?.count) || 0)
+				const count = Number(data?.count) || 0
+				// a chime for a conversation that became unread since the last
+				// look -- never for the count the page opened with, which is
+				// news to nobody
+				if (this.directCounted && count > this.unreadDirect) {
+					feel('dm')
+				}
+				this.directCounted = true
+				this.setUnreadDirectMessages(count)
 			} catch (error) {
 				logger.error('Failed to read the unread direct message count', { error })
 			}

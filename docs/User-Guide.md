@@ -65,6 +65,13 @@ again.
   ask only that one. Servers that did not answer are named under the results, so
   a short list is never mistaken for an empty fediverse. Somebody this server
   already knows opens here; a stranger opens on their own server.
+- **Look at who they follow**, on the People tab, suggests the people the
+  people you follow follow. Once it has answered, **Constellation** shows the
+  same suggestions as a small sky: you in the middle, the people you follow who
+  led somewhere around you, and the suggestions at the edge, tied to whoever
+  they came through. It settles by itself; drag a star anywhere and it stays
+  there, and press one to follow. **List** puts it back. Every star is a
+  button that says who it is and why, so a keyboard gets there too.
 - **Starter packs** are named handfuls of accounts with a **Follow everyone**
   button. Two ship with the app — the projects behind the network, and
   photography — and an administrator can curate more.
@@ -145,6 +152,15 @@ network hiccup.
   rule applies again, and so does the limit of 25 posts a day; a time the
   server refuses leaves the post where it was, and the reason is shown.
   What a waiting post says cannot be changed there.
+- **A card.** While a post is short (up to 120 characters) and has nothing
+  attached, the card button draws it big on one of six backgrounds. It goes
+  out as a picture of the words, described with those words, and the words
+  stay in the post as well.
+- **Games.** `/dice` rolls a six-sided die (`/dice 20` a twenty-sided one),
+  `/flip` tosses a coin, and `/pick tea, coffee` picks one of the options on
+  the rest of the line. A line under the box says they will be played; when
+  you post, the dice tumble for a moment, and what is sent is the result as
+  plain text, so everybody sees the same one.
 - **Replying and quoting.** **Reply** under a post opens the composer
   addressed to its author; **Quote** in a post's menu embeds it in yours. Only
   public and unlisted posts held by this server can be quoted, and the quoted
@@ -353,10 +369,17 @@ use the arrows at the sides to move to the next account.
 
 Your own place is always first in the row, with a **+** on it. It opens a
 small dialog: choose a picture or a video, add a caption if you like, and
-say how many seconds a picture should show for. The picture goes up the way
-every attachment does — stripped of the camera's metadata — and your story
-is up for a day, to your followers and nobody else. While it is up, you can
-see how many people watched it and take it down early from the same player.
+say how many seconds a picture should show for. On a picture you can add
+**stickers** — eight emoji, or a line of your own words — drag them where you
+want them, move a selected one with the arrow keys and remove it with Delete;
+they are drawn into the picture before it goes up. Or choose **Text** at the
+top instead: write a few words, pick one of six backgrounds (the first is your
+own colour), and the story is a card with those words on it, sent with the
+words as its description so somebody who cannot see it is told what it says.
+Either way the picture goes up the way every attachment does — stripped of
+the camera's metadata — and your story is up for a day, to your followers
+and nobody else. While it is up, you can see how many people watched it and
+take it down early from the same player.
 
 Somebody watching a story can answer it: a row of emoji under the picture for a
 reaction, and a box beside them for a line of text. Either one goes to the
@@ -539,6 +562,12 @@ table as they always did — and if you already wrote a row called "Pronouns" by
 hand, it is picked up as one.
 
 
+- **Sound and touch.** **Settings → Sound and touch** has two switches:
+  **Play sounds** (a tick on a like, a breath of air when a post goes out, a
+  chime when a direct message arrives; off until you turn it on, with
+  **Listen** to hear them first) and **Vibrate** (a short tap on a phone; on
+  unless you turn it off, and off whenever your system asks for less motion).
+  Both belong to the device you are on, not to your account.
 - **Profile.** **My profile** (behind your portrait at the bottom of the
   sidebar) → **Edit profile**: a banner (upload one or give the address of
   one), a bio, and up to four name/value fields shown under it — your website,
