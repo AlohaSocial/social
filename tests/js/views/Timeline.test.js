@@ -755,6 +755,14 @@ describe('Timeline', () => {
 
 		expect(wrapper.findComponent(TimelineSwitcher).exists()).toBe(false)
 	})
+	/** the way into the one-at-a-time stack is Shorts in the sidebar now, not a button here */
+	it('carries no Watch button on the Videos page', () => {
+		const wrapper = mountTimeline({ params: { type: 'videos' } })
+
+		expect(wrapper.text()).not.toContain('Watch')
+		expect(wrapper.find('.timeline-heading-row__watch').exists()).toBe(false)
+	})
+
 	describe('how the posts are drawn', () => {
 		// the same rule the profile follows: Posts is what somebody wrote, which
 		// is a list; Photos and Videos are what they showed, which is a grid.

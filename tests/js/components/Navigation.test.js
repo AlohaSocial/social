@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import Navigation from '../../../src/components/Navigation.vue'
 import appRouter from '../../../src/router.js'
 import axios from '@nextcloud/axios'
-import eventBus, { LISTS_CHANGED } from '../../../src/services/eventBus.js'
+import eventBus, { COMPOSE_WITH_FILES, LISTS_CHANGED } from '../../../src/services/eventBus.js'
 import { useErrorsStore } from '../../../src/store/errors.js'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useNotificationsStore } from '../../../src/store/notifications.js'
@@ -50,7 +50,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, closeOnClickOutside: Boolean }, emits: ['close'], template: '<div class="modal-stub" :data-name="name" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { props: ['initialPaths'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { props: ['initialPaths', 'initialFiles'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" :data-files="(initialFiles || []).map((f) => f.name).join(\',\')" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -142,6 +142,33 @@ describe('Navigation', () => {
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/trends/tags', expect.anything())
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/lists')
 			expect(fetchUnread).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	/** the Shorts page picks a video and hands it here, where the dialog lives */
+	describe('a video picked on the Shorts page', () => {
+		it('opens the New post dialog with the video attached, and forgets it on close', async () => {
+			const wrapper = mountNavigation()
+			const clip = new File(['v'], 'short.mp4', { type: 'video/mp4' })
+
+			eventBus.emit(COMPOSE_WITH_FILES, [clip])
+			await nextTick()
+			expect(wrapper.find('.modal-stub[data-name="New post"]').exists()).toBe(true)
+			expect(wrapper.find('.composer-stub').attributes('data-files')).toBe('short.mp4')
+
+			await wrapper.find('.composer-stub').trigger('click')
+			await wrapper.find('.navigation__compose').trigger('click')
+			expect(wrapper.find('.composer-stub').attributes('data-files')).toBe('')
+			eventBus.all.clear()
+		})
+
+		it('opens nothing for nothing', async () => {
+			const wrapper = mountNavigation()
+
+			eventBus.emit(COMPOSE_WITH_FILES, [])
+			await nextTick()
+			expect(wrapper.find('.modal-stub[data-name="New post"]').exists()).toBe(false)
+			eventBus.all.clear()
 		})
 	})
 
@@ -773,10 +800,9 @@ describe('Navigation', () => {
 	/**
 	 * Subscriptions had a client route, a view and a server route, and nothing
 	 * anywhere linked to it — so the only way to the page was typing the
-	 * address. The three routes that arrived together each need a way in, and
-	 * the other two have one: Videos carries a **Watch** button to the reel
-	 * stack, and Migration carries one to the switch wizard. This is the one
-	 * that had none.
+	 * address. The three routes that arrived together each need a way in:
+	 * Subscriptions and the reel stack (as Shorts) have a sidebar entry each,
+	 * and Migration carries a button to the switch wizard.
 	 */
 	it('offers a way to every page that has no other one', () => {
 		const wrapper = mountNavigation()
@@ -785,6 +811,21 @@ describe('Navigation', () => {
 			.map((entry) => entry.to?.name)
 
 		expect(destinations).toContain('subscriptions')
+		expect(destinations).toContain('reels')
+	})
+
+	/**
+	 * Shorts is the Videos timeline watched one at a time, so it is offered
+	 * exactly when Videos is: an instance that turned Videos off has nothing
+	 * for the stack to show.
+	 */
+	it('offers Shorts beside Videos, and not without it', () => {
+		useSettingsStore().setServerData({ public: false, sections: { section_videos: false } })
+		expect(itemNames(mountNavigation())).not.toContain('Shorts')
+	})
+
+	it('lights Shorts on the reel stack and nothing else', () => {
+		expect(activeNames(mountNavigation({}, appRouter.resolve('/reels')))).toEqual(['Shorts'])
 	})
 
 	it('lists the fixed entries in order, without an errors entry when there are none', () => {
@@ -792,6 +833,7 @@ describe('Navigation', () => {
 			'My Feed',
 			'Photos',
 			'Videos',
+			'Shorts',
 			'Subscriptions',
 			'Direct messages',
 			'Discover',
@@ -832,6 +874,7 @@ describe('Navigation', () => {
 			'My Feed',
 			'Photos',
 			'Videos',
+			'Shorts',
 			'Subscriptions',
 			'Direct messages',
 			'Discover',
