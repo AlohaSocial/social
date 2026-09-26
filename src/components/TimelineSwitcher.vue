@@ -20,7 +20,7 @@
 			:key="option.value"
 			ref="options"
 			class="switcher__option"
-			:class="{ 'switcher__option--active': option.value === value }"
+			:class="{ 'switcher__option--active': option.value === value, 'switcher__option--short': Boolean(option.short) }"
 			role="radio"
 			type="button"
 			:aria-checked="option.value === value"
@@ -31,6 +31,9 @@
 				class="switcher__icon"
 				:size="18" />
 			<span class="switcher__label">{{ option.label }}</span>
+			<!-- what a phone shows where there is no room for the label, for
+			     choices an icon cannot tell apart; the label stays the name -->
+			<span v-if="option.short" class="switcher__short" aria-hidden="true">{{ option.short }}</span>
 		</button>
 	</div>
 </template>
@@ -70,13 +73,15 @@ export default {
 
 	props: {
 		/**
-		 * What to choose between: `{ value, label, icon, to }` each, where
-		 * `to` is the route the option pushes when it is chosen. Leave `to`
-		 * off and the option emits `update:value` instead, for a page whose
-		 * choice is its own state.
+		 * What to choose between: `{ value, label, icon, to, short }` each,
+		 * where `to` is the route the option pushes when it is chosen. Leave
+		 * `to` off and the option emits `update:value` instead, for a page
+		 * whose choice is its own state. `short` is optional: a few words a
+		 * phone shows instead of the icon, for choices whose icons cannot tell
+		 * them apart -- four time windows are four calendars.
 		 */
 		options: {
-			type: Array,
+			type: /** @type {import('vue').PropType<Array<{ value: string, label: string, icon: object, to?: object, short?: string }>>} */ (Array),
 			required: true,
 		},
 
@@ -418,6 +423,11 @@ export default {
 	100% { transform: rotate(0) scale(1); }
 }
 
+/* a phone's stand-in for the label; see the block below */
+.switcher__short {
+	display: none;
+}
+
 /*
  * Five of these do not fit a phone.
  *
@@ -436,6 +446,15 @@ export default {
 	// the icon says the same thing, and there is no longer room for both
 	.switcher__label {
 		@include layout.visually-hidden;
+	}
+
+	// unless the icons are all alike, and the option brought words of its own
+	.switcher__option--short .switcher__icon {
+		display: none;
+	}
+
+	.switcher__short {
+		display: inline;
 	}
 }
 

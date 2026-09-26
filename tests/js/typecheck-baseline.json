@@ -231,11 +231,7 @@
 		"TS2353 Object literal may only specify known properties, and 'type' does not exist in type 'PropType<Status>'.": 1
 	},
 	"src/components/TimelineSwitcher.vue": {
-		"TS2339 Property 'icon' does not exist on type 'unknown'.": 1,
-		"TS2339 Property 'label' does not exist on type 'unknown'.": 1,
 		"TS2339 Property 'offset' does not exist on type '{ left: number; width: number; }'.": 1,
-		"TS2339 Property 'to' does not exist on type 'unknown'.": 2,
-		"TS2339 Property 'value' does not exist on type 'unknown'.": 7,
 		"TS2353 Object literal may only specify known properties, and 'offset' does not exist in type '{ left: number; width: number; }'.": 1
 	},
 	"src/components/TrendingHashtags.vue": {
