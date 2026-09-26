@@ -235,7 +235,23 @@ The sidebar is the map:
   with sound; opened from a link, the browser may hold the sound back until
   you tap the speaker, which a "Tap for sound" hint points at. Tap to pause,
   arrow keys to move, space to pause, `m` for sound, `l` to like. The **+**
-  picks a video from your computer and opens **New post** with it attached.
+  opens **New short**:
+  - **Upload a video**, drop one on the dialog, or **Record** one with your
+    camera. Recording counts down 3-2-1 first, can switch between the front
+    and back camera, and stops by itself at the limit you pick (15 s, 60 s or
+    3 min). Browsers only lend a page the camera over https, so on a server
+    reached by plain http the Record button says so instead.
+  - **Trim** it by dragging the two handles on the strip under the preview,
+    or focus a handle and use the arrow keys (Shift for bigger steps, Home and
+    End for the ends). The preview loops over just the part you kept.
+  - **Cover**: slide to the frame people see before the short plays.
+  - Write a **caption**; the popular hashtags underneath add themselves with
+    one press. Choose **Everyone**, **Quiet public** or **Followers**, and
+    switch on **Sensitive content** to hide it until somebody chooses to
+    watch.
+  - **Post** shows how far it has got: cutting (as long as the trimmed short
+    lasts, since the browser plays it through once), uploading, posting.
+    Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
   It is in the account menu at the foot of the sidebar, under **My profile**,

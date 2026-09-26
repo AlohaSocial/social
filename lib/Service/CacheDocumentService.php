@@ -150,6 +150,64 @@ class CacheDocumentService {
 		return true;
 	}
 
+	/** the largest cover picture taken for a video, in bytes */
+	public const MAX_POSTER_BYTES = 10 * 1024 * 1024;
+
+	/**
+	 * Uses a picture the uploader chose as a video's poster, in place of the
+	 * frame ffmpeg picked -- Mastodon's `thumbnail` on a media upload, and the
+	 * cover a short is posted with.
+	 *
+	 * The picture goes through the same decode and resize every uploaded image
+	 * does, and comes out as a new JPEG, so nothing the camera wrote into the
+	 * original survives and a picture the server cannot read is refused rather
+	 * than stored. The poster it replaces is removed from appdata.
+	 *
+	 * @param Document $document a video that has been stored
+	 * @param string $imagePath the uploaded picture
+	 *
+	 * @return bool whether the cover was taken
+	 */
+	public function applyCustomPoster(Document $document, string $imagePath): bool {
+		if (!str_starts_with($document->getMediaType(), 'video/') || !is_readable($imagePath)) {
+			return false;
+		}
+
+		$content = @file_get_contents($imagePath, false, null, 0, self::MAX_POSTER_BYTES + 1);
+		if ($content === false || $content === '' || strlen($content) > self::MAX_POSTER_BYTES) {
+			return false;
+		}
+
+		try {
+			$this->assertDecodable($content);
+			$image = ImageResize::createFromString($content);
+			$image->quality_jpg = 82;
+			$image->resizeToBestFit(self::RESIZED_WIDTH, self::RESIZED_HEIGHT);
+			$poster = $image->getImageAsString(IMAGETYPE_JPEG);
+		} catch (Throwable $e) {
+			$this->logger->debug('a cover picture could not be read', ['exception' => $e]);
+
+			return false;
+		}
+
+		if ($poster === '') {
+			return false;
+		}
+
+		$previous = $document->getResizedCopy();
+		$document->setResizedCopy($this->generateFileFromContent($poster));
+		$document->setResizedCopySize($image->getDestWidth(), $image->getDestHeight());
+		$gd = @imagecreatefromstring($poster);
+		if ($gd !== false) {
+			$document->setBlurHash($this->blurService->generateBlurHash($gd));
+		}
+		if ($previous !== '' && $previous !== $document->getLocalCopy()) {
+			$this->removeFromCache($previous);
+		}
+
+		return true;
+	}
+
 	/**
 	 * A file on somebody else's server, fetched and then stored exactly as an
 	 * upload is.

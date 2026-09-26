@@ -95,12 +95,20 @@ trait ApiMedia {
 
 			$this->logger->debug('[ApiController] mediaNew: ' . json_encode($file));
 
+			// a cover for a video, as Mastodon's API names it; anything
+			// wrong with it costs the cover and not the upload
+			$thumbnail = $_FILES['thumbnail'] ?? [];
+			$thumbnailPath = (($thumbnail['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK)
+				? ($thumbnail['tmp_name'] ?? '')
+				: '';
+
 			return new DataResponse(
 				$this->storeAttachment(
 					$name,
 					(string)$this->request->getParam('description', ''),
 					(string)$this->request->getParam('focus', ''),
-					basename($file['name'] ?? '')
+					basename($file['name'] ?? ''),
+					$thumbnailPath
 				),
 				Http::STATUS_OK
 			);
@@ -205,7 +213,7 @@ trait ApiMedia {
 	 *
 	 * @return MediaAttachment the entity a client is answered with
 	 */
-	private function storeAttachment(string $tmpPath, string $description, string $focus = '', string $filename = ''): MediaAttachment {
+	private function storeAttachment(string $tmpPath, string $description, string $focus = '', string $filename = '', string $thumbnailPath = ''): MediaAttachment {
 		$document = new Document();
 		$document->setLocal(true);
 		$document->setAccount($this->viewer->getPreferredUsername());
@@ -229,6 +237,9 @@ trait ApiMedia {
 		}
 
 		$this->cacheDocumentService->saveFromTempToCache($document, $tmpPath);
+		if ($thumbnailPath !== '') {
+			$this->cacheDocumentService->applyCustomPoster($document, $thumbnailPath);
+		}
 		if ($description === '' && $filename !== '' && CacheDocumentService::isDocumentMime($document->getMediaType())) {
 			// a file is known by its name, and the description is the one
 			// field the entity has for saying what it is; a picture with no

@@ -1017,16 +1017,6 @@ describe('Composer', () => {
 			expect(wrapper.findComponent(PreviewGridItem).exists()).toBe(true)
 		})
 
-		/** a video picked on the Shorts page arrives as a File, and goes up like a dropped one */
-		it('attaches a file it was handed, open and without a click', async () => {
-			const clip = new File(['v'], 'short.mp4', { type: 'video/mp4' })
-			const { wrapper, store } = mountComposer({ initialFiles: [clip, 'not a file'] })
-			await flushPromises()
-
-			expect(store.createMedia).toHaveBeenCalledTimes(1)
-			expect(wrapper.find('.new-post').classes()).not.toContain('new-post--collapsed')
-		})
-
 		it('attaches nothing when it was handed nothing', async () => {
 			const { store } = mountComposer()
 			await flushPromises()
