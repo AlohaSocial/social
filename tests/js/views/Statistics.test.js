@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import axios from '@nextcloud/axios'
@@ -733,8 +731,8 @@ describe('Statistics', () => {
 
 		expect(axios.get.mock.calls[0][1].params).toEqual({ days: 0, fresh: false })
 
-		const choices = wrapper.findAll('.stats__window-choice')
-		expect(choices.map((choice) => choice.text())).toEqual([
+		const choices = wrapper.findAll('.stats__windows .switcher__option')
+		expect(choices.map((choice) => choice.find('.switcher__label').text())).toEqual([
 			'All time',
 			'Last 30 days',
 			'Last 90 days',
@@ -746,7 +744,7 @@ describe('Statistics', () => {
 
 		expect(axios.get).toHaveBeenCalledTimes(2)
 		expect(axios.get.mock.calls[1][1].params).toEqual({ days: 90, fresh: false })
-		expect(choices[2].attributes('aria-pressed')).toBe('true')
+		expect(choices[2].attributes('aria-checked')).toBe('true')
 
 		// the same window again is not a second walk of the same posts
 		await choices[2].trigger('click')
@@ -772,7 +770,7 @@ describe('Statistics', () => {
 
 		const wrapper = mountPage()
 		await flushPromises()
-		await wrapper.findAll('.stats__window-choice')[1].trigger('click')
+		await wrapper.findAll('.stats__windows .switcher__option')[1].trigger('click')
 		await flushPromises()
 
 		const download = wrapper.find('.stats__actions a')
@@ -856,17 +854,32 @@ describe('Statistics', () => {
 		expect(wrapper.find('.stats__list').exists()).toBe(false)
 	})
 
-	/**
-	 * jsdom does no layout, so this reads the rule itself: four unbreakable
-	 * labels are 448 px wide, and on a 400 px phone a group that neither
-	 * wraps nor scrolls cut "Last 365 days" to "Last 36" with no way to it.
-	 */
-	it('lets the window choices wrap onto a second row on a narrow screen', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/views/Statistics.vue'), 'utf8')
-		const rule = source.match(/\n\.stats__windows \{([^}]*)\}/)
+	/** the window choice is the same control as every other switch in the app */
+	it('chooses the window with the app\'s own switcher', async () => {
+		axios.get.mockResolvedValue({ data: answer() })
 
-		expect(rule).not.toBeNull()
-		expect(rule[1]).toMatch(/flex-wrap: wrap;/)
-		expect(rule[1]).toMatch(/max-width: 100%;/)
+		const wrapper = mountPage()
+		await flushPromises()
+
+		const switcher = wrapper.findComponent({ name: 'TimelineSwitcher' })
+		expect(switcher.exists()).toBe(true)
+		expect(switcher.attributes('role')).toBe('radiogroup')
+		expect(switcher.attributes('aria-label')).toBe('Counted over')
+	})
+
+	/**
+	 * On a phone the switcher hides its labels behind their icons, and four
+	 * calendars cannot be told apart. Four labels of up to 13 characters were
+	 * also once cut to "Last 36" on a 400 px screen. Each window carries a
+	 * short name the switcher shows there instead.
+	 */
+	it('gives each window a short name for a phone', async () => {
+		axios.get.mockResolvedValue({ data: answer() })
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		expect(wrapper.findAll('.stats__windows .switcher__short').map((short) => short.text()))
+			.toEqual(['All', '30 days', '90 days', '365 days'])
 	})
 })

@@ -12,18 +12,15 @@
 		<!-- the window these numbers were counted over, and what to do with
 		     them once they are on screen -->
 		<div class="stats__toolbar">
-			<div class="stats__windows" role="group" :aria-label="t('social', 'Counted over')">
-				<button
-					v-for="choice in windowChoices"
-					:key="choice.days"
-					type="button"
-					class="stats__window-choice"
-					:class="{ 'stats__window-choice--on': choice.days === days }"
-					:aria-pressed="choice.days === days"
-					@click="pick(choice.days)">
-					{{ choice.label }}
-				</button>
-			</div>
+			<!-- the same switcher as the timelines, Discover and a profile's
+			     tabs: the window is a choice this page holds, so no option
+			     carries a route and the pick comes back as update:value -->
+			<TimelineSwitcher
+				class="stats__windows"
+				:options="windowChoices"
+				:value="String(days)"
+				:label="t('social', 'Counted over')"
+				@update:value="pick(Number($event))" />
 			<div class="stats__actions">
 				<NcButton
 					variant="tertiary"
@@ -786,6 +783,11 @@ import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconShape from 'vue-material-design-icons/ShapeOutline.vue'
 import IconTarget from 'vue-material-design-icons/Target.vue'
 import IconTrophy from 'vue-material-design-icons/Trophy.vue'
+import IconAllTime from 'vue-material-design-icons/Infinity.vue'
+import IconMonth from 'vue-material-design-icons/CalendarMonthOutline.vue'
+import IconQuarter from 'vue-material-design-icons/CalendarRangeOutline.vue'
+import IconYear from 'vue-material-design-icons/CalendarBlankOutline.vue'
+import TimelineSwitcher from '../components/TimelineSwitcher.vue'
 import { getCanonicalLocale, n, t } from '@nextcloud/l10n'
 import { seriesStyle } from '../utils/tagColour.js'
 import logger from '../services/logger.js'
@@ -804,6 +806,27 @@ import logger from '../services/logger.js'
  */
 function utcMonth(key, options, locale = undefined) {
 	return new Date(key + '-01T00:00:00Z').toLocaleDateString(locale, { ...options, timeZone: 'UTC' })
+}
+
+/**
+ * The icon beside a window in the switcher, which every option of that
+ * control carries.
+ *
+ * @param {number} days the window, 0 for everything
+ * @return {object} an icon component
+ */
+function windowIcon(days) {
+	if (days === 0) {
+		return IconAllTime
+	}
+	if (days <= 31) {
+		return IconMonth
+	}
+	if (days <= 120) {
+		return IconQuarter
+	}
+
+	return IconYear
 }
 
 /**
@@ -838,6 +861,7 @@ export default {
 		IconShape,
 		IconTarget,
 		IconTrophy,
+		TimelineSwitcher,
 		NcAvatar,
 		NcButton,
 		NcLoadingIcon,
@@ -872,16 +896,23 @@ export default {
 		 * entry of its own — so the list is read from the answer rather than
 		 * written down twice.
 		 *
-		 * @return {object[]} each with the days it covers and its label
+		 * @return {object[]} each with the days it covers as its `value`, its
+		 *                    label and its icon, as TimelineSwitcher takes them
 		 */
 		windowChoices() {
 			const choices = this.stats?.window?.choices ?? [0, 30, 90, 365]
 
 			return choices.map((days) => ({
-				days,
+				value: String(days),
 				label: days === 0
 					? t('social', 'All time')
 					: n('social', 'Last %n day', 'Last %n days', days),
+				icon: windowIcon(days),
+				// on a phone the switcher drops the labels for the icons, and
+				// four calendars say nothing; these are what it shows instead
+				short: days === 0
+					? t('social', 'All')
+					: n('social', '%n day', '%n days', days),
 			}))
 		},
 
@@ -2481,38 +2512,10 @@ export default {
 	margin-block-end: 18px;
 }
 
-.stats__windows {
-	display: flex;
-	flex-wrap: wrap;
-	max-width: 100%;
-	overflow: hidden;
-	border: 2px solid var(--color-border-dark);
-	border-radius: var(--border-radius-element, 24px);
-}
-
-.stats__window-choice {
-	padding: 6px 14px;
-	border: none;
-	border-radius: 0;
+/* the switcher centres itself above a timeline; in a toolbar it sits at the
+   start of the row, with the actions at the other end */
+.stats__toolbar .stats__windows {
 	margin: 0;
-	background: transparent;
-	color: var(--color-main-text);
-	flex: 1 1 auto;
-	font-size: .9em;
-	white-space: nowrap;
-
-	&:hover {
-		background: var(--color-background-hover);
-	}
-
-	&--on {
-		background: var(--color-primary-element);
-		color: var(--color-primary-element-text);
-
-		&:hover {
-			background: var(--color-primary-element-hover);
-		}
-	}
 }
 
 .stats__actions {

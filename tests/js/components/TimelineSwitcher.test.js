@@ -334,4 +334,25 @@ describe('TimelineSwitcher', () => {
 		expect(wrapper.find('.switcher__glider').attributes('style')).toContain('translateX(0%)')
 		expect(options(wrapper).filter((option) => option.attributes('aria-checked') === 'true')).toHaveLength(0)
 	})
+
+	/**
+	 * On a phone the labels give way to the icons, which is fine for three
+	 * timelines and useless for four time windows that are all calendars. An
+	 * option can bring a few words of its own for that case; the label stays
+	 * its accessible name either way.
+	 */
+	it('carries a short name for a phone only where the option brings one', () => {
+		const { wrapper } = mountSwitcher('first', [
+			{ value: 'first', label: 'All time', short: 'All', icon: IconStub },
+			{ value: 'second', label: 'Second', icon: IconStub },
+		])
+
+		const [withShort, without] = options(wrapper)
+		expect(withShort.classes()).toContain('switcher__option--short')
+		expect(withShort.find('.switcher__short').text()).toBe('All')
+		expect(withShort.find('.switcher__short').attributes('aria-hidden')).toBe('true')
+		expect(withShort.find('.switcher__label').text()).toBe('All time')
+		expect(without.classes()).not.toContain('switcher__option--short')
+		expect(without.find('.switcher__short').exists()).toBe(false)
+	})
 })
