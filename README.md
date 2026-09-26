@@ -138,9 +138,11 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 - **Shorts**, in the sidebar under Videos, is the same videos as a stack: one at a
   time, full height, playing as it comes past and stopping as it goes — the shape
   somebody arriving from TikTok or YouTube Shorts already knows. A switch in the corner
-  picks whose videos: the people you follow, this server, or everywhere. One playing at
-  a time and the rest paused rather than left buffering, and reachable with the arrow
-  keys and the space bar. A heart button likes the video and sends hearts up the edge;
+  picks whose videos: the people you follow, this server, or everywhere. It plays with
+  sound, or muted with a "Tap for sound" hint when the browser will not start with it,
+  one video at a time with the rest paused rather than left buffering, and reachable
+  with the arrow keys and the space bar. A **+** picks a video and opens New post with
+  it attached, to post a short of your own. A heart button likes the video and sends hearts up the edge;
   a double tap on the video likes it and puts a heart where your finger was (and never
   takes a like back); `l` does the same from the keyboard.
 ![Videos, including federated PeerTube channels](img/readme/videos.jpg)

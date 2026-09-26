@@ -67,6 +67,10 @@
 					<IconVolumeOff v-if="muted" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
+				<!-- the browser would not start with sound: say where it is -->
+				<span v-if="soundHeld && index === playing" class="reel__sound-hint" aria-hidden="true">
+					{{ t('social', 'Tap for sound') }}
+				</span>
 
 				<div class="reel__caption">
 					<router-link
@@ -120,6 +124,26 @@
 		<!-- whose videos: the three circles the Videos page is read at. Shorts
 		     is its own entry in the sidebar, so this page is where the choice
 		     is made rather than something carried over from the grid -->
+		<!-- a new short: pick a video and the New post dialog opens with it
+		     attached. The input stays out of the tab order; the button is the
+		     control a keyboard and a screen reader reach. -->
+		<input
+			ref="upload"
+			type="file"
+			accept="video/mp4,video/webm,video/quicktime,video/*"
+			class="hidden-visually"
+			tabindex="-1"
+			aria-hidden="true"
+			@change="chooseShort">
+		<button
+			type="button"
+			class="reels__create"
+			:title="t('social', 'New short')"
+			:aria-label="t('social', 'New short')"
+			@click="pickShort">
+			<IconPlus :size="24" />
+		</button>
+
 		<nav class="reels__scopes" :aria-label="t('social', 'Whose videos')">
 			<router-link
 				v-for="option in scopes"
@@ -150,10 +174,13 @@
  *  - **One plays at a time.** An IntersectionObserver decides which, and every
  *    other element is paused rather than left buffering; a dozen videos
  *    playing behind the one on screen is a phone getting hot for nothing.
- *  - **Muted until asked.** A page that makes noise on open is a page people
- *    close, and no browser will autoplay with sound anyway. The choice is
- *    remembered for the session and applies to every video, because it is a
- *    statement about this page rather than about one video.
+ *  - **Sound on, where the browser allows it.** Somebody who opens Shorts
+ *    from the sidebar has pressed something to get here, and a browser
+ *    counts that as leave to play with sound. Opened cold -- a pasted link,
+ *    a reload -- the browser refuses, and the stack falls back to muted and
+ *    says "Tap for sound" rather than showing a still. The choice is kept for
+ *    the page and applies to every video, because it is a statement about
+ *    this page rather than about one video.
  *  - **The scroll does the work.** CSS scroll-snap rather than a transform per
  *    slide: it is the one thing that behaves the same under a finger, a
  *    trackpad, a wheel and a keyboard, and it keeps working when the
@@ -165,6 +192,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
+import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
@@ -174,6 +202,7 @@ import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
+import eventBus, { COMPOSE_WITH_FILES } from '../services/eventBus.js'
 
 /** How close to the end the reader gets before the next page is asked for. */
 const LOOK_AHEAD = 3
@@ -198,6 +227,7 @@ export default {
 	components: {
 		IconHeart,
 		IconHeartOutline,
+		IconPlus,
 		IconRefresh,
 		IconVolumeHigh,
 		IconVolumeOff,
@@ -220,7 +250,9 @@ export default {
 
 	data() {
 		return {
-			muted: true,
+			muted: false,
+			/** the browser refused to start with sound, so it was muted for it */
+			soundHeld: false,
 			playing: 0,
 			loading: false,
 			/** the last page asked for could not be fetched */
@@ -382,9 +414,19 @@ export default {
 				if (at === index) {
 					video.muted = this.muted
 					// a rejected play is the browser's autoplay rule, which is
-					// an answer rather than a fault: the poster stays up and
-					// the reader can press it
-					video.play?.().catch((error) => logger.debug('autoplay refused', { error }))
+					// an answer rather than a fault. With sound it is usually
+					// the sound it refused, so the video plays muted instead
+					// and the page says where the sound is; muted and still
+					// refused, the poster stays up and the reader can press it
+					video.play?.().catch((error) => {
+						logger.debug('autoplay refused', { error })
+						if (error?.name === 'NotAllowedError' && !this.muted) {
+							this.muted = true
+							this.soundHeld = true
+							video.muted = true
+							video.play?.().catch((again) => logger.debug('muted autoplay refused', { error: again }))
+						}
+					})
 				} else {
 					video.pause?.()
 					// back to the first frame, so coming back to it is the
@@ -536,6 +578,28 @@ export default {
 			}, HEART_MS + delay)
 		},
 
+		/** Opens the file chooser behind the + button. */
+		pickShort() {
+			const input = /** @type {HTMLInputElement|undefined} */ (this.$refs.upload)
+			input?.click()
+		},
+
+		/**
+		 * A video picked for a new short goes to the New post dialog, which the
+		 * sidebar owns; once it is posted the stack refreshes like any timeline.
+		 *
+		 * @param {Event} event the file input's change
+		 */
+		chooseShort(event) {
+			const input = /** @type {HTMLInputElement} */ (event.target)
+			const files = [...(input?.files ?? [])]
+			// picking the same file twice in a row would otherwise do nothing
+			input.value = ''
+			if (files.length > 0) {
+				eventBus.emit(COMPOSE_WITH_FILES, files)
+			}
+		},
+
 		togglePlay(index) {
 			const video = this.videos[index]
 			if (!video) {
@@ -550,6 +614,7 @@ export default {
 		},
 
 		toggleSound() {
+			this.soundHeld = false
 			this.muted = !this.muted
 			const video = this.videos[this.playing]
 			if (video) {
@@ -675,6 +740,35 @@ export default {
 	}
 
 	/* top right, over the video, where every short-video app keeps it */
+	/* above the column of per-video buttons, for the whole stack */
+	&__create {
+		position: absolute;
+		z-index: 3;
+		inset-block-end: 132px;
+		inset-inline-end: 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		inline-size: 40px;
+		block-size: 40px;
+		padding: 0;
+		border: 2px solid #fff;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #ff3b5c, #0082c9);
+		color: #fff;
+		cursor: pointer;
+		transition: transform .15s ease;
+
+		&:hover {
+			transform: scale(1.08);
+		}
+
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: 2px;
+		}
+	}
+
 	&__scopes {
 		position: absolute;
 		inset-block-start: 12px;
@@ -740,12 +834,35 @@ export default {
 		background: rgba(0, 0, 0, 0.55);
 		color: #fff;
 		cursor: pointer;
+		/* over the caption, which runs the width of the slide underneath it
+		   and used to swallow every press meant for this button */
+		z-index: 2;
+	}
+
+	&__sound-hint {
+		position: absolute;
+		inset-block-end: 24px;
+		inset-inline-end: 64px;
+		z-index: 2;
+		padding: 3px 10px;
+		border-radius: 999px;
+		background: rgba(0, 0, 0, 0.7);
+		color: #fff;
+		font-size: 12px;
+		font-weight: 600;
+		pointer-events: none;
+		animation: reel-hint-in .4s ease-out both;
 	}
 
 	/* above the sound button, the column every short-video app keeps its
 	   actions in */
+	&__caption a {
+		pointer-events: auto;
+	}
+
 	&__like {
 		position: absolute;
+		z-index: 2;
 		inset-block-end: 68px;
 		inset-inline-end: 16px;
 		display: flex;
@@ -813,6 +930,9 @@ export default {
 
 	&__caption {
 		position: absolute;
+		/* the caption's own links take presses; the rest of it lets them
+		   through to the video (tap to pause) and to the buttons */
+		pointer-events: none;
 		inset-block-end: 0;
 		inset-inline: 0;
 		display: flex;
@@ -884,8 +1004,21 @@ export default {
 	100% { opacity: 0; transform: translate(var(--drift), -45vh) scale(.8) rotate(calc(var(--tilt) * -1)); }
 }
 
+@keyframes reel-hint-in {
+	from { opacity: 0; transform: translateX(8px); }
+	to { opacity: 1; transform: none; }
+}
+
 /* the like still lands; only the flight is taken away */
 @media (prefers-reduced-motion: reduce) {
+	.reel__sound-hint {
+		animation: none;
+	}
+
+	.reels__create {
+		transition: none;
+	}
+
 	.reel__heart {
 		animation: none;
 		display: none;

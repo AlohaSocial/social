@@ -248,15 +248,16 @@
 		v-if="showComposer"
 		closeOnClickOutside
 		:name="t('social', 'New post')"
-		@close="showComposer = false">
+		@close="closeComposer">
 		<div class="modal-composer">
 			<!-- the box emptied and the modal stayed open, which reads as if
 			     nothing had been sent -->
 			<Composer
 				startExpanded
 				:initialPaths="composerPaths"
+				:initialFiles="composerFiles"
 				emojiPickerContainer=".modal-wrapper"
-				@posted="showComposer = false" />
+				@posted="closeComposer" />
 		</div>
 	</NcModal>
 
@@ -336,7 +337,7 @@ import { pageIdentity } from '../services/pageOrder.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { afterFirstTimeline } from '../services/boot.js'
-import eventBus, { LISTS_CHANGED } from '../services/eventBus.js'
+import eventBus, { COMPOSE_WITH_FILES, LISTS_CHANGED } from '../services/eventBus.js'
 import { ownAvatarUrl } from '../services/avatar.js'
 
 // the composer pulls the emoji picker and the attachment stack with it:
@@ -426,6 +427,8 @@ export default {
 			ringing: false,
 			ringTimer: null,
 			showComposer: false,
+			/** files handed to the dialog by a page without a composer, like Shorts */
+			composerFiles: [],
 			/** files "Share to Social" in the Files app sent along, attached when the dialog opens */
 			composerPaths: [],
 			showErrors: false,
@@ -835,6 +838,7 @@ export default {
 		// the settings page changes them; this sidebar holds its own copy
 		this.onListsChanged = () => this.fetchLists()
 		eventBus.on(LISTS_CHANGED, this.onListsChanged)
+		eventBus.on(COMPOSE_WITH_FILES, this.composeWithFiles)
 
 		// how many entries Explore shows depends on how much room the rail has
 		this.measureViewport()
@@ -867,6 +871,7 @@ export default {
 
 	beforeUnmount() {
 		eventBus.off(LISTS_CHANGED, this.onListsChanged)
+		eventBus.off(COMPOSE_WITH_FILES, this.composeWithFiles)
 		window.removeEventListener('resize', this.measureViewport)
 		this.railObserver?.disconnect()
 		if (typeof this.stopListening === 'function') {
@@ -996,6 +1001,29 @@ export default {
 		 * once per file. Open the New post dialog with them, and take the
 		 * query off the address so a reload does not attach them twice.
 		 */
+		/**
+		 * Opens the New post dialog with files already attached, for a page
+		 * that picked them without a composer of its own.
+		 *
+		 * @param {File[]} files what was chosen
+		 */
+		composeWithFiles(files) {
+			const chosen = (Array.isArray(files) ? files : []).filter((file) => file instanceof File)
+			if (chosen.length === 0) {
+				return
+			}
+
+			this.composerFiles = chosen
+			this.showComposer = true
+		},
+
+		/** Closes the dialog and forgets what it was opened with, so it opens empty next time. */
+		closeComposer() {
+			this.showComposer = false
+			this.composerFiles = []
+			this.composerPaths = []
+		},
+
 		openComposerFromQuery() {
 			const raw = this.$route?.query?.attach
 			const paths = (Array.isArray(raw) ? raw : [raw])

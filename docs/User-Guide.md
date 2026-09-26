@@ -231,8 +231,11 @@ The sidebar is the map:
   here follows.
 - **Shorts** — the Videos timeline watched one at a time, full height, each
   playing as it comes up and pausing as you scroll past. The switch in the top
-  corner picks whose videos (**My Feed**, **Local** or **Global**). Tap to
-  pause, arrow keys to move, space to pause, `m` for sound.
+  corner picks whose videos (**My Feed**, **Local** or **Global**). It plays
+  with sound; opened from a link, the browser may hold the sound back until
+  you tap the speaker, which a "Tap for sound" hint points at. Tap to pause,
+  arrow keys to move, space to pause, `m` for sound, `l` to like. The **+**
+  picks a video from your computer and opens **New post** with it attached.
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
   It is in the account menu at the foot of the sidebar, under **My profile**,

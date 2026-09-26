@@ -11,7 +11,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import Navigation from '../../../src/components/Navigation.vue'
 import appRouter from '../../../src/router.js'
 import axios from '@nextcloud/axios'
-import eventBus, { LISTS_CHANGED } from '../../../src/services/eventBus.js'
+import eventBus, { COMPOSE_WITH_FILES, LISTS_CHANGED } from '../../../src/services/eventBus.js'
 import { useErrorsStore } from '../../../src/store/errors.js'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useNotificationsStore } from '../../../src/store/notifications.js'
@@ -50,7 +50,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, closeOnClickOutside: Boolean }, emits: ['close'], template: '<div class="modal-stub" :data-name="name" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { props: ['initialPaths'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { props: ['initialPaths', 'initialFiles'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" :data-files="(initialFiles || []).map((f) => f.name).join(\',\')" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -142,6 +142,33 @@ describe('Navigation', () => {
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/trends/tags', expect.anything())
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/lists')
 			expect(fetchUnread).toHaveBeenCalledTimes(1)
+		})
+	})
+
+	/** the Shorts page picks a video and hands it here, where the dialog lives */
+	describe('a video picked on the Shorts page', () => {
+		it('opens the New post dialog with the video attached, and forgets it on close', async () => {
+			const wrapper = mountNavigation()
+			const clip = new File(['v'], 'short.mp4', { type: 'video/mp4' })
+
+			eventBus.emit(COMPOSE_WITH_FILES, [clip])
+			await nextTick()
+			expect(wrapper.find('.modal-stub[data-name="New post"]').exists()).toBe(true)
+			expect(wrapper.find('.composer-stub').attributes('data-files')).toBe('short.mp4')
+
+			await wrapper.find('.composer-stub').trigger('click')
+			await wrapper.find('.navigation__compose').trigger('click')
+			expect(wrapper.find('.composer-stub').attributes('data-files')).toBe('')
+			eventBus.all.clear()
+		})
+
+		it('opens nothing for nothing', async () => {
+			const wrapper = mountNavigation()
+
+			eventBus.emit(COMPOSE_WITH_FILES, [])
+			await nextTick()
+			expect(wrapper.find('.modal-stub[data-name="New post"]').exists()).toBe(false)
+			eventBus.all.clear()
 		})
 	})
 

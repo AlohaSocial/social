@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import VideoReels from '../../../src/views/VideoReels.vue'
+import eventBus, { COMPOSE_WITH_FILES } from '../../../src/services/eventBus.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
@@ -142,12 +143,47 @@ describe('VideoReels', () => {
 		expect(wrapper.find('video').attributes('src')).toBe('https://cloud.example/b.mp4')
 	})
 
-	/** No browser autoplays with sound, and a page that made noise on open is one people close. */
-	it('starts muted', async () => {
+	/** somebody who pressed Shorts to get here is asking to hear it */
+	it('starts with the sound on', async () => {
 		const { wrapper } = await mountReels()
 
+		expect(wrapper.vm.muted).toBe(false)
+		expect(wrapper.find('.reel__sound').attributes('aria-label')).toBe('Mute')
+	})
+
+	/**
+	 * Opened cold, a browser refuses to start with sound. The stack plays
+	 * muted rather than showing a still, and says where the sound is.
+	 */
+	it('falls back to muted when the browser refuses the sound, and says so', async () => {
+		const { wrapper } = await mountReels()
+		const first = wrapper.findAll('video')[0].element
+		first.play = vi.fn()
+			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
+			.mockResolvedValue(undefined)
+
+		wrapper.vm.play(0)
+		await flushPromises()
+
 		expect(wrapper.vm.muted).toBe(true)
-		expect(wrapper.find('video').element.muted).toBe(true)
+		expect(first.muted).toBe(true)
+		expect(first.play).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('.reel__sound-hint').text()).toBe('Tap for sound')
+
+		await wrapper.find('.reel__sound').trigger('click')
+		expect(wrapper.vm.muted).toBe(false)
+		expect(wrapper.find('.reel__sound-hint').exists()).toBe(false)
+	})
+
+	it('does not mute for a refusal that was not about the sound', async () => {
+		const { wrapper } = await mountReels()
+		const first = wrapper.findAll('video')[0].element
+		first.play = vi.fn().mockRejectedValue(Object.assign(new Error('gone'), { name: 'NotSupportedError' }))
+
+		wrapper.vm.play(0)
+		await flushPromises()
+
+		expect(wrapper.vm.muted).toBe(false)
 	})
 
 	/**
@@ -175,13 +211,33 @@ describe('VideoReels', () => {
 	})
 
 	/** The sound is a statement about the page, not about one video. */
-	it('unmutes the whole stack at once', async () => {
+	it('mutes and unmutes the whole stack at once', async () => {
 		const { wrapper } = await mountReels()
 
-		await wrapper.vm.toggleSound()
+		await wrapper.find('.reel__sound').trigger('click')
+		expect(wrapper.vm.muted).toBe(true)
+		expect(wrapper.findAll('video')[0].element.muted).toBe(true)
 
+		await wrapper.find('.reel__sound').trigger('click')
 		expect(wrapper.vm.muted).toBe(false)
 		expect(wrapper.findAll('video')[0].element.muted).toBe(false)
+	})
+
+	/** a new short: the picked video goes to the New post dialog the sidebar owns */
+	it('hands a picked video to the New post dialog', async () => {
+		const { wrapper } = await mountReels()
+		const heard = vi.fn()
+		eventBus.on(COMPOSE_WITH_FILES, heard)
+		const clip = new File(['v'], 'short.mp4', { type: 'video/mp4' })
+		const input = wrapper.find('input[type="file"]')
+		Object.defineProperty(input.element, 'files', { value: [clip], configurable: true })
+
+		await input.trigger('change')
+		eventBus.off(COMPOSE_WITH_FILES, heard)
+
+		expect(wrapper.find('.reels__create').attributes('aria-label')).toBe('New short')
+		expect(input.attributes('accept')).toContain('video/')
+		expect(heard).toHaveBeenCalledWith([clip])
 	})
 
 	/** A stack is reachable from a keyboard or it is reachable by nobody using one. */
