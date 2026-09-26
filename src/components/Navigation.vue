@@ -1475,13 +1475,27 @@ export default {
 	transition: background-color .2s ease, box-shadow .2s ease;
 }
 
+/*
+ * Open, the drawer is frosted glass: the page's own background, a little
+ * over half opaque and blurred hard, so the entries it covers show through as
+ * a soft haze and the rows on it keep the sidebar's ink. A bright hairline
+ * catches the top edge and a shadow lifts the pane off the sidebar, which is
+ * what separates the two -- the drawer is lighter and sharper-edged than the
+ * tinted sidebar it sits on.
+ *
+ * Built from `--color-main-background`, so the dark theme gets smoked glass
+ * with light type rather than a white pane with dark type in the dark.
+ */
 .navigation__more:has(button[aria-expanded="true"]) {
-	background-color: var(--color-main-background);
+	background-color: color-mix(in srgb, var(--color-main-background) 62%, transparent);
+	backdrop-filter: blur(16px) saturate(1.6);
+	-webkit-backdrop-filter: blur(16px) saturate(1.6);
 	border-start-start-radius: var(--border-radius-large, 12px);
 	border-start-end-radius: var(--border-radius-large, 12px);
+	border-top: 1px solid color-mix(in srgb, #fff 90%, transparent);
 	box-shadow:
-		0 -1px 0 var(--color-border),
-		0 -10px 24px -12px rgba(0, 0, 0, .35);
+		0 -1px 0 color-mix(in srgb, #fff 70%, transparent),
+		0 -16px 34px -12px rgba(0, 50, 100, .5);
 }
 
 .navigation__more > :deep(div[id]) {
