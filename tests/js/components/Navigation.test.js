@@ -839,6 +839,20 @@ describe('Navigation', () => {
 	})
 
 	/**
+	 * The open drawer is frosted glass made of the page's own background:
+	 * see-through and blurred, so the theme decides its colour and a dark
+	 * theme gets smoked glass. jsdom applies no scoped CSS, so the rule is
+	 * read from the source.
+	 */
+	it('makes the open drawer frosted glass in the theme\'s own background', () => {
+		const source = readFileSync(resolve('src/components/Navigation.vue'), 'utf8')
+		const open = source.match(/\n\.navigation__more:has\(button\[aria-expanded="true"\]\) \{([^}]*)\}/)
+
+		expect(open[1]).toMatch(/color-mix\(in srgb, var\(--color-main-background\) \d+%, transparent\)/)
+		expect(open[1]).toContain('backdrop-filter: blur(')
+	})
+
+	/**
 	 * Activities is inside the account menu, so while the menu is shut the
 	 * account button carries the unread count; otherwise it would be a count
 	 * nobody sees until they go looking for it.
