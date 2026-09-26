@@ -247,6 +247,12 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		/** a picture chosen before the editor opened, to start from */
+		initialFile: {
+			type: File,
+			default: null,
+		},
 	},
 
 	emits: ['update:open', 'posted'],
@@ -350,6 +356,12 @@ export default {
 		},
 	},
 
+	mounted() {
+		if (this.initialFile instanceof File) {
+			this.useFile(this.initialFile)
+		}
+	},
+
 	beforeUnmount() {
 		this.releasePreview()
 		this.stopDrag()
@@ -373,10 +385,14 @@ export default {
 			// the input keeps its selection, so picking the same file twice in
 			// a row would otherwise be ignored the second time
 			input.value = ''
-			if (!file) {
-				return
+			if (file) {
+				this.useFile(file)
 			}
+		},
 
+		/** @param {File} file the picture or video to make a story of */
+		useFile(file) {
+			this.kind = 'media'
 			this.releasePreview()
 			this.file = file
 			this.previewUrl = URL.createObjectURL(file)

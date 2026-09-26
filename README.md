@@ -119,7 +119,9 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 - **Stories** — a row of faces above your feed: whose stories are up. One picture or
   video, for followers, gone after a day; a ring on the face while there is something
   you have not seen, a player that runs them one after another, and your own place
-  first in the row with a **+** on it to add one. The poster sees how many people
+  first in the row with a **+** on it to add one. Adding one opens the same dialog as
+  a new short: record a video with the camera (15 s or 1 min) or upload one, trim it and
+  pick its cover; a picture or a text story goes on to the story editor below. The poster sees how many people
   watched and can take it down early; nobody else sees either. Stories federate to
   Pixelfed, in the shape Pixelfed actually reads — an `Add` carrying a capability its
   inbox fetches the story with, measured field by field against Pixelfed's own source

@@ -390,9 +390,14 @@ each for the seconds its poster gave it, and the ring goes grey. Hold the
 picture to pause it, tap the left or right of it to go back or forward, and
 use the arrows at the sides to move to the next account.
 
-Your own place is always first in the row, with a **+** on it. It opens a
-small dialog: choose a picture or a video, add a caption if you like, and
-say how many seconds a picture should show for. On a picture you can add
+Your own place is always first in the row, with a **+** on it. It opens the
+same dialog as a new short (see **Shorts**): **Record** a video with your
+camera (up to 15 seconds or a minute) or **Upload** one, trim it, pick its
+cover and add a caption. Your followers can watch it for a day.
+
+Choose **Picture or words** there, or upload a picture, and the story editor
+opens instead: add a caption if you like, and say how many seconds a picture
+should show for. On a picture you can add
 **stickers** — eight emoji, or a line of your own words — drag them where you
 want them, move a selected one with the arrow keys and remove it with Delete;
 they are drawn into the picture before it goes up. Or choose **Text** at the

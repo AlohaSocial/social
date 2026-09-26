@@ -62,9 +62,20 @@
 			@seen="markSeen"
 			@deleted="forget" />
 
-		<StoryComposerDialog
+		<!-- a story starts where a short does: record or upload a video,
+		     trim it, pick its cover. A picture or a text story goes on to
+		     the story editor, which has the stickers and the cards -->
+		<ShortComposerDialog
 			v-if="composing"
 			v-model:open="composing"
+			mode="story"
+			@posted="add"
+			@other="editPicture" />
+
+		<StoryComposerDialog
+			v-if="editing"
+			v-model:open="editing"
+			:initialFile="editingFile"
 			@posted="add" />
 	</section>
 </template>
@@ -89,6 +100,7 @@ import { accountStyle } from '../services/accountColour.js'
 // neither; they are fetched when one is
 const StoryViewer = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./StoryViewer.vue'))
 const StoryComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./StoryComposerDialog.vue'))
+const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./ShortComposerDialog.vue'))
 
 /**
  * The row of faces above the home timeline: whose stories are up.
@@ -108,6 +120,7 @@ export default {
 		ActorAvatar,
 		IconPlus,
 		NcButton,
+		ShortComposerDialog,
 		StoryComposerDialog,
 		StoryViewer,
 	},
@@ -119,6 +132,10 @@ export default {
 			/** which group the viewer is playing, or null while it is closed */
 			viewing: null,
 			composing: false,
+			/** the story editor is open, for a picture or a text story */
+			editing: false,
+			/** @type {File|null} the picture it was opened with, if any */
+			editingFile: null,
 		}
 	},
 
@@ -316,6 +333,17 @@ export default {
 		 *
 		 * @param {object} story the new story
 		 */
+		/**
+		 * From the video dialog to the story editor.
+		 *
+		 * @param {File|null} file a picture chosen there, or null to start empty
+		 */
+		editPicture(file) {
+			this.editingFile = file
+			this.composing = false
+			this.editing = true
+		},
+
 		add(story) {
 			const own = this.ownGroup
 			if (own) {
