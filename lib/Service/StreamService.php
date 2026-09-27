@@ -214,11 +214,11 @@ class StreamService {
 	 *                TYPE_FOLLOWERS or TYPE_DIRECT, or '' when the author is unknown
 	 */
 	public function visibilityOf(Stream $stream): string {
-		if (in_array(ACore::CONTEXT_PUBLIC, $stream->getToAll())) {
+		if (in_array(ACore::CONTEXT_PUBLIC, $stream->getToAll(), true)) {
 			return Stream::TYPE_PUBLIC;
 		}
 
-		if (in_array(ACore::CONTEXT_PUBLIC, $stream->getCcArray())) {
+		if (in_array(ACore::CONTEXT_PUBLIC, $stream->getCcArray(), true)) {
 			return Stream::TYPE_UNLISTED;
 		}
 

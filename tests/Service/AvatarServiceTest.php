@@ -104,7 +104,7 @@ class AvatarServiceTest extends TestCase {
 	private function png(): string {
 		$path = (string)tempnam(sys_get_temp_dir(), 'avatar');
 		file_put_contents($path, base64_decode(
-			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', true
 		));
 		$this->files[] = $path;
 

@@ -256,7 +256,7 @@ class GifServiceTest extends TestCase {
 		$path = tempnam(sys_get_temp_dir(), 'gif');
 		// a one-pixel PNG, which is a picture but not an animation
 		file_put_contents($path, base64_decode(
-			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+			'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', true
 		));
 
 		try {

@@ -309,7 +309,7 @@ class Item {
 	 * @return Item
 	 */
 	public function addToArray(string $to): Item {
-		if (!in_array($to, $this->toArray)) {
+		if (!in_array($to, $this->toArray, true)) {
 			$this->toArray[] = $to;
 		}
 
@@ -346,7 +346,7 @@ class Item {
 	 * @return Item
 	 */
 	public function removeCc(string $cc): Item {
-		if (!in_array($cc, $this->cc)) {
+		if (!in_array($cc, $this->cc, true)) {
 			return $this;
 		}
 
@@ -361,7 +361,7 @@ class Item {
 	 * @return bool
 	 */
 	public function hasCc(string $cc): bool {
-		return (in_array($cc, $this->cc));
+		return (in_array($cc, $this->cc, true));
 	}
 
 	/**

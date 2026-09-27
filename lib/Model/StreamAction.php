@@ -81,21 +81,21 @@ class StreamAction implements JsonSerializable {
 
 	public function updateValue(string $key, string $value): void {
 		$this->values[$key] = $value;
-		if (in_array($key, $this->accepted) && !in_array($key, $this->affected)) {
+		if (in_array($key, $this->accepted, true) && !in_array($key, $this->affected, true)) {
 			$this->affected[] = $key;
 		}
 	}
 
 	public function updateValueInt(string $key, int $value): void {
 		$this->values[$key] = $value;
-		if (in_array($key, $this->accepted) && !in_array($key, $this->affected)) {
+		if (in_array($key, $this->accepted, true) && !in_array($key, $this->affected, true)) {
 			$this->affected[] = $key;
 		}
 	}
 
 	public function updateValueBool(string $key, bool $value): void {
 		$this->values[$key] = $value;
-		if (in_array($key, $this->accepted) && !in_array($key, $this->affected)) {
+		if (in_array($key, $this->accepted, true) && !in_array($key, $this->affected, true)) {
 			$this->affected[] = $key;
 		}
 	}

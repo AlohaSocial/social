@@ -122,7 +122,7 @@ class TimelineApiController extends MastodonApiController {
 					ProbeOptions::PUBLIC,
 					ProbeOptions::DIRECT,
 					ProbeOptions::FAVOURITES
-				]
+				], true
 			)) {
 				$this->logger->error('[' . static::class . '] Unknown timeline requested', [
 					'timeline' => $timeline

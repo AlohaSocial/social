@@ -231,7 +231,7 @@ class SignatureServiceTest extends TestCase {
 			'host: remote.example',
 			'digest: ' . $headers['digest'],
 		]);
-		$this->assertSame(1, openssl_verify($signingString, base64_decode($m[1]), self::$publicKey, OPENSSL_ALGO_SHA256));
+		$this->assertSame(1, openssl_verify($signingString, base64_decode($m[1], true), self::$publicKey, OPENSSL_ALGO_SHA256));
 	}
 
 	/**
@@ -326,6 +326,18 @@ class SignatureServiceTest extends TestCase {
 		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
 
 		$this->assertSame('remote.example', $this->service->checkRequest($this->incomingRequest($headers), $body));
+	}
+
+	/** a signature that is not base64 is a bad signature, not an error in the server */
+	public function testCheckRequestRejectsASignatureThatIsNotBase64(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey);
+		$headers['signature'] = preg_replace('/signature="[^"]*"/', 'signature="not*base64!"', $headers['signature']);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+
+		$this->expectException(SignatureException::class);
+		$this->expectExceptionMessage('signature is not base64');
+		$this->service->checkRequest($this->incomingRequest($headers), $body);
 	}
 
 	public function testCheckRequestRejectsATamperedBody(): void {

@@ -281,7 +281,7 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 * @return bool
 	 */
 	public function isPublic(): bool {
-		return in_array(self::CONTEXT_PUBLIC, $this->getRecipients());
+		return in_array(self::CONTEXT_PUBLIC, $this->getRecipients(), true);
 	}
 
 	/**

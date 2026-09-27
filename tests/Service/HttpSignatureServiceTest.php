@@ -115,7 +115,7 @@ class HttpSignatureServiceTest extends TestCase {
 			1,
 			openssl_verify(
 				$expected,
-				base64_decode($this->signatureParts($headers)['signature']),
+				base64_decode($this->signatureParts($headers)['signature'], true),
 				self::$publicKey,
 				OPENSSL_ALGO_SHA256
 			)

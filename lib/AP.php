@@ -648,6 +648,6 @@ class AP {
 			Application::TYPE
 		];
 
-		return (in_array($item->getType(), $types));
+		return (in_array($item->getType(), $types, true));
 	}
 }

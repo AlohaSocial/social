@@ -233,7 +233,7 @@ class OutboundFederationWireTest extends TestCase {
 			1,
 			openssl_verify(
 				$signingString,
-				base64_decode($this->signatureParts($signatureHeader)['signature']),
+				base64_decode($this->signatureParts($signatureHeader)['signature'], true),
 				self::$publicKey,
 				OPENSSL_ALGO_SHA256
 			),
