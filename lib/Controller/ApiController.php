@@ -37,9 +37,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Class ApiController
- *
- * @package OCA\Social\Controller
+ * The client API routes that belong to no resource of their own: what an app's
+ * credentials say about it, search, saved searches, trending hashtags and
+ * reports.
  */
 class ApiController extends MastodonApiController {
 

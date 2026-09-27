@@ -81,7 +81,7 @@ share. Measured on a checkout hundreds of commits behind, 2026 came out at
 
 The app serves two API designs, and they share the `/api/v1/` prefix.
 
-- **Mastodon-compatible** — `ApiController` (2,940 lines), `ListController`,
+- **Mastodon-compatible** — the controllers built on `MastodonApiController`, `ListController`,
   `FilterController` and others, through `StreamService::getTimeline(ProbeOptions)`.
 - **Custom local** — `LocalController` (1,068 lines), through the five
   `@deprecated` `StreamService::getStream*()` methods and the five

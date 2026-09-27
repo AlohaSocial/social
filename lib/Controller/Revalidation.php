@@ -21,7 +21,7 @@ use OCP\IRequest;
  * that lets the browser keep the body, and a `DataResponse` cannot carry one:
  * Nextcloud's json responder merges the fresh response's defaults —
  * `no-cache, no-store, must-revalidate` — over the controller's headers (see
- * `ApiController::tagged()`). So what these helpers hand back is a
+ * `MastodonApiController::tagged()`). So what these helpers hand back is a
  * `JSONResponse`, which the dispatcher passes through as it is.
  */
 final class Revalidation {

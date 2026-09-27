@@ -41,7 +41,7 @@ trait TNCDataResponse {
 	/**
 	 * The failures that are the caller's, or another server's, rather than
 	 * this one's, and the status that says so — the session-route share of
-	 * `ApiController::ERROR_STATUS`, without its 401s: these routes run on
+	 * `MastodonApiController::ERROR_STATUS`, without its 401s: these routes run on
 	 * the Nextcloud session, and a 401 from one reads as that session having
 	 * ended.
 	 */

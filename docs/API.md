@@ -30,7 +30,7 @@ number that was never measured is worse than no number.
 
 The Social app exposes four groups of endpoints. Each is registered as a `#[FrontpageRoute]` attribute on the controller method that answers it, with one exception noted at the end of this section:
 
-- **Mastodon-compatible REST API** (`ApiController`, `TagController`, `OAuthController`) — a partial implementation of the Mastodon client API. Several endpoints are stubs; each is marked below.
+- **Mastodon-compatible REST API** (the controllers built on `MastodonApiController` — `AccountApiController`, `StatusApiController`, `TimelineApiController`, `MediaApiController`, `InstanceApiController`, `ScheduledStatusApiController`, `AnnualReportApiController` and `ApiController` — plus `TagController` and `OAuthController`) — a partial implementation of the Mastodon client API. Several endpoints are stubs; each is marked below.
 - **Custom Local API** (`LocalController`, `ConfigController`) — the endpoints the app's own Vue frontend calls. They are not Mastodon-compatible and their response envelope differs (see Error Responses).
 - **ActivityPub Federation API** (`ActivityPubController`, `SocialPubController`) — server-to-server ActivityPub, plus the HTML profile/post pages served on the same URLs.
 - **Frontend, document, OStatus and queue endpoints** (`NavigationController`, `OStatusController`, `QueueController`) — HTML pages and internal plumbing.
@@ -83,7 +83,7 @@ Mastodon equivalent yet and stay.
 
 Two mechanisms exist, and which one applies depends on the controller:
 
-1. **OAuth Bearer token** — `ApiController` and `TagController` read it. The constructor parses the `Authorization` header, accepts a `bearer` auth type, and resolves the token through `ClientService::getFromToken()`. If no bearer token is present it falls back to the logged-in Nextcloud session user. Both declare their routes `#[PublicPage]` with `#[NoCSRFRequired]` and then require a viewer inside the handler: a Mastodon client has no Nextcloud session and no CSRF token, so `#[NoAdminRequired]` would refuse every real caller before the handler ran.
+1. **OAuth Bearer token** — `MastodonApiController` and `TagController` read it. The constructor parses the `Authorization` header, accepts a `bearer` auth type, and resolves the token through `ClientService::getFromToken()`. If no bearer token is present it falls back to the logged-in Nextcloud session user. Both declare their routes `#[PublicPage]` with `#[NoCSRFRequired]` and then require a viewer inside the handler: a Mastodon client has no Nextcloud session and no CSRF token, so `#[NoAdminRequired]` would refuse every real caller before the handler ran.
 2. **Nextcloud session** — `LocalController`, `ConfigController`, `NavigationController`, `OAuthController` (authorize/authorizing) and `OStatusController` use the session `userId` only. They do **not** honour bearer tokens, so the Custom Local API is effectively usable only from the app's own frontend (or with a Nextcloud session cookie / app password + `OCS-APIRequest`).
 
 Access control is declared with **PHP attributes** (`#[PublicPage]`, `#[NoCSRFRequired]`, `#[NoAdminRequired]`, and `#[BruteForceProtection]` on the OAuth token/revoke endpoints); the legacy PHPDoc annotations are gone. The "Auth" column in the tables below records these attributes:
@@ -93,7 +93,7 @@ Access control is declared with **PHP attributes** (`#[PublicPage]`, `#[NoCSRFRe
 - `admin` — no attribute at all: Nextcloud requires an admin session.
 - `no-csrf` — `#[NoCSRFRequired]`: no CSRF token needed, which matters for non-browser clients.
 
-Note that many `ApiController` endpoints are annotated `@PublicPage` but call `initViewer(true)` internally, which throws when there is neither a session nor a valid bearer token; those return HTTP 401 with `{"error": "the access_token was revoked"}`.
+Note that many client API endpoints are annotated `@PublicPage` but call `initViewer(true)` internally, which throws when there is neither a session nor a valid bearer token; those return HTTP 401 with `{"error": "the access_token was revoked"}`.
 
 ---
 
@@ -757,9 +757,9 @@ cannot be loaded.
 
 ### Pagination
 
-`ApiController` list endpoints accept the cursor parameters shown per route above (`limit`, `max_id`, `min_id`, and either `since_id` or `since`), all integers defaulting to `0` except `limit` (20 — 40 on `/api/v1/blocks` and `/api/v1/mutes` — capped at 50).
+Client API list endpoints accept the cursor parameters shown per route above (`limit`, `max_id`, `min_id`, and either `since_id` or `since`), all integers defaulting to `0` except `limit` (20 — 40 on `/api/v1/blocks` and `/api/v1/mutes` — capped at 50).
 
-Every paged `ApiController` route except `/api/v1/blocks`, `/api/v1/mutes` and `/api/v1/scheduled_statuses` also sends a `Link` header in Mastodon's form, which is the only cursor masto.js — and therefore Elk and Phanpy — reads:
+Every paged client API route except `/api/v1/blocks`, `/api/v1/mutes` and `/api/v1/scheduled_statuses` also sends a `Link` header in Mastodon's form, which is the only cursor masto.js — and therefore Elk and Phanpy — reads:
 
 ```
 Link: <https://cloud.example/index.php/apps/social/api/v1/timelines/home?limit=20&max_id=41>; rel="next",
@@ -1163,7 +1163,7 @@ on success (`success()`; `more` keys are merged in at the top level), and
 
 on failure (`fail()`) — the exception class and message go to the log, never into the response, since several callers are public pages. The HTTP status is whatever the caller passed — the default is **500**, callers also use 404, and `Config#remote` deliberately returns the failure envelope with HTTP 200. Failures are logged as warnings unless the caller disables it. Two related helpers bypass the envelope: `directSuccess()` returns the object as-is with HTTP 200, and `activityPubSuccess()` does the same while setting `Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"`.
 
-**2. `ApiController` and `TagController` errors** — a bare object, never the envelope:
+**2. `MastodonApiController` and `TagController` errors** — a bare object, never the envelope:
 
 ```json
 {"error": "the access_token was revoked"}
@@ -1175,9 +1175,9 @@ Every handler catches `Throwable`, not `Exception`. A `TypeError` — an empty o
 
 **3. `OAuthController` errors** — `{"error": "..."}` with HTTP 400 (bad grant type, missing code, token generation failure) or HTTP 401 (`unknown client_id`, other exceptions).
 
-### `ApiController` status codes
+### Client API status codes
 
-`ApiController` keeps Mastodon's `{"error": "..."}` body and maps the failure to a status a client can act on. Every failure used to be a 401, which a client reads as a revoked token: a deleted status, a mistyped timeline name, a database hiccup and a slow remote all logged the reader out of their client.
+`MastodonApiController::error()` keeps Mastodon's `{"error": "..."}` body and maps the failure to a status a client can act on. Every failure used to be a 401, which a client reads as a revoked token: a deleted status, a mistyped timeline name, a database hiccup and a slow remote all logged the reader out of their client.
 
 | Status | When |
 |--------|------|
@@ -1189,7 +1189,7 @@ Every handler catches `Throwable`, not `Exception`. A `TypeError` — an empty o
 | 502 | Another server let us down: `RequestNetworkException`, `RequestServerException`, `RequestResultNotJsonException`, `RequestResultSizeException`. |
 | 500 | Anything unrecognised. The body is always `{"error": "internal server error"}` and the real message is logged with its stack trace — these routes are all `#[PublicPage]`, and echoing `getMessage()` published whatever the failure happened to name. |
 
-Successful Mastodon-compatible responses are **not** wrapped: `ApiController` returns the object or array directly with HTTP 200. HTTP status codes in use across the app are 200, 303 (the actor-header and OAuth authorization redirects — `RedirectResponse`'s default), 400, 401, 403, 404, 422, 429, 500, 502 and 503 (a refused inbox delivery whose signature could not be checked); no endpoint returns 201 or 204.
+Successful Mastodon-compatible responses are **not** wrapped: the client API controllers return the object or array directly with HTTP 200. HTTP status codes in use across the app are 200, 303 (the actor-header and OAuth authorization redirects — `RedirectResponse`'s default), 400, 401, 403, 404, 422, 429, 500, 502 and 503 (a refused inbox delivery whose signature could not be checked); no endpoint returns 201 or 204.
 
 
 ## Numeric status identifiers

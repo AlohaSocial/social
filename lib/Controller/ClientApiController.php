@@ -33,9 +33,9 @@ use Throwable;
  * asking, whether their token is allowed to ask, and what to say when something
  * goes wrong.
  *
- * Every client-API controller extends it except `ApiController` and
- * `LocalController`, which grew their own session handling before it existed
- * and still answer in their own shapes. A controller that needs more than a
+ * Every client-API controller extends it except the ones built on
+ * `MastodonApiController` and `LocalController`, which grew their own session
+ * handling before it existed and still answer in their own shapes. A controller that needs more than a
  * viewer overrides `prepareViewer()`, and one that maps an exception of its
  * own overrides `error()` and hands everything else to it.
  *

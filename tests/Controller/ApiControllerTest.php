@@ -787,14 +787,15 @@ class ApiControllerTest extends TestCase {
 	 * The client API's routes are the contract every Mastodon client is written
 	 * against; `/api/v1/instance` is the first request one makes, and several
 	 * of the media routes are written into the ActivityPub documents this
-	 * server publishes as `social.Api.*`, a name derived from this class.
+	 * server publishes.
 	 *
-	 * The controller is split across three files, so a method that lost its
-	 * attributes in a move, or a trait that stopped being used, would take its
-	 * route with it and nothing else here would notice: the other route tests
-	 * walk whatever exists rather than checking that anything does.
+	 * The API is split across several controllers, so a method that lost its
+	 * attributes in a move, or a controller missing from
+	 * `ApiControllerRouter::CONTROLLERS`, would take its route with it and
+	 * nothing else here would notice: the other route tests walk whatever
+	 * exists rather than checking that anything does.
 	 */
-	public function testTheSplitOutRoutesAreStillDeclaredOnThisController(): void {
+	public function testTheInstanceAndMediaRoutesAreStillDeclared(): void {
 		$declared = self::declaredRoutes();
 
 		foreach ([
@@ -828,7 +829,7 @@ class ApiControllerTest extends TestCase {
 			$this->assertArrayHasKey(
 				$route,
 				$declared,
-				$route . '() no longer declares a route; every URL naming social.Api.' . $route . ' is now a 404'
+				$route . '() no longer declares a route; every URL built from it is now a 404'
 			);
 			$this->assertSame($verb, $declared[$route], $route . '() answers a different verb');
 		}
