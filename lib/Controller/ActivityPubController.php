@@ -1175,7 +1175,7 @@ class ActivityPubController extends Controller {
 		$accepts = array_map([$this, 'trimHeader'], $accepts);
 
 		foreach ($accepts as $accept) {
-			if (in_array($accept, $accepted)) {
+			if (in_array($accept, $accepted, true)) {
 				return true;
 			}
 		}

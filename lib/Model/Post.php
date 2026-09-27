@@ -78,7 +78,7 @@ class Post implements JsonSerializable {
 	 */
 	public function addTo(string $to): Post {
 		$to = trim($to);
-		if ($to !== '' && !in_array($to, $this->to)) {
+		if ($to !== '' && !in_array($to, $this->to, true)) {
 			$this->to[] = $to;
 		}
 
@@ -201,7 +201,7 @@ class Post implements JsonSerializable {
 
 	public function addHashtag(string $hashtag): Post {
 		$hashtag = trim($hashtag);
-		if ($hashtag !== '' && !in_array($hashtag, $this->hashtags)) {
+		if ($hashtag !== '' && !in_array($hashtag, $this->hashtags, true)) {
 			$this->hashtags[] = $hashtag;
 		}
 

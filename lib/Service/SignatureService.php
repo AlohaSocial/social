@@ -888,7 +888,10 @@ class SignatureService {
 			&& !in_array('content-digest', $signedHeaders, true)) {
 			throw new SignatureException('header is not signed: digest');
 		}
-		$signed = base64_decode($sign['signature']);
+		$signed = base64_decode($sign['signature'], true);
+		if ($signed === false) {
+			throw new SignatureException('signature is not base64');
+		}
 		$estimated = $this->generateEstimatedSignature($headers, $request);
 
 		$this->verifyWithKey($keyId, function (string $publicKey) use ($sign, $estimated, $signed): void {

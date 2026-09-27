@@ -113,7 +113,7 @@ class FediverseService {
 	 */
 	public function setAccessType(string $type) {
 		$accepted = array_values($this->configService->accessTypeList);
-		if (!in_array($type, $accepted)) {
+		if (!in_array($type, $accepted, true)) {
 			throw new Exception('invalid type: ' . json_encode($accepted));
 		}
 

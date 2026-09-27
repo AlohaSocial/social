@@ -206,7 +206,7 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 						] as $itemId => $newId
 					) {
 						$arr = $stream->getToArray();
-						if (in_array($itemId, $arr)) {
+						if (in_array($itemId, $arr, true)) {
 							$stream->setToArray(array_unique(array_merge(array_diff($arr, [$itemId]), [$newId])));
 							$changed = true;
 						}
@@ -223,7 +223,7 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 						] as $itemId => $newId
 					) {
 						$arr = $stream->getCcArray();
-						if (in_array($itemId, $arr)) {
+						if (in_array($itemId, $arr, true)) {
 							$stream->setCcArray(array_unique(array_merge(array_diff($arr, [$itemId]), [$newId])));
 							$changed = true;
 						}

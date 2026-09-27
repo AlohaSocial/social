@@ -285,7 +285,7 @@ class ClientService {
 	 */
 	public function confirmData(SocialClient $client, array $data) {
 		if (array_key_exists('redirect_uri', $data)
-			&& !in_array($data['redirect_uri'], $client->getAppRedirectUris())) {
+			&& !in_array($data['redirect_uri'], $client->getAppRedirectUris(), true)) {
 			throw new ClientException('unknown redirect_uri');
 		}
 
@@ -301,7 +301,7 @@ class ClientService {
 			}
 
 			foreach ($scopes as $scope) {
-				if (!in_array($scope, $client->getAppScopes())) {
+				if (!in_array($scope, $client->getAppScopes(), true)) {
 					throw new ClientException('invalid scope');
 				}
 			}

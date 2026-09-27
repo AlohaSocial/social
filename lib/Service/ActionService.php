@@ -156,7 +156,7 @@ class ActionService {
 	}
 
 	public function action(Person $actor, int|string $nid, string $action): ?Stream {
-		if (!in_array($action, self::$availableStatusAction)) {
+		if (!in_array($action, self::$availableStatusAction, true)) {
 			throw new InvalidActionException();
 		}
 

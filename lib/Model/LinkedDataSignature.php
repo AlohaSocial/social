@@ -156,7 +156,7 @@ class LinkedDataSignature implements JsonSerializable {
 			$algo = OPENSSL_ALGO_SHA256;
 		}
 
-		$signed = base64_decode($this->getSignatureValue());
+		$signed = base64_decode($this->getSignatureValue(), true);
 		if ($signed !== false
 			&& openssl_verify($hashHeader . $hashObject, $signed, $this->publicKey, $algo) === 1) {
 			return true;
