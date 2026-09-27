@@ -86,7 +86,7 @@ class FeedsRequestTest extends TestCase {
 
 		$due = array_map(
 			static fn (array $row): int => (int)$row['id'],
-			$this->feeds->due(1000, time() + 60)
+			$this->feeds->due(1000, time() + 60, time() + 60)
 		);
 
 		$this->assertContains($stale, $due);
