@@ -189,6 +189,7 @@ class TranslatableStringsTest extends TestCase {
 			'src/components/PostMenu.vue',
 			'src/components/Composer/Composer.vue',
 			'src/App.vue',
+			'src/views/SwitchWizard.vue',
 		];
 		$messages = [];
 		foreach (self::singulars() as $message => $paths) {
@@ -216,7 +217,36 @@ class TranslatableStringsTest extends TestCase {
 			}
 		}
 
-		$this->assertSame([], $missing, 'navigation, timeline, conversation, composer, and app labels must exist in both German catalog formats');
+		$this->assertSame([], $missing, 'navigation, timeline, conversation, composer, setup, and app labels must exist in both German catalog formats');
+	}
+
+	public function testSwitchWizardPluralMessagesHaveGermanCatalogEntries(): void {
+		$messages = [
+			'_Looked up %n name so far_::_Looked up %n names so far_' => ['%n Name geprüft', 'Bisher %n Namen geprüft'],
+			'_found %n_::_found %n_' => ['%n gefunden', '%n gefunden'],
+			'_%n left_::_%n left_' => ['%n übrig', '%n übrig'],
+			'_Follow %n account_::_Follow %n accounts_' => ['%n Konto folgen', '%n Konten folgen'],
+			'_Brought over %n post._::_Brought over %n posts._' => ['%n Beitrag übernommen.', '%n Beiträge übernommen.'],
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message => $translation) {
+				if (($catalog[$message] ?? null) !== $translation) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'setup wizard plurals must exist in both German catalog formats');
 	}
 
 	public function testSubscriptionVideoControlsHaveGermanCatalogEntries(): void {
