@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\ListController;
 use OCA\Social\Controller\Revalidation;
 use OCA\Social\Controller\TagController;
@@ -106,12 +107,12 @@ class SidebarRevalidationTest extends TestCase {
 	public function testTheEmojiRouteAnswersAConditionalGet(): void {
 		$emoji = $this->createMock(EmojiService::class);
 		$emoji->method('visible')->willReturn([['shortcode' => 'blobcat']]);
-		$controller = $this->getMockBuilder(ApiController::class)
+		$controller = $this->getMockBuilder(InstanceApiController::class)
 			->disableOriginalConstructor()
 			->onlyMethods([])
 			->getMock();
 		(new ReflectionProperty(Controller::class, 'request'))->setValue($controller, $this->request);
-		(new ReflectionProperty(ApiController::class, 'emojiService'))->setValue($controller, $emoji);
+		(new ReflectionProperty(InstanceApiController::class, 'emojiService'))->setValue($controller, $emoji);
 
 		$first = $controller->customEmojis();
 		$this->ifNoneMatch = $first->getHeaders()['ETag'];
@@ -121,10 +122,10 @@ class SidebarRevalidationTest extends TestCase {
 
 	/** @return iterable<string, array{class-string, string}> */
 	public static function routes(): iterable {
-		yield 'custom_emojis' => [ApiController::class, 'customEmojis'];
+		yield 'custom_emojis' => [InstanceApiController::class, 'customEmojis'];
 		yield 'trends/tags' => [ApiController::class, 'trendTags'];
-		yield 'instance' => [ApiController::class, 'instance'];
-		yield 'v2 instance' => [ApiController::class, 'instanceV2'];
+		yield 'instance' => [InstanceApiController::class, 'instance'];
+		yield 'v2 instance' => [InstanceApiController::class, 'instanceV2'];
 		yield 'lists' => [ListController::class, 'index'];
 		yield 'followed_tags' => [TagController::class, 'followedTags'];
 	}

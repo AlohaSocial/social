@@ -217,7 +217,7 @@ class ActionService {
 	 *
 	 * It used to be, and it returned the post unchanged — which a client
 	 * cannot tell from a translation, so the button worked and did nothing.
-	 * It is `ApiController::statusTranslate()` now, because what it answers
+	 * It is `StatusApiController::statusTranslate()` now, because what it answers
 	 * with is a Translation entity rather than a Status, and because it needs
 	 * a translation provider that this service has no business holding.
 	 */

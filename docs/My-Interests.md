@@ -380,7 +380,7 @@ Every mutation answers the full state, so the page never works out ranks
 itself. "Less like this" lives under `/api/v1/interests/` rather than beside
 the status actions, because `POST /api/v1/statuses/{nid}/{act}` would match
 it. The feed is a literal route of its own rather than a name for
-`ApiController::timelines()`: the router matches it exactly before it tries
+`TimelineApiController::timelines()`: the router matches it exactly before it tries
 the slashed `/api/v1/timelines/{timeline}/`, so which controller is read first
 does not decide it.
 

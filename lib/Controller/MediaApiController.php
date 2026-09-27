@@ -19,11 +19,18 @@ use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Response\StreamedRemoteResponse;
+use OCA\Social\Service\AccountService;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheDocumentService;
+use OCA\Social\Service\ClientService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\FollowService;
+use OCA\Social\Service\GifService;
+use OCA\Social\Service\InstanceService;
+use OCA\Social\Service\StreamService;
 use OCA\Social\Service\VideoLadderService;
 use OCA\Social\Service\VideoThumbnailService;
-use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -34,7 +41,13 @@ use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
+use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
+use OCP\IRequest;
+use OCP\ITempManager;
+use OCP\IURLGenerator;
+use OCP\IUserSession;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
@@ -44,19 +57,42 @@ use Throwable;
  * It is almost the only part of the client API that does not answer JSON.
  * These routes hand over bytes — an image, a range of a video, an HLS playlist
  * built on the spot, one rung of a ladder of transcodes — which is a different
- * job from the rest of ApiController with a different set of things to get
- * right: what media type to declare, what a browser with `nosniff` will do
- * with it, how large a file may be, and which copy of a document a uuid names.
+ * job from the rest of the API with a different set of things to get right:
+ * what media type to declare, what a browser with `nosniff` will do with it,
+ * how large a file may be, and which copy of a document a uuid names.
  *
- * A trait and not a controller of its own, deliberately. A separate controller
- * would change every one of these route names, and `social.Api.mediaOpen` is
- * written into the ActivityPub documents this server publishes and into the
- * URLs its own pages generate — it is in eighteen places, and one missed is a
- * broken picture on a page nobody thought to open. What this separates is the
- * file; the controller is the same controller, with the same routes, the same
- * session handling and the same injected services.
+ * Several of these routes are written into the ActivityPub documents this
+ * server publishes as URLs built from `social.MediaApi.*`; `RouteNamesTest`
+ * fails on any such name that stops resolving.
  */
-trait ApiMedia {
+class MediaApiController extends MastodonApiController {
+	/**
+	 * How long `/media/{uuid}` may be cached: a year, the conventional
+	 * "forever" for content whose URL names its bytes and never changes.
+	 */
+	private const MEDIA_CACHE_SECONDS = 31536000;
+
+	public function __construct(
+		IRequest $request,
+		IURLGenerator $urlGenerator,
+		IUserSession $userSession,
+		LoggerInterface $logger,
+		ClientService $clientService,
+		AccountService $accountService,
+		CacheActorService $cacheActorService,
+		StreamService $streamService,
+		FollowService $followService,
+		private InstanceService $instanceService,
+		private CacheDocumentService $cacheDocumentService,
+		private DocumentService $documentService,
+		private ConfigService $configService,
+		private IRootFolder $rootFolder,
+		private ITempManager $tempManager,
+		private GifService $gifService,
+	) {
+		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
+	}
+
 	/**
 	 *
 	 * @return DataResponse
@@ -93,7 +129,7 @@ trait ApiMedia {
 			// sniffed and (for an image) decoded.
 			$this->refuseOversized($size, $type);
 
-			$this->logger->debug('[ApiController] mediaNew: ' . json_encode($file));
+			$this->logger->debug('[' . static::class . '] mediaNew: ' . json_encode($file));
 
 			// a cover for a video, as Mastodon's API names it; anything
 			// wrong with it costs the cover and not the upload
@@ -483,74 +519,6 @@ trait ApiMedia {
 		}
 	}
 
-	// --- where somebody stopped watching ----------------------------------
-
-	/**
-	 * Remembers where the reader got to in a video.
-	 *
-	 * A two-hour talk watched in three sittings is three sittings of finding
-	 * the place again, which is what this is for. It is a fact about the
-	 * reader: never federated, never shown to anybody else, never counted into
-	 * anything.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	// a player reports as it goes, so this is asked for often and is cheap
-	#[AnonRateLimit(limit: 600, period: 60)]
-	#[UserRateLimit(limit: 600, period: 60)]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/watched')]
-	public function statusWatched(int|string $nid, int $position = 0, int $duration = 0): DataResponse {
-		try {
-			$this->initViewer(true);
-			$post = $this->streamService->getStreamByNid($nid);
-			$this->watchService->remember($post, $this->viewer, $position, $duration);
-
-			return new DataResponse([], Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/** Takes a video off the reader's own "continue watching" list. */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
-	#[UserRateLimit(limit: 60, period: 3600)]
-	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/statuses/{nid}/watched')]
-	public function statusUnwatched(int|string $nid): DataResponse {
-		try {
-			$this->initViewer(true);
-			$post = $this->streamService->getStreamByNid($nid);
-			$this->watchService->forget($post, $this->viewer);
-
-			return new DataResponse([], Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * The videos the reader was in the middle of, newest first.
-	 *
-	 * Neither the ones they barely started nor the ones they finished: a row
-	 * that offers back a video somebody watched to the end is a row nobody
-	 * presses twice.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/videos/continue')]
-	public function videosContinue(int $limit = 20): DataResponse {
-		try {
-			$this->initViewer(true);
-
-			return new DataResponse(
-				$this->watchService->unfinished($this->viewer, $limit), Http::STATUS_OK
-			);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
 	/**
 	 * An HLS playlist, with every URI in it pointed back through this server.
 	 *
@@ -575,7 +543,7 @@ trait ApiMedia {
 			$opened = $this->documentService->openPlaylist(
 				$nid,
 				fn (string $url): string => $this->urlGenerator->linkToRouteAbsolute(
-					'social.Api.mediaPlaylistFile', ['nid' => $nid, 'u' => $url]
+					'social.MediaApi.mediaPlaylistFile', ['nid' => $nid, 'u' => $url]
 				)
 			);
 
@@ -627,7 +595,7 @@ trait ApiMedia {
 			$master = $this->documentService->masterPlaylist(
 				$uuid,
 				fn (int $height): string => $this->urlGenerator->linkToRouteAbsolute(
-					'social.Api.mediaLadderRung', ['uuid' => $uuid, 'height' => $height]
+					'social.MediaApi.mediaLadderRung', ['uuid' => $uuid, 'height' => $height]
 				)
 			);
 
@@ -667,7 +635,7 @@ trait ApiMedia {
 				$uuid,
 				$height,
 				fn (int $rung): string => $this->urlGenerator->linkToRouteAbsolute(
-					'social.Api.mediaLadderFile', ['uuid' => $uuid, 'height' => $rung]
+					'social.MediaApi.mediaLadderFile', ['uuid' => $uuid, 'height' => $rung]
 				)
 			);
 
@@ -828,5 +796,64 @@ trait ApiMedia {
 		}
 
 		return $mediaType;
+	}
+
+	/**
+	 * Attaches a picture from the instance's library to a post being written.
+	 *
+	 * A copy, through the same `storeAttachment()` an upload and a Files pick
+	 * go through — so the sniffing, the size guard and the resizing are one
+	 * path rather than three that can drift. A copy rather than a reference
+	 * for the reason `mediaFromFile()` gives: a post keeps the picture it was
+	 * published with, and an administrator removing something from the library
+	 * must not empty a post that has already federated.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 30, period: 60)]
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/media/from-gif')]
+	public function mediaFromGif(): DataResponse {
+		try {
+			$this->initViewer(true);
+
+			$input = $this->convertInput(file_get_contents('php://input'));
+			$slug = trim((string)($input['slug'] ?? $this->request->getParam('slug', '')));
+			if ($slug === '') {
+				throw new InvalidActionException('no picture named');
+			}
+
+			$gif = $this->gifService->bySlug($slug);
+			if ($gif === null) {
+				throw new InvalidActionException('no such picture');
+			}
+
+			$file = $this->gifService->file($slug);
+			$this->refuseOversized($file->getSize(), $gif->getMediaType());
+
+			$tmpPath = $this->tempManager->getTemporaryFile();
+			if ($tmpPath === false) {
+				throw new InvalidActionException('no temporary file to copy into');
+			}
+
+			if (file_put_contents($tmpPath, $file->getContent()) === false) {
+				throw new InvalidActionException('the picture could not be copied');
+			}
+
+			// the title is the description unless the writer gave one: a
+			// library picture arriving with no alt text at all is the thing
+			// the ALT badge exists to complain about
+			$description = trim((string)($input['description'] ?? $this->request->getParam('description', '')));
+			if ($description === '') {
+				$description = $gif->getTitle();
+			}
+
+			return new DataResponse(
+				$this->storeAttachment($tmpPath, $description, '', $gif->getFilename()),
+				Http::STATUS_OK
+			);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
 	}
 }

@@ -62,7 +62,7 @@ class StreamService {
 	 *
 	 * The page comes from a server the caller names and is bounded only by the
 	 * body size cap, so a page of minimal Notes carries tens of thousands of
-	 * entries — each one a lookup and an INSERT. `ApiController::fetchRemoteCollection`
+	 * entries — each one a lookup and an INSERT. `AccountApiController::fetchRemoteCollection`
 	 * bounds its own walk over a remote page the same way.
 	 */
 	private const SYNC_ITEM_LIMIT = 20;

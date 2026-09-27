@@ -474,7 +474,7 @@ class Document extends ACore implements JsonSerializable {
 		}
 
 		return $urlGenerator->linkToRouteAbsolute(
-			'social.Api.mediaOpen',
+			'social.MediaApi.mediaOpen',
 			['uuid' => $this->getLocalCopy() . $ext]
 		);
 	}
@@ -512,7 +512,7 @@ class Document extends ACore implements JsonSerializable {
 	 */
 	public function streamUrl(IURLGenerator $urlGenerator): string {
 		return $urlGenerator->linkToRouteAbsolute(
-			'social.Api.mediaStream',
+			'social.MediaApi.mediaStream',
 			['nid' => (string)$this->getNid()]
 		);
 	}
@@ -540,7 +540,7 @@ class Document extends ACore implements JsonSerializable {
 	 */
 	public function ladderUrl(IURLGenerator $urlGenerator): string {
 		return $urlGenerator->linkToRouteAbsolute(
-			'social.Api.mediaLadder',
+			'social.MediaApi.mediaLadder',
 			['uuid' => $this->getLocalCopy()]
 		);
 	}
@@ -553,7 +553,7 @@ class Document extends ACore implements JsonSerializable {
 		}
 
 		return $urlGenerator->linkToRouteAbsolute(
-			'social.Api.mediaOpen',
+			'social.MediaApi.mediaOpen',
 			['uuid' => $this->getResizedCopy() . $ext]
 		);
 	}

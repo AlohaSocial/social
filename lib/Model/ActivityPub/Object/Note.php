@@ -251,7 +251,7 @@ class Note extends Stream implements JsonSerializable {
 				'height' => $rendition->getHeight(),
 				'size' => $rendition->getSize(),
 				'bandwidth' => $rendition->getBandwidth(),
-				'href' => $urlGenerator->linkToRouteAbsolute('social.Api.mediaLadderFile', [
+				'href' => $urlGenerator->linkToRouteAbsolute('social.MediaApi.mediaLadderFile', [
 					'uuid' => self::ladderUuid($video),
 					'height' => $rendition->getHeight(),
 				]),

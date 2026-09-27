@@ -243,14 +243,14 @@ class Notifier implements INotifier {
 		$accept->setLabel('accept')
 			->setParsedLabel($l10n->t('Accept'))
 			->setPrimary(true)
-			->setLink($this->url->linkToRouteAbsolute('social.Api.followRequestAuthorize', ['id' => $nid]), 'POST');
+			->setLink($this->url->linkToRouteAbsolute('social.AccountApi.followRequestAuthorize', ['id' => $nid]), 'POST');
 		$notification->addAction($accept);
 
 		$decline = $notification->createAction();
 		$decline->setLabel('decline')
 			->setParsedLabel($l10n->t('Decline'))
 			->setPrimary(false)
-			->setLink($this->url->linkToRouteAbsolute('social.Api.followRequestReject', ['id' => $nid]), 'POST');
+			->setLink($this->url->linkToRouteAbsolute('social.AccountApi.followRequestReject', ['id' => $nid]), 'POST');
 		$notification->addAction($decline);
 	}
 

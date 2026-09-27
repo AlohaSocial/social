@@ -33,12 +33,11 @@ use Throwable;
  * asking, whether their token is allowed to ask, and what to say when something
  * goes wrong.
  *
- * Twelve controllers carry a private copy of this -- `initViewer()`,
- * `currentSession()`, `checkTokenScope()` and `error()`, the same four methods
- * each time. That is the shape the app grew into and this does not rewrite it;
- * it exists so the controllers added since do not make it fourteen. The older
- * ones can move onto it one at a time, and each one that does is a hundred and
- * fifty lines that stop being able to drift from the others.
+ * Every client-API controller extends it except the ones built on
+ * `MastodonApiController` and `LocalController`, which grew their own session
+ * handling before it existed and still answer in their own shapes. A controller that needs more than a
+ * viewer overrides `prepareViewer()`, and one that maps an exception of its
+ * own overrides `error()` and hands everything else to it.
  *
  * The rules it encodes are the ones the copies already agreed on:
  *
@@ -76,15 +75,21 @@ abstract class ClientApiController extends Controller {
 	}
 
 	/**
+	 * Who is asking, held to the scopes the route needs.
+	 *
+	 * With `$required` false a caller without usable credentials is answered
+	 * as nobody and the viewer stays null; a token that is valid but lacks
+	 * the scope is still refused, since it said who it was.
+	 *
 	 * @param string[] $scopes
 	 *
 	 * @throws ClientNotFoundException
 	 * @throws InsufficientScopeException
 	 */
-	protected function initViewer(array $scopes): void {
+	protected function initViewer(array $scopes, bool $required = true): void {
 		try {
 			$userId = $this->currentSession($scopes);
-			$this->viewer = $this->accountService->getActorFromUserId($userId);
+			$this->viewer = $this->prepareViewer($this->accountService->getActorFromUserId($userId));
 		} catch (InsufficientScopeException $e) {
 			throw $e;
 		} catch (Exception $e) {
@@ -94,8 +99,18 @@ abstract class ClientApiController extends Controller {
 				'exception' => $e->getMessage(),
 			]);
 
-			throw new ClientNotFoundException('the access_token was revoked');
+			if ($required) {
+				throw new ClientNotFoundException('the access_token was revoked');
+			}
 		}
+	}
+
+	/**
+	 * What a controller does with the viewer once it is known, before the
+	 * route runs. A failure here counts as the credentials failing.
+	 */
+	protected function prepareViewer(Person $viewer): Person {
+		return $viewer;
 	}
 
 	/** The viewer, for a route that has already called `initViewer()`. */
@@ -144,11 +159,16 @@ abstract class ClientApiController extends Controller {
 	}
 
 	/**
-	 * @param string[] $accepted
+	 * @param string[] $accepted none means any valid token will do, as on
+	 *                           routes Mastodon guards with a user and no scope
 	 *
 	 * @throws InsufficientScopeException
 	 */
 	private function checkTokenScope(array $accepted): void {
+		if ($accepted === []) {
+			return;
+		}
+
 		foreach ($accepted as $scope) {
 			$broad = strstr($scope, ':', true);
 			$broad = ($broad === false) ? $scope : $broad;

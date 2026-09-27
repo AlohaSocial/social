@@ -43,7 +43,7 @@ use Throwable;
  * The routes the Pixelfed app asks for that live nowhere else.
  *
  * Pixelfed speaks the Mastodon client API for almost everything, and everything
- * it shares is served by `ApiController` and the rest. What is left is a small
+ * it shares is served by the Mastodon client API controllers. What is left is a small
  * surface of its own: a config object it reads on launch, and a `v1.1` namespace
  * its discover screen uses. They are gathered here rather than scattered,
  * because they have one thing in common that the rest of this API does not --

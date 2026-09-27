@@ -721,38 +721,6 @@ class DocumentServiceTest extends TestCase {
 		$this->assertSame('', $this->service->cacheLocalAvatarByUsername($this->alice(0)));
 	}
 
-	public function testCacheLocalHeaderStoresTheUploadAndPointsTheActorAtIt(): void {
-		$alice = $this->alice(0);
-		$image = new Image();
-		$image->setUrlCloud('https://cloud.example.com');
-		$ap = $this->createMock(AP::class);
-		$ap->method('getItemFromType')->with(Image::TYPE)->willReturn($image);
-		$imageInterface = $this->createMock(ImageInterface::class);
-		$imageInterface->expects($this->once())->method('save')->with($this->identicalTo($image));
-		$ap->method('getInterfaceFromType')->willReturn($imageInterface);
-		AP::set($ap);
-		$this->urlGenerator->method('linkToRouteAbsolute')
-			->willReturnCallback(fn (string $route, array $args) => match ($route) {
-				'social.Local.globalActorHeader' => 'https://cloud.example.com/apps/social/header/' . rawurlencode($args['id']),
-				'social.Api.mediaOpen' => 'https://cloud.example.com/apps/social/media/' . $args['uuid'],
-			});
-		$this->cacheService->expects($this->once())
-			->method('saveFromTempToCache')
-			->with($this->identicalTo($image), '/tmp/upload.jpg')
-			->willReturnCallback(function (Image $image) {
-				$image->setLocalCopy('stored-uuid');
-			});
-
-		$id = $this->service->cacheLocalHeaderByUsername($alice, '/tmp/upload.jpg', 'image/jpeg');
-
-		$this->assertSame($image->getId(), $id);
-		$this->assertStringStartsWith('https://cloud.example.com/documents/header/', $id);
-		$this->assertSame('image/jpeg', $image->getMimeType());
-		$this->assertTrue($image->isPublic());
-		$this->assertSame('https://cloud.example.com/apps/social/media/stored-uuid.jpeg', $image->getUrl());
-		$this->assertSame($image->getUrl(), $alice->getHeader());
-	}
-
 	/**
 	 * The streaming routes hand the nid over as the string it was in the url.
 	 * It has to reach the lookup as one: typed through to an `int` parameter

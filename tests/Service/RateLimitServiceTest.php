@@ -9,9 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Controller\AccountApiController;
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\InstanceApiController;
+use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\QueueController;
+use OCA\Social\Controller\StatusApiController;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -231,10 +235,11 @@ class RateLimitServiceTest extends TestCase {
 	 * page budget refuses the page rather than slowing the caller.
 	 */
 	public function testServingBytesIsNotCountedAgainstThePageBudget(): void {
-		$api = $this->createMock(ApiController::class);
+		$media = $this->createMock(MediaApiController::class);
+		$instance = $this->createMock(InstanceApiController::class);
 
-		$this->assertFalse($this->service->appliesDefaultTo($api, 'mediaOpen'));
-		$this->assertFalse($this->service->appliesDefaultTo($api, 'emojiOpen'));
+		$this->assertFalse($this->service->appliesDefaultTo($media, 'mediaOpen'));
+		$this->assertFalse($this->service->appliesDefaultTo($instance, 'emojiOpen'));
 	}
 
 	/**
@@ -249,7 +254,7 @@ class RateLimitServiceTest extends TestCase {
 	 * opposite of the truth.
 	 */
 	public function testARouteWithItsOwnLimitIsLeftToNextcloud(): void {
-		$api = $this->createPartialMock(ApiController::class, []);
+		$api = $this->createPartialMock(StatusApiController::class, []);
 
 		$this->assertFalse(
 			$this->service->appliesDefaultTo($api, 'statusNew'),
@@ -258,7 +263,7 @@ class RateLimitServiceTest extends TestCase {
 	}
 
 	public function testAnOrdinaryRouteIsGovernedByTheDefault(): void {
-		$api = $this->createPartialMock(ApiController::class, []);
+		$api = $this->createPartialMock(AccountApiController::class, []);
 
 		$this->assertTrue($this->service->appliesDefaultTo($api, 'verifyCredentials'));
 	}
@@ -276,7 +281,7 @@ class RateLimitServiceTest extends TestCase {
 	 * shows up here rather than silently doubling its limiter.
 	 */
 	public function testBothRateLimitAttributesCount(): void {
-		$statusNew = new \ReflectionMethod(ApiController::class, 'statusNew');
+		$statusNew = new \ReflectionMethod(StatusApiController::class, 'statusNew');
 		$this->assertNotEmpty(
 			array_merge(
 				$statusNew->getAttributes(UserRateLimit::class),
@@ -285,7 +290,7 @@ class RateLimitServiceTest extends TestCase {
 			'the fixture above still declares a limit of its own'
 		);
 
-		$verify = new \ReflectionMethod(ApiController::class, 'verifyCredentials');
+		$verify = new \ReflectionMethod(AccountApiController::class, 'verifyCredentials');
 		$this->assertSame(
 			[],
 			array_merge(

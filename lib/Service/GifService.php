@@ -257,7 +257,7 @@ class GifService {
 
 	private function urlOf(Gif $gif): string {
 		return $this->urlGenerator->linkToRouteAbsolute(
-			'social.Api.gifOpen', ['slug' => $gif->getSlug()]
+			'social.InstanceApi.gifOpen', ['slug' => $gif->getSlug()]
 		);
 	}
 

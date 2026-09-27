@@ -20,6 +20,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
@@ -38,6 +39,8 @@ use Psr\Log\NullLogger;
  * them either.
  */
 class FollowerControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const BOB = 'https://remote.example/users/bob';
 
@@ -83,7 +86,7 @@ class FollowerControllerTest extends TestCase {
 
 		$this->clientService = $this->createMock(ClientService::class);
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
 			->willReturnCallback(function (array $nids): array {
 				return ($nids === [2]) ? [$this->person(self::BOB, 2)] : [];

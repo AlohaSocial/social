@@ -9,16 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
-use Exception;
-use OCA\Social\AppInfo\Application;
-use OCA\Social\Exceptions\CacheActorDoesNotExistException;
-use OCA\Social\Exceptions\ClientNotFoundException;
-use OCA\Social\Exceptions\InsufficientScopeException;
-use OCA\Social\Exceptions\InvalidResourceException;
-use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
-use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Model\Relationship;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\AccountService;
@@ -59,35 +51,23 @@ use Throwable;
  * before the handler ran. Every route then requires a viewer itself — no token,
  * no session, 401 — so nothing is public in fact.
  */
-class RelationController extends Controller {
+class RelationController extends ClientApiController {
 	/** What Mastodon defaults and caps a page of featured accounts at. */
 	private const ENDORSEMENTS_LIMIT = 40;
 	private const MAX_ENDORSEMENTS_LIMIT = 80;
 
-	private string $bearer = '';
-	private ?SocialClient $client = null;
-	private ?Person $viewer = null;
-
 	public function __construct(
 		IRequest $request,
-		private IUserSession $userSession,
-		private LoggerInterface $logger,
-		private AccountService $accountService,
+		IUserSession $userSession,
+		LoggerInterface $logger,
+		AccountService $accountService,
 		private CacheActorService $cacheActorService,
-		private ClientService $clientService,
+		ClientService $clientService,
 		private FollowService $followService,
 		private AccountRelationService $accountRelationService,
 		private DomainBlockService $domainBlockService,
 	) {
-		parent::__construct(Application::APP_ID, $request);
-
-		$authHeader = trim($this->request->getHeader('Authorization'));
-		if (strpos($authHeader, ' ')) {
-			[$authType, $authToken] = explode(' ', $authHeader);
-			if (strtolower($authType) === 'bearer') {
-				$this->bearer = $authToken;
-			}
-		}
+		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
 	}
 
 	/**
@@ -158,7 +138,7 @@ class RelationController extends Controller {
 	public function note(string $id, string $comment = ''): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->setNote($this->viewer, $target, $comment);
 
 			return new DataResponse($this->relationship($target), Http::STATUS_OK);
@@ -174,7 +154,7 @@ class RelationController extends Controller {
 	public function pin(string $id): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->endorse($this->viewer, $target);
 
 			return new DataResponse($this->relationship($target, true), Http::STATUS_OK);
@@ -190,7 +170,7 @@ class RelationController extends Controller {
 	public function unpin(string $id): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->unendorse($this->viewer, $target);
 
 			return new DataResponse($this->relationship($target, false), Http::STATUS_OK);
@@ -249,162 +229,5 @@ class RelationController extends Controller {
 		);
 
 		return $relationship;
-	}
-
-	/**
-	 * The account behind what a client sent: Mastodon's numeric local id, an
-	 * actor URI, or a handle. The same three forms `ApiController` and
-	 * `ListController` accept wherever they take an account.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 */
-	private function resolveAccount(string $id): Person {
-		$id = trim($id);
-
-		if (is_numeric($id)) {
-			if ((int)$id < 1) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			$actors = $this->cacheActorService->getFromNids([(int)$id]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($id, 'http://') || str_starts_with($id, 'https://')) {
-			return $this->cacheActorService->getFromId($id);
-		}
-
-		if ($id === '') {
-			throw new CacheActorDoesNotExistException('Record not found');
-		}
-
-		return $this->cacheActorService->getFromAccount(ltrim($id, '@'));
-	}
-
-	/**
-	 * Resolves the viewer from the bearer token, or from the Nextcloud session
-	 * when there is none — the same order `ApiController` uses, because the
-	 * same clients call both.
-	 *
-	 * @param string[] $scopes any one of which satisfies a bearer token
-	 *
-	 * @throws ClientNotFoundException there is nobody to answer for
-	 * @throws InsufficientScopeException the token is fine, its grant is not
-	 */
-	private function initViewer(array $scopes): void {
-		try {
-			$userId = $this->currentSession($scopes);
-			$this->viewer = $this->accountService->getActorFromUserId($userId);
-		} catch (InsufficientScopeException $e) {
-			throw $e;
-		} catch (Exception $e) {
-			// a missing, stale or made-up token is ordinary internet noise and
-			// is answered with a 401, not logged as a fault
-			$this->logger->debug('[RelationController] no usable credentials', [
-				'exception' => $e->getMessage(),
-			]);
-
-			throw new ClientNotFoundException('the access_token was revoked');
-		}
-	}
-
-	/**
-	 * @param string[] $scopes
-	 *
-	 * @throws ClientNotFoundException
-	 * @throws InsufficientScopeException
-	 */
-	private function currentSession(array $scopes): string {
-		if ($this->bearer !== '') {
-			$this->client = $this->clientService->getFromToken($this->bearer);
-			$this->checkTokenScope($scopes);
-
-			return $this->client->getAuthUserId();
-		}
-
-		$user = $this->userSession->getUser();
-		if ($user !== null && $this->request->passesCSRFCheck()) {
-			return $user->getUID();
-		}
-
-		throw new ClientNotFoundException('userId not defined');
-	}
-
-	/**
-	 * A granular scope is satisfied by itself or by the broad scope that
-	 * contains it: `read:blocks` by `read:blocks` or by `read`, and by nothing
-	 * else.
-	 *
-	 * Not by any other granular variant of the same parent — a token granted
-	 * `read:statuses` has not been granted the reader's block list, and none of
-	 * this is anybody's business but the account it belongs to.
-	 *
-	 * @param string[] $accepted
-	 *
-	 * @throws InsufficientScopeException
-	 */
-	private function checkTokenScope(array $accepted): void {
-		foreach ($accepted as $scope) {
-			$broad = strstr($scope, ':', true);
-			$broad = ($broad === false) ? $scope : $broad;
-
-			foreach ($this->client->getAuthScopes() as $granted) {
-				if ($granted === $scope || $granted === $broad) {
-					return;
-				}
-			}
-		}
-
-		throw new InsufficientScopeException(
-			'token scope does not allow this request (needs ' . implode(' or ', $accepted) . ')'
-		);
-	}
-
-	/**
-	 * A failure as a Mastodon client can act on it: `{"error": "..."}` with a
-	 * status that says what to do about it. An unrecognised failure is a bug on
-	 * this side, so it answers 500 and its message is not sent on — these are
-	 * `#[PublicPage]` routes, and echoing getMessage() publishes whatever the
-	 * failure happened to name.
-	 */
-	private function error(Throwable $e): DataResponse {
-		if ($e instanceof InsufficientScopeException) {
-			return new DataResponse(
-				['error' => $e->getMessage()],
-				Http::STATUS_FORBIDDEN,
-				['WWW-Authenticate' => 'Bearer error="insufficient_scope"']
-			);
-		}
-
-		if ($e instanceof ClientNotFoundException) {
-			$message = trim($e->getMessage());
-
-			return new DataResponse(
-				['error' => ($message === '') ? 'the access_token is invalid' : $message],
-				Http::STATUS_UNAUTHORIZED,
-				['WWW-Authenticate' => 'Bearer error="invalid_token"']
-			);
-		}
-
-		if ($e instanceof ItemNotFoundException || $e instanceof CacheActorDoesNotExistException) {
-			return new DataResponse(['error' => 'Record not found'], Http::STATUS_NOT_FOUND);
-		}
-
-		if ($e instanceof InvalidResourceException) {
-			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-
-		$this->logger->error('[RelationController] unexpected failure answering the client API', [
-			'exception' => $e,
-			'route' => (string)$this->request->getParam('_route', ''),
-		]);
-
-		return new DataResponse(
-			['error' => 'internal server error'], Http::STATUS_INTERNAL_SERVER_ERROR
-		);
 	}
 }

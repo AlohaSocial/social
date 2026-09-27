@@ -390,7 +390,7 @@ class PersonTest extends TestCase {
 
 	public function testExportAsLocalServesTheCachedIconThroughTheMediaRoute(): void {
 		$this->urlGenerator->expects($this->once())->method('linkToRouteAbsolute')
-			->with('social.Api.mediaOpen', ['uuid' => 'abc123'])
+			->with('social.MediaApi.mediaOpen', ['uuid' => 'abc123'])
 			->willReturn('https://cloud.example.org/apps/social/media/abc123');
 		$person = new Person();
 		$icon = new Document();

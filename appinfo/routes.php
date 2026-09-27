@@ -46,7 +46,7 @@ namespace OCA\Social\AppInfo;
  */
 return [
 	'routes' => [
-		['name' => 'Api#accountGet', 'url' => '/api/v1/accounts/{id}', 'verb' => 'GET', 'requirements' => ['id' => '.+']],
+		['name' => 'AccountApi#accountGet', 'url' => '/api/v1/accounts/{id}', 'verb' => 'GET', 'requirements' => ['id' => '.+']],
 		['name' => 'ActivityPub#displayPost', 'url' => '/@{username}/{token}', 'verb' => 'GET'],
 	]
 ];

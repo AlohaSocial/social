@@ -291,7 +291,7 @@ class GifPackService {
 		);
 
 		return $gif->setUrl(
-			$this->urlGenerator->linkToRouteAbsolute('social.Api.gifOpen', ['slug' => $gif->getSlug()])
+			$this->urlGenerator->linkToRouteAbsolute('social.InstanceApi.gifOpen', ['slug' => $gif->getSlug()])
 		);
 	}
 

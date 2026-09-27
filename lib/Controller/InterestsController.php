@@ -185,7 +185,7 @@ class InterestsController extends ClientApiController {
 	 * The feed.
 	 *
 	 * A literal path rather than another name for
-	 * `ApiController::timelines()`: that route ends in a slash, and the
+	 * `TimelineApiController::timelines()`: that route ends in a slash, and the
 	 * router matches this path exactly before it tries adding one, so which
 	 * controller the filesystem lists first does not decide it. Paged with
 	 * `max_id` like every timeline, though what it names is a place in the

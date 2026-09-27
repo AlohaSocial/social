@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\AP;
 use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\MastodonApiController;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
@@ -82,6 +83,8 @@ use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Service\TranslationService;
 use OCA\Social\Service\ViewCountService;
+use OCA\Social\Tests\Helper\ApiControllerRouter;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -115,6 +118,8 @@ use ReflectionMethod;
 use stdClass;
 
 class ApiControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const REVOKED = 'the access_token was revoked';
 
 	/** @var IRequest&MockObject */
@@ -258,7 +263,7 @@ class ApiControllerTest extends TestCase {
 		$this->accountService->method('getDefaultPrivacy')->willReturnCallback(
 			fn (): string => $this->defaultPrivacy
 		);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->followService = $this->createMock(FollowService::class);
@@ -359,7 +364,7 @@ class ApiControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	private function controller(string $authorization = ''): ApiController {
+	private function controller(string $authorization = ''): ApiControllerRouter {
 		return $this->controllerWithHeaders($authorization);
 	}
 
@@ -368,69 +373,69 @@ class ApiControllerTest extends TestCase {
 		string $authorization,
 		array $headers = [],
 		?LoggerInterface $logger = null,
-	): ApiController {
+	): ApiControllerRouter {
 		// the callback is registered once, in setUp(): a second method() on the
 		// same mock never wins over the first, so per-controller headers have to
 		// go through a property
 		$this->headers = array_merge(['Authorization' => $authorization], $headers);
 
-		return new ApiController(
-			$this->request,
-			$this->urlGenerator,
-			$this->userSession,
-			$logger ?? new NullLogger(),
-			$this->instanceService,
-			$this->clientService,
-			$this->accountService,
-			$this->cacheActorService,
-			$this->cacheDocumentService,
-			$this->documentService,
-			$this->followService,
-			$this->relationshipService,
-			$this->streamService,
-			$this->actionService,
-			$this->postService,
-			$this->pollService,
-			$this->session,
-			$this->pinService,
-			$this->hashtagService,
-			$this->markerService,
-			$this->streamRequest,
-			$this->reportService,
-			$this->searchService,
-			$this->configService,
-			$this->curlService,
-			$this->cacheDocumentsRequest,
-			$this->cacheFactory,
-			$this->rootFolder,
-			$this->tempManager,
-			$this->filterService,
-			$this->bannerService,
-			$this->avatarService,
-			$this->accountRelationService,
-			$this->scheduledStatusService,
-			$this->postReviewService,
-			$this->sensitiveMediaService,
-			$this->viewCountService,
-			$this->teamService,
-			$this->emojiService,
-			$this->appManager,
-			$this->fediverseService,
-			$this->placeService,
-			$this->deliveryService,
-			$this->reactionService,
-			$this->reactionSummaryService,
-			$this->gifService,
-			$this->notificationService,
-			$this->translationService,
-			$this->notificationPolicyService,
-			$this->quoteService,
-			$this->annualReportService,
-			$this->createMock(\OCA\Social\Service\WatchService::class),
-			$this->l10nFactory,
-			$this->timelineRevisionService,
-			$this->durableCache(),
-		);
+		return new ApiControllerRouter([
+			'request' => $this->request,
+			'urlGenerator' => $this->urlGenerator,
+			'userSession' => $this->userSession,
+			'logger' => $logger ?? new NullLogger(),
+			'instanceService' => $this->instanceService,
+			'clientService' => $this->clientService,
+			'accountService' => $this->accountService,
+			'cacheActorService' => $this->cacheActorService,
+			'cacheDocumentService' => $this->cacheDocumentService,
+			'documentService' => $this->documentService,
+			'followService' => $this->followService,
+			'relationshipService' => $this->relationshipService,
+			'streamService' => $this->streamService,
+			'actionService' => $this->actionService,
+			'postService' => $this->postService,
+			'pollService' => $this->pollService,
+			'session' => $this->session,
+			'pinService' => $this->pinService,
+			'hashtagService' => $this->hashtagService,
+			'markerService' => $this->markerService,
+			'streamRequest' => $this->streamRequest,
+			'reportService' => $this->reportService,
+			'searchService' => $this->searchService,
+			'configService' => $this->configService,
+			'curlService' => $this->curlService,
+			'cacheDocumentsRequest' => $this->cacheDocumentsRequest,
+			'cacheFactory' => $this->cacheFactory,
+			'rootFolder' => $this->rootFolder,
+			'tempManager' => $this->tempManager,
+			'filterService' => $this->filterService,
+			'bannerService' => $this->bannerService,
+			'avatarService' => $this->avatarService,
+			'accountRelationService' => $this->accountRelationService,
+			'scheduledStatusService' => $this->scheduledStatusService,
+			'postReviewService' => $this->postReviewService,
+			'sensitiveMediaService' => $this->sensitiveMediaService,
+			'viewCountService' => $this->viewCountService,
+			'teamService' => $this->teamService,
+			'emojiService' => $this->emojiService,
+			'appManager' => $this->appManager,
+			'fediverseService' => $this->fediverseService,
+			'placeService' => $this->placeService,
+			'deliveryService' => $this->deliveryService,
+			'reactionService' => $this->reactionService,
+			'reactionSummaryService' => $this->reactionSummaryService,
+			'gifService' => $this->gifService,
+			'notificationService' => $this->notificationService,
+			'translationService' => $this->translationService,
+			'notificationPolicyService' => $this->notificationPolicyService,
+			'quoteService' => $this->quoteService,
+			'annualReportService' => $this->annualReportService,
+			'watchService' => $this->createMock(\OCA\Social\Service\WatchService::class),
+			'l10nFactory' => $this->l10nFactory,
+			'timelineRevisionService' => $this->timelineRevisionService,
+			'durableCache' => $this->durableCache(),
+		]);
 	}
 
 	/**
@@ -539,10 +544,8 @@ class ApiControllerTest extends TestCase {
 	 * middleware, before this controller runs at all.
 	 */
 	public function testEveryRouteDeclaresItsAccessAsAnAttribute(): void {
-		$reflection = new \ReflectionClass(ApiController::class);
-
-		foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
-			if ($method->isConstructor() || $method->getDeclaringClass()->getName() !== ApiController::class) {
+		foreach (self::apiMethods() as $method) {
+			if ($method->isConstructor()) {
 				continue;
 			}
 
@@ -688,7 +691,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testSettingAMarkerNeedsAWriteToken(): void {
-		$this->route = 'social.Api.markersSet';
+		$this->route = 'social.TimelineApi.markersSet';
 		$this->bearerFor(['read']);
 
 		$this->assertInsufficientScope(
@@ -698,7 +701,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testReadingMarkersIsSatisfiedByAReadToken(): void {
-		$this->route = 'social.Api.markersGet';
+		$this->route = 'social.TimelineApi.markersGet';
 		$this->bearerFor(['read']);
 		$this->markerService->method('get')->willReturn([]);
 
@@ -710,7 +713,7 @@ class ApiControllerTest extends TestCase {
 	// token scopes
 
 	public function testAWriteRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read']);
 		$this->postService->expects($this->never())->method('createPost');
 
@@ -722,7 +725,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testABlockRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.accountMute';
+		$this->route = 'social.AccountApi.accountMute';
 		$this->bearerFor(['read']);
 
 		$this->assertInsufficientScope(
@@ -732,7 +735,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAReadRouteRefusesAScopelessToken(): void {
-		$this->route = 'social.Api.verifyCredentials';
+		$this->route = 'social.AccountApi.verifyCredentials';
 		$this->bearerFor([]);
 
 		$this->assertInsufficientScope(
@@ -742,13 +745,32 @@ class ApiControllerTest extends TestCase {
 	}
 
 	/**
-	 * Every route of this controller, as its own attributes declare it.
+	 * The public methods of every client API controller, each where it is
+	 * declared.
+	 *
+	 * @return list<ReflectionMethod>
+	 */
+	private static function apiMethods(): array {
+		$methods = [];
+		foreach (ApiControllerRouter::CONTROLLERS as $class) {
+			foreach ((new ReflectionClass($class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+				if ($method->getDeclaringClass()->getName() === $class) {
+					$methods[] = $method;
+				}
+			}
+		}
+
+		return $methods;
+	}
+
+	/**
+	 * Every route of the client API, as its own attributes declare it.
 	 *
 	 * @return array<string, string> method name => HTTP verb
 	 */
 	private static function declaredRoutes(): array {
 		$routes = [];
-		foreach ((new ReflectionClass(ApiController::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+		foreach (self::apiMethods() as $method) {
 			foreach ($method->getAttributes() as $attribute) {
 				if (!in_array($attribute->getName(), [FrontpageRoute::class, ApiRoute::class], true)) {
 					continue;
@@ -765,14 +787,15 @@ class ApiControllerTest extends TestCase {
 	 * The client API's routes are the contract every Mastodon client is written
 	 * against; `/api/v1/instance` is the first request one makes, and several
 	 * of the media routes are written into the ActivityPub documents this
-	 * server publishes as `social.Api.*`, a name derived from this class.
+	 * server publishes.
 	 *
-	 * The controller is split across three files, so a method that lost its
-	 * attributes in a move, or a trait that stopped being used, would take its
-	 * route with it and nothing else here would notice: the other route tests
-	 * walk whatever exists rather than checking that anything does.
+	 * The API is split across several controllers, so a method that lost its
+	 * attributes in a move, or a controller missing from
+	 * `ApiControllerRouter::CONTROLLERS`, would take its route with it and
+	 * nothing else here would notice: the other route tests walk whatever
+	 * exists rather than checking that anything does.
 	 */
-	public function testTheSplitOutRoutesAreStillDeclaredOnThisController(): void {
+	public function testTheInstanceAndMediaRoutesAreStillDeclared(): void {
 		$declared = self::declaredRoutes();
 
 		foreach ([
@@ -806,7 +829,7 @@ class ApiControllerTest extends TestCase {
 			$this->assertArrayHasKey(
 				$route,
 				$declared,
-				$route . '() no longer declares a route; every URL naming social.Api.' . $route . ' is now a 404'
+				$route . '() no longer declares a route; every URL built from it is now a 404'
 			);
 			$this->assertSame($verb, $declared[$route], $route . '() answers a different verb');
 		}
@@ -819,9 +842,9 @@ class ApiControllerTest extends TestCase {
 	 * @return string[]
 	 */
 	private function scopesFor(string $route, string $verb, string $act = ''): array {
-		$resolve = new ReflectionMethod(ApiController::class, 'scopesForRoute');
+		$resolve = new ReflectionMethod(MastodonApiController::class, 'scopesForRoute');
 
-		return $resolve->invoke($this->controller(), $route, $verb, $act);
+		return $resolve->invoke($this->controller()->controller(ApiController::class), $route, $verb, $act);
 	}
 
 	/**
@@ -872,7 +895,7 @@ class ApiControllerTest extends TestCase {
 	 * the consent screen had named.
 	 */
 	public function testOneGranularScopeIsNotPermissionForAnother(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['write:favourites']);
 		$this->postService->expects($this->never())->method('createPost');
 
@@ -883,7 +906,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testOneGranularReadScopeIsNotPermissionToReadSomethingElse(): void {
-		$this->route = 'social.Api.notifications';
+		$this->route = 'social.TimelineApi.notifications';
 		$this->bearerFor(['read:lists']);
 
 		$this->assertInsufficientScope(
@@ -915,7 +938,7 @@ class ApiControllerTest extends TestCase {
 
 	/** A DELETE that a read-only token used to be able to make. */
 	public function testDeletingTheProfileAvatarRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.profileAvatarDelete';
+		$this->route = 'social.AccountApi.profileAvatarDelete';
 		$this->verb = 'DELETE';
 		$this->bearerFor(['read']);
 
@@ -926,7 +949,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testReactingToAPostRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.statusReact';
+		$this->route = 'social.StatusApi.statusReact';
 		$this->verb = 'POST';
 		$this->bearerFor(['read']);
 
@@ -937,7 +960,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testRewritingPreferencesRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.preferencesUpdate';
+		$this->route = 'social.AccountApi.preferencesUpdate';
 		$this->verb = 'PUT';
 		$this->bearerFor(['read']);
 
@@ -948,7 +971,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAGranularWriteScopeSatisfiesAWriteRoute(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read', 'write:statuses']);
 		$this->request->method('getParams')->willReturn(['status' => 'hi']);
 
@@ -963,7 +986,7 @@ class ApiControllerTest extends TestCase {
 	// statusNew()
 
 	public function testStatusNewCarriesTheContentWarningToThePost(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read', 'write']);
 		$this->request->method('getParams')->willReturn([
 			'status' => 'who shot him',
@@ -988,7 +1011,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testABearerTokenIsScopedEvenWhenASessionExists(): void {
 		// the token's grant must not silently widen to the cookie's full access
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->loggedInAs();
 		$this->bearerFor(['read']);
 		$this->postService->expects($this->never())->method('createPost');
@@ -1928,7 +1951,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowRequestRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.followRequestAuthorize';
+		$this->route = 'social.AccountApi.followRequestAuthorize';
 		$this->bearerFor(['read']);
 		$this->followService->expects($this->never())->method('authorizeFollowRequest');
 
@@ -1939,7 +1962,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowScopedTokenMayAuthorizeAFollowRequest(): void {
-		$this->route = 'social.Api.followRequestAuthorize';
+		$this->route = 'social.AccountApi.followRequestAuthorize';
 		$this->bearerFor(['follow']);
 		$target = $this->knownTarget();
 		$this->followService->expects($this->once())
@@ -2167,7 +2190,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testUpdateCredentialsRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.updateCredentials';
+		$this->route = 'social.AccountApi.updateCredentials';
 		$this->bearerFor(['read']);
 		$this->accountService->expects($this->never())->method('setLocked');
 
@@ -2250,7 +2273,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.accountFollow';
+		$this->route = 'social.AccountApi.accountFollow';
 		$this->bearerFor(['read']);
 		$this->followService->expects($this->never())->method('followAccount');
 
@@ -3404,7 +3427,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testStatusDeleteNeedsAWriteToken(): void {
-		$this->route = 'social.Api.statusDelete';
+		$this->route = 'social.StatusApi.statusDelete';
 		$this->bearerFor(['read']);
 		$this->streamService->expects($this->never())->method('deleteLocalItem');
 
@@ -3475,7 +3498,7 @@ class ApiControllerTest extends TestCase {
 	// Idempotency-Key
 
 	private function bearerPostingA(string $statusNid): Stream {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['write']);
 		$this->request->method('getParams')->willReturn(['status' => 'hello']);
 
@@ -4723,7 +4746,7 @@ class ApiControllerTest extends TestCase {
 	 */
 	public function testEveryRateLimitedRouteAlsoLimitsSessionlessCallers(): void {
 		$bare = [];
-		foreach ((new ReflectionClass(ApiController::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+		foreach (self::apiMethods() as $method) {
 			if ($method->getAttributes(UserRateLimit::class) !== []
 				&& $method->getAttributes(AnonRateLimit::class) === []) {
 				$bare[] = $method->getName();

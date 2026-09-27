@@ -307,7 +307,7 @@ class PostService {
 	 * counts — and the spoiler counts towards the same budget, the way Mastodon
 	 * measures a status.
 	 *
-	 * @throws InvalidActionException the refusal ApiController answers 422 with
+	 * @throws InvalidActionException the refusal the client API answers 422 with
 	 */
 	private function assertWithinLength(string $content, string $spoilerText): void {
 		if (mb_strlen($content) + mb_strlen($spoilerText) <= InstanceService::MAX_CHARACTERS) {
@@ -370,7 +370,7 @@ class PostService {
 	 *
 	 * @return ?Person the quoted author, when there is a quote and they are known
 	 * @throws InvalidActionException when the post may not be quoted — the
-	 *                                exception ApiController already answers 422 with, which is what a
+	 *                                exception the client API already answers 422 with, which is what a
 	 *                                client can act on, and the one PinService::pin() raises for the
 	 *                                same refusal
 	 */
