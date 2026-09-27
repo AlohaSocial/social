@@ -249,6 +249,24 @@ class TranslatableStringsTest extends TestCase {
 		$this->assertSame([], $missing, 'setup wizard plurals must exist in both German catalog formats');
 	}
 
+	public function testGermanJsonAndJavascriptCatalogValuesAgree(): void {
+		$mismatched = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($catalog as $message => $translation) {
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$mismatched[] = $locale . ': ' . $message;
+				}
+			}
+		}
+
+		$this->assertSame([], $mismatched, 'Nextcloud must serve the same German translations from JSON and JavaScript catalogs');
+	}
+
 	public function testSubscriptionVideoControlsHaveGermanCatalogEntries(): void {
 		$messages = [
 			'Channels and blogs that are not on the fediverse, followed by their feed. What comes out appears here with a link to where it is — nothing is copied onto this server, and nothing here is a post: it cannot be boosted, replied to or federated, because it is not ours to publish.',
