@@ -16,7 +16,6 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\CacheActorService;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\SearchService;
@@ -143,7 +142,6 @@ class SearchServiceTest extends TestCase {
 			$this->cacheActorService,
 			$this->hashtagService,
 			$this->streamRequest,
-			$this->createMock(ConfigService::class),
 			new NullLogger(),
 			$this->curlService
 		);

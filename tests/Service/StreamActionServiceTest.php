@@ -12,7 +12,6 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StreamActionsRequest;
 use OCA\Social\Exceptions\StreamActionDoesNotExistException;
 use OCA\Social\Model\StreamAction;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\StreamActionService;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -38,7 +37,7 @@ class StreamActionServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->streamActionsRequest = $this->createMock(StreamActionsRequest::class);
-		$this->service = new StreamActionService($this->streamActionsRequest, $this->createMock(MiscService::class));
+		$this->service = new StreamActionService($this->streamActionsRequest);
 	}
 
 	public function testSetActionStoresTheLoadedRow(): void {

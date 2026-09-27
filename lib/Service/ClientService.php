@@ -52,17 +52,13 @@ class ClientService {
 
 	private SecretHasher $secretHasher;
 
-	private MiscService $miscService;
-
 	public function __construct(
 		ClientRequest $clientRequest,
 		SecretHasher $secretHasher,
-		MiscService $miscService,
 		private ClientAuthRequest $clientAuthRequest,
 	) {
 		$this->clientRequest = $clientRequest;
 		$this->secretHasher = $secretHasher;
-		$this->miscService = $miscService;
 	}
 
 	/**

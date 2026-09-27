@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\AppInfo\Application;
-use OCP\IUserManager;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
@@ -21,11 +20,9 @@ use Psr\Log\LoggerInterface;
  */
 class MiscService {
 	private LoggerInterface $logger;
-	private IUserManager $userManager;
 
-	public function __construct(LoggerInterface $logger, IUserManager $userManager) {
+	public function __construct(LoggerInterface $logger) {
 		$this->logger = $logger;
-		$this->userManager = $userManager;
 	}
 
 	/**

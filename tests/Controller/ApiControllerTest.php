@@ -99,7 +99,6 @@ use OCP\Files\IRootFolder;
 use OCP\Files\IUserFolder;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
-use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\ISession;
@@ -168,7 +167,6 @@ class ApiControllerTest extends TestCase {
 	/** @var CurlService&MockObject */
 	private $curlService;
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private ICacheFactory|MockObject $cacheFactory;
 	private AccountRelationService|MockObject $accountRelationService;
 	private ScheduledStatusService|MockObject $scheduledStatusService;
 	private PostReviewService|MockObject $postReviewService;
@@ -205,8 +203,6 @@ class ApiControllerTest extends TestCase {
 	private FilterService|MockObject $filterService;
 	private IRootFolder|MockObject $rootFolder;
 	private ITempManager|MockObject $tempManager;
-	/** what a previous request with the same Idempotency-Key created, per test */
-	private array $idempotencyCache = [];
 
 	/** the table behind the durable cache, shared by every controller one test makes */
 	private ?\OCA\Social\Tests\Helper\InMemoryDurableCacheRequest $durableCacheRequest = null;
@@ -287,17 +283,6 @@ class ApiControllerTest extends TestCase {
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1048576);
 
-		// a real in-memory cache, so the Idempotency-Key round trip is exercised
-		$this->idempotencyCache = [];
-		$cache = $this->createMock(ICache::class);
-		$cache->method('get')
-			->willReturnCallback(fn (string $key) => $this->idempotencyCache[$key] ?? null);
-		$cache->method('set')
-			->willReturnCallback(function (string $key, $value): bool {
-				$this->idempotencyCache[$key] = $value;
-
-				return true;
-			});
 		// a pass-through: these tests are about the routes, not about filtering,
 		// and a filter that removed anything would rewrite what they assert
 		$this->accountRelationService = $this->createMock(AccountRelationService::class);
@@ -342,8 +327,6 @@ class ApiControllerTest extends TestCase {
 		$this->filterService->method('applyToStatus')->willReturnArgument(0);
 		$this->rootFolder = $this->createMock(IRootFolder::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
-		$this->cacheFactory = $this->createMock(ICacheFactory::class);
-		$this->cacheFactory->method('createDistributed')->willReturn($cache);
 
 		\OC::$server->register(IRequest::class, $this->request);
 		// Response::cacheFor() stamps an Expires header from the clock
@@ -406,7 +389,6 @@ class ApiControllerTest extends TestCase {
 			'configService' => $this->configService,
 			'curlService' => $this->curlService,
 			'cacheDocumentsRequest' => $this->cacheDocumentsRequest,
-			'cacheFactory' => $this->cacheFactory,
 			'rootFolder' => $this->rootFolder,
 			'tempManager' => $this->tempManager,
 			'filterService' => $this->filterService,

@@ -26,7 +26,6 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\StreamDest;
 use OCA\Social\Service\ActorCascadeService;
 use OCA\Social\Service\ActorService;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\BackgroundJob\IJobList;
 
@@ -53,7 +52,6 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 		private StreamRequest $streamRequest,
 		private StreamDestRequest $streamDestRequest,
 		private ActorService $actorService,
-		private ConfigService $configService,
 		private ActorCascadeService $actorCascadeService,
 		private IJobList $jobList,
 	) {

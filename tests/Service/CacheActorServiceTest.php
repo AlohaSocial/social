@@ -25,12 +25,10 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
-use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\ProfileLinkVerifier;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -70,11 +68,9 @@ class CacheActorServiceTest extends TestCase {
 		AP::set($this->ap);
 
 		$this->service = new CacheActorService(
-			$this->createMock(IURLGenerator::class),
 			$this->actorsRequest,
 			$this->cacheActorsRequest,
 			$this->curlService,
-			$this->createMock(FediverseService::class),
 			$this->configService,
 			new NullLogger(),
 		);
@@ -502,11 +498,9 @@ class CacheActorServiceTest extends TestCase {
 		$time->method('getTime')->willReturn($now);
 
 		return new CacheActorService(
-			$this->createMock(IURLGenerator::class),
 			$this->actorsRequest,
 			$this->cacheActorsRequest,
 			$this->curlService,
-			$this->createMock(FediverseService::class),
 			$this->configService,
 			new NullLogger(),
 			null,
@@ -579,11 +573,9 @@ class CacheActorServiceTest extends TestCase {
 			[ProfileLinkVerifier::class, $verifier],
 		]);
 		$service = new CacheActorService(
-			$this->createMock(IURLGenerator::class),
 			$this->actorsRequest,
 			$this->cacheActorsRequest,
 			$this->curlService,
-			$this->createMock(FediverseService::class),
 			$this->configService,
 			new NullLogger(),
 			$container,

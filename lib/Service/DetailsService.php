@@ -24,7 +24,6 @@ class DetailsService {
 		private StreamService $streamService,
 		private AccountService $accountService,
 		private FollowService $followService,
-		private CacheActorService $cacheActorService,
 	) {
 	}
 

@@ -15,29 +15,6 @@ use OCA\Social\Tools\Model\CacheItem;
 use PHPUnit\Framework\TestCase;
 
 class CacheTest extends TestCase {
-	public function testANewCacheIsEmpty(): void {
-		$cache = new Cache();
-
-		$this->assertFalse($cache->hasItems());
-		$this->assertSame([], $cache->getItems());
-		$this->assertFalse($cache->hasItem('https://a.example/1'));
-	}
-
-	public function testAddItemSkipsEmptyUrlsAndDuplicates(): void {
-		$cache = new Cache();
-		$first = new CacheItem('https://a.example/1');
-
-		$cache->addItem(new CacheItem(''))
-			->addItem($first)
-			->addItem(new CacheItem('https://a.example/1'))
-			->addItem(new CacheItem('https://a.example/2'));
-
-		$this->assertTrue($cache->hasItems());
-		$this->assertCount(2, $cache->getItems());
-		$this->assertSame($first, $cache->getItem('https://a.example/1'));
-		$this->assertTrue($cache->hasItem('https://a.example/2'));
-	}
-
 	public function testGetItemThrowsForUnknownUrls(): void {
 		$this->expectException(CacheItemNotFoundException::class);
 
@@ -123,13 +100,24 @@ class CacheTest extends TestCase {
 		$this->assertTrue($cache->hasItem('https://a.example/2'));
 	}
 
-	public function testSetItemsReplacesEverything(): void {
+	public function testANewCacheIsEmpty(): void {
 		$cache = new Cache();
-		$cache->addItem(new CacheItem('https://a.example/1'));
-		$only = new CacheItem('https://a.example/9');
 
-		$cache->setItems([$only]);
+		$this->assertSame([], $cache->getItems());
+		$this->assertFalse($cache->hasItem('https://a.example/1'));
+	}
 
-		$this->assertSame([$only], $cache->getItems());
+	public function testAddItemSkipsEmptyUrlsAndDuplicates(): void {
+		$cache = new Cache();
+		$first = new CacheItem('https://a.example/1');
+
+		$cache->addItem(new CacheItem(''))
+			->addItem($first)
+			->addItem(new CacheItem('https://a.example/1'))
+			->addItem(new CacheItem('https://a.example/2'));
+
+		$this->assertCount(2, $cache->getItems());
+		$this->assertSame($first, $cache->getItem('https://a.example/1'));
+		$this->assertTrue($cache->hasItem('https://a.example/2'));
 	}
 }

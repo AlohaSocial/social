@@ -9,8 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tools\Traits;
 
-use JsonSerializable;
-
 /**
  * @deprecated
  * Trait TAsync
@@ -37,12 +35,5 @@ trait TAsync {
 		header('Content-Length: ' . $size);
 		ob_end_flush();
 		flush();
-	}
-
-	/**
-	 * @param JsonSerializable $obj
-	 */
-	public function asyncObj(JsonSerializable $obj): void {
-		$this->async(json_encode($obj));
 	}
 }

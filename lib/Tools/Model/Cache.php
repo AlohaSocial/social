@@ -28,28 +28,10 @@ class Cache implements JsonSerializable {
 	}
 
 	/**
-	 * @return bool
-	 */
-	public function hasItems(): bool {
-		return !empty($this->items);
-	}
-
-	/**
 	 * @return CacheItem[]
 	 */
 	public function getItems(): array {
 		return $this->items;
-	}
-
-	/**
-	 * @param CacheItem[] $items
-	 *
-	 * @return Cache
-	 */
-	public function setItems(array $items): Cache {
-		$this->items = $items;
-
-		return $this;
 	}
 
 	/**

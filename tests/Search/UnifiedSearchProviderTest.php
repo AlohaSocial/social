@@ -17,7 +17,6 @@ use OCA\Social\Search\UnifiedSearchProvider;
 use OCA\Social\Search\UnifiedSearchResult;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
@@ -27,7 +26,6 @@ use OCP\IUser;
 use OCP\Search\ISearchQuery;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\NullLogger;
 
 class UnifiedSearchProviderTest extends TestCase {
 	/** @var IL10N&MockObject */
@@ -56,9 +54,7 @@ class UnifiedSearchProviderTest extends TestCase {
 			$this->createMock(FollowService::class),
 			$this->createMock(CacheActorService::class),
 			$this->createMock(AccountService::class),
-			$this->searchService,
-			$this->createMock(ConfigService::class),
-			new NullLogger()
+			$this->searchService
 		);
 	}
 

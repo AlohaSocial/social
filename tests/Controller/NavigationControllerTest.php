@@ -20,7 +20,6 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
-use OCA\Social\Service\MiscService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\DataResponse;
@@ -32,7 +31,6 @@ use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IInitialStateService;
-use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -115,7 +113,6 @@ class NavigationControllerTest extends TestCase {
 
 	private function controller(?string $userId = 'alice'): NavigationController {
 		return new NavigationController(
-			$this->createMock(IL10N::class),
 			$this->request,
 			$userId,
 			$this->config,
@@ -130,7 +127,6 @@ class NavigationControllerTest extends TestCase {
 			$this->createMock(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
 			$this->filterService,
-			$this->createMock(MiscService::class),
 			new NullLogger()
 		);
 	}

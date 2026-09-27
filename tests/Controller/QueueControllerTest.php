@@ -13,7 +13,6 @@ use OCA\Social\Controller\QueueController;
 use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\ActivityService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\RequestQueueService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
@@ -35,7 +34,6 @@ class QueueControllerTest extends TestCase {
 			$this->createMock(IRequest::class),
 			$this->requestQueueService,
 			$this->activityService,
-			$this->createMock(MiscService::class),
 			$this->logger
 		);
 	}

@@ -38,7 +38,7 @@ const parser = new DOMParser()
  * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
  * @param {import('../types/Mastodon.js').Status} item the post whose content is drawn
  */
-export function formatMessage(hFn, routerLink, item) {
+function formatMessage(hFn, routerLink, item) {
 	// `item` is the store's own status object and this runs from a render
 	// function, so nothing here writes to it: defaults go on a copy, or a
 	// missing `tags` key would be filled in on the store's post during render.

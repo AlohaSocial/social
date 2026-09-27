@@ -41,7 +41,7 @@ const FILTERS = [
  * @param {string} id the filter id
  * @return {string} its translated name
  */
-export function filterName(id) {
+function filterName(id) {
 	switch (id) {
 		case 'none': return t('social', 'Original')
 		case 'mono': return t('social', 'Mono')

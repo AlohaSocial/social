@@ -89,8 +89,6 @@ class RequestQueueService {
 
 	public function __construct(
 		private RequestQueueRequest $requestQueueRequest,
-		private ConfigService $configService,
-		private MiscService $miscService,
 	) {
 	}
 

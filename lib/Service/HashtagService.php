@@ -35,8 +35,6 @@ class HashtagService {
 		private HashtagsRequest $hashtagsRequest,
 		private StreamRequest $streamRequest,
 		private IURLGenerator $urlGenerator,
-		private ConfigService $configService,
-		private MiscService $miscService,
 		private TrendReviewService $trendReviewService,
 	) {
 	}
@@ -220,7 +218,7 @@ class HashtagService {
 	 */
 	public function related(string $hashtag, int $limit = 20): array {
 		$tags = [];
-		foreach ($this->hashtagsRequest->related($hashtag, max(1, min(40, $limit))) as $name => $count) {
+		foreach (array_keys($this->hashtagsRequest->related($hashtag, max(1, min(40, $limit)))) as $name) {
 			$tags[] = $this->tagEntity((string)$name);
 		}
 

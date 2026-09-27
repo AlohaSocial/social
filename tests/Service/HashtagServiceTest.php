@@ -12,9 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\HashtagsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\HashtagDoesNotExistException;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\HashtagService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\TrendReviewService;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -49,8 +47,6 @@ class HashtagServiceTest extends TestCase {
 			$this->hashtagsRequest,
 			$this->streamRequest,
 			$this->urlGenerator,
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class),
 			$this->trendReviewService,
 		);
 	}

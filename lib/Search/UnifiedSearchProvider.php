@@ -15,7 +15,6 @@ use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
@@ -26,7 +25,6 @@ use OCP\IUser;
 use OCP\Search\IProvider;
 use OCP\Search\ISearchQuery;
 use OCP\Search\SearchResult;
-use Psr\Log\LoggerInterface;
 
 /**
  * Class UnifiedSearchProvider
@@ -50,8 +48,6 @@ class UnifiedSearchProvider implements IProvider {
 		private CacheActorService $cacheActorService,
 		private AccountService $accountService,
 		private SearchService $searchService,
-		private ConfigService $configService,
-		private LoggerInterface $logger,
 	) {
 	}
 

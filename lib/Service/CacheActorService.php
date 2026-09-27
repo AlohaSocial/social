@@ -37,7 +37,6 @@ use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\IURLGenerator;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -70,11 +69,9 @@ class CacheActorService {
 	use TArrayTools;
 
 	public function __construct(
-		private IUrlGenerator $urlGenerator,
 		private ActorsRequest $actorsRequest,
 		private CacheActorsRequest $cacheActorsRequest,
 		private CurlService $curlService,
-		private FediverseService $fediverseService,
 		private ConfigService $configService,
 		private LoggerInterface $logger,
 		private ?ContainerInterface $container = null,

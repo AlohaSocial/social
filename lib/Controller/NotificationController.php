@@ -132,10 +132,6 @@ class NotificationController extends ClientApiController {
 	 * Declared before the `{group_key}` routes below, because within a
 	 * controller the order the methods are written in is the order the routes
 	 * are tried in and `unread_count` would otherwise be read as a group key.
-	 *
-	 * @param string[] $types
-	 * @param string[] $exclude_types
-	 * @param string[] $grouped_types
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]

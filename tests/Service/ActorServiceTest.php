@@ -19,9 +19,6 @@ use OCA\Social\Interfaces\Object\ImageInterface;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Service\ActorService;
-use OCA\Social\Service\ConfigService;
-use OCA\Social\Service\CurlService;
-use OCA\Social\Service\MiscService;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -43,9 +40,6 @@ class ActorServiceTest extends TestCase {
 		$this->service = new ActorService(
 			$this->cacheActorsRequest,
 			$this->cacheDocumentsRequest,
-			$this->createMock(CurlService::class),
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class),
 		);
 	}
 

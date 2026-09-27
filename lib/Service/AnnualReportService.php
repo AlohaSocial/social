@@ -121,7 +121,6 @@ class AnnualReportService {
 		$boosts = 0;
 		$replies = 0;
 		$polls = 0;
-		$favouritesTaken = 0;
 
 		foreach ($this->posts($actor) as $post) {
 			$published = $post->getPublishedTime();
@@ -160,7 +159,6 @@ class AnnualReportService {
 				}
 			}
 
-			$favouritesTaken += $post->getDetailInt(Details::LIKES);
 			foreach ([
 				'by_reblogs' => $post->getDetailInt(Details::BOOSTS),
 				'by_replies' => $post->getDetailInt(Details::REPLIES),
@@ -188,7 +186,7 @@ class AnnualReportService {
 		return [
 			'year' => $year,
 			'data' => [
-				'archetype' => $this->archetype($written, $boosts, $replies, $polls, $favouritesTaken),
+				'archetype' => $this->archetype($written, $boosts, $replies, $polls),
 				'time_series' => array_values($months),
 				'top_hashtags' => $top,
 				'top_statuses' => $best,
@@ -255,10 +253,9 @@ class AnnualReportService {
 	 * the most specific to the most general. Somebody who wrote almost nothing
 	 * is a lurker whatever the little they wrote was; after that it is whether
 	 * most of what they did was boosting, asking, or answering; and what is
-	 * left — somebody who mostly writes their own posts and is read — is the
-	 * oracle.
+	 * left — somebody who mostly writes their own posts — is the oracle.
 	 */
-	private function archetype(int $written, int $boosts, int $replies, int $polls, int $favourites): string {
+	private function archetype(int $written, int $boosts, int $replies, int $polls): string {
 		if ($written < 10) {
 			return self::ARCHETYPE_LURKER;
 		}

@@ -26,7 +26,6 @@ class ImportService {
 	use TStringTools;
 
 	public function __construct(
-		private ConfigService $configService,
 		private MiscService $miscService,
 		private ModerationService $moderationService,
 		private RelayService $relayService,

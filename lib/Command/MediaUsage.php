@@ -60,7 +60,7 @@ class MediaUsage extends SocialCommand {
 	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		try {
-			$cloudUrl = $this->configService->getCloudUrl();
+			$this->configService->getCloudUrl();
 		} catch (SocialAppConfigException $e) {
 			$output->writeln(
 				'<error>The Social app is not configured, so a document id cannot be told from'

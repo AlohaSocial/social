@@ -107,7 +107,7 @@ class CurlService {
 		if (count($exploded) < 2) {
 			throw new InvalidResourceException();
 		}
-		[$username, $host] = $exploded;
+		[, $host] = $exploded;
 		// hostMeta() rewrites $host to whatever the host-meta names, so the
 		// host that was asked is kept here
 		$queried = $host;

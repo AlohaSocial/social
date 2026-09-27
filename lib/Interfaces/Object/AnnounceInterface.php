@@ -69,7 +69,6 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 	 */
 	#[\Override]
 	public function processIncomingRequest(ACore $item): void {
-		/** @var ACore $item */
 		$item->checkOrigin($item->getId());
 		$item->checkOrigin($item->getActorId());
 

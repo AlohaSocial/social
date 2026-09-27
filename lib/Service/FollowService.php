@@ -584,7 +584,7 @@ class FollowService {
 	}
 
 	public function getRelationships(array $ids): array {
-		$actorNids = $relationships = [];
+		$actorNids = [];
 
 		// try to resolve actors by their id (could be nid or url)
 		$nids = [];

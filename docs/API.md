@@ -1161,7 +1161,7 @@ on success (`success()`; `more` keys are merged in at the top level), and
 {"status": -1, "error": "request failed"}
 ```
 
-on failure (`fail()`) — the exception class and message go to the log, never into the response, since several callers are public pages. The HTTP status is whatever the caller passed — the default is **500**, callers also use 404, and `Config#remote` deliberately returns the failure envelope with HTTP 200. Failures are logged as warnings unless the caller disables it. Two related helpers bypass the envelope: `directSuccess()` returns the object as-is with HTTP 200, and `activityPubSuccess()` does the same while setting `Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"`.
+on failure (`fail()`) — the exception class and message go to the log, never into the response, since several callers are public pages. The HTTP status is whatever the caller passed — the default is **500**, callers also use 404, and `Config#remote` deliberately returns the failure envelope with HTTP 200. Failures are logged as warnings unless the caller disables it. One related helper bypasses the envelope: `activityPubSuccess()` returns the object as-is with HTTP 200 and `Content-Type: application/ld+json; profile="https://www.w3.org/ns/activitystreams"`.
 
 **2. `MastodonApiController` and `TagController` errors** — a bare object, never the envelope:
 

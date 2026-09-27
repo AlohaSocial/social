@@ -23,7 +23,6 @@ class ApplicationInterfaceTest extends ActorInterfaceTestCase {
 			$this->streamRequest,
 			$this->streamDestRequest,
 			$this->actorService,
-			$this->configService,
 			$this->actorCascadeService,
 			$this->jobList,
 		);

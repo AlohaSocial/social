@@ -12,7 +12,6 @@ namespace OCA\Social\Service;
 use DateTime;
 use Exception;
 use JsonLdException;
-use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -138,8 +137,6 @@ class SignatureService {
 
 	private CacheActorService $cacheActorService;
 	private CacheActorsRequest $cacheActorsRequest;
-	private ActorsRequest $actorsRequest;
-	private CurlService $curlService;
 	private ConfigService $configService;
 	private HttpSignatureService $httpSignatureService;
 	private HttpMessageSignatureParser $messageSignatures;
@@ -147,20 +144,16 @@ class SignatureService {
 	private LoggerInterface $logger;
 
 	public function __construct(
-		ActorsRequest $actorsRequest,
 		CacheActorService $cacheActorService,
 		CacheActorsRequest $cacheActorsRequest,
-		CurlService $curlService,
 		ConfigService $configService,
 		HttpSignatureService $httpSignatureService,
 		ICacheFactory $cacheFactory,
 		LoggerInterface $logger,
 		private DurableCache $durableCache,
 	) {
-		$this->actorsRequest = $actorsRequest;
 		$this->cacheActorService = $cacheActorService;
 		$this->cacheActorsRequest = $cacheActorsRequest;
-		$this->curlService = $curlService;
 		$this->configService = $configService;
 		$this->httpSignatureService = $httpSignatureService;
 		$this->messageSignatures = new HttpMessageSignatureParser();

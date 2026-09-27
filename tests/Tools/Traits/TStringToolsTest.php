@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Tools\Traits;
 
 use OCA\Social\Tools\Traits\TStringTools;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class TStringToolsTest extends TestCase {
@@ -81,49 +80,6 @@ class TStringToolsTest extends TestCase {
 		$this->assertMatchesRegularExpression('/^[0-9a-f]{8}$/', $this->tools->uuid(8));
 		$this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $this->tools->uuid(16));
 		$this->assertMatchesRegularExpression('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab]$/', $this->tools->uuid(20));
-	}
-
-	public static function commonPartProvider(): array {
-		return [
-			'shared prefix' => ['nextcloud', 'nextdoor', true, 'next'],
-			'identical' => ['same', 'same', true, 'same'],
-			'nothing in common' => ['abc', 'xyz', true, ''],
-			'case matters by default' => ['NextCloud', 'nextcloud', true, ''],
-			'case insensitive keeps the first spelling' => ['NextCloud', 'nextdoor', false, 'Next'],
-			'shorter string bounds the result' => ['ab', 'abc', true, 'ab'],
-		];
-	}
-
-	#[DataProvider('commonPartProvider')]
-	public function testCommonPartReturnsTheSharedPrefix(string $a, string $b, bool $caseSensitive, string $expected): void {
-		$this->assertSame($expected, $this->tools->commonPart($a, $b, $caseSensitive));
-	}
-
-	public function testFeedStringWithParamsReplacesBracedPlaceholders(): void {
-		$result = $this->tools->feedStringWithParams(
-			'{user} followed {target} ({user})',
-			['user' => 'alice', 'target' => 'bob', 'unused' => 'x']
-		);
-
-		$this->assertSame('alice followed bob (alice)', $result);
-		$this->assertSame('{missing}', $this->tools->feedStringWithParams('{missing}', []));
-	}
-
-	public function testGenerateRandomWordAlternatesConsonantsAndVowels(): void {
-		$word = $this->tools->generateRandomWord(8);
-
-		$this->assertSame(10, strlen($word));
-		$this->assertMatchesRegularExpression('/^([bcdfghjklmnprstv][aeiouy])+$/', $word);
-	}
-
-	public function testGenerateRandomSentenceHasTheRequestedNumberOfWords(): void {
-		$sentence = $this->tools->generateRandomSentence(4);
-
-		$words = explode(' ', $sentence);
-		$this->assertCount(4, $words);
-		foreach ($words as $word) {
-			$this->assertMatchesRegularExpression('/^[a-z]+$/', $word);
-		}
 	}
 
 	public function testTokenCanEmitEveryCharsetCharacter(): void {

@@ -12,7 +12,6 @@ namespace OCA\Social\Controller;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\ActivityService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Tools\Traits\TAsync;
 use OCP\AppFramework\Controller;
@@ -42,7 +41,6 @@ class QueueController extends Controller {
 		IRequest $request,
 		RequestQueueService $requestQueueService,
 		ActivityService $activityService,
-		private MiscService $miscService,
 		LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);

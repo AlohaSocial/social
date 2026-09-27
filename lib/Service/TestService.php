@@ -31,8 +31,6 @@ class TestService {
 
 	public function __construct(
 		private CurlService $curlService,
-		private ConfigService $configService,
-		private MiscService $miscService,
 	) {
 	}
 

@@ -606,9 +606,6 @@ class StreamService {
 	}
 
 	/**
-	 * @param string $id
-	 * @param bool $asViewer
-	 *
 	 * @return Stream
 	 * @throws StreamNotFoundException
 	 */
@@ -953,17 +950,12 @@ class StreamService {
 					}
 
 					// Extract the Note data from the activity item
-					$noteData = null;
 					$itemType = $this->get('type', $itemData, '');
 					if ($itemType === 'Create' && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
 					} elseif ($itemType === 'Note') {
 						$noteData = $itemData;
 					} else {
-						continue;
-					}
-
-					if ($noteData === null) {
 						continue;
 					}
 

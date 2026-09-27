@@ -15,7 +15,6 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\HostBreakerRequest;
 use OCA\Social\Db\RelayRequest;
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\EmptyQueueException;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
@@ -115,7 +114,6 @@ class ActivityServiceTest extends TestCase {
 		});
 
 		$this->service = new ActivityService(
-			$this->createMock(StreamRequest::class),
 			$this->followsRequest,
 			$this->cacheActorsRequest,
 			$this->signatureService,
@@ -1275,7 +1273,7 @@ class ActivityServiceTest extends TestCase {
 	/** A breaker that cannot be read — the table not there yet — falls back to the per-pass list. */
 	public function testAnUnreadableBreakerFallsBackToThePerPassList(): void {
 		$service = new ActivityService(
-			$this->createMock(StreamRequest::class), $this->followsRequest, $this->cacheActorsRequest,
+			$this->followsRequest, $this->cacheActorsRequest,
 			$this->signatureService, $this->requestQueueService, $this->curlService, $this->configService,
 			$this->actorsRequest, $this->relayRequest, $broken = $this->createMock(HostBreakerRequest::class), $this->logger
 		);

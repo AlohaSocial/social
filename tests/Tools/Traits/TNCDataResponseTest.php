@@ -73,15 +73,6 @@ class TNCDataResponseTest extends TestCase {
 		$this->assertSame(['result' => [], 'status' => 1], $this->controller->success()->getData());
 	}
 
-	public function testDirectSuccessReturnsTheObjectItself(): void {
-		$store = new SimpleDataStore(['a' => 1]);
-
-		$response = $this->controller->directSuccess($store);
-
-		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame($store, $response->getData());
-	}
-
 	public function testActivityPubSuccessSetsTheJsonLdContentType(): void {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getId')->willReturn('req-1');

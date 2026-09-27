@@ -11,7 +11,6 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -37,14 +36,11 @@ class LikeService {
 	use TStringTools;
 
 	public function __construct(
-		private StreamRequest $streamRequest,
 		private StreamService $streamService,
 		private SignatureService $signatureService,
 		private ActivityService $activityService,
 		private StreamActionService $streamActionService,
-		private StreamQueueService $streamQueueService,
 		private CacheActorService $cacheActorService,
-		private MiscService $miscService,
 		private LoggerInterface $logger,
 		private ModerationService $moderationService,
 	) {

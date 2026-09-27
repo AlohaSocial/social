@@ -82,7 +82,6 @@ class InstanceService {
 	public function __construct(
 		private InstancesRequest $instancesRequest,
 		private ConfigService $configService,
-		private MiscService $miscService,
 		private IAppConfig $appConfig,
 		private IConfig $config,
 		private IURLGenerator $urlGenerator,

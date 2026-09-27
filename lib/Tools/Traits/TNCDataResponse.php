@@ -123,10 +123,6 @@ trait TNCDataResponse {
 
 		return new DataResponse($data, Http::STATUS_OK);
 	}
-	protected function directSuccess(JsonSerializable $result): DataResponse {
-		return new DataResponse($result, Http::STATUS_OK);
-	}
-
 	/**
 	 * Return JSON-LD response with ActivityPub content type.
 	 */

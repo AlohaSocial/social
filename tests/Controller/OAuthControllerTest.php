@@ -25,7 +25,6 @@ use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
-use OCA\Social\Service\MiscService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\DataResponse;
@@ -781,7 +780,7 @@ class OAuthControllerTest extends TestCase {
 		$clientRequest = $this->createMock(ClientRequest::class);
 		$clientAuthRequest = $this->createMock(ClientAuthRequest::class);
 		$clientService = new ClientService(
-			$clientRequest, $hasher, $this->createMock(MiscService::class), $clientAuthRequest
+			$clientRequest, $hasher, $clientAuthRequest
 		);
 
 		// exactly the columns saveApp() writes, read back the way

@@ -74,7 +74,7 @@ export function contextFor(type) {
  * @param {(status: object) => boolean} isOwn whether the reader wrote it
  * @return {boolean}
  */
-export function isTrackable(status, isOwn = () => false) {
+function isTrackable(status, isOwn = () => false) {
 	if (!status?.id || !Array.isArray(status.tags) || status.tags.length === 0) {
 		return false
 	}

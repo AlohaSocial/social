@@ -21,7 +21,6 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\TranslationService;
 use OCP\IAppConfig;
@@ -63,7 +62,6 @@ class InstanceServiceTest extends TestCase {
 		$this->service = new InstanceService(
 			$this->instancesRequest,
 			$this->configService,
-			$this->createMock(MiscService::class),
 			$this->appConfig,
 			$this->config,
 			$urlGenerator,

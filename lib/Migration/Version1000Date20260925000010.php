@@ -35,7 +35,6 @@ class Version1000Date20260925000010 extends SimpleMigrationStep {
 	 */
 	#[\Override]
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
-		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
 
 		if (!$schema->hasTable('social_durable_cache')) {

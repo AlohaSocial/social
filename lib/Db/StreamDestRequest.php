@@ -147,7 +147,7 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		return $seen;
 	}
 
-	private function generateStreamHome(Stream $stream): bool {
+	private function generateStreamHome(Stream $stream): void {
 		$recipients = self::uniqueRecipients(
 			[
 				'to' => array_merge($stream->getToAll(), [$stream->getAttributedTo()]),
@@ -158,8 +158,6 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		foreach ($recipients as $actorId => $subtype) {
 			$this->create($stream->getId(), $actorId, 'recipient', $subtype, $stream->getNid());
 		}
-
-		return true;
 	}
 
 	private function generateStreamDirect(Stream $stream): bool {
@@ -206,8 +204,6 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
-	 * @param string $actorId
-	 *
 	 * @return StreamDest[]
 	 */
 	public function getRelatedToActor(Person $actor, int $limit = 0, int $afterId = 0): array {

@@ -16,8 +16,6 @@ use OCA\Social\Exceptions\QueueStatusException;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
-use OCA\Social\Service\ConfigService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\RequestQueueService;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -32,8 +30,6 @@ class RequestQueueServiceTest extends TestCase {
 		$this->requestQueueRequest = $this->createMock(RequestQueueRequest::class);
 		$this->service = new RequestQueueService(
 			$this->requestQueueRequest,
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class),
 		);
 	}
 

@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Migration;
 
 use Closure;
-use OCP\DB\ISchemaWrapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
@@ -57,7 +56,6 @@ class Version1000Date20260912000010 extends SimpleMigrationStep {
 	 */
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
 		if (!$schema->hasTable('social_client_auth') || !$schema->hasTable('social_client')) {
 			return;

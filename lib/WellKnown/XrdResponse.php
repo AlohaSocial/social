@@ -15,7 +15,6 @@ use OCP\AppFramework\Http\TextPlainResponse;
 use OCP\Http\WellKnown\IResponse;
 
 final class XrdResponse implements IResponse {
-	private ?string $expires = null;
 	private int $httpCode;
 
 	/** @var mixed[] */
@@ -23,25 +22,6 @@ final class XrdResponse implements IResponse {
 
 	public function __construct(int $httpCode = Http::STATUS_OK) {
 		$this->httpCode = $httpCode;
-	}
-
-	/**
-	 * @param string $expires
-	 *
-	 * @return $this
-	 *
-	 * @since 21.0.0
-	 */
-	public function setExpires(string $expires): self {
-		$this->expires = $expires;
-
-		return $this;
-	}
-
-	public function setHttpCode(int $httpCode): self {
-		$this->httpCode = $httpCode;
-
-		return $this;
 	}
 
 	/**

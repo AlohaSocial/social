@@ -83,14 +83,7 @@ trait TPathTools {
 		return trim($path);
 	}
 
-	/**
-	 * @param string $path
-	 * @param bool $force
-	 * @param bool $clean
-	 *
-	 * @return string
-	 */
-	protected function withoutBeginAt(string $path) {
+	protected function withoutBeginAt(string $path): string {
 		$path = ltrim($path, '@');
 
 		return trim($path);

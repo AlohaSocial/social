@@ -11,9 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\AP;
 use OCA\Social\Exceptions\InvalidResourceException;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\TestService;
 use OCA\Social\Tools\Model\SimpleDataStore;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -37,8 +35,6 @@ class TestServiceTest extends TestCase {
 		AP::set($this->createMock(AP::class));
 		$this->service = new TestService(
 			$this->curlService,
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class),
 		);
 	}
 

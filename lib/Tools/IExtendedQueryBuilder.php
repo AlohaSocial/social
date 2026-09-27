@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Tools;
 
 use DateTime;
-use Exception;
 use OCP\DB\QueryBuilder\ICompositeExpression;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -73,16 +72,6 @@ interface IExtendedQueryBuilder extends IQueryBuilder {
 	 * @return IExtendedQueryBuilder
 	 */
 	public function limitToUserId(string $userId): IExtendedQueryBuilder;
-
-	/**
-	 * Limit the request to the creation
-	 *
-	 * @param int $delay
-	 *
-	 * @return IExtendedQueryBuilder
-	 * @throws Exception
-	 */
-	public function limitToCreation(int $delay = 0): IExtendedQueryBuilder;
 
 	/**
 	 * @param string $field
