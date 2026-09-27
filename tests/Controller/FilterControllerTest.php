@@ -794,6 +794,24 @@ class FilterControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A granular scope is not a key to its whole parent: a token granted
+	 * `write:statuses` may post, and may not rewrite what the account filters.
+	 */
+	public function testAnUnrelatedGranularScopeDoesNotOpenTheFilters(): void {
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:statuses', 'write:statuses']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(
+			Http::STATUS_FORBIDDEN,
+			$this->controller('Bearer statuses')->create('spoilers', ['home'])->getStatus()
+		);
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer statuses')->index()->getStatus());
+		$this->assertSame([], $this->filters);
+	}
+
 	// the other half of a v2 filter: the posts it covers by name
 
 	/**
