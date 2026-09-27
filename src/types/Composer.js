@@ -6,7 +6,7 @@
 /**
  * @typedef LocalAttachment - one attachment in the composer, before the post goes out
  * @property {?File} file - the file being uploaded; null for one picked from Files, the picture library or a re-draft
- * @property {string} path - what it is called in the preview: a file name, a path or a title
+ * @property {string} [path] - what it is called in the preview when it has no file: a path or a title
  * @property {?import('./Mastodon.js').MediaAttachment} data - the server's answer once it is stored; null while it uploads or when it failed
  * @property {boolean} failed - the upload was refused
  * @property {string} [description] - the alt text as typed

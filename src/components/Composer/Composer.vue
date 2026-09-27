@@ -491,7 +491,6 @@ import Close from 'vue-material-design-icons/Close.vue'
 import FolderImage from 'vue-material-design-icons/FolderImage.vue'
 import FileGifBox from 'vue-material-design-icons/FileGifBox.vue'
 import Paperclip from 'vue-material-design-icons/Paperclip.vue'
-import debounce from 'debounce'
 import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -501,10 +500,9 @@ import PollIcon from 'vue-material-design-icons/Poll.vue'
 import CardTextOutline from 'vue-material-design-icons/CardTextOutline.vue'
 import PlacePicker from './PlacePicker.vue'
 import SchedulePicker from './SchedulePicker.vue'
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, getCurrentInstance, ref } from 'vue'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError, showSuccess } from '../../services/toast.js'
-import he from 'he'
 import FocusOnCreate from '../../directives/focusOnCreate.js'
 import axios from '@nextcloud/axios'
 import ActorAvatar from '../ActorAvatar.vue'
@@ -519,7 +517,7 @@ import { isKnownVisibility } from '../Visibility/VisibilitiesInfos.js'
 import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
 import Tribute from 'tributejs'
-import { escapeHtml, hashtagChip, mentionChip, mentionMenuItem } from '../../utils/mentionTemplates.js'
+import { mentionTributeOptions } from '../../utils/mentionTribute.js'
 import eventBus from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
@@ -532,12 +530,13 @@ import { mapStores } from 'pinia'
 import { useInstanceStore } from '../../store/instance.js'
 import { useAccountStore } from '../../store/account.js'
 import { useTimelineStore } from '../../store/timeline.js'
-import { applyFilterToFile } from '../../utils/imageFilters.js'
-import { focusParam, isFocalPoint } from '../../utils/focalPoint.js'
-import { htmlToPlainText } from '../../utils/plainText.js'
+import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
+import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
+import { statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
 import { datePickerModule, isTooSoon, proposedSchedule } from '../../utils/schedule.js'
+import { useComposerAttachments } from '../../composables/useComposerAttachments.js'
 import { useCurrentUser } from '../../composables/useCurrentUser.js'
 import { useServerData } from '../../composables/useServerData.js'
 import { userKey } from '../../utils/browserStore.js'
@@ -547,51 +546,6 @@ import { userKey } from '../../utils/browserStore.js'
  * constants here; they are the server's, read from the instance entity into
  * the instance store, and appear below as `maxLength` and `maxAttachments`.
  */
-
-/**
- * What the composer takes as an attachment. The file dialog is given these
- * as its `accept`, and a drop or a paste is held to the same list, so that
- * what can be dragged in is exactly what can be picked.
- */
-const ACCEPTED_MEDIA_TYPES = ['image/', 'video/', 'audio/']
-
-/**
- * The files a post may carry besides media, as CacheDocumentService::
- * DOCUMENT_MIME_TYPES has them: what people on a Nextcloud actually have to
- * share. The extensions are for a browser that reports no type for a file.
- */
-const ACCEPTED_DOCUMENT_TYPES = [
-	'application/pdf',
-	'text/plain',
-	'text/markdown',
-	'text/csv',
-	'application/zip',
-	'application/epub+zip',
-	'application/vnd.oasis.opendocument.text',
-	'application/vnd.oasis.opendocument.spreadsheet',
-	'application/vnd.oasis.opendocument.presentation',
-	'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-	'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-]
-const ACCEPTED_DOCUMENT_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.zip', '.epub', '.odt', '.ods', '.odp', '.docx', '.xlsx', '.pptx']
-
-/**
- * What the file picker offers. Narrower than what the composer takes from a
- * drop or an upload: Files is where the pictures are, and an audio file picked
- * out of a folder tree is not what this button is for.
- */
-const PICKABLE_MEDIA_TYPES = ['image/*', 'video/*', ...ACCEPTED_DOCUMENT_TYPES]
-
-/**
- * How long to wait before uploading a filtered copy. Flicking through the
- * filters to see them is the normal way to use them, and each stop should not
- * be an upload.
- */
-const FILTER_DEBOUNCE = 600
-
-/** how long the card says no for, in step with the refusal in TimelinePost */
-const REFUSAL_DURATION = 400
 
 /**
  * The content warnings worth one press.
@@ -613,16 +567,6 @@ function contentWarningPresets() {
 		translate('social', 'Work'),
 	]
 }
-
-/**
- * The emoji picker's module, fetched at most once.
- *
- * It carries the whole emoji set — most of a megabyte of source — so it is its
- * own chunk and arrives when somebody asks for an emoji rather than with every
- * composer.
- *
- * @return {Promise<object>} the module
- */
 
 /**
  * The shared picture library, fetched when somebody first asks for it.
@@ -747,13 +691,31 @@ export default {
 	},
 
 	emits: ['posted'],
-	setup() {
+	setup(props) {
 		const { hostname } = useServerData()
 		const { currentUser } = useCurrentUser()
+
+		// what a click into the box opens up; the composer is also expanded
+		// by anything it already holds — see expanded()
+		const openedByHand = ref(props.startExpanded)
+		// and what the close button shuts again. It has to be a state of its
+		// own rather than the absence of `openedByHand`, because a box with a
+		// word in it is expanded by the word: without this there was no way to
+		// close one except by deleting what was in it.
+		const closedByHand = ref(false)
+		const expand = () => {
+			closedByHand.value = false
+			openedByHand.value = true
+		}
+		const instance = getCurrentInstance()
 
 		return {
 			hostname,
 			currentUser,
+			openedByHand,
+			closedByHand,
+			expand,
+			...useComposerAttachments({ expand, root: () => instance?.proxy?.$el }),
 			// set in mounted(); here rather than in data() so that the
 			// library's own object is not wrapped in a reactive proxy
 			tribute: null,
@@ -779,14 +741,6 @@ export default {
 			rolling: [],
 			/** whether the dice have come to rest */
 			rollLanded: false,
-			// what a click into the box opens up; the composer is also expanded
-			// by anything it already holds — see expanded()
-			openedByHand: this.startExpanded,
-			// and what the close button shuts again. It has to be a state of
-			// its own rather than the absence of `openedByHand`, because a box
-			// with a word in it is expanded by the word: without this there was
-			// no way to close one except by deleting what was in it.
-			closedByHand: false,
 			// a reply goes where the post it answers went, which is also what
 			// the reply flow does when a composer is retargeted by hand
 			// the audience, in order of who gets to say: whoever opened this
@@ -833,23 +787,6 @@ export default {
 			/** whether that fetch is in flight */
 			schedulePickerLoading: false,
 			loading: false,
-			/** whether an attachment is on its way to the server */
-			uploading: false,
-			/** how far the current upload has got, 0..1 */
-			uploadProgress: 0,
-			/** what the progress bar is working on, in words */
-			progressLabel: '',
-			/** whether the Files dialog is open or its picks are being attached */
-			picking: false,
-			/** keeps two picks of the same file apart, since the path cannot */
-			pickCount: 0,
-			/** pending re-uploads, one per attachment, keyed by its object URL */
-			filterTimers: {},
-			/** whether files are being dragged over the card right now */
-			draggingFiles: false,
-			/** briefly true after a drop of something the composer cannot take */
-			refusedDrop: false,
-			attachments: {},
 			showPoll: false,
 			showWarning: false,
 			/** what a video is called, and what it is; blank unless asked for */
@@ -868,89 +805,8 @@ export default {
 			replyTo: this.inReplyTo,
 			/** the post this one quotes, as the timeline handed it over */
 			quoteOf: null,
-			tributeOptions: {
-				spaceSelectsMatch: true,
-				collection: [
-					{
-						trigger: '@',
-						lookup(item) {
-							return item.key + item.value
-						},
+			tributeOptions: mentionTributeOptions(),
 
-						menuItemTemplate(item) {
-							return mentionMenuItem(item.original)
-						},
-
-						selectTemplate(item) {
-							return mentionChip(item.original)
-						},
-
-						values: debounce(async (text, populate) => {
-							if (text.length < 1) {
-								populate([])
-							}
-
-							const response = await this.remoteSearchAccounts(text)
-
-							const users = response.data.result.accounts.map((user) => ({
-								key: user.preferredUsername,
-								value: user.account,
-								url: user.url,
-								avatar: user.local
-									? generateUrl('/avatar/{user}/32', { user: user.preferredUsername })
-									: generateUrl('apps/social/api/v1/global/actor/avatar?id={id}', { id: user.id }),
-							}))
-
-							logger.debug('Found accounts for a mention', { count: users.length })
-							populate(users)
-						}, 200),
-					},
-					{
-						trigger: '#',
-						menuItemTemplate(item) {
-							return escapeHtml(item.original.value)
-						},
-
-						selectTemplate(item) {
-							let tag
-							if (typeof item === 'undefined') {
-								tag = this.currentMentionTextSnapshot
-							} else {
-								tag = item.original.value
-							}
-							return hashtagChip(tag, generateUrl('/timeline/tags/{tag}', { tag }))
-						},
-
-						values: debounce(async (text, populate) => {
-							if (text.length < 1) {
-								populate([])
-							}
-
-							const response = await this.remoteSearchHashtags(text)
-							const tags = [
-								...(response.data.result.exact && !Array.isArray(response.data.result.exact) ? [{ key: response.data.result.exact, value: response.data.result.exact }] : []),
-								...response.data.result.tags.map(({ hashtag }) => ({ key: hashtag, value: hashtag })),
-							]
-
-							logger.debug('Found hashtags for a mention', { count: tags.length })
-							populate(tags)
-						}, 200),
-					},
-				],
-
-				noMatchTemplate() {
-					if (this.current.collection.trigger === '#') {
-						if (this.current.mentionText === '') {
-							return undefined
-						} else {
-							return '<li data-index="0">#' + escapeHtml(this.current.mentionText) + '</li>'
-						}
-					}
-				},
-			},
-
-			/** when the refused-drop notice goes away */
-			refusalTimer: null,
 			// the eventBus and document handlers mounted() adds, kept so that
 			// unmounted() removes only these and not other components' listeners
 			onComposerReply: null,
@@ -994,26 +850,6 @@ export default {
 			return this.instanceStore.maxCharacters
 		},
 
-		/** @return {number} what a post may carry, as the server holds it */
-		maxAttachments() {
-			return this.instanceStore.maxAttachments
-		},
-
-		/** @return {string} the `accept` of the file dialog, from one list */
-		acceptedTypes() {
-			return [...ACCEPTED_MEDIA_TYPES.map((type) => `${type}*`), ...ACCEPTED_DOCUMENT_TYPES, ...ACCEPTED_DOCUMENT_EXTENSIONS].join(',')
-		},
-
-		/** @return {boolean} whether the composer holds a picture */
-		hasAttachments() {
-			return Object.keys(this.attachments).length > 0
-		},
-
-		/** @return {boolean} whether the post is carrying all the server takes */
-		attachmentsFull() {
-			return Object.keys(this.attachments).length >= this.maxAttachments
-		},
-
 		/**
 		 * What the box asks for. With a picture above it, the post is the
 		 * picture and the words underneath it are its caption.
@@ -1041,53 +877,6 @@ export default {
 		 */
 		anchoredReply() {
 			return this.inReplyTo !== null && this.replyTo?.id === this.inReplyTo.id
-		},
-
-		/** Attachments that can carry a description and have not been given one. */
-		undescribed() {
-			return Object.values(this.attachments).filter((attachment) => attachment.data?.id !== undefined && (attachment.description || '').trim() === '').length
-		},
-
-		/** @return {number} uploads the server refused */
-		failedUploads() {
-			return Object.values(this.attachments).filter((attachment) => attachment.failed === true).length
-		},
-
-		/** @return {boolean} whether an upload has not come back yet */
-		hasPendingUploads() {
-			return Object.values(this.attachments).some((attachment) => attachment.failed !== true && attachment.data === null)
-		},
-
-		/** @return {string[]} the ids the post will carry */
-		/**
-		 * Whether this post is a video: one attachment, and it a video.
-		 *
-		 * The same rule the wire form applies — a `Video` object *is* the
-		 * video, so a post carrying a video and three photographs is a post.
-		 *
-		 * @return {boolean}
-		 */
-		isVideoPost() {
-			const attachments = Object.values(this.attachments)
-
-			return attachments.length === 1
-				&& (attachments[0].data?.type === 'video'
-					|| (attachments[0].data?.media_type || '').startsWith('video/'))
-		},
-
-		mediaIds() {
-			return Object.values(this.attachments)
-				.map((attachment) => attachment.data?.id)
-				.filter((id) => id !== undefined && id !== null)
-		},
-
-		undescribedWarning() {
-			return translatePlural(
-				'social',
-				'%n attachment has no description',
-				'%n attachments have no description',
-				this.undescribed,
-			)
 		},
 
 		charactersLeftLabel() {
@@ -1297,7 +1086,7 @@ export default {
 			// everyone in the conversation, not only whoever wrote the post
 			// being answered: a reply that named one of three people reached
 			// one of three people
-			this.prefillMessageWithMentions(this.participantsOf(data))
+			this.prefillMessageWithMentions(participantsOf(data, this.currentUser.uid, this.hostname))
 			this.visibility = data.visibility
 			this.visibilityChosen = true
 			// somebody pressed reply, which is a request to write one — including
@@ -1349,7 +1138,6 @@ export default {
 	},
 
 	unmounted() {
-		window.clearTimeout(this.refusalTimer)
 		document.removeEventListener('pointerdown', this.onOutsideInteraction)
 		document.removeEventListener('focusin', this.onOutsideInteraction)
 		if (this.tribute && this.tributeTarget) {
@@ -1367,11 +1155,6 @@ export default {
 			return /** @type {HTMLElement} */ (this.$refs.composerInput)
 		},
 
-		expand() {
-			this.closedByHand = false
-			this.openedByHand = true
-		},
-
 		/**
 		 * Everything the reader put in, gone — the text, the attachments and
 		 * their previews, the poll, the warning, the schedule, the place, and
@@ -1386,8 +1169,7 @@ export default {
 			if (this.inputElement() !== undefined) {
 				this.inputElement().innerText = ''
 			}
-			Object.keys(this.attachments).forEach((key) => this.releasePreview(key))
-			this.attachments = {}
+			this.clearAttachments()
 			this.showPoll = false
 			this.pollOptions = ['', '']
 			this.pollMultiple = false
@@ -1532,64 +1314,8 @@ export default {
 				return
 			}
 
-			const nodes = accounts.flatMap((account) => {
-				const mention = document.createElement('span')
-				mention.className = 'mention'
-				mention.contentEditable = 'false'
-
-				const link = document.createElement('a')
-				link.href = account.url
-				link.target = '_blank'
-
-				// a Mention entity off a post carries no picture; the pill
-				// then carries none either rather than a broken one
-				if (account.avatar) {
-					const avatar = document.createElement('img')
-					avatar.src = account.avatar
-					link.append(avatar)
-				}
-				link.append(document.createTextNode(`@${this.fullHandle(account.acct)}`))
-				mention.append(link)
-
-				return [mention, document.createTextNode('\u00a0')]
-			})
-
-			this.inputElement().replaceChildren(...nodes)
+			this.inputElement().replaceChildren(...mentionPills(accounts, this.hostname))
 			this.updateStatusContent()
-		},
-
-		/**
-		 * @param {string} acct a handle, with or without its host
-		 * @return {string} the handle with its host, the way a mention is typed
-		 */
-		fullHandle(acct) {
-			return acct.includes('@') ? acct : `${acct}@${this.hostname}`
-		},
-
-		/**
-		 * Everyone a reply to this post should reach: its author, then
-		 * everyone it mentioned, each once, and never the reader — a reply
-		 * that addresses its own author is talking to itself.
-		 *
-		 * @param {object} post the post being answered, as the timeline holds it
-		 * @return {Array<{acct: string, url: string, avatar?: string}>}
-		 */
-		participantsOf(post) {
-			const self = `${this.currentUser.uid}@${this.hostname}`.toLowerCase()
-			const seen = new Set()
-
-			return [post.account, ...(Array.isArray(post.mentions) ? post.mentions : [])]
-				.filter((account) => typeof account?.acct === 'string' && account.acct !== '')
-				.filter((account) => {
-					const handle = this.fullHandle(account.acct).toLowerCase()
-					if (handle === self || seen.has(handle)) {
-						return false
-					}
-
-					seen.add(handle)
-
-					return true
-				})
 		},
 
 		updateStatusContent() {
@@ -1605,17 +1331,7 @@ export default {
 		 * @return {string}
 		 */
 		plainText() {
-			const input = this.inputElement()
-			if (input === undefined || input === null) {
-				return ''
-			}
-
-			const element = /** @type {HTMLElement} */ (input.cloneNode(true))
-			Array.from(element.getElementsByClassName('emoji')).forEach((emoji) => {
-				emoji.replaceWith(document.createTextNode(emoji.getAttribute('alt') ?? ''))
-			})
-
-			return he.decode(nodeToPlainText(element).trim())
+			return editableToPlainText(this.inputElement())
 		},
 
 		/**
@@ -1728,27 +1444,7 @@ export default {
 				this.language = post.language
 			}
 
-			const attachments = { ...this.attachments }
-			for (const media of post.media_attachments ?? []) {
-				if (media?.id === undefined || Object.keys(attachments).length >= this.maxAttachments) {
-					continue
-				}
-
-				// the same shape an upload leaves behind, with the server's
-				// answer already in hand: `data.id` is what goes out as
-				// `media_ids`, and `saved` is the description as the server
-				// already holds it, so it is not written again unless it is
-				// changed
-				attachments[`redraft:${++this.pickCount}:${media.id}`] = {
-					file: null,
-					path: media.description || media.url || String(media.id),
-					data: media,
-					failed: false,
-					description: media.description || '',
-					saved: media.description || '',
-				}
-			}
-			this.attachments = attachments
+			this.restoreMedia(post.media_attachments ?? [])
 
 			this.focusInput()
 		},
@@ -1767,245 +1463,10 @@ export default {
 			/** @type {HTMLInputElement} */ (this.$refs.fileUploadInput).click()
 		},
 
-		async handleFileChange(event) {
-			const target = event.target
-			const files = Array.from(target.files)
-			// the input keeps its selection, so picking the same file twice in
-			// a row would otherwise be ignored the second time
-			target.value = ''
-
-			await this.attachFiles(files)
-		},
-
 		/**
-		 * Whether a drag is carrying files, as opposed to a selection being
-		 * dragged around inside the composer — text moved from one line to the
-		 * next is not an attachment and must not light the card up.
-		 *
-		 * @param {Event} event a drag event
-		 * @return {boolean}
-		 */
-		carriesFiles(event) {
-			return Array.from(/** @type {DragEvent} */ (event).dataTransfer?.types ?? []).includes('Files')
-		},
-
-		/**
-		 * @param {File} file a dropped or pasted file
-		 * @return {boolean} whether the file dialog would have offered it
-		 */
-		acceptsFile(file) {
-			const type = file.type || ''
-			return ACCEPTED_MEDIA_TYPES.some((prefix) => type.startsWith(prefix))
-				|| ACCEPTED_DOCUMENT_TYPES.includes(type)
-				|| ACCEPTED_DOCUMENT_EXTENSIONS.some((extension) => (file.name || '').toLowerCase().endsWith(extension))
-		},
-
-		/** @param {DragEvent} event a drag arriving over the card */
-		handleDragEnter(event) {
-			if (!this.carriesFiles(event)) {
-				return
-			}
-
-			event.preventDefault()
-			this.draggingFiles = true
-		},
-
-		/** @param {DragEvent} event a drag moving over the card */
-		handleDragOver(event) {
-			if (!this.carriesFiles(event)) {
-				return
-			}
-
-			// without this the browser keeps the drop for itself and opens the
-			// file in the tab, which navigates away and takes the draft with it
-			event.preventDefault()
-			if (event.dataTransfer) {
-				event.dataTransfer.dropEffect = 'copy'
-			}
-			this.draggingFiles = true
-		},
-
-		/**
-		 * dragleave fires just as loudly when the pointer crosses from the card
-		 * onto one of its own children, which is where the highlight usually
-		 * starts flickering. Where the pointer went is the answer: it has only
-		 * left when it went somewhere outside this element, or nowhere at all
-		 * (relatedTarget is null when the drag leaves the window). A counter of
-		 * enters and leaves would answer the same question, but it can only be
-		 * repaired by an event that may never come — one missed leave and the
-		 * card stays lit for good — while this is decided fresh every time.
-		 *
-		 * @param {DragEvent} event the drag leaving something
-		 */
-		handleDragLeave(event) {
-			if (!this.draggingFiles) {
-				return
-			}
-
-			const movedTo = event.relatedTarget
-			if (movedTo instanceof Node && this.$el.contains(movedTo)) {
-				return
-			}
-
-			this.draggingFiles = false
-		},
-
-		/** @param {DragEvent} event the drop itself */
-		async handleDrop(event) {
-			if (!this.carriesFiles(event)) {
-				return
-			}
-
-			// same reason as dragover: an unhandled drop is a navigation
-			event.preventDefault()
-			this.draggingFiles = false
-			// dropping a picture is a way of starting a post, so a closed
-			// composer opens rather than swallowing the file out of sight
-			this.expand()
-
-			await this.attachDropped(Array.from(event.dataTransfer?.files ?? []))
-		},
-
-		/**
-		 * A picture on the clipboard becomes an attachment; everything else is
-		 * left to the contenteditable and its autocomplete, exactly as before.
-		 *
-		 * @param {ClipboardEvent} event the paste
-		 */
-		handlePaste(event) {
-			const files = Array.from(event.clipboardData?.files ?? []).filter((file) => this.acceptsFile(file))
-			if (files.length === 0) {
-				// text, a link, a mention pasted back in: none of our business
-				return
-			}
-
-			// otherwise the browser drops the image into the box as markup the
-			// post cannot carry
-			event.preventDefault()
-			this.attachFiles(files)
-		},
-
-		/**
-		 * Attaches what the composer takes and turns the rest away, which is
-		 * all the file dialog does with them — it never offers them at all.
-		 *
-		 * @param {File[]} files everything that was dropped
-		 */
-		async attachDropped(files) {
-			const accepted = files.filter((file) => this.acceptsFile(file))
-
-			if (accepted.length < files.length) {
-				logger.debug('Refused files the composer does not take', { refused: files.length - accepted.length })
-				this.refuseDrop()
-			}
-
-			if (accepted.length === 0) {
-				return
-			}
-
-			await this.attachFiles(accepted)
-		},
-
-		/** Says no to a drop, briefly and once. */
-		refuseDrop() {
-			this.refusedDrop = true
-			window.clearTimeout(this.refusalTimer)
-			this.refusalTimer = window.setTimeout(() => {
-				this.refusedDrop = false
-			}, REFUSAL_DURATION)
-		},
-
-		/**
-		 * How many of these there is still room for, with a word about the rest.
-		 *
-		 * The server refuses the ninth attachment outright, so the refusal
-		 * belongs here, where it can still be explained and where the eight
-		 * that do fit are not lost with it.
-		 *
-		 * @param {Array} items files or paths, in the order they were offered
-		 * @return {Array} the ones the post can still carry
-		 */
-		roomFor(items) {
-			const room = Math.max(this.maxAttachments - Object.keys(this.attachments).length, 0)
-			if (items.length > room) {
-				this.announceCeiling()
-			}
-
-			return items.slice(0, room)
-		},
-
-		/** Says that the post is carrying as much as it can. */
-		announceCeiling() {
-			showError(translatePlural(
-				'social',
-				'A post can carry %n attachment',
-				'A post can carry %n attachments',
-				this.maxAttachments,
-			))
-		},
-
-		/**
-		 * Attaches pictures the reader already has in Nextcloud, without a trip
-		 * through the browser: the path is all that is sent.
-		 */
-		async pickFromFiles() {
-			if (this.attachmentsFull) {
-				this.announceCeiling()
-				return
-			}
-
-			let picked
-			this.picking = true
-			try {
-				// imported here rather than at the top: the picker is most of
-				// `@nextcloud/dialogs`, and it is wanted only by somebody who
-				// has just clicked "attach from Files"
-				const { getFilePickerBuilder } = await import('@nextcloud/dialogs')
-				picked = await getFilePickerBuilder(translate('social', 'Pick files to attach'))
-					.setMultiSelect(true)
-					.setMimeTypeFilter(PICKABLE_MEDIA_TYPES)
-					.allowDirectories(false)
-					// Without this the dialog has **no confirm button at all**:
-					// a picker built with neither `addButton` nor
-					// `setButtonFactory` renders none, so a file could be
-					// selected and there was nothing to press, and the only way
-					// out was to close the dialog — which rejects, and attaches
-					// nothing. `pick()` resolves with the selection when a
-					// button is pressed, so the callback has nothing to do.
-					.addButton({
-						label: translate('social', 'Attach'),
-						variant: 'primary',
-						callback: () => {},
-					})
-					.build()
-					.pick()
-			} catch (error) {
-				// closing the dialog without picking rejects, and changing one's
-				// mind is not a failure to report
-				logger.debug('The file picker was closed', { error })
-				return
-			} finally {
-				this.picking = false
-			}
-
-			const paths = (Array.isArray(picked) ? picked : [picked])
-				.filter((path) => typeof path === 'string' && path !== '' && path !== '/')
-
-			if (paths.length === 0) {
-				return
-			}
-
-			this.expand()
-			await this.attachPaths(paths)
-		},
-
-		/**
-		 * Attaches a picture from the instance's shared library.
-		 *
-		 * The same shape as attaching from Files: a placeholder goes into the
-		 * grid at once so the reader sees that something is happening, and the
-		 * server's answer replaces it. The picker stays open — choosing two is
-		 * a normal thing to want, and the ceiling closes it instead.
+		 * Attaches a picture from the instance's shared library. The picker
+		 * stays open — choosing two is a normal thing to want — and the
+		 * ceiling closes it instead.
 		 *
 		 * @param {{slug: string, title: string}} gif the one that was chosen
 		 */
@@ -2016,215 +1477,11 @@ export default {
 				return
 			}
 
-			this.expand()
-
-			// the same picture may be chosen twice, and the slug cannot tell
-			// those two attachments apart
-			const key = `gif:${++this.pickCount}:${gif.slug}`
-			this.attachments = {
-				...this.attachments,
-				[key]: { file: null, path: gif.title || gif.slug, data: null, failed: false },
-			}
-
-			this.uploading = true
-			this.progressLabel = t('social', 'Attaching…')
-			const mediaData = await this.timelineStore.createMediaFromGif({ slug: gif.slug })
-			this.uploading = false
-
-			if (this.attachments[key] === undefined) {
-				// deleted while the server was copying it
-				return
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: {
-					...this.attachments[key],
-					data: mediaData?.id === undefined ? null : mediaData,
-					failed: mediaData?.id === undefined,
-				},
-			}
+			await this.attachLibraryGif(gif)
 
 			if (this.attachmentsFull) {
 				this.showGifs = false
 			}
-		},
-
-		/**
-		 * Asks the server for one attachment per path, in order, keeping the
-		 * ones it accepts. A path it refuses is marked and left in the grid:
-		 * the others are already attached and must not go down with it.
-		 *
-		 * @param {string[]} paths files in the reader's own storage
-		 */
-		async attachPaths(paths) {
-			const accepted = this.roomFor(paths)
-
-			this.picking = accepted.length > 0
-			this.progressLabel = translate('social', 'Attaching from Files…')
-			for (const [index, path] of accepted.entries()) {
-				// the same picture may be picked twice, and the path cannot
-				// tell those two attachments apart
-				const key = `nextcloud:${++this.pickCount}:${path}`
-				this.attachments = {
-					...this.attachments,
-					[key]: { file: null, path, data: null, failed: false },
-				}
-
-				this.uploading = true
-				this.uploadProgress = index / accepted.length
-				const mediaData = await this.timelineStore.createMediaFromFile({ path })
-				this.uploadProgress = (index + 1) / accepted.length
-
-				if (this.attachments[key] === undefined) {
-					// deleted while the server was fetching it
-					continue
-				}
-
-				this.attachments = {
-					...this.attachments,
-					[key]: {
-						...this.attachments[key],
-						data: mediaData?.id === undefined ? null : mediaData,
-						failed: mediaData?.id === undefined,
-					},
-				}
-			}
-			this.uploading = false
-			this.uploadProgress = 0
-			this.progressLabel = ''
-			this.picking = false
-		},
-
-		/**
-		 * Previews each file, uploads it, and remembers what came back. The one
-		 * road in: the file dialog, a drop and a paste all arrive here.
-		 *
-		 * @param {File[]} allFiles the files to attach, in order
-		 */
-		/**
-		 * Bakes a filter into an attachment and replaces the uploaded copy.
-		 *
-		 * The picture was uploaded the moment it was attached, so choosing a
-		 * filter has to replace what is on the server -- the alternative, baking
-		 * every filter in at send time, would upload each picture twice and make
-		 * pressing Post the slow part.
-		 *
-		 * Debounced, because flicking through eight filters to see them is the
-		 * normal way to use this and should not be eight uploads. The preview is
-		 * CSS and updates immediately either way, so the wait is invisible.
-		 *
-		 * @param {object} change what was chosen
-		 * @param {string} change.key the attachment's object URL
-		 * @param {string} change.filter the filter id
-		 */
-		applyFilter({ key, filter }) {
-			const attachment = this.attachments[key]
-			if (attachment === undefined) {
-				return
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: { ...attachment, filter },
-			}
-
-			window.clearTimeout(this.filterTimers[key])
-			this.filterTimers[key] = window.setTimeout(() => {
-				this.reuploadFiltered(key)
-			}, FILTER_DEBOUNCE)
-		},
-
-		/**
-		 * @param {string} key the attachment's object URL
-		 */
-		async reuploadFiltered(key) {
-			const attachment = this.attachments[key]
-			if (attachment?.file === undefined) {
-				return
-			}
-
-			const filtered = await applyFilterToFile(attachment.file, attachment.filter || 'none')
-			// still there? the reader may have deleted it while this ran
-			if (this.attachments[key] === undefined) {
-				return
-			}
-
-			const mediaData = await this.timelineStore.createMedia({ file: filtered })
-			if (this.attachments[key] === undefined) {
-				return
-			}
-
-			if (mediaData?.id === undefined) {
-				// the filtered copy would not upload; the unfiltered one is
-				// still attached and still perfectly postable
-				logger.warn('Could not upload the filtered copy; keeping the original')
-
-				return
-			}
-
-			// the description was typed against this picture and belongs to it
-			// rather than to the upload it happened to be stored as
-			const description = (attachment.description || '').trim()
-			if (description !== '') {
-				this.timelineStore.describeMedia({ id: mediaData.id, description })
-			}
-			// and so does the focal point: a filter changes the colours, not
-			// where the face is
-			if (isFocalPoint(attachment.focus)) {
-				this.timelineStore.focusMedia({ id: mediaData.id, focus: focusParam(attachment.focus) })
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: { ...this.attachments[key], data: mediaData, failed: false },
-			}
-		},
-
-		async attachFiles(allFiles) {
-			const files = this.roomFor(allFiles)
-			this.progressLabel = translate('social', 'Uploading…')
-			for (const [index, file] of files.entries()) {
-				const url = URL.createObjectURL(file)
-				this.attachments = {
-					...this.attachments,
-					[url]: {
-						file,
-						data: null,
-						failed: false,
-					},
-				}
-
-				this.uploading = true
-				// real progress, from the request itself: the bar used to be
-				// hard-coded to 40% behind a `v-if="false"`
-				this.uploadProgress = index / files.length
-				const mediaData = await this.timelineStore.createMedia({
-					file,
-					onProgress: (fraction) => {
-						this.uploadProgress = (index + fraction) / files.length
-					},
-				})
-				this.uploading = false
-				this.uploadProgress = 0
-
-				if (this.attachments[url] === undefined) {
-					// deleted while it was uploading
-					continue
-				}
-
-				this.attachments = {
-					...this.attachments,
-					[url]: {
-						...this.attachments[url],
-						// a failed upload is marked, never left as
-						// `data: undefined` for the submit path to trip over
-						data: mediaData?.id === undefined ? null : mediaData,
-						failed: mediaData?.id === undefined,
-					},
-				}
-			}
-			this.progressLabel = ''
 		},
 
 		insert(emoji) {
@@ -2275,26 +1532,6 @@ export default {
 		},
 
 		n: translatePlural,
-		/**
-		 * What the poster said the video is, leaving out what they did not say.
-		 *
-		 * @return {object}
-		 */
-		videoFields() {
-			const fields = {}
-			for (const [key, value] of [
-				['video_title', this.videoTitle],
-				['video_category', this.videoCategory],
-				['video_licence', this.videoLicence],
-			]) {
-				if (value.trim() !== '') {
-					fields[key] = value.trim()
-				}
-			}
-
-			return fields
-		},
-
 		async createPost() {
 			if (!this.canPost || this.loading) {
 				return
@@ -2310,48 +1547,26 @@ export default {
 			const status = played.text
 			const warning = this.showWarning ? this.spoilerText.trim() : ''
 
-			const statusData = {
-				content_type: '',
+			const statusData = statusPayload({
+				text: status,
+				warning,
 				// only uploads the server actually took: a failed one used to
 				// be read as `preview.data.id` and threw a TypeError here
-				media_ids: this.mediaIds,
-				// a warning means the body is hidden until asked for, which is
-				// what `sensitive` says about the post as a whole
-				sensitive: warning !== '',
-				spoiler_text: warning,
-				status,
-				in_reply_to_id: this.replyTo?.id,
-				quote_id: this.quoteOf?.id,
+				mediaIds: this.mediaIds,
+				inReplyToId: this.replyTo?.id,
+				quoteId: this.quoteOf?.id,
 				visibility: this.visibility,
-				// the team this is written as, when it is written as one. Left
-				// out entirely otherwise, so a post as yourself is the request
-				// it always was.
-				...(this.postAs === '' ? {} : { post_as: this.postAs }),
-				// always, so the post is never without one: the server would
-				// fill in the same default, but what the poster saw is what goes
+				postAs: this.postAs,
 				language: this.language,
-				// only where this is a video and the poster filled something
-				// in: an empty title is not an answer, and the server falls
-				// back to the first line of the post as it always did
-				...(this.isVideoPost ? this.videoFields() : {}),
-			}
-
-			// where it was taken, only ever as the poster said: a known place
-			// by its id, a new one by its name
-			if (this.place?.id) {
-				statusData.place_id = this.place.id
-			} else if (this.place?.name) {
-				statusData.place_name = this.place.name
-				if (this.place.country) {
-					statusData.place_country = this.place.country
-				}
-			}
-
-			// ISO 8601 in UTC, which is what `scheduled_at` takes; the picker
-			// works in the reader's zone and the Date carries the conversion
-			if (this.scheduling && this.scheduledAt instanceof Date) {
-				statusData.scheduled_at = this.scheduledAt.toISOString()
-			}
+				video: this.isVideoPost
+					? { title: this.videoTitle, category: this.videoCategory, licence: this.videoLicence }
+					: null,
+				place: this.place,
+				scheduledAt: this.scheduling ? this.scheduledAt : null,
+				poll: this.showPoll
+					? { options: this.pollOptions, expiresIn: this.pollExpiresIn, multiple: this.pollMultiple }
+					: null,
+			})
 
 			// a short post as a card: the words drawn on colour and attached
 			// as a picture, described with those same words
@@ -2362,15 +1577,6 @@ export default {
 					return
 				}
 				statusData.media_ids = [...statusData.media_ids, card]
-			}
-
-			const pollOptions = this.pollOptions.map((option) => option.trim()).filter((option) => option !== '')
-			if (this.showPoll && pollOptions.length >= 2) {
-				statusData.poll = {
-					options: pollOptions,
-					expires_in: this.pollExpiresIn,
-					multiple: this.pollMultiple,
-				}
 			}
 
 			logger.debug('Posting status', {
@@ -2445,25 +1651,6 @@ export default {
 			eventBus.emit('post-published', created)
 		},
 
-		/**
-		 * Presses or releases the clock. Pressing it fetches the picker and
-		 * proposes an hour from now, rounded to the picker's step, so there is
-		 * a time to move rather than a blank to fill.
-		 */
-		/**
-		 * Presses or releases the pin. Releasing it drops the place as well:
-		 * a pin that is not pressed says the post has no place, and it should
-		 * mean it.
-		 */
-		/**
-		 * Plays the games in a post where the writer can watch: each one
-		 * tumbles through what it could land on for half a second and then
-		 * lands on what it did. The result was decided before the tumble
-		 * started; this is only the showing of it.
-		 *
-		 * @param {Array<{ kind: string, result: string }>} results what was played
-		 * @return {Promise<void>}
-		 */
 		/** @param {object} option a background @return {string} it as CSS */
 		backgroundOf(option) {
 			return gradientCss(option)
@@ -2495,6 +1682,15 @@ export default {
 			return media.id
 		},
 
+		/**
+		 * Plays the games in a post where the writer can watch: each one
+		 * tumbles through what it could land on for half a second and then
+		 * lands on what it did. The result was decided before the tumble
+		 * started; this is only the showing of it.
+		 *
+		 * @param {Array<{ kind: string, result: string }>} results what was played
+		 * @return {Promise<void>}
+		 */
 		async roll(results) {
 			const icons = { dice: '🎲', flip: '🪙', pick: '🎯' }
 			const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -2517,6 +1713,11 @@ export default {
 			this.rolling = []
 		},
 
+		/**
+		 * Presses or releases the pin. Releasing it drops the place as well:
+		 * a pin that is not pressed says the post has no place, and it should
+		 * mean it.
+		 */
 		togglePlace() {
 			this.placing = !this.placing
 			if (!this.placing) {
@@ -2524,6 +1725,11 @@ export default {
 			}
 		},
 
+		/**
+		 * Presses or releases the clock. Pressing it fetches the picker and
+		 * proposes an hour from now, rounded to the picker's step, so there is
+		 * a time to move rather than a blank to fill.
+		 */
 		async toggleSchedule() {
 			if (this.scheduling) {
 				this.scheduling = false
@@ -2588,136 +1794,6 @@ export default {
 			this.quoteOf = null
 		},
 
-		remoteSearchAccounts(text) {
-			return axios.get(generateUrl('apps/social/api/v1/global/accounts/search'), { params: { search: text } })
-		},
-
-		remoteSearchHashtags(text) {
-			return axios.get(generateUrl('apps/social/api/v1/global/tags/search'), { params: { search: text } })
-		},
-
-		deletePreview(key) {
-			const newAttachments = { ...this.attachments }
-			delete newAttachments[key]
-			this.attachments = newAttachments
-			this.releasePreview(key)
-		},
-
-		/**
-		 * Lets go of the blob URL a preview was drawn from. Without this the
-		 * file stays in memory for the life of the document.
-		 *
-		 * @param {string} key the attachment key, which is that URL
-		 */
-		releasePreview(key) {
-			// an attachment picked out of Files is keyed by its path: there is
-			// no object URL behind it to let go of
-			if (!key.startsWith('blob:')) {
-				return
-			}
-
-			try {
-				URL.revokeObjectURL(key)
-			} catch (error) {
-				logger.debug('Could not release a preview URL', { error })
-			}
-		},
-
-		/**
-		 * Remembers what an attachment shows. Kept locally while the post is
-		 * being written and sent when it goes, rather than on every keystroke.
-		 *
-		 * @param {object} update what changed
-		 * @param {string} update.key which attachment
-		 * @param {string} update.description what it shows
-		 */
-		/**
-		 * Sends whatever descriptions were written, once, as the post goes.
-		 *
-		 * Saving per keystroke would be a request per letter; saving here means
-		 * the description travels with the post that carries the picture.
-		 */
-		async saveDescriptions() {
-			const described = Object.values(this.attachments).filter((attachment) => attachment.data?.id
-				&& (attachment.description || '').trim() !== ''
-				&& (attachment.description || '').trim() !== attachment.saved)
-
-			await Promise.all(described.map((attachment) => this.timelineStore.describeMedia({
-				id: attachment.data.id,
-				description: attachment.description.trim(),
-			})))
-		},
-
-		/**
-		 * Saves what an attachment shows as soon as the field is left, so a
-		 * description outlives a post that never went out.
-		 *
-		 * @param {object} update what was written
-		 * @param {string} update.key which attachment
-		 * @param {string} update.description what it shows
-		 */
-		async commitDescription({ key, description }) {
-			const attachment = this.attachments[key]
-			const text = (description || '').trim()
-			if (attachment?.data?.id === undefined || text === '' || text === attachment.saved) {
-				return
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: { ...attachment, description, saved: text },
-			}
-
-			await this.timelineStore.describeMedia({ id: attachment.data.id, description: text })
-		},
-
-		describeAttachment({ key, description }) {
-			if (this.attachments[key] === undefined) {
-				return
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: { ...this.attachments[key], description },
-			}
-		},
-
-		/**
-		 * Moves an attachment's focal point, locally: what the crosshair shows
-		 * while it is being dragged.
-		 *
-		 * @param {object} update what changed
-		 * @param {string} update.key which attachment
-		 * @param {import('../../utils/focalPoint.js').FocalPoint} update.focus where the subject is
-		 */
-		focusAttachment({ key, focus }) {
-			if (this.attachments[key] === undefined || !isFocalPoint(focus)) {
-				return
-			}
-
-			this.attachments = {
-				...this.attachments,
-				[key]: { ...this.attachments[key], focus },
-			}
-		},
-
-		/**
-		 * Saves where the subject is once the drag is over, through the same
-		 * request the description takes.
-		 *
-		 * @param {object} update what was set
-		 * @param {string} update.key which attachment
-		 * @param {import('../../utils/focalPoint.js').FocalPoint} update.focus where the subject is
-		 */
-		async commitFocus({ key, focus }) {
-			const attachment = this.attachments[key]
-			if (attachment?.data?.id === undefined || !isFocalPoint(focus)) {
-				return
-			}
-
-			this.focusAttachment({ key, focus })
-			await this.timelineStore.focusMedia({ id: attachment.data.id, focus: focusParam(focus) })
-		},
 	},
 }
 
@@ -2739,44 +1815,6 @@ function rememberedVisibility() {
 	}
 
 	return isKnownVisibility(remembered) ? remembered : ''
-}
-
-/**
- * What an element of the editable box says, as plain text.
- *
- * @param {Node} node the element
- * @return {string}
- */
-function nodeToPlainText(node) {
-	let text = ''
-	for (const child of Array.from(node.childNodes)) {
-		if (child.nodeType === Node.TEXT_NODE) {
-			text += child.textContent || ''
-			continue
-		}
-
-		if (child.nodeType !== Node.ELEMENT_NODE) {
-			continue
-		}
-
-		const element = /** @type {Element} */ (child)
-		if (element.tagName === 'BR') {
-			text += '\n'
-			continue
-		}
-
-		const isBlock = ['DIV', 'P', 'LI', 'BLOCKQUOTE', 'PRE'].includes(element.tagName)
-		if (isBlock && text !== '' && !text.endsWith('\n')) {
-			text += '\n'
-		}
-
-		text += nodeToPlainText(element)
-		if (isBlock && !text.endsWith('\n')) {
-			text += '\n'
-		}
-	}
-
-	return text
 }
 </script>
 
@@ -2934,7 +1972,7 @@ $composer-duration: 220ms;
 }
 
 .new-post--refused {
-	// 400ms, the same span REFUSAL_DURATION keeps the class on for
+	// 400ms, the same span REFUSAL_DURATION in useComposerAttachments keeps the class on for
 	animation: composer-refused 400ms $composer-ease;
 }
 

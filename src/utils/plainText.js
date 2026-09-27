@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import he from 'he'
+
 /**
  * A post's HTML as the words that were typed.
  *
@@ -29,6 +31,28 @@ export function htmlToPlainText(html) {
 	}
 
 	return nodeToPlainText(root).trim()
+}
+
+/**
+ * What the composer's editable box says, as the text the post is sent with.
+ *
+ * An emoji drawn as a picture counts as its alt text, and what the box holds
+ * is decoded as the markup it was typed into.
+ *
+ * @param {HTMLElement|null|undefined} element the editable element
+ * @return {string} the text, trimmed
+ */
+export function editableToPlainText(element) {
+	if (element === undefined || element === null) {
+		return ''
+	}
+
+	const copy = /** @type {HTMLElement} */ (element.cloneNode(true))
+	Array.from(copy.getElementsByClassName('emoji')).forEach((emoji) => {
+		emoji.replaceWith(document.createTextNode(emoji.getAttribute('alt') ?? ''))
+	})
+
+	return he.decode(nodeToPlainText(copy).trim())
 }
 
 /**

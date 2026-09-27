@@ -19,9 +19,6 @@ export const TICK_MS = 30000
 const listeners = new Set()
 let timer = null
 
-/**
- *
- */
 function tick() {
 	const now = Date.now()
 	for (const listener of [...listeners]) {
