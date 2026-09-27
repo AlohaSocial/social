@@ -853,17 +853,36 @@ describe('Navigation', () => {
 	})
 
 	/**
-	 * The open drawer is frosted glass made of the page's own background:
-	 * see-through and blurred, so the theme decides its colour and a dark
-	 * theme gets smoked glass. jsdom applies no scoped CSS, so the rule is
-	 * read from the source.
+	 * The open drawer is liquid glass made of the page's own background: a
+	 * clear, rounded pane, see-through and blurred, so the theme decides its
+	 * colour and a dark theme gets dark glass rather than a white pane. It is
+	 * drawn as a pseudo-element inset from the sidebar's edges, so the account
+	 * row does not move when the menu opens. jsdom applies no scoped CSS, so
+	 * the rule is read from the source.
 	 */
-	it('makes the open drawer frosted glass in the theme\'s own background', () => {
+	it('draws the open drawer as an inset pane of liquid glass behind its rows', () => {
 		const source = readFileSync(resolve('src/components/Navigation.vue'), 'utf8')
-		const open = source.match(/\n\.navigation__more:has\(button\[aria-expanded="true"\]\) \{([^}]*)\}/)
+		const pane = source.match(/\n\.navigation__more:has\(button\[aria-expanded="true"\]\)::before \{([^}]*)\}/)
 
-		expect(open[1]).toMatch(/color-mix\(in srgb, var\(--color-main-background\) \d+%, transparent\)/)
-		expect(open[1]).toContain('backdrop-filter: blur(')
+		expect(pane[1]).toMatch(/background-color: color-mix\(in srgb, var\(--color-main-background\) \d+%, transparent\)/)
+		expect(pane[1]).toContain('backdrop-filter: blur(')
+		expect(pane[1]).toContain('inset: 0 6px 6px;')
+		expect(pane[1]).toContain('z-index: -1;')
+		expect(pane[1]).toMatch(/border: 1px solid color-mix\(in srgb, var\(--social-glass-light\) \d+%, transparent\)/)
+		expect(pane[1]).toContain('animation: social-glass-pop')
+		// the drawer itself stays unstyled, so nothing inside it shifts
+		expect(source).not.toMatch(/\n\.navigation__more:has\(button\[aria-expanded="true"\]\) \{/)
+	})
+
+	/**
+	 * The rim light is white, and a dark theme gets a fainter one -- whether
+	 * the reader chose it or it follows the system, unless they chose light.
+	 */
+	it('dims the glass rim light in a dark theme', () => {
+		const source = readFileSync(resolve('src/components/Navigation.vue'), 'utf8')
+
+		expect(source).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*body:not\(\[data-themes\*='light'\]\) \.navigation__more \{\s*--social-glass-light:/)
+		expect(source).toMatch(/\[data-themes\*='dark'\] \.navigation__more \{\s*--social-glass-light:/)
 	})
 
 	/**

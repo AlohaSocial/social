@@ -1495,26 +1495,62 @@ export default {
 }
 
 /*
- * Open, the drawer is frosted glass: the page's own background, a little
- * over half opaque and blurred hard, so the entries it covers show through as
- * a soft haze and the rows on it keep the sidebar's ink. A bright hairline
- * catches the top edge and a shadow lifts the pane off the sidebar, which is
- * what separates the two -- the drawer is lighter and sharper-edged than the
- * tinted sidebar it sits on.
+ * Open, the drawer is liquid glass: a clear, rounded pane that floats 6px in
+ * from the sidebar's sides and foot, only lightly frosted and saturated, so
+ * the entries it covers stay visible as a soft, colourful haze instead of
+ * disappearing under a white slab. Light catches its rim -- a bright line
+ * along the top, a faint dark one along the bottom and a glow just inside the
+ * edge -- and a shadow drops beneath it, which is what separates it from the
+ * entries it overlaps.
  *
- * Built from `--color-main-background`, so the dark theme gets smoked glass
- * with light type rather than a white pane with dark type in the dark.
+ * The pane is a pseudo-element behind the drawer's contents rather than the
+ * drawer itself: insetting the drawer would move the account row 6px every
+ * time the menu opened, out of line with the entries' icons above it. The
+ * pane pops up around the row instead, springing slightly past its size.
+ *
+ * Built from `--color-main-background` and `--color-main-text`, so the dark
+ * theme gets dark glass. The rim light is white in both, but fainter in the
+ * dark, where a strong white line would glare.
  */
-.navigation__more:has(button[aria-expanded="true"]) {
-	background-color: color-mix(in srgb, var(--color-main-background) 62%, transparent);
-	backdrop-filter: blur(16px) saturate(1.6);
-	-webkit-backdrop-filter: blur(16px) saturate(1.6);
-	border-start-start-radius: var(--border-radius-large, 12px);
-	border-start-end-radius: var(--border-radius-large, 12px);
-	border-top: 1px solid color-mix(in srgb, #fff 90%, transparent);
+.navigation__more {
+	--social-glass-light: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+	body:not([data-themes*='light']) .navigation__more {
+		--social-glass-light: rgba(255, 255, 255, .34);
+	}
+}
+
+[data-themes*='dark'] .navigation__more {
+	--social-glass-light: rgba(255, 255, 255, .34);
+}
+
+@keyframes social-glass-pop {
+	from {
+		opacity: 0;
+		transform: scale(.9) translateY(10px);
+	}
+}
+
+.navigation__more:has(button[aria-expanded="true"])::before {
+	content: '';
+	position: absolute;
+	inset: 0 6px 6px;
+	z-index: -1;
+	border: 1px solid color-mix(in srgb, var(--social-glass-light) 70%, transparent);
+	border-radius: 22px;
+	background-color: color-mix(in srgb, var(--color-main-background) 28%, transparent);
+	backdrop-filter: blur(10px) saturate(1.9) contrast(1.05);
+	-webkit-backdrop-filter: blur(10px) saturate(1.9) contrast(1.05);
 	box-shadow:
-		0 -1px 0 color-mix(in srgb, #fff 70%, transparent),
-		0 -16px 34px -12px rgba(0, 50, 100, .5);
+		inset 0 1px 0 color-mix(in srgb, var(--social-glass-light) 80%, transparent),
+		inset 0 -1px 0 color-mix(in srgb, var(--color-main-text) 10%, transparent),
+		inset 0 0 24px color-mix(in srgb, var(--social-glass-light) 28%, transparent),
+		0 12px 30px -10px rgba(0, 20, 50, .45);
+	transform-origin: 50% 100%;
+	animation: social-glass-pop .42s cubic-bezier(.3, 1.5, .5, 1) backwards;
+	pointer-events: none;
 }
 
 .navigation__more > :deep(div[id]) {
@@ -1540,8 +1576,8 @@ export default {
  * and the rows inside it were simply there when it finished -- the container
  * moved and its contents did not. These scale up from 82%, overshooting a
  * little on the way (the tail of the easing curve goes past 1), so the menu
- * reads as growing out of the button rather than as a list that was already
- * written and got uncovered.
+ * reads as growing out of the button along with the glass behind it rather
+ * than as a list that was already written and got uncovered.
  *
  * **An animation and not a transition, because a transition cannot run here.**
  * The panel is held by `v-show`, so while the menu is shut it is
@@ -1556,7 +1592,7 @@ export default {
  * The stagger runs from the bottom row up, which is the direction the panel
  * itself grows: it is anchored at the foot of the sidebar, so an opening
  * drawer pushes its own top edge upward. Rows appearing the other way would
- * travel against it. There is nothing to mirror for right-to-left -- a scale
+ * run against it. There is nothing to mirror for right-to-left -- a scale
  * has no leading edge -- so the drawer is the same in both.
  *
  * Driven off `aria-expanded`, which is the accordion's own state and the only
@@ -1638,16 +1674,17 @@ export default {
 .navigation__more:has(button[aria-expanded="true"]) :deep(.app-navigation-entry) {
 	/* out of its own bottom edge, towards the row above */
 	transform-origin: 50% 100%;
-	animation: social-menu-pop .39s cubic-bezier(.34, 1.56, .64, 1) both;
+	animation: social-menu-pop .38s cubic-bezier(.34, 1.56, .64, 1) both;
 	/* counted from the bottom: the last row waits for nothing */
-	animation-delay: calc((var(--entry-total, 1) - 1 - var(--entry-index, 0)) * 38ms);
+	animation-delay: calc((var(--entry-total, 1) - 1 - var(--entry-index, 0)) * 32ms);
 }
 
 /* A reader who asked for no movement gets the menu all at once, with no
    stagger: a row that appears a fifth of a second after the one below it is
    the movement they turned off, even though nothing travels. */
 @media (prefers-reduced-motion: reduce) {
-	.navigation__more:has(button[aria-expanded="true"]) :deep(.app-navigation-entry) {
+	.navigation__more:has(button[aria-expanded="true"]) :deep(.app-navigation-entry),
+	.navigation__more:has(button[aria-expanded="true"])::before {
 		animation: none;
 	}
 }
