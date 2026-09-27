@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Db;
 
+use DateTime;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -41,15 +42,11 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * Distinct hosts among the remote actors this instance has cached.
-	 *
-	 * The host is the tail of `account` (`name@host`) and there is no column
-	 * for it, so the distinct accounts are read and split here: SUBSTRING from
-	 * a POSITION is not the same expression on every database this app runs
-	 * on, and the caller caches the answer anyway.
-	 */
-	/**
 	 * Local statuses published in a window, for the weekly activity series.
+	 *
+	 * `published_time` is a DATETIME, so the window is bound as dates: an
+	 * integer compared against it matches nothing on SQLite and is an error
+	 * on PostgreSQL.
 	 */
 	public function countLocalStatusesBetween(int $from, int $to): int {
 		$qb = $this->getQueryBuilder();
@@ -59,10 +56,10 @@ class InstanceStatsRequest extends CoreRequestBuilder {
 		$qb->limitToLocal(true);
 		$qb->limitToStatusTypes();
 		$qb->andWhere($qb->expr()->gte(
-			's.published_time', $qb->createNamedParameter($from, IQueryBuilder::PARAM_INT)
+			's.published_time', $qb->createNamedParameter((new DateTime())->setTimestamp($from), IQueryBuilder::PARAM_DATE)
 		));
 		$qb->andWhere($qb->expr()->lt(
-			's.published_time', $qb->createNamedParameter($to, IQueryBuilder::PARAM_INT)
+			's.published_time', $qb->createNamedParameter((new DateTime())->setTimestamp($to), IQueryBuilder::PARAM_DATE)
 		));
 
 		$cursor = $qb->executeQuery();
