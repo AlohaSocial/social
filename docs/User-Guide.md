@@ -27,7 +27,7 @@ names are the English strings of the web client.
 
 ## Getting an account
 
-There is no sign-up. A Nextcloud account is the account: the first time you
+A Nextcloud account is the account: the first time you
 open **Social** from the app menu, a short screen asks whether you want a
 fediverse identity here, or would rather name the one you already have
 somewhere else. Nothing is created until you choose. You pick your handle on
@@ -46,6 +46,27 @@ copy button, people to follow, a way to bring the follows you already have from
 another server, and a button that puts you in the composer. Every step can be
 skipped; once closed it stays closed, and **Settings → Introduction** shows it
 again.
+
+### Registering without a Nextcloud account
+
+Where the administrators allow it, the login page has a **Create an account**
+button, and an invitation link from somebody here leads to the same form. The
+username you choose is your handle, so the same rules apply, and your address
+is `@username@your-nextcloud-host` from the start. Depending on the server you
+confirm your email address first, and an administrator may look at the
+registration before it becomes an account; you are emailed either way.
+
+Such an account is for Social only. You log in on the normal login page, with
+two-factor authentication if you set it up or the server requires it, and
+land in Social. Your personal settings for your details, password, security,
+appearance and notifications are there; Files, Talk and the other apps are
+not, and Nextcloud's own desktop and mobile clients are refused. Mastodon apps
+can. **Settings → Your storage** shows how much of the space the server gives
+each such account your pictures and videos take up. Deleting your Social
+account deletes the whole account.
+
+Where the administrators let everybody invite people, **Settings → Invite
+people** makes an invitation link: it works once and for a week.
 
 ## Finding and following people
 

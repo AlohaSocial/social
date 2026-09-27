@@ -32,6 +32,7 @@ class BackgroundJobsRegisteredTest extends TestCase {
 	private const QUEUED_ONLY = [
 		'OCA\\Social\\Cron\\ActorCleanup',
 		'OCA\\Social\\Cron\\DomainPurge',
+		'OCA\\Social\\Cron\\ExternalPromoted',
 	];
 
 	/** @return list<string> the job classes info.xml registers */

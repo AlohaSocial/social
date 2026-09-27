@@ -69,6 +69,7 @@ class CacheDocumentService {
 		private MediaBlocksRequest $mediaBlocksRequest,
 		private VideoQuotaService $videoQuotaService,
 		private RemoteMediaQuotaService $remoteMediaQuotaService,
+		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -373,11 +374,20 @@ class CacheDocumentService {
 			return;
 		}
 
+		// what a self-registered external user may upload in all, on top of
+		// the video quota every account has
+		$account = $document->getAccount();
+		if (!$this->externalMediaQuota->fits($account, $size)) {
+			throw new CacheContentSizeException(
+				'this account has used its ' . $this->externalMediaQuota->quota()
+				. 'MB of media storage on this instance'
+			);
+		}
+
 		if (!str_starts_with($mime, 'video/')) {
 			return;
 		}
 
-		$account = $document->getAccount();
 		if ($this->videoQuotaService->fits($account, $size)) {
 			return;
 		}

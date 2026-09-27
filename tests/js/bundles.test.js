@@ -217,6 +217,7 @@ describe('the pages that load the bundles', () => {
 	const SITES = [
 		['templates/main.php', 'social-social'],
 		['templates/oauth2.php', 'social-oauth'],
+		['templates/signup.php', 'social-signup'],
 		['lib/Dashboard/SocialWidget.php', 'social-dashboard'],
 		['lib/Listeners/ProfileSectionListener.php', 'social-profilePage'],
 		['lib/Settings/AdminSettings.php', 'social-adminSettings'],

@@ -86,6 +86,10 @@ if (!class_exists('OC\\AppScriptDependency', false)) {
 	class_alias(\OCA\Social\Tests\Helper\AppScriptDependency::class, 'OC\\AppScriptDependency');
 }
 
+// dav, Sabre and a proposed server event, which the external-user code refers
+// to and this suite has no copy of
+require_once __DIR__ . '/Helper/external-stubs.php';
+
 // The escaping helpers every server-side template is written against. Same
 // behaviour as the server's: `p()` escapes, `print_unescaped()` does not.
 if (!function_exists('p')) {

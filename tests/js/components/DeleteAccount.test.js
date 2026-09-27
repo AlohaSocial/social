@@ -8,6 +8,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DeleteAccount from '../../../src/components/DeleteAccount.vue'
 import { useAccountStore } from '../../../src/store/account.js'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }))
 vi.mock('@nextcloud/axios', () => ({ default: { post } }))
@@ -19,9 +20,10 @@ vi.mock('../../../src/services/logger.js', () => ({
 
 const API = '/index.php/apps/social/api/v1'
 
-function mountCard() {
+function mountCard(serverData = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
+	useSettingsStore().setServerData(serverData)
 	const wrapper = mount(DeleteAccount, { global: { plugins: [pinia] } })
 	useAccountStore().setCredentials({ id: '1', username: 'alice', acct: 'alice@cloud.example' })
 
@@ -99,5 +101,29 @@ describe('deleting your own account', () => {
 
 		expect(post).not.toHaveBeenCalled()
 		expect(wrapper.find('input').exists()).toBe(false)
+	})
+
+	/** An external user has nothing here but Social, and is told so. */
+	it('tells an external user that their whole account goes, and sends them to the login page', async () => {
+		post.mockResolvedValue({ data: { result: { deleted: true, userDeleted: true }, status: 1 } })
+		const assign = vi.fn()
+		const location = window.location
+		Object.defineProperty(window, 'location', { configurable: true, value: { ...location, assign, reload: vi.fn() } })
+		try {
+			const wrapper = mountCard({ externalMedia: { quota: 10, used: 0 } })
+			expect(wrapper.text()).toContain('is deleted too, and you are signed out')
+			expect(wrapper.text()).not.toContain('Your Nextcloud account is not touched')
+
+			await flushPromises()
+			await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+			wrapper.vm.typed = 'alice'
+			await wrapper.vm.$nextTick()
+			await buttonByText(wrapper, 'Delete it for good').trigger('click')
+			await flushPromises()
+
+			expect(assign).toHaveBeenCalledWith('/index.php/login')
+		} finally {
+			Object.defineProperty(window, 'location', { configurable: true, value: location })
+		}
 	})
 })

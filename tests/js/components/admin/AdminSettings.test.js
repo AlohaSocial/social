@@ -146,6 +146,26 @@ describe('the administration page', () => {
 			.not.toContain('Server')
 	})
 
+	/** Who may have an account here is an administrator's decision; a delegate is sent none of it. */
+	it('draws the External users group above moderation when the server sends it', async () => {
+		const external = {
+			settings: { enabled: false, max: 100, quota: 1024, mode: 'approval', verifyEmail: true, minAge: 16, reserved: [], userInvites: false, count: 0, awaitingApproval: 0, restricted: false, restrictionIncludesExternals: true },
+			twoFactor: { enforced: false, everybody: false },
+			requests: [],
+			invites: [],
+			users: [],
+		}
+		const wrapper = await mountPage({ ...STATE, external })
+
+		expect(wrapper.findAll('.social-admin__group-name').map((h) => h.text()).slice(0, 3))
+			.toEqual(['Overview', 'External users', 'Moderation'])
+		expect(wrapper.findAll('h2').map((heading) => heading.text()).slice(1, 4))
+			.toEqual(['External users', 'Registrations and invitations', 'External accounts'])
+
+		const without = await mountPage(STATE)
+		expect(without.findAll('.social-admin__group-name').map((h) => h.text())).not.toContain('External users')
+	})
+
 	it('draws a page the server told nothing about without breaking', async () => {
 		const wrapper = await mountPage({})
 

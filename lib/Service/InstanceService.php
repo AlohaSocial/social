@@ -408,7 +408,7 @@ class InstanceService {
 	 *
 	 * @return array<array{id: string, text: string}>
 	 */
-	private function rules(): array {
+	public function rules(): array {
 		$stored = trim($this->appConfig->getValueString(Application::APP_ID, 'rules', ''));
 		if ($stored === '') {
 			return [];

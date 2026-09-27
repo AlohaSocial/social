@@ -85,6 +85,7 @@
 </template>
 
 <script>
+import { humanSize } from '../../utils/humanSize.js'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
@@ -205,21 +206,7 @@ export default {
 			return (half.attachments?.files ?? 0) + (half.avatars?.files ?? 0)
 		},
 
-		/**
-		 * @param {number} bytes how many
-		 * @return {string} in the units a person reads
-		 */
-		human(bytes) {
-			const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
-			let value = bytes
-			let unit = 0
-			while (value >= 1024 && unit < units.length - 1) {
-				value /= 1024
-				unit++
-			}
-
-			return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
-		},
+		human: humanSize,
 	},
 }
 </script>

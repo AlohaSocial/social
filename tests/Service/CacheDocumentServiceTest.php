@@ -109,6 +109,7 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->mediaBlocksRequest,
 			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
 			$this->unlimitedDomainQuota(),
+			$this->noExternalQuota(),
 			new NullLogger(),
 		);
 	}
@@ -1026,6 +1027,47 @@ class CacheDocumentServiceTest extends TestCase {
 
 		$this->expectException(RequestServerException::class);
 		$this->service->saveRemoteFileToCache($document);
+	}
+
+	/** An external user's upload past their media quota is refused before anything is written. */
+	public function testAnExternalUsersUploadPastTheirQuotaIsRefused(): void {
+		$quota = $this->createStub(\OCA\Social\Service\ExternalMediaQuota::class);
+		$quota->method('fits')->willReturnCallback(static fn (string $account): bool => $account !== 'alice');
+		$quota->method('quota')->willReturn(5);
+		$service = new CacheDocumentService(
+			$this->appData,
+			$this->curlService,
+			$this->blurService,
+			$this->createStub(ConfigService::class),
+			$this->imageConversionService,
+			$this->videoThumbnailService,
+			$this->tempManager,
+			$this->mediaBlocksRequest,
+			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
+			$this->unlimitedDomainQuota(),
+			$quota,
+			new NullLogger(),
+		);
+
+		$bob = new Document();
+		$bob->setLocal(true);
+		$bob->setAccount('bob');
+		$service->filterQuota($bob, 'image/png', 1000);
+
+		$alice = new Document();
+		$alice->setLocal(true);
+		$alice->setAccount('alice');
+		$this->expectException(\OCA\Social\Exceptions\CacheContentSizeException::class);
+		$this->expectExceptionMessage('5MB of media storage');
+		$service->filterQuota($alice, 'image/png', 1000);
+	}
+
+	/** Nobody here is an external user with a media quota. */
+	private function noExternalQuota(): \OCA\Social\Service\ExternalMediaQuota {
+		$quota = $this->createStub(\OCA\Social\Service\ExternalMediaQuota::class);
+		$quota->method('fits')->willReturn(true);
+
+		return $quota;
 	}
 }
 

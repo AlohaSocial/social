@@ -88,6 +88,7 @@ import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
 import IconIntroduction from 'vue-material-design-icons/HandWaveOutline.vue'
+import IconInvite from 'vue-material-design-icons/EmailPlusOutline.vue'
 import IconKeyboard from 'vue-material-design-icons/KeyboardOutline.vue'
 import IconLists from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconPortfolio from 'vue-material-design-icons/ImageMultipleOutline.vue'
@@ -95,6 +96,7 @@ import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
 import IconScheduled from 'vue-material-design-icons/ClockOutline.vue'
 import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
+import IconStorage from 'vue-material-design-icons/Harddisk.vue'
 import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
 import { t } from '@nextcloud/l10n'
@@ -116,6 +118,10 @@ const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkNa
 const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InterestsSettings.vue'))
 // and again: two switches and a button, only ever drawn on this page
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
+// and again: a bar and a line for a self-registered external user, and the
+// invitation links, only ever drawn on this page
+const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
+const InviteSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue'))
 
 /**
  * Settings: what this app holds about how the reader uses it.
@@ -139,16 +145,19 @@ export default {
 		ArchivedPosts,
 		AuthorizedApps,
 		DeleteAccount,
+		ExternalStorage,
 		FeaturedTagsSettings,
 		HeldPosts,
 		InterestsSettings,
 		IntroductionSettings,
+		InviteSettings,
 		IconAccount,
 		IconApps,
 		IconArchive,
 		IconDelete,
 		IconInterests,
 		IconIntroduction,
+		IconInvite,
 		IconKeyboard,
 		IconLists,
 		IconPortfolio,
@@ -156,6 +165,7 @@ export default {
 		IconReview,
 		IconScheduled,
 		IconSenses,
+		IconStorage,
 		IconTags,
 		ListsSettings,
 		PortfolioSettings,
@@ -203,6 +213,16 @@ export default {
 					title: t('social', 'Your account'),
 					lede: t('social', 'How others find you, and who sees what you post.'),
 				},
+				// a self-registered external user's media quota
+				...(this.serverData?.externalMedia
+					? [{
+							id: 'storage',
+							icon: 'IconStorage',
+							component: 'ExternalStorage',
+							title: t('social', 'Your storage'),
+							lede: t('social', 'The pictures and videos you uploaded here, against what this server lets each account keep. Media from other servers does not count.'),
+						}]
+					: []),
 				{
 					id: 'featured-tags',
 					icon: 'IconTags',
@@ -277,6 +297,16 @@ export default {
 					title: t('social', 'Authorized apps'),
 					lede: t('social', 'The apps you have signed in to with this account — a phone client, a cross-poster, anything that asked. Each one holds a key to your account until you take it back, so this is the page to open after losing a phone.'),
 				},
+				// where the administrator lets people invite others to register
+				...(this.serverData?.externalInvites === true
+					? [{
+							id: 'invites',
+							icon: 'IconInvite',
+							component: 'InviteSettings',
+							title: t('social', 'Invite people'),
+							lede: t('social', 'A link somebody without an account can use to register on this server. Each link works once and for a week.'),
+						}]
+					: []),
 				{
 					id: 'introduction',
 					icon: 'IconIntroduction',
@@ -296,7 +326,10 @@ export default {
 					icon: 'IconDelete',
 					component: 'DeleteAccount',
 					title: t('social', 'Delete your Social account'),
-					lede: t('social', 'Your fediverse account, gone, while your Nextcloud account stays exactly as it is. Last, and on its own, because it is the one thing on this page that cannot be undone.'),
+					lede: this.serverData?.externalMedia
+						? t('social', 'Your account on this server, gone, with everything you posted. Last, and on its own, because it is the one thing on this page that cannot be undone.')
+						: t('social', 'Your fediverse account, gone, while your Nextcloud account stays exactly as it is. Last, and on its own, because it is the one thing on this page that cannot be undone.'),
+
 					danger: true,
 				},
 			]

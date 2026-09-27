@@ -658,6 +658,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->createStub(MediaBlocksRequest::class),
 			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
 			$this->unlimitedDomainQuota(),
+			$this->noExternalQuota(),
 			new NullLogger(),
 		);
 
@@ -671,6 +672,14 @@ class OutboundFederationWireTest extends TestCase {
 	/** No per-domain media quota, which is what an instance has by default. */
 	private function unlimitedDomainQuota(): \OCA\Social\Service\RemoteMediaQuotaService {
 		$quota = $this->createMock(\OCA\Social\Service\RemoteMediaQuotaService::class);
+		$quota->method('fits')->willReturn(true);
+
+		return $quota;
+	}
+
+	/** Nobody here is an external user with a media quota. */
+	private function noExternalQuota(): \OCA\Social\Service\ExternalMediaQuota {
+		$quota = $this->createStub(\OCA\Social\Service\ExternalMediaQuota::class);
 		$quota->method('fits')->willReturn(true);
 
 		return $quota;

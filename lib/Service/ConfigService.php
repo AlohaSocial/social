@@ -408,6 +408,24 @@ class ConfigService {
 	public const SOCIAL_INTERESTS_CAP = 'interests_cap';
 	public const SOCIAL_INTERESTS_WINDOW = 'interests_window';
 
+	/**
+	 * Self-registered external users (`ExternalUserService`): whether people
+	 * without a Nextcloud account may create one that reaches Social only, how
+	 * many such accounts may exist, the megabytes of media each may upload
+	 * (0 is no quota), how a registration is admitted (`open`, `invite` or
+	 * `approval`), whether its email has to be confirmed first, the minimum
+	 * age a person must confirm (0 asks nothing), handles nobody may register
+	 * (a JSON list) and whether existing users may send invitations.
+	 */
+	public const SOCIAL_EXTERNAL_ENABLED = 'external_enabled';
+	public const SOCIAL_EXTERNAL_MAX = 'external_max';
+	public const SOCIAL_EXTERNAL_QUOTA = 'external_media_quota';
+	public const SOCIAL_EXTERNAL_MODE = 'external_signup_mode';
+	public const SOCIAL_EXTERNAL_VERIFY = 'external_verify_email';
+	public const SOCIAL_EXTERNAL_MIN_AGE = 'external_min_age';
+	public const SOCIAL_EXTERNAL_RESERVED = 'external_reserved';
+	public const SOCIAL_EXTERNAL_USER_INVITES = 'external_user_invites';
+
 	public array $defaults = [
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
@@ -462,6 +480,14 @@ class ConfigService {
 		self::SOCIAL_INTERESTS_THRESHOLD => '3',
 		self::SOCIAL_INTERESTS_CAP => '30',
 		self::SOCIAL_INTERESTS_WINDOW => '7',
+		self::SOCIAL_EXTERNAL_ENABLED => '0',
+		self::SOCIAL_EXTERNAL_MAX => '100',
+		self::SOCIAL_EXTERNAL_QUOTA => '1024',
+		self::SOCIAL_EXTERNAL_MODE => 'approval',
+		self::SOCIAL_EXTERNAL_VERIFY => '1',
+		self::SOCIAL_EXTERNAL_MIN_AGE => '16',
+		self::SOCIAL_EXTERNAL_RESERVED => '[]',
+		self::SOCIAL_EXTERNAL_USER_INVITES => '0',
 	];
 
 	public array $accessTypeList = [

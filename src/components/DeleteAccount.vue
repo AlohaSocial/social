@@ -7,7 +7,10 @@
 		<p class="delete-account__what">
 			{{ t('social', 'Everything you posted from here is deleted, your followers and the people you follow are let go, and every server that knew this account is told it is gone. It cannot be undone, and there is no way to get any of it back afterwards — take an archive from the Export button above first if you might want one.') }}
 		</p>
-		<p class="delete-account__what">
+		<p v-if="external" class="delete-account__what">
+			{{ t('social', 'Your account on this server was made for Social, so it is deleted too, and you are signed out. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go.') }}
+		</p>
+		<p v-else class="delete-account__what">
 			{{ t('social', 'Your Nextcloud account is not touched: you stay signed in to everything else, and you can make a new Social account straight away. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go, so a new account needs a different one.') }}
 		</p>
 		<p class="delete-account__what">
@@ -60,6 +63,7 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconDeleteOutline from 'vue-material-design-icons/DeleteOutline.vue'
 import { useAccountStore } from '../store/account.js'
+import { useSettingsStore } from '../store/settings.js'
 import logger from '../services/logger.js'
 import { showError } from '../services/toast.js'
 
@@ -95,7 +99,12 @@ export default {
 	},
 
 	computed: {
-		...mapStores(useAccountStore),
+		...mapStores(useAccountStore, useSettingsStore),
+
+		/** @return {boolean} whether the reader is a self-registered external user */
+		external() {
+			return Boolean(this.settingsStore.getServerData?.externalMedia)
+		},
 
 		/** @return {string} the handle being deleted, as the server writes it */
 		handle() {
@@ -120,10 +129,16 @@ export default {
 		async remove() {
 			this.deleting = true
 			try {
-				await axios.post(
+				const response = await axios.post(
 					generateUrl('apps/social/api/v1/account/delete'),
 					{ confirm: this.typed.trim() },
 				)
+				if (response.data?.result?.userDeleted) {
+					// a self-registered external user: the whole account is
+					// gone with the Social one, and so is the session
+					window.location.assign(generateUrl('/login'))
+					return
+				}
 				// not a redirect and not a state change: what is left here is a
 				// client holding an account that no longer exists, and the
 				// setup screen is what the app shows somebody without one
