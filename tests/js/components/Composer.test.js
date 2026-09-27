@@ -286,6 +286,22 @@ async function addWarning(wrapper, text) {
 }
 
 describe('Composer', () => {
+	/** the @ menu is HTML set with innerHTML, and what it shows comes from other servers */
+	it('draws the mention and hashtag menus with every remote value escaped', () => {
+		const { wrapper } = mountComposer()
+		const [mention, hashtag] = wrapper.vm.tributeOptions.collection
+		const hostile = { key: 'Alice <img src=x onerror=alert(1)//', value: 'a@evil.example', url: 'javascript:alert(2)', avatar: '/a.png" onerror="alert(3)' }
+		const host = document.createElement('div')
+
+		host.innerHTML = mention.menuItemTemplate({ original: hostile }) + mention.selectTemplate({ original: hostile })
+			+ hashtag.menuItemTemplate({ original: { value: '<img src=x onerror=alert(4)>' } })
+			+ hashtag.selectTemplate({ original: { value: '"><img src=x onerror=alert(5)>' } })
+
+		expect([...host.querySelectorAll('img')].every((img) => img.getAttribute('onerror') === null)).toBe(true)
+		expect(host.querySelectorAll('img')).toHaveLength(2)
+		expect(host.querySelector('.mention a').getAttribute('href')).toBe('#')
+	})
+
 	let getContext
 	let createObjectURL
 	let revokeObjectURL
