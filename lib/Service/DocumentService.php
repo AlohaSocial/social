@@ -862,45 +862,6 @@ class DocumentService {
 	}
 
 	/**
-	 * Cache a banner/header image for a local actor.
-	 *
-	 * @param Person $actor
-	 * @param string $tmpPath
-	 * @param string $mimeType
-	 *
-	 * @return string
-	 * @throws SocialAppConfigException
-	 * @throws UrlCloudException
-	 * @throws ItemUnknownException
-	 * @throws ItemAlreadyExistsException
-	 * @throws CacheContentMimeTypeException
-	 * @throws NotFoundException
-	 * @throws NotPermittedException
-	 */
-	public function cacheLocalHeaderByUsername(Person $actor, string $tmpPath, string $mimeType = 'image/jpeg'): string {
-		/** @var Image $image */
-		$image = AP::instance()->getItemFromType(Image::TYPE);
-		$image->generateUniqueId('/documents/header');
-		$image->setUrl($this->urlGenerator->linkToRouteAbsolute(
-			'social.Local.globalActorHeader', ['id' => $actor->getId()]
-		));
-		$image->setMediaType($mimeType);
-		$image->setMimeType($mimeType);
-		$image->setPublic(true);
-
-		$this->cacheService->saveFromTempToCache($image, $tmpPath);
-
-		$image->setUrl($image->getMediaUrl($this->urlGenerator, $image->getMimeType()));
-
-		$interface = AP::instance()->getInterfaceFromType(Image::TYPE);
-		$interface->save($image);
-
-		$actor->setHeader($image->getUrl());
-
-		return $image->getId();
-	}
-
-	/**
 	 * Stores a file that is already on this server as one of an account's own
 	 * attachments, on the post it belongs to.
 	 *
