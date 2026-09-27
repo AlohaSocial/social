@@ -63,9 +63,8 @@ export default {
 			default: false,
 		},
 
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Account>} */
 		account: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Account>} */ (Object),
 			required: true,
 		},
 	},
@@ -89,6 +88,7 @@ export default {
 			return '@' + (this.account.acct ?? this.account.username ?? '')
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		buttons() {
 			return [
 				{

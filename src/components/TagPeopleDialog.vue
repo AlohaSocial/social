@@ -78,7 +78,7 @@ export default {
 
 		/** who it names now */
 		people: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Account[]>} */ (Array),
 			default: () => [],
 		},
 	},

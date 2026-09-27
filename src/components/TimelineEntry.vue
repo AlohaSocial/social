@@ -199,9 +199,8 @@ export default {
 			default: '',
 		},
 
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Status|import('../types/Mastodon.js').Notification>} */
 		item: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status|import('../types/Mastodon.js').Notification>} */ (Object),
 			default: () => {},
 		},
 
@@ -311,9 +310,9 @@ export default {
 				return this.notification.status
 			} else if (this.isBoost) {
 				// We use the object stored in the store so that actions on it are reflected.
-				return this.timelineStore.getStatus(this.item.reblog.id)
+				return this.timelineStore.getStatus(this.status.reblog.id)
 			} else {
-				return this.item
+				return this.status
 			}
 		},
 
@@ -328,7 +327,7 @@ export default {
 				return null
 			}
 
-			return interestReason(/** @type {import('../types/Mastodon.js').Status} */ (this.item).interest ?? this.entryContent?.interest)
+			return interestReason(this.status.interest ?? this.entryContent?.interest)
 		},
 
 		/** @return {boolean} */
@@ -353,12 +352,12 @@ export default {
 
 		/** @return {import('../types/Mastodon.js').Notification} */
 		notification() {
-			return this.item
+			return /** @type {import('../types/Mastodon.js').Notification} */ (this.item)
 		},
 
 		/** @return {import('../types/Mastodon.js').Status} */
 		status() {
-			return this.item
+			return /** @type {import('../types/Mastodon.js').Status} */ (this.item)
 		},
 
 		/** @return {boolean} */

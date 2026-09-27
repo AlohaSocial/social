@@ -66,9 +66,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Poll>} */
 		poll: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Poll>} */ (Object),
 			required: true,
 		},
 	},
@@ -82,6 +81,7 @@ export default {
 			// component's `selected` was untouched, and it went on to submit
 			// the choice that was no longer shown.
 			groupName: `poll-option-${nextGroup++}`,
+			/** @type {number|number[]|null} the option picked, or all of them on a multiple-choice poll */
 			selected: this.poll.multiple ? [] : null,
 			voting: false,
 			// the bars grow from nothing; they need one frame at zero width
@@ -98,7 +98,7 @@ export default {
 
 		/** @return {number[]} */
 		selectedIndices() {
-			if (this.poll.multiple) {
+			if (Array.isArray(this.selected)) {
 				return this.selected
 			}
 			return this.selected === null ? [] : [this.selected]

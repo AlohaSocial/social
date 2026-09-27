@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+/* eslint-disable no-console -- the console is what the logger writes to, and what this suite checks */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { getCurrentUser } = vi.hoisted(() => ({ getCurrentUser: vi.fn() }))

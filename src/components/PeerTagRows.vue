@@ -52,15 +52,15 @@ export default {
 	},
 
 	props: {
-		/** @type {object[]} `PeerTag` entities as the server serialises them */
+		/** `PeerTag` entities as the server serialises them */
 		tags: {
-			type: Array,
+			type: /** @type {import('vue').PropType<object[]>} */ (Array),
 			required: true,
 		},
 
 		/** the hashtags this reader follows, or null while that is unknown */
 		followed: {
-			type: Array,
+			type: /** @type {import('vue').PropType<string[]|null>} */ (Array),
 			default: null,
 		},
 	},

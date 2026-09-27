@@ -4,7 +4,9 @@
 -->
 <template>
 	<div class="social__blocked">
-		<h2 class="social__blocked-title">{{ t('social', 'Blocking') }}</h2>
+		<h2 class="social__blocked-title">
+			{{ t('social', 'Blocking') }}
+		</h2>
 		<p class="social__blocked-lede">
 			{{ t('social', 'Everything you have decided not to read, in one place: the accounts you have blocked or muted, the servers you have hidden, the words you would rather not see — and the senders your notification settings are holding back, waiting on you.') }}
 		</p>
@@ -18,7 +20,9 @@
 				<span class="block-card__icon">
 					<AccountCancelOutline :size="20" />
 				</span>
-				<h3 class="block-card__title">{{ t('social', 'Blocked') }}</h3>
+				<h3 class="block-card__title">
+					{{ t('social', 'Blocked') }}
+				</h3>
 				<span v-if="blocked.length" class="block-card__count">{{ blocked.length }}</span>
 			</header>
 			<p class="block-card__lede">
@@ -58,7 +62,9 @@
 				<span class="block-card__icon">
 					<VolumeOff :size="20" />
 				</span>
-				<h3 class="block-card__title">{{ t('social', 'Muted') }}</h3>
+				<h3 class="block-card__title">
+					{{ t('social', 'Muted') }}
+				</h3>
 				<span v-if="muted.length" class="block-card__count">{{ muted.length }}</span>
 			</header>
 			<p class="block-card__lede">
@@ -95,7 +101,9 @@
 				<span class="block-card__icon">
 					<DomainOff :size="20" />
 				</span>
-				<h3 class="block-card__title">{{ t('social', 'Hidden servers') }}</h3>
+				<h3 class="block-card__title">
+					{{ t('social', 'Hidden servers') }}
+				</h3>
 				<span v-if="domains.length" class="block-card__count">{{ domains.length }}</span>
 			</header>
 			<p class="block-card__lede">
@@ -145,7 +153,9 @@
 				<span class="block-card__icon">
 					<FilterOutline :size="20" />
 				</span>
-				<h3 class="block-card__title">{{ t('social', 'Filtered words') }}</h3>
+				<h3 class="block-card__title">
+					{{ t('social', 'Filtered words') }}
+				</h3>
 			</header>
 			<p class="block-card__lede">
 				{{ t('social', 'Words you would rather not read, wherever they appear — from the people you follow as much as from anybody else. A post carrying one is folded away behind the name of the filter, or taken out of your timelines altogether. Filters are yours alone, and a filter set in a phone app has been applying here all along.') }}
@@ -162,7 +172,9 @@
 				<span class="block-card__icon">
 					<IconInboxOutline :size="20" />
 				</span>
-				<h3 class="block-card__title">{{ t('social', 'Filtered notifications') }}</h3>
+				<h3 class="block-card__title">
+					{{ t('social', 'Filtered notifications') }}
+				</h3>
 			</header>
 			<p class="block-card__lede">
 				{{ t('social', 'Your notification settings hold some notifications back instead of showing them — from accounts nobody here follows, from brand-new accounts, from people you do not follow. They wait here, one row per sender, so you decide about the person once rather than about every notification they send.') }}

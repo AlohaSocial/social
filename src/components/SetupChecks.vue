@@ -86,7 +86,7 @@ export default {
 
 		/** What each client-API probe saw, in the order the bases were tried. */
 		clientApi: {
-			type: Array,
+			type: /** @type {import('vue').PropType<Array<{base: string, status: number, reason: string}>>} */ (Array),
 			default: () => [],
 		},
 	},

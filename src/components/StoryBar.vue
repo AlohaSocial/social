@@ -34,22 +34,22 @@
 				</NcButton>
 			</li>
 
-			<li v-for="(group, index) in others" :key="group.account.id" class="story-bar__item">
+			<li v-for="(other, index) in others" :key="other.account.id" class="story-bar__item">
 				<button
 					type="button"
 					class="story-bar__tile"
-					:class="{ 'story-bar__tile--unseen': !group.seen }"
-					:style="accountStyle(group.account)"
-					:aria-label="tileLabel(group)"
+					:class="{ 'story-bar__tile--unseen': !other.seen }"
+					:style="accountStyle(other.account)"
+					:aria-label="tileLabel(other)"
 					@click="open(ownGroup ? index + 1 : index)">
 					<span class="story-bar__ring">
 						<ActorAvatar
-							:actor="group.account"
+							:actor="other.account"
 							:size="52"
 							:link="false"
 							:hoverCard="false" />
 					</span>
-					<span class="story-bar__name">{{ firstName(group.account) }}</span>
+					<span class="story-bar__name">{{ firstName(other.account) }}</span>
 				</button>
 			</li>
 		</ul>

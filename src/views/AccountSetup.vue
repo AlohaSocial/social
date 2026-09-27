@@ -128,9 +128,11 @@ export default {
 	},
 
 	data() {
+		const serverData = useServerData().serverData.value
+
 		return {
-			handle: this.serverData.suggestedHandle ?? '',
-			linked: this.serverData.linkedHandle ?? '',
+			handle: serverData.suggestedHandle ?? '',
+			linked: serverData.linkedHandle ?? '',
 			linkedNow: '',
 			/** which of the two forms is talking to the server: 'create', 'link' or '' */
 			busy: '',

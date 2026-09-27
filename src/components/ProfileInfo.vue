@@ -1187,7 +1187,7 @@ export default {
 
 		async openFilePicker() {
 			if (this.$refs.bannerInput) {
-				this.$refs.bannerInput.click()
+				/** @type {HTMLInputElement} */ (this.$refs.bannerInput).click()
 			}
 		},
 
@@ -1291,7 +1291,7 @@ export default {
 		},
 
 		applyBanner(url) {
-			const el = this.$refs.bannerEl
+			const el = /** @type {HTMLElement|undefined} */ (this.$refs.bannerEl)
 			if (!el) {
 				return
 			}

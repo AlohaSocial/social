@@ -205,7 +205,7 @@ export default {
 		 * @param {Event} event the toggle of the fold
 		 */
 		onFold(event) {
-			if (event.target.open && this.resolvedPage === 0) {
+			if (/** @type {HTMLDetailsElement} */ (event.target).open && this.resolvedPage === 0) {
 				this.loadReports(true)
 			}
 		},

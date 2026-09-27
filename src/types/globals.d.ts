@@ -19,8 +19,10 @@ declare const appName: string
 declare const OC: any
 declare const OCA: any
 
-declare const __webpack_nonce__: string
-declare const __webpack_public_path__: string
+// set by each entry point before anything loads a chunk, as webpack's own
+// typings declare them
+declare let __webpack_nonce__: string
+declare let __webpack_public_path__: string
 
 interface Window {
 	OC: any

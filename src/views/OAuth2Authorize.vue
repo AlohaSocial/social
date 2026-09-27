@@ -312,7 +312,7 @@ export default {
 
 		/** Focusing the field selects the whole code, so one tap picks it up. */
 		selectCode() {
-			this.$refs.code?.select()
+			/** @type {HTMLInputElement|undefined} */ (this.$refs.code)?.select()
 		},
 
 		async copyCode() {

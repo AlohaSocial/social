@@ -265,7 +265,7 @@ export default {
 			 * The debounced search, made once in `created()`. Declared so it
 			 * is part of the instance rather than appearing on it.
 			 *
-			 * @type {((...args: any[]) => void) & {clear?: () => void}|null}
+			 * @type {((...args: unknown[]) => void) & {clear?: () => void}|null}
 			 */
 			searchDebounced: null,
 			/** @type {object|null} the state, as the last answer had it */

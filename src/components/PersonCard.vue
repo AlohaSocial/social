@@ -102,9 +102,9 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<object>} an Account entity */
+		/** an Account entity */
 		account: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Account>} */ (Object),
 			required: true,
 		},
 
@@ -165,7 +165,7 @@ export default {
 		 * fetch
 		 */
 		onThisServer() {
-			return this.account.local === true || !(this.account.acct ?? '').includes('@')
+			return !(this.account.acct ?? '').includes('@')
 		},
 
 		/** @return {string} the letter a blank avatar shows */

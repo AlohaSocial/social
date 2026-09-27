@@ -69,6 +69,8 @@
    @property {string} preview_url - Ex: "https://files.mastodon.social/media_attachments/files/022/345/792/small/57859aede991da25.jpeg"
    @property {string} [remote_url] -
    @property {number|null} [cache_error] - Social's finite remote-cache rejection code (1=size, 2=type, 3=access, 4=decode)
+   @property {string} [media_type] - the stored file's MIME type
+   @property {?string} [hls_url] - the adaptive stream's master playlist, null when the video has no ladder
    @property {object} meta -
    @property {string} description - Ex: "test media description"
    @property {string} blurhash - Ex: "UFBWY:8_0Jxv4mx]t8t64.%M-:IUWGWAt6M}"
@@ -146,24 +148,42 @@
  * @property {FilterResult[]} [filtered] - one entry per filter this post matched; only `warn` filters ever arrive, a `hide` match is not sent at all
  * @property {?{tags: string[], reason: string}} [interest] - why the My interests feed is showing this post: the reader's matching hashtags and which kind of match (`InterestFeedService`). Absent on every other timeline
  * @property {?{can_reply?: {always?: string[], approval_required?: boolean}, can_quote?: {always?: string[]}}} [interaction_policy] - who the author allows to reply and quote
+ * @property {string} [nid] - this app's own id for the post; the same string as `id`
+ * @property {boolean} [local] - written on this server
+ * @property {boolean} [archived] - put away by its author; only ever on the author's own copy
+ * @property {?string} [edited_at] - when it was last edited, null when never
+ * @property {Account[]} [tagged_people] - who is in the picture (Pixelfed's key)
+ * @property {?Place} [place] - where it was taken, null when nobody said
+ * @property {?object} [quote_approval] - who may quote it; only on this server's own posts
+ * @property {?object} [video] - PeerTube's metadata for a video post, null for anything else
+ * @property {string} [type] - set when a timeline entry is a notification about the post rather than the post itself
+ */
+
+/**
+ * @typedef Place - where a post was taken; not a Mastodon entity
+ * @property {string} id - this server's id for the place
+ * @property {string} name - what the place is called
+ * @property {string} country - ISO 3166-1 alpha-2, or '' when unknown
+ * @property {?number} lat - latitude, null when nobody gave one
+ * @property {?number} long - longitude, null when nobody gave one
  */
 
 /**
  * @typedef Filter - https://docs.joinmastodon.org/entities/Filter (v2)
- * @property {string} id
+ * @property {string} id - the filter's id
  * @property {string} title - what the reader called it
  * @property {string[]} context - home, notifications, public, thread, account
  * @property {?string} expires_at - null for a filter that never expires
  * @property {string} filter_action - `warn` (cover the post) or `hide` (never send it)
- * @property {{id: string, keyword: string, whole_word: boolean}[]} [keywords]
- * @property {{id: string, status_id: string}[]} [statuses]
+ * @property {{id: string, keyword: string, whole_word: boolean}[]} [keywords] - the words it matches
+ * @property {{id: string, status_id: string}[]} [statuses] - the posts it covers by name
  */
 
 /**
  * @typedef FilterResult - https://docs.joinmastodon.org/entities/FilterResult
  * @property {Filter} filter - the filter that matched
  * @property {string[]} [keyword_matches] - the post's own text that matched, not the reader's keyword
- * @property {string[]} [status_matches]
+ * @property {string[]} [status_matches] - the ids of the covered posts that matched
  */
 
 /**
@@ -186,12 +206,13 @@
 
 /**
  * @typedef Notification - https://docs.joinmastodon.org/entities/Notification
- * @property {string} id - Ex: "https://example.com/users/@tommy""
- * @property {"mention"|"status"|"reblog"|"follow"|"follow_request"|"favourite"|"poll"|"update"|"admin.sign_up"|"admin.report"} type - Ex: "2016-03-16T14:34:26.392Z"
+ * @property {string} id - Ex: "34975861"
+ * @property {"mention"|"status"|"reblog"|"follow"|"follow_request"|"favourite"|"poll"|"update"|"admin.sign_up"|"admin.report"} type - Ex: "mention"
  * @property {string} created_at - Ex: "2016-03-16T14:34:26.392Z"
  * @property {Account} account -
  * @property {Status} [status] -
- * @property {any} [report] -
+ * @property {object} [report] - the report, on an admin.report notification
+ * @property {Account[]} [accounts] - everyone a grouped card stands for, most recent first
  */
 
 /**

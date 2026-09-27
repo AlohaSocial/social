@@ -21,7 +21,7 @@ import { useTimelineStore } from '../store/timeline.js'
  * reason that has nothing to do with interests — and the reader is only told
  * the feed will take note.
  *
- * @param {Record<string, any>} status the post the reader sees
+ * @param {import('../types/Mastodon.js').Status} status the post the reader sees
  * @param {string} type the timeline it is shown in
  * @return {Promise<void>}
  */

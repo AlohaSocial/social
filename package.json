@@ -1,7 +1,7 @@
 {
 	"name": "social",
 	"description": "Nextcloud becomes part of the federated social networks!",
-	"version": "0.26.85",
+	"version": "0.26.86",
 	"authors": [
 		{
 			"name": "Benedikt Schächner",
@@ -17,8 +17,7 @@
 		"build": "NODE_ENV=production webpack --progress --config webpack.common.js",
 		"serve": "NODE_ENV=development webpack serve --progress --config webpack.common.js",
 		"lint": "eslint src tests/js tests/e2e *.js *.mjs",
-		"typecheck": "tsc -p jsconfig.json && node tools/typecheck.mjs",
-		"typecheck:baseline": "node tools/typecheck.mjs --update",
+		"typecheck": "tsc -p jsconfig.json && vue-tsc --noEmit -p jsconfig.vue.json",
 		"lint:fix": "eslint src tests/js tests/e2e *.js *.mjs --fix",
 		"stylelint": "stylelint src css",
 		"stylelint:fix": "stylelint src css --fix",

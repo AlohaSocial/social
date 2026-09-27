@@ -150,6 +150,14 @@ const NOTHING = {
 	accessList: [],
 	retentionDays: 0,
 	storage: null,
+	/** @type {?object} what each section is switched to; administrators only */
+	sections: null,
+	/** @type {?Array<{id: string, name: string}>} the groups a list may follow; administrators only */
+	groups: null,
+	/** @type {?object} the video ladder and its disk; administrators only */
+	videoStorage: null,
+	/** @type {?object} how the background jobs are doing */
+	background: null,
 	federation: {
 		waiting: 0,
 		running: 0,

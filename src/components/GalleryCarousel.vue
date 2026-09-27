@@ -97,9 +97,8 @@ export default {
 			default: true,
 		},
 
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment[]>} */
 		attachments: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment[]>} */ (Array),
 			required: true,
 		},
 	},

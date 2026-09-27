@@ -137,7 +137,7 @@
 					aria-hidden="true"
 					@change="importFollows">
 				<div class="first-run__import">
-					<NcButton variant="primary" :disabled="followsBusy" @click="$refs.follows.click()">
+					<NcButton variant="primary" :disabled="followsBusy" @click="pickFollows">
 						<template #icon>
 							<NcLoadingIcon v-if="followsBusy" :size="20" />
 							<IconUpload v-else :size="20" />
@@ -299,6 +299,11 @@ export default {
 	},
 
 	methods: {
+		/** Opens the file chooser for the follows export. */
+		pickFollows() {
+			/** @type {HTMLInputElement} */ (this.$refs.follows).click()
+		},
+
 		/** Who there is to follow, both kinds at once; either failing leaves the other. */
 		async load() {
 			this.loading = true
@@ -386,7 +391,8 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		async importFollows(event) {
-			const file = event?.target?.files?.[0]
+			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
+			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
@@ -408,8 +414,8 @@ export default {
 				showError(error?.response?.data?.error || t('social', 'Could not import those follows'))
 			} finally {
 				this.followsBusy = false
-				if (event?.target) {
-					event.target.value = ''
+				if (input) {
+					input.value = ''
 				}
 			}
 		},

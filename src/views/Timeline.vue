@@ -40,7 +40,7 @@
 			</h1>
 			<HashtagFollowButton
 				v-if="type === 'tags'"
-				:tag="$route.params.tag"
+				:tag="String($route.params.tag)"
 				@changed="onHashtagFollowChanged" />
 		</div>
 
@@ -642,7 +642,7 @@ export default {
 
 		/** The list of followed hashtags is stale the moment one is followed. */
 		onHashtagFollowChanged() {
-			this.$refs.followedHashtags?.refresh()
+			/** @type {{refresh?: () => void}|undefined} */ (this.$refs.followedHashtags)?.refresh?.()
 		},
 
 		endCelebration() {

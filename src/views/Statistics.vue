@@ -1680,6 +1680,7 @@ export default {
 			// counted in UTC and printed in UTC: formatted in a zone ahead of it,
 			// the last second of the window becomes the small hours of the day
 			// after it and the page names a day it does not cover
+			/** @type {Intl.DateTimeFormatOptions} */
 			const format = { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }
 
 			return from.toLocaleDateString(undefined, format) + ' – ' + until.toLocaleDateString(undefined, format)

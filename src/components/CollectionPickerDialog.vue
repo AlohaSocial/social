@@ -117,6 +117,7 @@ export default {
 	},
 
 	computed: {
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		buttons() {
 			return [{ label: t('social', 'Done'), variant: 'primary', callback: () => this.$emit('update:open', false) }]
 		},

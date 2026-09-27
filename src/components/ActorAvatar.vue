@@ -34,9 +34,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Account>} */
 		actor: {
-			type: Object,
+			type: /** @type {import('vue').PropType<Partial<import('../types/Mastodon.js').Account>>} */ (Object),
 			default: () => {},
 		},
 

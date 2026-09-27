@@ -64,7 +64,7 @@ export default {
 	name: 'ProfileStatusCard',
 	components: { MessageContent, NcButton, PostReactedBy, TimelineEntry },
 	props: {
-		status: { type: Object, required: true },
+		status: { type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object), required: true },
 	},
 
 	data() {
@@ -77,7 +77,7 @@ export default {
 		},
 
 		commentCount() {
-			return Number(this.status.replies_count ?? this.status.reply_count) || 0
+			return Number(this.status.replies_count) || 0
 		},
 	},
 

@@ -212,7 +212,7 @@ export default {
 	props: {
 		/** the post, as the client API sends one */
 		item: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object),
 			required: true,
 		},
 

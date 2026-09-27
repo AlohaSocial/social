@@ -192,7 +192,7 @@ export default {
 			}
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification[]} newNotifications */
+		/** @param {import('../types/Mastodon.js').Notification[]} newNotifications the page just fetched */
 		processNotifications(newNotifications) {
 			if (this.notifications.length === 0) {
 				// first time, we take everything the server sent
@@ -209,27 +209,27 @@ export default {
 			}
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getMainText(n) {
 			return notificationSummary(n)
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getAvatarUrl(n) {
 			return n.account.avatar
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getActorName(n) {
 			return n.account.display_name
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getActorAccountName(n) {
 			return n.account.acct
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getNotificationTarget(n) {
 			if (n.type === 'follow') {
 				return generateUrl('/apps/social/@' + this.getActorAccountName(n) + '/')
@@ -237,7 +237,7 @@ export default {
 			return this.showMoreUrl
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getSubline(n) {
 			if (n.type === 'follow') {
 				return this.getActorAccountName(n)
@@ -248,7 +248,7 @@ export default {
 			return ''
 		},
 
-		/** @param {import('../types/Mastodon.js').Notification} n */
+		/** @param {import('../types/Mastodon.js').Notification} n the notification */
 		getNotificationTypeImage(n) {
 			if (n.type === 'follow') {
 				return generateUrl('/svg/social/add_user')

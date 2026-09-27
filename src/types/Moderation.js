@@ -20,4 +20,19 @@
  * @property {string} level - the decision standing against the account, '' for none
  */
 
+/**
+ * A post waiting in the review queue, as `HeldPost::jsonSerialize()` sends it.
+ *
+ * @typedef {object} HeldPost
+ * @property {string} id - the held post's id in the queue
+ * @property {string} account_id - the author's actor id
+ * @property {string} username - the author's handle, their actor id when it could not be read
+ * @property {string} reason - why it was held
+ * @property {string} text - what was written
+ * @property {string} spoiler_text - the content warning, '' for none
+ * @property {string} visibility - who it will reach once it is published
+ * @property {number} media_count - how many attachments it carries
+ * @property {string} created_at - when it was written
+ */
+
 export default {}

@@ -93,11 +93,9 @@ export default {
 
 		/**
 		 * The bar as the server sent it: `{name, count, me}` each.
-		 *
-		 * @type {import('vue').PropType<Array<{name: string, count: number, me: boolean}>>}
 		 */
 		modelValue: {
-			type: Array,
+			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean}>>} */ (Array),
 			default: () => [],
 		},
 

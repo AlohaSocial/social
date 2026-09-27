@@ -351,7 +351,7 @@ const PAGE_SIZE = 40
  * `\w` is ASCII whatever else is set, so `@müller@remote.example` — and every
  * handle on an internationalised domain — was not recognised and the routing
  * mention stayed on screen. What a handle may hold is "not whitespace and not
- * another @", which is the same rule the recipient box uses.
+ * another at sign", which is the same rule the recipient box uses.
  */
 const LEADING_HANDLE = /^(\s*)@([^\s@]+(?:@[^\s@]+)?)(?=\s|$)/u
 
@@ -581,7 +581,7 @@ export default {
 
 		messages() {
 			this.$nextTick(() => {
-				const thread = this.$refs.threadContainer
+				const thread = /** @type {HTMLElement|undefined} */ (this.$refs.threadContainer)
 				if (thread) {
 					thread.scrollTop = thread.scrollHeight
 				}
@@ -904,11 +904,12 @@ export default {
 				}
 				return wrapper.innerHTML
 			}
-			if (first?.nodeType !== Node.ELEMENT_NODE || !first.matches('.h-card, .mention, a.mention, span.mention')) {
+			const mention = first?.nodeType === Node.ELEMENT_NODE ? /** @type {Element} */ (first) : null
+			if (mention === null || !mention.matches('.h-card, .mention, a.mention, span.mention')) {
 				return content
 			}
-			const linkedAccount = first.querySelector('a[href]')?.getAttribute('href') ?? first.getAttribute('href') ?? ''
-			const visibleMention = first.textContent.replace(/^@/, '').trim()
+			const linkedAccount = mention.querySelector('a[href]')?.getAttribute('href') ?? mention.getAttribute('href') ?? ''
+			const visibleMention = mention.textContent.replace(/^@/, '').trim()
 			// and only when it names the peer. The `.h-card` exemption here
 			// stripped the first mention of *anybody*, so a message opening
 			// "@carol look at this" lost the name it was about.

@@ -81,7 +81,6 @@
 		</ul>
 		<NcModal
 			v-if="modal"
-			ref="modal"
 			:name="currentLabel"
 			:hasPrevious="current > 0"
 			:hasNext="current < (media.length - 1)"
@@ -156,9 +155,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment[]>} */
 		attachments: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment[]>} */ (Array),
 			default: Array,
 		},
 
@@ -187,11 +185,9 @@ export default {
 		 * What the post said about the video beyond its file: the captions,
 		 * whether it is live. One `Video` object carries one set of those, so
 		 * it belongs to the post rather than to any one attachment.
-		 *
-		 * @type {import('vue').PropType<object|null>}
 		 */
 		video: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 
@@ -273,7 +269,11 @@ export default {
 	},
 
 	watch: {
-		/** the listener is only live while there is a lightbox to page */
+		/**
+		 * the listener is only live while there is a lightbox to page
+		 *
+		 * @param {boolean} open whether the lightbox is up
+		 */
 		modal(open) {
 			if (open) {
 				window.addEventListener('keydown', this.onViewerKey)
@@ -305,7 +305,7 @@ export default {
 			}
 			// a key pressed while typing a description, or scrubbing a video, is
 			// not a request to page
-			const target = event.target
+			const target = /** @type {Element|null} */ (event.target)
 			if (target?.closest?.('input, textarea, select, [contenteditable], video, audio')) {
 				return
 			}
@@ -361,7 +361,7 @@ export default {
 		 */
 		frameAt(index) {
 			if (this.isCarousel) {
-				return this.$refs.carousel?.frameAt(index) ?? null
+				return /** @type {{frameAt: (index: number) => HTMLElement|null}|undefined} */ (this.$refs.carousel)?.frameAt(index) ?? null
 			}
 
 			const frame = this.$refs.frames?.[index] ?? this.$refs.thumbnails?.[index] ?? null
@@ -419,14 +419,14 @@ export default {
 				this.current = index
 				this.modal = true
 				await this.$nextTick()
-				nameForTransition(this.$refs.viewer ?? null, MEDIA_TRANSITION)
+				nameForTransition(/** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null, MEDIA_TRANSITION)
 			})
 
 			release()
 		},
 
 		async closeModal() {
-			const release = nameForTransition(this.$refs.viewer ?? null, MEDIA_TRANSITION)
+			const release = nameForTransition(/** @type {HTMLElement|undefined} */ (this.$refs.viewer) ?? null, MEDIA_TRANSITION)
 			const thumbnail = this.frameAt(this.current)
 
 			await withViewTransition(async () => {

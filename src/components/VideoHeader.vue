@@ -120,9 +120,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<object>} */
 		status: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object>} */ (Object),
 			required: true,
 		},
 	},

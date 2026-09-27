@@ -258,6 +258,7 @@ export default {
 			return Boolean(current && this.ownerAcct && current.acct === this.ownerAcct)
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		editButtons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => { this.showEdit = false } },
@@ -270,6 +271,7 @@ export default {
 			]
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => { this.showDelete = false } },

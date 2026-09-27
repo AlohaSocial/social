@@ -16,7 +16,8 @@
 /**
  * Spread hues around the wheel; the same host always lands on the same one.
  *
- * @param value
+ * @param {string} value a hostname
+ * @return {number} a hash, reduced to a multiple-friendly range
  */
 function hash(value) {
 	let h = 0
@@ -59,10 +60,11 @@ const TARGET_CONTRAST = 4.5
 /**
  * One channel of an hsl() colour, 0..1.
  *
- * @param hue
- * @param saturation
- * @param lightness
- * @param n
+ * @param {number} hue 0 to 360
+ * @param {number} saturation 0 to 1
+ * @param {number} lightness 0 to 1
+ * @param {number} n which channel: 0 red, 8 green, 4 blue
+ * @return {number}
  */
 function channel(hue, saturation, lightness, n) {
 	const a = saturation * Math.min(lightness, 1 - lightness)
@@ -74,9 +76,10 @@ function channel(hue, saturation, lightness, n) {
 /**
  * Relative luminance per WCAG 2, from an hsl() triple.
  *
- * @param hue
- * @param saturation
- * @param lightness
+ * @param {number} hue 0 to 360
+ * @param {number} saturation 0 to 1
+ * @param {number} lightness 0 to 1
+ * @return {number} 0 for black to 1 for white
  */
 function luminance(hue, saturation, lightness) {
 	const linear = (value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
@@ -89,9 +92,10 @@ function luminance(hue, saturation, lightness) {
 /**
  * Contrast of a colour against white, per WCAG 2.
  *
- * @param hue
- * @param saturation
- * @param lightness
+ * @param {number} hue 0 to 360
+ * @param {number} saturation 0 to 1
+ * @param {number} lightness 0 to 1
+ * @return {number} the ratio, 1 to 21
  */
 function contrastWithWhite(hue, saturation, lightness) {
 	return 1.05 / (luminance(hue, saturation, lightness) + 0.05)

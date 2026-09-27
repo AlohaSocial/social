@@ -710,11 +710,9 @@ export default {
 		 * post in the same thread retargets this composer like any other, and
 		 * sending or closing that reply comes back here rather than leaving
 		 * the box pointed at a post further down the page.
-		 *
-		 * @type {import('vue').PropType<object|null>}
 		 */
 		inReplyTo: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 
@@ -723,11 +721,9 @@ export default {
 		 * Social" in the Files app hands over. Paths in the reader's own
 		 * folder, the same the picker produces; attached through the same
 		 * code, so the ceiling, the progress and a refusal look the same.
-		 *
-		 * @type {import('vue').PropType<string[]>}
 		 */
 		initialPaths: {
-			type: Array,
+			type: /** @type {import('vue').PropType<string[]>} */ (Array),
 			default: () => [],
 		},
 
@@ -1252,7 +1248,7 @@ export default {
 		 * view, so without this the box would still be replying to the post
 		 * the reader has navigated away from.
 		 *
-		 * @param post
+		 * @param {object|null} post the post to reply to now
 		 */
 		inReplyTo(post) {
 			this.replyTo = post
@@ -1291,7 +1287,7 @@ export default {
 		this.tribute = new Tribute(this.tributeOptions)
 		// Kept, because $refs is cleared before unmounted() runs and detach() rejects
 		// anything that is not a node.
-		this.tributeTarget = this.$refs.composerInput
+		this.tributeTarget = this.inputElement()
 		this.tribute.attach(this.tributeTarget)
 
 		// Keep the handler so unmounted() removes only this one and not the
@@ -1366,6 +1362,11 @@ export default {
 	},
 
 	methods: {
+		/** @return {HTMLElement} the element the post is written in */
+		inputElement() {
+			return /** @type {HTMLElement} */ (this.$refs.composerInput)
+		},
+
 		expand() {
 			this.closedByHand = false
 			this.openedByHand = true
@@ -1382,8 +1383,8 @@ export default {
 		 * to only one of those lists is a field that survives posting.
 		 */
 		clearComposer() {
-			if (this.$refs.composerInput !== undefined) {
-				this.$refs.composerInput.innerText = ''
+			if (this.inputElement() !== undefined) {
+				this.inputElement().innerText = ''
 			}
 			Object.keys(this.attachments).forEach((key) => this.releasePreview(key))
 			this.attachments = {}
@@ -1475,7 +1476,8 @@ export default {
 			// a click in the same tick lands before the listener does
 			await this.$nextTick()
 			await new Promise((resolve) => window.requestAnimationFrame(resolve))
-			this.$refs.emojiButton?.$el?.click()
+			const button = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.emojiButton)
+			button?.$el?.click()
 		},
 
 		/**
@@ -1503,7 +1505,7 @@ export default {
 
 		/** Puts the caret in the composer, scrolling it into view if need be. */
 		focusInput() {
-			const input = this.$refs.composerInput
+			const input = this.inputElement()
 			if (input === undefined) {
 				return
 			}
@@ -1526,7 +1528,7 @@ export default {
 		 * @param {Array<{acct: string, url: string, avatar?: string}>} accounts who to address
 		 */
 		prefillMessageWithMentions(accounts) {
-			if (accounts.length === 0 || !this.statusIsEmpty || this.$refs.composerInput === undefined) {
+			if (accounts.length === 0 || !this.statusIsEmpty || this.inputElement() === undefined) {
 				return
 			}
 
@@ -1552,7 +1554,7 @@ export default {
 				return [mention, document.createTextNode('\u00a0')]
 			})
 
-			this.$refs.composerInput.replaceChildren(...nodes)
+			this.inputElement().replaceChildren(...nodes)
 			this.updateStatusContent()
 		},
 
@@ -1591,7 +1593,7 @@ export default {
 		},
 
 		updateStatusContent() {
-			this.statusContent = this.$refs.composerInput.innerHTML
+			this.statusContent = this.inputElement().innerHTML
 			this.statusText = this.plainText()
 			this.rememberDraft()
 		},
@@ -1603,12 +1605,12 @@ export default {
 		 * @return {string}
 		 */
 		plainText() {
-			const input = this.$refs.composerInput
+			const input = this.inputElement()
 			if (input === undefined || input === null) {
 				return ''
 			}
 
-			const element = input.cloneNode(true)
+			const element = /** @type {HTMLElement} */ (input.cloneNode(true))
 			Array.from(element.getElementsByClassName('emoji')).forEach((emoji) => {
 				emoji.replaceWith(document.createTextNode(emoji.getAttribute('alt') ?? ''))
 			})
@@ -1654,12 +1656,12 @@ export default {
 		 */
 		restoreDraft() {
 			const draft = loadDraft()
-			if (draft === null || this.$refs.composerInput === undefined) {
+			if (draft === null || this.inputElement() === undefined) {
 				return false
 			}
 
 			if (draft.text !== '') {
-				this.$refs.composerInput.innerText = draft.text
+				this.inputElement().innerText = draft.text
 			}
 			if (draft.spoilerText !== '') {
 				this.showWarning = true
@@ -1706,8 +1708,8 @@ export default {
 		redraft(post) {
 			this.expand()
 
-			if (this.statusIsEmpty && this.$refs.composerInput !== undefined) {
-				this.$refs.composerInput.innerText = htmlToPlainText(post.content || '')
+			if (this.statusIsEmpty && this.inputElement() !== undefined) {
+				this.inputElement().innerText = htmlToPlainText(post.content || '')
 				this.updateStatusContent()
 			}
 
@@ -1762,7 +1764,7 @@ export default {
 		},
 
 		clickImportInput() {
-			this.$refs.fileUploadInput.click()
+			/** @type {HTMLInputElement} */ (this.$refs.fileUploadInput).click()
 		},
 
 		async handleFileChange(event) {
@@ -1784,7 +1786,7 @@ export default {
 		 * @return {boolean}
 		 */
 		carriesFiles(event) {
-			return Array.from(event.dataTransfer?.types ?? []).includes('Files')
+			return Array.from(/** @type {DragEvent} */ (event).dataTransfer?.types ?? []).includes('Files')
 		},
 
 		/**
@@ -2233,26 +2235,28 @@ export default {
 				emoji = emojis[firstEmoji]
 			}
 
-			const lastChild = this.$refs.composerInput.lastChild
+			const lastChild = /** @type {HTMLElement|null} */ (this.inputElement().lastChild)
 			const div = document.createElement('div')
 			div.textContent = emoji + ' '
 
 			if (lastChild === null) {
-				this.$refs.composerInput.innerHTML = div.innerHTML
+				this.inputElement().innerHTML = div.innerHTML
 			} else {
 				switch (lastChild.tagName) {
 					case 'BR':
 						lastChild.before(div.firstChild)
 						break
-					case 'DIV':
-						switch (lastChild.lastChild.tagName) {
+					case 'DIV': {
+						const inner = /** @type {HTMLElement} */ (lastChild.lastChild)
+						switch (inner.tagName) {
 							case 'BR':
-								lastChild.lastChild.before(div.firstChild)
+								inner.before(div.firstChild)
 								break
 							default:
 								lastChild.append(div.firstChild)
 						}
 						break
+					}
 					default:
 						lastChild.after(div.firstChild)
 				}
@@ -2738,8 +2742,10 @@ function rememberedVisibility() {
 }
 
 /**
+ * What an element of the editable box says, as plain text.
  *
- * @param node
+ * @param {Node} node the element
+ * @return {string}
  */
 function nodeToPlainText(node) {
 	let text = ''
@@ -2753,7 +2759,7 @@ function nodeToPlainText(node) {
 			continue
 		}
 
-		const element = child
+		const element = /** @type {Element} */ (child)
 		if (element.tagName === 'BR') {
 			text += '\n'
 			continue

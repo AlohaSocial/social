@@ -28,9 +28,8 @@
 export default {
 	name: 'PostCard',
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Card>} */
 		card: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Card>} */ (Object),
 			default: null,
 		},
 	},

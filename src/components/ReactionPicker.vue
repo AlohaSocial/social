@@ -74,7 +74,7 @@ export default {
 	props: {
 		/** the request that had the picker mounted, answered as it arrives */
 		firstAsk: {
-			type: /** @type {import('vue').PropType<{react: Function}>} */ (Object),
+			type: /** @type {import('vue').PropType<{react: (emoji: string) => void}>} */ (Object),
 			default: null,
 		},
 	},
@@ -102,7 +102,7 @@ export default {
 		t,
 
 		/**
-		 * @param {{react: Function}} payload who asked, and what to tell
+		 * @param {{react: (emoji: string) => void}} payload who asked, and what to tell
 		 */
 		async onAsked(payload) {
 			this.react = typeof payload?.react === 'function' ? payload.react : null
@@ -112,8 +112,10 @@ export default {
 				await this.$nextTick()
 				// or Escape would go to whatever the reader last pressed,
 				// which is a card behind the backdrop
-				this.$refs.backdrop?.focus()
-				this.$refs.anchor?.click()
+				const backdrop = /** @type {HTMLElement|undefined} */ (this.$refs.backdrop)
+				backdrop?.focus()
+				const anchor = /** @type {HTMLElement|undefined} */ (this.$refs.anchor)
+				anchor?.click()
 			}
 		},
 

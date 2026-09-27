@@ -159,9 +159,8 @@ const AccountDisplayName = {
 			type: String,
 			default: '',
 		},
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').CustomEmoji[]>} */
 		emojis: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').CustomEmoji[]>} */ (Array),
 			default: () => [],
 		},
 	},
@@ -229,11 +228,9 @@ export default {
 		/**
 		 * What is already known about this account (a status carries its
 		 * author in full), shown while the fetch is on its way.
-		 *
-		 * @type {import('vue').PropType<import('../types/Mastodon.js').Account|null>}
 		 */
 		fallback: {
-			type: Object,
+			type: /** @type {import('vue').PropType<Partial<import('../types/Mastodon.js').Account>|null>} */ (Object),
 			default: null,
 		},
 
@@ -244,7 +241,7 @@ export default {
 		variant: {
 			type: String,
 			default: 'inline',
-			validator: (value) => ['inline', 'block'].includes(value),
+			validator: (value) => ['inline', 'block'].includes(String(value)),
 		},
 
 		placement: {
@@ -331,7 +328,7 @@ export default {
 		 * ceiling, so a profile that carries more cannot turn the card into a
 		 * page.
 		 *
-		 * @return {Array<{name: string, text: string, href: string}>}
+		 * @return {Array<{name: string, text: string, href: string, verified: boolean, verifiedAt: string}>}
 		 */
 		fields() {
 			return profileFields(this.account?.fields, MAX_FIELDS)

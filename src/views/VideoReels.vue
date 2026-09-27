@@ -331,7 +331,8 @@ export default {
 		// the viewport for most of a scroll, and whichever was observed last
 		// would win. A slide is the one being watched when most of it is there.
 		this.observer = new IntersectionObserver(this.onVisible, { threshold: 0.6 })
-		this.$refs.track?.focus?.()
+		const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
+		track?.focus?.()
 	},
 
 	beforeUnmount() {
@@ -389,7 +390,7 @@ export default {
 					continue
 				}
 
-				const index = Number(entry.target.dataset.index)
+				const index = Number(/** @type {HTMLElement} */ (entry.target).dataset.index)
 				if (Number.isNaN(index)) {
 					continue
 				}
@@ -629,7 +630,7 @@ export default {
 		 * right slide playing.
 		 */
 		onScroll() {
-			const track = this.$refs.track
+			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
 			if (!track) {
 				return
 			}
@@ -893,6 +894,7 @@ export default {
 
 		/* where a double tap landed: it swells, holds, and lifts away */
 		&--burst {
+			/* stylelint-disable-next-line csstools/use-logical -- a point on the screen, not a side: where the finger landed is set inline as `left`, and the heart is centred on it with translate() */
 			left: 50%;
 			top: 45%;
 			animation: reel-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;

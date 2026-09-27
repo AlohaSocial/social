@@ -79,10 +79,11 @@ export default {
 		...mapStores(useAccountStore),
 		/** @return {string} */
 		profileAccount() {
-			if (!this.$route.params.account) {
+			const account = String(this.$route.params.account ?? '')
+			if (account === '') {
 				return ''
 			}
-			return (this.$route.params.account.indexOf('@') === -1) ? this.$route.params.account + '@' + this.hostname : this.$route.params.account
+			return account.includes('@') ? account : account + '@' + this.hostname
 		},
 
 		/** @return {string} */
@@ -216,10 +217,11 @@ export default {
 		},
 
 		isSentinelVisible() {
-			if (!this.$refs.sentinel) {
+			const sentinel = /** @type {HTMLElement|undefined} */ (this.$refs.sentinel)
+			if (!sentinel) {
 				return false
 			}
-			const rect = this.$refs.sentinel.getBoundingClientRect()
+			const rect = sentinel.getBoundingClientRect()
 			return rect.top <= window.innerHeight + 300
 		},
 	},

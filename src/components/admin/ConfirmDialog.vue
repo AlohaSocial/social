@@ -61,6 +61,7 @@ export default {
 	emits: ['update:open', 'confirm'],
 
 	computed: {
+		/** @return {import('../../types/Nextcloud.js').DialogButton[]} */
 		buttons() {
 			return [
 				{

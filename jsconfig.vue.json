@@ -1,5 +1,5 @@
 {
-	"//": "The whole of src/, single-file components included, checked by vue-tsc with the same options as jsconfig.json. It is not held to zero errors: tools/typecheck.mjs compares what it reports against tests/js/typecheck-baseline.json and fails on anything new.",
+	"//": "The whole of src/, single-file components included, checked by vue-tsc with the same options as jsconfig.json, and held to zero errors like it.",
 	"extends": "./jsconfig.json",
 	"include": [
 		"src/**/*.js",

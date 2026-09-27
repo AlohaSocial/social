@@ -72,9 +72,8 @@ export default {
 			required: true,
 		},
 
-		/** @type {import('vue').PropType<Object<string, import('./Composer.vue').LocalAttachment>>} */
 		miniatures: {
-			type: Object,
+			type: /** @type {import('vue').PropType<Object<string, import('../../types/Composer.js').LocalAttachment>>} */ (Object),
 			required: true,
 		},
 	},

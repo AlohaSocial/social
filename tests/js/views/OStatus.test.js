@@ -59,7 +59,6 @@ describe('OStatus', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks()
-		delete window.oc_current_user
 	})
 
 	describe('following a remote account from this instance', () => {
@@ -70,9 +69,9 @@ describe('OStatus', () => {
 		})
 
 		it('imports the server data and current user and looks up the remote account', () => {
-			mountView()
+			const wrapper = mountView()
 			expect(settingsStore.serverData).toEqual(serverData)
-			expect(window.oc_current_user).toEqual(currentUser)
+			expect(wrapper.vm.currentUser).toEqual(currentUser)
 			expect(accountStore.fetchAccountInfo).toHaveBeenCalledWith('bob@remote.example')
 			expect(accountStore.fetchPublicAccountInfo).not.toHaveBeenCalled()
 		})
@@ -113,7 +112,7 @@ describe('OStatus', () => {
 			const wrapper = mountView()
 			await flushPromises()
 			await wrapper.find('form').trigger('submit')
-			expect(accountStore.followAccount).toHaveBeenCalledWith(expect.objectContaining({ currentAccount: 'alice@cloud.example.org', accountToFollow: 'bob@remote.example' }))
+			expect(accountStore.followAccount).toHaveBeenCalledWith({ accountToFollow: 'bob@remote.example' })
 		})
 	})
 

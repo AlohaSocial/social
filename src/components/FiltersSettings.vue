@@ -196,6 +196,7 @@ export default {
 				.join('; ')
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
 				{

@@ -85,7 +85,7 @@ export default {
 			return this.visibilityPostLabel(this.visibility)
 		},
 
-		/** @return {Function} */
+		/** @return {(visibility?: string) => string} */
 		visibilityPostLabel() {
 			return (visibility) => {
 				if (visibility === undefined) {

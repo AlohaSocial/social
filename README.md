@@ -746,19 +746,14 @@ npm ci
 npm test                    # JS: vitest run (tests/js/** and src/**/*.test.js)
 npm run test:coverage       # with a coverage report in coverage/js
 npm run typecheck           # tsc over the plain-JS half of src/, then vue-tsc over all of it
-npm run typecheck:baseline  # rewrite the vue-tsc baseline after fixing errors in it
 ```
 
-`npm run typecheck` runs two checks. `tsc` holds the types, services, stores and
-utilities to the JSDoc typedefs in `src/types/` and allows no errors
+`npm run typecheck` runs two checks, and neither allows an error. `tsc` holds the
+types, services, stores and utilities to the JSDoc typedefs in `src/types/`
 (`jsconfig.json`). `vue-tsc` then checks every `.js` and `.vue` file in `src/`
-with the same options (`jsconfig.vue.json`), and `tools/typecheck.mjs` compares
-what it reports with `tests/js/typecheck-baseline.json`, the errors the tree
-already had: an error the baseline does not list for that file — or one more of
-an error than it counts — fails. The baseline records file, error code and
-message, not line numbers, so an edit elsewhere in a file does not disturb it.
-When a change removes errors the check says so and passes; run
-`npm run typecheck:baseline` and commit the smaller baseline with the change.
+with the same options (`jsconfig.vue.json`). A `$refs` entry or an event target
+is an element the checker cannot see, so it is given its type where it is read:
+`/** @type {HTMLInputElement} */ (this.$refs.file)`.
 
 PHP tests live in `tests/` mirroring `lib/` (`lib/Service/PostService.php` →
 `tests/Service/PostServiceTest.php`). Everything a class needs is mocked; the

@@ -369,7 +369,7 @@ export default {
 		 * Mounts the emoji picker for the first reaction anybody asks for; from
 		 * then on it listens on the bus itself.
 		 *
-		 * @param {{react: Function}} payload who asked, and what to tell
+		 * @param {{react: (emoji: string) => void}} payload who asked, and what to tell
 		 */
 		onFirstReactionAsk(payload) {
 			if (typeof payload?.react !== 'function') {
@@ -432,7 +432,7 @@ export default {
 			if (this.$route.name === 'tags') {
 				timeline = 'tags'
 			} else if (this.$route.params.type) {
-				timeline = this.$route.params.type
+				timeline = String(this.$route.params.type)
 			}
 
 			if (data.source === 'timeline.home' && timeline === 'home') {

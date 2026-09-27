@@ -38,7 +38,7 @@
 				class="subs__file"
 				accept=".csv,text/csv"
 				@change="importTakeout">
-			<NcButton :disabled="busy !== ''" @click="$refs.takeout.click()">
+			<NcButton :disabled="busy !== ''" @click="pickTakeout">
 				<template #icon>
 					<NcLoadingIcon v-if="busy === 'takeout'" :size="20" />
 					<IconUpload v-else :size="20" />
@@ -259,6 +259,11 @@ export default {
 	},
 
 	methods: {
+		/** Opens the file chooser for a subscriptions takeout. */
+		pickTakeout() {
+			/** @type {HTMLInputElement} */ (this.$refs.takeout).click()
+		},
+
 		t,
 		n,
 

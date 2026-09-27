@@ -151,7 +151,7 @@ export default {
 	props: {
 		/** the first page of the queue */
 		queue: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../../types/Moderation.js').HeldPost[]>} */ (Array),
 			required: true,
 		},
 

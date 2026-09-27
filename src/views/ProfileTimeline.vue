@@ -23,7 +23,7 @@
 				type="account" />
 		</ul>
 
-		<TimelineList :display="display" :account="$route.params.account" />
+		<TimelineList :display="display" :account="routeAccount" />
 	</div>
 </template>
 
@@ -61,6 +61,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {string} the account the page is about, as the address names it */
+		routeAccount() {
+			return String(this.$route.params.account ?? '')
+		},
+
 		...mapStores(useTimelineStore),
 		/**
 		 * Which of an account's posts are being read.
@@ -101,7 +106,7 @@ export default {
 		 * @return {object[]} the three tabs, for the switcher
 		 */
 		kinds() {
-			return profileKinds(this.$route.params.account)
+			return profileKinds(this.routeAccount)
 		},
 
 		/**
@@ -144,8 +149,8 @@ export default {
 		},
 
 		loadTimeline() {
-			if (this.$route.params.account) {
-				this.timelineStore.changeTimelineTypeAccount(this.$route.params.account, this.kind)
+			if (this.routeAccount !== '') {
+				this.timelineStore.changeTimelineTypeAccount(this.routeAccount, this.kind)
 			}
 		},
 

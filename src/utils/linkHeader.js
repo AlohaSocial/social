@@ -14,7 +14,7 @@
  * short because the reader may not see some of them. The absence of the
  * header is also the only reliable "this was the last page".
  *
- * @param {Record<string, any>} headers the response headers, as axios hands them back
+ * @param {Record<string, unknown>} headers the response headers, as axios hands them back
  * @return {string} the cursor, or '' when the server said this is the last page
  */
 export function nextCursor(headers) {

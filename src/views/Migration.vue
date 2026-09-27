@@ -4,7 +4,9 @@
 -->
 <template>
 	<div class="social__migration">
-		<h2 class="social__migration-title">{{ t('social', 'Migration') }}</h2>
+		<h2 class="social__migration-title">
+			{{ t('social', 'Migration') }}
+		</h2>
 		<p class="social__migration-lede">
 			{{ t('social', 'Your account is yours. Take a copy of it whenever you like, move it to another server, or bring one here from somewhere else — including the posts you wrote there, with their pictures.') }}
 		</p>

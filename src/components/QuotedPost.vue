@@ -56,11 +56,9 @@ export default {
 		 * post quotes nothing. `quoted_status` is only ever filled in when the
 		 * quote was accepted and the reader is allowed to read the quoted post,
 		 * so every other combination has to read as an explanation.
-		 *
-		 * @type {import('vue').PropType<{state: string, quoted_status: ?object}>}
 		 */
 		quote: {
-			type: Object,
+			type: /** @type {import('vue').PropType<{state: string, quoted_status: ?object}>} */ (Object),
 			default: null,
 		},
 	},

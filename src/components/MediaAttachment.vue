@@ -111,9 +111,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon').MediaAttachment>} */
 		attachment: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon').MediaAttachment>} */ (Object),
 			default: null,
 		},
 
@@ -135,11 +134,9 @@ export default {
 		 * whether it is live. Passed in rather than read off the attachment,
 		 * because it is a fact about the *post* — one `Video` object, one set
 		 * of subtitles — and the attachment is only its file.
-		 *
-		 * @type {import('vue').PropType<object|null>}
 		 */
 		video: {
-			type: Object,
+			type: /** @type {import('vue').PropType<object|null>} */ (Object),
 			default: null,
 		},
 	},
@@ -399,7 +396,7 @@ export default {
 				return
 			}
 
-			const element = this.$refs.video
+			const element = /** @type {HTMLVideoElement} */ (this.$refs.video)
 			// a remote video that is nothing but a playlist, or a local one
 			// that has a ladder beside its file
 			const source = this.isPlaylist ? this.attachment.url : this.ladderSource
@@ -504,7 +501,7 @@ export default {
 			}
 
 			try {
-				const ctx = this.$refs.canvas.getContext('2d')
+				const ctx = /** @type {HTMLCanvasElement} */ (this.$refs.canvas).getContext('2d')
 				const imageData = ctx.createImageData(this.attachment.meta.small.width, this.attachment.meta.small.height)
 				const pixels = decode(blurhash, this.attachment.meta.small.width, this.attachment.meta.small.height)
 				imageData.data.set(pixels)

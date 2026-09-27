@@ -106,7 +106,7 @@ export default {
 			 * Where the active option is, in pixels from the inside of the
 			 * track, or null while there is nothing to measure.
 			 *
-			 * @type {?{left: number, width: number}}
+			 * @type {?{offset: number, width: number}}
 			 */
 			measured: null,
 			/** re-measures when the track or an option changes size */

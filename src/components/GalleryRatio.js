@@ -28,6 +28,13 @@
  */
 export const DEFAULT_RATIO = 4 / 3
 
+/**
+ * How wide an attachment is for its height.
+ *
+ * @param {import('../types/Mastodon.js').MediaAttachment} attachment the attachment
+ * @param {number} [fallback] what to use when its size is not known
+ * @return {number} width divided by height
+ */
 export function ratioOf(attachment, fallback = DEFAULT_RATIO) {
 	// `meta` is absent for a remote attachment this instance has not cached
 	// yet, and AttachmentMeta::jsonSerialize() drops zero width and height

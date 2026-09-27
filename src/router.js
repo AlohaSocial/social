@@ -195,7 +195,7 @@ const router = createRouter({
 			// `/` is a private home feed for signed-in readers and the local
 			// public feed for visitors. This runs before Timeline mounts, so a
 			// guest never briefly asks for private posts or account-only data.
-			redirect: () => loadState('social', 'serverData', {}).public
+			redirect: () => /** @type {{public?: boolean}} */ (loadState('social', 'serverData', {})).public
 				? { name: 'timeline', params: { type: 'timeline' } }
 				: { name: 'timeline' },
 		},
@@ -217,16 +217,17 @@ const router = createRouter({
 			props: true,
 			name: 'timeline',
 			children: [
-				{
+				// rendered by the parent: the timeline reads the tag from the route
+				/** @type {import('vue-router').RouteRecordRaw} */ ({
 					path: 'tags/:tag',
 					name: 'tags',
-				},
+				}),
 				// a list's timeline: the id is the list's, and the page is the
 				// same timeline view read through it
-				{
+				/** @type {import('vue-router').RouteRecordRaw} */ ({
 					path: 'list/:id',
 					name: 'list',
-				},
+				}),
 			],
 		},
 		{
@@ -352,7 +353,7 @@ const router = createRouter({
 			components: {
 				default: VideoReels,
 			},
-			props: (route) => ({ scope: route.query.scope ?? 'home' }),
+			props: { default: (route) => ({ scope: String(route.query.scope ?? 'home') }) },
 			name: 'reels',
 		},
 		{

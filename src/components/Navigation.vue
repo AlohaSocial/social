@@ -776,8 +776,8 @@ export default {
 		/**
 		 * another page: the mark goes to the row that is lit now
 		 *
-		 * @param to
-		 * @param from
+		 * @param {import('vue-router').RouteLocationNormalized} to where the reader is going
+		 * @param {import('vue-router').RouteLocationNormalized} from where they were
 		 */
 		$route(to, from) {
 			this.$nextTick(() => this.placeIndicator())
@@ -1140,7 +1140,7 @@ export default {
 				window.requestAnimationFrame(() => this.measureRail())
 			})
 
-			const list = this.$refs.exploreItem?.$el?.parentElement
+			const list = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.exploreItem)?.$el?.parentElement
 			if (list) {
 				this.railObserver.observe(list)
 			}
@@ -1168,7 +1168,7 @@ export default {
 		 * grow each time it was applied and shrink each time it was read back.
 		 */
 		measureRail() {
-			const item = this.$refs.exploreItem?.$el
+			const item = /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.exploreItem)?.$el
 			const list = item?.parentElement
 			const children = item?.querySelector('.app-navigation-entry__children')
 			const rows = children ? children.children : []
@@ -1255,7 +1255,7 @@ export default {
 		 * them, which is the rule router-link itself applies.
 		 *
 		 * @param {object} to a route location
-		 * @param {MouseEvent} event the click
+		 * @param {MouseEvent} [event] the click
 		 */
 		navigate(to, event) {
 			// Let the browser follow an absolute Nextcloud page URL. This keeps
