@@ -26,6 +26,17 @@
 						loading="lazy"
 						decoding="async"
 						@error="onImageError(tile.key)">
+					<video
+						v-else-if="tile.videoSource && !tile.filtered"
+						ref="videoPreviews"
+						class="media-grid__image"
+						:data-source="tile.videoSource"
+						muted
+						playsinline
+						preload="none"
+						aria-hidden="true"
+						@loadedmetadata="showVideoFrame"
+						@error="onImageError(tile.key)" />
 					<span v-else-if="!tile.filtered" class="media-grid__missing" aria-hidden="true">
 						<ImageOffOutline :size="24" />
 					</span>
@@ -110,6 +121,9 @@ export default {
 		return {
 			/** Tiles whose picture 404'd, so the next render draws the fallback. */
 			broken: [],
+			/** Observer that only fetches a video when its tile nears the viewport. */
+			/** @type {IntersectionObserver | null} */
+			videoObserver: null,
 		}
 	},
 
@@ -119,6 +133,18 @@ export default {
 				.filter((post) => post && Array.isArray(post.media_attachments) && post.media_attachments.length > 0)
 				.map((post) => this.toTile(post))
 		},
+	},
+
+	mounted() {
+		this.observeVideoPreviews()
+	},
+
+	updated() {
+		this.observeVideoPreviews()
+	},
+
+	beforeUnmount() {
+		this.videoObserver?.disconnect()
 	},
 
 	methods: {
@@ -132,14 +158,24 @@ export default {
 			const first = post.media_attachments[0]
 			const key = String(post.id)
 			const broken = this.broken.includes(key)
+			const isVideo = first.type === 'video' || first.type === 'gifv'
+			const preview = typeof first.preview_url === 'string'
+				&& first.preview_url !== ''
+				&& first.preview_url !== first.url
+				? first.preview_url
+				: null
 
 			return {
 				key,
 				count: post.media_attachments.length,
-				isVideo: first.type === 'video' || first.type === 'gifv',
+				isVideo,
 				sensitive: Boolean(post.sensitive),
 				filtered: matchedFilters(post).length > 0,
-				preview: broken ? null : (first.preview_url || first.url || null),
+				// For older videos, preview_url is the video itself. An <img> cannot
+				// decode it; use a muted, lazy video frame instead. Images may still
+				// fall back to their full-size source when they have no thumbnail.
+				preview: broken ? null : (preview || (!isVideo ? first.url || null : null)),
+				videoSource: !broken && isVideo && !preview ? first.url || null : null,
 				alt: first.description || '',
 				label: this.labelFor(post, first),
 				style: { objectPosition: this.focalPosition(first) },
@@ -181,14 +217,80 @@ export default {
 				return attachment.description
 			}
 
-			return post.media_attachments.length > 1
-				? t('social', 'Post with {count} pictures', { count: post.media_attachments.length })
+			if (post.media_attachments.length > 1) {
+				return t('social', 'Post with {count} pictures', { count: post.media_attachments.length })
+			}
+
+			return (attachment.type === 'video' || attachment.type === 'gifv')
+				? t('social', 'Post with a video')
 				: t('social', 'Post with a picture')
 		},
 
 		onImageError(key) {
 			if (!this.broken.includes(key)) {
 				this.broken.push(key)
+			}
+		},
+
+		/**
+		 * Only fetch a video when its tile is near the viewport. Most videos
+		 * have a server-generated JPEG poster and never reach this path; for old
+		 * uploads without one, this lets the browser draw an actual frame without
+		 * opening a connection for every video in the grid at once.
+		 */
+		observeVideoPreviews() {
+			const videoRefs = this.$refs.videoPreviews
+			const videos = /** @type {HTMLVideoElement[]} */ (
+				Array.isArray(videoRefs) ? videoRefs : videoRefs ? [videoRefs] : []
+			)
+			if (videos.length === 0) {
+				return
+			}
+
+			if (typeof IntersectionObserver === 'undefined') {
+				videos.forEach((video) => {
+					const source = video.dataset.source
+					if (!video.src && source) {
+						video.preload = 'metadata'
+						video.src = source
+					}
+				})
+				return
+			}
+
+			if (!this.videoObserver) {
+				this.videoObserver = new IntersectionObserver((entries) => {
+					entries.forEach(({ isIntersecting, target }) => {
+						const video = /** @type {HTMLVideoElement} */ (target)
+						const source = video.dataset.source
+						if (isIntersecting && !video.src && source) {
+							video.preload = 'metadata'
+							video.src = source
+							this.videoObserver?.unobserve(video)
+						}
+					})
+				}, { rootMargin: '120px' })
+			}
+
+			videos.forEach((video) => {
+				if (!video.src) {
+					this.videoObserver?.observe(video)
+				}
+			})
+		},
+
+		/**
+		 * Seek past black intro frames when metadata lets us.
+		 *
+		 * @param {Event} event the media metadata event
+		 */
+		showVideoFrame(event) {
+			const video = /** @type {HTMLVideoElement | null} */ (event.target)
+			if (!video) {
+				return
+			}
+			if (Number.isFinite(video.duration) && video.duration > 0) {
+				video.currentTime = Math.min(1, video.duration / 2)
 			}
 		},
 	},

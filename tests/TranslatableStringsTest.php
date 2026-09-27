@@ -172,11 +172,23 @@ class TranslatableStringsTest extends TestCase {
 	 * label in either component must be present in both catalog formats that
 	 * Nextcloud serves.
 	 */
-	public function testSidebarAndPostActionsHaveGermanCatalogEntries(): void {
+	public function testHighTrafficViewsHaveGermanCatalogEntries(): void {
 		$files = [
 			'src/components/Navigation.vue',
 			'src/components/TimelinePost.vue',
+			'src/views/Timeline.vue',
+			'src/components/Search.vue',
+			'src/components/FediverseSearch.vue',
+			'src/views/Discover.vue',
+			'src/components/DiscoverCategories.vue',
+			'src/views/VideoReels.vue',
+			'src/components/VideoHeader.vue',
+			'src/components/ProfileMediaGrid.vue',
+			'src/components/FollowGraphSuggestions.vue',
 			'src/components/DirectMessages.vue',
+			'src/components/PostMenu.vue',
+			'src/components/Composer/Composer.vue',
+			'src/App.vue',
 		];
 		$messages = [];
 		foreach (self::singulars() as $message => $paths) {
@@ -185,24 +197,113 @@ class TranslatableStringsTest extends TestCase {
 			}
 		}
 
-		$catalogPath = dirname(__DIR__) . '/l10n/de_DE.json';
-		$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
-		$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/de_DE.js');
 		$missing = [];
-		foreach ($messages as $message) {
-			if (!array_key_exists($message, $catalog)) {
-				$missing[] = $message;
-				continue;
-			}
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message) {
+				if (!array_key_exists($message, $catalog)) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
 
-			$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-			$value = json_encode($catalog[$message], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-			if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
-				$missing[] = $message . ' (JavaScript catalog)';
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($catalog[$message], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
 			}
 		}
 
-		$this->assertSame([], $missing, 'navigation, post action, and conversation labels must be translated in both German catalogs');
+		$this->assertSame([], $missing, 'navigation, timeline, conversation, composer, and app labels must exist in both German catalog formats');
+	}
+
+	public function testSubscriptionVideoControlsHaveGermanCatalogEntries(): void {
+		$messages = [
+			'Channels and blogs that are not on the fediverse, followed by their feed. What comes out appears here with a link to where it is — nothing is copied onto this server, and nothing here is a post: it cannot be boosted, replied to or federated, because it is not ours to publish.',
+			'A feed address, or a YouTube channel',
+			'https://example.org/feed — or a YouTube channel link',
+			'Bring your YouTube subscriptions over',
+			'Google Takeout → YouTube and YouTube Music → subscriptions. The file is called subscriptions.csv and names every channel you follow; each one becomes a subscription here. Your own uploads are not imported — they are whole videos, and each belongs on a post you write.',
+			'Choose subscriptions.csv',
+			'What you follow',
+			'Read fine, but it lists nothing',
+			'Not read yet',
+			'Unfollow {title}',
+			'Latest',
+			'Your subscriptions could not be loaded.',
+			'Nothing yet',
+			'Follow a channel or a blog above, and what it publishes turns up here.',
+			'Older',
+			'Could not follow that',
+			'Could not unfollow that',
+			'That file could not be read',
+			'Play {title}',
+			'Play video',
+			'Open on YouTube, including comments',
+			'Close player',
+			'That file is larger than 5 MB',
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message) {
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				$value = json_encode($catalog[$message] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				if (!array_key_exists($message, $catalog) || !str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message;
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'subscription page messages must exist in both German catalog formats');
+	}
+
+	public function testCoreTimelineAndDiscoveryPluralsHaveGermanCatalogEntries(): void {
+		$messages = [
+			'_Follow one more account and this can look at who they follow._::_Follow {count} more accounts and this can look at who they follow._' => [
+				'Folge noch einem Konto, dann können wir prüfen, wem es folgt.',
+				'Folge noch {count} Konten, dann können wir prüfen, wem sie folgen.',
+			],
+			'_%n entry_::_%n entries_' => ['%n Eintrag', '%n Einträge'],
+			'_%n view_::_%n views_' => ['%n Aufruf', '%n Aufrufe'],
+			'_%n like_::_%n likes_' => ['%n Like', '%n Likes'],
+			'_%n dislike_::_%n dislikes_' => ['%n Ablehnung', '%n Ablehnungen'],
+			'_%n new activity_::_%n new activities_' => ['%n neue Aktivität', '%n neue Aktivitäten'],
+			'_{names} did not answer. What is above is the rest._::_{names} did not answer. What is above is the rest._' => [
+				'Die Server von {names} haben nicht geantwortet. Die übrigen Ergebnisse stehen oben.',
+				'Die Server von {names} haben nicht geantwortet. Die übrigen Ergebnisse stehen oben.',
+			],
+			'_%n directory_::_%n directories_' => ['%n Verzeichnis', '%n Verzeichnisse'],
+			'_One account could not be reached from this server:_::_%n accounts could not be reached from this server:_' => [
+				'Ein Konto konnte von diesem Server nicht erreicht werden:',
+				'%n Konten konnten von diesem Server nicht erreicht werden:',
+			],
+			'_%n account_::_%n accounts_' => ['%n Konto', '%n Konten'],
+			'_Followed %n account_::_Followed %n accounts_' => ['Du folgst jetzt %n Konto', 'Du folgst jetzt %n Konten'],
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message => $translation) {
+				if (($catalog[$message] ?? null) !== $translation) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'core timeline and discovery plural messages must exist in both German catalog formats');
 	}
 
 	/**

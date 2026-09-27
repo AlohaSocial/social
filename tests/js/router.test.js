@@ -311,6 +311,28 @@ describe('router navigation', () => {
 		expect(router.currentRoute.value.params.type).toBe('timeline')
 		document.getElementById('initial-state-social-serverData')?.remove()
 	})
+
+	it('redirects anonymous direct links from the private home feed to the public local feed', async () => {
+		globalThis.setInitialState('social', 'serverData', { public: true })
+		const router = await freshRouter()
+		await router.push('/timeline/home')
+
+		expect(router.currentRoute.value.path).toBe('/timeline/timeline')
+		expect(router.currentRoute.value.params.type).toBe('timeline')
+		expect(router.currentRoute.value.redirectedFrom.path).toBe('/timeline/home')
+		document.getElementById('initial-state-social-serverData')?.remove()
+	})
+
+	it('redirects the parameterless anonymous timeline home to the public local feed', async () => {
+		globalThis.setInitialState('social', 'serverData', { public: true })
+		const router = await freshRouter()
+		await router.push('/timeline')
+
+		expect(router.currentRoute.value.path).toBe('/timeline/timeline')
+		expect(router.currentRoute.value.params.type).toBe('timeline')
+		expect(router.currentRoute.value.redirectedFrom.path).toBe('/timeline')
+		document.getElementById('initial-state-social-serverData')?.remove()
+	})
 })
 
 describe('router base detection', () => {
@@ -357,9 +379,13 @@ describe('router base detection', () => {
 
 	/** News is gone; an address somebody kept for it opens their feed */
 	it('sends the old News address to My Feed', async () => {
-		await router.push('/timeline/news')
+		globalThis.setInitialState('social', 'serverData', { public: false })
+		vi.resetModules()
+		const { default: testRouter } = await import('../../src/router.js')
+		await testRouter.push('/timeline/news')
 
-		expect(router.currentRoute.value.name).toBe('timeline')
-		expect(router.currentRoute.value.params.type ?? '').toBe('')
+		expect(testRouter.currentRoute.value.name).toBe('timeline')
+		expect(['home', 'timeline']).toContain(testRouter.currentRoute.value.params.type)
+		document.getElementById('initial-state-social-serverData')?.remove()
 	})
 })

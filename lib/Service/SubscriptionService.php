@@ -29,6 +29,9 @@ class SubscriptionService {
 	/** How long one feed read may take. */
 	private const TIMEOUT = 30;
 
+	/** A first read belongs to the follow request, so keep its wait bounded. */
+	private const FIRST_READ_TIMEOUT = 10;
+
 	/** The biggest feed worth reading. */
 	private const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -111,24 +114,31 @@ class SubscriptionService {
 	 * rather than what was typed. Following the same thing twice is one
 	 * subscription.
 	 *
-	 * The feed itself is not read here. The request answers once the row is
-	 * stored, and the cron reads it on its next pass — a feed never read goes
-	 * first (`FeedsRequest::due()`) — rather than holding a PHP worker for a
-	 * second fetch of up to `TIMEOUT` seconds and a hundred inserts.
+	 * Read a newly followed feed once before answering so its first entries are
+	 * visible immediately. The shorter timeout keeps that request bounded; the
+	 * cron remains responsible for later refreshes and retries after failures.
 	 *
 	 * @throws InvalidArgumentException nothing there, or too many already
 	 */
 	public function follow(string $userId, string $input): array {
+		$url = $this->discoveryService->discover($input);
+
+		$id = $this->feedsRequest->idOf($userId, $url);
+		if ($id !== 0) {
+			return ['id' => $id, 'url' => $url];
+		}
+
 		if (count($this->feedsRequest->feedsOf($userId)) >= self::MAX_FEEDS) {
 			throw new InvalidArgumentException('that is as many feeds as one account may follow');
 		}
 
-		$url = $this->discoveryService->discover($input);
-
-		$id = $this->feedsRequest->idOf($userId, $url);
-		if ($id === 0) {
-			$id = $this->feedsRequest->create($userId, $url, '', '');
-		}
+		$id = $this->feedsRequest->create($userId, $url, '', '');
+		$this->refresh([
+			'id' => $id,
+			'url' => $url,
+			'etag' => '',
+			'modified_at' => '',
+		], self::FIRST_READ_TIMEOUT);
 
 		return ['id' => $id, 'url' => $url];
 	}
@@ -142,21 +152,66 @@ class SubscriptionService {
 	 *
 	 * @return array<array<string, mixed>>
 	 */
-	public function timeline(string $userId, int $limit, int $maxId): array {
+	public function timeline(string $userId, int $limit, int $maxId, string $before = '', int $beforeId = 0): array {
 		$items = [];
-		foreach ($this->feedsRequest->timelineOf($userId, max(1, min($limit, 100)), $maxId) as $row) {
+		foreach ($this->feedsRequest->timelineOf($userId, max(1, min($limit, 100)), $maxId, $before, $beforeId) as $row) {
+			$link = $this->safeExternalLink((string)($row['link'] ?? ''));
+			$published = (string)($row['published'] ?? '');
 			$items[] = [
 				'id' => (int)$row['id'],
-				'link' => (string)($row['link'] ?? ''),
+				'link' => $link,
+				'video_id' => $this->youtubeVideoId($link),
 				'title' => (string)($row['title'] ?? ''),
 				'summary' => (string)($row['summary'] ?? ''),
 				'thumbnail' => (string)($row['thumbnail'] ?? ''),
 				'feed_title' => (string)($row['feed_title'] ?? ''),
-				'published' => $this->asDate($row['published'] ?? null),
+				// The cursor carries the stored wall-clock value exactly. The
+				// display timestamp is UTC and may differ across server time zones.
+				'cursor' => $published,
+				'published' => $this->asDate($published),
 			];
 		}
 
 		return $items;
+	}
+
+	/** A feed-provided link is clickable only when it is a complete web URL. */
+	private function safeExternalLink(string $link): string {
+		$parts = parse_url($link);
+		if (!is_array($parts)
+			|| !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+			|| ($parts['host'] ?? '') === ''
+			|| isset($parts['user'])
+			|| isset($parts['pass'])) {
+			return '';
+		}
+
+		return $link;
+	}
+
+	/** The ID of a YouTube video link, or empty for other hosts and invalid IDs. */
+	private function youtubeVideoId(string $link): string {
+		$parts = parse_url($link);
+		if (!is_array($parts)) {
+			return '';
+		}
+
+		$host = strtolower($parts['host'] ?? '');
+		if (!in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'], true)) {
+			return '';
+		}
+
+		$id = '';
+		if ($host === 'youtu.be') {
+			$id = trim($parts['path'] ?? '', '/');
+		} elseif (($parts['path'] ?? '') === '/watch') {
+			parse_str($parts['query'] ?? '', $query);
+			$id = is_string($query['v'] ?? null) ? $query['v'] : '';
+		} elseif (preg_match('#^/(?:shorts|embed|live)/([^/?]+)#', $parts['path'] ?? '', $matches) === 1) {
+			$id = $matches[1] ?? '';
+		}
+
+		return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : '';
 	}
 
 	/**
@@ -171,9 +226,9 @@ class SubscriptionService {
 	 *
 	 * @return int how many entries were new
 	 */
-	public function refresh(array $feed): int {
+	public function refresh(array $feed, ?int $timeout = null): int {
 		try {
-			$response = $this->clientService->newClient()->get((string)$feed['url'], $this->requestOptions($feed));
+			$response = $this->clientService->newClient()->get((string)$feed['url'], $this->requestOptions($feed, $timeout));
 		} catch (Throwable $e) {
 			return $this->unreadable($feed, $e);
 		}
@@ -225,14 +280,14 @@ class SubscriptionService {
 	 *
 	 * @param array<array<string, mixed>> $feeds
 	 */
-	private function refreshBatch(array $feeds): int {
+	private function refreshBatch(array $feeds, ?int $timeout = null): int {
 		$client = $this->clientService->newClient();
 
 		$promises = [];
 		$added = 0;
 		foreach ($feeds as $i => $feed) {
 			try {
-				$promises[$i] = $client->getAsync((string)$feed['url'], $this->requestOptions($feed));
+				$promises[$i] = $client->getAsync((string)$feed['url'], $this->requestOptions($feed, $timeout));
 			} catch (Throwable $e) {
 				$added += $this->unreadable($feed, $e);
 			}
@@ -260,7 +315,7 @@ class SubscriptionService {
 	 *
 	 * @return array<string, mixed>
 	 */
-	private function requestOptions(array $feed): array {
+	private function requestOptions(array $feed, ?int $timeout = null): array {
 		$headers = ['Accept' => 'application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.5'];
 		if ((string)($feed['etag'] ?? '') !== '') {
 			$headers['If-None-Match'] = (string)$feed['etag'];
@@ -270,7 +325,7 @@ class SubscriptionService {
 		}
 
 		return [
-			'timeout' => self::TIMEOUT,
+			'timeout' => $timeout ?? self::TIMEOUT,
 			'headers' => $headers,
 			// read as it arrives, so the ceiling below is a ceiling on
 			// memory and not on a string already in it
@@ -353,11 +408,10 @@ class SubscriptionService {
 	 *
 	 * `subscriptions.csv` names one channel a line with its id in the first
 	 * column, which is the one form a feed address can be built from without
-	 * asking YouTube anything. So nothing is fetched here: each channel is
-	 * stored and the cron reads them, a batch a pass. It used to follow and
-	 * read every channel inside the upload request — up to two hundred
-	 * sequential fetches, which `max_execution_time` cut off part-way with no
-	 * word of where it stopped.
+	 * asking YouTube anything. New channels get an immediate first read in
+	 * parallel, within one short time budget; the cron reads any remainder.
+	 * Reading all two hundred sequentially inside the upload request used to
+	 * run past `max_execution_time` with no word of where it stopped.
 	 *
 	 * @return int how many were newly followed
 	 */
@@ -372,6 +426,7 @@ class SubscriptionService {
 
 		$held = count($this->feedsRequest->feedsOf($userId));
 		$followed = 0;
+		$newFeeds = [];
 		while (($row = fgetcsv($handle, 0, ',', '"', '')) !== false) {
 			if ($row === [null]) {
 				continue;
@@ -390,7 +445,8 @@ class SubscriptionService {
 			try {
 				$url = $this->discoveryService->discover('https://www.youtube.com/channel/' . $channel);
 				if ($this->feedsRequest->idOf($userId, $url) === 0) {
-					$this->feedsRequest->create($userId, $url, '', '');
+					$id = $this->feedsRequest->create($userId, $url, '', '');
+					$newFeeds[] = ['id' => $id, 'url' => $url, 'etag' => '', 'modified_at' => ''];
 					$held++;
 					$followed++;
 				}
@@ -402,6 +458,19 @@ class SubscriptionService {
 		}
 
 		fclose($handle);
+
+		// Bring in the newest videos before the import request returns, without
+		// making a large Takeout hold the request open for every feed. Feeds not
+		// read inside this bounded window remain unread and are picked up by cron.
+		$deadline = microtime(true) + (float)self::FIRST_READ_TIMEOUT;
+		foreach (array_chunk($newFeeds, self::PARALLEL) as $batch) {
+			$remaining = $deadline - microtime(true);
+			if ($remaining <= 0) {
+				break;
+			}
+			$timeout = max(1, min(self::FIRST_READ_TIMEOUT, (int)ceil($remaining)));
+			$this->refreshBatch($batch, $timeout);
+		}
 
 		return $followed;
 	}

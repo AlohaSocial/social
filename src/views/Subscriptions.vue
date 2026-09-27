@@ -113,23 +113,62 @@
 
 			<ul v-if="items.length" class="entries">
 				<li v-for="item in items" :key="item.id" class="entries__item">
-					<a
-						class="entries__link"
-						:href="item.link"
-						target="_blank"
-						rel="noopener noreferrer">
-						<!-- no thumbnail: the feed's picture is on its own host,
-						     which the page's img-src does not allow, and there is
-						     no local route that fetches it the way attachments are -->
-						<span class="entries__body">
-							<span class="entries__title">{{ item.title }}</span>
-							<span class="entries__meta">
-								{{ item.feed_title }}
-								<template v-if="item.published">· {{ when(item.published) }}</template>
-							</span>
-							<span v-if="item.summary" class="entries__summary">{{ item.summary }}</span>
+					<div v-if="item.video_id" class="entries__video">
+						<iframe
+							v-if="activeVideo === item.id"
+							class="entries__player"
+							:src="embedUrl(item)"
+							:title="item.title"
+							allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+							allowfullscreen
+							loading="lazy"
+							referrerpolicy="strict-origin-when-cross-origin" />
+						<button
+							v-if="activeVideo === item.id"
+							class="entries__close"
+							type="button"
+							:aria-label="t('social', 'Close player')"
+							@click="activeVideo = null">
+							<span aria-hidden="true">×</span>
+						</button>
+						<button
+							v-else
+							class="entries__poster"
+							type="button"
+							:aria-label="t('social', 'Play {title}', { title: item.title })"
+							@click="play(item)">
+							<img
+								v-if="item.thumbnail"
+								:src="item.thumbnail"
+								alt=""
+								loading="lazy"
+								referrerpolicy="no-referrer">
+							<span v-if="item.thumbnail" class="entries__play" aria-hidden="true">▶</span>
+							<span v-else class="entries__play-label">▶ {{ t('social', 'Play video') }}</span>
+						</button>
+					</div>
+					<div class="entries__body">
+						<a
+							v-if="item.link"
+							class="entries__title"
+							:href="item.link"
+							target="_blank"
+							rel="noopener noreferrer"
+							referrerpolicy="no-referrer">{{ item.title }}</a>
+						<span v-else class="entries__title">{{ item.title }}</span>
+						<span class="entries__meta">
+							{{ item.feed_title }}
+							<template v-if="item.published">· {{ when(item.published) }}</template>
 						</span>
-					</a>
+						<span v-if="item.summary" class="entries__summary">{{ item.summary }}</span>
+						<a
+							v-if="item.video_id"
+							class="entries__source"
+							:href="item.link"
+							target="_blank"
+							rel="noopener noreferrer"
+							referrerpolicy="no-referrer">{{ t('social', 'Open on YouTube, including comments') }}</a>
+					</div>
 				</li>
 			</ul>
 
@@ -196,17 +235,27 @@ export default {
 			url: '',
 			feeds: [],
 			items: [],
+			/** One player at a time; loading the iframe contacts YouTube. */
+			activeVideo: null,
 			allLoaded: false,
-			/** the feed list or a page of entries could not be fetched */
-			failed: false,
+			/** Keep independent request failures separate so retry can do the right one. */
+			feedsFailed: false,
+			itemsFailed: false,
 			/** '', 'add', 'remove', 'load', 'takeout' */
 			busy: '',
 		}
 	},
 
+	computed: {
+		failed() {
+			return this.feedsFailed || this.itemsFailed
+		},
+	},
+
 	async mounted() {
-		await this.refresh()
-		await this.load()
+		// These are independent requests; do not serialize an extra round trip
+		// before the first entries can render.
+		await Promise.all([this.refresh(), this.load()])
 	},
 
 	methods: {
@@ -217,22 +266,30 @@ export default {
 			return fromNow(published)
 		},
 
+		embedUrl(item) {
+			return `https://www.youtube-nocookie.com/embed/${item.video_id}?autoplay=1`
+		},
+
+		play(item) {
+			this.activeVideo = item.id
+		},
+
 		async refresh() {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/subscriptions'))
 				this.feeds = data.feeds ?? []
+				this.feedsFailed = false
 			} catch (error) {
 				logger.warn('Could not list subscriptions', { error })
-				this.failed = true
+				this.feedsFailed = true
 			}
 		},
 
 		/**
-		 * The next page of entries, paged on the row id.
+		 * The next page of entries, paged on publication date and row id.
 		 *
-		 * Two feeds polled in the same minute give a dozen entries the same
-		 * date to the second, so a cursor on the date either loops on them or
-		 * steps over the rest.
+		 * Entries from different feeds can share a timestamp, so the row id is
+		 * the stable tie-breaker after the publication date.
 		 */
 		async load() {
 			if (this.busy !== '' || this.allLoaded) {
@@ -257,7 +314,8 @@ export default {
 				const params = { limit: 40 }
 				const last = this.items.at(-1)
 				if (last) {
-					params.max_id = last.id
+					params.before = last.cursor
+					params.before_id = last.id
 				}
 
 				const { data } = await axios.get(
@@ -267,9 +325,10 @@ export default {
 				const page = data.items ?? []
 				this.items.push(...page)
 				this.allLoaded = page.length === 0
+				this.itemsFailed = false
 			} catch (error) {
 				logger.warn('Could not load feed entries', { error })
-				this.failed = true
+				this.itemsFailed = true
 			}
 		},
 
@@ -324,7 +383,10 @@ export default {
 				))
 			} catch (error) {
 				logger.warn('Could not import subscriptions', { error })
-				showError(error?.response?.data?.error || t('social', 'That file could not be read'))
+				const reason = error?.response?.data?.error
+				showError(reason === 'that file is larger than 5 MB'
+					? t('social', 'That file is larger than 5 MB')
+					: reason || t('social', 'That file could not be read'))
 			} finally {
 				this.busy = ''
 				event.target.value = ''
@@ -333,8 +395,8 @@ export default {
 
 		/** What failed, asked again: both lists when nothing is shown yet, else the next page. */
 		async retry() {
-			if (this.items.length > 0) {
-				this.failed = false
+			if (this.itemsFailed && this.items.length > 0 && !this.feedsFailed) {
+				this.itemsFailed = false
 				await this.load()
 				return
 			}
@@ -351,9 +413,10 @@ export default {
 		async reload() {
 			this.items = []
 			this.allLoaded = false
-			this.failed = false
-			await this.refresh()
-			await this.fetchPage()
+			this.activeVideo = null
+			this.feedsFailed = false
+			this.itemsFailed = false
+			await Promise.all([this.refresh(), this.fetchPage()])
 		},
 	},
 }
@@ -495,29 +558,103 @@ export default {
 	padding: 0;
 	list-style: none;
 
-	&__link {
-		display: flex;
-		gap: 12px;
+	&__item {
 		padding: 8px;
 		border-radius: var(--border-radius-large, 12px);
-		color: var(--color-main-text);
-		text-decoration: none;
 
 		&:hover,
-		&:focus-visible {
+		&:focus-within {
 			background: var(--color-background-hover);
 		}
+	}
+
+	&__video {
+		position: relative;
+		width: min(100%, 640px);
+		aspect-ratio: 16 / 9;
+		overflow: hidden;
+		border-radius: var(--border-radius-large, 12px);
+		background: var(--color-background-dark);
+	}
+
+	&__player,
+	&__poster,
+	&__poster img {
+		width: 100%;
+		height: 100%;
+	}
+
+	&__player {
+		border: 0;
+	}
+
+	&__close {
+		position: absolute;
+		inset-block-start: 8px;
+		inset-inline-end: 8px;
+		z-index: 1;
+		width: 36px;
+		height: 36px;
+		border: 0;
+		border-radius: 50%;
+		color: #fff;
+		background: rgb(0 0 0 / 75%);
+		font-size: 24px;
+		cursor: pointer;
+	}
+
+	&__poster {
+		display: grid;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		cursor: pointer;
+		background: var(--color-background-dark);
+	}
+
+	&__poster img {
+		position: absolute;
+		inset: 0;
+		object-fit: cover;
+	}
+
+	&__play {
+		grid-area: 1 / 1;
+		z-index: 1;
+		padding: 8px 18px;
+		border-radius: 12px;
+		color: #fff;
+		background: rgb(0 0 0 / 75%);
+		font-size: 22px;
+		transform: translate(-50%, -50%);
+	}
+
+	&__play-label {
+		grid-area: 1 / 1;
+		z-index: 1;
+		padding: 8px 12px;
+		border-radius: 12px;
+		color: #fff;
+		background: rgb(0 0 0 / 75%);
 	}
 
 	&__body {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 4px;
 		min-inline-size: 0;
+		margin-top: 6px;
 	}
 
 	&__title {
 		font-weight: bold;
+		color: var(--color-main-text);
+		text-decoration: none;
+
+		&:hover,
+		&:focus-visible {
+			text-decoration: underline;
+		}
 	}
 
 	&__meta {
@@ -531,6 +668,10 @@ export default {
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	&__source {
+		font-size: 90%;
 	}
 }
 </style>

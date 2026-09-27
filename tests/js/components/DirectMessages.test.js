@@ -48,6 +48,12 @@ function mountMessages(selectedConversationId = '') {
 	})
 }
 
+/** Run the recipient search now, cancelling the debounced watcher request. */
+async function searchImmediately(wrapper, query) {
+	clearTimeout(wrapper.vm.accountSearchTimer)
+	await wrapper.vm.searchAccounts(query)
+}
+
 describe('DirectMessages', () => {
 	let get
 	let post
@@ -220,13 +226,13 @@ describe('DirectMessages', () => {
 		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/accounts/42/following', { params: { limit: 20 } })
 		expect(wrapper.find('.direct-messages__recipient-results').text()).toContain('Bob')
 		await wrapper.find('.direct-messages__recipient-search input').setValue('bob')
-		await wrapper.vm.searchAccounts('bob')
+		await searchImmediately(wrapper, 'bob')
 		await flushPromises()
 
 		expect(wrapper.find('.direct-messages__recipient-results').text()).toContain('Bob')
 		expect(wrapper.find('.direct-messages__people-heading').text()).toContain('People you know')
 		await wrapper.find('.direct-messages__recipient-search input').setValue('@bob')
-		await wrapper.vm.searchAccounts('@bob')
+		await searchImmediately(wrapper, '@bob')
 		await flushPromises()
 		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/accounts/search', { params: { q: '@bob', limit: 8, resolve: true } })
 		expect(wrapper.find('.direct-messages__recipient-results').text()).toContain('Bob')
@@ -251,7 +257,7 @@ describe('DirectMessages', () => {
 			await wrapper.find('.direct-messages__list-heading button').trigger('click')
 			await flushPromises()
 			await wrapper.find('.direct-messages__recipient-search input').setValue(query)
-			await wrapper.vm.searchAccounts(query)
+			await searchImmediately(wrapper, query)
 			await flushPromises()
 
 			return wrapper
@@ -439,7 +445,7 @@ describe('DirectMessages', () => {
 		await wrapper.find('.direct-messages__list-heading button').trigger('click')
 		await wrapper.find('.direct-messages__recipient-search input').setValue('alice')
 		get.mockRejectedValueOnce(new Error('offline'))
-		await wrapper.vm.searchAccounts('alice')
+		await searchImmediately(wrapper, 'alice')
 		await flushPromises()
 
 		expect(wrapper.find('.direct-messages__recipient-feedback[role="alert"]').text()).toContain('Could not search for people')
@@ -448,6 +454,7 @@ describe('DirectMessages', () => {
 	it('sends a private message with the selected recipient attached automatically', async () => {
 		const wrapper = mountMessages()
 		await flushPromises()
+		wrapper.vm.newMessageOpen = true
 		wrapper.vm.newRecipient = bob
 		wrapper.vm.messageText = 'Hello there'
 		await wrapper.vm.sendMessage()
@@ -457,6 +464,40 @@ describe('DirectMessages', () => {
 			visibility: 'direct',
 		})
 		expect(wrapper.vm.messageText).toBe('')
+	})
+
+	it('does not route a new message through the conversation that was open before composing', async () => {
+		const alice = { id: 'https://remote.example/users/alice', acct: 'alice@remote.example', display_name: 'Alice' }
+		const carol = { id: 'https://elsewhere.example/users/carol', acct: 'carol@elsewhere.example', display_name: 'Carol' }
+		get.mockResolvedValueOnce({ data: [{ ...structuredClone(conversation), accounts: [alice] }] })
+		const wrapper = mountMessages('10')
+		await flushPromises()
+		wrapper.vm.newMessageOpen = true
+		wrapper.vm.newRecipient = carol
+		wrapper.vm.messageText = 'A private note'
+
+		await wrapper.vm.sendMessage()
+
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
+			status: '@carol@elsewhere.example A private note',
+			visibility: 'direct',
+		})
+	})
+
+	it('ignores a recipient left over after leaving the new-message panel', async () => {
+		const wrapper = mountMessages('10')
+		await flushPromises()
+		wrapper.vm.newRecipient = { id: 'https://elsewhere.example/users/carol', acct: 'carol@elsewhere.example' }
+		wrapper.vm.newMessageOpen = false
+		wrapper.vm.messageText = 'A reply to Bob'
+
+		await wrapper.vm.sendMessage()
+
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
+			status: '@bob@remote.example A reply to Bob',
+			visibility: 'direct',
+			in_reply_to_id: '11',
+		})
 	})
 
 	// A conversation is a thread, and two people can have several: the server
@@ -575,11 +616,80 @@ describe('DirectMessages', () => {
 		expect(wrapper.find('.direct-messages__more').exists()).toBe(false)
 	})
 
+	it('can load older unread conversations when the current page has no matches', async () => {
+		get.mockResolvedValueOnce({
+			data: [{ ...structuredClone(conversation), unread: false }],
+			headers: { link: '</index.php/apps/social/api/v1/conversations?limit=40&max_id=99>; rel="next"' },
+		})
+		const wrapper = mountMessages()
+		await flushPromises()
+		wrapper.vm.filterMode = 'unread'
+		await wrapper.vm.$nextTick()
+
+		expect(wrapper.find('.direct-messages__no-matches').text()).toContain('No conversations match')
+		const older = wrapper.find('.direct-messages__no-matches button')
+		expect(older.exists()).toBe(true)
+
+		get.mockResolvedValueOnce({ data: [{ ...structuredClone(conversation), id: '7', unread: true }] })
+		await older.trigger('click')
+		await flushPromises()
+
+		expect(wrapper.findAll('.direct-messages__conversation')).toHaveLength(1)
+		expect(wrapper.find('.direct-messages__unread-dot').exists()).toBe(true)
+	})
+
 	it('offers nothing older when the server sent no next cursor', async () => {
 		const wrapper = mountMessages()
 		await flushPromises()
 
 		expect(wrapper.find('.direct-messages__more').exists()).toBe(false)
+	})
+
+	it('can retry loading the conversation list after a failed request', async () => {
+		get.mockRejectedValueOnce(new Error('offline'))
+		const wrapper = mountMessages()
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').text()).toContain('Could not load conversations')
+		await wrapper.find('.direct-messages__retry-state button').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+		expect(wrapper.find('.direct-messages__conversation').exists()).toBe(true)
+	})
+
+	it('can retry loading a conversation after a failed request', async () => {
+		const wrapper = mountMessages()
+		await flushPromises()
+		get.mockRejectedValueOnce(new Error('offline'))
+		await wrapper.setProps({ selectedConversationId: '10' })
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').text()).toContain('Could not load this conversation')
+		await wrapper.find('.direct-messages__retry-state button').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+		expect(wrapper.findAll('.message-stub')).toHaveLength(3)
+	})
+
+	it('clears an old thread error when opening an empty conversation', async () => {
+		const emptyConversation = { id: '20', unread: false, accounts: [bob], last_status: null }
+		get.mockImplementation(async (url) => {
+			if (url.endsWith('/conversations')) {
+				return { data: [structuredClone(conversation), emptyConversation] }
+			}
+			throw new Error('offline')
+		})
+		const wrapper = mountMessages('10')
+		await flushPromises()
+		expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+
+		await wrapper.setProps({ selectedConversationId: '20' })
+		await flushPromises()
+
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+		expect(wrapper.find('.direct-messages__thread').text()).toContain('No messages in this conversation')
 	})
 
 	// Pasting a profile link is how one person sends another a profile, and

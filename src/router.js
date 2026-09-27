@@ -55,6 +55,22 @@ function getBase() {
 }
 
 /**
+ * A direct link to the private home feed must not make a visitor ask for it.
+ * The page shell is public so visitors can read the public timeline; sending
+ * them to the public local feed here prevents a predictable 401 from being
+ * shown as a broken page.
+ *
+ * @param {object} to target route
+ * @param {boolean} isPublic whether this page has no signed-in reader
+ * @return {object|undefined} the public feed route when a guest asks for home
+ */
+export function redirectGuestHome(to, isPublic) {
+	if (isPublic && (to.params.type ?? 'home') === 'home') {
+		return { name: 'timeline', params: { type: 'timeline' } }
+	}
+}
+
+/**
  * How long a restored scroll offset waits for the page to be drawn before it is
  * applied anyway. Long enough for a list to come back from the store and for a
  * page of posts to arrive over a slow connection; short enough that a view that
@@ -187,10 +203,14 @@ const router = createRouter({
 		// kept for it opens their feed rather than an empty page
 		{
 			path: '/timeline/news',
-			redirect: { name: 'timeline' },
+			redirect: { name: 'timeline', params: { type: 'home' } },
 		},
 		{
 			path: '/timeline/:type?',
+			beforeEnter: (to) => redirectGuestHome(
+				to,
+				loadState('social', 'serverData', { public: false }).public === true,
+			),
 			components: {
 				default: Timeline,
 			},

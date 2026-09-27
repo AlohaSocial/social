@@ -103,8 +103,8 @@
 			     that what somebody chose to follow can never be pushed out of
 			     their own sidebar by what happens to be busy today.
 
-			     No icon of its own, so the chevron is the only thing before
-			     the word and the children line up under it. -->
+			     The compass marks this as a place to explore, and distinguishes it
+			     from the individual lists and tags nested beneath it. -->
 			<NcAppNavigationItem
 				v-if="exploreTotal > 0"
 				ref="exploreItem"
@@ -113,6 +113,9 @@
 				:allowCollapse="true"
 				:open="exploreOpen"
 				@update:open="onExploreToggle">
+				<template #icon>
+					<IconCompass :size="20" />
+				</template>
 				<!-- Followed tags, trending tags and lists were one
 				     undifferentiated column, so which kind a row was had to be read
 				     off its icon. A caption before each run costs one line and says
@@ -384,6 +387,7 @@ export default {
 		IconTrendingUp,
 		IconAccountGroup,
 		IconFormatListBulleted,
+		IconCompass,
 		IconCancel,
 		IconSwapHorizontal,
 		IconCog,

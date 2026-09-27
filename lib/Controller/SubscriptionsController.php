@@ -30,6 +30,9 @@ use Throwable;
  * bearer-token like the client API.
  */
 class SubscriptionsController extends Controller {
+	/** A Takeout contains only channel ids; cap memory before parsing the upload. */
+	private const TAKEOUT_MAX_BYTES = 5 * 1024 * 1024;
+
 	public function __construct(
 		IRequest $request,
 		private ?string $userId,
@@ -91,19 +94,21 @@ class SubscriptionsController extends Controller {
 	/**
 	 * What those feeds have published, newest first.
 	 *
-	 * Paged on the row id: two feeds read in the same minute give a dozen
-	 * entries the same date to the second, and a cursor on the date either
-	 * loops on them or steps over the rest.
+	 * Ordered and paged by publication time, with the row id as a stable
+	 * tie-breaker when different feeds publish at the same second.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/subscriptions/timeline')]
-	public function timeline(int $limit = 40, int $max_id = 0): DataResponse {
+	public function timeline(int $limit = 40, int $max_id = 0, string $before = '', int $before_id = 0): DataResponse {
 		if ($this->userId === null) {
 			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
 		}
+		if ($before !== '' && ($before_id <= 0 || strtotime($before) === false)) {
+			return new DataResponse(['error' => 'invalid timeline cursor'], Http::STATUS_BAD_REQUEST);
+		}
 
 		return new DataResponse([
-			'items' => $this->subscriptionService->timeline($this->userId, $limit, $max_id),
+			'items' => $this->subscriptionService->timeline($this->userId, $limit, $max_id, $before, $before_id),
 		]);
 	}
 
@@ -121,9 +126,29 @@ class SubscriptionsController extends Controller {
 			return new DataResponse(['error' => 'no file was uploaded'], Http::STATUS_BAD_REQUEST);
 		}
 
-		$csv = file_get_contents($file['tmp_name']);
+		if (($file['size'] ?? 0) > self::TAKEOUT_MAX_BYTES) {
+			return new DataResponse(
+				['error' => 'that file is larger than 5 MB'],
+				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
+			);
+		}
+
+		$path = $file['tmp_name'] ?? '';
+		if ($path === '') {
+			return new DataResponse(['error' => 'that file could not be read'], Http::STATUS_BAD_REQUEST);
+		}
+
+		// The upload metadata is supplied by PHP, but cap the actual read too:
+		// the size field can be missing in tests or malformed by another caller.
+		$csv = file_get_contents($path, false, null, 0, self::TAKEOUT_MAX_BYTES + 1);
 		if ($csv === false) {
 			return new DataResponse(['error' => 'that file could not be read'], Http::STATUS_BAD_REQUEST);
+		}
+		if (strlen($csv) > self::TAKEOUT_MAX_BYTES) {
+			return new DataResponse(
+				['error' => 'that file is larger than 5 MB'],
+				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
+			);
 		}
 
 		try {

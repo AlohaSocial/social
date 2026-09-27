@@ -3,8 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import ProfileMediaGrid from '../../../src/components/ProfileMediaGrid.vue'
+
+afterEach(() => {
+	vi.unstubAllGlobals()
+})
 
 /**
  * The methods are pure, so they are exercised directly rather than through a
@@ -83,6 +87,28 @@ describe('ProfileMediaGrid', () => {
 
 		it('falls back to the full picture when there is no preview', () => {
 			expect(grid().toTile(post([{ url: 'full.jpg', type: 'image' }])).preview).toBe('full.jpg')
+		})
+
+		it('uses a video element when the preview URL is the video itself', () => {
+			const tile = grid().toTile(post([{
+				type: 'video',
+				url: 'clip.mp4',
+				preview_url: 'clip.mp4',
+			}]))
+
+			expect(tile.preview).toBeNull()
+			expect(tile.videoSource).toBe('clip.mp4')
+		})
+
+		it('uses the still poster when a video has a separate preview image', () => {
+			const tile = grid().toTile(post([{
+				type: 'video',
+				url: 'clip.mp4',
+				preview_url: 'poster.jpg',
+			}]))
+
+			expect(tile.preview).toBe('poster.jpg')
+			expect(tile.videoSource).toBeNull()
 		})
 
 		it('draws nothing rather than a broken image once one has failed', () => {
@@ -170,6 +196,43 @@ describe('ProfileMediaGrid', () => {
 			}
 
 			expect(ProfileMediaGrid.computed.tiles.call(context)).toHaveLength(1)
+		})
+	})
+
+	describe('video preview loading', () => {
+		it('does not fetch fallback video tiles until they approach the viewport', () => {
+			let callback
+			const observe = vi.fn()
+			const unobserve = vi.fn()
+			vi.stubGlobal('IntersectionObserver', class {
+				constructor(onEntries, options) {
+					callback = onEntries
+					expect(options.rootMargin).toBe('120px')
+					this.observe = observe
+					this.unobserve = unobserve
+				}
+			})
+
+			const video = { src: '', dataset: { source: 'clip.mp4' }, preload: 'none' }
+			const context = grid({ $refs: { videoPreviews: [video] }, videoObserver: null })
+			context.observeVideoPreviews()
+
+			expect(video.src).toBe('')
+			expect(observe).toHaveBeenCalledWith(video)
+
+			callback([{ isIntersecting: false, target: video }])
+			expect(video.src).toBe('')
+
+			callback([{ isIntersecting: true, target: video }])
+			expect(video.src).toBe('clip.mp4')
+			expect(video.preload).toBe('metadata')
+			expect(unobserve).toHaveBeenCalledWith(video)
+		})
+
+		it('seeks past the opening frame when a video loads', () => {
+			const video = { duration: 2, currentTime: 0 }
+			grid().showVideoFrame({ target: video })
+			expect(video.currentTime).toBe(1)
 		})
 	})
 })
