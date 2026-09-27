@@ -491,7 +491,6 @@ import Close from 'vue-material-design-icons/Close.vue'
 import FolderImage from 'vue-material-design-icons/FolderImage.vue'
 import FileGifBox from 'vue-material-design-icons/FileGifBox.vue'
 import Paperclip from 'vue-material-design-icons/Paperclip.vue'
-import debounce from 'debounce'
 import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -518,7 +517,7 @@ import { isKnownVisibility } from '../Visibility/VisibilitiesInfos.js'
 import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
 import Tribute from 'tributejs'
-import { escapeHtml, hashtagChip, mentionChip, mentionMenuItem } from '../../utils/mentionTemplates.js'
+import { mentionTributeOptions } from '../../utils/mentionTribute.js'
 import eventBus from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
@@ -859,86 +858,7 @@ export default {
 			replyTo: this.inReplyTo,
 			/** the post this one quotes, as the timeline handed it over */
 			quoteOf: null,
-			tributeOptions: {
-				spaceSelectsMatch: true,
-				collection: [
-					{
-						trigger: '@',
-						lookup(item) {
-							return item.key + item.value
-						},
-
-						menuItemTemplate(item) {
-							return mentionMenuItem(item.original)
-						},
-
-						selectTemplate(item) {
-							return mentionChip(item.original)
-						},
-
-						values: debounce(async (text, populate) => {
-							if (text.length < 1) {
-								populate([])
-							}
-
-							const response = await this.remoteSearchAccounts(text)
-
-							const users = response.data.result.accounts.map((user) => ({
-								key: user.preferredUsername,
-								value: user.account,
-								url: user.url,
-								avatar: user.local
-									? generateUrl('/avatar/{user}/32', { user: user.preferredUsername })
-									: generateUrl('apps/social/api/v1/global/actor/avatar?id={id}', { id: user.id }),
-							}))
-
-							logger.debug('Found accounts for a mention', { count: users.length })
-							populate(users)
-						}, 200),
-					},
-					{
-						trigger: '#',
-						menuItemTemplate(item) {
-							return escapeHtml(item.original.value)
-						},
-
-						selectTemplate(item) {
-							let tag
-							if (typeof item === 'undefined') {
-								tag = this.currentMentionTextSnapshot
-							} else {
-								tag = item.original.value
-							}
-							return hashtagChip(tag, generateUrl('/timeline/tags/{tag}', { tag }))
-						},
-
-						values: debounce(async (text, populate) => {
-							if (text.length < 1) {
-								populate([])
-							}
-
-							const response = await this.remoteSearchHashtags(text)
-							const tags = [
-								...(response.data.result.exact && !Array.isArray(response.data.result.exact) ? [{ key: response.data.result.exact, value: response.data.result.exact }] : []),
-								...response.data.result.tags.map(({ hashtag }) => ({ key: hashtag, value: hashtag })),
-							]
-
-							logger.debug('Found hashtags for a mention', { count: tags.length })
-							populate(tags)
-						}, 200),
-					},
-				],
-
-				noMatchTemplate() {
-					if (this.current.collection.trigger === '#') {
-						if (this.current.mentionText === '') {
-							return undefined
-						} else {
-							return '<li data-index="0">#' + escapeHtml(this.current.mentionText) + '</li>'
-						}
-					}
-				},
-			},
+			tributeOptions: mentionTributeOptions(),
 
 			/** when the refused-drop notice goes away */
 			refusalTimer: null,
@@ -2460,14 +2380,6 @@ export default {
 			// only the quote goes, unlike closeReply(): the message is the
 			// reader's own and taking the embed back is no reason to lose it
 			this.quoteOf = null
-		},
-
-		remoteSearchAccounts(text) {
-			return axios.get(generateUrl('apps/social/api/v1/global/accounts/search'), { params: { search: text } })
-		},
-
-		remoteSearchHashtags(text) {
-			return axios.get(generateUrl('apps/social/api/v1/global/tags/search'), { params: { search: text } })
 		},
 
 		deletePreview(key) {
