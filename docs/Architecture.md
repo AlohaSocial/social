@@ -1666,7 +1666,7 @@ the API stays the shape every Mastodon client expects.
 *The filter row* is `TimelineSwitcher` again, with no `to` on any option, so the
 choice is the page's own state: `src/services/notifications.js` holds the seven
 filters and `excludeTypesFor()` turns one into the `exclude_types` the server
-takes (`ApiController::notifications()`). The choice is part of the store's
+takes (`TimelineApiController::notifications()`). The choice is part of the store's
 `params`, so it is part of `getTimelineIdentity` — changing it refetches rather
 than hiding rows already on screen — and `rememberedFilter()`/`rememberFilter()`
 keep it in `localStorage` under `social.notificationsFilter`, inside a

@@ -691,7 +691,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testSettingAMarkerNeedsAWriteToken(): void {
-		$this->route = 'social.Api.markersSet';
+		$this->route = 'social.TimelineApi.markersSet';
 		$this->bearerFor(['read']);
 
 		$this->assertInsufficientScope(
@@ -701,7 +701,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testReadingMarkersIsSatisfiedByAReadToken(): void {
-		$this->route = 'social.Api.markersGet';
+		$this->route = 'social.TimelineApi.markersGet';
 		$this->bearerFor(['read']);
 		$this->markerService->method('get')->willReturn([]);
 
@@ -905,7 +905,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testOneGranularReadScopeIsNotPermissionToReadSomethingElse(): void {
-		$this->route = 'social.Api.notifications';
+		$this->route = 'social.TimelineApi.notifications';
 		$this->bearerFor(['read:lists']);
 
 		$this->assertInsufficientScope(

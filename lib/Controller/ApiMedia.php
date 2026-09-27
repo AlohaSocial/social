@@ -483,30 +483,6 @@ trait ApiMedia {
 		}
 	}
 
-	// --- where somebody stopped watching ----------------------------------
-
-	/**
-	 * The videos the reader was in the middle of, newest first.
-	 *
-	 * Neither the ones they barely started nor the ones they finished: a row
-	 * that offers back a video somebody watched to the end is a row nobody
-	 * presses twice.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/videos/continue')]
-	public function videosContinue(int $limit = 20): DataResponse {
-		try {
-			$this->initViewer(true);
-
-			return new DataResponse(
-				$this->watchService->unfinished($this->viewer, $limit), Http::STATUS_OK
-			);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
 	/**
 	 * An HLS playlist, with every URI in it pointed back through this server.
 	 *
