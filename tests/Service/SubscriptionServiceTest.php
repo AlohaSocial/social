@@ -306,7 +306,7 @@ class SubscriptionServiceTest extends TestCase {
 		$this->client->method('getAsync')->willReturn($promise);
 
 		$this->feedsRequest->expects($this->exactly(4))->method('due')
-			->with(SubscriptionService::PARALLEL, $this->anything())
+			->with(SubscriptionService::PARALLEL, $this->anything(), $this->anything())
 			->willReturnOnConsecutiveCalls(
 				$this->feeds(1, SubscriptionService::PARALLEL),
 				$this->feeds(11, SubscriptionService::PARALLEL),

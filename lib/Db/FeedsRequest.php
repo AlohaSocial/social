@@ -317,12 +317,15 @@ class FeedsRequest extends CoreRequestBuilder {
 	 * The feeds due a re-read. What the cron walks.
 	 *
 	 * The ones never read come first — a feed somebody has just followed is
-	 * stored unread and waits for this — then the rest, stalest first. Two
+	 * stored unread and waits for this — then failed reads after a short retry
+	 * interval, then the rest, stalest first. Two
 	 * queries rather than one `ORDER BY fetched_at`, because where NULL sorts
 	 * is not portable: first on MySQL and SQLite, last on PostgreSQL, where a
-	 * new subscription would wait behind every stale one.
+	 * new subscription would wait behind every stale one. A recent failure is
+	 * due before an ordinary stale feed, while successful reads keep their
+	 * longer interval.
 	 */
-	public function due(int $limit, int $olderThan): array {
+	public function due(int $limit, int $olderThan, int $failedBefore): array {
 		$fresh = $this->getQueryBuilder();
 		$fresh->select('id', 'url', 'etag', 'modified_at')
 			->from(self::TABLE_FEEDS)
@@ -335,10 +338,27 @@ class FeedsRequest extends CoreRequestBuilder {
 			return $rows;
 		}
 
+		$retry = $this->getQueryBuilder();
+		$retry->select('id', 'url', 'etag', 'modified_at')
+			->from(self::TABLE_FEEDS)
+			->where($retry->expr()->neq('error', $retry->createNamedParameter('')))
+			->andWhere($retry->expr()->lt(
+				'fetched_at',
+				$retry->createNamedParameter(new DateTime('@' . $failedBefore), IQueryBuilder::PARAM_DATE)
+			))
+			->orderBy('fetched_at', 'asc')
+			->setMaxResults($limit - count($rows));
+		$rows = array_merge($rows, $this->rowsOf($retry));
+
+		if (count($rows) >= $limit) {
+			return $rows;
+		}
+
 		$qb = $this->getQueryBuilder();
 		$qb->select('id', 'url', 'etag', 'modified_at')
 			->from(self::TABLE_FEEDS)
-			->where($qb->expr()->lt(
+			->where($qb->expr()->eq('error', $qb->createNamedParameter('')))
+			->andWhere($qb->expr()->lt(
 				'fetched_at',
 				$qb->createNamedParameter(new DateTime('@' . $olderThan), IQueryBuilder::PARAM_DATE)
 			))

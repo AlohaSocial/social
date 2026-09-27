@@ -54,6 +54,9 @@ class SubscriptionService {
 	/** How often a feed is re-read. */
 	public const INTERVAL = 3600;
 
+	/** A failed first read should get another chance on the next cron pass. */
+	public const FAILURE_RETRY = 15 * 60;
+
 	/** How many feeds one account may follow. */
 	public const MAX_FEEDS = 200;
 
@@ -258,7 +261,12 @@ class SubscriptionService {
 
 		while (time() < $deadline) {
 			$batch = [];
-			foreach ($this->feedsRequest->due(self::PARALLEL, time() - self::INTERVAL) as $feed) {
+			$now = time();
+			foreach ($this->feedsRequest->due(
+				self::PARALLEL,
+				$now - self::INTERVAL,
+				$now - self::FAILURE_RETRY
+			) as $feed) {
 				// a read whose outcome could not be recorded would be due
 				// again at once; once a pass is enough
 				if (!isset($seen[(int)$feed['id']])) {

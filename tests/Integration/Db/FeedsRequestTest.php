@@ -93,6 +93,22 @@ class FeedsRequestTest extends TestCase {
 		$this->assertLessThan(array_search($stale, $due, true), array_search($fresh, $due, true));
 	}
 
+	/** A failed first read retries promptly; a healthy feed keeps its hourly interval. */
+	public function testARecentFailureIsDueBeforeARecentSuccessfulRead(): void {
+		$failed = $this->feeds->create(self::USER, 'https://feeds.example/failed', '', '');
+		$this->feeds->recordRead($failed, '', '', '', '', 'could not be read');
+		$healthy = $this->feeds->create(self::USER, 'https://feeds.example/healthy', '', '');
+		$this->feeds->recordRead($healthy, '', '', '', '', '');
+
+		$due = array_map(
+			static fn (array $row): int => (int)$row['id'],
+			$this->feeds->due(1000, time() - 3600, time() + 1)
+		);
+
+		$this->assertContains($failed, $due, 'a failed first read should not sleep for the normal one-hour interval');
+		$this->assertNotContains($healthy, $due, 'successful feeds keep the one-hour interval');
+	}
+
 	/**
 	 * A subscribed feed is shown like a video timeline: the newest publication
 	 * is at the top, and moving to the next page neither repeats nor skips two
