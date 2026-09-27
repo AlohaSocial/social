@@ -888,8 +888,11 @@ class FilterController extends Controller {
 	 */
 	private function checkTokenScope(array $accepted): void {
 		foreach ($accepted as $scope) {
-			foreach ($this->client->getAuthScopes() as $granted) {
-				if ($granted === $scope || str_starts_with($granted, $scope . ':')) {
+			$broad = strstr($scope, ':', true);
+			$broad = ($broad === false) ? $scope : $broad;
+
+			foreach ($this->client?->getAuthScopes() ?? [] as $granted) {
+				if ($granted === $scope || $granted === $broad) {
 					return;
 				}
 			}

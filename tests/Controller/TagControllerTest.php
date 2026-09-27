@@ -323,4 +323,29 @@ class TagControllerTest extends TestCase {
 			$this->controller('Bearer readonly')->followedTags()->getStatus()
 		);
 	}
+
+	public function testAnUnrelatedGranularScopeMayNotFollow(): void {
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:statuses', 'write:statuses']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(
+			Http::STATUS_FORBIDDEN,
+			$this->controller('Bearer statuses')->follow('nextcloud')->getStatus()
+		);
+		$this->assertSame([], $this->writes);
+	}
+
+	/** what Mastodon asks for, and what a client that asks for exactly that is granted */
+	public function testTheFollowsScopesAreEnough(): void {
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:follows', 'write:follows']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer follows')->follow('nextcloud')->getStatus());
+		$this->page([]);
+		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer follows')->followedTags()->getStatus());
+	}
 }

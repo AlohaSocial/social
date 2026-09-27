@@ -87,7 +87,7 @@ class TagController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/followed_tags')]
 	public function followedTags(int $limit = 20, int $max_id = 0, int $min_id = 0): Response {
 		try {
-			$this->initViewer();
+			$this->initViewer(['read:follows']);
 			$limit = max(1, min(self::MAX_LIMIT, $limit));
 
 			$rows = $this->followedTagsRequest->getByActor(
@@ -111,7 +111,7 @@ class TagController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/tags/{hashtag}')]
 	public function get(string $hashtag): DataResponse {
 		try {
-			$this->initViewer();
+			$this->initViewer(['read:follows', 'read:statuses']);
 			$tag = $this->tag($hashtag);
 
 			return new DataResponse(
@@ -137,7 +137,7 @@ class TagController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/tags/{hashtag}/follow')]
 	public function follow(string $hashtag): DataResponse {
 		try {
-			$this->initViewer(['write', 'follow']);
+			$this->initViewer(['write:follows', 'follow']);
 			$tag = $this->tag($hashtag);
 			$this->followedTagsRequest->save($this->viewer->getId(), $tag);
 			// posts carrying it are part of their home timeline from now on,
@@ -156,7 +156,7 @@ class TagController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/tags/{hashtag}/unfollow')]
 	public function unfollow(string $hashtag): DataResponse {
 		try {
-			$this->initViewer(['write', 'follow']);
+			$this->initViewer(['write:follows', 'follow']);
 			$tag = $this->tag($hashtag);
 			$this->followedTagsRequest->delete($this->viewer->getId(), $tag);
 			$this->timelineRevisionService->bumpForActor($this->viewer->getId());
@@ -191,7 +191,7 @@ class TagController extends Controller {
 	 * @throws ClientNotFoundException there is nobody to answer for
 	 * @throws InsufficientScopeException the token is fine, its grant is not
 	 */
-	private function initViewer(array $scopes = ['read']): void {
+	private function initViewer(array $scopes): void {
 		try {
 			$userId = $this->currentSession($scopes);
 			$this->viewer = $this->accountService->getActorFromUserId($userId);
@@ -240,8 +240,11 @@ class TagController extends Controller {
 	 */
 	private function checkTokenScope(array $accepted): void {
 		foreach ($accepted as $scope) {
-			foreach ($this->client->getAuthScopes() as $granted) {
-				if ($granted === $scope || str_starts_with($granted, $scope . ':')) {
+			$broad = strstr($scope, ':', true);
+			$broad = ($broad === false) ? $scope : $broad;
+
+			foreach ($this->client?->getAuthScopes() ?? [] as $granted) {
+				if ($granted === $scope || $granted === $broad) {
 					return;
 				}
 			}
