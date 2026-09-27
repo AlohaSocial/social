@@ -35,7 +35,7 @@ use Throwable;
  *
  * The whole request is kept, not a rendered post, because publishing has to
  * take the same path an immediate post takes — `PostService::createPost()`,
- * over a `Post` built exactly as `ApiController::statusNew()` builds one. A
+ * over a `Post` built exactly as `StatusApiController::statusNew()` builds one. A
  * rendered note stored now would be built by one code path and federated by
  * another, and the two would drift: the quote approval, the language fallback
  * and the source snapshot all happen inside `createPost()`.
@@ -288,7 +288,7 @@ class ScheduledStatusService {
 	 * The visibility the post will be published with, resolved now rather than
 	 * when it goes out.
 	 *
-	 * `ApiController::visibilityOf()` decides the same thing for an immediate
+	 * `StatusApiController::visibilityOf()` decides the same thing for an immediate
 	 * post, and this has to agree with it. Resolving an absent visibility at
 	 * publishing time instead would read the account's default as it is then:
 	 * an author who schedules a public post and later switches their default to

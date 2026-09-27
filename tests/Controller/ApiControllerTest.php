@@ -713,7 +713,7 @@ class ApiControllerTest extends TestCase {
 	// token scopes
 
 	public function testAWriteRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read']);
 		$this->postService->expects($this->never())->method('createPost');
 
@@ -894,7 +894,7 @@ class ApiControllerTest extends TestCase {
 	 * the consent screen had named.
 	 */
 	public function testOneGranularScopeIsNotPermissionForAnother(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['write:favourites']);
 		$this->postService->expects($this->never())->method('createPost');
 
@@ -948,7 +948,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testReactingToAPostRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.statusReact';
+		$this->route = 'social.StatusApi.statusReact';
 		$this->verb = 'POST';
 		$this->bearerFor(['read']);
 
@@ -970,7 +970,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAGranularWriteScopeSatisfiesAWriteRoute(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read', 'write:statuses']);
 		$this->request->method('getParams')->willReturn(['status' => 'hi']);
 
@@ -985,7 +985,7 @@ class ApiControllerTest extends TestCase {
 	// statusNew()
 
 	public function testStatusNewCarriesTheContentWarningToThePost(): void {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['read', 'write']);
 		$this->request->method('getParams')->willReturn([
 			'status' => 'who shot him',
@@ -1010,7 +1010,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testABearerTokenIsScopedEvenWhenASessionExists(): void {
 		// the token's grant must not silently widen to the cookie's full access
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->loggedInAs();
 		$this->bearerFor(['read']);
 		$this->postService->expects($this->never())->method('createPost');
@@ -3426,7 +3426,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testStatusDeleteNeedsAWriteToken(): void {
-		$this->route = 'social.Api.statusDelete';
+		$this->route = 'social.StatusApi.statusDelete';
 		$this->bearerFor(['read']);
 		$this->streamService->expects($this->never())->method('deleteLocalItem');
 
@@ -3497,7 +3497,7 @@ class ApiControllerTest extends TestCase {
 	// Idempotency-Key
 
 	private function bearerPostingA(string $statusNid): Stream {
-		$this->route = 'social.Api.statusNew';
+		$this->route = 'social.StatusApi.statusNew';
 		$this->bearerFor(['write']);
 		$this->request->method('getParams')->willReturn(['status' => 'hello']);
 

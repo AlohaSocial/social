@@ -34,7 +34,7 @@ use Throwable;
  * A route of its own rather than another method on `ApiController` because
  * the revisions are a subsystem of their own — their own table, their own
  * request class and their own entity — and because the visibility rule it
- * needs is the one `ApiController::statusGet()` already applies and nothing
+ * needs is the one `StatusApiController::statusGet()` already applies and nothing
  * more.
  *
  * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and

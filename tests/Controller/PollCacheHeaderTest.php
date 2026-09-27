@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
-use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\StatusApiController;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
@@ -59,27 +59,27 @@ class PollCacheHeaderTest extends TestCase {
 	}
 
 	/** the real controller, with only the two things these two methods touch */
-	private function controller(string $pollTag = ''): ApiController {
-		$controller = $this->getMockBuilder(ApiController::class)
+	private function controller(string $pollTag = ''): StatusApiController {
+		$controller = $this->getMockBuilder(StatusApiController::class)
 			->disableOriginalConstructor()
 			->onlyMethods([])
 			->getMock();
 
 		(new ReflectionProperty(Controller::class, 'request'))
 			->setValue($controller, $this->request);
-		(new ReflectionProperty(ApiController::class, 'pollTag'))
+		(new ReflectionProperty(StatusApiController::class, 'pollTag'))
 			->setValue($controller, $pollTag);
 
 		return $controller;
 	}
 
-	private function tagged(ApiController $controller, DataResponse $response): JSONResponse {
-		return (new ReflectionMethod(ApiController::class, 'tagged'))
+	private function tagged(StatusApiController $controller, DataResponse $response): JSONResponse {
+		return (new ReflectionMethod(StatusApiController::class, 'tagged'))
 			->invoke($controller, $response);
 	}
 
-	private function notModified(ApiController $controller, string $tag): ?JSONResponse {
-		return (new ReflectionMethod(ApiController::class, 'notModified'))
+	private function notModified(StatusApiController $controller, string $tag): ?JSONResponse {
+		return (new ReflectionMethod(StatusApiController::class, 'notModified'))
 			->invoke($controller, $tag);
 	}
 
@@ -170,7 +170,7 @@ class PollCacheHeaderTest extends TestCase {
 		$this->assertNull($this->notModified($controller, 'h123-20'));
 		$this->assertSame(
 			self::TAG,
-			(new ReflectionProperty(ApiController::class, 'pollTag'))->getValue($controller)
+			(new ReflectionProperty(StatusApiController::class, 'pollTag'))->getValue($controller)
 		);
 	}
 }

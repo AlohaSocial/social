@@ -136,7 +136,7 @@ class ActionServiceTest extends TestCase {
 	/**
 	 * `translate` used to be one of these, and returned the post unchanged —
 	 * which a client cannot tell from a translation. It is a route of its own
-	 * now (`ApiController::statusTranslate()`), answering a Translation
+	 * now (`StatusApiController::statusTranslate()`), answering a Translation
 	 * entity from a real provider, so asking for it here is asking for an
 	 * action that does not exist.
 	 */

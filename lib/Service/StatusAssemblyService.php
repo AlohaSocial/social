@@ -27,7 +27,7 @@ use Throwable;
  *
  * Two things here keep a request instead of a post — one scheduled for later,
  * one held for a moderator — and both have to turn it back into exactly the
- * `Post` that `ApiController::statusNew()` assembles from a live request. A
+ * `Post` that `StatusApiController::statusNew()` assembles from a live request. A
  * note built by one path and federated by another drifts: the quote approval,
  * the language fallback and the source snapshot all happen inside
  * `PostService::createPost()`, and what reaches it has to be the same shape
@@ -126,7 +126,7 @@ class StatusAssemblyService {
 	 * world-readable, which decides how the bytes may be cached on the way to a
 	 * reader.
 	 *
-	 * The twin of `ApiController::scopeMediaToVisibility()`, which does this
+	 * The twin of `StatusApiController::scopeMediaToVisibility()`, which does this
 	 * for an immediate post and is private to the controller. Both exist
 	 * because the answer is only known when the post is created.
 	 *

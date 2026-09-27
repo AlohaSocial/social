@@ -304,7 +304,7 @@ entity's half-word, and `description` is not the property a peer reads alt text
 from.
 
 The pieces are all present and correctly written — `MediaAttachment::asDocument()`
-emits exactly the right object, and `ApiController::statusNew()` sets
+emits exactly the right object, and `StatusApiController::statusNew()` sets
 `ACore::FORMAT_ACTIVITYPUB` on the attachments of a post as it is created, so
 the original `Create` that goes out over the wire is right. What is wrong is
 everything *after* that: `StreamRequest::save()` deliberately stores

@@ -17,6 +17,7 @@ use OCA\Social\Controller\ApiController;
 use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\ScheduledStatusApiController;
+use OCA\Social\Controller\StatusApiController;
 use OCA\Social\Controller\TimelineApiController;
 use ReflectionMethod;
 
@@ -32,6 +33,7 @@ final class ApiControllerRouter {
 	/** @var list<class-string> the controllers that extend MastodonApiController */
 	public const CONTROLLERS = [
 		ApiController::class,
+		StatusApiController::class,
 		AccountApiController::class,
 		MediaApiController::class,
 		TimelineApiController::class,

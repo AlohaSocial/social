@@ -15,6 +15,7 @@ use OCA\Social\Controller\ApiController;
 use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\QueueController;
+use OCA\Social\Controller\StatusApiController;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -253,7 +254,7 @@ class RateLimitServiceTest extends TestCase {
 	 * opposite of the truth.
 	 */
 	public function testARouteWithItsOwnLimitIsLeftToNextcloud(): void {
-		$api = $this->createPartialMock(ApiController::class, []);
+		$api = $this->createPartialMock(StatusApiController::class, []);
 
 		$this->assertFalse(
 			$this->service->appliesDefaultTo($api, 'statusNew'),
@@ -280,7 +281,7 @@ class RateLimitServiceTest extends TestCase {
 	 * shows up here rather than silently doubling its limiter.
 	 */
 	public function testBothRateLimitAttributesCount(): void {
-		$statusNew = new \ReflectionMethod(ApiController::class, 'statusNew');
+		$statusNew = new \ReflectionMethod(StatusApiController::class, 'statusNew');
 		$this->assertNotEmpty(
 			array_merge(
 				$statusNew->getAttributes(UserRateLimit::class),
