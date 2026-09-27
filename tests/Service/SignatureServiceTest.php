@@ -113,10 +113,8 @@ class SignatureServiceTest extends TestCase {
 		);
 
 		$this->service = new SignatureService(
-			$this->actorsRequest,
 			$this->cacheActorService,
 			$this->cacheActorsRequest,
-			$this->createMock(CurlService::class),
 			$configService,
 			new HttpSignatureService(
 				$this->actorsRequest, $this->createMock(InstanceActorService::class), new NullLogger()
@@ -1211,10 +1209,8 @@ class SignatureServiceTest extends TestCase {
 		);
 
 		$this->service = new SignatureService(
-			$this->actorsRequest,
 			$this->cacheActorService,
 			$this->cacheActorsRequest,
-			$this->createMock(CurlService::class),
 			$configService,
 			new HttpSignatureService(
 				$this->actorsRequest, $this->createMock(InstanceActorService::class), new NullLogger()

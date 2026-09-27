@@ -14,7 +14,6 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\MediaBlocksRequest;
 use OCA\Social\Db\RelayRequest;
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\InstancePath;
@@ -31,7 +30,6 @@ use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\HttpSignatureService;
 use OCA\Social\Service\ImageConversionService;
 use OCA\Social\Service\InstanceActorService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\ReportForwardService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\SignatureService;
@@ -47,7 +45,6 @@ use OCP\IAppConfig;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
-use OCP\IRequest;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -116,9 +113,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->appConfig,
 			$this->createMock(IUserConfig::class),
 			$this->config,
-			$this->createMock(IRequest::class),
 			$this->createMock(IURLGenerator::class),
-			$this->createMock(MiscService::class),
 		);
 
 		$this->fediverseService = $this->createMock(FediverseService::class);
@@ -176,10 +171,8 @@ class OutboundFederationWireTest extends TestCase {
 		$cacheFactory->method('createDistributed')->willReturn($this->createMock(ICache::class));
 
 		return new SignatureService(
-			$this->actorsRequest,
 			$this->createMock(CacheActorService::class),
 			$this->createMock(CacheActorsRequest::class),
-			$curlService,
 			$this->configService,
 			$this->httpSignatureService(),
 			$cacheFactory,
@@ -263,7 +256,6 @@ class OutboundFederationWireTest extends TestCase {
 
 	private function activityService(CurlService $curlService): ActivityService {
 		$service = new ActivityService(
-			$this->createMock(StreamRequest::class),
 			$this->createMock(FollowsRequest::class),
 			$this->createMock(CacheActorsRequest::class),
 			$this->signatureService($curlService),
@@ -595,8 +587,7 @@ class OutboundFederationWireTest extends TestCase {
 			});
 		$this->configService = new ConfigService(
 			'alice', $this->appConfig, $this->createMock(IUserConfig::class), $this->config,
-			$this->createMock(IRequest::class), $this->createMock(IURLGenerator::class),
-			$this->createMock(MiscService::class),
+			$this->createMock(IURLGenerator::class),
 		);
 
 		$this->curlService()->retrieveObject('https://' . self::REMOTE . '/users/bob');

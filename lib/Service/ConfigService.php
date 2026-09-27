@@ -17,7 +17,6 @@ use OCP\Config\Exceptions\TypeConflictException;
 use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
-use OCP\IRequest;
 use OCP\IURLGenerator;
 
 /**
@@ -486,9 +485,7 @@ class ConfigService {
 		private IAppConfig $appConfig,
 		private IUserConfig $userConfig,
 		private IConfig $config,
-		private IRequest $request,
 		private IURLGenerator $urlGenerator,
-		private MiscService $miscService,
 	) {
 		$this->userId = $userId;
 	}

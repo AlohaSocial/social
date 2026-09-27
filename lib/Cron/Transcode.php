@@ -9,12 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Cron;
 
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\VideoTranscodeService;
 use OCA\Social\Service\VideoTranscodingWorker;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
-use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -39,8 +37,6 @@ class Transcode extends TimedJob {
 		ITimeFactory $time,
 		private ?VideoTranscodeService $videoTranscodeService = null,
 		private ?VideoTranscodingWorker $worker = null,
-		private ?ConfigService $configService = null,
-		private ?IConfig $config = null,
 		private ?LoggerInterface $logger = null,
 	) {
 		parent::__construct($time);

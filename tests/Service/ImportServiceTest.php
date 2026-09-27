@@ -74,7 +74,7 @@ class ImportServiceTest extends TestCase {
 		$this->moderationService = $this->createMock(ModerationService::class);
 		$this->relayService = $this->createMock(RelayService::class);
 		$this->service = new ImportService(
-			$configService, $this->miscService, $this->moderationService, $this->relayService
+			$this->miscService, $this->moderationService, $this->relayService
 		);
 	}
 

@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tools\Db;
 
-use DateInterval;
 use DateTime;
 use Exception;
 use OCA\Social\Tools\Exceptions\RowNotFoundException;
@@ -519,24 +518,6 @@ class ExtendedQueryBuilder implements IExtendedQueryBuilder {
 	#[\Override]
 	public function limitToUserId(string $userId): IExtendedQueryBuilder {
 		$this->limitToDBField('user_id', $userId, false);
-
-		return $this;
-	}
-
-	/**
-	 * Limit the request to the creation
-	 *
-	 * @param int $delay
-	 *
-	 * @return ExtendedQueryBuilder
-	 * @throws Exception
-	 */
-	#[\Override]
-	public function limitToCreation(int $delay = 0): IExtendedQueryBuilder {
-		$date = new DateTime('now');
-		$date->sub(new DateInterval('PT' . $delay . 'M'));
-
-		$this->limitToDBFieldDateTime('creation', $date, true);
 
 		return $this;
 	}

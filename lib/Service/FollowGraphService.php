@@ -246,22 +246,13 @@ class FollowGraphService {
 	}
 
 	/**
-	 * The actor ids in one `following` collection, one page of it.
+	 * The actor ids in one fetched `following` collection, one page of it.
 	 *
 	 * A collection answers either with its items or with a `first` page that
 	 * has them; both shapes are in the wild and the difference is not
 	 * interesting here. Nothing pages further: a walk of somebody's entire
 	 * following list is a different act from reading the front of it, and it
 	 * is not one this instance should perform on a button press.
-	 *
-	 * @return string[]
-	 */
-	private function itemsOf(string $collection): array {
-		return $this->itemsIn($this->curlService->retrieveObject($collection));
-	}
-
-	/**
-	 * The same, from a collection already fetched.
 	 *
 	 * @param array<string, mixed> $document
 	 *

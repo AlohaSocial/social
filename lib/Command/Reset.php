@@ -90,7 +90,7 @@ class Reset extends SocialCommand {
 			try {
 				$output->writeln('');
 				$output->write('Uninstalling Social App...');
-				$this->fullUninstall($output);
+				$this->fullUninstall();
 				$output->writeln('<info>uninstalled</info>');
 			} catch (Exception $e) {
 				$output->writeln('<error>' . $e->getMessage() . '</error>');
@@ -193,7 +193,7 @@ class Reset extends SocialCommand {
 	/**
 	 * @param OutputInterface $output
 	 */
-	private function fullUninstall(OutputInterface $output) {
+	private function fullUninstall(): void {
 		$this->coreRequestBuilder->uninstallSocialTables();
 		$this->coreRequestBuilder->uninstallFromMigrations();
 		$this->coreRequestBuilder->uninstallFromJobs();

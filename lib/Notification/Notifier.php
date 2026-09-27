@@ -12,8 +12,6 @@ namespace OCA\Social\Notification;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Model\Strike;
-use OCP\Contacts\IManager;
-use OCP\Federation\ICloudIdManager;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
@@ -30,9 +28,7 @@ class Notifier implements INotifier {
 	public function __construct(
 		private IL10N $l10n,
 		protected IFactory $factory,
-		protected IManager $contactsManager,
 		protected IURLGenerator $url,
-		protected ICloudIdManager $cloudIdManager,
 	) {
 	}
 

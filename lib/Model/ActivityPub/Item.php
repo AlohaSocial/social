@@ -25,7 +25,6 @@ class Item {
 	private string $type = '';
 	private string $subType = '';
 	private string $url = '';
-	private string $attributedTo = '';
 	private string $summary = '';
 	/** @var InstancePath[] */
 	private array $instancePaths = [];

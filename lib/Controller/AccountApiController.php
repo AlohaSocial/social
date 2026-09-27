@@ -689,7 +689,7 @@ class AccountApiController extends MastodonApiController {
 	 * @param int $limit
 	 * @param int|string $max_id
 	 * @param int|string $min_id
-	 * @param int|string $since
+	 * @param int|string $since_id
 	 *
 	 * @return DataResponse
 	 */

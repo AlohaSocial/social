@@ -20,7 +20,6 @@ use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\StreamCard;
-use OCA\Social\Service\AccountService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\StatisticsService;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
@@ -55,7 +54,6 @@ class StatisticsServiceTest extends TestCase {
 		$this->service = new StatisticsService(
 			$this->streamRequest,
 			$this->followsRequest,
-			$this->createMock(AccountService::class),
 			$this->cacheActorsRequest,
 			new DurableCache($cacheFactory, new InMemoryDurableCacheRequest(), $time),
 		);

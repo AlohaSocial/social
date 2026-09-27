@@ -17,7 +17,6 @@ use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ClientService;
-use OCA\Social\Service\MiscService;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -33,7 +32,6 @@ class ClientServiceTest extends TestCase {
 		$this->service = new ClientService(
 			$this->clientRequest,
 			new SecretHasher(),
-			$this->createMock(MiscService::class),
 			$this->clientAuthRequest
 		);
 	}

@@ -11,12 +11,10 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Service\ConfigService;
-use OCA\Social\Service\MiscService;
 use OCP\Config\Exceptions\TypeConflictException;
 use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
-use OCP\IRequest;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -39,9 +37,7 @@ class ConfigServiceTest extends TestCase {
 			$this->appConfig,
 			$this->userConfig,
 			$this->config,
-			$this->createMock(IRequest::class),
 			$this->urlGenerator,
-			$this->createMock(MiscService::class),
 		);
 	}
 
@@ -137,9 +133,7 @@ class ConfigServiceTest extends TestCase {
 			$this->appConfig,
 			$this->userConfig,
 			$this->config,
-			$this->createMock(IRequest::class),
 			$this->urlGenerator,
-			$this->createMock(MiscService::class),
 		);
 
 		$this->userConfig->expects($this->never())->method('getValueString');

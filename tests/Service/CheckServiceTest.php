@@ -13,7 +13,6 @@ use Exception;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
-use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -109,7 +108,6 @@ class CheckServiceTest extends TestCase {
 			$this->followRequest,
 			$this->actorsRequest,
 			$this->cacheActorsRequest,
-			$this->createMock(StreamDestRequest::class),
 			$this->streamRequest,
 			$this->accountService,
 			$this->configService,
@@ -148,7 +146,6 @@ class CheckServiceTest extends TestCase {
 			$this->followRequest,
 			$this->actorsRequest,
 			$this->cacheActorsRequest,
-			$this->createMock(StreamDestRequest::class),
 			$this->streamRequest,
 			$this->accountService,
 			$this->configService,

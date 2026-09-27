@@ -275,7 +275,7 @@ class AnnouncementService {
 	 * @return array<string, array{count: int, me: bool, url?: string}>
 	 */
 	private function withPictures(array $reactions): array {
-		foreach ($reactions as $name => $reaction) {
+		foreach (array_keys($reactions) as $name) {
 			$emoji = $this->emojiService->byShortcode($name);
 			if ($emoji !== null) {
 				$reactions[$name]['url'] = $emoji->getUrl();

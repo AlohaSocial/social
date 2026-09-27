@@ -16,7 +16,6 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\HostBreakerRequest;
 use OCA\Social\Db\RelayRequest;
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\EmptyQueueException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -90,7 +89,6 @@ class ActivityService {
 	private ?array $localHosts = null;
 
 	public function __construct(
-		private StreamRequest $streamRequest,
 		private FollowsRequest $followsRequest,
 		private CacheActorsRequest $cacheActorsRequest,
 		private SignatureService $signatureService,

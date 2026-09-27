@@ -35,7 +35,7 @@ const GRADIENTS = [
  * @param {string} id a gradient id
  * @return {string} what it is called, for a screen reader and a tooltip
  */
-export function gradientName(id) {
+function gradientName(id) {
 	switch (id) {
 		case 'account': return t('social', 'Your colour')
 		case 'sunset': return t('social', 'Sunset')

@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Tools\Traits;
 
-use OCA\Social\Model\InstancePath;
 use OCA\Social\Tools\Exceptions\ArrayNotFoundException;
 use OCA\Social\Tools\Exceptions\ItemNotFoundException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
@@ -169,20 +168,6 @@ class TArrayToolsTest extends TestCase {
 		$this->assertFalse($this->tools->validKey('missing', $this->sample()));
 	}
 
-	public function testGetListBuildsObjectsThroughTheirImportMethod(): void {
-		$list = $this->tools->getList('paths', [
-			'paths' => [
-				['uri' => 'https://a.example/inbox', 'type' => 1],
-				['uri' => 'https://b.example/inbox', 'type' => 2],
-			],
-		], [InstancePath::class, 'import']);
-
-		$this->assertCount(2, $list);
-		$this->assertContainsOnlyInstancesOf(InstancePath::class, $list);
-		$this->assertSame('https://b.example/inbox', $list[1]->getUri());
-		$this->assertSame(2, $list[1]->getType());
-	}
-
 	public function testExtractArrayFindsTheEntryWithAMatchingValue(): void {
 		$list = [['rel' => 'self', 'href' => 'https://a.example/users/alice'], ['rel' => 'http://webfinger.net/rel/profile-page', 'href' => 'https://a.example/@alice']];
 
@@ -272,17 +257,5 @@ class TArrayToolsTest extends TestCase {
 	public function testGetBoolFallsBackWhenADottedPathCrossesAScalar(): void {
 		$this->assertTrue($this->tools->getBool('str.sub', $this->sample(), true));
 		$this->assertFalse($this->tools->getBool('str.sub', $this->sample()));
-	}
-
-	public function testGetListSkipsEntriesTheImportMethodCannotTake(): void {
-		$list = $this->tools->getList('paths', [
-			'paths' => [
-				'not-an-array',
-				['uri' => 'https://a.example/inbox', 'type' => 1],
-			],
-		], [InstancePath::class, 'import']);
-
-		$this->assertCount(1, $list);
-		$this->assertSame('https://a.example/inbox', $list[0]->getUri());
 	}
 }

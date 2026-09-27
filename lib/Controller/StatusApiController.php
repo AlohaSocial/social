@@ -804,7 +804,7 @@ class StatusApiController extends MastodonApiController {
 	/**
 	 *
 	 * @param int|string $nid
-	 * @param string $action
+	 * @param string $act
 	 *
 	 * @return DataResponse
 	 */

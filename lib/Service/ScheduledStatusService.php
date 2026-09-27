@@ -12,7 +12,6 @@ namespace OCA\Social\Service;
 use OCA\Social\Db\ScheduledStatusesRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemNotFoundException;
-use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -276,10 +275,10 @@ class ScheduledStatusService {
 	 *
 	 * @throws \Exception whatever `createPost()` refuses it for
 	 */
-	private function publish(ScheduledStatus $scheduled): ?ACore {
+	private function publish(ScheduledStatus $scheduled): void {
 		$actor = $this->accountService->getFromId($scheduled->getActorId());
 
-		return $this->postService->createPost(
+		$this->postService->createPost(
 			$this->statusAssemblyService->fromParams($actor, $scheduled)
 		);
 	}

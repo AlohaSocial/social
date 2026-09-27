@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Service\MiscService;
-use OCP\IUserManager;
 use OCP\ServerVersion;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -26,7 +25,7 @@ class MiscServiceTest extends TestCase {
 			->method('log')
 			->with(3, 'something happened', ['app' => 'social', 'level' => 3]);
 
-		$service = new MiscService($logger, $this->createMock(IUserManager::class));
+		$service = new MiscService($logger);
 		$service->log('something happened', 3);
 	}
 
@@ -36,7 +35,7 @@ class MiscServiceTest extends TestCase {
 			->method('log')
 			->with(2, 'default level', ['app' => 'social', 'level' => 2]);
 
-		$service = new MiscService($logger, $this->createMock(IUserManager::class));
+		$service = new MiscService($logger);
 		$service->log('default level');
 	}
 
@@ -57,7 +56,7 @@ class MiscServiceTest extends TestCase {
 		};
 		\OC::$server->register(ServerVersion::class, $version);
 
-		$service = new MiscService($this->createMock(LoggerInterface::class), $this->createMock(IUserManager::class));
+		$service = new MiscService($this->createMock(LoggerInterface::class));
 
 		$this->assertSame(31, $service->getNcVersion());
 	}

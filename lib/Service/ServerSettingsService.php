@@ -207,7 +207,6 @@ class ServerSettingsService {
 			if (!$actor->isLocal() || $actor->getUserId() === '') {
 				throw new InvalidArgumentException('contact_account must be a local Social account');
 			}
-			$contactAccount = $actor->getPreferredUsername();
 			$contactUserId = $actor->getUserId();
 		}
 

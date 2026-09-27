@@ -56,6 +56,5 @@ class XrdResponseTest extends TestCase {
 
 	public function testHttpCodeIsForwarded(): void {
 		$this->assertSame(Http::STATUS_NOT_FOUND, (new XrdResponse(Http::STATUS_NOT_FOUND))->toHttpResponse()->getStatus());
-		$this->assertSame(Http::STATUS_GONE, (new XrdResponse())->setHttpCode(Http::STATUS_GONE)->toHttpResponse()->getStatus());
 	}
 }

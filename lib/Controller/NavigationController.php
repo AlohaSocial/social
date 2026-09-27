@@ -24,7 +24,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\InterestService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\SectionsService;
 use OCA\Social\Service\SensitiveMediaService;
 use OCA\Social\Service\StreamService;
@@ -44,7 +43,6 @@ use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IConfig;
 use OCP\IGroupManager;
-use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\Server;
@@ -65,7 +63,6 @@ class NavigationController extends Controller {
 	private ?string $userId = null;
 
 	public function __construct(
-		private IL10N $l10n,
 		IRequest $request,
 		?string $userId,
 		private IConfig $config,
@@ -80,7 +77,6 @@ class NavigationController extends Controller {
 		private InterestService $interestService,
 		private StreamService $streamService,
 		private FilterService $filterService,
-		private MiscService $miscService,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);

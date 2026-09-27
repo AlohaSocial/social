@@ -39,7 +39,6 @@ class SearchService {
 		private CacheActorService $cacheActorService,
 		private HashtagService $hashtagService,
 		private StreamRequest $streamRequest,
-		private ConfigService $configService,
 		private LoggerInterface $logger,
 		private CurlService $curlService,
 	) {

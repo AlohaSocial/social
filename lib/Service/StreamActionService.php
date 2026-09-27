@@ -21,12 +21,8 @@ use OCA\Social\Model\StreamAction;
 class StreamActionService {
 	private StreamActionsRequest $streamActionsRequest;
 
-	private MiscService $miscService;
-
-	public function __construct(StreamActionsRequest $streamActionsRequest, MiscService $miscService,
-	) {
+	public function __construct(StreamActionsRequest $streamActionsRequest) {
 		$this->streamActionsRequest = $streamActionsRequest;
-		$this->miscService = $miscService;
 	}
 
 	/**

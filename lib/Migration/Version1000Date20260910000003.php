@@ -11,7 +11,6 @@ namespace OCA\Social\Migration;
 
 use Closure;
 use OCA\Social\Db\HashtagsRequest;
-use OCP\DB\ISchemaWrapper;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
@@ -48,7 +47,6 @@ class Version1000Date20260910000003 extends SimpleMigrationStep {
 
 	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
 		if (!$schema->hasTable('social_hashtag')) {
 			return;
@@ -81,7 +79,7 @@ class Version1000Date20260910000003 extends SimpleMigrationStep {
 
 				$stored = HashtagsRequest::countersFromRow($row);
 				$wanted = [];
-				foreach (HashtagsRequest::TREND_COLUMNS as $period => $column) {
+				foreach (array_keys(HashtagsRequest::TREND_COLUMNS) as $period) {
 					$wanted[$period] = (int)($trend[$period] ?? 0);
 				}
 

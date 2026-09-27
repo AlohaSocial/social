@@ -64,11 +64,11 @@ class WebfingerHandler implements IHandler {
 				break;
 
 			case 'nodeinfo':
-				$response = $this->handleNodeInfo($context);
+				$response = $this->handleNodeInfo();
 				break;
 
 			case 'host-meta':
-				$response = $this->handleHostMeta($context);
+				$response = $this->handleHostMeta();
 				break;
 		}
 
@@ -226,11 +226,9 @@ class WebfingerHandler implements IHandler {
 	 * handle request on /.well-known/nodeinfo
 	 * returns Json
 	 *
-	 * @param IRequestContext $context
-	 *
 	 * @return IResponse|null
 	 */
-	private function handleNodeInfo(IRequestContext $context): ?IResponse {
+	private function handleNodeInfo(): ?IResponse {
 		$response = new JrdResponse();
 
 		// Every schema the controller serves, oldest first. Oldest first on
@@ -253,11 +251,9 @@ class WebfingerHandler implements IHandler {
 	 * handle request on /.well-known/host-meta
 	 * returns xml/xrd
 	 *
-	 * @param IRequestContext $context
-	 *
 	 * @return IResponse|null
 	 */
-	private function handleHostMeta(IRequestContext $context): ?IResponse {
+	private function handleHostMeta(): ?IResponse {
 		$response = new XrdResponse();
 		try {
 			$url = $this->configService->getCloudUrl(true) . '/.well-known/webfinger?resource={uri}';

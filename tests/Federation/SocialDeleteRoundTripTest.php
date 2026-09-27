@@ -124,7 +124,6 @@ class SocialDeleteRoundTripTest extends TestCase {
 		$configService->method('getCloudHost')->willReturn(self::SENDER_HOST);
 
 		$service = new ActivityService(
-			$this->createMock(StreamRequest::class),
 			$this->createMock(FollowsRequest::class),
 			$this->createMock(CacheActorsRequest::class),
 			$this->createMock(SignatureService::class),
@@ -240,7 +239,6 @@ class SocialDeleteRoundTripTest extends TestCase {
 	 */
 	private function parse(string $wire): void {
 		$import = new ImportService(
-			$this->createMock(ConfigService::class),
 			$this->createMock(MiscService::class),
 			$this->createMock(ModerationService::class),
 			$this->createMock(RelayService::class),

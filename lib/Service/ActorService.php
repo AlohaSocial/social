@@ -32,9 +32,6 @@ class ActorService {
 	public function __construct(
 		private CacheActorsRequest $cacheActorsRequest,
 		private CacheDocumentsRequest $cacheDocumentsRequest,
-		private CurlService $curlService,
-		private ConfigService $configService,
-		private MiscService $miscService,
 	) {
 	}
 

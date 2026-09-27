@@ -170,7 +170,7 @@ export function matchedFilters(status) {
  * can match one post, and naming only the first would send a reader off to
  * change a filter that is not the whole reason the post is covered.
  */
-export function matchedFilterTitles(status) {
+function matchedFilterTitles(status) {
 	const titles = matchedFilters(status)
 		.map((match) => String(match.filter?.title ?? '').trim())
 		.filter((title) => title !== '')

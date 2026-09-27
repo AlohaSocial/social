@@ -137,7 +137,7 @@ class MediaPosters extends SocialCommand {
 		$output->writeln($made . ' poster(s) made, ' . $failed . ' could not be');
 
 		if ($made > 0) {
-			$posts = $this->refreshStoredCopies($output);
+			$posts = $this->refreshStoredCopies();
 			$output->writeln($posts . ' post(s) now show one');
 		}
 
@@ -159,7 +159,7 @@ class MediaPosters extends SocialCommand {
 	 *
 	 * @return int how many posts were rewritten
 	 */
-	private function refreshStoredCopies(OutputInterface $output): int {
+	private function refreshStoredCopies(): int {
 		$after = 0;
 		$changed = 0;
 

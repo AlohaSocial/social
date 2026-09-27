@@ -14,7 +14,6 @@ use OCA\Social\Tools\Exceptions\ArrayNotFoundException;
 use OCA\Social\Tools\Exceptions\ItemNotFoundException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\UnknownTypeException;
-use Throwable;
 
 /**
  * Trait TArrayTools
@@ -221,32 +220,6 @@ trait TArrayTools {
 		}
 
 		return false;
-	}
-
-	/**
-	 * @param string $k
-	 * @param array $arr
-	 * @param array $import
-	 * @param array $default
-	 *
-	 * @return array
-	 */
-	protected function getList(string $k, array $arr, array $import, array $default = []): array {
-		$list = $this->getArray($k, $arr, $default);
-
-		$r = [];
-		[$obj, $method] = $import;
-		foreach ($list as $item) {
-			try {
-				$o = new $obj();
-				$o->$method($item);
-
-				$r[] = $o;
-			} catch (Throwable $e) {
-			}
-		}
-
-		return $r;
 	}
 
 	/**

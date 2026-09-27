@@ -10,8 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Notification;
 
 use OCA\Social\Notification\Notifier;
-use OCP\Contacts\IManager;
-use OCP\Federation\ICloudIdManager;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
@@ -37,9 +35,7 @@ class NotifierTest extends TestCase {
 		$this->notifier = new Notifier(
 			$this->l10n,
 			$this->factory,
-			$this->createMock(IManager::class),
-			$this->urlGenerator,
-			$this->createMock(ICloudIdManager::class)
+			$this->urlGenerator
 		);
 	}
 

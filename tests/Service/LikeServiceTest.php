@@ -11,7 +11,6 @@ namespace OCA\Social\Tests\Service;
 
 use DateTime;
 use OCA\Social\AP;
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -31,11 +30,9 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\LikeService;
-use OCA\Social\Service\MiscService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamActionService;
-use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Service\StreamService;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -48,7 +45,6 @@ class LikeServiceTest extends TestCase {
 	private const BOB_ID = 'https://remote.example/users/bob';
 	private const POST_ID = 'https://remote.example/notes/1';
 
-	private StreamRequest|MockObject $streamRequest;
 	private StreamService|MockObject $streamService;
 	private SignatureService|MockObject $signatureService;
 	private ActivityService|MockObject $activityService;
@@ -63,7 +59,6 @@ class LikeServiceTest extends TestCase {
 		$this->likeInterface = $this->createMock(LikeInterface::class);
 		$this->bootActivityPub([LikeInterface::class => $this->likeInterface]);
 
-		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->signatureService = $this->createMock(SignatureService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
@@ -71,14 +66,11 @@ class LikeServiceTest extends TestCase {
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 
 		$this->service = new LikeService(
-			$this->streamRequest,
 			$this->streamService,
 			$this->signatureService,
 			$this->activityService,
 			$this->streamActionService,
-			$this->createMock(StreamQueueService::class),
 			$this->cacheActorService,
-			$this->createMock(MiscService::class),
 			new NullLogger(),
 			$this->moderationService
 		);

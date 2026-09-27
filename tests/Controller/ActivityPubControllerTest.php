@@ -56,7 +56,6 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
-use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -115,8 +114,6 @@ class ActivityPubControllerTest extends TestCase {
 	private bool $secureMode = false;
 	/** @var ConfigService&MockObject */
 	private $configService;
-	/** @var IInitialState&MockObject */
-	private $initialState;
 	/** @var InboxLimiter&MockObject */
 	private $inboxLimiter;
 	/** @var LoggerInterface&MockObject */
@@ -139,7 +136,6 @@ class ActivityPubControllerTest extends TestCase {
 		$this->pinService = $this->createMock(PinService::class);
 		$this->instanceActorService = $this->createMock(InstanceActorService::class);
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->initialState = $this->createMock(IInitialState::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
 		$this->configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
@@ -180,7 +176,6 @@ class ActivityPubControllerTest extends TestCase {
 			$this->storyService,
 			$this->createMock(\OCA\Social\Service\FeedService::class),
 			$this->configService,
-			$this->initialState,
 			$this->logger
 		);
 	}
@@ -1191,7 +1186,6 @@ class ActivityPubControllerTest extends TestCase {
 			->with('alice', '1789250751711653456')->willReturn($page);
 		$this->streamService->expects($this->never())->method('getStreamById');
 		$this->streamService->expects($this->never())->method('getStreamByNid');
-		$this->initialState->expects($this->never())->method('provideInitialState');
 
 		$this->assertSame($page, $this->controller->displayPost('alice', '1789250751711653456'));
 	}

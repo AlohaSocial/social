@@ -14,7 +14,6 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
-use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
@@ -77,7 +76,6 @@ class CheckService {
 		private FollowsRequest $followRequest,
 		private ActorsRequest $actorsRequest,
 		private CacheActorsRequest $cacheActorsRequest,
-		private StreamDestRequest $streamDestRequest,
 		private StreamRequest $streamRequest,
 		private AccountService $accountService,
 		private ConfigService $configService,

@@ -118,7 +118,6 @@ class StatisticsService {
 	public function __construct(
 		private StreamRequest $streamRequest,
 		private FollowsRequest $followsRequest,
-		private AccountService $accountService,
 		private CacheActorsRequest $cacheActorsRequest,
 		private DurableCache $cache,
 	) {

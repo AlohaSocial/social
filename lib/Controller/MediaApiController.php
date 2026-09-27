@@ -383,9 +383,6 @@ class MediaApiController extends MastodonApiController {
 	}
 
 	/**
-	 *
-	 * @param string $id
-	 *
 	 * @return Response
 	 */
 	#[PublicPage]
@@ -484,7 +481,6 @@ class MediaApiController extends MastodonApiController {
 			$opened = $this->documentService->openStreamed(
 				$nid, $this->request->getHeader('Range')
 			);
-			/** @var Document $document */
 			$document = $opened['document'];
 
 			$headers = [

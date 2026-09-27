@@ -116,7 +116,6 @@ class Worker extends SocialCommand {
 		$idle = self::IDLE_START;
 		$reapedAt = 0;
 		$delivered = 0;
-		$cached = 0;
 
 		while (!$this->stopping) {
 			if ($deadline > 0 && time() >= $deadline) {

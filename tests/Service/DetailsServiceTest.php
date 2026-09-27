@@ -16,7 +16,6 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\AccountService;
-use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\DetailsService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StreamService;
@@ -41,7 +40,6 @@ class DetailsServiceTest extends TestCase {
 			$this->streamService,
 			$this->accountService,
 			$this->followService,
-			$this->createMock(CacheActorService::class),
 		);
 	}
 

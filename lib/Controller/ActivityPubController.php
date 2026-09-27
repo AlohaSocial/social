@@ -70,7 +70,6 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Response;
-use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
@@ -90,7 +89,6 @@ class ActivityPubController extends Controller {
 	private FollowService $followService;
 	private StreamService $streamService;
 	private ConfigService $configService;
-	private IInitialState $initialState;
 	private LoggerInterface $logger;
 
 	/** The account behind a signed GET, resolved at most once a request. */
@@ -116,7 +114,6 @@ class ActivityPubController extends Controller {
 		private StoryService $storyService,
 		private FeedService $feedService,
 		ConfigService $configService,
-		IInitialState $initialState,
 		LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -132,7 +129,6 @@ class ActivityPubController extends Controller {
 		$this->followService = $followService;
 		$this->streamService = $streamService;
 		$this->configService = $configService;
-		$this->initialState = $initialState;
 		$this->logger = $logger;
 
 		$this->registerResponder('activity+json', $this->activityStreamsResponder('application/activity+json; charset=utf-8'));
@@ -426,7 +422,8 @@ class ActivityPubController extends Controller {
 			// instance that owns it
 			$this->inboxLimiter->assertOriginAllowed($origin);
 
-			$actor = $this->cacheActorService->getFromLocalAccount($username);
+			// throws for an inbox of an account this server does not have
+			$this->cacheActorService->getFromLocalAccount($username);
 
 			$activity = $this->importService->importFromJson($body);
 			if (!$this->signatureService->checkObject($activity)) {

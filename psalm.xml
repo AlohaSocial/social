@@ -43,10 +43,5 @@
 				<file name="lib/Service/FeedParserService.php"/>
 			</errorLevel>
 		</RedundantCondition>
-		<TypeDoesNotContainNull>
-			<errorLevel type="suppress">
-				<file name="lib/Service/StreamService.php"/>
-			</errorLevel>
-		</TypeDoesNotContainNull>
 	</issueHandlers>
 </psalm>

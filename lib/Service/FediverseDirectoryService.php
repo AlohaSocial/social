@@ -240,7 +240,7 @@ class FediverseDirectoryService {
 
 		$software = $this->known()['software'];
 		$sources = [];
-		foreach ($this->instanceStatsRequest->remoteHostCounts() as $host => $seen) {
+		foreach (array_keys($this->instanceStatsRequest->remoteHostCounts()) as $host) {
 			if (count($sources) >= $wanted) {
 				break;
 			}
@@ -324,7 +324,7 @@ class FediverseDirectoryService {
 		$wanted = $this->peersWanted();
 		$found = 0;
 		$lookups = 0;
-		foreach (($wanted < 1) ? [] : $this->instanceStatsRequest->remoteHostCounts() as $host => $seen) {
+		foreach (($wanted < 1) ? [] : array_keys($this->instanceStatsRequest->remoteHostCounts()) as $host) {
 			$host = (string)$host;
 			if ($found >= $wanted || $lookups >= self::LOOKUPS_PER_REFRESH) {
 				break;
