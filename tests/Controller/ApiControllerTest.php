@@ -725,7 +725,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testABlockRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.accountMute';
+		$this->route = 'social.AccountApi.accountMute';
 		$this->bearerFor(['read']);
 
 		$this->assertInsufficientScope(
@@ -735,7 +735,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAReadRouteRefusesAScopelessToken(): void {
-		$this->route = 'social.Api.verifyCredentials';
+		$this->route = 'social.AccountApi.verifyCredentials';
 		$this->bearerFor([]);
 
 		$this->assertInsufficientScope(
@@ -937,7 +937,7 @@ class ApiControllerTest extends TestCase {
 
 	/** A DELETE that a read-only token used to be able to make. */
 	public function testDeletingTheProfileAvatarRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.profileAvatarDelete';
+		$this->route = 'social.AccountApi.profileAvatarDelete';
 		$this->verb = 'DELETE';
 		$this->bearerFor(['read']);
 
@@ -959,7 +959,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testRewritingPreferencesRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.preferencesUpdate';
+		$this->route = 'social.AccountApi.preferencesUpdate';
 		$this->verb = 'PUT';
 		$this->bearerFor(['read']);
 
@@ -1950,7 +1950,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowRequestRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.followRequestAuthorize';
+		$this->route = 'social.AccountApi.followRequestAuthorize';
 		$this->bearerFor(['read']);
 		$this->followService->expects($this->never())->method('authorizeFollowRequest');
 
@@ -1961,7 +1961,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowScopedTokenMayAuthorizeAFollowRequest(): void {
-		$this->route = 'social.Api.followRequestAuthorize';
+		$this->route = 'social.AccountApi.followRequestAuthorize';
 		$this->bearerFor(['follow']);
 		$target = $this->knownTarget();
 		$this->followService->expects($this->once())
@@ -2189,7 +2189,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testUpdateCredentialsRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.updateCredentials';
+		$this->route = 'social.AccountApi.updateCredentials';
 		$this->bearerFor(['read']);
 		$this->accountService->expects($this->never())->method('setLocked');
 
@@ -2272,7 +2272,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAFollowRouteRefusesAReadOnlyToken(): void {
-		$this->route = 'social.Api.accountFollow';
+		$this->route = 'social.AccountApi.accountFollow';
 		$this->bearerFor(['read']);
 		$this->followService->expects($this->never())->method('followAccount');
 

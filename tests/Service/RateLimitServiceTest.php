@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Controller\AccountApiController;
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\ApiController;
 use OCA\Social\Controller\InstanceApiController;
@@ -261,7 +262,7 @@ class RateLimitServiceTest extends TestCase {
 	}
 
 	public function testAnOrdinaryRouteIsGovernedByTheDefault(): void {
-		$api = $this->createPartialMock(ApiController::class, []);
+		$api = $this->createPartialMock(AccountApiController::class, []);
 
 		$this->assertTrue($this->service->appliesDefaultTo($api, 'verifyCredentials'));
 	}
@@ -288,7 +289,7 @@ class RateLimitServiceTest extends TestCase {
 			'the fixture above still declares a limit of its own'
 		);
 
-		$verify = new \ReflectionMethod(ApiController::class, 'verifyCredentials');
+		$verify = new \ReflectionMethod(AccountApiController::class, 'verifyCredentials');
 		$this->assertSame(
 			[],
 			array_merge(

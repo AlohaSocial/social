@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Helper;
 
 use BadMethodCallException;
 use LogicException;
+use OCA\Social\Controller\AccountApiController;
 use OCA\Social\Controller\AnnualReportApiController;
 use OCA\Social\Controller\ApiController;
 use OCA\Social\Controller\InstanceApiController;
@@ -31,6 +32,7 @@ final class ApiControllerRouter {
 	/** @var list<class-string> the controllers that extend MastodonApiController */
 	public const CONTROLLERS = [
 		ApiController::class,
+		AccountApiController::class,
 		MediaApiController::class,
 		TimelineApiController::class,
 		InstanceApiController::class,

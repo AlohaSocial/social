@@ -197,8 +197,8 @@ class NotifierTest extends TestCase {
 
 		$this->assertSame(
 			[
-				['label' => '[en] Accept', 'link' => 'https://cloud.example/social.Api.followRequestAuthorize/42', 'method' => 'POST', 'primary' => true],
-				['label' => '[en] Decline', 'link' => 'https://cloud.example/social.Api.followRequestReject/42', 'method' => 'POST', 'primary' => false],
+				['label' => '[en] Accept', 'link' => 'https://cloud.example/social.AccountApi.followRequestAuthorize/42', 'method' => 'POST', 'primary' => true],
+				['label' => '[en] Decline', 'link' => 'https://cloud.example/social.AccountApi.followRequestReject/42', 'method' => 'POST', 'primary' => false],
 			],
 			$actions
 		);

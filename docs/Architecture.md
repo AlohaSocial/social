@@ -114,7 +114,7 @@ app can match the same url:
   after `getInbox()`, `outbox()`, `followers()` and `following()` for that
   reason, and has to stay there.
 - `appinfo/routes.php` is loaded after every attribute route of the app. That is
-  why `ApiController::accountGet()` is still declared there: its
+  why `AccountApiController::accountGet()` is still declared there: its
   `/api/v1/accounts/{id}` accepts slashes in `{id}`, so it also matches
   `/api/v1/accounts/{account}/lists` and `/api/v1/accounts/{account}/featured_tags`,
   which live in `ListController` and `DiscoveryController` — no arrangement of
