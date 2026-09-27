@@ -28,6 +28,11 @@ const notAdopted = {
 	// how the file is laid out.
 	'vue/multi-word-component-names': 'off',
 	'vue/no-reserved-component-names': 'off',
+	// 10 reports. Every boolean prop would have to default to false, which
+	// turns `link` and `hoverCard` into `noLink` and `noHoverCard` at every
+	// call site: a negated name to spell a default, where `:link="false"`
+	// already says what it means.
+	'vue/no-boolean-default': 'off',
 }
 
 export default [

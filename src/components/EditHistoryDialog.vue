@@ -12,7 +12,9 @@
 
 		<div v-else-if="loadError" class="history__none" role="alert">
 			<p>{{ t('social', 'Could not load this post’s edit history.') }}</p>
-			<NcButton variant="secondary" @click="load">{{ t('social', 'Try again') }}</NcButton>
+			<NcButton variant="secondary" @click="load">
+				{{ t('social', 'Try again') }}
+			</NcButton>
 		</div>
 
 		<p v-else-if="versions.length === 0 && editedAt" class="history__none">

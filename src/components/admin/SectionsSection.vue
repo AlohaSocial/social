@@ -95,7 +95,7 @@ export default {
 
 		/** every group on this server, `{ id, name }` */
 		groups: {
-			type: Array,
+			type: /** @type {import('vue').PropType<Array<{id: string, name: string}>>} */ (Array),
 			default: () => [],
 		},
 	},

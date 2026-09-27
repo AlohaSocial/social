@@ -177,17 +177,21 @@ a style question rather than debt: the components are consistent with each other
 
 **The JSDoc typedefs are checked.** `jsconfig.json` runs `checkJs` over the
 types, services, stores and utilities, and `npm run typecheck` is a script.
-The single-file components are checked by `vue-tsc` in the same script, against
-a baseline of the errors they already had (`tests/js/typecheck-baseline.json`):
-new ones fail, and the baseline shrinks as files are fixed.
+The single-file components are checked by `vue-tsc` in the same script, and
+both checks allow no errors. There was a baseline of 265 while the components
+were brought up to it; it is gone, along with the tooling that compared against
+it.
 
-**Four ESLint rules are switched off**, in two pairs, and `eslint.config.mjs`
-says why next to each. Sorting imports and named imports (247 reports) detaches
+**Five ESLint rules are switched off**, and `eslint.config.mjs` says why next to
+each. Sorting imports and named imports (247 reports) detaches
 the comments that explain the side-effect imports; the two component-naming
 rules (8 reports) would rename `Search.vue`, `Poll.vue` and friends, which
 changes what templates say. Neither pair is formatting, which is why they were
-not taken with the rest. A fifth rule, `vue/no-multiple-template-root`, is off
-because this app mounts several roots and the rule is a Vue 2 leftover.
+not taken with the rest. `vue/no-boolean-default` (10 reports) would turn every
+prop that defaults to true into a negation — `link` into `noLink` — at every
+call site. And `vue/no-multiple-template-root` is off because this app mounts
+several roots and the rule is a Vue 2 leftover. Everything else is on, and the
+tree reports no warnings.
 
 ---
 
@@ -198,7 +202,7 @@ because this app mounts several roots and the rule is a Vue 2 leftover.
 | `nextcloud/ocp` | `dev-stable35` | Matches the declared minimum, so analysis checks this app against the oldest server it claims to support. |
 | PHPUnit | `^11.5` (11.5.56) | Current major minus one. See below. |
 | Psalm | `^6.17` | Current, running on supported PHP. Its baseline covers six files and seven issues, none of them in `lib/Db`. |
-| ESLint | 10.10.0 with `@nextcloud/eslint-config` 9 | Current, flat config, four rules deliberately off. |
+| ESLint | 10.10.0 with `@nextcloud/eslint-config` 9 | Current, flat config, five rules deliberately off, no warnings. |
 | Stylelint | `^17.15` | Current. |
 | Vitest / jsdom | 5.0 / 30.0 | Current. |
 | webpack / vue-router / vite | 5.110 / 5.3 / 8.3 | Current. |
@@ -435,9 +439,8 @@ sixty when twenty survive the check.
 
 1. Collapse the two cache-actor joins, with a database to check against.
 2. Finish the l10n round trip — a Transifex round trip, not a code change.
-3. The `vue-tsc` baseline, down to zero.
-4. PHPUnit 12, which means `createMock` -> `createStub` across the suite.
-5. Web Push and a streaming API, so mobile clients stop polling.
+3. PHPUnit 12, which means `createMock` -> `createStub` across the suite.
+4. Web Push and a streaming API, so mobile clients stop polling.
 
 ---
 

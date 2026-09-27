@@ -82,7 +82,7 @@
 				v-if="!file"
 				type="button"
 				class="story-composer__pick"
-				@click="$refs.file.click()">
+				@click="pickFile">
 				<IconImagePlus :size="32" />
 				<span>{{ t('social', 'Choose a picture or a video') }}</span>
 			</button>
@@ -150,7 +150,7 @@
 					</NcButton>
 				</div>
 
-				<NcButton variant="tertiary" @click="$refs.file.click()">
+				<NcButton variant="tertiary" @click="pickFile">
 					{{ t('social', 'Choose another') }}
 				</NcButton>
 			</div>
@@ -336,6 +336,7 @@ export default {
 			return this.kind === 'text' ? this.storyText.trim() !== '' : Boolean(this.file)
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		buttons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => this.$emit('update:open', false) },
@@ -358,14 +359,20 @@ export default {
 		t,
 		n,
 
+		/** Opens the file chooser behind the pick buttons. */
+		pickFile() {
+			/** @type {HTMLInputElement} */ (this.$refs.file).click()
+		},
+
 		/**
 		 * @param {Event} event the file input's change
 		 */
 		choose(event) {
-			const file = event.target?.files?.[0] ?? null
+			const input = /** @type {HTMLInputElement} */ (event.target)
+			const file = input.files?.[0] ?? null
 			// the input keeps its selection, so picking the same file twice in
 			// a row would otherwise be ignored the second time
-			event.target.value = ''
+			input.value = ''
 			if (!file) {
 				return
 			}

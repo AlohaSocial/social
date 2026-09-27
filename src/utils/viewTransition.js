@@ -21,7 +21,7 @@ export function transitionsWanted() {
 /**
  * Applies a change inside a view transition.
  *
- * @param {Function} change mutates the DOM (or the router); may be async
+ * @param {() => unknown} change mutates the DOM (or the router); may be async
  * @return {Promise<void>} resolves once the change has been applied
  */
 export async function withViewTransition(change) {
@@ -47,7 +47,7 @@ export async function withViewTransition(change) {
  *
  * @param {HTMLElement|null} element the element to follow
  * @param {string} name a name unique within the document
- * @return {Function} call to release the name again
+ * @return {() => void} call to release the name again
  */
 export function nameForTransition(element, name) {
 	if (!element || !transitionsWanted()) {

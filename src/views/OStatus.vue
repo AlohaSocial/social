@@ -75,15 +75,24 @@ export default {
 	},
 
 	setup() {
-		const { serverData, hostname } = useServerData()
+		const { serverData } = useServerData()
 
-		return { serverData, hostname }
+		return { serverData }
 	},
 
 	data() {
 		return {
 			remote: '',
 			account: {},
+			/**
+			 * The signed-in reader. This page is public, so the reader is not
+			 * the page's user: the server puts whoever is signed in into the
+			 * initial state, and the handle is built from that rather than
+			 * from @nextcloud/auth.
+			 *
+			 * @type {{uid?: string, displayName?: string}}
+			 */
+			currentUser: {},
 		}
 	},
 
@@ -98,25 +107,9 @@ export default {
 		},
 
 		/**
-		 * This page is public, so the reader is not the page's user: the
-		 * server puts whoever is signed in into the initial state, and the
-		 * handle is built from that rather than from @nextcloud/auth.
-		 *
-		 * @return {object} the signed-in user
-		 */
-		currentUser() {
-			return window.oc_current_user
-		},
-
-		/** @return {string} the signed-in reader's own handle */
-		cloudId() {
-			return this.currentUser.uid + '@' + this.hostname
-		},
-
-		/**
 		 * The logged-in user rendered as a (local) actor for ActorAvatar.
 		 *
-		 * @return {import('../types/Mastodon.js').Account}
+		 * @return {Partial<import('../types/Mastodon.js').Account>}
 		 */
 		currentUserActor() {
 			const uid = this.currentUser?.uid ?? ''
@@ -137,7 +130,7 @@ export default {
 		try {
 			const serverData = loadState('social', 'serverData')
 			if (serverData.currentUser) {
-				window.oc_current_user = JSON.parse(JSON.stringify(serverData.currentUser))
+				this.currentUser = serverData.currentUser
 			}
 			this.settingsStore.setServerData(serverData)
 			if (this.serverData.account && !this.serverData.local) {
@@ -157,7 +150,7 @@ export default {
 
 	methods: {
 		follow() {
-			this.accountStore.followAccount({ currentAccount: this.cloudId, accountToFollow: this.account.acct }).then(() => {
+			this.accountStore.followAccount({ accountToFollow: this.account.acct }).then(() => {
 
 			})
 		},

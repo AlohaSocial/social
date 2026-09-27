@@ -37,9 +37,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */
 		status: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object),
 			required: true,
 		},
 	},

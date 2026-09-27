@@ -321,6 +321,10 @@ export const useAccountStore = defineStore('account', {
 		 * only the first page would be reachable until the page was reloaded.
 		 * `addFollowersAppend` deliberately does not reset it: a later page is
 		 * not a new list.
+		 *
+		 * @param {object} page one page of the list
+		 * @param {string} page.account whose list it is
+		 * @param {object[]} page.data the accounts on the page
 		 */
 		addFollowers({ account, data }) {
 			const key = keyFor(this, account)
@@ -336,7 +340,13 @@ export const useAccountStore = defineStore('account', {
 			this.accountsFollowers = { ...this.accountsFollowers, [key]: [...existing, ...users] }
 			this.accountsFollowersMaxId = { ...this.accountsFollowersMaxId, [key]: lastId }
 		},
-		/** Replaces page one; resets `allLoaded` for the reason above. */
+		/**
+		 * Replaces page one; resets `allLoaded` for the reason above.
+		 *
+		 * @param {object} page one page of the list
+		 * @param {string} page.account whose list it is
+		 * @param {object[]} page.data the accounts on the page
+		 */
 		addFollowing({ account, data }) {
 			const key = keyFor(this, account)
 			const { users, lastId } = collectActors(this, data)

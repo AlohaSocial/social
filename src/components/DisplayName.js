@@ -17,9 +17,8 @@ export default {
 			type: String,
 			default: '',
 		},
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').CustomEmoji[]>} */
 		emojis: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').CustomEmoji[]>} */ (Array),
 			default: () => [],
 		},
 	},

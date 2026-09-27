@@ -40,9 +40,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment>} */
 		attachment: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment>} */ (Object),
 			required: true,
 		},
 
@@ -75,7 +74,7 @@ export default {
 		fit: {
 			type: String,
 			default: 'cover',
-			validator: (value) => ['cover', 'contain'].includes(value),
+			validator: (value) => ['cover', 'contain'].includes(String(value)),
 		},
 
 		/** the box to reserve, overriding the picture's own shape; 0 to derive it */

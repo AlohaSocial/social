@@ -145,7 +145,7 @@ export default {
 	mounted() {
 		// the picker opens because the button was pressed; the field is what
 		// the press was for
-		this.$nextTick(() => this.$refs.search?.$el?.querySelector('input')?.focus())
+		this.$nextTick(() => /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.search)?.$el?.querySelector('input')?.focus())
 	},
 
 	beforeUnmount() {

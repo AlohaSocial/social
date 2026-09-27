@@ -22,7 +22,6 @@
 				v-if="timeline"
 				class="thread__ancestors"
 				:showParents="true"
-				:type="$route.params.type"
 				:reverseOrder="true" />
 			<!-- a video gets a page about the video: the same route, because
 			     every link to one already leads here, with a heading, the
@@ -54,7 +53,6 @@
 			<TimelineList
 				v-if="timeline"
 				class="descendants thread__descendants"
-				:type="$route.params.type"
 				@settled="repliesSettled = true" />
 			<!-- a thread this instance holds only part of should say so rather
 			     than present what it has as the whole of it -->
@@ -246,11 +244,11 @@ export default {
 				return
 			}
 
-			if (this.$refs.socialWrapper.parentElement?.scrollTop !== 0) {
+			if (/** @type {HTMLElement} */ (this.$refs.socialWrapper).parentElement?.scrollTop !== 0) {
 				return
 			}
 
-			this.$nextTick(() => this.$refs.mainPost?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+			this.$nextTick(() => /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.mainPost)?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
 		},
 	},
 
@@ -259,7 +257,7 @@ export default {
 		// eventBus.off('composer-reply') would also detach the Composer's.
 		this.onComposerReply = (item) => {
 			this.$nextTick(() => {
-				this.$refs.socialWrapper?.querySelector(`[data-social-status="${item.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+				/** @type {HTMLElement|undefined} */ (this.$refs.socialWrapper)?.querySelector(`[data-social-status="${item.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 			})
 		}
 		eventBus.on('composer-reply', this.onComposerReply)
@@ -301,7 +299,7 @@ export default {
 		 */
 		async load() {
 			// read before the reset: changeTimelineType prunes the status index
-			const singlePost = this.timelineStore.getPostFromTimeline(this.$route.params.id) ?? this.postFromInitialState()
+			const singlePost = this.timelineStore.getPostFromTimeline(String(this.$route.params.id)) ?? this.postFromInitialState()
 
 			// A post has two addresses here. The app links it by the numeric id
 			// its client API knows, `/@alice/42`; the wider fediverse links it
@@ -328,7 +326,7 @@ export default {
 			// through the store. `/context` answers with what is around a post
 			// and never with the post, so the page used to say it did not exist.
 			if (singlePost === undefined || singlePost === null) {
-				await this.timelineStore.fetchStatus(this.$route.params.id)
+				await this.timelineStore.fetchStatus(String(this.$route.params.id))
 			}
 
 			this.reportOpened()

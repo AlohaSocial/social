@@ -153,7 +153,7 @@ export default {
 		n,
 
 		pick() {
-			this.$refs.file?.click?.()
+			/** @type {HTMLInputElement|undefined} */ (this.$refs.file)?.click?.()
 		},
 
 		/**
@@ -166,7 +166,7 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		async read(event) {
-			const file = event?.target?.files?.[0]
+			const file = /** @type {HTMLInputElement|null} */ (event?.target ?? null)?.files?.[0]
 			this.preview = null
 			this.fileError = ''
 			if (!file) {

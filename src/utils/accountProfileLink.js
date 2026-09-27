@@ -9,7 +9,7 @@ import { generateUrl } from '@nextcloud/router'
  * Remote actors have no corresponding `/u/{uid}` page and return an empty
  * string so their caller can keep the Social/Fediverse profile destination.
  *
- * @param {import('../types/Mastodon.js').Account} account a Mastodon-compatible account
+ * @param {Partial<import('../types/Mastodon.js').Account>} account a Mastodon-compatible account
  * @param {string|number|null} [statusId] optional Social status to focus
  * @return {string}
  */

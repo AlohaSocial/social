@@ -6,7 +6,7 @@ SPDX-PackageSupplier = "Nextcloud <https://nextcloud.com/contact/>"
 SPDX-PackageDownloadLocation = "https://github.com/nextcloud/social"
 
 [[annotations]]
-path = ["package-lock.json", "package.json", "composer.json", "composer.lock", "jsconfig.json", "jsconfig.vue.json", "tests/js/typecheck-baseline.json", ".tx/config"]
+path = ["package-lock.json", "package.json", "composer.json", "composer.lock", "jsconfig.json", "jsconfig.vue.json", ".tx/config"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "none"
 SPDX-License-Identifier = "CC0-1.0"

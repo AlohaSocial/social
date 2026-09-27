@@ -14,7 +14,7 @@
 			role="radio"
 			class="filter-picker__option"
 			:class="{ 'filter-picker__option--active': filter.id === modelValue }"
-			:aria-checked="String(filter.id === modelValue)"
+			:aria-checked="filter.id === modelValue"
 			:title="filter.name"
 			@click="$emit('update:modelValue', filter.id)">
 			<span class="filter-picker__swatch">

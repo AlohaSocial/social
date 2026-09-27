@@ -27,16 +27,21 @@ export default {
 const parser = new DOMParser()
 
 /**
- *
- * @param hFn
- * @param routerLink
- * @param item
+ * @typedef MessageContext - what a post says about the things its content links to
+ * @property {import('../types/Mastodon.js').StatusTag[]} tags - its hashtags
+ * @property {import('../types/Mastodon.js').StatusMention[]} mentions - the accounts it mentions
+ * @property {import('../types/Mastodon.js').CustomEmoji[]} emojis - the custom emoji it uses
+ */
+
+/**
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
+ * @param {import('../types/Mastodon.js').Status} item the post whose content is drawn
  */
 export function formatMessage(hFn, routerLink, item) {
 	// `item` is the store's own status object and this runs from a render
-	// function: `item.tags = []` wrote to Vuex state during render, on every
-	// post, because exportAsLocal() never emits a `tags` key. Under
-	// strict: true Vuex raises; in production it silently mutated the store.
+	// function, so nothing here writes to it: defaults go on a copy, or a
+	// missing `tags` key would be filled in on the store's post during render.
 	const context = {
 		tags: item.tags ?? [],
 		mentions: item.mentions ?? [],
@@ -49,18 +54,18 @@ export function formatMessage(hFn, routerLink, item) {
 }
 
 /**
- *
- * @param hFn
- * @param routerLink
- * @param node
- * @param context
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
+ * @param {Node} node a node of the parsed content: an element or a run of text
+ * @param {MessageContext} context what the post says about its own tags, mentions and emoji
  */
 function domToVue(hFn, routerLink, node, context) {
-	if (node.tagName === 'A') {
-		return cleanLink(hFn, routerLink, node, context)
+	const element = node.nodeType === Node.ELEMENT_NODE ? /** @type {Element} */ (node) : null
+	if (element?.tagName === 'A') {
+		return cleanLink(hFn, routerLink, element, context)
 	}
-	if (STRUCTURAL_TAGS.includes(node.tagName)) {
-		return cleanCopy(hFn, routerLink, node, context)
+	if (element && STRUCTURAL_TAGS.includes(element.tagName)) {
+		return cleanCopy(hFn, routerLink, element, context)
 	}
 	// Anything else is reduced to its text, which also drops every attribute
 	return transformText(hFn, routerLink, node.textContent ?? '', context)
@@ -121,9 +126,9 @@ const customEmojiRegex = /:([a-zA-Z0-9_]+):/
  * Render a plain-text string (a display name) with its custom emoji replaced
  * by inline images. Everything goes through createElement — never innerHTML.
  *
- * @param hFn the render function
- * @param text the plain text
- * @param emojis the CustomEmoji entries of the entity
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string} text the plain text
+ * @param {import('../types/Mastodon.js').CustomEmoji[]} emojis the CustomEmoji entries of the entity
  */
 export function emojifyPlain(hFn, text, emojis) {
 	return transformTextRegex(text ?? '', [
@@ -156,7 +161,7 @@ export function emojifyPlain(hFn, text, emojis) {
  * in the run of text — and the card is a sibling of the text flow that only
  * exists once it is opened.
  *
- * @param {Function} hFn - the render function
+ * @param {typeof import('vue').h} hFn - the render function
  * @param {string} handle - the account handle, without the leading @
  * @param {object} link - the rendered mention link
  * @return {object} the link, wrapped
@@ -166,13 +171,13 @@ function withHoverCard(hFn, handle, link) {
 }
 
 /**
- *
- * @param hFn
- * @param routerLink
- * @param text
- * @param context
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
+ * @param {string} text the plain text
+ * @param {MessageContext} [context] what the post says about its own tags, mentions and emoji
+ * @return {import('vue').VNodeArrayChildren}
  */
-function transformText(hFn, routerLink, text, context = {}) {
+function transformText(hFn, routerLink, text, context = { tags: [], mentions: [], emojis: [] }) {
 	return transformTextRegex(text, [
 		{
 			regex: customEmojiRegex,
@@ -229,11 +234,10 @@ function transformText(hFn, routerLink, text, context = {}) {
 }
 
 /**
- *
- * @param hFn
- * @param routerLink
- * @param node
- * @param context
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
+ * @param {Element} node an element of the parsed content
+ * @param {MessageContext} context what the post says about its own tags, mentions and emoji
  */
 function cleanCopy(hFn, routerLink, node, context) {
 	const children = Array.from(node.childNodes).map((node) => domToVue(hFn, routerLink, node, context))
@@ -241,11 +245,10 @@ function cleanCopy(hFn, routerLink, node, context) {
 }
 
 /**
- *
- * @param hFn
- * @param routerLink
- * @param node
- * @param context
+ * @param {typeof import('vue').h} hFn the render function
+ * @param {string|import('vue').ConcreteComponent} routerLink the RouterLink component, for the links that stay in the app
+ * @param {Element} node an element of the parsed content
+ * @param {MessageContext} context what the post says about its own tags, mentions and emoji
  */
 function cleanLink(hFn, routerLink, node, context) {
 	const type = getLinkType(node.className)
@@ -258,7 +261,6 @@ function cleanLink(hFn, routerLink, node, context) {
 				attributes.rel = 'nofollow noopener noreferrer'
 				attributes.target = '_blank'
 				attributes.href = safeHref(node)
-				attributes.title = tag.name
 
 				return withHoverCard(hFn, tag.acct, hFn('a', attributes, [transformText(hFn, routerLink, node.textContent, context)]))
 			} else {
@@ -285,8 +287,7 @@ function cleanLink(hFn, routerLink, node, context) {
 }
 
 /**
- *
- * @param className
+ * @param {string} className a link's class attribute
  */
 function getLinkType(className) {
 	const parts = className.split(' ')
@@ -300,10 +301,9 @@ function getLinkType(className) {
 }
 
 /**
- *
- * @param tags
- * @param mentionHref
- * @param mentionText
+ * @param {import('../types/Mastodon.js').StatusMention[]} tags the post's mentions
+ * @param {string} mentionHref where the mention link points
+ * @param {string} mentionText what the mention link says
  */
 function matchMention(tags = [], mentionHref, mentionText) {
 	const mentionHost = hostOf(mentionHref)
@@ -350,9 +350,9 @@ const emojiSequenceRe = /(?:\ud83d\udc68\ud83c\udffb\u200d\ud83e\udd1d\u200d\ud8
 const emojiRe = new RegExp(emojiSequenceRe.source + '|\\p{Emoji_Presentation}|\\p{Extended_Pictographic}\uFE0F', 'u')
 
 /**
- *
- * @param text
- * @param handlers
+ * @param {string} text the plain text
+ * @param {Array<{regex: RegExp, onMatch: (match: RegExpExecArray) => import('vue').VNodeChild}>} handlers what to do with each kind of match
+ * @return {import('vue').VNodeArrayChildren} the text, split around what matched
  */
 function transformTextRegex(text, handlers) {
 	const parts = []
@@ -370,7 +370,7 @@ function transformTextRegex(text, handlers) {
 				}
 			}
 			return bestMatch
-		}, { index: -1 })
+		}, /** @type {{index: number, match?: RegExpExecArray, onMatch?: (match: RegExpExecArray) => import('vue').VNodeChild}} */ ({ index: -1 }))
 
 		if (result.index !== -1) {
 			if (result.index > 0) {

@@ -31,7 +31,7 @@ const ROLL_MS = 280
 export default {
 	name: 'RollingCount',
 	props: {
-		/** @type {import('vue').PropType<number>} what the counter says now */
+		/** what the counter says now */
 		count: {
 			type: Number,
 			default: 0,

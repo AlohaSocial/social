@@ -48,8 +48,6 @@ jobs:
               - 'tsconfig.json'
               - 'jsconfig.json'
               - 'jsconfig.vue.json'
-              - 'tools/typecheck.mjs'
-              - 'tests/js/typecheck-baseline.json'
               - 'eslint.config.*'
               - '**.js'
               - '**.ts'
@@ -93,8 +91,9 @@ jobs:
 
       - name: Type check
         # tsc over the plain-JavaScript half of src/, against the JSDoc typedefs
-        # in src/types/ (jsconfig.json); then vue-tsc over all of src/, against
-        # the baseline in tests/js/typecheck-baseline.json (tools/typecheck.mjs).
+        # in src/types/ (jsconfig.json); then vue-tsc over all of src/,
+        # single-file components included (jsconfig.vue.json). Both allow no
+        # errors.
         run: npm run typecheck
 
   summary:

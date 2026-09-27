@@ -70,7 +70,7 @@ export function contextFor(type) {
  * Whether reading this post may teach anything: it carries a hashtag, and the
  * reader did not write it.
  *
- * @param {Record<string, any>|null|undefined} status the post the reader sees
+ * @param {import('../types/Mastodon.js').Status|null|undefined} status the post the reader sees
  * @param {(status: object) => boolean} isOwn whether the reader wrote it
  * @return {boolean}
  */
@@ -147,7 +147,7 @@ function sideOf(entry, viewportHeight) {
  *
  * @typedef {object} WatchedView
  * @property {Element} element the post's element
- * @property {Record<string, any>} status the post itself
+ * @property {import('../types/Mastodon.js').Status} status the post itself
  * @property {boolean} visible whether it is on screen now
  * @property {number|null} since when the current stretch began, null between them
  * @property {number} ms how long it has been watched in total
@@ -159,7 +159,7 @@ function sideOf(entry, viewportHeight) {
  * @param {object} options what the tracker works with
  * @param {string} options.context what the signals say they came from
  * @param {(events: object[], options: {beacon: boolean}) => Promise<void>} [options.send] how a batch goes out
- * @param {(status: Record<string, any>) => boolean} [options.isOwn] whether the reader wrote a post
+ * @param {(status: import('../types/Mastodon.js').Status) => boolean} [options.isOwn] whether the reader wrote a post
  * @param {() => number} [options.now] the clock
  * @param {Document} [options.document] where visibility and input are read
  * @param {Window} [options.window] where focus, the observer and timers come from
@@ -435,7 +435,7 @@ export function createInterestTracker({
 		 * reader's own, or ones without a hashtag — are never watched.
 		 *
 		 * @param {Element} element the entry on the page
-		 * @param {Record<string, any>} status the post the reader sees in it
+		 * @param {import('../types/Mastodon.js').Status} status the post the reader sees in it
 		 */
 		observe(element, status) {
 			if (destroyed || watched.has(element) || !isTrackable(status, isOwn)) {
@@ -485,7 +485,7 @@ export function createInterestTracker({
 		 * in it, a link from it, or muted its author. Once per post and kind
 		 * per page view.
 		 *
-		 * @param {Record<string, any>} status the post
+		 * @param {import('../types/Mastodon.js').Status} status the post
 		 * @param {'open'|'media'|'link'|'mute'} kind what happened
 		 */
 		record(status, kind) {
@@ -544,7 +544,7 @@ export function createInterestTracker({
  * author from it. The same rules as the tracker — nothing for the reader's
  * own posts or for posts without a hashtag.
  *
- * @param {Record<string, any>} status the post
+ * @param {import('../types/Mastodon.js').Status} status the post
  * @param {string} kind what happened
  * @param {string} context where
  * @param {(status: object) => boolean} [isOwn] whether the reader wrote it

@@ -179,7 +179,6 @@ describe('FollowButton', () => {
 
 		await wrapper.find('button').trigger('click')
 		expect(follow).toHaveBeenCalledWith({
-			currentAccount: 'alice@cloud.example.org',
 			accountToFollow: 'bob@remote.example',
 		})
 		expect(wrapper.find('button').attributes('disabled')).toBeDefined()
@@ -198,7 +197,6 @@ describe('FollowButton', () => {
 		await wrapper.find('.dialog-button--1').trigger('click')
 		await flushPromises()
 		expect(unfollow).toHaveBeenCalledWith({
-			currentAccount: 'alice@cloud.example.org',
 			accountToUnfollow: 'bob@remote.example',
 		})
 		expect(unfollow).toHaveBeenCalledTimes(1)
@@ -226,7 +224,6 @@ describe('FollowButton', () => {
 		const { follow } = spyOnFollows()
 		await mountButton('carol').find('button').trigger('click')
 		expect(follow).toHaveBeenCalledWith({
-			currentAccount: 'alice@cloud.example.org',
 			accountToFollow: 'carol@cloud.example.org',
 		})
 	})

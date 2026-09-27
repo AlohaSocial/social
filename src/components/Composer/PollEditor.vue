@@ -23,7 +23,7 @@
 				type="text"
 				:placeholder="t('social', 'Poll option {number}', { number: index + 1 })"
 				maxlength="100"
-				@input="setOption(index, $event.target.value)">
+				@input="setOption(index, valueOf($event))">
 			<NcButton
 				v-if="options.length > 2"
 				variant="tertiary"
@@ -45,13 +45,13 @@
 				<input
 					:checked="multiple"
 					type="checkbox"
-					@change="$emit('update:multiple', $event.target.checked)">
+					@change="$emit('update:multiple', checkedOf($event))">
 				{{ t('social', 'Multiple choice') }}
 			</label>
 			<select
 				:value="expiresIn"
 				:aria-label="t('social', 'Poll duration')"
-				@change="$emit('update:expiresIn', Number($event.target.value))">
+				@change="$emit('update:expiresIn', Number(valueOf($event)))">
 				<option :value="1800">
 					{{ t('social', '30 minutes') }}
 				</option>
@@ -79,6 +79,7 @@
 import { translate as t } from '@nextcloud/l10n'
 import Close from 'vue-material-design-icons/Close.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import { checkedOf, valueOf } from '../../utils/dom.js'
 
 /** What Mastodon accepts, and so what a poll written here may have. */
 const MIN_OPTIONS = 2
@@ -131,6 +132,8 @@ export default {
 
 	methods: {
 		t,
+		checkedOf,
+		valueOf,
 
 		/**
 		 * @param {number} index which option was typed in

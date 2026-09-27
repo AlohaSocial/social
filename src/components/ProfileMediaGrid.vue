@@ -97,7 +97,7 @@ export default {
 	props: {
 		/** The posts to draw; those without pictures are skipped. */
 		posts: {
-			type: Array,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status[]>} */ (Array),
 			default: () => [],
 		},
 

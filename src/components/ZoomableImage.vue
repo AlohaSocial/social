@@ -215,7 +215,7 @@ export default {
 			// capture that could not be taken is not worth failing the gesture
 			// over — the drag simply ends at the edge instead of following.
 			try {
-				event.target?.setPointerCapture?.(event.pointerId)
+				/** @type {Element|null} */ (event.target)?.setPointerCapture?.(event.pointerId)
 			} catch {
 				// no capture; the gesture still works within the frame
 			}
@@ -319,7 +319,7 @@ export default {
 		 * reset button.
 		 */
 		clamp() {
-			const frame = this.$refs.frame
+			const frame = /** @type {HTMLElement|undefined} */ (this.$refs.frame)
 			if (!frame) {
 				return
 			}

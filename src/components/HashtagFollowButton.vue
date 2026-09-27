@@ -54,11 +54,9 @@ export default {
 		 * requests before any of them can be drawn.
 		 *
 		 * `null` means nobody has said, and the button asks for itself.
-		 *
-		 * @type {import('vue').PropType<string[]|null>}
 		 */
 		known: {
-			type: Array,
+			type: /** @type {import('vue').PropType<string[]|null>} */ (Array),
 			default: null,
 		},
 	},

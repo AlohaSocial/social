@@ -35,7 +35,7 @@ let known = DEFAULT_LIMITS
 let pending = null
 
 /**
- * @param {*} value what the entity said
+ * @param {unknown} value what the entity said
  * @param {number} fallback what to use when it said nothing usable
  * @return {number} a positive whole number
  */

@@ -24,7 +24,7 @@
 				class="emoji__file"
 				accept="image/png,image/gif,image/webp,image/jpeg"
 				@change="pick">
-			<NcButton :disabled="busy" @click="$refs.picture.click()">
+			<NcButton :disabled="busy" @click="choosePicture">
 				<template #icon>
 					<IconUpload :size="20" />
 				</template>
@@ -118,6 +118,11 @@ export default {
 	},
 
 	methods: {
+		/** Opens the file chooser for the emoji's picture. */
+		choosePicture() {
+			/** @type {HTMLInputElement} */ (this.$refs.picture).click()
+		},
+
 		t,
 
 		/** @return {Promise<void>} */
@@ -134,7 +139,7 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		pick(event) {
-			this.picture = event.target.files?.[0] ?? null
+			this.picture = /** @type {HTMLInputElement} */ (event.target).files?.[0] ?? null
 			this.pictureName = this.picture?.name ?? ''
 		},
 

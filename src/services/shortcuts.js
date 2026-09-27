@@ -119,7 +119,7 @@ export function eventFor(event) {
 /**
  * Starts listening for shortcuts.
  *
- * @return {Function} call to stop listening again
+ * @return {() => void} call to stop listening again
  */
 export function listenForShortcuts() {
 	const handler = (event) => {

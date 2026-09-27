@@ -88,7 +88,7 @@ export default {
 
 		/** what is on the list now */
 		addresses: {
-			type: Array,
+			type: /** @type {import('vue').PropType<string[]>} */ (Array),
 			required: true,
 		},
 	},

@@ -191,7 +191,7 @@ export default {
 	props: {
 		/** the filter being changed, or null for a new one */
 		filter: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Filter|null>} */ (Object),
 			default: null,
 		},
 
@@ -207,7 +207,7 @@ export default {
 	data() {
 		const filter = this.filter
 		const applies = filter?.context ?? []
-		const chosen = {}
+		const chosen = /** @type {Record<string, boolean>} */ ({})
 		for (const { id } of contextOptions()) {
 			chosen[id] = applies.includes(id)
 		}

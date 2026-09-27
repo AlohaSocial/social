@@ -159,6 +159,8 @@ export default {
 	},
 
 	data() {
+		const serverData = useServerData().serverData.value
+
 		return {
 			visibilities: visibilitiesInfo,
 			draft: {
@@ -177,7 +179,7 @@ export default {
 			 * already there because the timeline needs it before it draws, and
 			 * the choice behind it travels with it.
 			 */
-			sensitive: this.serverData?.nsfwChoice ?? '',
+			sensitive: serverData?.nsfwChoice ?? '',
 			savingSensitive: false,
 
 			saving: false,

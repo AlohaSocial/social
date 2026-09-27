@@ -33,8 +33,8 @@ function tick() {
  * Calls back roughly every half minute for as long as the returned function
  * is not called.
  *
- * @param {Function} listener called with the current epoch milliseconds
- * @return {Function} unsubscribes, and stops the interval with the last listener
+ * @param {(now: number) => void} listener called with the current epoch milliseconds
+ * @return {() => void} unsubscribes, and stops the interval with the last listener
  */
 export function onTick(listener) {
 	listeners.add(listener)
@@ -46,7 +46,7 @@ export function onTick(listener) {
 }
 
 /**
- * @param {Function} listener the callback passed to onTick()
+ * @param {(now: number) => void} listener the callback passed to onTick()
  */
 export function offTick(listener) {
 	listeners.delete(listener)

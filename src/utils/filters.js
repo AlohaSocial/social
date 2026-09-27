@@ -108,7 +108,7 @@ export function expiryOptions() {
  * moment, and the server stops applying the filter the moment it passes
  * without deleting the row.
  *
- * @param {Record<string, any>} filter a v2 Filter entity, as the wire gave it
+ * @param {import('../types/Mastodon.js').Filter} filter a v2 Filter entity, as the wire gave it
  * @param {number} [now] the moment to measure against, for tests
  * @return {boolean} false once it has expired
  */
@@ -125,7 +125,7 @@ export function isActive(filter, now = Date.now()) {
 /**
  * When a filter stops applying, in words.
  *
- * @param {Record<string, any>} filter a v2 Filter entity, as the wire gave it
+ * @param {import('../types/Mastodon.js').Filter} filter a v2 Filter entity, as the wire gave it
  * @param {number} [now] the moment to measure against, for tests
  * @return {string} a sentence for the summary line
  */
@@ -153,7 +153,7 @@ export function expiryLabel(filter, now = Date.now()) {
  * `hide` filter matched is not sent at all — so anything here is something to
  * cover rather than something to drop.
  *
- * @param {Record<string, any>} status a status entity, as the wire gave it
+ * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
  * @return {import('../types/Mastodon.js').FilterResult[]} one entry per filter that matched
  */
 export function matchedFilters(status) {
@@ -165,7 +165,7 @@ export function matchedFilters(status) {
 }
 
 /**
- * @param {Record<string, any>} status a status entity, as the wire gave it
+ * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
  * @return {string[]} the names of the filters that matched, each once. Several
  * can match one post, and naming only the first would send a reader off to
  * change a filter that is not the whole reason the post is covered.
@@ -185,7 +185,7 @@ export function matchedFilterTitles(status) {
  * and printing it on the cover would put exactly the words somebody filtered
  * back in front of them. The name is what they have to look for in Settings.
  *
- * @param {Record<string, any>} status a status entity, as the wire gave it
+ * @param {import('../types/Mastodon.js').Status} status a status entity, as the wire gave it
  * @return {string} a line for the cover
  */
 export function filterCoverLabel(status) {

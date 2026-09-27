@@ -96,7 +96,6 @@ import { feel } from '../services/senses.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useAccount } from '../composables/useAccount.js'
-import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 
 /** how long the confirmation plays, the same window a liked post celebrates for */
@@ -122,10 +121,9 @@ export default {
 
 	setup(props) {
 		const { serverData } = useServerData()
-		const { cloudId } = useCurrentUser()
 		const { profileAccount, relationship } = useAccount(() => props.uid)
 
-		return { serverData, cloudId, profileAccount, relationship }
+		return { serverData, profileAccount, relationship }
 	},
 
 	data() {
@@ -186,6 +184,7 @@ export default {
 			return this.accountStore.currentAccount
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		unfollowButtons() {
 			return [
 				{
@@ -220,7 +219,7 @@ export default {
 				this.loading = true
 				// the label goes ahead of the server, and comes back if it has to
 				this.pending = true
-				await this.accountStore.followAccount({ currentAccount: this.cloudId, accountToFollow: this.profileAccount })
+				await this.accountStore.followAccount({ accountToFollow: this.profileAccount })
 				// the store commits the follow only when the server took it —
 				// on a refusal it reports the error itself and commits nothing,
 				// which is the only signal this component gets
@@ -246,7 +245,7 @@ export default {
 			logger.debug('Unfollowing an account', { account: this.profileAccount })
 			try {
 				this.loading = true
-				await this.accountStore.unfollowAccount({ currentAccount: this.cloudId, accountToUnfollow: this.profileAccount })
+				await this.accountStore.unfollowAccount({ accountToUnfollow: this.profileAccount })
 				if (this.relationship?.following) {
 					this.refuse()
 				}

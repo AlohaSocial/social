@@ -28,7 +28,7 @@ const waiting = []
  * does not. `requestIdleCallback` is missing from Safari, and a page whose
  * main thread never goes idle would otherwise never boot.
  *
- * @param {Function} callback what to run
+ * @param {() => void} callback what to run
  */
 function whenIdle(callback) {
 	if (typeof window.requestIdleCallback === 'function') {
@@ -69,7 +69,7 @@ export function noteTimelineRequest(request) {
  * sent yet and there is nothing to yield to. By the time the browser is idle,
  * the timeline -- if this page has one -- has asked.
  *
- * @param {Function} callback what to run
+ * @param {() => void} callback what to run
  */
 export function afterFirstTimeline(callback) {
 	whenIdle(() => {

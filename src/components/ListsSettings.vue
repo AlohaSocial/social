@@ -286,6 +286,7 @@ export default {
 	},
 
 	computed: {
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
 				{

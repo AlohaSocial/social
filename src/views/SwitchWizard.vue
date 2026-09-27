@@ -50,7 +50,7 @@
 						class="switch__file"
 						accept=".zip,application/zip"
 						@change="onArchive">
-					<NcButton variant="primary" :disabled="busy !== ''" @click="$refs.archive.click()">
+					<NcButton variant="primary" :disabled="busy !== ''" @click="pickArchive">
 						<template #icon>
 							<NcLoadingIcon v-if="busy === 'posts'" :size="20" />
 							<IconUpload v-else :size="20" />
@@ -358,6 +358,11 @@ export default {
 	},
 
 	methods: {
+		/** Opens the file chooser for the export archive. */
+		pickArchive() {
+			/** @type {HTMLInputElement} */ (this.$refs.archive).click()
+		},
+
 		t,
 		n,
 
@@ -528,7 +533,7 @@ export default {
 		 * subtly different card with no error to go on.
 		 */
 		drawCard() {
-			const canvas = this.$refs.card
+			const canvas = /** @type {HTMLCanvasElement|undefined} */ (this.$refs.card)
 			const ctx = canvas?.getContext?.('2d')
 			if (!ctx) {
 				return
@@ -585,7 +590,7 @@ export default {
 		},
 
 		downloadCard() {
-			this.$refs.card?.toBlob((blob) => {
+			/** @type {HTMLCanvasElement|undefined} */ (this.$refs.card)?.toBlob((blob) => {
 				if (!blob) {
 					return
 				}

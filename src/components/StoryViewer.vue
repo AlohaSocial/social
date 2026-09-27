@@ -204,7 +204,7 @@ export default {
 	props: {
 		/** the bar's groups: `{account, stories, seen, own}` each */
 		groups: {
-			type: Array,
+			type: /** @type {import('vue').PropType<Array<{account: import('../types/Mastodon.js').Account, stories: object[], seen: boolean, own: boolean}>>} */ (Array),
 			required: true,
 		},
 
@@ -238,7 +238,7 @@ export default {
 	computed: {
 		...mapStores(useAccountStore),
 
-		/** @return {object|undefined} */
+		/** @return {{account: import('../types/Mastodon.js').Account, stories: object[], seen: boolean, own: boolean}|undefined} */
 		group() {
 			return this.groups[this.groupIndex]
 		},
@@ -294,7 +294,7 @@ export default {
 				return
 			}
 			// somebody writing a reply is not paging
-			if (event.target?.closest?.('input, textarea, [contenteditable]')) {
+			if (/** @type {Element|null} */ (event.target)?.closest?.('input, textarea, [contenteditable]')) {
 				return
 			}
 

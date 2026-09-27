@@ -90,7 +90,7 @@
 				tabindex="-1"
 				aria-hidden="true"
 				@change="importArchive">
-			<NcButton :disabled="importing" @click="$refs.archive.click()">
+			<NcButton :disabled="importing" @click="pick('archive')">
 				<template #icon>
 					<NcLoadingIcon v-if="importing" :size="20" />
 					<IconUpload v-else :size="20" />
@@ -127,7 +127,7 @@
 				tabindex="-1"
 				aria-hidden="true"
 				@change="importFollows">
-			<NcButton :disabled="followsBusy" @click="$refs.follows.click()">
+			<NcButton :disabled="followsBusy" @click="pick('follows')">
 				<template #icon>
 					<NcLoadingIcon v-if="followsBusy" :size="20" />
 					<IconAccountMultiplePlus v-else :size="20" />
@@ -154,7 +154,7 @@
 					tabindex="-1"
 					aria-hidden="true"
 					@change="importCsv($event, 'blocks')">
-				<NcButton :disabled="csvImport !== ''" @click="$refs.blocks.click()">
+				<NcButton :disabled="csvImport !== ''" @click="pick('blocks')">
 					<template #icon>
 						<NcLoadingIcon v-if="csvImport === 'blocks'" :size="20" />
 						<IconCancel v-else :size="20" />
@@ -169,7 +169,7 @@
 					tabindex="-1"
 					aria-hidden="true"
 					@change="importCsv($event, 'mutes')">
-				<NcButton :disabled="csvImport !== ''" @click="$refs.mutes.click()">
+				<NcButton :disabled="csvImport !== ''" @click="pick('mutes')">
 					<template #icon>
 						<NcLoadingIcon v-if="csvImport === 'mutes'" :size="20" />
 						<IconVolumeOff v-else :size="20" />
@@ -184,7 +184,7 @@
 					tabindex="-1"
 					aria-hidden="true"
 					@change="importCsv($event, 'lists')">
-				<NcButton :disabled="csvImport !== ''" @click="$refs.lists.click()">
+				<NcButton :disabled="csvImport !== ''" @click="pick('lists')">
 					<template #icon>
 						<NcLoadingIcon v-if="csvImport === 'lists'" :size="20" />
 						<IconFormatListBulleted v-else :size="20" />
@@ -217,7 +217,7 @@
 				tabindex="-1"
 				aria-hidden="true"
 				@change="importPosts">
-			<NcButton :disabled="postsBusy" @click="$refs.posts.click()">
+			<NcButton :disabled="postsBusy" @click="pick('posts')">
 				<template #icon>
 					<NcLoadingIcon v-if="postsBusy" :size="20" />
 					<IconPostOutline v-else :size="20" />
@@ -405,6 +405,11 @@ export default {
 	},
 
 	methods: {
+		/** @param {string} name the ref of the file input behind a button */
+		pick(name) {
+			/** @type {HTMLInputElement} */ (this.$refs[name]).click()
+		},
+
 		t,
 
 		/**
@@ -516,7 +521,8 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		async importArchive(event) {
-			const file = event?.target?.files?.[0]
+			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
+			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
@@ -538,8 +544,8 @@ export default {
 			} finally {
 				this.importing = false
 				// cleared, or choosing the same file twice fires no change
-				if (event?.target) {
-					event.target.value = ''
+				if (input) {
+					input.value = ''
 				}
 			}
 		},
@@ -558,7 +564,8 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async importPosts(event) {
-			const file = event?.target?.files?.[0]
+			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
+			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
@@ -593,8 +600,8 @@ export default {
 				showError(error?.response?.data?.error || t('social', 'Could not import those posts'))
 			} finally {
 				this.postsBusy = false
-				if (event?.target) {
-					event.target.value = ''
+				if (input) {
+					input.value = ''
 				}
 			}
 		},
@@ -641,7 +648,8 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async importCsv(event, kind) {
-			const file = event?.target?.files?.[0]
+			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
+			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
@@ -662,8 +670,8 @@ export default {
 				showError(error?.response?.data?.error || t('social', 'Could not read that file'))
 			} finally {
 				this.csvImport = ''
-				if (event?.target) {
-					event.target.value = ''
+				if (input) {
+					input.value = ''
 				}
 			}
 		},
@@ -696,7 +704,8 @@ export default {
 		},
 
 		async importFollows(event) {
-			const file = event?.target?.files?.[0]
+			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
+			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
@@ -722,8 +731,8 @@ export default {
 				showError(error?.response?.data?.error || t('social', 'Could not import those follows'))
 			} finally {
 				this.followsBusy = false
-				if (event?.target) {
-					event.target.value = ''
+				if (input) {
+					input.value = ''
 				}
 			}
 		},

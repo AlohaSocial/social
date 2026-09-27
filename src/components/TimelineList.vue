@@ -216,7 +216,7 @@ export default {
 		display: {
 			type: String,
 			default: 'list',
-			validator: (value) => ['list', 'grid'].includes(value),
+			validator: (value) => ['list', 'grid'].includes(String(value)),
 		},
 
 		/** Whose profile the grid links its tiles into. */
@@ -544,7 +544,7 @@ export default {
 				return byProp
 			}
 
-			const byType = this.emptyContent[this.$route.params.type]
+			const byType = this.emptyContent[String(this.$route.params.type)]
 			if (byType !== undefined) {
 				return byType
 			}
@@ -616,7 +616,7 @@ export default {
 			}
 
 			const order = []
-			const depth = {}
+			const depth = /** @type {Record<string, number>} */ ({})
 			const seen = new Set()
 			const visit = (parentId, level) => {
 				for (const status of byParent.get(parentId) ?? []) {
@@ -658,7 +658,7 @@ export default {
 				return {}
 			}
 
-			const parents = {}
+			const parents = /** @type {Record<string, boolean>} */ ({})
 			for (const status of this.timelineStore.getTimeline) {
 				const parent = String(status.in_reply_to_id ?? '')
 				if (parent !== '') {
@@ -886,7 +886,7 @@ export default {
 		// remains as a slow safety net. Without it, poll every 30 seconds.
 		const hasPush = onTimelinePush(this.onPushed)
 		this.pollEvery = (hasPush ? 300 : 30) * 1000
-		this.intervalId = setInterval(() => this.pollIfVisible(), this.pollEvery)
+		this.intervalId = window.setInterval(() => this.pollIfVisible(), this.pollEvery)
 		// a tab nobody is looking at does not need to ask; it catches up when
 		// it comes back
 		document.addEventListener('visibilitychange', this.pollOnReturn)
@@ -1177,7 +1177,7 @@ export default {
 			}
 
 			clearTimeout(this.seenTimer)
-			this.seenTimer = setTimeout(() => this.markSeen(), SEEN_AFTER)
+			this.seenTimer = window.setTimeout(() => this.markSeen(), SEEN_AFTER)
 		},
 
 		/**

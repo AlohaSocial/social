@@ -557,9 +557,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */
 		item: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object),
 			default: () => {},
 		},
 
@@ -882,6 +881,7 @@ export default {
 			return allowedByAuthor(this.item, 'like')
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		blockButtons() {
 			return [
 				{
@@ -898,6 +898,7 @@ export default {
 			]
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		reportButtons() {
 			return [
 				{
@@ -962,6 +963,7 @@ export default {
 			return code === '' || code === 'und' ? '' : languageName(code)
 		},
 
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		deleteButtons() {
 			return [
 				{
@@ -1241,8 +1243,9 @@ export default {
 		 * @param {MouseEvent} event the press
 		 */
 		onPostClick(event) {
+			const target = /** @type {Element|null} */ (event.target)
 			if (this.postHref && !event.defaultPrevented && event.button === 0
-				&& !event.target?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')
+				&& !target?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')
 				&& (window.getSelection?.()?.toString() ?? '') === '') {
 				if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 					return
@@ -1258,7 +1261,7 @@ export default {
 			if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 				return
 			}
-			if (event.target?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')) {
+			if (/** @type {Element|null} */ (event.target)?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')) {
 				return
 			}
 			if ((window.getSelection?.()?.toString() ?? '') !== '') {
@@ -1343,7 +1346,7 @@ export default {
 			this.isEditing = true
 			this.$nextTick(() => {
 				if (this.$refs.editInput) {
-					this.$refs.editInput.focus()
+					/** @type {HTMLElement} */ (this.$refs.editInput).focus()
 				}
 			})
 		},
@@ -1519,7 +1522,7 @@ export default {
 			// the bar below owns what a reaction does -- the request, the
 			// counts it answers with, the failure -- so this asks it to open
 			// its own picker rather than sending anything itself
-			this.$refs.reactionBar?.askForPicker?.()
+			/** @type {{askForPicker?: () => void}|undefined} */ (this.$refs.reactionBar)?.askForPicker?.()
 		},
 
 		/**

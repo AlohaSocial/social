@@ -103,8 +103,8 @@
 			maxlength="1500"
 			:value="preview.description || ''"
 			:placeholder="t('social', 'A cat asleep on a keyboard')"
-			@input="$emit('describe', { key: randomKey, description: $event.target.value })"
-			@change="$emit('commitDescription', { key: randomKey, description: $event.target.value })" />
+			@input="$emit('describe', { key: randomKey, description: valueOf($event) })"
+			@change="$emit('commitDescription', { key: randomKey, description: valueOf($event) })" />
 	</div>
 </template>
 
@@ -116,6 +116,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import { filterCss } from '../../utils/imageFilters.js'
 import { NUDGE, focusFromPoint, isFocalPoint, nudgeFocus, positionOfFocus } from '../../utils/focalPoint.js'
 import { translate } from '@nextcloud/l10n'
+import { valueOf } from '../../utils/dom.js'
 import MediaAttachment from '../MediaAttachment.vue'
 
 /** which way each arrow key moves the point, in focus units (y points up) */
@@ -137,9 +138,8 @@ export default {
 	},
 
 	props: {
-		/** @type {import('vue').PropType<import('./Composer.vue').LocalAttachment>} */
 		preview: {
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../../types/Composer.js').LocalAttachment>} */ (Object),
 			required: true,
 		},
 
@@ -149,7 +149,7 @@ export default {
 		},
 	},
 
-	emits: ['delete', 'describe', 'commitDescription', 'focus', 'commitFocus'],
+	emits: ['delete', 'describe', 'commitDescription', 'focus', 'commitFocus', 'filter'],
 
 	data() {
 		return {
@@ -221,13 +221,14 @@ export default {
 	methods: {
 		t: translate,
 		filterCss,
+		valueOf,
 
 		toggleFocusing() {
 			this.focusing = !this.focusing
 			if (this.focusing) {
 				// the pad takes the keys, so it takes the focus: pressing the
 				// button and then an arrow should move the point, not the page
-				this.$nextTick(() => this.$refs.focusPad?.focus())
+				this.$nextTick(() => /** @type {HTMLElement|undefined} */ (this.$refs.focusPad)?.focus())
 			}
 		},
 
@@ -243,8 +244,9 @@ export default {
 			this.dragging = true
 			// keeps the moves coming even once the pointer has left the pad,
 			// which is exactly where a drag towards the edge ends up
-			if (typeof event.currentTarget?.setPointerCapture === 'function') {
-				event.currentTarget.setPointerCapture(event.pointerId)
+			const pad = /** @type {HTMLElement|null} */ (event.currentTarget)
+			if (typeof pad?.setPointerCapture === 'function') {
+				pad.setPointerCapture(event.pointerId)
 			}
 			this.setFocusFromEvent(event)
 		},
@@ -282,7 +284,7 @@ export default {
 		 * @param {PointerEvent} event a pointer somewhere over the pad
 		 */
 		setFocusFromEvent(event) {
-			const pad = event.currentTarget
+			const pad = /** @type {HTMLElement} */ (event.currentTarget)
 			const bounds = pad.getBoundingClientRect()
 			const focus = focusFromPoint(
 				event.clientX - bounds.left,
