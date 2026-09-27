@@ -199,6 +199,12 @@ class ACoreTest extends TestCase {
 			'content is sanitized not stripped' => [ACore::AS_CONTENT, '<p onclick="x">hi <b>there</b></p>', '<p>hi <b>there</b></p>'],
 			'username drops tags' => [ACore::AS_USERNAME, '<b>alice</b>', 'alice'],
 			'account drops tags' => [ACore::AS_ACCOUNT, 'alice@<i>a.example</i>', 'alice@a.example'],
+			// a tag with no `>` of its own would be closed by whatever HTML it
+			// was put into, handler and all
+			'username drops an unterminated tag' => [ACore::AS_USERNAME, 'Alice <img src=x onerror=alert(1)//', 'Alice '],
+			'string drops an unterminated tag' => [ACore::AS_STRING, 'cw <svg onload=alert(1)', 'cw '],
+			'a heart still is not a tag' => [ACore::AS_USERNAME, 'Alice <3', 'Alice <3'],
+			'an unclosed letter without an attribute is still prose' => [ACore::AS_USERNAME, 'a<b', 'a<b'],
 		];
 	}
 

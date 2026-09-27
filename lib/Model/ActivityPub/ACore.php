@@ -691,12 +691,21 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 * fields people write prose in: a content warning of `I <3 cats` was
 	 * stored as `I `, and `CW: 1<2 and 3` as `CW: 1`.
 	 *
+	 * A tag that is opened with an attribute and never closed goes too, to the
+	 * end of the text: `<img src=x onerror=…` has no `>` of its own, and a
+	 * renderer that put it into HTML would close it at the next `>` it wrote.
+	 * Without an attribute it is left alone, so `a<b` is still a name.
+	 *
 	 * This is a flattener and not a sanitiser: a plain-text field is escaped
 	 * by whatever renders it, and markup that is meant to stay markup goes
 	 * through AS_CONTENT, which sanitises it properly.
 	 */
 	public static function withoutMarkup(string $value): string {
-		return (string)preg_replace('/<\/?[a-zA-Z][^>]*>/', '', $value);
+		return (string)preg_replace(
+			['/<\/?[a-zA-Z][^>]*>/', '/<[a-zA-Z][\w-]*\s[^>]*=[^>]*$/'],
+			'',
+			$value
+		);
 	}
 
 	/**

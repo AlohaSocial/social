@@ -519,6 +519,7 @@ import { isKnownVisibility } from '../Visibility/VisibilitiesInfos.js'
 import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
 import Tribute from 'tributejs'
+import { escapeHtml, hashtagChip, mentionChip, mentionMenuItem } from '../../utils/mentionTemplates.js'
 import eventBus from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
@@ -881,19 +882,11 @@ export default {
 						},
 
 						menuItemTemplate(item) {
-							return '<img src="' + item.original.avatar + '" /><div>'
-								+ '<span class="displayName">' + item.original.key + '</span>'
-								+ '<span class="account">' + item.original.value + '</span>'
-								+ '</div>'
+							return mentionMenuItem(item.original)
 						},
 
 						selectTemplate(item) {
-							return '<span class="mention" contenteditable="false">'
-								+ `<a href="${item.original.url}" target="_blank">`
-								+ `<img src="${item.original.avatar}"/>`
-								+ `@${item.original.value}`
-								+ '</a>'
-								+ '</span>&nbsp;'
+							return mentionChip(item.original)
 						},
 
 						values: debounce(async (text, populate) => {
@@ -907,7 +900,9 @@ export default {
 								key: user.preferredUsername,
 								value: user.account,
 								url: user.url,
-								avatar: user.local ? generateUrl(`/avatar/${user.preferredUsername}/32`) : generateUrl(`apps/social/api/v1/global/actor/avatar?id=${user.id}`),
+								avatar: user.local
+									? generateUrl('/avatar/{user}/32', { user: user.preferredUsername })
+									: generateUrl('apps/social/api/v1/global/actor/avatar?id={id}', { id: user.id }),
 							}))
 
 							logger.debug('Found accounts for a mention', { count: users.length })
@@ -917,7 +912,7 @@ export default {
 					{
 						trigger: '#',
 						menuItemTemplate(item) {
-							return item.original.value
+							return escapeHtml(item.original.value)
 						},
 
 						selectTemplate(item) {
@@ -927,8 +922,7 @@ export default {
 							} else {
 								tag = item.original.value
 							}
-							return '<span class="hashtag" contenteditable="false">'
-								+ '<a href="' + generateUrl('/timeline/tags/' + tag) + '" target="_blank">#' + tag + '</a></span>'
+							return hashtagChip(tag, generateUrl('/timeline/tags/{tag}', { tag }))
 						},
 
 						values: debounce(async (text, populate) => {
@@ -953,7 +947,7 @@ export default {
 						if (this.current.mentionText === '') {
 							return undefined
 						} else {
-							return '<li data-index="0">#' + this.current.mentionText + '</li>'
+							return '<li data-index="0">#' + escapeHtml(this.current.mentionText) + '</li>'
 						}
 					}
 				},
