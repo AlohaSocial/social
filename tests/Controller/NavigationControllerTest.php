@@ -130,6 +130,7 @@ class NavigationControllerTest extends TestCase {
 			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
 			$this->filterService,
+			$this->createStub(\OCA\Social\Service\ExternalMediaQuota::class),
 			new NullLogger()
 		);
 	}
@@ -188,6 +189,10 @@ class NavigationControllerTest extends TestCase {
 			// whether My interests is on for this reader; what it holds is
 			// InterestService::pageState()'s, tested there
 			'interests' => [],
+			// the media quota of a self-registered external user; alice is not one
+			'externalMedia' => null,
+			// and whether people may invite others to register; not here
+			'externalInvites' => false,
 			'cloudAddress' => 'https://cloud.example/index.php',
 		], $this->serverData());
 	}

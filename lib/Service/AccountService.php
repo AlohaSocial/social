@@ -223,12 +223,13 @@ class AccountService {
 	 * Refuses a fediverse identity to a Nextcloud account at a blocked email
 	 * domain.
 	 *
-	 * Mastodon's email-domain block polices its sign-up. There is no sign-up
-	 * here — the server decides who gets a Nextcloud account — so this is the
-	 * one decision left that is this app's to make, and it is the same
+	 * Mastodon's email-domain block polices its sign-up. For an internal user
+	 * the server decides who gets a Nextcloud account, so this is the same
 	 * question one step later: whether this instance publishes a fediverse
 	 * identity for whoever is behind that address. It matters on a server with
 	 * open registration, which is where a throwaway-address domain turns up.
+	 * A self-registered external user is asked it at the registration form as
+	 * well (`ExternalUserService::assertEmailAvailable()`).
 	 *
 	 * An account with no email address is allowed: there is nothing to check
 	 * it against, and a server that stores no addresses would otherwise hand

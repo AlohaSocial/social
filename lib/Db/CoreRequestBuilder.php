@@ -95,6 +95,9 @@ class CoreRequestBuilder {
 	public const TABLE_STRIKES = 'social_strike';
 	public const TABLE_STREAM_QUEUE = 'social_stream_queue';
 	public const TABLE_STREAM_TAGS = 'social_stream_tag';
+	public const TABLE_EXTERNAL_USERS = 'social_ext_user';
+	public const TABLE_EXTERNAL_SIGNUPS = 'social_ext_signup';
+	public const TABLE_EXTERNAL_INVITES = 'social_ext_invite';
 
 	public static array $tables = [
 		self::TABLE_ACTIONS => [
@@ -740,6 +743,36 @@ class CoreRequestBuilder {
 		self::TABLE_STREAM_TAGS => [
 			'stream_id',
 			'hashtag'
+		],
+		self::TABLE_EXTERNAL_USERS => [
+			'uid',
+			'uid_lower',
+			'password',
+			'displayname',
+			'origin',
+			'creation'
+		],
+		self::TABLE_EXTERNAL_SIGNUPS => [
+			'id',
+			'handle',
+			'email',
+			'password',
+			'token',
+			'verified',
+			'approval',
+			'invite_id',
+			'ip_hash',
+			'creation'
+		],
+		self::TABLE_EXTERNAL_INVITES => [
+			'id',
+			'token',
+			'creator',
+			'note',
+			'max_uses',
+			'uses',
+			'expires',
+			'creation'
 		],
 		self::TABLE_REPORTS => [
 			'id',

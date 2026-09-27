@@ -334,7 +334,8 @@ single web server; Redis is what several need.
 ## The administration page
 
 **Administration → Social.** Cards, grouped by what they are for --
-Overview, Moderation, What people see, What is kept, Federation, Server -- with
+Overview, External users, Moderation, What people see, What is kept,
+Federation, Server -- with
 a list of them beside the page on a wide screen:
 
 
@@ -465,6 +466,69 @@ federated timeline here holds and where every public post written here is
 sent.
 
 ---
+
+## External users
+
+People without an account on this server can register one themselves, when
+an administrator switches it on. They log in through the normal login page
+and reach Social and nothing else. It is off by default, and the three cards
+are in the **External users** group of the administration page, for
+administrators proper only: who may have an account here is not a
+moderator's decision.
+
+**Registration.** The switch *Let people register*, the maximum number of
+external accounts (registration closes when that many exist, with a message
+saying so), the megabytes of media each may upload, and the minimum age a
+person confirms. *Who gets an account* is anybody who registers, anybody an
+administrator approves, or only the holders of an invitation link; an
+invitation admits its holder in every mode, without approval. With *Confirm
+the email address* on, which is the default, the account is made when the
+link in the confirmation email is followed, so the server needs working
+mail. The form also asks to accept the server rules (the **Rules** card) and
+links the privacy policy and legal notice set in Administration → Theming.
+*Usernames nobody may register* adds to a built-in list (`admin`, `root`,
+`support`, `social`, `postmaster` and similar). Email domains on the access
+block list are refused here as they are for every account.
+
+*Require two-factor authentication* is Nextcloud's own mandatory two-factor
+setting for the `social-external` group, the same one as in Administration →
+Security; changing it asks for your password. With it on, external users set
+up a second factor when they first log in.
+
+Where Social is enabled for some groups only, external users are let in by
+adding `social-external` to them. Switching registration on does that, and
+the card warns and offers a button when the restriction leaves them out.
+
+**Waiting and invited.** The registrations waiting for approval, with
+*Approve*, which makes the account and emails the person, and *Reject*, which
+deletes the registration and emails them, with a reason if you give one.
+Below it, the invitation links: a note to remember who each is for, how many
+registrations it admits (0 for any number) and how many days it works (0 for
+ever). *Let everybody here send invitation links* also gives every user an
+*Invite people* section in their Social settings, single-use links that work
+for a week, at most ten open at a time.
+
+**External accounts.** Every external account with its email, when it
+registered and last logged in and what its media takes up. *Disable* and
+*Enable* are Nextcloud's own. *Promote* makes one an ordinary account of this
+server with the same username, password, two-factor setup and Social
+account; from then on the groups and apps you give them apply, and there is
+no way back. *Delete* removes the account and its Social account, the way
+deleting any Nextcloud user does. Both ask for your password. External users
+also appear on the Users page, with *Social* as their backend and in the
+`social-external` group.
+
+What an external user reaches: Social, logging in and out, their personal
+settings for their details, language, security, appearance and
+notifications, and their notifications. Everything else is refused before it
+runs, including every app installed later, and WebDAV, CalDAV and CardDAV are
+refused altogether, so Nextcloud's desktop and mobile clients and Talk do not
+work for them; Mastodon apps do. Nobody outside Social finds them in the
+share dialog, the contacts menu, the user status list or the system address
+book. See [Architecture.md](Architecture.md#external-users) for how.
+
+`occ social:reset` refuses to run while external accounts exist: their logins
+are rows of this app.
 
 ## Moderating
 
@@ -654,6 +718,21 @@ settings page, which validates the ranges given here; every one can be set with
 | `review_posts` | `1` | How many posts an account must have had published before its posts stop being held. `1` is first-post review as it has always meant. An account graduates by having that many posts approved — a person having looked at it that many times, which is the only measure of trust here that is not a guess. Capped at 20. |
 | `autospam` | `1` | Hold a post that trips one of the spam rules — more than five links in a short post, or more than five mentions from an account nobody follows and that follows nobody. Nothing is ever refused by the rules, only shown to a person. |
 
+### External users
+
+Set from the External users cards; these are the keys they write.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `external_enabled` | `0` | Whether people without an account may register one for Social. |
+| `external_max` | `100` | How many external accounts may exist. |
+| `external_media_quota` | `1024` | Megabytes of media each external user may upload. `0` is no quota. |
+| `external_signup_mode` | `approval` | `open`, `approval` or `invite`. |
+| `external_verify_email` | `1` | Whether the email address is confirmed before the account is made. |
+| `external_min_age` | `16` | The age a person confirms at registration. `0` asks nothing. |
+| `external_reserved` | `[]` | Usernames nobody may register, as a JSON array, on top of the built-in ones. |
+| `external_user_invites` | `0` | Whether every user may send invitation links. |
+
 ### System configuration
 
 Two `config.php` values, neither documented anywhere else:
@@ -692,6 +771,14 @@ resolved. Keep Nextcloud background jobs working as `Cron\Index` relies on
 them. The manual `occ social:check:install --index --force` remains a full
 rebuild for administrators; it clears and repopulates both indexes and should
 not be scheduled as a cron command.
+
+**External users**
+
+```bash
+occ social:external list                                        # who, and how many of how many
+OC_PASS=... occ social:external add <handle> --email EMAIL --password-from-env
+occ social:external promote <handle>                            # make one an ordinary account
+```
 
 **Delivery is behind**
 

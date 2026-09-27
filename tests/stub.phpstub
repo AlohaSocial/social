@@ -989,3 +989,61 @@ namespace OCA\Settings\Service {
 		}
 	}
 }
+
+namespace OCA\DAV\Events {
+	use OCP\EventDispatcher\Event;
+
+	class SabrePluginAddEvent extends Event {
+		public function getServer(): \Sabre\DAV\Server {}
+	}
+
+	class CardCreatedEvent extends Event {
+		public function getAddressBookId(): int {}
+		public function getAddressBookData(): array {}
+		public function getShares(): array {}
+		public function getCardData(): array {}
+	}
+
+	class CardUpdatedEvent extends Event {
+		public function getAddressBookId(): int {}
+		public function getAddressBookData(): array {}
+		public function getShares(): array {}
+		public function getCardData(): array {}
+	}
+}
+
+namespace OCA\DAV\CardDAV {
+	use OCP\IUser;
+
+	class SyncService {
+		public function updateUser(IUser $user): void {}
+		/** @param IUser|string $userOrCardId */
+		public function deleteUser($userOrCardId) {}
+	}
+}
+
+namespace Sabre\DAV {
+	class Server {
+		public function on(string $eventName, callable $callBack, int $priority = 100): void {}
+	}
+
+	class Exception extends \Exception {}
+}
+
+namespace Sabre\DAV\Exception {
+	class Forbidden extends \Sabre\DAV\Exception {}
+}
+
+namespace OCP\Navigation\Events {
+	use OCP\EventDispatcher\Event;
+
+	/**
+	 * Proposed for Nextcloud server; until a server ships it, the listener
+	 * for it is never called.
+	 */
+	class NavigationEntriesFilterEvent extends Event {
+		public function getEntries(): array {}
+		public function setEntries(array $entries): void {}
+		public function getType(): string {}
+	}
+}

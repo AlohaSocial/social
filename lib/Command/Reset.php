@@ -11,6 +11,7 @@ namespace OCA\Social\Command;
 
 use Exception;
 use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Db\ExternalUsersRequest;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
@@ -30,6 +31,7 @@ class Reset extends SocialCommand {
 		CheckService $checkService,
 		ConfigService $configService,
 		private MiscService $miscService,
+		private ExternalUsersRequest $externalUsersRequest,
 	) {
 		parent::__construct();
 		$this->checkService = $checkService;
@@ -75,6 +77,18 @@ class Reset extends SocialCommand {
 			$output->writeln(
 				'<error>Refusing to run non-interactively without --force:'
 				. ' there is nobody here to confirm.</error>'
+			);
+
+			return 1;
+		}
+
+		// their logins are rows of this app: emptying the table would leave
+		// Nextcloud users nobody can log in as, with their data still there
+		$externals = $this->externalUsersRequest->count();
+		if ($externals > 0) {
+			$output->writeln(
+				'<error>' . $externals . ' self-registered external user(s) log in through this app.'
+				. ' Delete them, or promote them with occ social:external promote, first.</error>'
 			);
 
 			return 1;

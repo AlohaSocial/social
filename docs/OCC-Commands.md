@@ -1101,6 +1101,38 @@ for cron.
 
 ---
 
+## External Users
+
+### `social:external`
+
+Self-registered external users: list them, add one without the registration
+form, or promote one to an ordinary local user.
+
+```
+php occ social:external list
+OC_PASS=... php occ social:external add <handle> --email EMAIL --password-from-env
+php occ social:external promote <handle>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `action` | Yes | `list`, `add` or `promote` |
+| `handle` | No | The user id, which is also the Social handle; needed by `add` and `promote` |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--email` | required | The email address of a new external user, for `add` |
+| `--password-from-env` | none | Read the password of a new external user from the `OC_PASS` environment variable, for `add` |
+
+`add` checks the handle, the email address and the room left under the
+maximum the same way the registration page does, and needs external users to
+be switched on. It skips email confirmation and approval. `promote` moves the
+user to Nextcloud's database backend with the same user id and password hash;
+from then on the normal app and group rules apply to them. A refusal prints
+the reason and exits with 1.
+
+---
+
 ## Installation & Maintenance
 
 ### `social:check:install`
@@ -1166,6 +1198,11 @@ nothing. Under `--no-interaction` the command refuses with exit code `1` unless
 `--force` is given: a confirmation prompt answers itself with its default when
 nobody is there, so without this the command would exit `0` having done nothing.
 
+It refuses with exit code `1`, before asking anything, while self-registered
+external users exist: their logins are rows of this app, and flushing them
+would leave Nextcloud users nobody can log in as. Delete them, or promote them
+with `social:external promote`, first.
+
 Without `--uninstall`:
 
 - empties every Social table (`CoreRequestBuilder::emptyAll()`),
@@ -1191,7 +1228,7 @@ The app files themselves are not removed, and the app is not disabled.
 | Code | Meaning |
 |------|---------|
 | 0 | Success, and also a confirmation prompt answered with "no" |
-| 1 | A refusal to act non-interactively without `--force` (`social:reset`, `social:check:install --index`, `social:benchmark`, `social:queue:retry`), a failed flush or uninstall in `social:reset`, streams `social:check:install --index` could not parse, a setup check that `social:check:install` reports as an error, `social:account:following` handled failure, or an uncaught exception in any command |
+| 1 | A refusal to act non-interactively without `--force` (`social:reset`, `social:check:install --index`, `social:benchmark`, `social:queue:retry`), a failed flush or uninstall in `social:reset`, `social:reset` while external users exist, streams `social:check:install --index` could not parse, a setup check that `social:check:install` reports as an error, `social:account:following` handled failure, or an uncaught exception in any command |
 
 ---
 
@@ -1199,7 +1236,7 @@ The app files themselves are not removed, and the app is not disabled.
 
 The `TimedJob`s below are among those registered in `<background-jobs>` in
 `appinfo/info.xml` (that list is the complete one), run by Nextcloud's cron;
-the last two are queued on demand instead:
+the last three are queued on demand instead:
 
 | Job | Class | Description |
 |-----|-------|-------------|
@@ -1208,5 +1245,7 @@ the last two are queued on demand instead:
 | Expired stories | `OCA\Social\Cron\ExpiredStories` | Hourly. Deletes the stories whose day is up, at most 500 per run. The second of the two guards on a story's expiry: every read already filters on `expires_at`, so an instance whose cron has stopped shows nothing it should not — but without this the rows and their pictures would pile up for ever, and "it disappears after a day" would be true of what people can see and false of what is stored. |
 | Scheduled posts | `OCA\Social\Cron\ScheduledPosts` | Every 5 minutes. Publishes the posts whose `scheduled_at` has passed, at most 50 per run. Shorter than the other two on purpose: a scheduled post may be published up to one cron period late, and a longer period would promise a precision the five-minute minimum on `scheduled_at` implies but the app could not keep. |
 | Block lists | `OCA\Social\Cron\BlocklistSync` | Daily. Re-reads the block lists an administrator follows and applies what they say; does nothing while no source is on. |
+| External registrations | `OCA\Social\Cron\ExternalSignups` | Hourly. Forgets registrations of external users whose email was not confirmed within a day, and invitations that expired or were used up. A registration waiting for an administrator is kept until somebody decides on it. |
 | Domain purge | `OCA\Social\Cron\DomainPurge` | Queued with a domain when one is added to the deny list — not registered in `appinfo/info.xml`, because a job listed there is added once at install time with no argument. Does 10 batches of 50 accounts per run and re-queues itself while anything of the domain is left. |
+| External promotion | `OCA\Social\Cron\ExternalPromoted` | Queued with a user id when an external user is promoted to a local one — not in `appinfo/info.xml`, for the same reason as the domain purge. Writes the user's system address book card, which external users do not have, in a request that sees them on their new backend. |
 | Actor cleanup | `OCA\Social\Cron\ActorCleanup` | Queued with an actor id when a deleted account is addressed by more posts than one inbox request should rewrite — not in `appinfo/info.xml`, for the same reason as the domain purge. Rewrites 2000 posts per run and re-queues itself while any remain. Without it, the rewrite ran inline in the request a peer was waiting on for its `Delete`, so the peer timed out, re-sent, and the work started over. |

@@ -43,6 +43,8 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {''|'show_all'|'default'|'hide_all'} [nsfwChoice] - What the reader chose for sensitive media; '' follows the instance (not on a public page)
  * @property {'show_all'|'default'|'hide_all'} [nsfwPolicy] - What happens to sensitive media for this reader (not on a public page)
  * @property {boolean} public - False when the page is accessed by an authenticated user. True otherwise
+ * @property {{quota: number, used: number}|null} [externalMedia] - A self-registered external user's media quota in MB (0 is none) and bytes used; null for everybody else
+ * @property {boolean} [externalInvites] - Whether people may invite others to register on this server
  * @property {Sections} [sections] - The sections this instance offers (not on a public page)
  * @property {boolean} setup - Whether the instance still needs its address confirmed
  * @property {string} [suggestedHandle] - The handle offered to somebody creating an account (only with needsAccount)

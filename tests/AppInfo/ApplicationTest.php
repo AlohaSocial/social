@@ -9,6 +9,9 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\AppInfo;
 
+use OCA\DAV\Events\CardCreatedEvent;
+use OCA\DAV\Events\CardUpdatedEvent;
+use OCA\DAV\Events\SabrePluginAddEvent;
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Dashboard\SocialBookmarksWidget;
@@ -20,6 +23,13 @@ use OCA\Social\Dashboard\SocialReportsWidget;
 use OCA\Social\Dashboard\SocialTimelineWidget;
 use OCA\Social\Dashboard\SocialTrendingWidget;
 use OCA\Social\Dashboard\SocialWidget;
+use OCA\Social\External\SignupLoginProvider;
+use OCA\Social\Listeners\ExternalAddressBookListener;
+use OCA\Social\Listeners\ExternalDavListener;
+use OCA\Social\Listeners\ExternalFirstLoginListener;
+use OCA\Social\Listeners\ExternalNavigationListener;
+use OCA\Social\Listeners\ExternalPageListener;
+use OCA\Social\Listeners\ExternalUserStatusListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
 use OCA\Social\Listeners\ProfileSectionListener;
@@ -27,6 +37,7 @@ use OCA\Social\Listeners\UserAccountListener;
 use OCA\Social\Listeners\UserDeletedListener;
 use OCA\Social\Middleware\AccessBlockMiddleware;
 use OCA\Social\Middleware\ApiRateLimitMiddleware;
+use OCA\Social\Middleware\ExternalScopeMiddleware;
 use OCA\Social\Middleware\RateLimitHeadersMiddleware;
 use OCA\Social\Notification\Notifier;
 use OCA\Social\Search\UnifiedSearchProvider;
@@ -36,12 +47,15 @@ use OCP\Accounts\UserUpdatedEvent;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent as PageRenderedEvent;
 use OCP\Group\Events\GroupChangedEvent;
 use OCP\Group\Events\GroupDeletedEvent;
 use OCP\Group\Events\UserAddedEvent;
 use OCP\Group\Events\UserRemovedEvent;
 use OCP\Profile\BeforeTemplateRenderedEvent;
 use OCP\User\Events\UserDeletedEvent;
+use OCP\User\Events\UserEnumerationFilterEvent;
+use OCP\User\Events\UserFirstTimeLoggedInEvent;
 use PHPUnit\Framework\TestCase;
 
 class ApplicationTest extends TestCase {
@@ -67,10 +81,15 @@ class ApplicationTest extends TestCase {
 		// without this one an account export silently leaves out the whole app
 		$context->expects($this->once())->method('registerUserMigrator')->with(SocialMigrator::class);
 
+		// the button under the login form that leads to the registration page
+		$context->expects($this->once())->method('registerAlternativeLoginProvider')->with(SignupLoginProvider::class);
+
 		$listeners = [];
-		$context->expects($this->exactly(8))->method('registerEventListener')
-			->willReturnCallback(function (string $event, string $listener) use (&$listeners): void {
+		$priorities = [];
+		$context->expects($this->exactly(15))->method('registerEventListener')
+			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$priorities): void {
 				$listeners[$event] = $listener;
+				$priorities[$event] = $priority;
 			});
 		$widgets = [];
 		$context->expects($this->exactly(9))->method('registerDashboardWidget')
@@ -92,7 +111,20 @@ class ApplicationTest extends TestCase {
 			UserRemovedEvent::class => GroupListListener::class,
 			GroupDeletedEvent::class => GroupListListener::class,
 			GroupChangedEvent::class => GroupListListener::class,
+			// self-registered external users stay out of the system address
+			// book, the user lists, other apps' first-login setup, the page
+			// chrome, the navigation and WebDAV
+			CardCreatedEvent::class => ExternalAddressBookListener::class,
+			CardUpdatedEvent::class => ExternalAddressBookListener::class,
+			UserEnumerationFilterEvent::class => ExternalUserStatusListener::class,
+			UserFirstTimeLoggedInEvent::class => ExternalFirstLoginListener::class,
+			PageRenderedEvent::class => ExternalPageListener::class,
+			ExternalNavigationListener::EVENT => ExternalNavigationListener::class,
+			SabrePluginAddEvent::class => ExternalDavListener::class,
 		], $listeners);
+		// ahead of Files, which copies the skeleton on the same event
+		$this->assertSame(ExternalFirstLoginListener::PRIORITY, $priorities[UserFirstTimeLoggedInEvent::class]);
+		$this->assertGreaterThan(0, ExternalFirstLoginListener::PRIORITY);
 		$this->assertSame([
 			SocialWidget::class,
 			SocialTimelineWidget::class,
@@ -156,15 +188,57 @@ class ApplicationTest extends TestCase {
 				AccessBlockMiddleware::class,
 				RateLimitHeadersMiddleware::class,
 				ApiRateLimitMiddleware::class,
+				ExternalScopeMiddleware::class,
 			],
 			$registered
 		);
 	}
 
-	public function testBootDoesNothing(): void {
+	/**
+	 * The only middleware that runs for other apps' controllers: without
+	 * `global` it would keep an external user inside Social only while they
+	 * were already there.
+	 */
+	public function testTheExternalScopeIsEnforcedForEveryApp(): void {
+		$global = [];
+		$context = $this->createStub(IRegistrationContext::class);
+		$context->method('registerMiddleware')->willReturnCallback(
+			static function (string $class, bool $isGlobal = false) use (&$global): void {
+				$global[$class] = $isGlobal;
+			}
+		);
+
+		$this->application()->register($context);
+
+		$this->assertSame([
+			AccessBlockMiddleware::class => false,
+			RateLimitHeadersMiddleware::class => false,
+			ApiRateLimitMiddleware::class => false,
+			ExternalScopeMiddleware::class => true,
+		], $global);
+	}
+
+	/**
+	 * Boot registers the backends of the external users, through one
+	 * injected function: nothing is resolved at registration time.
+	 */
+	public function testBootRegistersTheBackendsThroughOneInjectedFunction(): void {
 		$context = $this->createMock(IBootContext::class);
-		$context->expects($this->never())->method($this->anything());
+		$context->expects($this->once())->method('injectFn')->with($this->isInstanceOf(\Closure::class));
 
 		$this->application()->boot($context);
+	}
+
+	/** Loaded before login on every entry point, and still restrictable to groups. */
+	public function testTheAppIsLoadedBeforeLogin(): void {
+		$info = simplexml_load_file(__DIR__ . '/../../appinfo/info.xml');
+		$this->assertNotFalse($info);
+
+		$types = [];
+		foreach ($info->types->children() as $type) {
+			$types[] = $type->getName();
+		}
+
+		$this->assertSame(['extended_authentication'], $types);
 	}
 }

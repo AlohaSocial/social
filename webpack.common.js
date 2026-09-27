@@ -24,6 +24,7 @@ webpackConfig.entry = {
 	dashboard: path.join(__dirname, 'src', 'dashboard.js'),
 	oauth: path.join(__dirname, 'src', 'oauth.js'),
 	filesAction: path.join(__dirname, 'src', 'filesAction.js'),
+	signup: path.join(__dirname, 'src', 'signup.js'),
 }
 
 // The one entry that stays self-contained. It registers "Share to Social" in

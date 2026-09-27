@@ -339,7 +339,9 @@ own unified search. No external search engine to run.
   a relayed post arrives as the post it is rather than as a boost by the relay.
 - **Delete your Social account** from Settings, keeping your Nextcloud one —
   the posts, the follows and a `Delete` to every server that knew you. No
-  administrator, and no password to type for an account signed in through SSO.
+  administrator, and no password to type for an account signed in through SSO. A
+  self-registered external user, who has nothing here but Social, loses the whole
+  account with it.
 - **Authorized apps** — every app holding a key to your account, with what it
   may do and when it was last used, and a button that signs one out. The page
   to open after losing a phone.
@@ -581,6 +583,18 @@ the administration settings:
   never held**.
 - **An account browser** over every account this instance knows, with the standing
   decision and the strike history against each one.
+- **Let people without an account join — for Social only.** Switch on external users
+  and people register themselves from a "Create an account" button on the login page:
+  a username that becomes their handle, an email address they confirm, the server rules
+  and an age to confirm. You choose how many such accounts may exist, how much media each
+  may upload, and who gets one — anybody, anybody you approve from a queue on the same
+  page, or only the holders of an invitation link you (or, if you allow it, anybody
+  here) sent. They log in through the normal login page, two-factor authentication
+  included and enforceable with one switch, and reach Social and nothing else: no
+  Files, no Talk, no WebDAV, no other app, and nobody outside Social finds them in the
+  share dialog, the contacts menu or the address book. Mastodon apps work for them. One
+  click makes one an ordinary account of this server, password and Social account kept.
+  `occ social:external` lists, adds and promotes them.
 - **Federation health** — how many deliveries are waiting, how many keep failing, which
   instances they are stacked up against, how close each is to being abandoned (**16
   attempts**), and which instances have been given up on in the last seven days.

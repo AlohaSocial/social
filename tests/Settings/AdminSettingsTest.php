@@ -138,6 +138,7 @@ class AdminSettingsTest extends TestCase {
 			$userSession,
 			$groupManager,
 			$this->initialState,
+			$this->createStub(\OCA\Social\Service\ExternalAdminState::class),
 		);
 	}
 

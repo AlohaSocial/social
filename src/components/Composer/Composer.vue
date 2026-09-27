@@ -303,6 +303,7 @@
 				</NcButton>
 
 				<NcButton
+					v-if="hasFiles"
 					:title="t('social', 'Add from Files')"
 					variant="tertiary"
 					:aria-label="t('social', 'Add from Files')"
@@ -500,7 +501,7 @@ import PollIcon from 'vue-material-design-icons/Poll.vue'
 import CardTextOutline from 'vue-material-design-icons/CardTextOutline.vue'
 import PlacePicker from './PlacePicker.vue'
 import SchedulePicker from './SchedulePicker.vue'
-import { defineAsyncComponent, getCurrentInstance, ref } from 'vue'
+import { computed, defineAsyncComponent, getCurrentInstance, ref } from 'vue'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError, showSuccess } from '../../services/toast.js'
 import FocusOnCreate from '../../directives/focusOnCreate.js'
@@ -692,8 +693,10 @@ export default {
 
 	emits: ['posted'],
 	setup(props) {
-		const { hostname } = useServerData()
+		const { hostname, serverData } = useServerData()
 		const { currentUser } = useCurrentUser()
+		// a self-registered external user has no Files to attach from
+		const hasFiles = computed(() => !serverData.value?.externalMedia)
 
 		// what a click into the box opens up; the composer is also expanded
 		// by anything it already holds — see expanded()
@@ -711,6 +714,7 @@ export default {
 
 		return {
 			hostname,
+			hasFiles,
 			currentUser,
 			openedByHand,
 			closedByHand,

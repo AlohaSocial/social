@@ -17,6 +17,7 @@ Regression coverage includes identifiers above the 32-bit signed integer range a
 - [Frontend Architecture](#frontend-architecture)
 - [Integration Points](#integration-points)
 - [Account export and import](#account-export-and-import)
+- [External users](#external-users)
 - [Security](#security)
 - [Keeping this document in sync](#keeping-this-document-in-sync)
 
@@ -28,7 +29,7 @@ Nextcloud Social is a federated social networking app built on the W3C ActivityP
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.95
+**App version:** 0.26.96
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -224,6 +225,11 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_announce_read` | Who has dismissed which announcement: one row per (account, announcement), unique on the pair |
 | `social_scheduled` | Posts asked to be published later: one row per waiting post, with the client's request as JSON in `params` and the resolved visibility inside it |
 | `social_durable_cache` | `DurableCache`'s entries on an instance with no memcache: a hashed key, a JSON value and the unix time it expires at, indexed on that for the purge in `Cron\Cache`. Empty wherever a memcache is configured |
+| `social_ext_user` | The logins of self-registered external users: the Nextcloud user id, which is also their handle, its lowercase form (unique), the password hash, the display name and how the account came to be (`origin`). Everything else about the person is where Nextcloud keeps it for any user |
+| `social_ext_signup` | Registrations of external users that are not accounts yet: the handle and email they reserve, the password hash, the SHA-256 of the confirmation token, whether the email is confirmed (`verified`) and whether an administrator has to decide (`approval`), the invitation used and a salted hash of the address it came from |
+| `social_ext_invite` | Invitation links for external users: the token as it is sent, who made it, how many registrations it admits (`max_uses`, 0 for any number), how many it has (`uses`) and when it expires (`expires`, unix seconds, 0 for never) |
+
+`Version1000Date20260927000010` adds the three tables of self-registered external users, `social_ext_user`, `social_ext_signup` and `social_ext_invite` — see [External users](#external-users).
 
 `Version1000Date20260611000001` only drops the abandoned `social_3_*` tables from an earlier prototype. `Version1000Date20260907000001` adds the timeline indexes and the missing primary keys, `Version1000Date20260907000002` adds `social_actor_relation`, `Version1000Date20260907000003` adds the `bookmarked` flag to `social_stream_act`, `Version1000Date20260908000001` widens `social_client.app_client_secret` for its hashed value, `Version1000Date20260908000002` adds the `locked` flag to `social_actor`, `Version1000Date20260908000003` adds `social_report` (moderation reports), `Version1000Date20260908000004` adds the `fields` column to `social_actor` (the profile metadata fields), `Version1000Date20260908000005` adds `social_stream_card` (link previews), `Version1000Date20260909000001` adds `social_moderation` (the silence/suspend decisions, indexed on `level`), `Version1000Date20260910000001` adds the indexes the hot paths were querying as if they existed (`social_cache_doc.id_prim` and `parent_id_prim`, `social_stream_act` by (actor, flag), `social_stream_tag` by tag, `social_action` by (object, type), both queues by `status`/`id`, `social_client.token`, `social_stream.creation`, `social_cache_actor` by (local, details_update) and `social_follow` by (object, actor)) and drops the redundant five-column `ipoha` unique index on `social_stream`, `Version1000Date20260910000002` adds the sortable `trend_*` counter columns to `social_hashtag` zeroed (the JSON `trend` column stays and remains what the API hands back), `Version1000Date20260910000003` fills those columns in from the JSON, `Version1000Date20260911000001` adds the `sensitive` flag to `social_stream`, and `Version1000Date20260911000004` adds `social_followed_tag` (the hashtags an account follows, unique on (actor, tag) — which is also the index the home timeline reads). `Version1000Date20260911000005` adds `social_list` and `social_list_member` — Mastodon's lists and their membership, the membership table unique on (list, account), which is both what makes adding an account twice a no-op and the index the list timeline joins `social_stream.attributed_to_prim` on. `Version1000Date20260911000006` adds `social_filter` and `social_filter_kw` — the keyword filters an account mutes posts with, indexed by owner and by filter, which are the two reads there are. `Version1000Date20260911000007` adds `social_convo_state`, unique on (account, thread root) — the read and dismissed markers behind `/api/v1/conversations`. The conversations themselves get no table: a conversation is a thread of `social_stream` rows derived from `in_reply_to` at read time, and its id is the nid of the thread root. `Version1000Date20260911000008` adds `social_domain_block`, `social_account_note` and `social_mute_expiry` — the per-account instance blocks, the private notes and the expiry of a timed mute, each unique on the pair it is keyed by, which is both what makes writing one twice a no-op and the index its read path probes. An endorsement is not among them: it is a row in `social_actor_relation` with type `endorse`, which is what that table already holds. `Version1000Date20260911000009` adds `social_stream_rev` (the revisions of an edited status, indexed on (status, id), which is the only read there is) and `Version1000Date20260911000010` adds `social_featured_tag` (the hashtags an account pins to its profile, unique on (actor, tag)). `Version1000Date20260911000011` adds `social_announcement` and `social_announce_read` — the announcements and their dismissals, the dismissal table unique on (account, announcement), which is both what makes dismissing twice a no-op and the index the client read probes. The announcements table gets no index beyond its key: every read of it is its whole active set, and it holds a handful of rows. `Version1000Date20260911000014` adds `social_scheduled` — the posts a client asked to have published later — with two indexes, one per read there is: `(actor_id_prim, scheduled_at)` for one account's list and the daily cap, and `(scheduled_at)` for the cron's "what is due across every account", which the first index cannot answer because its leading column is the account. `Version1000Date20260911000020` adds `forwarded` to `social_report`: whether a report was passed on to the instance that hosts the reported account, which the admin API used to answer as a hardcoded `false`. `Version1000Date20260912000001` adds the two indexes `Version1000Date20260910000001` left out: `social_actor.user_id`, which resolves the logged-in user's actor on every authenticated request and had no index at all, and the four trend windows of `social_hashtag` other than `trend_1d` (`trend_1h`, `trend_12h`, `trend_3d`, `trend_10d`), each of which `getTrending()` filters and orders on. `Version1000Date20260912000002` adds `social_actor.bot` — whether a local account is automated, which is what Mastodon's `bot` reports and what decides whether the actor document says `Service` or `Person`; it was accepted from clients and dropped. `Version1000Date20260912000003` adds `social_strike` — the history of moderation decisions, indexed on the account, which is the only read there is. `Version1000Date20260912000011` adds `social_convo_state.muted` — the thread an account has stopped hearing from, a column rather than a table because that row already records what one account has done with one thread. `Version1000Date20260912000010` adds `social_client_auth`, unique on (client, account) with an index on each of the two secrets it is looked up by — and carries the authorization already on each client row across, so a token in use today goes on working. `Version1000Date20260912000006` adds `social_access_block`, unique on (type, value) — one table for two lists, because what differs between Mastodon's two is a severity column and a count, and neither is worth a second table on an instance that holds tens of these rows. `Version1000Date20260912000005` adds `social_announce_react`, unique on (announcement, account, emoji) — both what makes reacting twice with the same emoji a no-op and the index its two reads use. `Version1000Date20260912000004` adds `social_emoji`, unique on the shortcode — which is both what makes re-adding one a replacement rather than a second row nothing can tell from the first, and the index every read of it uses. `Version1000Date20260912000008` adds `social_collection` and `social_collection_item` — the albums an account curates out of its own posts, the item table unique on (collection, post) so adding one twice is a no-op, with a second index on the post because deleting one has to find every collection holding it. `Version1000Date20260912000009` adds `social_story` and `social_story_view` — a picture that expires after a day and who has seen it, indexed on (account, expiry) for the reads and on expiry alone for the cron that sweeps them, the view table unique on (story, viewer). `Version1000Date20260912000012` adds `social_place` and `social_stream.place_id` — where a post was taken, deduplicated on (name, country) with the name hashed because a unique index on a TEXT column is not portable; no geocoder is involved anywhere, see the migration. `Version1000Date20260914000002` adds `social_list.group_id`, indexed — the Nextcloud group a list follows, which is what `GroupListService` reads when a group changes: every list bound to it, whoever owns it. `Version1000Date20260914000001` adds `social_req_queue.object_id_prim`, indexed — the md5 of the id of the object a queued delivery is about, which is what lets a post ask the queue where it got to; empty on rows queued before the column existed, which are at most a few days of retries. `Version1000Date20260914000005` adds `social_gif` — the shared pictures the composer offers, unique on the slug, with the bytes in appdata beside the custom emoji: it is the same shape of thing, a small curated set served to everybody that must not break because a file moved in somebody's Files. `Version1000Date20260914000004` adds `social_reaction` — who reacted to which post with which emoji — unique on (actor, post, emoji) and indexed on the post, which is the read it exists for. A table of its own rather than another `type` in `social_action`: a like and a boost are a fact about a pair, which is what that table's key says, while a reaction carries a third thing and one account may react to one post several times over. `Version1000Date20260915000001` adds `social_filter_st` — the individual posts a filter covers, beside the keywords it matches, which is the other half of Mastodon's v2 filters and the only part of that API this app did not serve. The post is named by its `nid`, the id a client sends, with an index on the filter (how a filter's entries are read and deleted) and one on the status (not unique: two filters of one account, and two accounts, may each cover the same post). `Version1000Date20260915000002` adds `social_import_post` — what an account has brought over from an export, unique on (account, original id). A post written by the importer is a *new local post*: its original id belongs to the server it was written on and cannot be kept, so without this row nothing would remember where it came from, a second run of the same archive would write every post again, and a reply — which an archive names by its parent's original id — would have nothing to hang off. Nothing cascades: a post the account later deletes leaves its row, because the row says "this was imported" and importing it again because it was deleted here would undo a decision the account made. `Version1000Date20260915000003` adds `source_id`, `source_id_prim` and `local` to `social_story`, unique on the hashed id. A story used to be local by definition — no ActivityPub identity, no recipients — so the row had no way of saying whose network it belonged to; it is published to followers as an `Add` now and arrives from peers the same way. The unique index is what makes a story delivered twice one row, which matters more here than elsewhere because a fan-out reaches an instance once per follower on it, and `local` is what decides which stories are published outward and which may be deleted through the API. Existing rows are local and have their id minted on first read rather than in a `postSchemaChange`: a story lives a day, so within a day of the migration the question has answered itself. `Version1000Date20260915000004` adds `social_post_hold` — the review queue. What it stores is the *request*, the same shape `social_scheduled` holds, and not a post: a held post that existed as a row in `social_stream` with a flag on it would be one forgotten predicate away from a timeline, a hashtag page, a profile or an outbox, and this app has shipped exactly that leak before. A post that is not in the table cannot be read out of it by code nobody has written yet. Unique on `digest`, the md5 of the account and the text: a client told its post was held will be pressed again by its user and the Pixelfed app retries a 422 by itself, so without it one post held once would be twenty identical rows for a moderator to work through. Indexed on (`actor_id_prim`, `id`) for the author's own list and the per-account cap; the queue itself is read in `id` order off the primary key, because it is drained by people. `Version1000Date20260915000005` adds `social_stream.archived` — a post its author has put away. Deleting was the only thing this app offered somebody who no longer wanted a post on their profile, which is a bad answer to a common question: a photograph from four years ago is not something to destroy because it has stopped belonging at the top of a profile. A column rather than a table because it is one fact about one post and every read that must not show one is a read of `social_stream`; no index, because almost every row is `false` and always will be, and the queries that filter it are already selected by their own timeline's index. The filter is **fail-closed**: `StreamRequestBuilder::hideArchived()` is applied by the two base selects every stream read is built from, and the two reads that should see an archived post — the author's own list, and a post fetched by its own address — ask for it. A read written later shows none until somebody decides it should, rather than leaking one until somebody notices. Nothing federates: an archived post is still on every server that received it, and taking it back from them is what `Delete` is for. `Version1000Date20260915000006` adds `social_moderation.force_sensitive` and `social_media_block`. The first is the step between doing nothing and silencing — an account asked to put a content warning on its pictures without being taken out of the timelines, which is Mastodon's own tier and what Pixelfed calls `cw` — applied in `StreamRequest::save()` because a local post, a post that arrived in the inbox and a post the importer restored are the same row and a rule that held for one of them would be a rule nobody could explain. The second is the one thing none of the account-level tools does: stop a **file** coming back. A hash of the bytes as they arrive, checked in `CacheDocumentService::saveFromTempToCache()` — the one place an upload and a fetched remote attachment both pass through — with the reason and the moderator beside it, and a count of how many times it has been turned away, because a blocklist with no evidence is one nobody dares remove anything from a year later. `Version1000Date20260915000007` adds `social_stream_view` — who has opened a post. An author could see three likes and had no way to know whether that was three out of five or three out of four hundred; a story has had a view count since it was written and a post had none. What is counted is deliberately narrow: **a post's own page, opened by a signed-in account that is not its author**. Not an impression in a timeline — a post scrolled past has not been read, counting it would make the number meaningless, and it would write a row for every post on every page of every timeline. Unique on (post, viewer), so the number is people rather than visits. It is never federated and is on the author's copy alone: a count that arrived from another server would be a number about that server's readers added to this one's, meaning neither. `Version1000Date20260916000001` adds `social_trend_review` — what a moderator has decided about something that is trending. Trending is counted and shown with nobody in the loop, so the first ugly hashtag to catch on did so on the Explore page of every account here and the only remedy was to wait for it to fall off; Mastodon has nine admin routes for this and the app had none. **Rejected is what is stored, and everything else trends.** The other arrangement Mastodon offers — nothing trends until it is approved — would empty the Explore page of every instance on upgrade and leave it empty until somebody found the new panel; approval is still recorded, because a moderator wants to see what they have already looked at, but it grants nothing that was not already so. One table for the three kinds rather than three: what differs is a word (a tag is named by its text, a link by its URL, a status by its id) and splitting them would be three identical schemas, three queries to keep in step and three things each trend read would have to know about. The filter is applied where a trend list is **read**, never where the counters are written — a rejected tag keeps being counted, so lifting the decision puts it back with the number it would have had, and a decision that could only be undone by waiting for counters to refill is one nobody would risk making. `Version1000Date20260916000004` adds `social_channel`, `social_actor.actor_type` and `social_cache_doc.size` — the three things a `Video` this app publishes needs before a PeerTube will take it. PeerTube has **no video without a channel**: its builder resolves one by looking for a `Group` in the video's `attributedTo` and throws *"Cannot find associated video channel"* when there is none, then fetches that `Group` and looks for a `Person` in *its* `attributedTo`. A Social account is a `Person` and nothing else, so every `Video` published from here was refused on arrival — silently, and in PeerTube's log rather than in ours. A channel is **an actor like any other** — key pair, inbox, outbox, followers, followable, moderatable — which is the same design `social_team` uses and the reason neither needed the actor machinery written twice; what is new is the type it is served as and who owns it. It is stored under a reserved `channel/<handle>` user id, which no Nextcloud user can have because a user id may not contain a slash. The owner is the **`Person` actor**, not the Nextcloud user, so a channel points at the same thing the wire does. One is made for an account the first time it posts a video and used unless the person picks another: nobody should have to learn what a channel is in order to post a video, and an account that never posts one never grows an actor it did not ask for. It is made when the **post is written**, never when it is serialised — a serialisation happens once per instance a post is delivered to, and making an actor there would be a write on a read path, forty times over. `actor_type` is how it is served as a `Group`. A local actor's type was derived from one flag (`bot`, which moves it between `Person` and `Service`) and there was nowhere to say anything else; `''` means "decide as before", which is every row written until now. `social_cache_doc.size` is how many bytes a stored file is. PeerTube's `isRemoteVideoUrlValid()` wants `size` as an integer on every video file link and drops a link without one, so a `Video` from here arrived with nothing to play; it is recorded when the file is stored rather than measured per serialisation, and the per-account video quota asks the same question. **A post that cannot make a valid `Video` stays a `Note`**: no poster (`icon` is mandatory), no duration, or no channel, and the post is published in the shape Mastodon and Pixelfed both read. Sending a `Video` that is going to be thrown away is strictly worse than sending the one that works.
 
@@ -524,7 +530,7 @@ for it, since registration stores whatever scope string arrives.
 
 **Admin metrics.** `MetricsService` answers Mastodon's three metric shapes — a measure (one number a day over a window), a dimension (the ranked list behind one number) and retention (how much of each month's new accounts is still posting later) — plus the three admin trend routes, which answer exactly what the public ones answer because a trend here is what the counts say and there is no review queue to report on. A key this instance cannot answer is **refused with a 422 naming the ones it can**, never answered with zeroes: most of Mastodon's keys describe a sign-up, an invite system, an email address or a media store this app does not own, and `0` reads as "none", which is a different claim and the one an admin acts on. The window is snapped to whole days and capped at 370, because these are full scans of a date range rather than index probes. The SQL lives in the service in `protected` methods, as `AdminApiService`'s does and for the same reason: what decides which question gets asked is then testable without a database. `active_users` counts accounts that **posted**, not accounts that logged in — this app has no session of its own to count.
 
-**Blocks that are about an address.** Mastodon keeps three lists for this — IP blocks, email-domain blocks, canonical email blocks — and all three exist to police a sign-up. This app has no sign-up: an account is a Nextcloud account and the server decides who gets one. So two of the three are given the only meanings they can honestly have, and the third is not implemented rather than stored and never consulted. An **IP block** at `no_access` is enforced in `AccessBlockMiddleware`, which every request this app serves passes through — "no access" is a statement about the whole app, and a block that held on the inbox but not on the API, or on last month's routes but not on the ones added since, is not what an admin switched on; it answers **403**, so a peer stops redelivering. The two sign-up severities are refused at the API rather than stored. An **email-domain block** is checked once, in `AccountService::createActor()`: whether a Nextcloud account gets a fediverse identity at all, which is the same question Mastodon asks one step earlier and is the only one left that is this app's to answer. A **canonical email block** is a hash of the address of a deleted Mastodon account, kept so the same person cannot sign up again; nothing here holds an account's address after deletion, because the address is not this app's to hold. Ranges are matched on packed bytes (`inet_pton`) rather than on text, which is the only way `::1` and `0:0:0:0:0:0:0:1` are the same address and the only way a prefix that falls inside a byte means anything.
+**Blocks that are about an address.** Mastodon keeps three lists for this — IP blocks, email-domain blocks, canonical email blocks — and all three exist to police a sign-up. This app has none of its own for internal users, whose account is a Nextcloud account the server decided to give them, and an optional one for [external users](#external-users). So two of the three are given the only meanings they can honestly have, and the third is not implemented rather than stored and never consulted. An **IP block** at `no_access` is enforced in `AccessBlockMiddleware`, which every request this app serves passes through — "no access" is a statement about the whole app, and a block that held on the inbox but not on the API, or on last month's routes but not on the ones added since, is not what an admin switched on; it answers **403**, so a peer stops redelivering. The two sign-up severities are refused at the API rather than stored. An **email-domain block** is checked in `AccountService::createActor()`: whether a Nextcloud account gets a fediverse identity at all, which is the same question Mastodon asks one step earlier. For a self-registered external user it is asked at the registration form too (`ExternalUserService::assertEmailAvailable()`), which is exactly Mastodon's question. An IP block at `no_access` covers the registration routes like every other route of this app. A **canonical email block** is a hash of the address of a deleted Mastodon account, kept so the same person cannot sign up again; nothing here holds an account's address after deletion, because the address is not this app's to hold. Ranges are matched on packed bytes (`inet_pton`) rather than on text, which is the only way `::1` and `0:0:0:0:0:0:0:1` are the same address and the only way a prefix that falls inside a byte means anything.
 
 **The timeline switcher.** `TimelineSwitcher.vue` sits above the posts on the three timelines that are the same place seen from three distances — the home timeline (`My Feed`), `timeline` (Local) and `federated` (Global) — and on no others: everywhere else it would be a switch between three places the reader is not. It routes rather than fetching, so `Timeline.vue` and the store go on being the single answer to "which timeline is this". The values are the route's own words rather than the labels, because `timeline` is what the store calls the local one and `federated` the global one, and a second vocabulary in a component that only routes would be one more place for the two to disagree; `home` is the route with no `type` at all, so it is pushed as the bare route rather than as `type: 'home'`, which names a timeline nothing serves. Local and Global have **left the sidebar**: they are scopes of the page the switcher sets rather than places of their own, and two entries that lead to the same list while saying it is somewhere else are two too many. The Home entry stays lit while either is being read — `isActive()` honours a `covers` list on a menu entry, which is the set of `type` params that entry owns — so the sidebar never shows nothing chosen.
 
@@ -2620,6 +2626,139 @@ a freshly imported account has none. No `Delete`, no `Move`, no `Like`, no
 
 ---
 
+## External users
+
+Internal Nextcloud users use Social as they always have. An administrator can
+also open Social to a limited number of **external users**: people without a
+Nextcloud account who register one themselves, log in through the normal
+login form and reach nothing but Social. The settings are on the Social
+settings page, in the External users cards, and are all off by default.
+
+**They are real Nextcloud users.** `External\ExternalUserBackend` is a user
+backend of this app, holding the logins in `social_ext_user`. Because they are
+ordinary users on it, the login form, sessions, remember-me, password reset,
+password confirmation, two-factor authentication, the Users page (disable,
+delete, the backend column says "Social") and the Mastodon OAuth flow all work
+unchanged. The backend does not implement `ICreateUserBackend`, so nobody
+creates one from the Users page or `occ user:add`; they are made by
+`ExternalUserService::createAccount()` only. The user id is the handle: lower
+case letters, digits and underscore, with dot and dash inside, at most 64
+characters, not reserved (a built-in list and the administrator's), not
+anybody's user id on any backend, not held by a Social actor, deleted ones in
+retention included, and not reserved by a pending registration.
+
+`External\ExternalGroupBackend` exposes one read-only group, `social-external`,
+whose members are exactly the external users. It is hidden from the share
+dialog. Core's mandatory two-factor setting is group-based, and an
+administrator who restricts Social to groups names the externals with it.
+
+**Loaded before login.** `appinfo/info.xml` declares the app
+`extended_authentication`, which every entry point loads before it
+authenticates anybody — `index.php`, `ocs/`, `remote.php` and `public.php` —
+and which, unlike `authentication`, still lets Social be restricted to groups.
+`Application::boot()` registers both backends there. Where Social is
+restricted to groups, switching external users on adds `social-external` to
+them, and the settings card says when the restriction leaves them out.
+
+**Registration** (`ExternalSignupService`, `SignupController`, the
+`social-signup` entry). The login page shows a "Create an account" button,
+through `SignupLoginProvider`, while there is room and registration is not by
+invitation only. The mode decides who is admitted: `open` admits anybody,
+`invite` only the holder of an invitation link, `approval` puts the
+registration in a queue on the settings page. A valid invitation admits its
+holder in every mode, approval included, and a use is counted when the form is
+sent. With email confirmation on, which is the default, the account is made
+only when the link in the confirmation email is followed, within 24 hours.
+The form asks for the handle, the email, a password (8 characters at least,
+and the instance's password policy), acceptance of the server rules and, when
+a minimum age is set, confirmation of it. It carries a honeypot field and two
+rate limits, 10 an hour per address on the route and 5 registrations an hour
+per address in all, and it stops taking registrations while 1000 are
+waiting. A pending registration reserves its handle and its email; the
+unconfirmed ones are forgotten by `Cron\ExternalSignups` after a day. Email
+domains on the access block list are refused, as they are for every account.
+
+`ExternalUserService::createAccount()` takes a lock, then checks the room left
+under the maximum, the handle and the email again, because the person may have
+registered while there was room. It writes the login, dispatches
+`BeforeUserCreatedEvent` and `UserCreatedEvent` itself, sets the email, sets
+every account property to at most `v2-local` (display name, email and avatar)
+or `v2-private` (everything else) and turns the core profile off, so nothing
+about the person is published to trusted servers or the lookup server, makes
+Social their default app, and creates the Social actor. When any of that
+fails, the user is deleted again. `ExternalFirstLoginListener` stops the
+first-login event for external users before other apps see it, so Files does
+not copy the skeleton into their home and no default calendar is made.
+
+**What they reach** (`ExternalScope`, `Middleware\ExternalScopeMiddleware`).
+The middleware is registered as a **global** middleware, so it runs before the
+controllers of every app and of core, and it refuses whatever `ExternalScope`
+does not allow: a page is answered with a redirect to Social, anything else
+with 403. Allowed are this app, theming, notifications and the two-factor
+providers; logging in and out, two-factor challenges, password reset and
+confirmation; avatars and the assets every page loads; the core capabilities;
+their own user status; and the personal settings sections for their account
+details, language, security, appearance and notifications, whose navigation is
+cut down to those sections. Everything else is refused, including every app
+installed later. Core's profile page, `/u/{userId}`, is sent to the Social
+profile for everybody when it is an external user's, and for an external user
+whoever's it is. The app menu, unified search, the contacts menu and the
+account menu entries that lead elsewhere are taken off the page by
+`css/external-scope.css` (`ExternalPageListener`); on a server that dispatches
+`NavigationEntriesFilterEvent`, `ExternalNavigationListener` also removes the
+navigation entries themselves.
+
+WebDAV is not a controller. `External\ExternalDavGuard` runs in
+`Application::boot()`, which `remote.php` calls right before it hands the
+request to the DAV server, and ends a request with 403 when its session or its
+HTTP basic credentials are an external user's: this covers the legacy
+`/remote.php/caldav` and `/remote.php/carddav` endpoints, which have no hook
+of their own and would list the system address book. `ExternalDavListener`
+adds a `beforeMethod:*` handler to the DAV server of `/remote.php/dav` and
+`/remote.php/webdav` at priority 15, after Sabre's authentication, which
+refuses an external user whatever the credential was. Nextcloud's desktop and
+mobile clients, Talk and every CalDAV and CardDAV client are therefore
+refused; Mastodon apps work through the OAuth flow of this app.
+
+**Who sees them.** Inside Social they are local accounts like any other.
+Outside it they are invisible: `ExternalCollaboratorPlugin`, a collaborator
+search plugin for user shares, removes them from every people search that
+goes through core — the share dialog, mentions, Talk;
+`ExternalUserStatusListener` removes them from the user lists
+`UserEnumerationFilterEvent` filters; `ExternalAddressBookListener` deletes
+their card from the system address book as soon as it is written (the card is
+named `Social:<uid>.vcf`), which keeps them out of the contacts menu and of
+every CardDAV client. Administrators still see them on the Users page.
+
+**Quota.** `ExternalMediaQuota` is one number for every external user, in MB,
+checked in `CacheDocumentService::filterQuota()` — the one place every local
+upload passes — against the stored size of every local document the account
+holds. The video quota every account has still applies on top. Media that
+federated in is not charged to anybody. The person sees what they use on
+their Social settings page (`serverData.externalMedia`). Social stores media in
+app data, so the core per-user quota is not involved.
+
+**Two-factor authentication.** `ExternalTwoFactorService` reads and writes
+core's mandatory two-factor setting for `social-external` and keeps its
+shape: enforcement for a list of groups gains or loses the group, enforcement
+for everybody gains or loses it as an excluded group, and taking the last
+group off a list turns enforcement off rather than leaving an empty list,
+which core would read as everybody.
+
+**Promotion.** `ExternalUserService::promote()` moves an external user to
+Nextcloud's database backend with the same user id and password hash, in one
+transaction, and removes the login here. Their two-factor setup, preferences
+and Social account are keyed by the user id and stay. `Cron\ExternalPromoted`
+writes their system address book card in a later request, which sees them on
+their new backend.
+
+**Removal.** Deleting an external user goes through `IUserManager`, so the
+Social account goes the way it goes for any deleted user. `occ social:reset`
+refuses to run while external users exist, because emptying `social_ext_user`
+would leave Nextcloud users nobody can log in as.
+
+---
+
 ## Security
 
 **What is enforced**
@@ -2639,6 +2778,8 @@ a freshly imported account has none. No `Delete`, no `Move`, no `Like`, no
 - **Client secrets, authorization codes and access tokens are stored hashed** — `sha256:<hex>` digests (`SecretHasher`). A presented secret that already carries that prefix is never looked up as a legacy plaintext row, so the stored digest is not itself a working credential: offering it for lookup made a database dump, a backup or a read-only SQL flaw hand out usable tokens, which is the one thing hashing them is for
 - **Self-signed certificates** — TLS peer verification is skipped only when the `allow_self_signed` app config value is `1`
 - **My interests learns only from what the reader may read, and shows it to nobody else.** A signal names a post by id and nothing else; the hashtags are read from the stored post through the same visibility, block and mute filter the timelines use (`StreamRequest::getVisibleByNids()`), because the interests it produces are shown back on the reader's settings page — a signal naming a stranger's followers-only post would otherwise put that post's hashtags there. No raw signal is kept, nothing is federated, and every route is the viewer's own. Learning is **on by default** for a reader who has not chosen (`interests_default`), with a one-time notice in the web interface; an administrator for whom profiling from reading needs consent turns the default off
+
+- **External users reach Social only** — every controller of every app is checked against `ExternalScope`'s allowlist by a global middleware before it runs, and WebDAV by `ExternalDavGuard` and `ExternalDavListener`; hiding the menus is not what keeps them out. See [External users](#external-users).
 
 **Known gaps — these are real and deliberate to record**
 

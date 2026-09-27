@@ -160,6 +160,8 @@ class LocalControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
+	private ?\OCP\IUserManager $userManager = null;
+
 	private function controller(?string $userId = 'alice'): LocalController {
 		return new LocalController(
 			$this->request,
@@ -175,7 +177,8 @@ class LocalControllerTest extends TestCase {
 			$this->configService,
 			new NullLogger(),
 			$this->cacheDocumentService,
-			$this->bannerService
+			$this->bannerService,
+			$this->userManager ?? $this->createStub(\OCP\IUserManager::class),
 		);
 	}
 
@@ -532,6 +535,28 @@ class LocalControllerTest extends TestCase {
 			'type alice@cloud.example to confirm that this is the account to delete',
 			$response->getData()['error']
 		);
+	}
+
+	/** An external user has nothing here but Social, so their Nextcloud account goes too. */
+	public function testAccountDeleteTakesAnExternalUsersNextcloudAccountWithIt(): void {
+		$this->accountService->expects($this->once())->method('deleteOwnAccount')->with('alice', 'alice');
+		$user = $this->createMock(\OCP\IUser::class);
+		$user->method('getBackend')->willReturn($this->createStub(\OCA\Social\External\ExternalUserBackend::class));
+		$user->expects($this->once())->method('delete')->willReturn(true);
+		$this->userManager = $this->createStub(\OCP\IUserManager::class);
+		$this->userManager->method('get')->willReturn($user);
+
+		$this->assertSuccess($this->controller()->accountDelete('alice'), ['deleted' => true, 'userDeleted' => true]);
+	}
+
+	public function testAccountDeleteKeepsAnInternalUsersNextcloudAccount(): void {
+		$user = $this->createMock(\OCP\IUser::class);
+		$user->method('getBackend')->willReturn(null);
+		$user->expects($this->never())->method('delete');
+		$this->userManager = $this->createStub(\OCP\IUserManager::class);
+		$this->userManager->method('get')->willReturn($user);
+
+		$this->assertSuccess($this->controller()->accountDelete('alice'), ['deleted' => true]);
 	}
 
 	public function testAccountDeleteRequiresALoggedInUser(): void {

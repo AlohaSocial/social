@@ -53,6 +53,18 @@
 							class="social-admin__card"
 							:style="{ '--entry-index': index }">
 							<ActivitySection v-if="card.id === 'activity'" :activity="state.activity" />
+							<ExternalUsersSection
+								v-else-if="card.id === 'external'"
+								:external="state.external"
+								@changed="onExternalChanged" />
+							<ExternalRequestsSection
+								v-else-if="card.id === 'external-requests'"
+								:external="state.external"
+								@changed="onExternalChanged" />
+							<ExternalAccountsSection
+								v-else-if="card.id === 'external-accounts'"
+								:external="state.external"
+								@changed="onExternalChanged" />
 							<ReportsSection
 								v-else-if="card.id === 'reports'"
 								:reports="state.reports"
@@ -111,6 +123,9 @@ import AccountsSection from './AccountsSection.vue'
 import AnnouncementsSection from './AnnouncementsSection.vue'
 import DiscoverSection from './DiscoverSection.vue'
 import EmojiSection from './EmojiSection.vue'
+import ExternalAccountsSection from './ExternalAccountsSection.vue'
+import ExternalRequestsSection from './ExternalRequestsSection.vue'
+import ExternalUsersSection from './ExternalUsersSection.vue'
 import BackgroundSection from './BackgroundSection.vue'
 import FederationSection from './FederationSection.vue'
 import InterestsSection from './InterestsSection.vue'
@@ -158,6 +173,8 @@ const NOTHING = {
 	videoStorage: null,
 	/** @type {?object} how the background jobs are doing */
 	background: null,
+	/** @type {?object} self-registered external users (`ExternalAdminState`); administrators only */
+	external: null,
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -193,6 +210,9 @@ export default {
 		AnnouncementsSection,
 		DiscoverSection,
 		EmojiSection,
+		ExternalAccountsSection,
+		ExternalRequestsSection,
+		ExternalUsersSection,
 		BackgroundSection,
 		FederationSection,
 		InterestsSection,
@@ -241,6 +261,18 @@ export default {
 					cards: [
 						{ id: 'activity', title: t('social', 'Activity here') },
 					],
+				},
+				{
+					// who may have an account on this server: an administrator's
+					// decision, so a delegate is sent none of it
+					name: t('social', 'External users'),
+					cards: this.state.external
+						? [
+								{ id: 'external', title: t('social', 'Registration') },
+								{ id: 'external-requests', title: t('social', 'Waiting and invited') },
+								{ id: 'external-accounts', title: t('social', 'External accounts') },
+							]
+						: [],
 				},
 				{
 					name: t('social', 'Moderation'),
@@ -311,6 +343,15 @@ export default {
 
 	methods: {
 		t,
+
+		/**
+		 * What the External users cards read, after one of them changed it.
+		 *
+		 * @param {object} external `ExternalAdminState::current()`, or part of it
+		 */
+		onExternalChanged(external) {
+			this.state = { ...this.state, external: { ...this.state.external, ...external } }
+		},
 
 		/**
 		 * The access list after a block list was applied.

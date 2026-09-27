@@ -13,6 +13,7 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\BackgroundHealthService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\ExternalAdminState;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\InterestService;
@@ -80,6 +81,7 @@ class AdminSettings implements IDelegatedSettings {
 		private IUserSession $userSession,
 		private IGroupManager $groupManager,
 		private IInitialState $initialState,
+		private ExternalAdminState $externalAdminState,
 	) {
 	}
 
@@ -157,6 +159,9 @@ class AdminSettings implements IDelegatedSettings {
 			// what this instance does with a post somebody marked sensitive,
 			// for readers who have not chosen for themselves
 			'nsfwPolicy' => $this->sensitiveMediaService->instancePolicy(),
+			// self-registered external users: who may have an account on
+			// this server is a decision for an administrator proper
+			'external' => $this->isAdministrator() ? $this->externalAdminState->current() : null,
 		]);
 
 		return new TemplateResponse('social', 'settings/admin');

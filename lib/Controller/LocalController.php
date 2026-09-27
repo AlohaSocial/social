@@ -21,6 +21,7 @@ use OCA\Social\Exceptions\CacheContentSizeException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidHandleException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
@@ -51,6 +52,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
+use OCP\IUserManager;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
@@ -84,6 +86,7 @@ class LocalController extends Controller {
 		private LoggerInterface $logger,
 		private CacheDocumentService $cacheDocumentService,
 		private BannerService $bannerService,
+		private IUserManager $userManager,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -460,7 +463,9 @@ class LocalController extends Controller {
 	}
 
 	/**
-	 * Deletes the reader's own Social account, keeping their Nextcloud one.
+	 * Deletes the reader's own Social account, keeping their Nextcloud one —
+	 * unless they are a self-registered external user, whose Nextcloud account
+	 * exists for Social only and is deleted with it (`userDeleted`).
 	 *
 	 * The same deletion `occ social:account:delete` does: the posts go, the
 	 * follows go, and a `Delete` goes out to every server that knew the
@@ -487,6 +492,15 @@ class LocalController extends Controller {
 			}
 
 			$this->accountService->deleteOwnAccount($this->userId, $confirm);
+
+			// a self-registered external user has nothing on this server but
+			// the Social account, so their Nextcloud account goes with it
+			$user = $this->userManager->get($this->userId);
+			if (ExternalUserBackend::isExternal($user)) {
+				$user->delete();
+
+				return $this->success(['deleted' => true, 'userDeleted' => true]);
+			}
 
 			return $this->success(['deleted' => true]);
 		} catch (InvalidResourceException $e) {

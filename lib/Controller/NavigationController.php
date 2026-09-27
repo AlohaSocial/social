@@ -22,6 +22,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\ExternalMediaQuota;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\InterestService;
 use OCA\Social\Service\SectionsService;
@@ -76,6 +77,7 @@ class NavigationController extends Controller {
 		private InterestService $interestService,
 		private StreamService $streamService,
 		private FilterService $filterService,
+		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -166,6 +168,12 @@ class NavigationController extends Controller {
 			// that teaches it are on for this reader, decided before the
 			// switcher above the timeline is drawn
 			'interests' => $this->interestService->pageState($this->userId),
+			// a self-registered external user: no Files to attach from, and a
+			// media quota the settings page shows. Null for everybody else.
+			'externalMedia' => $this->externalMediaQuota->usageOf($this->userId),
+			// whether the administrator lets people invite others to register
+			'externalInvites' => $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_ENABLED) === '1'
+				&& $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES) === '1',
 		];
 
 		$this->logger->debug('[NavigationController] Initial serverData', ['serverData' => $serverData]);

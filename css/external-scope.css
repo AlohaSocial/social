@@ -1,0 +1,31 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/*
+ * Loaded on every page for a self-registered external user only
+ * (ExternalPageListener). Takes the parts of the header they cannot use off
+ * the page: the app menu, unified search and the contacts menu, and the
+ * account menu entries for help, the Nextcloud profile and administration.
+ * Their endpoints are refused by ExternalScopeMiddleware either way; this is
+ * so nothing is offered that would only fail.
+ */
+#header-start__appmenu,
+#header .app-menu,
+#unified-search,
+.unified-search-menu,
+#contactsmenu,
+.contactsmenu {
+	display: none !important;
+}
+
+#user-menu li:has(> a#help),
+#user-menu li:has(> a#profile),
+#user-menu li:has(> a#core_users),
+#user-menu li:has(> a#settings_administration),
+#user-menu li:has(> a#user_status-menu-entry),
+#user-menu li:has(> #help),
+#user-menu li:has(> #profile) {
+	display: none !important;
+}

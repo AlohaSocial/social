@@ -456,6 +456,50 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	}
 
 	/**
+	 * How many bytes of media, of any type, one account has uploaded here.
+	 *
+	 * The same stored `size` the video quota reads, and for the same reason;
+	 * streamed rows are somebody else's bytes and are left out.
+	 */
+	public function localBytesOf(string $account): int {
+		return $this->localBytesByAccount([$account])[$account] ?? 0;
+	}
+
+	/**
+	 * The bytes each of these accounts has uploaded, in one query.
+	 *
+	 * @param string[] $accounts
+	 * @return array<string, int> account => bytes, for the accounts holding any
+	 */
+	public function localBytesByAccount(array $accounts): array {
+		$accounts = array_values(array_unique(array_filter($accounts, static fn (string $a): bool => $a !== '')));
+		if ($accounts === []) {
+			return [];
+		}
+
+		$bytes = [];
+		foreach (array_chunk($accounts, 500) as $chunk) {
+			$qb = $this->getQueryBuilder();
+			$expr = $qb->expr();
+			$qb->select('account')
+				->selectAlias($qb->func()->sum('size'), 'total')
+				->from(self::TABLE_CACHE_DOCUMENTS)
+				->where($expr->in('account', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_STR_ARRAY)))
+				->andWhere($expr->neq('local_copy', $qb->createNamedParameter('')))
+				->andWhere($expr->neq('local_copy', $qb->createNamedParameter(Document::COPY_STREAMED)))
+				->groupBy('account');
+
+			$cursor = $qb->executeQuery();
+			while ($data = $cursor->fetch()) {
+				$bytes[(string)$data['account']] = (int)($data['total'] ?? 0);
+			}
+			$cursor->closeCursor();
+		}
+
+		return $bytes;
+	}
+
+	/**
 	 * How many bytes of video one account is holding here.
 	 *
 	 * The stored `size`, not a walk of the files: this is asked on every video
