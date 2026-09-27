@@ -184,8 +184,8 @@ class SubscriptionServiceTest extends TestCase {
 	 */
 	public function testTheListSaysWhetherAFeedHasBeenReadYet(): void {
 		$this->feedsRequest->method('feedsOf')->willReturn([
-			['id' => 1, 'url' => 'https://blog.example/feed', 'title' => 'Blog', 'site_url' => '', 'error' => '', 'fetched_at' => '2026-09-01 08:00:00'],
-			['id' => 2, 'url' => 'https://other.example/feed', 'title' => '', 'site_url' => '', 'error' => '', 'fetched_at' => null],
+			['id' => 1, 'url' => 'https://blog.example/feed', 'title' => 'Blog', 'site_url' => 'https://blog.example/', 'error' => '', 'fetched_at' => '2026-09-01 08:00:00'],
+			['id' => 2, 'url' => 'https://other.example/feed', 'title' => '', 'site_url' => 'javascript:alert(1)', 'error' => '', 'fetched_at' => null],
 		]);
 		$this->feedsRequest->method('countsFor')->willReturn([1 => 0]);
 
@@ -193,7 +193,9 @@ class SubscriptionServiceTest extends TestCase {
 
 		$this->assertTrue($feeds[0]['read']);
 		$this->assertSame(0, $feeds[0]['items']);
+		$this->assertSame('https://blog.example/', $feeds[0]['site_url']);
 		$this->assertFalse($feeds[1]['read']);
+		$this->assertSame('', $feeds[1]['site_url']);
 	}
 
 	public function testTimelineReturnsSafeYoutubeVideoIdsAndForwardsTheDateCursor(): void {
