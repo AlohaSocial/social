@@ -535,6 +535,7 @@ import { applyFilterToFile } from '../../utils/imageFilters.js'
 import { focusParam, isFocalPoint } from '../../utils/focalPoint.js'
 import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
 import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
+import { statusPayload } from '../../utils/statusPayload.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
 import { datePickerModule, isTooSoon, proposedSchedule } from '../../utils/schedule.js'
@@ -2199,26 +2200,6 @@ export default {
 		},
 
 		n: translatePlural,
-		/**
-		 * What the poster said the video is, leaving out what they did not say.
-		 *
-		 * @return {object}
-		 */
-		videoFields() {
-			const fields = {}
-			for (const [key, value] of [
-				['video_title', this.videoTitle],
-				['video_category', this.videoCategory],
-				['video_licence', this.videoLicence],
-			]) {
-				if (value.trim() !== '') {
-					fields[key] = value.trim()
-				}
-			}
-
-			return fields
-		},
-
 		async createPost() {
 			if (!this.canPost || this.loading) {
 				return
@@ -2234,48 +2215,26 @@ export default {
 			const status = played.text
 			const warning = this.showWarning ? this.spoilerText.trim() : ''
 
-			const statusData = {
-				content_type: '',
+			const statusData = statusPayload({
+				text: status,
+				warning,
 				// only uploads the server actually took: a failed one used to
 				// be read as `preview.data.id` and threw a TypeError here
-				media_ids: this.mediaIds,
-				// a warning means the body is hidden until asked for, which is
-				// what `sensitive` says about the post as a whole
-				sensitive: warning !== '',
-				spoiler_text: warning,
-				status,
-				in_reply_to_id: this.replyTo?.id,
-				quote_id: this.quoteOf?.id,
+				mediaIds: this.mediaIds,
+				inReplyToId: this.replyTo?.id,
+				quoteId: this.quoteOf?.id,
 				visibility: this.visibility,
-				// the team this is written as, when it is written as one. Left
-				// out entirely otherwise, so a post as yourself is the request
-				// it always was.
-				...(this.postAs === '' ? {} : { post_as: this.postAs }),
-				// always, so the post is never without one: the server would
-				// fill in the same default, but what the poster saw is what goes
+				postAs: this.postAs,
 				language: this.language,
-				// only where this is a video and the poster filled something
-				// in: an empty title is not an answer, and the server falls
-				// back to the first line of the post as it always did
-				...(this.isVideoPost ? this.videoFields() : {}),
-			}
-
-			// where it was taken, only ever as the poster said: a known place
-			// by its id, a new one by its name
-			if (this.place?.id) {
-				statusData.place_id = this.place.id
-			} else if (this.place?.name) {
-				statusData.place_name = this.place.name
-				if (this.place.country) {
-					statusData.place_country = this.place.country
-				}
-			}
-
-			// ISO 8601 in UTC, which is what `scheduled_at` takes; the picker
-			// works in the reader's zone and the Date carries the conversion
-			if (this.scheduling && this.scheduledAt instanceof Date) {
-				statusData.scheduled_at = this.scheduledAt.toISOString()
-			}
+				video: this.isVideoPost
+					? { title: this.videoTitle, category: this.videoCategory, licence: this.videoLicence }
+					: null,
+				place: this.place,
+				scheduledAt: this.scheduling ? this.scheduledAt : null,
+				poll: this.showPoll
+					? { options: this.pollOptions, expiresIn: this.pollExpiresIn, multiple: this.pollMultiple }
+					: null,
+			})
 
 			// a short post as a card: the words drawn on colour and attached
 			// as a picture, described with those same words
@@ -2286,15 +2245,6 @@ export default {
 					return
 				}
 				statusData.media_ids = [...statusData.media_ids, card]
-			}
-
-			const pollOptions = this.pollOptions.map((option) => option.trim()).filter((option) => option !== '')
-			if (this.showPoll && pollOptions.length >= 2) {
-				statusData.poll = {
-					options: pollOptions,
-					expires_in: this.pollExpiresIn,
-					multiple: this.pollMultiple,
-				}
 			}
 
 			logger.debug('Posting status', {
