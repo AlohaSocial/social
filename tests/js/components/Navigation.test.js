@@ -247,14 +247,12 @@ describe('Navigation', () => {
 			expect(listItems(wrapper).map((e) => e.attributes('data-name'))).toEqual(['Friends'])
 		})
 
-		// the chevron is the only thing before the word
-		it('carries no icon of its own', async () => {
+		it('shows a compass icon of its own while keeping icons on its children', async () => {
 			withExplore({ lists: [list(1, 'Friends')] })
 			const wrapper = mountNavigation()
 			await flushPromises()
 
-			// its own icon slot, not the children's: they keep theirs
-			expect(explore(wrapper).find('.nav-item__icon').element.children).toHaveLength(0)
+			expect(explore(wrapper).find('.nav-item__icon .material-design-icon').exists()).toBe(true)
 			expect(listItems(wrapper)[0].find('.material-design-icon').exists()).toBe(true)
 		})
 

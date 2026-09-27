@@ -7,6 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import axios from '@nextcloud/axios'
 import Subscriptions from '../../../src/views/Subscriptions.vue'
+import { showError } from '../../../src/services/toast.js'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
@@ -39,6 +40,7 @@ const ITEM = {
 	link: 'https://example.org/watch/abc',
 	summary: 'What happens in it.',
 	thumbnail: 'https://example.org/thumb.jpg',
+	cursor: '2026-01-02 10:00:00',
 	published: '2026-01-02T10:00:00Z',
 }
 
@@ -82,7 +84,7 @@ describe('Subscriptions', () => {
 	 */
 	it('sends every entry out to where it actually is', async () => {
 		const wrapper = await mountPage()
-		const link = wrapper.find('.entries__link')
+		const link = wrapper.find('.entries__title')
 
 		expect(link.attributes('href')).toBe('https://example.org/watch/abc')
 		expect(link.attributes('rel')).toContain('noopener')
@@ -94,10 +96,33 @@ describe('Subscriptions', () => {
 	 * which Nextcloud's img-src refuses: an <img> for it is an empty box and a
 	 * CSP violation, never a picture.
 	 */
-	it('does not point an image at the feed\'s host', async () => {
+	it('does not load a video player until its preview is clicked', async () => {
+		const video = {
+			...ITEM,
+			id: '92',
+			link: 'https://www.youtube.com/shorts/AbCdEfGhI_1',
+			video_id: 'AbCdEfGhI_1',
+			thumbnail: 'https://i1.ytimg.com/vi/AbCdEfGhI_1/hqdefault.jpg',
+		}
+		const wrapper = await mountPage({ items: [video] })
+
+		expect(wrapper.find('.entries__poster img').attributes('src')).toBe(video.thumbnail)
+		expect(wrapper.find('iframe').exists()).toBe(false)
+
+		await wrapper.find('.entries__poster').trigger('click')
+
+		expect(wrapper.find('iframe').attributes('src')).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhI_1?autoplay=1')
+		expect(wrapper.find('iframe').attributes('referrerpolicy')).toBe('strict-origin-when-cross-origin')
+		expect(wrapper.find('.entries__source').attributes('href')).toBe(video.link)
+
+		await wrapper.find('.entries__close').trigger('click')
+		expect(wrapper.find('iframe').exists()).toBe(false)
+	})
+
+	it('does not render video thumbnails for ordinary feed links', async () => {
 		const wrapper = await mountPage()
 
-		expect(wrapper.find('.entries__link').exists()).toBe(true)
+		expect(wrapper.find('.entries__title').exists()).toBe(true)
 		expect(wrapper.find('img').exists()).toBe(false)
 	})
 
@@ -191,11 +216,28 @@ describe('Subscriptions', () => {
 		expect(axios.post.mock.calls[0][0]).toContain('/subscriptions/takeout')
 	})
 
+	it('explains when a Takeout file exceeds the upload limit', async () => {
+		const wrapper = await mountPage()
+		axios.post.mockRejectedValueOnce({
+			response: { data: { error: 'that file is larger than 5 MB' } },
+		})
+
+		const input = wrapper.find('input[type="file"]')
+		Object.defineProperty(input.element, 'files', {
+			value: [new File(['subscriptions'], 'subscriptions.csv')],
+			configurable: true,
+		})
+		await input.trigger('change')
+		await flushPromises()
+
+		expect(showError).toHaveBeenCalledWith('That file is larger than 5 MB')
+	})
+
 	/**
 	 * Two feeds polled in the same minute give a dozen entries the same date to
 	 * the second, so a cursor on the date either loops or steps over the rest.
 	 */
-	it('pages on the row id', async () => {
+	it('pages on publication date and row id', async () => {
 		const wrapper = await mountPage()
 		axios.get.mockClear()
 		serve({ items: [] })
@@ -203,7 +245,8 @@ describe('Subscriptions', () => {
 		await wrapper.vm.load()
 
 		const [, options] = axios.get.mock.calls.at(-1)
-		expect(options.params.max_id).toBe('91')
+		expect(options.params.before).toBe('2026-01-02 10:00:00')
+		expect(options.params.before_id).toBe('91')
 	})
 
 	it('stops asking once a page comes back empty', async () => {
@@ -269,6 +312,25 @@ describe('Subscriptions', () => {
 
 		expect(wrapper.find('[role="alert"]').exists()).toBe(true)
 		expect(wrapper.text()).not.toContain('Nothing yet')
+	})
+
+	it('retries the feed list instead of skipping to an older page', async () => {
+		axios.get.mockImplementation((url) => url.includes('/subscriptions/timeline')
+			? Promise.resolve({ data: { items: [ITEM] } })
+			: Promise.reject(new Error('network')))
+		const wrapper = mount(Subscriptions, { global: { stubs: { NcLoadingIcon: true } } })
+		await flushPromises()
+
+		serve()
+		await wrapper.find('[role="alert"] button').trigger('click')
+		await flushPromises()
+
+		const feedRequests = axios.get.mock.calls.filter(([url]) => !url.includes('/subscriptions/timeline'))
+		const timelineRequests = axios.get.mock.calls.filter(([url]) => url.includes('/subscriptions/timeline'))
+		expect(feedRequests).toHaveLength(2)
+		expect(timelineRequests).toHaveLength(2)
+		expect(timelineRequests[1][1].params).toEqual({ limit: 40 })
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 	})
 
 	it('keeps what is listed when an older page fails', async () => {

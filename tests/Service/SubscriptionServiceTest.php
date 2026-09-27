@@ -90,26 +90,39 @@ class SubscriptionServiceTest extends TestCase {
 	}
 
 	/**
-	 * Following answers once the row is stored: the feed is read by the cron,
-	 * not inside the request.
+	 * A new follow reads the feed once so the first page already has entries.
 	 */
-	public function testFollowingStoresTheFeedWithoutReadingIt(): void {
+	public function testFollowingReadsTheFeedImmediatelyWithABoundedTimeout(): void {
 		$this->discovery->method('discover')->willReturn('https://blog.example/feed');
 		$this->feedsRequest->method('feedsOf')->willReturn([]);
 		$this->feedsRequest->method('idOf')->willReturn(0);
 		$this->feedsRequest->expects($this->once())->method('create')
 			->with('alice', 'https://blog.example/feed', '', '')->willReturn(9);
+		$this->answers(self::FEED);
+		$this->feedsRequest->expects($this->once())->method('addItem')->with(9, $this->anything())->willReturn(true);
+		$this->feedsRequest->expects($this->once())->method('recordRead')
+			->with(9, 'Blog', 'https://blog.example/', '', '', '');
+
+		$this->assertSame(['id' => 9, 'url' => 'https://blog.example/feed'], $this->service->follow('alice', 'https://blog.example/'));
+		$this->assertSame(10, $this->requests[0]['timeout']);
+	}
+
+	/** A duplicate follow stays idempotent, even at the account's feed limit. */
+	public function testFollowingAnExistingFeedAtTheLimitDoesNotFetchItAgain(): void {
+		$this->discovery->method('discover')->willReturn('https://blog.example/feed');
+		$this->feedsRequest->method('idOf')->willReturn(9);
+		$this->feedsRequest->method('feedsOf')->willReturn(array_fill(0, SubscriptionService::MAX_FEEDS, ['id' => 1]));
+		$this->feedsRequest->expects($this->never())->method('create');
 		$this->client->expects($this->never())->method('get');
-		$this->feedsRequest->expects($this->never())->method('addItem');
 
 		$this->assertSame(['id' => 9, 'url' => 'https://blog.example/feed'], $this->service->follow('alice', 'https://blog.example/'));
 	}
 
 	/**
-	 * A takeout is two hundred channels at most; each becomes a row and none
-	 * is fetched in the upload request.
+	 * A Takeout stores every channel and starts bounded parallel reads so the
+	 * newest entries can show before the upload request returns.
 	 */
-	public function testATakeoutStoresEveryChannelAndFetchesNothing(): void {
+	public function testATakeoutStoresEveryChannelAndReadsNewFeedsImmediately(): void {
 		$csv = "Channel Id,Channel Url,Channel Title\n";
 		for ($i = 0; $i < 3; $i++) {
 			$csv .= 'UC' . str_repeat((string)$i, 22) . ",https://www.youtube.com/channel/x,Channel $i\n";
@@ -119,10 +132,25 @@ class SubscriptionServiceTest extends TestCase {
 		);
 		$this->feedsRequest->method('feedsOf')->willReturn([]);
 		$this->feedsRequest->method('idOf')->willReturn(0);
-		$this->feedsRequest->expects($this->exactly(3))->method('create');
-		$this->client->expects($this->never())->method('get');
+		$this->feedsRequest->expects($this->exactly(3))->method('create')->willReturnOnConsecutiveCalls(1, 2, 3);
+		$this->feedsRequest->expects($this->exactly(3))->method('addItem')->willReturn(false);
+		$this->feedsRequest->expects($this->exactly(3))->method('recordRead');
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn(self::FEED);
+		$response->method('getHeader')->willReturn('');
+		$promise = $this->createMock(IPromise::class);
+		$promise->method('wait')->willReturn($response);
+		$options = [];
+		$this->client->expects($this->exactly(3))->method('getAsync')->willReturnCallback(
+			static function (string $url, array $requestOptions) use ($promise, &$options): IPromise {
+				$options[] = $requestOptions;
+				return $promise;
+			}
+		);
 
 		$this->assertSame(3, $this->service->importTakeout('alice', $csv));
+		$this->assertSame([10, 10, 10], array_column($options, 'timeout'));
 	}
 
 	public function testATakeoutStopsAtTheFeedAllowance(): void {
@@ -163,6 +191,24 @@ class SubscriptionServiceTest extends TestCase {
 		$this->assertTrue($feeds[0]['read']);
 		$this->assertSame(0, $feeds[0]['items']);
 		$this->assertFalse($feeds[1]['read']);
+	}
+
+	public function testTimelineReturnsSafeYoutubeVideoIdsAndForwardsTheDateCursor(): void {
+		$this->feedsRequest->expects($this->once())->method('timelineOf')
+			->with('alice', 40, 0, '2026-09-24T16:25:01Z', 15)
+			->willReturn([
+				['id' => 16, 'link' => 'https://www.youtube.com/shorts/AbCdEfGhI_1', 'published' => '2026-09-24 17:00:00'],
+				['id' => 15, 'link' => 'https://example.org/video/AbCdEfGhI_1', 'published' => '2026-09-24 16:25:01'],
+				['id' => 14, 'link' => 'javascript:alert(1)', 'published' => '2026-09-24 16:00:00'],
+			]);
+
+		$items = $this->service->timeline('alice', 40, 0, '2026-09-24T16:25:01Z', 15);
+
+		$this->assertSame('AbCdEfGhI_1', $items[0]['video_id']);
+		$this->assertSame('', $items[1]['video_id']);
+		$this->assertSame('', $items[2]['link']);
+		$this->assertSame('', $items[2]['video_id']);
+		$this->assertSame('2026-09-24T17:00:00Z', $items[0]['published']);
 	}
 
 	/** A read that added something prunes the feed to its allowance. */

@@ -36,6 +36,7 @@ use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\Template\PublicTemplateResponse;
@@ -268,7 +269,19 @@ class NavigationController extends Controller {
 		$this->provideViewerAccount();
 		$this->provideFirstPage($path);
 
-		return new TemplateResponse(Application::APP_ID, 'main');
+		$response = new TemplateResponse(Application::APP_ID, 'main');
+		// Vue changes routes without another document request. The first route
+		// can therefore be anything in Social before the reader opens
+		// Subscriptions, so these narrow media exceptions belong on every app
+		// shell response rather than only a direct /subscriptions load.
+		$policy = new ContentSecurityPolicy();
+		foreach (['i.ytimg.com', 'i1.ytimg.com', 'i2.ytimg.com', 'i3.ytimg.com', 'i4.ytimg.com'] as $host) {
+			$policy->addAllowedImageDomain($host);
+		}
+		$policy->addAllowedFrameDomain('https://www.youtube-nocookie.com');
+		$response->setContentSecurityPolicy($policy);
+
+		return $response;
 	}
 
 	/**

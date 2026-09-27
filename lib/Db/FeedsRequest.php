@@ -178,21 +178,56 @@ class FeedsRequest extends CoreRequestBuilder {
 	/**
 	 * A page of what the reader's feeds have published, newest first.
 	 *
-	 * Paged on the row id rather than the date: two feeds polled in the same
-	 * minute give a dozen entries the same timestamp to the second, and a
-	 * cursor on that either loops on them or steps over the rest.
+	 * Ordered and paged by publication time, with the row id as a stable
+	 * tie-breaker when feeds publish at the same second.
 	 */
-	public function timelineOf(string $userId, int $limit, int $maxId): array {
+	public function timelineOf(string $userId, int $limit, int $maxId, string $beforePublished = '', int $beforeId = 0): array {
+		// `max_id` is the cursor existing clients already know. Resolve it to
+		// the same publication-time cursor as the newer `before` parameters;
+		// insertion order and publication order are not interchangeable when
+		// a feed republishes old entries or adds several at once.
+		if ($beforePublished === '' && $maxId > 0) {
+			$lookup = $this->getQueryBuilder();
+			$lookup->select('i.published')
+				->from(self::TABLE_FEED_ITEMS, 'i')
+				->innerJoin('i', self::TABLE_FEEDS, 'f', $lookup->expr()->eq('i.feed_id', 'f.id'))
+				->where($lookup->expr()->eq('i.id', $lookup->createNamedParameter($maxId, IQueryBuilder::PARAM_INT)))
+				->andWhere($lookup->expr()->eq('f.user_id', $lookup->createNamedParameter($userId)));
+			$cursor = $lookup->executeQuery();
+			$row = $cursor->fetch();
+			$cursor->closeCursor();
+
+			if ($row !== false && is_string($row['published'] ?? null) && $row['published'] !== '') {
+				$beforePublished = $row['published'];
+				$beforeId = $maxId;
+			}
+		}
+
 		$qb = $this->getQueryBuilder();
 		$qb->select('i.id', 'i.link', 'i.title', 'i.summary', 'i.thumbnail', 'i.published')
 			->selectAlias('f.title', 'feed_title')
 			->from(self::TABLE_FEED_ITEMS, 'i')
 			->innerJoin('i', self::TABLE_FEEDS, 'f', $qb->expr()->eq('i.feed_id', 'f.id'))
 			->where($qb->expr()->eq('f.user_id', $qb->createNamedParameter($userId)))
-			->orderBy('i.id', 'desc')
+			->orderBy('i.published', 'desc')
+			->addOrderBy('i.id', 'desc')
 			->setMaxResults($limit);
 
-		if ($maxId > 0) {
+		if ($beforePublished !== '' && $beforeId > 0) {
+			$cursorDate = new DateTime($beforePublished);
+			$publishedBefore = $qb->createNamedParameter($cursorDate, IQueryBuilder::PARAM_DATE);
+			$publishedEqual = $qb->createNamedParameter($cursorDate, IQueryBuilder::PARAM_DATE);
+			$entryBefore = $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT);
+			$qb->andWhere($qb->expr()->orX(
+				$qb->expr()->lt('i.published', $publishedBefore),
+				$qb->expr()->andX(
+					$qb->expr()->eq('i.published', $publishedEqual),
+					$qb->expr()->lt('i.id', $entryBefore)
+				)
+			));
+		} elseif ($maxId > 0) {
+			// Keep the historical behavior if the cursor row has already been
+			// removed, or does not belong to this reader's subscriptions.
 			$qb->andWhere($qb->expr()->lt('i.id', $qb->createNamedParameter($maxId, IQueryBuilder::PARAM_INT)));
 		}
 

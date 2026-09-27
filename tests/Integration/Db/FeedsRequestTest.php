@@ -92,4 +92,46 @@ class FeedsRequestTest extends TestCase {
 		$this->assertContains($stale, $due);
 		$this->assertLessThan(array_search($stale, $due, true), array_search($fresh, $due, true));
 	}
+
+	/**
+	 * A subscribed feed is shown like a video timeline: the newest publication
+	 * is at the top, and moving to the next page neither repeats nor skips two
+	 * entries published in the same second.
+	 */
+	public function testTimelineIsNewestFirstAndPagesEqualPublicationTimes(): void {
+		$id = $this->feeds->create(self::USER, 'https://feeds.example/videos', '', '');
+		$this->itemAt($id, 'same-time-first', '2026-09-25 10:00:00');
+		$this->itemAt($id, 'same-time-second', '2026-09-25 10:00:00');
+		$this->itemAt($id, 'newest', '2026-09-27 10:00:00');
+		// This old entry arrives after the cursor row, so id-only paging would
+		// silently lose it despite it belonging on the next publication page.
+		$this->itemAt($id, 'oldest', '2026-09-20 10:00:00');
+
+		$firstPage = $this->feeds->timelineOf(self::USER, 2, 0);
+		$this->assertSame(['newest', 'same-time-second'], array_column($firstPage, 'title'));
+
+		$last = $firstPage[array_key_last($firstPage)];
+		$secondPage = $this->feeds->timelineOf(
+			self::USER,
+			2,
+			0,
+			(string)$last['published'],
+			(int)$last['id']
+		);
+
+		$this->assertSame(['same-time-first', 'oldest'], array_column($secondPage, 'title'));
+		$legacyPage = $this->feeds->timelineOf(self::USER, 2, (int)$last['id']);
+		$this->assertSame(['same-time-first', 'oldest'], array_column($legacyPage, 'title'));
+	}
+
+	private function itemAt(int $feedId, string $guid, string $published): void {
+		$this->feeds->addItem($feedId, [
+			'guid' => $guid,
+			'link' => 'https://feeds.example/' . $guid,
+			'title' => $guid,
+			'summary' => '',
+			'thumbnail' => '',
+			'published' => $published,
+		]);
+	}
 }

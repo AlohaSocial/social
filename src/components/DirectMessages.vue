@@ -62,9 +62,12 @@
 			<p v-if="loadingList" class="direct-messages__state" role="status">
 				{{ t('social', 'Loading conversations…') }}
 			</p>
-			<p v-else-if="listError" class="direct-messages__state" role="alert">
-				{{ t('social', 'Could not load conversations') }}
-			</p>
+			<div v-else-if="listError" class="direct-messages__retry-state" role="alert">
+				<p>{{ t('social', 'Could not load conversations') }}</p>
+				<NcButton variant="tertiary" @click="loadConversations()">
+					{{ t('social', 'Try again') }}
+				</NcButton>
+			</div>
 			<div v-else-if="conversations.length === 0" class="direct-messages__inbox-empty">
 				<MessageOutline :size="24" aria-hidden="true" />
 				<strong>{{ t('social', 'No conversations yet') }}</strong>
@@ -72,9 +75,16 @@
 					{{ t('social', 'Start a conversation') }}
 				</NcButton>
 			</div>
-			<p v-else-if="filteredConversations.length === 0" class="direct-messages__state">
-				{{ t('social', 'No conversations match your search') }}
-			</p>
+			<div v-else-if="filteredConversations.length === 0" class="direct-messages__state direct-messages__no-matches">
+				<p>{{ t('social', 'No conversations match your search') }}</p>
+				<NcButton
+					v-if="cursor"
+					variant="tertiary"
+					:disabled="loadingMore"
+					@click="loadConversations(true)">
+					{{ loadingMore ? t('social', 'Loading…') : t('social', 'Load older conversations') }}
+				</NcButton>
+			</div>
 
 			<ul v-else class="direct-messages__list">
 				<li v-for="conversation in filteredConversations" :key="conversation.id">
@@ -242,9 +252,12 @@
 			<p v-if="loadingThread" class="direct-messages__state" role="status">
 				{{ t('social', 'Loading messages…') }}
 			</p>
-			<p v-else-if="threadError" class="direct-messages__state" role="alert">
-				{{ t('social', 'Could not load this conversation') }}
-			</p>
+			<div v-else-if="threadError" class="direct-messages__retry-state" role="alert">
+				<p>{{ t('social', 'Could not load this conversation') }}</p>
+				<NcButton variant="tertiary" :disabled="loadingThread" @click="loadThread(selectedConversationId)">
+					{{ t('social', 'Try again') }}
+				</NcButton>
+			</div>
 			<div
 				v-else
 				ref="threadContainer"
@@ -537,6 +550,7 @@ export default {
 				this.accountSearchRequest++
 				this.suggestionsRequest++
 				this.searchingAccounts = false
+				this.newRecipient = null
 			}
 		},
 
@@ -739,7 +753,8 @@ export default {
 		},
 
 		async sendMessage() {
-			const recipient = this.newRecipient || this.activeConversation?.accounts?.find((account) => account.acct !== this.currentUserId && account.username !== this.currentUserId)
+			const newRecipient = this.newMessageOpen ? this.newRecipient : null
+			const recipient = newRecipient || this.activeConversation?.accounts?.find((account) => account.acct !== this.currentUserId && account.username !== this.currentUserId)
 			const text = this.messageText.trim()
 			if (!recipient?.acct || !text || this.sendingMessage) {
 				return
@@ -747,7 +762,9 @@ export default {
 			this.sendingMessage = true
 			this.sendError = false
 			try {
-				const replyTo = this.activeConversation?.last_status?.id
+				// A new-message composer can be opened while another thread remains
+				// selected in the route. That thread is not the parent of this post.
+				const replyTo = newRecipient ? null : this.activeConversation?.last_status?.id
 				await axios.post(generateUrl('apps/social/api/v1/statuses'), {
 					status: `${this.routingMentions(recipient)} ${text}`,
 					visibility: 'direct',
@@ -755,7 +772,7 @@ export default {
 				})
 				this.messageText = ''
 				await this.loadConversations()
-				if (this.newRecipient) {
+				if (newRecipient) {
 					const conversation = this.conversations.find((item) => (item.accounts ?? []).some((candidate) => candidate.acct === recipient.acct || (candidate.id && recipient.id && String(candidate.id) === String(recipient.id))))
 					this.newRecipient = null
 					this.newMessageOpen = false
@@ -775,11 +792,14 @@ export default {
 
 		async loadThread(id) {
 			const conversation = this.conversations.find((item) => String(item.id) === id)
+			const request = ++this.threadRequest
 			if (!conversation?.last_status?.id) {
+				this.thread = { ancestors: [], descendants: [] }
+				this.loadingThread = false
+				this.threadError = false
 				return
 			}
 
-			const request = ++this.threadRequest
 			this.loadingThread = true
 			this.threadError = false
 			try {
@@ -963,6 +983,13 @@ export default {
 		 * @return {string} the mentions, in the order the conversation lists them
 		 */
 		routingMentions(recipient) {
+			// While composing a new chat, the route may still point at the thread
+			// that was open before the recipient picker appeared. Only address the
+			// person explicitly chosen for this new message.
+			if (this.newMessageOpen && this.newRecipient) {
+				return `@${recipient.acct}`
+			}
+
 			const accounts = this.activeConversation?.accounts ?? []
 			const handles = accounts
 				.map((account) => String(account.acct ?? ''))
@@ -1230,6 +1257,33 @@ export default {
 	padding: 1.5rem;
 	color: var(--color-text-maxcontrast);
 	text-align: center;
+}
+
+.direct-messages__no-matches {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.direct-messages__no-matches p {
+	margin: 0;
+}
+
+.direct-messages__retry-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	margin: auto 0;
+	padding: 1.5rem;
+	color: var(--color-text-maxcontrast);
+	text-align: center;
+}
+
+.direct-messages__retry-state p {
+	margin: 0;
 }
 
 .direct-messages__inbox-empty {
