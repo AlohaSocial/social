@@ -769,11 +769,10 @@ describe('Navigation', () => {
 	})
 
 	/**
-	 * Subscriptions had a client route, a view and a server route, and nothing
-	 * anywhere linked to it — so the only way to the page was typing the
-	 * address. The three routes that arrived together each need a way in:
-	 * Subscriptions and the reel stack (as Shorts) have a sidebar entry each,
-	 * and Migration carries a button to the switch wizard.
+	 * The reel stack once had a client route, a view and a server route, and
+	 * nothing anywhere linked to it — so the only way to the page was typing
+	 * the address. A page needs a way in: the stack has a sidebar entry (as
+	 * Shorts), and Migration carries a button to the switch wizard.
 	 */
 	it('offers a way to every page that has no other one', () => {
 		const wrapper = mountNavigation()
@@ -781,7 +780,6 @@ describe('Navigation', () => {
 		const destinations = [...wrapper.vm.menu.timelines, ...wrapper.vm.menu.more]
 			.map((entry) => entry.to?.name)
 
-		expect(destinations).toContain('subscriptions')
 		expect(destinations).toContain('reels')
 	})
 
@@ -805,7 +803,6 @@ describe('Navigation', () => {
 			'Photos',
 			'Videos',
 			'Shorts',
-			'Subscriptions',
 			'Direct messages',
 			'Discover',
 			// the profile entry appears only when an ActivityPub account exists;
@@ -846,7 +843,6 @@ describe('Navigation', () => {
 			'Photos',
 			'Videos',
 			'Shorts',
-			'Subscriptions',
 			'Direct messages',
 			'Discover',
 		])

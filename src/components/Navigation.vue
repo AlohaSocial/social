@@ -306,7 +306,6 @@ import IconCompass from 'vue-material-design-icons/Compass.vue'
 import IconImageMultiple from 'vue-material-design-icons/ImageMultiple.vue'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultiple.vue'
 import IconPlayCircleOutline from 'vue-material-design-icons/PlayCircleOutline.vue'
-import IconRss from 'vue-material-design-icons/Rss.vue'
 import IconBell from 'vue-material-design-icons/Bell.vue'
 import IconCommentAccount from 'vue-material-design-icons/CommentAccount.vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
@@ -653,15 +652,6 @@ export default {
 						icon: IconPlayCircleOutline,
 						title: t('social', 'Shorts'),
 						to: { name: 'reels' },
-					},
-					// the last of the things to read, after the two kind
-					// filters: what this account follows off the fediverse
-					// rather than on it.
-					{
-						key: 'social-subscriptions',
-						icon: IconRss,
-						title: t('social', 'Subscriptions'),
-						to: { name: 'subscriptions' },
 					},
 					{
 						key: 'social-direct',

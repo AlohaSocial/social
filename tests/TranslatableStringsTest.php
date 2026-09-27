@@ -309,49 +309,6 @@ class TranslatableStringsTest extends TestCase {
 		$this->assertSame([], $mismatched, 'Nextcloud must serve the same German translations from JSON and JavaScript catalogs');
 	}
 
-	public function testSubscriptionVideoControlsHaveGermanCatalogEntries(): void {
-		$messages = [
-			'Channels and blogs that are not on the fediverse, followed by their feed. What comes out appears here with a link to where it is — nothing is copied onto this server, and nothing here is a post: it cannot be boosted, replied to or federated, because it is not ours to publish.',
-			'A feed address, or a YouTube channel',
-			'https://example.org/feed — or a YouTube channel link',
-			'Bring your YouTube subscriptions over',
-			'Google Takeout → YouTube and YouTube Music → subscriptions. The file is called subscriptions.csv and names every channel you follow; each one becomes a subscription here. Your own uploads are not imported — they are whole videos, and each belongs on a post you write.',
-			'Choose subscriptions.csv',
-			'What you follow',
-			'Read fine, but it lists nothing',
-			'Not read yet',
-			'Unfollow {title}',
-			'Latest',
-			'Your subscriptions could not be loaded.',
-			'Nothing yet',
-			'Follow a channel or a blog above, and what it publishes turns up here.',
-			'Older',
-			'Could not follow that',
-			'Could not unfollow that',
-			'That file could not be read',
-			'Play {title}',
-			'Play video',
-			'Open on YouTube, including comments',
-			'Close player',
-			'That file is larger than 5 MB',
-		];
-		$missing = [];
-		foreach (['de', 'de_DE'] as $locale) {
-			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
-			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
-			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
-			foreach ($messages as $message) {
-				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-				$value = json_encode($catalog[$message] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-				if (!array_key_exists($message, $catalog) || !str_contains($jsCatalog, $key . ' : ' . $value)) {
-					$missing[] = $locale . ': ' . $message;
-				}
-			}
-		}
-
-		$this->assertSame([], $missing, 'subscription page messages must exist in both German catalog formats');
-	}
-
 	public function testCoreTimelineAndDiscoveryPluralsHaveGermanCatalogEntries(): void {
 		$messages = [
 			'_Follow one more account and this can look at who they follow._::_Follow {count} more accounts and this can look at who they follow._' => [

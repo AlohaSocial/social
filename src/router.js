@@ -30,7 +30,6 @@ const Discover = () => import('./views/Discover.vue')
 // app -- and the settings page with it, before drawing a single post.
 const Migration = () => import(/* webpackChunkName: "migration" */'./views/Migration.vue')
 const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/SwitchWizard.vue')
-const Subscriptions = () => import(/* webpackChunkName: "subscriptions" */'./views/Subscriptions.vue')
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
 const Statistics = () => import(/* webpackChunkName: "statistics" */'./views/Statistics.vue')
 const Search = () => import('./components/Search.vue')
@@ -367,17 +366,6 @@ const router = createRouter({
 				default: SwitchWizard,
 			},
 			name: 'switch',
-		},
-		{
-			// Channels and blogs that are not on the fediverse, followed by
-			// their feed. Its own page rather than a timeline: nothing here is
-			// a post — it cannot be boosted, replied to or federated — and
-			// putting it among the timelines would say otherwise.
-			path: '/subscriptions',
-			components: {
-				default: Subscriptions,
-			},
-			name: 'subscriptions',
 		},
 		{
 			path: '/statistics',

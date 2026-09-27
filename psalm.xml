@@ -24,24 +24,5 @@
 		</ignoreFiles>
 	</extraFiles>
 	<issueHandlers>
-		<!--
-			Psalm believes every property of a SimpleXMLElement is set, so it
-			reads the `?? null` guards in the feed parser as dead code. They
-			are not: one level deep a missing child is an empty element, two
-			levels deep it is null, and `$item->foo->bar` on a feed that omits
-			`foo` is a method call on null. The guards stay and the two rules
-			that cannot see that are off for the one file that reads feeds
-			somebody else wrote.
-		-->
-		<TypeDoesNotContainType>
-			<errorLevel type="suppress">
-				<file name="lib/Service/FeedParserService.php"/>
-			</errorLevel>
-		</TypeDoesNotContainType>
-		<RedundantCondition>
-			<errorLevel type="suppress">
-				<file name="lib/Service/FeedParserService.php"/>
-			</errorLevel>
-		</RedundantCondition>
 	</issueHandlers>
 </psalm>

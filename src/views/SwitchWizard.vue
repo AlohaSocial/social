@@ -318,8 +318,8 @@ export default {
 					tint: '#c00',
 					readsPosts: false,
 					readsPeople: false,
-					how: t('social', 'Google Takeout → YouTube and YouTube Music. What is worth bringing over is not the videos but the channels you subscribed to: Subscriptions are set up under Settings → Subscriptions, where the same Takeout file is read.'),
-					noPosts: t('social', 'Your own uploads are yours to re-publish rather than something to import in bulk — they are whole videos, and each one belongs on a post you write. Your subscriptions are the part that carries over, under Settings → Subscriptions.'),
+					how: t('social', 'Google Takeout → YouTube and YouTube Music. The archive holds your videos as files rather than as posts, so there is nothing here that can read it as a timeline yet.'),
+					noPosts: t('social', 'Your own uploads are yours to re-publish rather than something to import in bulk — they are whole videos, and each one belongs on a post you write.'),
 				},
 			]
 		},
