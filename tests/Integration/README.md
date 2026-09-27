@@ -50,6 +50,16 @@ to stop.
   key is skipped rather than raised, the purge takes only what has expired.
 - `Db/ActorRelationRequestTest` / `Db/StreamFilterTest` — block/mute storage and
   the hidden-actor anti-join on every timeline.
+- `Db/ListsRequestTest`, `Db/TrendsRequestTest`, `Db/DiscoveryRequestTest`,
+  `Db/ConversationsRequestTest`, `Db/StreamInterestsTest`,
+  `Db/CacheDocumentsRequestTest` and one `Db/*RequestTest` for each smaller
+  table (reactions, interests, featured tags, portfolios, media tags, stories,
+  places, post holds, quote grants, revisions, imports, emoji and GIFs,
+  channels and teams, access blocks, account notes, mutes, stream views,
+  watches, trend review, Discover categories) — the request classes whose SQL
+  no test had run. `Db/InstanceStatsRequestTest` caught the weekly activity
+  counting zero statuses: its window was bound as integers against a DATETIME
+  column.
 - `Command/*` — the occ commands, driven through Symfony's `CommandTester` with
   each command built by the real container, so a constructor these tests cannot
   satisfy is one occ cannot satisfy either. `ResetTest` and `CheckInstallTest`
