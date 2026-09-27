@@ -76,7 +76,7 @@
     "Continue" : "继续",
     "This step is needed as the user is probably not registered on the same server as you are. We will redirect you to your homeserver to follow this account." : "此步骤是必要的，因为此用户可能和您不在同一台服务器上注册。我们将把您重定向到您的家服务器来关注此账号。",
     "User not found" : "未找到用户",
-    "Sorry, we could not find the account of {userId}" : "非常抱歉，我们无法查找到 {userid} 对应的账号",
+    "Sorry, we could not find the account of {userId}" : "非常抱歉，我们无法查找到 {userId} 对应的账号",
     "Nextcloud becomes part of the federated social networks!" : "Nextcloud已经成为联合云社交网络的一部分！",
     "We automatically created a Social account for you. Your Social ID is the same as your Federated Cloud ID:" : "我们会自动为您创建一个社交账号。您的社交ID与您的联合云ID相同：",
     "Since you are new to Social, start by following the official Nextcloud account so you don't miss any news" : "鉴于您刚来到社交应用，请先关注 Nextcloud 官方账号，这样您将不会错过任何新闻",

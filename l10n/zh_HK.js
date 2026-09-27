@@ -85,7 +85,7 @@ OC.L10N.register(
     "Continue" : "繼續",
     "This step is needed as the user is probably not registered on the same server as you are. We will redirect you to your homeserver to follow this account." : "此步驟是必要的，因為此用戶可能和您不在同一部伺服器上註冊。我們將把您重定向到您的家伺服器來關注此帳戶。",
     "User not found" : "未找到用戶",
-    "Sorry, we could not find the account of {userId}" : "非常抱歉，我們無法找到 {userid} 對應的帳戶",
+    "Sorry, we could not find the account of {userId}" : "非常抱歉，我們無法找到 {userId} 對應的帳戶",
     "Nextcloud becomes part of the federated social networks!" : "Nextcloud 成為聯盟社交網絡的一部分！",
     "This application is currently in beta stage." : "此應用程式目前處於 beta 測試階段。",
     "We automatically created a Social account for you. Your Social ID is the same as your Federated Cloud ID:" : "我們會自動為您創建一個社交帳戶。您的 Social ID 與您的聯盟式雲端 ID 相同：",
