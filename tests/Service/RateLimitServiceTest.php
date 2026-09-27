@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RateLimitService;
@@ -232,9 +233,10 @@ class RateLimitServiceTest extends TestCase {
 	 */
 	public function testServingBytesIsNotCountedAgainstThePageBudget(): void {
 		$api = $this->createMock(ApiController::class);
+		$instance = $this->createMock(InstanceApiController::class);
 
 		$this->assertFalse($this->service->appliesDefaultTo($api, 'mediaOpen'));
-		$this->assertFalse($this->service->appliesDefaultTo($api, 'emojiOpen'));
+		$this->assertFalse($this->service->appliesDefaultTo($instance, 'emojiOpen'));
 	}
 
 	/**

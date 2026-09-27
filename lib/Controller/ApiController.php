@@ -44,8 +44,6 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
-use OCA\Social\Service\EmojiService;
-use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GifService;
@@ -83,13 +81,10 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
-use OCP\AppFramework\Http\FileDisplayResponse;
-use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\IRequest;
-use OCP\ISession;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
@@ -103,7 +98,6 @@ use Throwable;
  * @package OCA\Social\Controller
  */
 class ApiController extends MastodonApiController {
-	use ApiInstance;
 	use ApiMedia;
 
 	/** where a used Idempotency-Key is remembered, and for how long */
@@ -136,7 +130,6 @@ class ApiController extends MastodonApiController {
 		private ActionService $actionService,
 		private PostService $postService,
 		private PollService $pollService,
-		private ISession $session,
 		private PinService $pinService,
 		private HashtagService $hashtagService,
 		private MarkerService $markerService,
@@ -157,9 +150,7 @@ class ApiController extends MastodonApiController {
 		private SensitiveMediaService $sensitiveMediaService,
 		private ViewCountService $viewCountService,
 		private TeamService $teamService,
-		private EmojiService $emojiService,
 		private IAppManager $appManager,
-		private FediverseService $fediverseService,
 		private PlaceService $placeService,
 		private DeliveryService $deliveryService,
 		private ReactionService $reactionService,
@@ -697,139 +688,6 @@ class ApiController extends MastodonApiController {
 		return 'An account on this server is a Nextcloud account, created by an '
 			. 'administrator. Once it exists, this application gives it a fediverse '
 			. 'identity; there is nothing to sign up for here.';
-	}
-
-	/**
-	 * The emoji this instance publishes.
-	 *
-	 * Answered `[]` unconditionally until the instance had any: emoji from
-	 * every other server rendered here and this one could publish none, which
-	 * is the asymmetry somebody moving here notices first. Only the ones
-	 * marked visible are listed — that is what the field means, and a picker
-	 * is what reads this route.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/custom_emojis')]
-	public function customEmojis(): JSONResponse {
-		return Revalidation::byContent(
-			$this->request, new DataResponse($this->emojiService->visible(), Http::STATUS_OK)
-		);
-	}
-
-	/**
-	 * The picture behind a shortcode.
-	 *
-	 * Unauthenticated, like `mediaOpen()` and for the same reason: this is
-	 * what a remote server dereferences out of an `Emoji` tag on a post it
-	 * received, and it has no token of ours to present. An emoji is published
-	 * by definition — it is on every post that uses it, everywhere that post
-	 * went — so there is nothing here to keep from anybody.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/emoji/{shortcode}')]
-	public function emojiOpen(string $shortcode): Response {
-		try {
-			$emoji = $this->emojiService->byShortcode($shortcode);
-			if ($emoji === null) {
-				return new DataResponse(['error' => 'Record not found'], Http::STATUS_NOT_FOUND);
-			}
-
-			$response = new FileDisplayResponse(
-				$this->emojiService->picture($shortcode),
-				Http::STATUS_OK,
-				['Content-Type' => $emoji->getMediaType()]
-			);
-			// the shortcode names one picture and replacing it is a deliberate
-			// act, so a day is cheap; a shared cache may keep it, since the
-			// route answers everybody the same bytes
-			$response->cacheFor(86400, false, true);
-
-			return $response;
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * The instance's GIF library, or the part of it that matches `q`.
-	 *
-	 * A viewer is required: this is a picker inside the composer, not
-	 * something the public page needs, and there is no reason to hand the
-	 * whole library to anybody who asks.
-	 *
-	 * Paged, which it did not need to be while the library was whatever an
-	 * administrator had added: with the animated emoji in it there are 881,
-	 * and a grid of 881 is 881 pictures this instance would go and fetch
-	 * because somebody opened the picker. `limit` is how many to answer with
-	 * and `offset` where to carry on from, so the picker asks for the next
-	 * screenful when the reader scrolls to it.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/gifs')]
-	public function gifs(string $q = '', int $limit = 24, int $offset = 0): DataResponse {
-		try {
-			$this->initViewer(true);
-
-			$limit = max(1, min(200, $limit));
-			$found = $this->gifService->search($q);
-
-			return new DataResponse([
-				'gifs' => array_slice($found, max(0, $offset), $limit),
-				'total' => count($found),
-				// said wherever the pack is shown, because CC BY asks for it
-				'attribution' => $this->gifService->attribution(),
-			], Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * The bytes behind a slug.
-	 *
-	 * Unauthenticated, like `emojiOpen()`: the picker draws a grid of these
-	 * and they are the same bytes for everybody on the instance. Nothing here
-	 * is private — a library picture is one an administrator put there for
-	 * everybody — and requiring a session would mean the grid could not be
-	 * cached by anything.
-	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/gif/{slug}')]
-	public function gifOpen(string $slug): Response {
-		try {
-			// Nothing here reads the session, and holding it is what made the
-			// picker unusable: PHP serialises requests that hold one, so the
-			// sixty thumbnails a picker draws went out one at a time — and for
-			// one of the shipped emoji this instance has not seen, each of
-			// those is a fetch from Google. Measured on a cold instance, the
-			// search that followed them waited forty seconds for its turn.
-			// Letting it go makes them parallel and costs nothing: these are
-			// the same bytes for everybody, which is why the route is public.
-			$this->session->close();
-
-			$gif = $this->gifService->bySlug($slug);
-			if ($gif === null) {
-				return new DataResponse(['error' => 'Record not found'], Http::STATUS_NOT_FOUND);
-			}
-
-			$response = new FileDisplayResponse(
-				$this->gifService->file($slug),
-				Http::STATUS_OK,
-				['Content-Type' => $gif->getMediaType()]
-			);
-			// the slug names one picture and replacing it is a deliberate act,
-			// so a day is cheap; a shared cache may keep it, since the route
-			// answers everybody the same bytes
-			$response->cacheFor(86400, false, true);
-
-			return $response;
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
 	}
 
 	/**
@@ -1940,51 +1798,6 @@ class ApiController extends MastodonApiController {
 			}
 
 			return new DataResponse(array_slice(array_values($accounts), 0, $limit), Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * The instances this one has heard of.
-	 *
-	 * Mastodon's `/api/v1/instance/peers`, which instance browsers and
-	 * "about this server" pages read. A bare array of hostnames, which is what
-	 * the peer of every cached remote actor amounts to, and the same walk the
-	 * `domain_count` statistic uses — two walks would be two answers.
-	 *
-	 * Public, as Mastodon's is: it says who this instance federates with, not
-	 * who its users are.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/instance/peers')]
-	public function instancePeers(): DataResponse {
-		try {
-			return new DataResponse($this->instanceService->getPeers(), Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
-	 * Mastodon's weekly activity series: twelve weeks of statuses, logins and
-	 * registrations.
-	 *
-	 * `registrations` is always `0` and says so in the docs: an account here is
-	 * a Nextcloud user, created by the server rather than by this app, so there
-	 * is no registration for it to count. `logins` is likewise not this app's
-	 * to know. What it does know is how many statuses were published in a week,
-	 * which is the series a client actually plots.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 10, period: 60)]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/instance/activity')]
-	public function instanceActivity(): DataResponse {
-		try {
-			return new DataResponse($this->instanceService->getWeeklyActivity(), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

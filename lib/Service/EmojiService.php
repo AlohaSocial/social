@@ -252,7 +252,7 @@ class EmojiService {
 	/** The one address the picture has, for a client and for a peer alike. */
 	private function urlOf(CustomEmoji $emoji): string {
 		return $this->urlGenerator->linkToRouteAbsolute(
-			'social.Api.emojiOpen', ['shortcode' => $emoji->getShortcode()]
+			'social.InstanceApi.emojiOpen', ['shortcode' => $emoji->getShortcode()]
 		);
 	}
 
