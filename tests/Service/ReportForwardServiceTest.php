@@ -18,7 +18,9 @@ use OCA\Social\Service\InstanceActorService;
 use OCA\Social\Service\ReportForwardService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -31,13 +33,14 @@ use Psr\Log\NullLogger;
  * back into the Flag would be invisible from here — it is the receiving
  * instance that would see it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ReportForwardServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const SPAMMER = 'https://spam.example/users/spammer';
 	private const INBOX = 'https://spam.example/users/spammer/inbox';
 	private const INSTANCE = 'https://cloud.example/apps/social/actor';
 
-	private InstanceActorService|MockObject $instanceActorService;
+	private InstanceActorService|Stub $instanceActorService;
 	private CurlService|MockObject $curlService;
 	private \OCA\Social\Db\StreamRequest|MockObject $streamRequest;
 	private ReportForwardService $service;
@@ -46,14 +49,14 @@ class ReportForwardServiceTest extends TestCase {
 	private array $sent = [];
 
 	protected function setUp(): void {
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
 		$this->curlService = $this->createMock(CurlService::class);
 
 		$this->streamRequest = $this->createMock(\OCA\Social\Db\StreamRequest::class);
 		$this->service = new ReportForwardService(
 			$this->instanceActorService,
 			new HttpSignatureService(
-				$this->createMock(\OCA\Social\Db\ActorsRequest::class),
+				$this->createStub(\OCA\Social\Db\ActorsRequest::class),
 				$this->instanceActorService,
 				new NullLogger()
 			),

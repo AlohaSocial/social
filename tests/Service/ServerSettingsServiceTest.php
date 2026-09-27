@@ -15,8 +15,10 @@ use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ServerSettingsService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,8 +28,9 @@ use PHPUnit\Framework\TestCase;
  * so nothing validated them either: a `max_size` of `-1` or of `words` was
  * accepted and found out about by whoever next tried to upload something.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ServerSettingsServiceTest extends TestCase {
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private ActorsRequest|MockObject $actorsRequest;
 	private ServerSettingsService $service;
 
@@ -36,7 +39,7 @@ class ServerSettingsServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->stored = [];
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->stored[$key] ?? '');

@@ -29,7 +29,9 @@ use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
@@ -42,18 +44,19 @@ use ReflectionClass;
  * by its viewers and disliked by nobody, and the count its author cares about
  * was a count of everybody except them.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DislikeServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const ALICE_ID = 'https://cloud.example/@alice';
 	private const BOB_ID = 'https://peertube.example/accounts/bob';
 	private const VIDEO_ID = 'https://peertube.example/videos/watch/1';
 
-	private StreamService|MockObject $streamService;
+	private StreamService|Stub $streamService;
 	private ActivityService|MockObject $activityService;
-	private ActionsRequest|MockObject $actionsRequest;
-	private CacheActorService|MockObject $cacheActorService;
-	private StreamActionService|MockObject $streamActionService;
-	private DislikeInterface|MockObject $dislikeInterface;
+	private ActionsRequest|Stub $actionsRequest;
+	private CacheActorService|Stub $cacheActorService;
+	private StreamActionService|Stub $streamActionService;
+	private DislikeInterface|Stub $dislikeInterface;
 	private DislikeService $service;
 
 	/** @var array<int, array{string, string, string, bool}> every flag written */
@@ -62,15 +65,15 @@ class DislikeServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->dislikeInterface = $this->createMock(DislikeInterface::class);
+		$this->dislikeInterface = $this->createStub(DislikeInterface::class);
 		$this->bootActivityPub([DislikeInterface::class => $this->dislikeInterface]);
 
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')->willReturn($this->bob());
-		$this->streamActionService = $this->createMock(StreamActionService::class);
+		$this->streamActionService = $this->createStub(StreamActionService::class);
 		$this->streamActionService->method('setActionBool')->willReturnCallback(
 			function (string $actorId, string $streamId, string $flag, bool $value): void {
 				$this->flags[] = [$actorId, $streamId, $flag, $value];
@@ -79,12 +82,12 @@ class DislikeServiceTest extends TestCase {
 
 		$this->service = new DislikeService(
 			$this->streamService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->activityService,
 			$this->actionsRequest,
 			$this->cacheActorService,
 			$this->streamActionService,
-			$this->createMock(ModerationService::class),
+			$this->createStub(ModerationService::class),
 			new NullLogger()
 		);
 	}
@@ -103,7 +106,7 @@ class DislikeServiceTest extends TestCase {
 				$args[] = $interfaces[$class];
 				continue;
 			}
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}
@@ -235,16 +238,16 @@ class DislikeServiceTest extends TestCase {
 	 */
 	public function testADislikeIsTakenBackLocallyEvenWhenItCannotBeSent(): void {
 		$this->streamService->method('getStreamById')->willReturn($this->video());
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')->willReturn(new Person());
 		$this->service = new DislikeService(
 			$this->streamService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->activityService,
 			$this->actionsRequest,
 			$this->cacheActorService,
 			$this->streamActionService,
-			$this->createMock(ModerationService::class),
+			$this->createStub(ModerationService::class),
 			new NullLogger()
 		);
 
@@ -258,16 +261,16 @@ class DislikeServiceTest extends TestCase {
 
 	public function testAnAuthorWithNoInboxIsRefusedRatherThanQueuedNowhere(): void {
 		$this->streamService->method('getStreamById')->willReturn($this->video());
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')->willReturn(new Person());
 		$this->service = new DislikeService(
 			$this->streamService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->activityService,
 			$this->actionsRequest,
 			$this->cacheActorService,
 			$this->streamActionService,
-			$this->createMock(ModerationService::class),
+			$this->createStub(ModerationService::class),
 			new NullLogger()
 		);
 

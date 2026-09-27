@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Db;
 
 use OCA\Social\Db\ConversationsRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * The statements themselves need a real database and are exercised by the
  * integration suite; the levels they are called in are what this covers.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ConversationsRequestTest extends TestCase {
 	private const ACTOR = 'https://cloud.example/users/alice';
 

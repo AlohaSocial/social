@@ -18,6 +18,7 @@ use OCA\Social\Service\VideoLadderService;
 use OCA\Social\Service\VideoLadderWorker;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\ITempManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -26,6 +27,7 @@ use Psr\Log\NullLogger;
  * The bookkeeping around a ladder: what is picked, what is written, and what
  * is cleaned up when a rung fails.
  */
+#[AllowMockObjectsWithoutExpectations]
 class VideoLadderWorkerTest extends TestCase {
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
 	private RenditionsRequest|MockObject $renditionsRequest;
@@ -44,7 +46,7 @@ class VideoLadderWorkerTest extends TestCase {
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 		$this->videoLadderService = $this->createMock(VideoLadderService::class);
 
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturnCallback(
 			function (string $suffix = ''): string {
 				$path = tempnam(sys_get_temp_dir(), 'ladder') . $suffix;

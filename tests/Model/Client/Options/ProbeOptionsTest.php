@@ -67,7 +67,7 @@ class ProbeOptionsTest extends TestCase {
 	}
 
 	public function testConstructorReadsTheRequestParameters(): void {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getParams')->willReturn(['limit' => '15', 'local' => 'true']);
 
 		$options = new ProbeOptions($request);
@@ -84,7 +84,7 @@ class ProbeOptionsTest extends TestCase {
 
 	public function testRequestLimitIsClampedToMaxLimit(): void {
 		// A request asking for a million items must not reach setMaxResults() unbounded.
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getParams')->willReturn(['limit' => '1000000']);
 
 		$this->assertSame(ProbeOptions::MAX_LIMIT, (new ProbeOptions($request))->getLimit());
@@ -120,7 +120,7 @@ class ProbeOptionsTest extends TestCase {
 	}
 
 	public function testMediaTypeIsReadOffTheRequest(): void {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getParams')->willReturn(['media_type' => 'video']);
 
 		$this->assertSame('video', (new ProbeOptions($request))->getMediaType());

@@ -16,10 +16,12 @@ use OCA\Social\Interfaces\Object\ImageInterface;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class ImageInterfaceTest extends ActivityPubTestCase {
 	/** @var CacheDocumentService&MockObject */
 	private $cacheDocumentService;

@@ -14,6 +14,7 @@ use OCA\Social\Db\WatchRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\WatchService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -27,6 +28,7 @@ use Psr\Log\NullLogger;
  * fail a request — a bookmark that was not written is a video that starts at
  * the beginning.
  */
+#[AllowMockObjectsWithoutExpectations]
 class WatchServiceTest extends TestCase {
 	private const POST = 'https://cloud.example/@alice/1';
 	private const BOB = 'https://cloud.example/@bob';
@@ -38,7 +40,7 @@ class WatchServiceTest extends TestCase {
 		$this->watchRequest = $this->createMock(WatchRequest::class);
 		$this->service = new WatchService(
 			$this->watchRequest,
-			$this->createMock(StreamRequest::class),
+			$this->createStub(StreamRequest::class),
 			new NullLogger(),
 		);
 	}

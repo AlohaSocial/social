@@ -25,7 +25,9 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -36,11 +38,12 @@ use PHPUnit\Framework\TestCase;
  * separately, and a client told "3 remaining" and then refused has been lied
  * to — which is a sign-in that fails for reasons nothing on the server records.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RateLimitServiceTest extends TestCase {
-	private IRequest|MockObject $request;
+	private IRequest|Stub $request;
 	private IUserSession|MockObject $userSession;
-	private ICacheFactory|MockObject $cacheFactory;
-	private ConfigService|MockObject $configService;
+	private ICacheFactory|Stub $cacheFactory;
+	private ConfigService|Stub $configService;
 	private RateLimitService $service;
 
 	/** the app values, as an administrator would have set them */
@@ -53,17 +56,17 @@ class RateLimitServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getRemoteAddress')->willReturn('198.51.100.7');
 
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')->willReturn(null);
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => (string)($this->appValues[$key] ?? ''));
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(
 			function (string $key) {
 				return $this->held[$key] ?? null;
@@ -77,7 +80,7 @@ class RateLimitServiceTest extends TestCase {
 			}
 		);
 
-		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory = $this->createStub(ICacheFactory::class);
 		$this->cacheFactory->method('isAvailable')->willReturnCallback(fn (): bool => $this->distributed);
 		$this->cacheFactory->method('isLocalCacheAvailable')->willReturnCallback(fn (): bool => $this->local);
 		$this->cacheFactory->method('createDistributed')->willReturn($cache);
@@ -93,7 +96,7 @@ class RateLimitServiceTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$session = $this->createMock(IUserSession::class);
 		$session->method('getUser')->willReturn($user);
@@ -223,8 +226,8 @@ class RateLimitServiceTest extends TestCase {
 	// which routes the default governs
 
 	public function testFederationIsNotACLientPacingItself(): void {
-		$activityPub = $this->createMock(ActivityPubController::class);
-		$queue = $this->createMock(QueueController::class);
+		$activityPub = $this->createStub(ActivityPubController::class);
+		$queue = $this->createStub(QueueController::class);
 
 		$this->assertFalse($this->service->appliesDefaultTo($activityPub, 'inbox'));
 		$this->assertFalse($this->service->appliesDefaultTo($queue, 'asyncForRequest'));
@@ -235,8 +238,8 @@ class RateLimitServiceTest extends TestCase {
 	 * page budget refuses the page rather than slowing the caller.
 	 */
 	public function testServingBytesIsNotCountedAgainstThePageBudget(): void {
-		$media = $this->createMock(MediaApiController::class);
-		$instance = $this->createMock(InstanceApiController::class);
+		$media = $this->createStub(MediaApiController::class);
+		$instance = $this->createStub(InstanceApiController::class);
 
 		$this->assertFalse($this->service->appliesDefaultTo($media, 'mediaOpen'));
 		$this->assertFalse($this->service->appliesDefaultTo($instance, 'emojiOpen'));

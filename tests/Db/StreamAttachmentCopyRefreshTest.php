@@ -30,7 +30,7 @@ class StreamAttachmentCopyRefreshTest extends TestCase {
 	private IURLGenerator $urlGenerator;
 
 	protected function setUp(): void {
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args): string => 'https://cloud.example.org/media/' . ($args['uuid'] ?? '')
 		);

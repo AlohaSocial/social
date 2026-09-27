@@ -13,6 +13,7 @@ use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCP\DB\IResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -21,9 +22,10 @@ use PHPUnit\Framework\TestCase;
  * `int|string` and a url segment arrives as a string, which the integer
  * predicate refuses under strict types.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CacheDocumentsRequestNidTest extends TestCase {
 	public function testADocumentIsLookedUpByTheStringARouteWasGiven(): void {
-		$empty = $this->createMock(IResult::class);
+		$empty = $this->createStub(IResult::class);
 		$empty->method('fetch')->willReturn(false);
 
 		$qb = $this->createMock(SocialQueryBuilder::class);

@@ -20,7 +20,9 @@ use OCA\Social\Service\MiscService;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -35,11 +37,12 @@ use Psr\Log\NullLogger;
  * The statements are not run: the unit suite has no database, so the
  * connection is a double that records what it was asked to write.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StreamTagsRequestTest extends TestCase {
 	private const POST = 'https://social.example/@alice/1';
 
-	private IDBConnection|MockObject $connection;
-	private IQueryBuilder|MockObject $queryBuilder;
+	private IDBConnection|Stub $connection;
+	private IQueryBuilder|Stub $queryBuilder;
 	private StreamTagsRequest|MockObject $request;
 
 	/** @var array<int, array{string, array<string, string>}> every insertIgnoreConflict */
@@ -48,10 +51,10 @@ class StreamTagsRequestTest extends TestCase {
 	private array $deleted = [];
 
 	protected function setUp(): void {
-		$this->queryBuilder = $this->createMock(IQueryBuilder::class);
+		$this->queryBuilder = $this->createStub(IQueryBuilder::class);
 		$this->queryBuilder->method('createNamedParameter')->willReturn(':p');
 
-		$this->connection = $this->createMock(IDBConnection::class);
+		$this->connection = $this->createStub(IDBConnection::class);
 		$this->connection->method('getQueryBuilder')->willReturn($this->queryBuilder);
 		$this->connection->method('insertIgnoreConflict')
 			->willReturnCallback(function (string $table, array $values): int {

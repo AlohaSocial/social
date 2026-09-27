@@ -34,11 +34,14 @@ use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class LikeServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const ALICE_ID = 'https://social.example/@alice';
@@ -51,11 +54,11 @@ class LikeServiceTest extends TestCase {
 	private StreamActionService|MockObject $streamActionService;
 	private CacheActorService|MockObject $cacheActorService;
 	private LikeInterface|MockObject $likeInterface;
-	private ModerationService|MockObject $moderationService;
+	private ModerationService|Stub $moderationService;
 	private LikeService $service;
 
 	protected function setUp(): void {
-		$this->moderationService = $this->createMock(ModerationService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->likeInterface = $this->createMock(LikeInterface::class);
 		$this->bootActivityPub([LikeInterface::class => $this->likeInterface]);
 
@@ -91,7 +94,7 @@ class LikeServiceTest extends TestCase {
 				$args[] = $interfaces[$class];
 				continue;
 			}
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}

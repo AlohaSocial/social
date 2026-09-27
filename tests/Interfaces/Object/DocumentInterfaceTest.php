@@ -25,12 +25,14 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class DocumentInterfaceTest extends ActivityPubTestCase {
 	private const DOCUMENT = self::REMOTE_URL . '/media/1';
 

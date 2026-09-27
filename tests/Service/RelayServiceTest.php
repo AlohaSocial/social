@@ -25,7 +25,9 @@ use OCA\Social\Service\HttpSignatureService;
 use OCA\Social\Service\InstanceActorService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\SearchService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -38,26 +40,27 @@ use RuntimeException;
  * somebody else's post rather than as a boost, and that nothing is taken in
  * from a server nobody subscribed to.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RelayServiceTest extends TestCase {
 	private const RELAY = 'https://relay.example/actor';
 	private const INBOX = 'https://relay.example/inbox';
 	private const OURS = 'https://cloud.example/apps/social/actor';
 
 	private RelayRequest|MockObject $relayRequest;
-	private HttpSignatureService|MockObject $httpSignatureService;
+	private HttpSignatureService|Stub $httpSignatureService;
 	private CurlService|MockObject $curlService;
 	private CacheActorService|MockObject $cacheActorService;
 	private SearchService|MockObject $searchService;
-	private InstanceActorService|MockObject $instanceActorService;
+	private InstanceActorService|Stub $instanceActorService;
 	private RelayService $service;
 
 	protected function setUp(): void {
 		$this->relayRequest = $this->createMock(RelayRequest::class);
-		$this->httpSignatureService = $this->createMock(HttpSignatureService::class);
+		$this->httpSignatureService = $this->createStub(HttpSignatureService::class);
 		$this->curlService = $this->createMock(CurlService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->searchService = $this->createMock(SearchService::class);
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
 		$this->instanceActorService->method('getId')->willReturn(self::OURS);
 
 		$this->service = new RelayService(

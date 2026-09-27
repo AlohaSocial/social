@@ -26,19 +26,22 @@ use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PixelfedAdminService;
 use OCA\Social\Service\PostReviewService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class PixelfedAdminServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://cloud.example/apps/social/@bob';
 
 	private AdminApiService|MockObject $adminApiService;
 	private FediverseService|MockObject $fediverseService;
-	private InstanceStatsRequest|MockObject $instanceStatsRequest;
+	private InstanceStatsRequest|Stub $instanceStatsRequest;
 	private PostReviewService|MockObject $postReviewService;
 	private ModerationService|MockObject $moderationService;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private PixelfedAdminService $service;
 	private array $accessList = [];
 	private array $silencedList = [];
@@ -68,19 +71,19 @@ class PixelfedAdminServiceTest extends TestCase {
 			});
 
 		$instance = (new Instance())->setStats(['user_count' => 36, 'status_count' => 692, 'domain_count' => 3]);
-		$instanceService = $this->createMock(InstanceService::class);
+		$instanceService = $this->createStub(InstanceService::class);
 		$instanceService->method('getLocal')->willReturn($instance);
 
-		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
+		$this->instanceStatsRequest = $this->createStub(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')
 			->willReturn(['big.example' => 40, 'loud.example' => 3, 'evil.example' => 1]);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->accessTypeList = ['BLACKLIST' => 'all_but', 'WHITELIST' => 'none_but'];
 
 		$this->postReviewService = $this->createMock(PostReviewService::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 
 		$this->service = new PixelfedAdminService(
 			$this->adminApiService,

@@ -159,7 +159,7 @@ class StreamSaveAtomicityTest extends TestCase {
 	public function testAPostWhoseRecipientsFailIsNotLeftBehind(): void {
 		$note = $this->note('partial');
 
-		$failing = $this->createMock(StreamDestRequest::class);
+		$failing = $this->createStub(StreamDestRequest::class);
 		$failing->method('generateStreamDest')
 			->willThrowException(new \RuntimeException('the recipient rows could not be written'));
 

@@ -80,14 +80,14 @@ class SocialDeleteRoundTripTest extends TestCase {
 				$args[] = $interfaces[$class];
 				continue;
 			}
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn($cloudUrl);
 			}
 			$args[] = $mock;
 		}
 		AP::set(new AP(...$args));
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	/**
@@ -107,7 +107,7 @@ class SocialDeleteRoundTripTest extends TestCase {
 		$actorsRequest->method('getFromId')->with(self::BOB)->willReturn($bob);
 
 		$wire = '';
-		$requestQueueService = $this->createMock(RequestQueueService::class);
+		$requestQueueService = $this->createStub(RequestQueueService::class);
 		$requestQueueService->method('generateRequestQueue')->willReturnCallback(
 			static function (array $paths, ACore $item) use (&$wire): string {
 				// what RequestQueueService stores and later posts
@@ -120,20 +120,20 @@ class SocialDeleteRoundTripTest extends TestCase {
 			->willThrowException(new NoHighPriorityRequestException());
 		$requestQueueService->method('getRequestFromToken')->willReturn([]);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudHost')->willReturn(self::SENDER_HOST);
 
 		$service = new ActivityService(
-			$this->createMock(FollowsRequest::class),
-			$this->createMock(CacheActorsRequest::class),
-			$this->createMock(SignatureService::class),
+			$this->createStub(FollowsRequest::class),
+			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(SignatureService::class),
 			$requestQueueService,
-			$this->createMock(CurlService::class),
+			$this->createStub(CurlService::class),
 			$configService,
 			$actorsRequest,
-			$this->createMock(RelayRequest::class),
-			$this->createMock(HostBreakerRequest::class),
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(RelayRequest::class),
+			$this->createStub(HostBreakerRequest::class),
+			$this->createStub(LoggerInterface::class),
 		);
 
 		$post->setActorId($post->getAttributedTo());
@@ -166,14 +166,14 @@ class SocialDeleteRoundTripTest extends TestCase {
 
 		$noteInterface = new NoteInterface(
 			$streamRequest,
-			$this->createMock(CacheActorsRequest::class),
-			$this->createMock(PollService::class),
-			$this->createMock(PushService::class),
-			$this->createMock(StreamQueueService::class),
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(ForwardService::class),
-			$this->createMock(NotificationService::class),
-			$this->createMock(StatusRevisionService::class),
+			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(PollService::class),
+			$this->createStub(PushService::class),
+			$this->createStub(StreamQueueService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(ForwardService::class),
+			$this->createStub(NotificationService::class),
+			$this->createStub(StatusRevisionService::class),
 		);
 		$this->boot(self::RECEIVER, [
 			DeleteInterface::class => new DeleteInterface(),
@@ -239,9 +239,9 @@ class SocialDeleteRoundTripTest extends TestCase {
 	 */
 	private function parse(string $wire): void {
 		$import = new ImportService(
-			$this->createMock(MiscService::class),
-			$this->createMock(ModerationService::class),
-			$this->createMock(RelayService::class),
+			$this->createStub(MiscService::class),
+			$this->createStub(ModerationService::class),
+			$this->createStub(RelayService::class),
 		);
 		$activity = $import->importFromJson($wire);
 		$activity->setOrigin(self::SENDER_HOST, SignatureService::ORIGIN_HEADER, time());

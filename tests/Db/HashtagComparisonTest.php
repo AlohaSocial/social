@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Db;
 
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * Using temporary; Using filesort`). The rows are stored normalised now, so
  * both reads compare the column as it stands.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HashtagComparisonTest extends TestCase {
 	public function testTheFollowedTagsJoinComparesTheStoredTagAsItStands(): void {
 		$on = [];

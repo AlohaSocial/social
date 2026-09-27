@@ -42,10 +42,13 @@ use OCP\IL10N;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
 use OCP\IUser;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialMigratorTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://cloud.example/apps/social/@bob';
@@ -58,16 +61,16 @@ class SocialMigratorTest extends TestCase {
 	private AccountService|MockObject $accountService;
 	private AccountRelationService|MockObject $accountRelationService;
 	private MigrationService|MockObject $migrationService;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private CacheDocumentService|MockObject $cacheDocumentService;
 	private DocumentService|MockObject $documentService;
 	private BannerService|MockObject $bannerService;
 	private AvatarService|MockObject $avatarService;
-	private FollowsRequest|MockObject $followsRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private ActorRelationRequest|MockObject $actorRelationRequest;
 	private StreamRequest|MockObject $streamRequest;
 	private StreamActionService|MockObject $streamActionService;
-	private \OCA\Social\Service\InterestService|MockObject $interestService;
+	private \OCA\Social\Service\InterestService|Stub $interestService;
 	private SocialMigrator $migrator;
 	private RecordingOutput $output;
 
@@ -75,25 +78,25 @@ class SocialMigratorTest extends TestCase {
 	private array $tempFiles = [];
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->accountRelationService = $this->createMock(AccountRelationService::class);
 		$this->migrationService = $this->createMock(MigrationService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->bannerService = $this->createMock(BannerService::class);
 		$this->avatarService = $this->createMock(AvatarService::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->actorRelationRequest = $this->createMock(ActorRelationRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->streamActionService = $this->createMock(StreamActionService::class);
-		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
+		$this->interestService = $this->createStub(\OCA\Social\Service\InterestService::class);
 		$this->interestService->method('export')->willReturn(['version' => 1, 'settings' => [], 'interests' => []]);
 
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = (string)tempnam(sys_get_temp_dir(), 'social-migrator-test');
 			$this->tempFiles[] = $path;
@@ -104,7 +107,7 @@ class SocialMigratorTest extends TestCase {
 		// a media URL is rebuilt from its uuid when a stored attachment is read
 		// back (`MediaAttachment::asLocal()`), and that reaches for the
 		// container rather than taking a dependency
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')
 			->willReturnCallback(static fn (string $route, array $args): string => self::MEDIA);
 		\OC::$server->register(IURLGenerator::class, $urlGenerator);

@@ -33,25 +33,29 @@ use OCA\Social\Settings\AdminSettings;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ModerationControllerTest extends TestCase {
 	private ReportService|MockObject $reportService;
 	private FediverseService|MockObject $fediverseService;
 	private ConfigService|MockObject $configService;
 	private ModerationService|MockObject $moderationService;
-	private AdminApiService|MockObject $adminApiService;
-	private PostReviewService|MockObject $postReviewService;
+	private AdminApiService|Stub $adminApiService;
+	private PostReviewService|Stub $postReviewService;
 	private MediaBlocksRequest|MockObject $mediaBlocksRequest;
 	private DiscoverCategoriesRequest|MockObject $discoverCategoriesRequest;
-	private TrendReviewService|MockObject $trendReviewService;
-	private HashtagService|MockObject $hashtagService;
-	private EmojiService|MockObject $emojiService;
-	private \OCP\IUserSession|MockObject $userSession;
-	private BlocklistImportService|MockObject $blocklistImportService;
-	private BlocklistSubscriptionService|MockObject $blocklistSubscriptionService;
-	private AccountService|MockObject $accountService;
+	private TrendReviewService|Stub $trendReviewService;
+	private HashtagService|Stub $hashtagService;
+	private EmojiService|Stub $emojiService;
+	private \OCP\IUserSession|Stub $userSession;
+	private BlocklistImportService|Stub $blocklistImportService;
+	private BlocklistSubscriptionService|Stub $blocklistSubscriptionService;
+	private AccountService|Stub $accountService;
 	private ModerationController $controller;
 
 	/** The arguments the account page was asked for. */
@@ -68,23 +72,23 @@ class ModerationControllerTest extends TestCase {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->adminApiService = $this->createMock(AdminApiService::class);
-		$this->postReviewService = $this->createMock(PostReviewService::class);
+		$this->adminApiService = $this->createStub(AdminApiService::class);
+		$this->postReviewService = $this->createStub(PostReviewService::class);
 		$this->mediaBlocksRequest = $this->createMock(MediaBlocksRequest::class);
 		$this->discoverCategoriesRequest = $this->createMock(DiscoverCategoriesRequest::class);
-		$user = $this->createMock(\OCP\IUser::class);
+		$user = $this->createStub(\OCP\IUser::class);
 		$user->method('getUID')->willReturn('alice');
-		$this->userSession = $this->createMock(\OCP\IUserSession::class);
+		$this->userSession = $this->createStub(\OCP\IUserSession::class);
 		$this->userSession->method('getUser')->willReturn($user);
-		$this->accountService = $this->createMock(AccountService::class);
-		$this->trendReviewService = $this->createMock(TrendReviewService::class);
-		$this->hashtagService = $this->createMock(HashtagService::class);
-		$this->emojiService = $this->createMock(EmojiService::class);
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->trendReviewService = $this->createStub(TrendReviewService::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
+		$this->emojiService = $this->createStub(EmojiService::class);
 
-		$this->blocklistImportService = $this->createMock(BlocklistImportService::class);
-		$this->blocklistSubscriptionService = $this->createMock(BlocklistSubscriptionService::class);
+		$this->blocklistImportService = $this->createStub(BlocklistImportService::class);
+		$this->blocklistSubscriptionService = $this->createStub(BlocklistSubscriptionService::class);
 		$this->controller = new ModerationController(
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$this->reportService,
 			$this->fediverseService,
 			$this->configService,
@@ -300,9 +304,7 @@ class ModerationControllerTest extends TestCase {
 		$this->assertSame([9, 7], $data['cursors'], 'the cursors page the browser');
 	}
 
-	/**
-	 * @dataProvider provideWhatAModeratorWouldType
-	 */
+	#[DataProvider('provideWhatAModeratorWouldType')]
 	public function testWhatWasTypedIsReadAsBothHalves(
 		string $query, string $username, string $domain,
 	): void {
@@ -312,7 +314,7 @@ class ModerationControllerTest extends TestCase {
 		$this->assertSame($domain, $this->accountQuery['domain'], $query . ' names this instance');
 	}
 
-	public function provideWhatAModeratorWouldType(): iterable {
+	public static function provideWhatAModeratorWouldType(): iterable {
 		yield 'a handle' => ['bob@remote.example', 'bob', 'remote.example'];
 		yield 'a handle with the leading at' => ['@bob@remote.example', 'bob', 'remote.example'];
 		yield 'an instance' => ['remote.example', '', 'remote.example'];
@@ -321,14 +323,14 @@ class ModerationControllerTest extends TestCase {
 		yield 'mixed case' => ['Bob@Remote.Example', 'Bob', 'remote.example'];
 	}
 
-	/** @dataProvider provideOrigins */
+	#[DataProvider('provideOrigins')]
 	public function testTheOriginNarrowsToOneSideOfTheFederation(string $origin, ?bool $local): void {
 		$this->controller->accounts('', $origin);
 
 		$this->assertSame($local, $this->accountQuery['local']);
 	}
 
-	public function provideOrigins(): iterable {
+	public static function provideOrigins(): iterable {
 		yield 'this instance' => ['local', true];
 		yield 'the rest' => ['remote', false];
 		yield 'both' => ['', null];

@@ -18,10 +18,12 @@ use OCA\Social\Service\AccountService;
 use OCP\Accounts\UserUpdatedEvent;
 use OCP\EventDispatcher\Event;
 use OCP\IUser;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class UserAccountListenerTest extends TestCase {
 	/** @var ActorsRequest&MockObject */
 	private $actorsRequest;
@@ -51,7 +53,7 @@ class UserAccountListenerTest extends TestCase {
 	}
 
 	private function userUpdated(string $uid): UserUpdatedEvent {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 
 		return new UserUpdatedEvent($user, ['displayname' => 'New Name']);

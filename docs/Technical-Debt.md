@@ -36,7 +36,6 @@ JavaScript and Vue across 81 files in `src/`.
 | Theme | Severity | Size |
 |---|---|---|
 | Translation catalogue covers under 40 % of source strings | Low | — |
-| PHPUnit 12 | Low | ~3,100 stub migrations |
 
 The two largest items in every previous version of this document are both gone.
 The vendored toolkit's query builder no longer extends a private core class, and
@@ -200,7 +199,7 @@ tree reports no warnings.
 | Tool | Pinned | Status |
 |---|---|---|
 | `nextcloud/ocp` | `dev-stable35` | Matches the declared minimum, so analysis checks this app against the oldest server it claims to support. |
-| PHPUnit | `^11.5` (11.5.56) | Current major minus one. See below. |
+| PHPUnit | `^12.5` (12.5.36) | Current. |
 | Psalm | `^6.17` | Current, running on supported PHP. Its baseline covers six files and seven issues, none of them in `lib/Db`. |
 | ESLint | 10.10.0 with `@nextcloud/eslint-config` 9 | Current, flat config, five rules deliberately off, no warnings. |
 | Stylelint | `^17.15` | Current. |
@@ -208,14 +207,14 @@ tree reports no warnings.
 | webpack / vue-router / vite | 5.110 / 5.3 / 8.3 | Current. |
 | `node-polyfill-webpack-plugin` | exactly `4.0.0` | **Blocked upstream.** `@nextcloud/webpack-vue-config` 6.3.2 peer-pins it; 4.1.0 needs a release there first. |
 
-**PHPUnit 12 is the one version behind, and the gap is measured.** Under 12 this
-suite reports about 3,100 notices — "no expectations were configured for the
-mock object, consider a test stub" — which is a suite-wide `createMock` to
-`createStub` migration, and it needs roughly 2 GB to run where 11 needs 90 MB.
-Nothing in `tests/` blocks it otherwise: providers are static, metadata is
-attributes rather than annotations, and the `onConsecutiveCalls()` calls 12
-removes are gone. It is a day of mechanical work with no correctness payoff,
-which is why it is last.
+**PHPUnit 12, with the mock hygiene it asks for.** A double nothing sets an
+expectation on is a `createStub()` (about 1,400 of them were `createMock()`),
+and the ActivityPub dispatcher the model tests install builds stubs unless a
+test names the interfaces it expects calls on. What still warns is the shared
+fixture — a mock built once in `setUp()` that some tests of the class expect on
+and others only stub — and those classes carry
+`#[AllowMockObjectsWithoutExpectations]`, which is PHPUnit's own answer to that
+shape. The suite runs in about 190 MB.
 
 `terser-webpack-plugin` is a direct devDependency because webpack 5.110 stopped
 hoisting it where `@nextcloud/webpack-vue-config` expects to find it. Worth
@@ -413,7 +412,7 @@ sixty when twenty survive the check.
 | `nextcloud/ocp` two years stale | `dev-master` at a 2024-10-23 commit -> `dev-stable35`. |
 | `#[\Override]` unavailable | 343 methods carry it; the psalm suppression that named the 8.1 floor is gone. |
 | `IConfig` deprecated methods | `IAppConfig` and `IUserConfig` in five files. |
-| PHPUnit 9 (end of life) | 11.5, via 10. All 112 data providers static, 127 annotations to attributes, 11 `withConsecutive()` sites rewritten, config migrated. |
+| PHPUnit 9 (end of life) | 12.5, via 10. Every data provider static and named by attribute, `withConsecutive()` and `onConsecutiveCalls()` rewritten, `isType()` gone, config migrated. |
 | Test doubles drifting from the interfaces they double | `FakeConnection` completed; ten hand-rolled anonymous table classes replaced by one `FakeTable`; the test container serves an anonymous session because `Response` resolves one on every render from 35 onward. |
 | Vuex 4, no Pinia | Five Pinia stores, `mapStores` at the call sites, `vuex` removed. |
 | Three mixins, four spellings of one import | Three composables in `src/composables/`. |
@@ -439,8 +438,7 @@ sixty when twenty survive the check.
 
 1. Collapse the two cache-actor joins, with a database to check against.
 2. Finish the l10n round trip — a Transifex round trip, not a code change.
-3. PHPUnit 12, which means `createMock` -> `createStub` across the suite.
-4. Web Push and a streaming API, so mobile clients stop polling.
+3. Web Push and a streaming API, so mobile clients stop polling.
 
 ---
 

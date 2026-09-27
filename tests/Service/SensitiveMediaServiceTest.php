@@ -12,7 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\SensitiveMediaService;
 use OCP\IConfig;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -20,7 +20,7 @@ use PHPUnit\Framework\TestCase;
  * one of them.
  */
 class SensitiveMediaServiceTest extends TestCase {
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private SensitiveMediaService $service;
 
 	/** the user-config rows, as the instance would hold them */
@@ -29,8 +29,8 @@ class SensitiveMediaServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
-		$config = $this->createMock(IConfig::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$config = $this->createStub(IConfig::class);
 		$config->method('getUserValue')->willReturnCallback(
 			fn (string $user, string $app, string $key, $default = '') => $this->stored[$user] ?? $default
 		);

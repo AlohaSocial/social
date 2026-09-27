@@ -27,7 +27,9 @@ use OCA\Social\Model\QuoteGrant;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
@@ -36,6 +38,7 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * FEP-044f approval, both ways: answering somebody's QuoteRequest for one of
  * our posts, and recording their answer to ours.
  */
+#[AllowMockObjectsWithoutExpectations]
 class QuoteRequestInterfaceTest extends ActivityPubTestCase {
 	private const ALICE = self::LOCAL_URL . '/users/alice';
 	private const BOB = self::REMOTE_URL . '/users/bob';
@@ -45,20 +48,20 @@ class QuoteRequestInterfaceTest extends ActivityPubTestCase {
 	private const REMOTE_QUOTING = self::REMOTE_URL . '/notes/2';
 
 	private StreamRequest|MockObject $streamRequest;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private ActivityService|MockObject $activityService;
 	private QuoteGrantRequest|MockObject $quoteGrantRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private QuoteRequestInterface $handler;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->quoteGrantRequest = $this->createMock(QuoteGrantRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->followsRequest->method('getByPersons')
 			->willThrowException(new FollowNotFoundException());
 		$this->handler = new QuoteRequestInterface(

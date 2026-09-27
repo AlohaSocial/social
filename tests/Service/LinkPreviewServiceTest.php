@@ -16,10 +16,12 @@ use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class LinkPreviewServiceTest extends TestCase {
 	private const POST_ID = 'https://cloud.example/@alice/1';
 

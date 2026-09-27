@@ -22,9 +22,11 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamDest;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 
 require_once __DIR__ . '/ActorInterfaceTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class PersonInterfaceTest extends ActorInterfaceTestCase {
 	private const CAROL = 'https://other.example/users/carol';
 

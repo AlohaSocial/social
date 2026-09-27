@@ -16,6 +16,7 @@ use OCA\Social\Service\NetworkStatsService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -31,8 +32,8 @@ use RuntimeException;
  * over eight months.
  */
 class NetworkGrowthServiceTest extends TestCase {
-	private CurlService|MockObject $curlService;
-	private ConfigService|MockObject $configService;
+	private CurlService|Stub $curlService;
+	private ConfigService|Stub $configService;
 	private NetworkGrowthService $service;
 
 	/** what the survey answers with, or a Throwable it raises */
@@ -47,7 +48,7 @@ class NetworkGrowthServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->curlService = $this->createMock(CurlService::class);
+		$this->curlService = $this->createStub(CurlService::class);
 		$this->curlService->method('retrieveJson')
 			->willReturnCallback(function (string $method, string $url, array $options): array {
 				$this->asked++;
@@ -59,16 +60,16 @@ class NetworkGrowthServiceTest extends TestCase {
 				return is_array($this->answer) ? $this->answer : [];
 			});
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string
 				=> ($key === NetworkStatsService::CONFIG_KEY) ? $this->configured : '');
 
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 	}
 
 	private function build(ICache|MockObject $cache): NetworkGrowthService {
-		$factory = $this->createMock(ICacheFactory::class);
+		$factory = $this->createStub(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
 		return new NetworkGrowthService(
@@ -193,7 +194,7 @@ class NetworkGrowthServiceTest extends TestCase {
 	public function testTheSeriesIsKeptRatherThanFetchedForEveryReader(): void {
 		$this->answer = $this->series(3);
 		$kept = [];
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('set')->willReturnCallback(function (string $key, $value) use (&$kept): bool {
 			$kept[$key] = $value;
 

@@ -22,7 +22,7 @@ use OCA\Social\Service\StreamService;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -35,8 +35,8 @@ class PostReferenceProviderTest extends TestCase {
 	private const PRETTY = 'https://cloud.example/apps/social/';
 	private const SOCIAL_URL = 'https://cloud.example/index.php/apps/social/';
 
-	private StreamService|MockObject $streamService;
-	private CacheActorService|MockObject $cacheActorService;
+	private StreamService|Stub $streamService;
+	private CacheActorService|Stub $cacheActorService;
 	private PostReferenceProvider $provider;
 
 	/** @var array<int, Stream> */
@@ -49,7 +49,7 @@ class PostReferenceProviderTest extends TestCase {
 	private array $lookups = [];
 
 	protected function setUp(): void {
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->streamService->method('getStreamByNid')->willReturnCallback(function (int $nid): Stream {
 			return $this->posts[$nid] ?? throw new StreamNotFoundException('no post ' . $nid);
 		});
@@ -57,7 +57,7 @@ class PostReferenceProviderTest extends TestCase {
 			return $this->byId[$id] ?? throw new StreamNotFoundException('no post ' . $id);
 		});
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromLocalAccount')->willReturnCallback(function (string $account): Person {
 			return $this->accounts[$account] ?? throw new CacheActorDoesNotExistException('unknown');
 		});
@@ -67,10 +67,10 @@ class PostReferenceProviderTest extends TestCase {
 			return $this->accounts[$account] ?? throw new CacheActorDoesNotExistException('unknown');
 		});
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args = []): string => match ($route) {
 				'social.Navigation.navigate' => self::APP,
@@ -80,7 +80,7 @@ class PostReferenceProviderTest extends TestCase {
 			}
 		);
 
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(
 			static fn (string $text, $params = []): string => ((array)$params === []) ? $text : vsprintf($text, (array)$params)
 		);

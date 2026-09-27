@@ -21,9 +21,13 @@ use OCA\Social\Service\LikeService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ActionServiceTest extends TestCase {
 	private const POST_ID = 'https://remote.example/notes/42';
 
@@ -32,8 +36,8 @@ class ActionServiceTest extends TestCase {
 	private LikeService|MockObject $likeService;
 	private StreamActionService|MockObject $streamActionService;
 	private PinService|MockObject $pinService;
-	private ActionsRequest|MockObject $actionsRequest;
-	private ConversationsRequest|MockObject $conversationsRequest;
+	private ActionsRequest|Stub $actionsRequest;
+	private ConversationsRequest|Stub $conversationsRequest;
 
 	/** What rootOf() answers, or '' for "the post is its own root". */
 	private string $threadRoot = '';
@@ -44,7 +48,7 @@ class ActionServiceTest extends TestCase {
 	private Note $post;
 
 	private \OCA\Social\Service\DislikeService|\PHPUnit\Framework\MockObject\MockObject $dislikeService;
-	private \OCA\Social\Service\InterestService|\PHPUnit\Framework\MockObject\MockObject $interestService;
+	private \OCA\Social\Service\InterestService|\PHPUnit\Framework\Stub\Stub $interestService;
 
 	protected function setUp(): void {
 		$this->streamService = $this->createMock(StreamService::class);
@@ -52,8 +56,8 @@ class ActionServiceTest extends TestCase {
 		$this->likeService = $this->createMock(LikeService::class);
 		$this->streamActionService = $this->createMock(StreamActionService::class);
 		$this->pinService = $this->createMock(PinService::class);
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
-		$this->conversationsRequest = $this->createMock(ConversationsRequest::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
+		$this->conversationsRequest = $this->createStub(ConversationsRequest::class);
 		$this->conversationsRequest->method('rootOf')->willReturnCallback(
 			fn (string $statusId): string => $this->threadRoot ?: $statusId
 		);
@@ -64,7 +68,7 @@ class ActionServiceTest extends TestCase {
 		);
 
 		$this->dislikeService = $this->createMock(\OCA\Social\Service\DislikeService::class);
-		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
+		$this->interestService = $this->createStub(\OCA\Social\Service\InterestService::class);
 
 		$this->service = new ActionService(
 			$this->streamService,
@@ -147,14 +151,14 @@ class ActionServiceTest extends TestCase {
 	}
 
 	/** @return array<string, array{string, bool}> */
-	public function bookmarkActionProvider(): array {
+	public static function bookmarkActionProvider(): array {
 		return [
 			'bookmark' => ['bookmark', true],
 			'unbookmark' => ['unbookmark', false],
 		];
 	}
 
-	/** @dataProvider bookmarkActionProvider */
+	#[DataProvider('bookmarkActionProvider')]
 	public function testBookmarkTogglesTheLocalFlagAndFederatesNothing(string $action, bool $expected): void {
 		$this->streamService->expects($this->once())->method('getStreamByNid')->willReturn($this->post);
 		$this->likeService->expects($this->never())->method($this->anything());
@@ -169,9 +173,8 @@ class ActionServiceTest extends TestCase {
 	/**
 	 * Mastodon's conversation mute is about being *told*: the thread's posts
 	 * stay on the timelines and only the notifications stop.
-	 *
-	 * @dataProvider muteActionProvider
 	 */
+	#[DataProvider('muteActionProvider')]
 	public function testMutingAConversationIsRecordedAgainstItsRoot(string $action, bool $muted): void {
 		$this->streamService->method('getStreamByNid')->willReturn($this->post);
 		$this->threadRoot = 'https://cloud.example.com/apps/social/@bob/the-root';
@@ -187,7 +190,7 @@ class ActionServiceTest extends TestCase {
 	}
 
 	/** @return array<string, array{string, bool}> */
-	public function muteActionProvider(): array {
+	public static function muteActionProvider(): array {
 		return [
 			'mute' => ['mute', true],
 			'unmute' => ['unmute', false],

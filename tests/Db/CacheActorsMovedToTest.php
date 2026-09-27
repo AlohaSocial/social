@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\CacheActorsRequestBuilder;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Tools\Exceptions\RowNotFoundException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * server class this suite has no copy of — so the one method that runs it is
  * the seam: everything around it is exercised for real.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CacheActorsMovedToTest extends TestCase {
 	private const ALICE = 'https://mastodon.social/users/alice';
 	private const NEW_ALICE = 'https://new.example/users/alice';

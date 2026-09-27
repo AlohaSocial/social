@@ -30,18 +30,21 @@ use OCP\AppFramework\Services\IInitialState;
 use OCP\IInitialStateService;
 use OCP\IL10N;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialPubControllerTest extends TestCase {
 	private const SOCIAL_URL = 'https://cloud.example/apps/social/';
 
-	/** @var IInitialState&MockObject */
+	/** @var IInitialState&Stub */
 	private $initialState;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var AccountService&MockObject */
+	/** @var AccountService&Stub */
 	private $accountService;
 	/** @var StreamService&MockObject */
 	private $streamService;
@@ -52,9 +55,9 @@ class SocialPubControllerTest extends TestCase {
 	private array $states = [];
 
 	protected function setUp(): void {
-		$this->initialState = $this->createMock(IInitialState::class);
+		$this->initialState = $this->createStub(IInitialState::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->navigationController = $this->createMock(NavigationController::class);
 		$this->app = new TemplateResponse('social', 'main');
@@ -67,7 +70,7 @@ class SocialPubControllerTest extends TestCase {
 
 		// PublicTemplateResponse registers the public page menu with the
 		// server's own initial state on construction
-		\OC::$server->register(IInitialStateService::class, $this->createMock(IInitialStateService::class));
+		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 	}
 
 	protected function tearDown(): void {
@@ -75,9 +78,9 @@ class SocialPubControllerTest extends TestCase {
 	}
 
 	private function controller(?string $userId): SocialPubController {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(
 			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters)
 		);
@@ -85,7 +88,7 @@ class SocialPubControllerTest extends TestCase {
 		return new SocialPubController(
 			$userId,
 			$this->initialState,
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$l10n,
 			$this->navigationController,
 			$this->cacheActorService,
@@ -96,7 +99,7 @@ class SocialPubControllerTest extends TestCase {
 	}
 
 	private function knownActor(string $name = 'Alice'): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getName')->willReturn($name);
 		$actor->method('getPreferredUsername')->willReturn('alice');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
@@ -313,7 +316,7 @@ class SocialPubControllerTest extends TestCase {
 	}
 
 	public function testThePostIsReadAsItsViewer(): void {
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$this->accountService->method('getCurrentViewer')->willReturn($viewer);
 		$this->streamService->expects($this->once())->method('setViewer')->with($viewer);
 		$this->knownPost();
@@ -322,7 +325,7 @@ class SocialPubControllerTest extends TestCase {
 	}
 
 	public function testALoggedInReaderGetsTheAppWithThePostRenderedIntoIt(): void {
-		$this->accountService->method('getCurrentViewer')->willReturn($this->createMock(Person::class));
+		$this->accountService->method('getCurrentViewer')->willReturn($this->createStub(Person::class));
 		$post = $this->knownPost();
 		$this->navigationController->expects($this->once())->method('navigate');
 
@@ -340,7 +343,7 @@ class SocialPubControllerTest extends TestCase {
 	 */
 	public function testAPostIsFoundByTheNumericIdTheAppLinksWith(): void {
 		$this->anonymous();
-		$post = $this->createMock(Stream::class);
+		$post = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->streamService->expects($this->once())->method('getStreamByNid')
 			->with(1789250751711653456)->willReturn($post);
@@ -385,7 +388,7 @@ class SocialPubControllerTest extends TestCase {
 	}
 
 	public function testAnUnknownPostIsTheAppWithA404ForALoggedInReader(): void {
-		$this->accountService->method('getCurrentViewer')->willReturn($this->createMock(Person::class));
+		$this->accountService->method('getCurrentViewer')->willReturn($this->createStub(Person::class));
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
 
 		$response = $this->controller('alice')->displayPost('alice', 'missing');

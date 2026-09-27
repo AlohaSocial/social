@@ -13,6 +13,7 @@ use OCA\Social\Db\FiltersRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\Client\FilterStatus;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -23,6 +24,7 @@ use ReflectionMethod;
  *
  * The statement is not run; what it was asked to bind is what is asserted.
  */
+#[AllowMockObjectsWithoutExpectations]
 class FilterStatusesRequestTest extends TestCase {
 	private const WIDE = '92233720368547758070';
 

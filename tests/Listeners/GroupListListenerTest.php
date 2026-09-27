@@ -19,23 +19,26 @@ use OCP\Group\Events\UserAddedEvent;
 use OCP\Group\Events\UserRemovedEvent;
 use OCP\IGroup;
 use OCP\IUser;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class GroupListListenerTest extends TestCase {
 	private GroupListService|MockObject $service;
 	private LoggerInterface|MockObject $logger;
 	private GroupListListener $listener;
-	private IGroup|MockObject $group;
-	private IUser|MockObject $user;
+	private IGroup|Stub $group;
+	private IUser|Stub $user;
 
 	protected function setUp(): void {
 		$this->service = $this->createMock(GroupListService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->listener = new GroupListListener($this->service, $this->logger);
-		$this->group = $this->createMock(IGroup::class);
-		$this->user = $this->createMock(IUser::class);
+		$this->group = $this->createStub(IGroup::class);
+		$this->user = $this->createStub(IUser::class);
 	}
 
 	public function testIsAnEventListener(): void {

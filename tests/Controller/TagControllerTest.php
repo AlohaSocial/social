@@ -23,7 +23,9 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -35,17 +37,18 @@ use Psr\Log\NullLogger;
  * allowed to ask, what a tag that is not one answers, and the cursor the list
  * pages on.
  */
+#[AllowMockObjectsWithoutExpectations]
 class TagControllerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private ClientService|MockObject $clientService;
-	private FollowedTagsRequest|MockObject $followedTagsRequest;
-	private TimelineRevisionService|MockObject $timelineRevisionService;
-	private HashtagService|MockObject $hashtagService;
-	private IUserSession|MockObject $userSession;
+	private FollowedTagsRequest|Stub $followedTagsRequest;
+	private TimelineRevisionService|Stub $timelineRevisionService;
+	private HashtagService|Stub $hashtagService;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -57,7 +60,7 @@ class TagControllerTest extends TestCase {
 	private bool $csrf = true;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -65,7 +68,7 @@ class TagControllerTest extends TestCase {
 		$this->request->method('getRequestUri')->willReturnCallback(fn (): string => $this->uri);
 		$this->request->method('getParam')->willReturn('');
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')
 			->willReturnCallback(
 				static fn (string $route, array $args): string
@@ -74,19 +77,19 @@ class TagControllerTest extends TestCase {
 		$urlGenerator->method('getAbsoluteURL')
 			->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . $path);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$viewer = new Person();
 		$viewer->setId(self::VIEWER);
 		$this->accountService->method('getActorFromUserId')->willReturn($viewer);
 
 		$this->clientService = $this->createMock(ClientService::class);
 
-		$this->hashtagService = $this->createMock(HashtagService::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
 		$this->hashtagService->method('tagEntity')
 			->willReturnCallback(
 				static fn (string $tag, ?bool $following = null): array => array_filter([
@@ -97,8 +100,8 @@ class TagControllerTest extends TestCase {
 				], static fn ($value): bool => $value !== null)
 			);
 
-		$this->followedTagsRequest = $this->createMock(FollowedTagsRequest::class);
-		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
+		$this->followedTagsRequest = $this->createStub(FollowedTagsRequest::class);
+		$this->timelineRevisionService = $this->createStub(TimelineRevisionService::class);
 		$this->followedTagsRequest->method('isFollowing')
 			->willReturnCallback(fn (string $actor, string $tag): bool => in_array($tag, $this->followed, true));
 		$this->followedTagsRequest->method('save')

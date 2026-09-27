@@ -68,8 +68,8 @@ class MediaRecoverTest extends TestCase {
 	}
 
 	public function testRestoresMediaWithoutRewritingThePost(): void {
-		$this->installActivityPub();
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example.org/apps/social/media/test.jpeg');
 		\OC::$server->register(IURLGenerator::class, $urlGenerator);
 		$this->apInterface(DocumentInterface::class)->expects($this->once())->method('save');
@@ -100,8 +100,8 @@ class MediaRecoverTest extends TestCase {
 	 * job is to give it its picture back.
 	 */
 	public function testAnAttachmentSentOnItsOwnIsRecoveredToo(): void {
-		$this->installActivityPub();
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example.org/apps/social/media/test.jpeg');
 		\OC::$server->register(IURLGenerator::class, $urlGenerator);
 		$this->apInterface(DocumentInterface::class)->expects($this->once())->method('save');
@@ -124,11 +124,11 @@ class MediaRecoverTest extends TestCase {
 	 */
 	public function testAPostFilledInBySomethingElseIsSaidSoRatherThanNothing(): void {
 		$this->installActivityPub();
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example.org/apps/social/media/test.jpeg');
 		\OC::$server->register(IURLGenerator::class, $urlGenerator);
 
-		$request = $this->createMock(StreamRequest::class);
+		$request = $this->createStub(StreamRequest::class);
 		$request->method('getMissingRemoteAttachments')->willReturnOnConsecutiveCalls([$this->row()], []);
 		$request->method('setRecoveredRemoteAttachments')->willReturn(false);
 		$tester = new CommandTester(new MediaRecover($request));

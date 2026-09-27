@@ -34,7 +34,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -47,18 +49,19 @@ use Psr\Log\NullLogger;
  * whether it exists, and dismissing one that is already gone is a success —
  * the client is asking for a state that already holds.
  */
+#[AllowMockObjectsWithoutExpectations]
 class NotificationControllerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
-	private ClientService|MockObject $clientService;
-	private NotificationService|MockObject $notificationService;
+	private AccountService|Stub $accountService;
+	private ClientService|Stub $clientService;
+	private NotificationService|Stub $notificationService;
 	private NotificationPolicyService|MockObject $notificationPolicyService;
-	private FilterService|MockObject $filterService;
-	private CacheActorService|MockObject $cacheActorService;
-	private IUserSession|MockObject $userSession;
+	private FilterService|Stub $filterService;
+	private CacheActorService|Stub $cacheActorService;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -69,7 +72,7 @@ class NotificationControllerTest extends TestCase {
 	private bool $csrf = true;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -77,12 +80,12 @@ class NotificationControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturnCallback(
 			function (): Person {
 				$viewer = new Person();
@@ -95,9 +98,9 @@ class NotificationControllerTest extends TestCase {
 			}
 		);
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('get')
 			->willReturnCallback(function (Person $viewer, int $id): Stream {
 				$this->mine($id);
@@ -128,9 +131,9 @@ class NotificationControllerTest extends TestCase {
 		$this->notificationPolicyService->method('of')->willReturn(new NotificationPolicy());
 		$this->notificationPolicyService->method('decisionsAbout')
 			->willReturn(['accepted' => [], 'dismissed' => []]);
-		$this->filterService = $this->createMock(FilterService::class);
+		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 
 		// Response::getHeaders() asks the container for the request
 		\OC::$server->register(IRequest::class, $this->request);
@@ -171,7 +174,7 @@ class NotificationControllerTest extends TestCase {
 	private function withToken(array $scopes): void {
 		$this->headers['Authorization'] = 'Bearer token-1';
 
-		$client = $this->createMock(SocialClient::class);
+		$client = $this->createStub(SocialClient::class);
 		$client->method('getAuthUserId')->willReturn('alice');
 		$client->method('getAuthScopes')->willReturn($scopes);
 		$this->clientService->method('getFromToken')->willReturn($client);
@@ -288,7 +291,7 @@ class NotificationControllerTest extends TestCase {
 	}
 
 	public function testAFailureOnThisSideSaysNothingAboutItself(): void {
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('clear')
 			->willThrowException(new \RuntimeException('SQLSTATE[42S02] social_stream'));
 
@@ -401,7 +404,7 @@ class NotificationControllerTest extends TestCase {
 			->with('alice', [NotificationPolicy::NOT_FOLLOWING => NotificationPolicy::FILTER])
 			->willReturn(new NotificationPolicy());
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -424,10 +427,10 @@ class NotificationControllerTest extends TestCase {
 		$this->notificationPolicyService->method('requestsFrom')
 			->willReturnCallback(
 				fn (array $rows, array $dismissed = []): array => (new NotificationPolicyService(
-					$this->createMock(ConfigService::class),
-					$this->createMock(FollowsRequest::class),
-					$this->createMock(ModerationService::class),
-					$this->createMock(AccountRelationService::class)
+					$this->createStub(ConfigService::class),
+					$this->createStub(FollowsRequest::class),
+					$this->createStub(ModerationService::class),
+					$this->createStub(AccountRelationService::class)
 				))->requestsFrom($rows, $dismissed)
 			);
 

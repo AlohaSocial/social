@@ -16,7 +16,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MediaUsageService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -31,15 +31,15 @@ use Symfony\Component\Console\Tester\CommandTester;
 class MediaUsageTest extends TestCase {
 	private const CLOUD = 'https://cloud.example.com';
 
-	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private CacheDocumentService|MockObject $cacheDocumentService;
-	private ConfigService|MockObject $configService;
+	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
+	private CacheDocumentService|Stub $cacheDocumentService;
+	private ConfigService|Stub $configService;
 	private CommandTester $tester;
 
 	protected function setUp(): void {
-		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getCloudUrl')->willReturn(self::CLOUD);
 
 		// the real service over the same mocks: what this test is about is the
@@ -50,7 +50,7 @@ class MediaUsageTest extends TestCase {
 				$this->cacheDocumentsRequest,
 				$this->cacheDocumentService,
 				$this->configService,
-				$this->createMock(\OCA\Social\Service\RemoteMediaQuotaService::class)
+				$this->createStub(\OCA\Social\Service\RemoteMediaQuotaService::class)
 			),
 			$this->configService
 		));
@@ -188,14 +188,14 @@ class MediaUsageTest extends TestCase {
 	}
 
 	public function testAnUnconfiguredInstanceSaysSoRatherThanGuessing(): void {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException('no address'));
 		$tester = new CommandTester(new MediaUsage(
 			new MediaUsageService(
 				$this->cacheDocumentsRequest,
 				$this->cacheDocumentService,
 				$configService,
-				$this->createMock(\OCA\Social\Service\RemoteMediaQuotaService::class)
+				$this->createStub(\OCA\Social\Service\RemoteMediaQuotaService::class)
 			),
 			$configService
 		));

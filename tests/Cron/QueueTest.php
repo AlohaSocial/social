@@ -20,10 +20,13 @@ use OCA\Social\Service\StreamQueueService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\TimedJob;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class QueueTest extends TestCase {
 	private const NOW = 1700000000;
 
@@ -33,19 +36,19 @@ class QueueTest extends TestCase {
 	private $streamQueueService;
 	/** @var ActivityService&MockObject */
 	private $activityService;
-	/** @var IJobList&MockObject */
+	/** @var IJobList&Stub */
 	private $jobList;
 	/** @var LoggerInterface&MockObject */
 	private $logger;
 	private Queue $job;
 
 	protected function setUp(): void {
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
-		$this->jobList = $this->createMock(IJobList::class);
+		$this->jobList = $this->createStub(IJobList::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
 		$this->job = new Queue(

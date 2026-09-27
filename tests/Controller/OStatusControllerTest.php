@@ -26,29 +26,32 @@ use OCP\AppFramework\Services\IInitialState;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class OStatusControllerTest extends TestCase {
-	/** @var IInitialState&MockObject */
+	/** @var IInitialState&Stub */
 	private $initialState;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
 	/** @var AccountService&MockObject */
 	private $accountService;
-	/** @var CurlService&MockObject */
+	/** @var CurlService&Stub */
 	private $curlService;
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	private OStatusController $controller;
 	private array $states = [];
 
 	protected function setUp(): void {
-		$this->initialState = $this->createMock(IInitialState::class);
+		$this->initialState = $this->createStub(IInitialState::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->accountService = $this->createMock(AccountService::class);
-		$this->curlService = $this->createMock(CurlService::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->curlService = $this->createStub(CurlService::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 
 		$this->initialState->method('provideInitialState')
 			->willReturnCallback(function (string $key, $data): void {
@@ -56,12 +59,12 @@ class OStatusControllerTest extends TestCase {
 			});
 
 		$this->controller = new OStatusController(
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$this->initialState,
 			$this->cacheActorService,
 			$this->accountService,
 			$this->curlService,
-			$this->createMock(MiscService::class),
+			$this->createStub(MiscService::class),
 			$this->userSession
 		);
 	}
@@ -71,7 +74,7 @@ class OStatusControllerTest extends TestCase {
 	}
 
 	private function loggedIn(string $uid, string $displayName): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$user->method('getDisplayName')->willReturn($displayName);
 		$this->userSession->method('getUser')->willReturn($user);

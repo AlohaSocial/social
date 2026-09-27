@@ -15,7 +15,9 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\AnnualReportService;
 use OCA\Social\Service\ConfigService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,17 +27,18 @@ use PHPUnit\Framework\TestCase;
  * is counted and then left out of what it did not write, the archetype is the
  * first rule that fits, and `share_url` is null rather than a link that 404s.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AnnualReportServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 
-	private StreamRequest|MockObject $streamRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private StreamRequest|Stub $streamRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private ConfigService|MockObject $configService;
 	private AnnualReportService $service;
 
 	protected function setUp(): void {
-		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->followsRequest->method('getFollowerOrigins')->willReturn([]);
 
@@ -163,7 +166,7 @@ class AnnualReportServiceTest extends TestCase {
 
 	public function testFollowersAreCountedIntoTheMonthTheyArrived(): void {
 		$this->holding([['when' => '2025-06-01 10:00:00']]);
-		$followers = $this->createMock(FollowsRequest::class);
+		$followers = $this->createStub(FollowsRequest::class);
 		$followers->method('getFollowerOrigins')->willReturn([
 			['actor_id' => 'https://remote.example/users/bob', 'creation' => '2025-04-10 09:00:00'],
 			['actor_id' => 'https://remote.example/users/carol', 'creation' => '2025-04-11 09:00:00'],

@@ -14,6 +14,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\IOutput;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * The byte-range rules, which are the whole reason this class exists: a video
  * a reader cannot seek is a video with a scrub bar that does nothing.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RangedFileResponseTest extends TestCase {
 	private const BODY = '0123456789';
 
@@ -29,7 +31,7 @@ class RangedFileResponseTest extends TestCase {
 
 	protected function setUp(): void {
 		// `Response::getHeaders()` resolves the request for its id
-		\OC::$server->register(IRequest::class, $this->createMock(IRequest::class));
+		\OC::$server->register(IRequest::class, $this->createStub(IRequest::class));
 	}
 
 	protected function tearDown(): void {
@@ -206,7 +208,7 @@ class RangedFileResponseTest extends TestCase {
 		stream_wrapper_register('rangedtest', UnseekableStream::class);
 
 		try {
-			$file = $this->createMock(ISimpleFile::class);
+			$file = $this->createStub(ISimpleFile::class);
 			$file->method('getSize')->willReturn(strlen(UnseekableStream::$content));
 			$file->method('read')->willReturnCallback(static fn () => fopen('rangedtest://x', 'r'));
 

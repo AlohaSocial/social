@@ -21,7 +21,9 @@ use OCA\Social\Service\FediverseDirectoryService;
 use OCA\Social\Service\FediverseService;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -36,14 +38,15 @@ use RuntimeException;
  * mocks the whole service, so what is mocked here is exactly the network and
  * nothing else.
  */
+#[AllowMockObjectsWithoutExpectations]
 class FediverseDirectoryServiceTest extends TestCase {
 	private const LOCAL_HOST = 'cloud.example';
 
-	private ConfigService|MockObject $configService;
-	private CurlService|MockObject $curlService;
-	private DirectoryService|MockObject $directoryService;
-	private CacheActorService|MockObject $cacheActorService;
-	private FediverseService|MockObject $fediverseService;
+	private ConfigService|Stub $configService;
+	private CurlService|Stub $curlService;
+	private DirectoryService|Stub $directoryService;
+	private CacheActorService|Stub $cacheActorService;
+	private FediverseService|Stub $fediverseService;
 	private InstanceStatsRequest|MockObject $instanceStatsRequest;
 	/** how many federated peers to ask, as the app value would say it */
 	private string $peersWanted = '0';
@@ -69,7 +72,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(function (string $key): string {
 				return match ($key) {
@@ -90,7 +93,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 			});
 		$this->configService->method('getCloudHost')->willReturn(self::LOCAL_HOST);
 
-		$this->curlService = $this->createMock(CurlService::class);
+		$this->curlService = $this->createStub(CurlService::class);
 		$this->curlService->method('retrieveJson')
 			->willReturnCallback(function (string $method, string $url): array {
 				$this->asked[] = $url;
@@ -107,10 +110,10 @@ class FediverseDirectoryServiceTest extends TestCase {
 				throw new RuntimeException('nothing answers ' . $url);
 			});
 
-		$this->directoryService = $this->createMock(DirectoryService::class);
+		$this->directoryService = $this->createStub(DirectoryService::class);
 		$this->directoryService->method('page')->willReturnCallback(fn (): array => $this->localPeople);
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('searchCachedAccounts')
 			->willReturnCallback(fn (): array => $this->localPeople);
 		$this->cacheActorService->method('getFromAccount')
@@ -125,7 +128,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 				return $person;
 			});
 
-		$this->fediverseService = $this->createMock(FediverseService::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
 		$this->fediverseService->method('authorized')
 			->willReturnCallback(function (string $host): bool {
 				if (in_array($host, $this->blocked, true)) {
@@ -144,11 +147,11 @@ class FediverseDirectoryServiceTest extends TestCase {
 
 		// a cache that keeps nothing, so each test asks what it means to ask;
 		// the one test about caching supplies its own
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 	}
 
 	private function build(ICache|MockObject $cache): FediverseDirectoryService {
-		$factory = $this->createMock(ICacheFactory::class);
+		$factory = $this->createStub(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
 		return new FediverseDirectoryService(
@@ -323,7 +326,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		// most-federated first, which is the order they are worth asking in
 		$this->instanceStatsRequest->method('remoteHostCounts')
 			->willReturn(['chaos.social' => 120, 'shonk.example' => 40, 'third.example' => 2]);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 		$this->nodeinfoFor('chaos.social', 'mastodon');
 		$this->nodeinfoFor('shonk.example', 'sharkey');
 		$this->nodeinfoFor('third.example', 'mastodon');
@@ -349,7 +352,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')
 			->willReturn(['writefreely.example' => 90, 'chaos.social' => 10]);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 		$this->nodeinfoFor('writefreely.example', 'writefreely');
 		$this->nodeinfoFor('chaos.social', 'mastodon');
 
@@ -366,7 +369,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		$this->peersWanted = '0';
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->expects($this->never())->method('remoteHostCounts');
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 
 		$this->service->refresh();
 		$this->service->sources();
@@ -378,7 +381,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')
 			->willReturn(['spam.example' => 300, 'chaos.social' => 1]);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 		$this->nodeinfoFor('chaos.social', 'mastodon');
 
 		$this->service->refresh();
@@ -403,7 +406,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		$this->discovery = '1';
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')->willReturn(['chaos.social' => 120]);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 		$this->nodeinfoFor('chaos.social', 'mastodon');
 		$this->answers['fediverse.info'] = ['data' => [['domain' => 'sharkey.example', 'software_name' => 'sharkey']]];
 
@@ -430,7 +433,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		$this->peersWanted = '1';
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')->willReturn(['chaos.social' => 120]);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 		$this->nodeinfoFor('chaos.social', 'mastodon');
 
 		$this->service->refresh();
@@ -449,7 +452,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 		}
 		$this->instanceStatsRequest = $this->createMock(InstanceStatsRequest::class);
 		$this->instanceStatsRequest->method('remoteHostCounts')->willReturn($hosts);
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 
 		$this->service->refresh();
 
@@ -759,7 +762,7 @@ class FediverseDirectoryServiceTest extends TestCase {
 
 	/** Typing must not be four requests a keystroke. */
 	public function testAnAnswerIsKeptForALittleWhile(): void {
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$held = [];
 		// by reference: an arrow function would capture the empty array as it
 		// stands now, and every read would miss

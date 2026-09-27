@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Db;
 
 use OCA\Social\Db\DiscoveryRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -25,6 +26,7 @@ use ReflectionMethod;
  * a later change that quietly stops applying it, and that is visible in the
  * source whether or not a server is available to run it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DiscoveryRequestTest extends TestCase {
 	private function source(string $file): string {
 		return (string)file_get_contents(__DIR__ . '/../../lib/Db/' . $file);

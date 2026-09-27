@@ -39,7 +39,9 @@ use OCA\Social\Db\WatchRequest;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\ActorCascadeService;
 use OCA\Social\Service\CacheDocumentService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -53,12 +55,13 @@ use Psr\Log\NullLogger;
  * albums and stories. The table below is what both entry points now work from,
  * and what stops the next table added from being registered in one place only.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ActorCascadeServiceTest extends TestCase {
 	private const BOB = 'https://spam.example/users/bob';
 
 	/** @var array<class-string, MockObject> */
 	private array $mocks = [];
-	private CacheDocumentService|MockObject $cacheDocumentService;
+	private CacheDocumentService|Stub $cacheDocumentService;
 
 	/**
 	 * Every table the cascade clears, as `class => [method, argument]`.
@@ -99,7 +102,7 @@ class ActorCascadeServiceTest extends TestCase {
 	}
 
 	protected function setUp(): void {
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		foreach (self::tables() as [$class, $method]) {
 			$this->mocks[$class] ??= $this->createMock($class);
 		}

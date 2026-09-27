@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -28,6 +29,7 @@ use ReflectionProperty;
  * two answers. The SQL of each half needs a database and is exercised by the
  * integration suite.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HomeTimelineFollowedTagsTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 

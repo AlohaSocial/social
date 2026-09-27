@@ -41,8 +41,10 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -62,29 +64,30 @@ use stdClass;
  * account's own featured tags are about the asking account, and there is no
  * anonymous answer to "who should I follow".
  */
+#[AllowMockObjectsWithoutExpectations]
 class DiscoveryControllerTest extends TestCase {
 	use TCacheActorServiceMock;
 
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const OTHER = 'https://cloud.example/users/bob';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private CacheActorService|MockObject $cacheActorService;
-	private ClientService|MockObject $clientService;
-	private DirectoryService|MockObject $directoryService;
-	private SuggestionService|MockObject $suggestionService;
-	private FollowGraphService|MockObject $followGraphService;
-	private TrendService|MockObject $trendService;
-	private FeaturedTagService|MockObject $featuredTagService;
-	private LinkPreviewService|MockObject $linkPreviewService;
-	private StarterPackService|MockObject $starterPackService;
-	private ProfileHighlightsService|MockObject $profileHighlightsService;
+	private ClientService|Stub $clientService;
+	private DirectoryService|Stub $directoryService;
+	private SuggestionService|Stub $suggestionService;
+	private FollowGraphService|Stub $followGraphService;
+	private TrendService|Stub $trendService;
+	private FeaturedTagService|Stub $featuredTagService;
+	private LinkPreviewService|Stub $linkPreviewService;
+	private StarterPackService|Stub $starterPackService;
+	private ProfileHighlightsService|Stub $profileHighlightsService;
 	private AccountRelationService|MockObject $accountRelationService;
-	private FediverseDirectoryService|MockObject $fediverseDirectoryService;
-	private PeerTrendService|MockObject $peerTrendService;
-	private IUserSession|MockObject $userSession;
+	private FediverseDirectoryService|Stub $fediverseDirectoryService;
+	private PeerTrendService|Stub $peerTrendService;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -109,7 +112,7 @@ class DiscoveryControllerTest extends TestCase {
 	private ?string $featuredOf = null;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -118,13 +121,13 @@ class DiscoveryControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')
 			->willReturnCallback(fn (): ?IUser => $this->hasSession ? $user : null);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (): Person => $this->person(self::VIEWER, 1));
 
@@ -138,10 +141,10 @@ class DiscoveryControllerTest extends TestCase {
 		$this->cacheActorService->method('getFromAccount')
 			->willReturnCallback(fn (): Person => $this->person(self::OTHER, 2));
 
-		$this->clientService = $this->createMock(ClientService::class);
-		$this->starterPackService = $this->createMock(StarterPackService::class);
+		$this->clientService = $this->createStub(ClientService::class);
+		$this->starterPackService = $this->createStub(StarterPackService::class);
 
-		$this->directoryService = $this->createMock(DirectoryService::class);
+		$this->directoryService = $this->createStub(DirectoryService::class);
 		$this->directoryService->method('page')
 			->willReturnCallback(function (string $order, int $limit, int $offset): array {
 				$this->directoryAsked = ['order' => $order, 'limit' => $limit, 'offset' => $offset];
@@ -149,14 +152,14 @@ class DiscoveryControllerTest extends TestCase {
 				return [$this->person(self::OTHER, 2)];
 			});
 
-		$this->suggestionService = $this->createMock(SuggestionService::class);
-		$this->followGraphService = $this->createMock(FollowGraphService::class);
+		$this->suggestionService = $this->createStub(SuggestionService::class);
+		$this->followGraphService = $this->createStub(FollowGraphService::class);
 		$this->suggestionService->method('suggestions')
 			->willReturnCallback(fn (): array => [
 				new Suggestion($this->person(self::OTHER, 2), Suggestion::SOURCE_FRIENDS),
 			]);
 
-		$this->trendService = $this->createMock(TrendService::class);
+		$this->trendService = $this->createStub(TrendService::class);
 		$this->trendService->method('trendingStatuses')
 			->willReturnCallback(function (
 				string $period,
@@ -189,7 +192,7 @@ class DiscoveryControllerTest extends TestCase {
 				return $this->linkTimeline;
 			});
 
-		$this->featuredTagService = $this->createMock(FeaturedTagService::class);
+		$this->featuredTagService = $this->createStub(FeaturedTagService::class);
 		$this->featuredTagService->method('featured')
 			->willReturnCallback(function (string $actorId): array {
 				$this->featuredOf = $actorId;
@@ -218,14 +221,14 @@ class DiscoveryControllerTest extends TestCase {
 		$this->featuredTagService->method('suggestions')
 			->willReturn([['name' => 'cycling']]);
 
-		$this->profileHighlightsService = $this->createMock(ProfileHighlightsService::class);
+		$this->profileHighlightsService = $this->createStub(ProfileHighlightsService::class);
 
 		$this->accountRelationService = $this->createMock(AccountRelationService::class);
 
-		$this->fediverseDirectoryService = $this->createMock(FediverseDirectoryService::class);
-		$this->peerTrendService = $this->createMock(PeerTrendService::class);
+		$this->fediverseDirectoryService = $this->createStub(FediverseDirectoryService::class);
+		$this->peerTrendService = $this->createStub(PeerTrendService::class);
 
-		$this->linkPreviewService = $this->createMock(LinkPreviewService::class);
+		$this->linkPreviewService = $this->createStub(LinkPreviewService::class);
 		$this->linkPreviewService->method('attachCards')
 			->willReturnCallback(function (): void {
 				$this->cardsAttached = true;
@@ -253,7 +256,7 @@ class DiscoveryControllerTest extends TestCase {
 			$this->trendService,
 			$this->featuredTagService,
 			$this->linkPreviewService,
-			$this->createMock(PlaceService::class),
+			$this->createStub(PlaceService::class),
 			$this->starterPackService,
 			$this->profileHighlightsService,
 			$this->accountRelationService,
@@ -601,7 +604,7 @@ class DiscoveryControllerTest extends TestCase {
 	 * not echoed on a public route.
 	 */
 	public function testAnUnexpectedFailureDoesNotLeakItsMessage(): void {
-		$this->directoryService = $this->createMock(DirectoryService::class);
+		$this->directoryService = $this->createStub(DirectoryService::class);
 		$this->directoryService->method('page')
 			->willThrowException(new RuntimeException('connection to 10.0.0.4 refused'));
 

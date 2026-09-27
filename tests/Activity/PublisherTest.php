@@ -13,19 +13,21 @@ use OCA\Social\Activity\Publisher;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCP\Activity\IEvent;
 use OCP\Activity\IManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class PublisherTest extends TestCase {
-	private IManager|MockObject $activityManager;
+	private IManager|Stub $activityManager;
 	private Publisher $publisher;
 	/** @var array<string, mixed> */
 	private array $event = [];
 	private int $published = 0;
 
 	protected function setUp(): void {
-		$this->activityManager = $this->createMock(IManager::class);
+		$this->activityManager = $this->createStub(IManager::class);
 		$this->activityManager->method('generateEvent')->willReturnCallback(fn (): IEvent => $this->recorder());
 		$this->activityManager->method('publish')->willReturnCallback(function (): void {
 			$this->published++;
@@ -77,7 +79,7 @@ class PublisherTest extends TestCase {
 	}
 
 	public function testTheActivityAppBeingAwayIsNotTheCallersProblem(): void {
-		$manager = $this->createMock(IManager::class);
+		$manager = $this->createStub(IManager::class);
 		$manager->method('generateEvent')->willThrowException(new \RuntimeException('no activity app'));
 
 		(new Publisher($manager, new NullLogger()))->publish('alice', 'follow', null, 'x', 'link', '', 504);

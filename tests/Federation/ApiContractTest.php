@@ -35,7 +35,7 @@ class ApiContractTest extends TestCase {
 	protected function setUp(): void {
 		$this->installActivityPub();
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args = []): string
 				=> 'https://cloud.example.org/apps/social/' . ($args['path'] ?? '')

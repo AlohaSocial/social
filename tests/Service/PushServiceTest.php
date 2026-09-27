@@ -16,6 +16,7 @@ use OCA\Social\Model\StreamDetails;
 use OCA\Social\Service\DetailsService;
 use OCA\Social\Service\PushService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -32,6 +33,7 @@ class TestablePushService extends PushService {
 	}
 }
 
+#[AllowMockObjectsWithoutExpectations]
 class PushServiceTest extends TestCase {
 	private DetailsService|MockObject $detailsService;
 	private StreamService|MockObject $streamService;

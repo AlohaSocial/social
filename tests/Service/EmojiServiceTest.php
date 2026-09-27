@@ -19,7 +19,9 @@ use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\IURLGenerator;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -33,10 +35,11 @@ use Psr\Log\NullLogger;
  * text, and what tag each one becomes — and the half that decides what gets
  * served to every reader of every post that uses it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class EmojiServiceTest extends TestCase {
-	private EmojiRequest|MockObject $emojiRequest;
-	private IAppData|MockObject $appData;
-	private ISimpleFolder|MockObject $folder;
+	private EmojiRequest|Stub $emojiRequest;
+	private IAppData|Stub $appData;
+	private ISimpleFolder|Stub $folder;
 	private EmojiService $service;
 
 	/** @var array<string, CustomEmoji> what the instance has */
@@ -47,9 +50,9 @@ class EmojiServiceTest extends TestCase {
 	private array $deleted = [];
 
 	protected function setUp(): void {
-		$this->emojiRequest = $this->createMock(EmojiRequest::class);
-		$this->appData = $this->createMock(IAppData::class);
-		$this->folder = $this->createMock(ISimpleFolder::class);
+		$this->emojiRequest = $this->createStub(EmojiRequest::class);
+		$this->appData = $this->createStub(IAppData::class);
+		$this->folder = $this->createStub(ISimpleFolder::class);
 
 		$this->emojiRequest->method('getAll')->willReturnCallback(fn (): array => $this->stored);
 		$this->emojiRequest->method('save')->willReturnCallback(
@@ -84,7 +87,7 @@ class EmojiServiceTest extends TestCase {
 			}
 		);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args): string
 				=> 'https://cloud.example/apps/social/emoji/' . $args['shortcode']
@@ -129,14 +132,12 @@ class EmojiServiceTest extends TestCase {
 
 	// what a post is scanned for
 
-	/**
-	 * @dataProvider provideTextsAndShortcodes
-	 */
+	#[DataProvider('provideTextsAndShortcodes')]
 	public function testTheShortcodesWrittenInAPieceOfText(string $text, array $expected): void {
 		$this->assertSame($expected, $this->service->shortcodesIn($text));
 	}
 
-	public function provideTextsAndShortcodes(): iterable {
+	public static function provideTextsAndShortcodes(): iterable {
 		yield 'one' => ['hello :blobcat:', ['blobcat']];
 		yield 'several' => [':a1: and :b2:', ['a1', 'b2']];
 		yield 'the same one twice is one tag' => [':blobcat: :blobcat:', ['blobcat']];
@@ -280,16 +281,14 @@ class EmojiServiceTest extends TestCase {
 		$this->assertSame('blobcat', $emoji->getShortcode());
 	}
 
-	/**
-	 * @dataProvider provideThingsThatAreNotShortcodes
-	 */
+	#[DataProvider('provideThingsThatAreNotShortcodes')]
 	public function testWhatCannotBeAShortcodeIsRefused(string $shortcode): void {
 		$this->expectException(InvalidActionException::class);
 
 		$this->service->add($shortcode, $this->picture());
 	}
 
-	public function provideThingsThatAreNotShortcodes(): iterable {
+	public static function provideThingsThatAreNotShortcodes(): iterable {
 		yield 'empty' => [''];
 		yield 'one character' => ['a'];
 		yield 'a hyphen' => ['blob-cat'];

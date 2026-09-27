@@ -47,7 +47,9 @@ use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -69,6 +71,7 @@ use Psr\Log\NullLogger;
  * So the assertions here are deliberately literal. A refactor that changes any
  * of them has changed the wire, and has to say so out loud.
  */
+#[AllowMockObjectsWithoutExpectations]
 class OutboundFederationWireTest extends TestCase {
 	/** TEST-NET-3: a public address the local-address guard lets through without asking DNS. */
 	private const REMOTE = '203.0.113.10';
@@ -81,12 +84,12 @@ class OutboundFederationWireTest extends TestCase {
 	private static string $privateKey;
 	private static string $publicKey;
 
-	private IAppConfig|MockObject $appConfig;
+	private IAppConfig|Stub $appConfig;
 	private IConfig|MockObject $config;
 	private IClient|MockObject $client;
-	private FediverseService|MockObject $fediverseService;
+	private FediverseService|Stub $fediverseService;
 	private ActorsRequest|MockObject $actorsRequest;
-	private InstanceActorService|MockObject $instanceActorService;
+	private InstanceActorService|Stub $instanceActorService;
 	private ConfigService $configService;
 
 	/** @var list<array{method: string, url: string, options: array}> */
@@ -100,7 +103,7 @@ class OutboundFederationWireTest extends TestCase {
 	}
 
 	protected function setUp(): void {
-		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->appConfig = $this->createStub(IAppConfig::class);
 		$this->appConfig->method('getValueString')
 			->willReturnCallback(fn (string $app, string $key, string $default): string => match ($key) {
 				ConfigService::SOCIAL_MAX_SIZE => '10',
@@ -111,12 +114,12 @@ class OutboundFederationWireTest extends TestCase {
 		$this->configService = new ConfigService(
 			'alice',
 			$this->appConfig,
-			$this->createMock(IUserConfig::class),
+			$this->createStub(IUserConfig::class),
 			$this->config,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 		);
 
-		$this->fediverseService = $this->createMock(FediverseService::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
 		$this->fediverseService->method('authorized')->willReturn(true);
 
 		$this->client = $this->createMock(IClient::class);
@@ -129,7 +132,7 @@ class OutboundFederationWireTest extends TestCase {
 		);
 
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
 	}
 
 	private function answer(string $body, int $code = 200, string $contentType = 'application/json'): IResponse {
@@ -150,7 +153,7 @@ class OutboundFederationWireTest extends TestCase {
 	}
 
 	private function curlService(): CurlService {
-		$clientService = $this->createMock(IClientService::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
 
 		return new CurlService(
@@ -167,17 +170,17 @@ class OutboundFederationWireTest extends TestCase {
 	}
 
 	private function signatureService(CurlService $curlService): SignatureService {
-		$cacheFactory = $this->createMock(ICacheFactory::class);
-		$cacheFactory->method('createDistributed')->willReturn($this->createMock(ICache::class));
+		$cacheFactory = $this->createStub(ICacheFactory::class);
+		$cacheFactory->method('createDistributed')->willReturn($this->createStub(ICache::class));
 
 		return new SignatureService(
-			$this->createMock(CacheActorService::class),
-			$this->createMock(CacheActorsRequest::class),
+			$this->createStub(CacheActorService::class),
+			$this->createStub(CacheActorsRequest::class),
 			$this->configService,
 			$this->httpSignatureService(),
 			$cacheFactory,
 			new NullLogger(),
-			$this->createMock(DurableCache::class),
+			$this->createStub(DurableCache::class),
 		);
 	}
 
@@ -256,15 +259,15 @@ class OutboundFederationWireTest extends TestCase {
 
 	private function activityService(CurlService $curlService): ActivityService {
 		$service = new ActivityService(
-			$this->createMock(FollowsRequest::class),
-			$this->createMock(CacheActorsRequest::class),
+			$this->createStub(FollowsRequest::class),
+			$this->createStub(CacheActorsRequest::class),
 			$this->signatureService($curlService),
-			$this->createMock(RequestQueueService::class),
+			$this->createStub(RequestQueueService::class),
 			$curlService,
 			$this->configService,
 			$this->actorsRequest,
-			$this->createMock(RelayRequest::class),
-			$this->createMock(\OCA\Social\Db\HostBreakerRequest::class),
+			$this->createStub(RelayRequest::class),
+			$this->createStub(\OCA\Social\Db\HostBreakerRequest::class),
 			new NullLogger(),
 		);
 		$service->manageInit();
@@ -462,7 +465,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->instanceActorService,
 			$this->httpSignatureService(),
 			$this->curlService(),
-			$this->createMock(\OCA\Social\Db\StreamRequest::class),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
 			new NullLogger(),
 		);
 
@@ -578,7 +581,7 @@ class OutboundFederationWireTest extends TestCase {
 	}
 
 	public function testSelfSignedCertificatesAreAcceptedWhenTheInstanceSaysSo(): void {
-		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->appConfig = $this->createStub(IAppConfig::class);
 		$this->appConfig->method('getValueString')
 			->willReturnCallback(fn (string $app, string $key, string $default): string => match ($key) {
 				ConfigService::SOCIAL_MAX_SIZE => '10',
@@ -586,8 +589,8 @@ class OutboundFederationWireTest extends TestCase {
 				default => $default,
 			});
 		$this->configService = new ConfigService(
-			'alice', $this->appConfig, $this->createMock(IUserConfig::class), $this->config,
-			$this->createMock(IURLGenerator::class),
+			'alice', $this->appConfig, $this->createStub(IUserConfig::class), $this->config,
+			$this->createStub(IURLGenerator::class),
 		);
 
 		$this->curlService()->retrieveObject('https://' . self::REMOTE . '/users/bob');
@@ -645,15 +648,15 @@ class OutboundFederationWireTest extends TestCase {
 	/** A cached document is fetched without the ActivityPub headers. */
 	public function testAMediaFetchDoesNotAskForActivityJson(): void {
 		$service = new CacheDocumentService(
-			$this->createMock(IAppData::class),
+			$this->createStub(IAppData::class),
 			$this->curlService(),
-			$this->createMock(BlurService::class),
+			$this->createStub(BlurService::class),
 			$this->configService,
-			$this->createMock(ImageConversionService::class),
-			$this->createMock(VideoThumbnailService::class),
-			$this->createMock(ITempManager::class),
-			$this->createMock(MediaBlocksRequest::class),
-			$this->createMock(\OCA\Social\Service\VideoQuotaService::class),
+			$this->createStub(ImageConversionService::class),
+			$this->createStub(VideoThumbnailService::class),
+			$this->createStub(ITempManager::class),
+			$this->createStub(MediaBlocksRequest::class),
+			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
 			$this->unlimitedDomainQuota(),
 			new NullLogger(),
 		);

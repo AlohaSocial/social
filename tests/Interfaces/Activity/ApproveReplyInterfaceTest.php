@@ -17,6 +17,7 @@ use OCA\Social\Model\ActivityPub\Activity\ApproveReply;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -28,6 +29,7 @@ use Psr\Log\NullLogger;
  * is allowed to say it — anybody else would be a stranger approving a reply on
  * somebody else's post.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ApproveReplyInterfaceTest extends TestCase {
 	private const REPLY = 'https://cloud.example/apps/social/@alice/9';
 	private const VIDEO = 'https://peertube.example/videos/watch/6f4c1e1a';

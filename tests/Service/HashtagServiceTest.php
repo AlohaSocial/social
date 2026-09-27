@@ -15,7 +15,9 @@ use OCA\Social\Exceptions\HashtagDoesNotExistException;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\TrendReviewService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,23 +26,24 @@ use PHPUnit\Framework\TestCase;
  * The counting is one grouped query per window; what is left here is the
  * upsert around it — which hashtags get written, and which are left alone.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HashtagServiceTest extends TestCase {
 	private HashtagsRequest|MockObject $hashtagsRequest;
-	private TrendReviewService|MockObject $trendReviewService;
+	private TrendReviewService|Stub $trendReviewService;
 	private StreamRequest|MockObject $streamRequest;
-	private IURLGenerator|MockObject $urlGenerator;
+	private IURLGenerator|Stub $urlGenerator;
 	private HashtagService $service;
 
 	protected function setUp(): void {
 		$this->hashtagsRequest = $this->createMock(HashtagsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRouteAbsolute')
 			->willReturnCallback(
 				static fn (string $route, array $args): string
 					=> 'https://cloud.example/apps/social/timeline/' . $args['path']
 			);
-		$this->trendReviewService = $this->createMock(TrendReviewService::class);
+		$this->trendReviewService = $this->createStub(TrendReviewService::class);
 		$this->trendReviewService->method('filterTags')->willReturnArgument(0);
 
 		$this->service = new HashtagService(

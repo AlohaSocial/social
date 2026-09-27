@@ -21,7 +21,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\StreamService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -38,9 +38,9 @@ class ConversationServiceTest extends TestCase {
 	private const BOB = 'https://remote.example/users/bob';
 	private const CAROL = 'https://remote.example/users/carol';
 
-	private StreamService|MockObject $streamService;
-	private CacheActorService|MockObject $cacheActorService;
-	private ConversationsRequest|MockObject $conversationsRequest;
+	private StreamService|Stub $streamService;
+	private CacheActorService|Stub $cacheActorService;
+	private ConversationsRequest|Stub $conversationsRequest;
 
 	/** @var Stream[] what the direct timeline answers, newest first */
 	private array $timeline = [];
@@ -55,7 +55,7 @@ class ConversationServiceTest extends TestCase {
 	private ?ProbeOptions $asked = null;
 
 	protected function setUp(): void {
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->streamService->method('getTimeline')
 			->willReturnCallback(function (ProbeOptions $options): array {
 				$this->asked = $options;
@@ -79,7 +79,7 @@ class ConversationServiceTest extends TestCase {
 				throw new StreamNotFoundException('stream not found');
 			});
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getCachedFromIds')
 			->willReturnCallback(function (array $ids): array {
 				$actors = [];
@@ -94,7 +94,7 @@ class ConversationServiceTest extends TestCase {
 				return $actors;
 			});
 
-		$this->conversationsRequest = $this->createMock(ConversationsRequest::class);
+		$this->conversationsRequest = $this->createStub(ConversationsRequest::class);
 		$this->conversationsRequest->method('getThreadLinks')
 			->willReturnCallback(function (array $ids): array {
 				$links = [];

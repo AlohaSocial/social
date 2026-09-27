@@ -14,6 +14,7 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Service\DomainPurgeService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -25,6 +26,7 @@ use Psr\Log\NullLogger;
  * another run — a job that tried to finish in one pass would own a cron slot
  * for as long as the blocked instance had been federating with us.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DomainPurgeTest extends TestCase {
 	private DomainPurgeService|MockObject $domainPurgeService;
 	private IJobList|MockObject $jobList;
@@ -35,7 +37,7 @@ class DomainPurgeTest extends TestCase {
 		$this->jobList = $this->createMock(IJobList::class);
 
 		$this->job = new DomainPurge(
-			$this->createMock(ITimeFactory::class),
+			$this->createStub(ITimeFactory::class),
 			$this->domainPurgeService,
 			$this->jobList,
 			new NullLogger()

@@ -24,7 +24,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -36,18 +38,19 @@ use Psr\Log\NullLogger;
  * credentials is a 401, the wrong granular scope is a 403, and a conversation
  * that is not the caller's is a 404 with nothing written.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ConversationControllerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const BOB = 'https://remote.example/users/bob';
 	/** A thread root's nid wider than a PHP int. */
 	private const WIDE = '92233720368547758070';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
-	private ClientService|MockObject $clientService;
+	private AccountService|Stub $accountService;
+	private ClientService|Stub $clientService;
 	private ConversationService|MockObject $conversationService;
-	private IUserSession|MockObject $userSession;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -61,7 +64,7 @@ class ConversationControllerTest extends TestCase {
 	private bool $csrf = true;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -70,15 +73,15 @@ class ConversationControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn($this->person(self::VIEWER));
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 
 		$this->conversationService = $this->createMock(ConversationService::class);
 		$this->conversationService->method('getPage')->willReturnCallback(

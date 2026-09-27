@@ -37,28 +37,31 @@ use OCA\Social\Service\ReportService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StoryService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class PixelfedServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://cloud.example/apps/social/@bob';
 	private const CAROL = 'https://remote.example/users/carol';
 
-	private StoryService|MockObject $storyService;
+	private StoryService|Stub $storyService;
 	private StoriesRequest|MockObject $storiesRequest;
-	private CollectionService|MockObject $collectionService;
+	private CollectionService|Stub $collectionService;
 	private FollowService|MockObject $followService;
 	private CacheActorService|MockObject $cacheActorService;
-	private SearchService|MockObject $searchService;
+	private SearchService|Stub $searchService;
 	private ReportService|MockObject $reportService;
 	private StreamService|MockObject $streamService;
-	private InstanceService|MockObject $instanceService;
+	private InstanceService|Stub $instanceService;
 	private StreamRequest|MockObject $streamRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
 	private PostService|MockObject $postService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private PixelfedService $service;
 
 	/** @var array<string, string> what setValueForUser() was given */
@@ -67,24 +70,24 @@ class PixelfedServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->storyService = $this->createMock(StoryService::class);
+		$this->storyService = $this->createStub(StoryService::class);
 		$this->storiesRequest = $this->createMock(StoriesRequest::class);
-		$this->collectionService = $this->createMock(CollectionService::class);
+		$this->collectionService = $this->createStub(CollectionService::class);
 		$this->followService = $this->createMock(FollowService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->searchService = $this->createMock(SearchService::class);
+		$this->searchService = $this->createStub(SearchService::class);
 		$this->reportService = $this->createMock(ReportService::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->postService = $this->createMock(PostService::class);
-		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->instanceService = $this->createStub(InstanceService::class);
 		$this->instanceService->method('supportedMimeTypes')->willReturn(['image/jpeg', 'video/mp4']);
 		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1024 * 1024);
 
 		// a user config that remembers, so what is written can be read back
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getSocialUrl')->willReturn('https://cloud.example/apps/social/');
 		$this->configService->method('setValueForUser')
 			->willReturnCallback(function (string $user, string $key, string $value): void {
@@ -105,8 +108,8 @@ class PixelfedServiceTest extends TestCase {
 			$this->searchService,
 			$this->reportService,
 			$this->streamService,
-			$this->createMock(AvatarService::class),
-			$this->createMock(AccountService::class),
+			$this->createStub(AvatarService::class),
+			$this->createStub(AccountService::class),
 			$this->instanceService,
 			$this->configService,
 			$this->streamRequest,

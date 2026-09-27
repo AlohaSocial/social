@@ -26,7 +26,7 @@ use OCA\Social\Service\InterestService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -61,8 +61,8 @@ class InterestServiceTest extends TestCase {
 	/** makes the interests table fail, as a database that went away would */
 	private bool $broken = false;
 
-	private StreamRequest|MockObject $streamRequest;
-	private InterestsRequest|MockObject $interestsRequest;
+	private StreamRequest|Stub $streamRequest;
+	private InterestsRequest|Stub $interestsRequest;
 
 	private function actor(): Person {
 		return (new Person())->setId(self::ME)->setUserId('alice');
@@ -92,7 +92,7 @@ class InterestServiceTest extends TestCase {
 	}
 
 	private function service(): InterestService {
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValue')->willReturnCallback(fn ($key) => $this->app[$key] ?? '');
 		$config->method('getAppValueInt')->willReturnCallback(fn (string $key): int => (int)($this->app[$key] ?? 0));
 		$config->method('getAppValueBool')->willReturnCallback(fn (string $key): bool => ($this->app[$key] ?? '0') !== '0');
@@ -104,7 +104,7 @@ class InterestServiceTest extends TestCase {
 			$this->user[$key] = (string)$value;
 		});
 
-		$this->interestsRequest = $this->createMock(InterestsRequest::class);
+		$this->interestsRequest = $this->createStub(InterestsRequest::class);
 		$this->interestsRequest->method('getByActor')->willReturnCallback(function (): array {
 			if ($this->broken) {
 				throw new RuntimeException('database gone');
@@ -133,35 +133,35 @@ class InterestServiceTest extends TestCase {
 		$this->interestsRequest->method('isHidden')->willReturnCallback(fn (string $actorId, string $nid): bool => isset($this->hidden[$nid]));
 		$this->interestsRequest->method('getHiddenSince')->willReturnCallback(fn (): array => array_map('strval', array_keys($this->hidden)));
 
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->streamRequest->method('getVisibleByNids')->willReturnCallback(function (array $nids): array {
 			$this->asked[] = $nids;
 
 			return array_intersect_key($this->visible, array_flip($nids));
 		});
 
-		$followedTags = $this->createMock(FollowedTagsRequest::class);
+		$followedTags = $this->createStub(FollowedTagsRequest::class);
 		$followedTags->method('getByActor')->willReturnCallback(fn (): array => array_map(
 			static fn (string $tag): array => ['id' => 1, 'hashtag' => $tag, 'creation' => 0], $this->followed
 		));
 
-		$featured = $this->createMock(FeaturedTagsRequest::class);
+		$featured = $this->createStub(FeaturedTagsRequest::class);
 		$featured->method('getByActor')->willReturn([]);
 
-		$hashtags = $this->createMock(HashtagService::class);
+		$hashtags = $this->createStub(HashtagService::class);
 		$hashtags->method('getTrending')->willReturnCallback(fn (): array => $this->trending);
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $key) => $this->cache[$key] ?? null);
 		$cache->method('set')->willReturnCallback(function (string $key, $value): bool {
 			$this->cache[$key] = $value;
 
 			return true;
 		});
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 
 		return new InterestService(

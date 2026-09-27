@@ -14,9 +14,11 @@ use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\RequestQueueService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class DeliveryServiceTest extends TestCase {
 	private const OBJECT = 'https://cloud.example.com/apps/social/@alice/1';
 

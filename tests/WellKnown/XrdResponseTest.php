@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
 
 class XrdResponseTest extends TestCase {
 	protected function setUp(): void {
-		\OC::$server->register(IRequest::class, $this->createMock(IRequest::class));
+		\OC::$server->register(IRequest::class, $this->createStub(IRequest::class));
 	}
 
 	protected function tearDown(): void {

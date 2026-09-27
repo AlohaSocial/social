@@ -13,6 +13,7 @@ use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -29,6 +30,7 @@ use ReflectionProperty;
  * indexed columns are the `_prim` forms, so that is what each join must compare,
  * and nothing it compares may be wrapped in a function.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ActorJoinsOnPrimsTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 

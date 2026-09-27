@@ -16,7 +16,7 @@ use OCA\Social\Model\Instance;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\PixelfedConfigService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,7 +26,7 @@ use PHPUnit\Framework\TestCase;
  * yes to a post the server then refuses.
  */
 class PixelfedConfigServiceTest extends TestCase {
-	private InstanceService|MockObject $instanceService;
+	private InstanceService|Stub $instanceService;
 	private PixelfedConfigService $service;
 
 	protected function setUp(): void {
@@ -37,13 +37,13 @@ class PixelfedConfigServiceTest extends TestCase {
 		$instance->setUri('cloud.example.org');
 		$instance->setShortDescription('a small instance');
 
-		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->instanceService = $this->createStub(InstanceService::class);
 		$this->instanceService->method('getLocal')->willReturn($instance);
 		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1024 * 1024);
 		$this->instanceService->method('supportedMimeTypes')
 			->willReturn(['image/jpeg', 'image/png', 'video/mp4']);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn('https://cloud.example.org/');
 
 		$this->service = new PixelfedConfigService($this->instanceService, $configService);

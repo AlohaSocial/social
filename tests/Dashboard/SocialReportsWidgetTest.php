@@ -20,14 +20,17 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialReportsWidgetTest extends TestCase {
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	/** @var ModeratorService&MockObject */
 	private $moderatorService;
@@ -36,10 +39,10 @@ class SocialReportsWidgetTest extends TestCase {
 	private SocialReportsWidget $widget;
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->moderatorService = $this->createMock(ModeratorService::class);
 		$this->reportService = $this->createMock(ReportService::class);
 
@@ -54,7 +57,7 @@ class SocialReportsWidgetTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid, bool $moderator): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 		$this->moderatorService->method('isModerator')->with($uid)->willReturn($moderator);
@@ -105,7 +108,7 @@ class SocialReportsWidgetTest extends TestCase {
 
 	public function testRowsNameWhoWasReportedAndWhy(): void {
 		$this->moderatorService->method('isModerator')->willReturn(true);
-		$target = $this->createMock(Person::class);
+		$target = $this->createStub(Person::class);
 		$target->method('getAccount')->willReturn('spammer@remote.example');
 		$target->method('getAvatar')->willReturn('https://remote.example/spammer.png');
 		$this->reportService->method('getReports')->willReturn([

@@ -195,7 +195,7 @@ class PinnedPostsTest extends TestCase {
 	}
 
 	public function testTheRepairStepPublishesTheFeaturedCollectionOfLocalActors(): void {
-		Server::get(CacheFeaturedCollections::class)->run($this->createMock(IOutput::class));
+		Server::get(CacheFeaturedCollections::class)->run($this->createStub(IOutput::class));
 
 		// an actor row whose Nextcloud user is gone cannot be cached at all —
 		// the step warns and moves on — so only the cached ones are asserted

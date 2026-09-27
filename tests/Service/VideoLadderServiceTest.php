@@ -14,7 +14,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\VideoLadderService;
 use OCP\IBinaryFinder;
 use OCP\ITempManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -26,16 +26,16 @@ use Psr\Log\NullLogger;
  * tested is every decision made around it, which is where the mistakes are.
  */
 class VideoLadderServiceTest extends TestCase {
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private VideoLadderService $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->service = new VideoLadderService(
-			$this->createMock(IBinaryFinder::class),
-			$this->createMock(ITempManager::class),
+			$this->createStub(IBinaryFinder::class),
+			$this->createStub(ITempManager::class),
 			$this->configService,
 			new NullLogger(),
 		);

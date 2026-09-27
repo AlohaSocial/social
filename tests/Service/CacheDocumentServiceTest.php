@@ -29,21 +29,24 @@ use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\ITempManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\WithoutErrorHandler;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class CacheDocumentServiceTest extends TestCase {
 	private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/';
 
 	private IAppData|MockObject $appData;
 	private CurlService|MockObject $curlService;
 	private BlurService|MockObject $blurService;
-	private ImageConversionService|MockObject $imageConversionService;
-	private VideoThumbnailService|MockObject $videoThumbnailService;
-	private ITempManager|MockObject $tempManager;
+	private ImageConversionService|Stub $imageConversionService;
+	private VideoThumbnailService|Stub $videoThumbnailService;
+	private ITempManager|Stub $tempManager;
 	private MediaBlocksRequest|MockObject $mediaBlocksRequest;
 	private \OCA\Social\Service\RemoteMediaQuotaService|MockObject $domainQuota;
 	/** @var string[] */
@@ -70,7 +73,7 @@ class CacheDocumentServiceTest extends TestCase {
 		// identity it is for a picture that needs neither turning nor
 		// converting, so these tests keep asserting what they were written for.
 		// A test that is about the conversion replaces $this->conversion.
-		$this->imageConversionService = $this->createMock(ImageConversionService::class);
+		$this->imageConversionService = $this->createStub(ImageConversionService::class);
 		$this->imageConversionService->method('prepareForStorage')
 			->willReturnCallback(function (string $content, string $mime): array {
 				$this->converted++;
@@ -81,10 +84,10 @@ class CacheDocumentServiceTest extends TestCase {
 		$this->blurService = $this->createMock(BlurService::class);
 		// no ffmpeg by default: a poster is what a server that has it adds, and
 		// every path here has to work on one that does not
-		$this->videoThumbnailService = $this->createMock(VideoThumbnailService::class);
+		$this->videoThumbnailService = $this->createStub(VideoThumbnailService::class);
 		// a real file, because the code under test writes the stored video to
 		// it and hands the path to ffmpeg
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(
 			function (string $suffix = ''): string {
 				$path = tempnam(sys_get_temp_dir(), 'social-test-') . $suffix;
@@ -99,12 +102,12 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->appData,
 			$this->curlService,
 			$this->blurService,
-			$this->createMock(ConfigService::class),
+			$this->createStub(ConfigService::class),
 			$this->imageConversionService,
 			$this->videoThumbnailService,
 			$this->tempManager,
 			$this->mediaBlocksRequest,
-			$this->createMock(\OCA\Social\Service\VideoQuotaService::class),
+			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
 			$this->unlimitedDomainQuota(),
 			new NullLogger(),
 		);
@@ -367,7 +370,7 @@ class CacheDocumentServiceTest extends TestCase {
 	}
 
 	public function testSaveContentToCacheReusesAnExistingFolder(): void {
-		$folder = $this->createMock(ISimpleFolder::class);
+		$folder = $this->createStub(ISimpleFolder::class);
 		$file = $this->createMock(ISimpleFile::class);
 		$folder->method('newFile')->willReturn($file);
 		$this->appData->method('getFolder')->willReturn($folder);
@@ -668,7 +671,7 @@ class CacheDocumentServiceTest extends TestCase {
 	}
 
 	public function testGetContentFromCacheReadsFromTheHashedFolder(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$folder = $this->createMock(ISimpleFolder::class);
 		$folder->expects($this->once())->method('getFile')->with('2b5a7a87-8db1-445f-a17b-405790f91c80')->willReturn($file);
 		$this->appData->expects($this->once())->method('getFolder')->with('2b/5a/7a/87/')->willReturn($folder);
@@ -698,7 +701,7 @@ class CacheDocumentServiceTest extends TestCase {
 	}
 
 	public function testGetFromUuidReadsTheFile(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$folder = $this->createMock(ISimpleFolder::class);
 		$folder->method('getFile')->with('2b5a7a87-8db1-445f-a17b-405790f91c80')->willReturn($file);
 		$this->appData->method('getFolder')->with('2b/5a/7a/87/')->willReturn($folder);
@@ -707,7 +710,7 @@ class CacheDocumentServiceTest extends TestCase {
 	}
 
 	public function testGetFromUuidReportsAMissingDocument(): void {
-		$folder = $this->createMock(ISimpleFolder::class);
+		$folder = $this->createStub(ISimpleFolder::class);
 		$folder->method('getFile')->willThrowException(new NotFoundException('no file'));
 		$this->appData->method('getFolder')->willReturn($folder);
 

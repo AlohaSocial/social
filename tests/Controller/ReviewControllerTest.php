@@ -17,6 +17,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\PostReviewService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -28,6 +29,7 @@ use Psr\Log\NullLogger;
  * telling them, and the one thing it must not do twice over is let anybody see
  * anybody else's.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ReviewControllerTest extends TestCase {
 	private AccountService|MockObject $accountService;
 	private PostReviewService|MockObject $postReviewService;
@@ -35,7 +37,7 @@ class ReviewControllerTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		// Response::getHeaders() asks the container for the request
-		\OC::$server->register(IRequest::class, $this->createMock(IRequest::class));
+		\OC::$server->register(IRequest::class, $this->createStub(IRequest::class));
 
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->postReviewService = $this->createMock(PostReviewService::class);
@@ -48,7 +50,7 @@ class ReviewControllerTest extends TestCase {
 
 	private function controller(?string $userId = 'alice'): ReviewController {
 		return new ReviewController(
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$userId,
 			$this->accountService,
 			$this->postReviewService,

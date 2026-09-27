@@ -28,8 +28,10 @@ use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\SignatureService;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -40,6 +42,7 @@ use Psr\Log\NullLogger;
  * the people who follow the post it replies to? Each test names one reason it
  * should or should not.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ForwardServiceTest extends TestCase {
 	private const LOCAL_URL = 'https://cloud.example';
 	private const ALICE = self::LOCAL_URL . '/users/alice';
@@ -48,8 +51,8 @@ class ForwardServiceTest extends TestCase {
 	private const ACTIVITY = 'https://remote.example/notes/reply/activity';
 	private const SOURCE = '{"type":"Create","signature":{"type":"RsaSignature2017"}}';
 
-	private ActorsRequest|MockObject $actorsRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private ActorsRequest|Stub $actorsRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private StreamRequest|MockObject $streamRequest;
 	private RequestQueueService|MockObject $requestQueueService;
 	private CurlService|MockObject $curlService;
@@ -59,23 +62,23 @@ class ForwardServiceTest extends TestCase {
 	private array $cached = [];
 
 	protected function setUp(): void {
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 		$this->curlService = $this->createMock(CurlService::class);
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $key) => $this->cached[$key] ?? null);
 		$cache->method('set')->willReturnCallback(function (string $key, $value) {
 			$this->cached[$key] = $value;
 
 			return true;
 		});
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn(self::LOCAL_URL);
 
 		$this->service = new ForwardService(

@@ -79,7 +79,7 @@ class APTest extends TestCase {
 	protected function setUp(): void {
 		$this->ap = $this->installActivityPub();
 		// Stream::import() always resolves the URL generator, even without attachments
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	protected function tearDown(): void {
@@ -438,7 +438,7 @@ class APTest extends TestCase {
 
 	public function testTheRegistryIsResolvedLazilyAndOnlyOnce(): void {
 		AP::set(null);
-		$double = $this->createMock(AP::class);
+		$double = $this->createStub(AP::class);
 		AP::set($double);
 
 		$this->assertSame($double, AP::instance());

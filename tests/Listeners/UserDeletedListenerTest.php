@@ -17,6 +17,7 @@ use OCA\Social\Service\AccountService;
 use OCP\EventDispatcher\Event;
 use OCP\IUser;
 use OCP\User\Events\UserDeletedEvent;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -26,6 +27,7 @@ use Psr\Log\LoggerInterface;
  * behind, the actor still resolves over WebFinger, the posts stay readable and
  * remote servers keep delivering to an inbox nobody owns.
  */
+#[AllowMockObjectsWithoutExpectations]
 class UserDeletedListenerTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private AccountService|MockObject $accountService;
@@ -43,7 +45,7 @@ class UserDeletedListenerTest extends TestCase {
 	}
 
 	private function deletionOf(string $uid): UserDeletedEvent {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 
 		return new UserDeletedEvent($user);

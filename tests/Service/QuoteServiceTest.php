@@ -21,7 +21,9 @@ use OCA\Social\Model\QuoteGrant;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\QuoteService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -33,6 +35,7 @@ use Psr\Log\NullLogger;
  * set, changing it does not silently withdraw what was already granted, and
  * taking one back reaches the server that holds the quote.
  */
+#[AllowMockObjectsWithoutExpectations]
 class QuoteServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://cloud.example/apps/social/@bob';
@@ -42,14 +45,14 @@ class QuoteServiceTest extends TestCase {
 
 	private StreamRequest|MockObject $streamRequest;
 	private QuoteGrantRequest|MockObject $quoteGrantRequest;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private ActivityService|MockObject $activityService;
 	private QuoteService $service;
 
 	protected function setUp(): void {
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->quoteGrantRequest = $this->createMock(QuoteGrantRequest::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 
 		$this->service = new QuoteService(

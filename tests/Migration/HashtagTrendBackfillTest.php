@@ -14,6 +14,7 @@ use OCA\Social\Db\HashtagsRequest;
 use OCA\Social\Migration\Version1000Date20260910000003;
 use OCP\DB\ISchemaWrapper;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * Without it those rows keep a correct JSON trend and zeroed columns forever
  * on a quiet instance, and the trends endpoint reads the columns.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HashtagTrendBackfillTest extends TestCase {
 	use RecordsSchemaChanges;
 
@@ -59,7 +61,7 @@ class HashtagTrendBackfillTest extends TestCase {
 			$hasColumns ? array_values(HashtagsRequest::TREND_COLUMNS) : [],
 		);
 
-		$schema = $this->createMock(ISchemaWrapper::class);
+		$schema = $this->createStub(ISchemaWrapper::class);
 		$schema->method('hasTable')->willReturn($hasTable);
 		$schema->method('getTable')->willReturn($table);
 

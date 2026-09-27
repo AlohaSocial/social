@@ -12,20 +12,23 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Service\VideoThumbnailService;
 use OCP\IBinaryFinder;
 use OCP\ITempManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class VideoThumbnailServiceTest extends TestCase {
 	private IBinaryFinder|MockObject $binaryFinder;
-	private ITempManager|MockObject $tempManager;
+	private ITempManager|Stub $tempManager;
 	/** @var string[] */
 	private array $tempFiles = [];
 	private VideoThumbnailService $service;
 
 	protected function setUp(): void {
 		$this->binaryFinder = $this->createMock(IBinaryFinder::class);
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(
 			function (string $suffix = ''): string {
 				$path = tempnam(sys_get_temp_dir(), 'social-test-') . $suffix;

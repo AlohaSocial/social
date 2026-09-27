@@ -16,17 +16,21 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StarterPackService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 class StarterPackServiceTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private CacheActorService|MockObject $cacheActorService;
-	private FollowService|MockObject $followService;
+	private FollowService|Stub $followService;
 	private StarterPackService $service;
 
 	/** @var string[] handles that resolve; anything else raises */
@@ -38,7 +42,7 @@ class StarterPackServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string
 				=> ($key === StarterPackService::CONFIG_KEY) ? $this->configured : '');
@@ -57,7 +61,7 @@ class StarterPackServiceTest extends TestCase {
 				return $person;
 			});
 
-		$this->followService = $this->createMock(FollowService::class);
+		$this->followService = $this->createStub(FollowService::class);
 		$this->followService->method('followAccount')
 			->willReturnCallback(function (Person $actor, string $account): bool {
 				if (!in_array($account, $this->resolvable, true)) {
@@ -216,9 +220,8 @@ class StarterPackServiceTest extends TestCase {
 	/**
 	 * These strings reach a WebFinger lookup. One that is not a handle is
 	 * refused here rather than turned into a request to whatever it resembles.
-	 *
-	 * @dataProvider badHandleProvider
 	 */
+	#[DataProvider('badHandleProvider')]
 	public function testAHandleThatIsNotOneIsRefused(string $handle): void {
 		$this->configured = json_encode([[
 			'slug' => 'bad', 'name' => 'bad', 'handles' => [$handle],

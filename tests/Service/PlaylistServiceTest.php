@@ -17,7 +17,9 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\Collection;
 use OCA\Social\Service\PlaylistService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -29,19 +31,20 @@ use Psr\Log\NullLogger;
  * out of a playlist there has to leave this copy too — and that a playlist of
  * videos nobody here has seen is not a reason to go and fetch forty videos.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PlaylistServiceTest extends TestCase {
 	private const CHANNEL = 'https://peertube.example/video-channels/news';
 	private const ONE = 'https://peertube.example/videos/watch/one';
 	private const TWO = 'https://peertube.example/videos/watch/two';
 
 	private CollectionsRequest|MockObject $collectionsRequest;
-	private StreamService|MockObject $streamService;
+	private StreamService|Stub $streamService;
 	private PlaylistService $service;
 
 	protected function setUp(): void {
 		$this->collectionsRequest = $this->createMock(CollectionsRequest::class);
-		$this->streamService = $this->createMock(StreamService::class);
-		$cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->streamService = $this->createStub(StreamService::class);
+		$cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$cacheActorsRequest->method('getFromId')->willReturnCallback(
 			static fn (string $id): Person => (new Person())->setId($id)
 		);

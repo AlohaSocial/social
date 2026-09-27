@@ -29,7 +29,9 @@ use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\ReactionSummaryService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -47,12 +49,13 @@ use Psr\Log\NullLogger;
  * `DELETE /api/v1/conversations/{id}` answered 404 for every real
  * conversation.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ConversationViewerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const BOB = 'https://remote.example/users/bob';
 	private const ROOT = 'https://remote.example/notes/1';
 
-	private StreamRequest|MockObject $streamRequest;
+	private StreamRequest|Stub $streamRequest;
 	private ConversationsRequest|MockObject $conversationsRequest;
 	private ConversationService $service;
 
@@ -60,7 +63,7 @@ class ConversationViewerTest extends TestCase {
 	private ?Person $readerOfRequest = null;
 
 	protected function setUp(): void {
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->streamRequest->method('setViewer')
 			->willReturnCallback(function (Person $viewer): void {
 				$this->readerOfRequest = $viewer;
@@ -91,22 +94,22 @@ class ConversationViewerTest extends TestCase {
 	private function serviceOver(ConversationsRequest $request): ConversationService {
 		return new ConversationService(
 			new StreamService(
-				$this->createMock(IURLGenerator::class),
+				$this->createStub(IURLGenerator::class),
 				$this->streamRequest,
-				$this->createMock(ActivityService::class),
-				$this->createMock(CacheActorService::class),
-				$this->createMock(ConfigService::class),
-				$this->createMock(CurlService::class),
-				$this->createMock(LinkPreviewService::class),
-				$this->createMock(EmojiService::class),
-				$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+				$this->createStub(ActivityService::class),
+				$this->createStub(CacheActorService::class),
+				$this->createStub(ConfigService::class),
+				$this->createStub(CurlService::class),
+				$this->createStub(LinkPreviewService::class),
+				$this->createStub(EmojiService::class),
+				$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 				new NullLogger(),
-				$this->createMock(PlaceService::class),
-				$this->createMock(ReactionSummaryService::class),
-				$this->createMock(MediaTagsRequest::class),
-				$this->createMock(AccountService::class),
+				$this->createStub(PlaceService::class),
+				$this->createStub(ReactionSummaryService::class),
+				$this->createStub(MediaTagsRequest::class),
+				$this->createStub(AccountService::class),
 			),
-			$this->createMock(CacheActorService::class),
+			$this->createStub(CacheActorService::class),
 			$request,
 		);
 	}
@@ -154,7 +157,7 @@ class ConversationViewerTest extends TestCase {
 
 	/** A thread the viewer has no part in is still refused, viewer or no viewer. */
 	public function testAConversationTheViewerHasNoPartInIsNotFound(): void {
-		$empty = $this->createMock(ConversationsRequest::class);
+		$empty = $this->createStub(ConversationsRequest::class);
 		$empty->method('getThreadLinks')->willReturn([]);
 		$empty->method('getThreadFor')->willReturn([]);
 

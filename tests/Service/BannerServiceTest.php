@@ -22,7 +22,9 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MediaPurgeService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -35,15 +37,16 @@ require_once __DIR__ . '/../Model/TActivityPubMocks.php';
  * and there was no such sweep, so every replaced banner stayed on disk and
  * stayed readable at its own URL by anyone who had it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class BannerServiceTest extends TestCase {
 	use TActivityPubMocks;
 
 	private const ACTOR = 'https://cloud.example/apps/social/@alice';
 	private const OLD = 'https://cloud.example/apps/social/media/old-banner.jpeg';
 
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private ActorService|MockObject $actorService;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private MediaPurgeService|MockObject $mediaPurgeService;
 	private Person $cached;
 	private BannerService $service;
@@ -60,24 +63,24 @@ class BannerServiceTest extends TestCase {
 		$this->cached->setPreferredUsername('alice');
 		$this->cached->setHeader(self::OLD);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn($alice);
 		$this->actorService = $this->createMock(ActorService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')->willReturnCallback(fn (): Person => $this->cached);
 		$this->mediaPurgeService = $this->createMock(MediaPurgeService::class);
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn('https://cloud.example/');
 
 		$this->service = new BannerService(
 			$this->accountService,
 			$this->actorService,
 			$this->cacheActorService,
-			$this->createMock(CacheDocumentService::class),
+			$this->createStub(CacheDocumentService::class),
 			$this->mediaPurgeService,
-			$this->createMock(ActivityService::class),
+			$this->createStub(ActivityService::class),
 			$configService,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			new NullLogger(),
 		);
 	}

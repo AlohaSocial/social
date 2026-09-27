@@ -40,7 +40,7 @@ class StreamTest extends TestCase {
 
 		$this->installActivityPub();
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args): string => 'https://cloud.example.org/' . $route . '/' . ($args['uuid'] ?? '')
 		);
@@ -149,6 +149,7 @@ class StreamTest extends TestCase {
 	}
 
 	public function testImportBuildsMediaAttachmentsThroughTheDocumentAndImageInterfaces(): void {
+		$this->installActivityPub(mocked: [DocumentInterface::class, ImageInterface::class]);
 		$this->apInterface(DocumentInterface::class)->expects($this->once())->method('save')
 			->with($this->isInstanceOf(Document::class));
 		$this->apInterface(ImageInterface::class)->expects($this->once())->method('save')
@@ -189,6 +190,7 @@ class StreamTest extends TestCase {
 	 * thread and notification included.
 	 */
 	public function testAnAttachmentThatCannotBeStoredDoesNotTakeThePostWithIt(): void {
+		$this->installActivityPub(mocked: [ImageInterface::class]);
 		$this->apInterface(DocumentInterface::class)->method('save')
 			->willThrowException(new \RuntimeException('the origin is down'));
 		$this->apInterface(ImageInterface::class)->expects($this->once())->method('save');
@@ -218,7 +220,8 @@ class StreamTest extends TestCase {
 	 * instance that dropped them or anywhere else.
 	 */
 	public function testDroppedAttachmentsAreWrittenDownWithTheirReason(): void {
-		$logger = $this->createMock(LoggerInterface::class);
+		$this->installActivityPub(mocked: [ImageInterface::class]);
+		$logger = $this->createStub(LoggerInterface::class);
 		$logged = [];
 		$logger->method('warning')->willReturnCallback(
 			function (string $message, array $context = []) use (&$logged): void {
@@ -311,6 +314,7 @@ class StreamTest extends TestCase {
 	}
 
 	public function testAnAbsurdAttachmentListIsCappedRatherThanImported(): void {
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
 		// a signed Create is authenticated, not trusted: each entry is a row
 		// written and a file queued inside the inbox request
 		$this->apInterface(DocumentInterface::class)
@@ -336,6 +340,7 @@ class StreamTest extends TestCase {
 	}
 
 	public function testAnOrdinaryPostKeepsEveryAttachment(): void {
+		$this->installActivityPub(mocked: [DocumentInterface::class]);
 		$this->apInterface(DocumentInterface::class)->expects($this->exactly(4))->method('save');
 
 		$attachments = [];

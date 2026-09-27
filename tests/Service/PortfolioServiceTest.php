@@ -20,19 +20,22 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CollectionService;
 use OCA\Social\Service\PortfolioService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
  * A page anybody may read, built only out of posts anybody may read.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PortfolioServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 
 	private PortfoliosRequest|MockObject $portfoliosRequest;
 	private StreamRequest|MockObject $streamRequest;
-	private CollectionService|MockObject $collectionService;
-	private CacheActorService|MockObject $cacheActorService;
+	private CollectionService|Stub $collectionService;
+	private CacheActorService|Stub $cacheActorService;
 	private PortfolioService $service;
 
 	/** the options every timeline read was asked with */
@@ -43,8 +46,8 @@ class PortfolioServiceTest extends TestCase {
 
 		$this->portfoliosRequest = $this->createMock(PortfoliosRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->collectionService = $this->createMock(CollectionService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->collectionService = $this->createStub(CollectionService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 
 		$this->streamRequest->method('getTimeline')->willReturnCallback(
 			function (ProbeOptions $options): array {
@@ -59,7 +62,7 @@ class PortfolioServiceTest extends TestCase {
 			$this->streamRequest,
 			$this->collectionService,
 			$this->cacheActorService,
-			$this->createMock(StreamService::class),
+			$this->createStub(StreamService::class),
 		);
 	}
 

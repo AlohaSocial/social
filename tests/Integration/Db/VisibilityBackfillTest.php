@@ -116,7 +116,7 @@ class VisibilityBackfillTest extends TestCase {
 		$this->note('classified', ACore::CONTEXT_PUBLIC, [], 'unlisted');
 		$this->note('local', self::BASE . '/users/someone', [], '', true);
 
-		$output = $this->createMock(IOutput::class);
+		$output = $this->createStub(IOutput::class);
 		$this->repair->run($output);
 
 		$this->assertSame('public', $this->visibilityOf('public-to'));

@@ -19,7 +19,9 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -33,10 +35,11 @@ use RuntimeException;
  * that sameness, and the two decisions around it: what is stored, and what
  * happens when the world moved while the post waited.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StatusAssemblyServiceTest extends TestCase {
 	private DocumentService|MockObject $documentService;
 	private StreamService|MockObject $streamService;
-	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
+	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
 	private StatusAssemblyService $service;
 
 	/** @var Document[] what the media ids resolve to */
@@ -54,7 +57,7 @@ class StatusAssemblyServiceTest extends TestCase {
 			)));
 
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
+		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
 		$this->cacheDocumentsRequest->method('update')
 			->willReturnCallback(function (Document $document): void {
 				$this->updated[] = $document;
@@ -64,7 +67,7 @@ class StatusAssemblyServiceTest extends TestCase {
 			$this->documentService,
 			$this->streamService,
 			$this->cacheDocumentsRequest,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			new NullLogger()
 		);
 	}

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Migration;
 use OCA\Social\Migration\Version1000Date20260920000002;
 use OCP\DB\IResult;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * the loop runs exactly as it would against a database, including the rows
  * the parser cannot place and writes back as `''`.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CacheActorHostBackfillTest extends TestCase {
 	/** @var array<string, array{account: string, host: string}> id_prim => row */
 	private array $rows = [];
@@ -91,7 +93,7 @@ class CacheActorHostBackfillTest extends TestCase {
 
 	private function backfill(): void {
 		(new Version1000Date20260920000002($this->connection()))
-			->postSchemaChange($this->createMock(IOutput::class), fn () => null, []);
+			->postSchemaChange($this->createStub(IOutput::class), fn () => null, []);
 	}
 
 	public function testEveryRowWithAHandleGetsItsServer(): void {

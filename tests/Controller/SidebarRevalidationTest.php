@@ -21,8 +21,9 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionNamedType;
@@ -36,18 +37,19 @@ use ReflectionProperty;
  * fetched every one of them again on every page. They are tagged by what they
  * say now, and a caller that already holds the answer is sent `304`.
  */
+#[AllowMockObjectsWithoutExpectations]
 class SidebarRevalidationTest extends TestCase {
-	private IRequest|MockObject $request;
+	private IRequest|Stub $request;
 	private string $ifNoneMatch = '';
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $name === 'If-None-Match' ? $this->ifNoneMatch : '');
 
 		\OC::$server->register(IRequest::class, $this->request);
-		\OC::$server->register(IUserSession::class, $this->createMock(IUserSession::class));
+		\OC::$server->register(IUserSession::class, $this->createStub(IUserSession::class));
 	}
 
 	protected function tearDown(): void {
@@ -105,7 +107,7 @@ class SidebarRevalidationTest extends TestCase {
 	}
 
 	public function testTheEmojiRouteAnswersAConditionalGet(): void {
-		$emoji = $this->createMock(EmojiService::class);
+		$emoji = $this->createStub(EmojiService::class);
 		$emoji->method('visible')->willReturn([['shortcode' => 'blobcat']]);
 		$controller = $this->getMockBuilder(InstanceApiController::class)
 			->disableOriginalConstructor()

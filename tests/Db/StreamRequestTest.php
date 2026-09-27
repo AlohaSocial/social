@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * and the traversal — which levels are asked for, in what order the rows come
  * back, where it stops — is exercised here.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StreamRequestTest extends TestCase {
 	private const ROOT = 'https://social.example/@alice/root';
 

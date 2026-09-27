@@ -17,9 +17,11 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\RequestQueueService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class RequestQueueServiceTest extends TestCase {
 	private const AUTHOR = 'https://cloud.example.com/apps/social/@alice';
 

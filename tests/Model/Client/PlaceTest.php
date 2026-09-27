@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Model\Client;
 
 use OCA\Social\Model\Client\Place;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class PlaceTest extends TestCase {
@@ -27,7 +28,7 @@ class PlaceTest extends TestCase {
 		];
 	}
 
-	/** @dataProvider countryProvider */
+	#[DataProvider('countryProvider')]
 	public function testOnlyAnIsoCountryCodeIsKept(string $given, string $expected): void {
 		$this->assertSame($expected, (new Place())->setCountry($given)->getCountry());
 	}
@@ -46,7 +47,7 @@ class PlaceTest extends TestCase {
 		];
 	}
 
-	/** @dataProvider coordinateProvider */
+	#[DataProvider('coordinateProvider')]
 	public function testCoordinatesAreBothKeptOrBothDropped(string $lat, string $lon, bool $kept): void {
 		$place = (new Place())->setCoordinates($lat, $lon);
 

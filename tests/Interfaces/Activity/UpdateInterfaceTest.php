@@ -12,9 +12,11 @@ namespace OCA\Social\Tests\Interfaces\Activity;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
 use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Model\ActivityPub\Activity\Update;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 
 require_once __DIR__ . '/DispatchingActivityTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class UpdateInterfaceTest extends DispatchingActivityTestCase {
 	protected function createHandler(): IActivityPubInterface {
 		return new UpdateInterface();

@@ -31,7 +31,9 @@ use OCP\BackgroundJob\IJobList;
 use OCP\ICacheFactory;
 use OCP\IL10N;
 use OCP\SetupCheck\SetupResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -44,11 +46,12 @@ use PHPUnit\Framework\TestCase;
  * severity matches how broken it is — a warning an administrator learns to
  * ignore is worse than no check.
  */
+#[AllowMockObjectsWithoutExpectations]
 class SetupChecksTest extends TestCase {
-	private IL10N|MockObject $l10n;
+	private IL10N|Stub $l10n;
 
 	protected function setUp(): void {
-		$this->l10n = $this->createMock(IL10N::class);
+		$this->l10n = $this->createStub(IL10N::class);
 		// positional, like the real one: the address check names the same
 		// address twice and a stub that could not would hide it
 		$this->l10n->method('t')->willReturnCallback(
@@ -75,7 +78,7 @@ class SetupChecksTest extends TestCase {
 	public function testWebFingerIsProbedForAnAccountThatExistsRatherThanForTheAdministrator(): void {
 		// the administrator may never have opened Social, and a probe for an
 		// account that does not exist answers 404 whatever the redirects do
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getAny')->willReturn($this->actor('alice'));
 
 		$checkService = $this->checkService();
@@ -135,7 +138,7 @@ class SetupChecksTest extends TestCase {
 	}
 
 	public function testAnInstanceNobodyCanBeFoundOnIsAnError(): void {
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getAny')->willReturn($this->actor('alice'));
 
 		$checkService = $this->checkService();
@@ -149,7 +152,7 @@ class SetupChecksTest extends TestCase {
 	}
 
 	public function testAnAppNobodyHasOpenedYetIsNotProbedAtAll(): void {
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getAny')->willReturn(null);
 
 		$checkService = $this->checkService();
@@ -162,7 +165,7 @@ class SetupChecksTest extends TestCase {
 
 	/** A database that will not answer is not a failing WebFinger. */
 	public function testALookupFailureIsNotReportedAsAnUnreachableInstance(): void {
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getAny')->willThrowException(new \RuntimeException('no database'));
 
 		$result = (new WebFingerReachable($this->l10n, $this->checkService(), $actorsRequest))->run();
@@ -245,12 +248,12 @@ class SetupChecksTest extends TestCase {
 	}
 
 	private function cron(int $lastRun, int $now = 1_757_548_800): CronRanRecently {
-		$job = $this->createMock(IJob::class);
+		$job = $this->createStub(IJob::class);
 		$job->method('getLastRun')->willReturn($lastRun);
 		$jobList = $this->createMock(IJobList::class);
 		$jobList->method('getJobs')->with(Queue::class, 1, 0)->willReturn($lastRun < 0 ? [] : [$job]);
 
-		$timeFactory = $this->createMock(ITimeFactory::class);
+		$timeFactory = $this->createStub(ITimeFactory::class);
 		$timeFactory->method('getTime')->willReturn($now);
 
 		return new CronRanRecently($this->l10n, $jobList, $timeFactory);
@@ -285,7 +288,7 @@ class SetupChecksTest extends TestCase {
 	}
 
 	private function memcache(bool $available): MemcacheConfigured {
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn($available);
 
 		return new MemcacheConfigured($this->l10n, $cacheFactory);
@@ -314,7 +317,7 @@ class SetupChecksTest extends TestCase {
 	}
 
 	private function queue(int $abandoned, int $stale): OutboundQueueNotStuck {
-		$health = $this->createMock(FederationHealthService::class);
+		$health = $this->createStub(FederationHealthService::class);
 		$health->method('stuck')->willReturn(['abandoned' => $abandoned, 'stale' => $stale]);
 
 		return new OutboundQueueNotStuck($this->l10n, $health);
@@ -387,7 +390,7 @@ class SetupChecksTest extends TestCase {
 	// Social: upload size
 
 	private function uploadCheck(int $megabytes): UploadLimitsAgree {
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValueInt')->willReturn($megabytes);
 
 		return new UploadLimitsAgree($this->l10n, $config);
@@ -429,7 +432,7 @@ class SetupChecksTest extends TestCase {
 	// Social: reachable by other servers
 
 	private function reachCheck(string $socialUrl): ReachableByStrictPeers {
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValue')->willReturn($socialUrl);
 
 		return new ReachableByStrictPeers($this->l10n, $config);

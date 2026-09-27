@@ -33,18 +33,21 @@ use OCA\Social\Model\StreamDest;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
 // see also PersonTest for the alsoKnownAs import/export round-trip
+#[AllowMockObjectsWithoutExpectations]
 class MoveInterfaceTest extends ActivityPubTestCase {
 	private const CAROL = 'https://other.example/users/carol';
 
 	/** @var ActionsRequest&MockObject */
 	private $actionsRequest;
-	/** @var ReactionsRequest&MockObject */
+	/** @var ReactionsRequest&Stub */
 	private $reactionsRequest;
 	/** @var CacheActorsRequest&MockObject */
 	private $cacheActorsRequest;
@@ -71,7 +74,7 @@ class MoveInterfaceTest extends ActivityPubTestCase {
 		parent::setUp();
 
 		$this->actionsRequest = $this->createMock(ActionsRequest::class);
-		$this->reactionsRequest = $this->createMock(ReactionsRequest::class);
+		$this->reactionsRequest = $this->createStub(ReactionsRequest::class);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 		$this->followsRequest = $this->createMock(FollowsRequest::class);

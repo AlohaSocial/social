@@ -31,12 +31,15 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MigrationService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 class MigrationServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const NEW_ALICE = 'https://new.example/users/alice';
@@ -44,26 +47,26 @@ class MigrationServiceTest extends TestCase {
 	private const CAROL = 'https://remote.example/users/carol';
 
 	private AccountService|MockObject $accountService;
-	private ActorsRequest|MockObject $actorsRequest;
+	private ActorsRequest|Stub $actorsRequest;
 	private FollowsRequest|MockObject $followsRequest;
 	private CacheActorService|MockObject $cacheActorService;
 	private FollowService|MockObject $followService;
 	private ActivityService|MockObject $activityService;
 	private SignatureService|MockObject $signatureService;
-	private ActorRelationRequest|MockObject $actorRelationRequest;
+	private ActorRelationRequest|Stub $actorRelationRequest;
 	private ListsRequest|MockObject $listsRequest;
 	private RelationshipService|MockObject $relationshipService;
 	private MigrationService $service;
 
 	protected function setUp(): void {
 		$this->accountService = $this->createMock(AccountService::class);
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
 		$this->followsRequest = $this->createMock(FollowsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->followService = $this->createMock(FollowService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->signatureService = $this->createMock(SignatureService::class);
-		$this->actorRelationRequest = $this->createMock(ActorRelationRequest::class);
+		$this->actorRelationRequest = $this->createStub(ActorRelationRequest::class);
 		$this->listsRequest = $this->createMock(ListsRequest::class);
 		$this->relationshipService = $this->createMock(RelationshipService::class);
 

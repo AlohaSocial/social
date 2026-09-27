@@ -16,7 +16,9 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\StreamPruneService;
 use OCP\IDBConnection;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -32,12 +34,13 @@ use RuntimeException;
  * exists next door. Its protection rules are the app's most destructive piece
  * of SQL and belong in an integration test against a real schema.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StreamPruneServiceTest extends TestCase {
-	private IDBConnection|MockObject $connection;
-	private ConfigService|MockObject $configService;
+	private IDBConnection|Stub $connection;
+	private ConfigService|Stub $configService;
 	private StreamRequest|MockObject $streamRequest;
 	private RequestQueueRequest|MockObject $requestQueueRequest;
-	private StreamQueueRequest|MockObject $streamQueueRequest;
+	private StreamQueueRequest|Stub $streamQueueRequest;
 	private StreamPruneService $service;
 
 	/** the `retention_days` app value */
@@ -48,11 +51,11 @@ class StreamPruneServiceTest extends TestCase {
 
 		// every query this service builds goes through the connection, so a
 		// test that reaches one fails loudly rather than deleting anything
-		$this->connection = $this->createMock(IDBConnection::class);
+		$this->connection = $this->createStub(IDBConnection::class);
 		$this->connection->method('getQueryBuilder')
 			->willThrowException(new RuntimeException('a query was built where none was expected'));
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
 			fn (string $key): string
 				=> ($key === ConfigService::SOCIAL_RETENTION_DAYS) ? $this->retention : ''
@@ -60,7 +63,7 @@ class StreamPruneServiceTest extends TestCase {
 
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->requestQueueRequest = $this->createMock(RequestQueueRequest::class);
-		$this->streamQueueRequest = $this->createMock(StreamQueueRequest::class);
+		$this->streamQueueRequest = $this->createStub(StreamQueueRequest::class);
 
 		$this->service = new StreamPruneService(
 			$this->connection,

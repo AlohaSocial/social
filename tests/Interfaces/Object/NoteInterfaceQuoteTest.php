@@ -23,6 +23,7 @@ use OCA\Social\Service\PollService;
 use OCA\Social\Service\PushService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
@@ -32,6 +33,7 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * fetched the way a reply's parent is — through the note's cache and the stream
  * queue — so the inbox request is not held up by a stranger's server.
  */
+#[AllowMockObjectsWithoutExpectations]
 class NoteInterfaceQuoteTest extends ActivityPubTestCase {
 	private const NOTE = self::REMOTE_URL . '/notes/1';
 	private const QUOTED = 'https://other.example/notes/quoted';
@@ -47,14 +49,14 @@ class NoteInterfaceQuoteTest extends ActivityPubTestCase {
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->handler = new NoteInterface(
 			$this->streamRequest,
-			$this->createMock(CacheActorsRequest::class),
-			$this->createMock(PollService::class),
-			$this->createMock(PushService::class),
+			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(PollService::class),
+			$this->createStub(PushService::class),
 			$this->streamQueueService,
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(ForwardService::class),
-			$this->createMock(\OCA\Social\Service\NotificationService::class),
-			$this->createMock(\OCA\Social\Service\StatusRevisionService::class)
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(ForwardService::class),
+			$this->createStub(\OCA\Social\Service\NotificationService::class),
+			$this->createStub(\OCA\Social\Service\StatusRevisionService::class)
 		);
 	}
 

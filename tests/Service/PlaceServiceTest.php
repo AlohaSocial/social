@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Place;
 use OCA\Social\Service\PlaceService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * the decisions it makes instead: what a stale place id costs a post, what a
  * page of posts costs in queries, and who may read a location.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PlaceServiceTest extends TestCase {
 	private PlacesRequest|MockObject $placesRequest;
 	private StreamRequest|MockObject $streamRequest;

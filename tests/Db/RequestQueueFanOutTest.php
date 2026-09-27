@@ -17,6 +17,7 @@ use OCA\Social\Service\MiscService;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -29,6 +30,7 @@ use Psr\Log\NullLogger;
  * twenty thousand separate INSERTs, each prepared again and each committed on
  * its own, before the post was handed back to its author.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RequestQueueFanOutTest extends TestCase {
 	private IQueryBuilder|MockObject $queryBuilder;
 	private IDBConnection|MockObject $connection;
@@ -46,9 +48,9 @@ class RequestQueueFanOutTest extends TestCase {
 		$this->request = new RequestQueueRequest(
 			$this->connection,
 			new NullLogger(),
-			$this->createMock(IURLGenerator::class),
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class)
+			$this->createStub(IURLGenerator::class),
+			$this->createStub(ConfigService::class),
+			$this->createStub(MiscService::class)
 		);
 	}
 

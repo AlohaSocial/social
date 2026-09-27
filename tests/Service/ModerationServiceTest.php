@@ -26,7 +26,9 @@ use OCA\Social\Service\AuditService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\StrikeService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -38,6 +40,7 @@ use Psr\Log\NullLogger;
  * the tests below pin exactly what it deletes and what lifting does not
  * restore — an administrator has to be able to trust the difference.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ModerationServiceTest extends TestCase {
 	private const SPAMMER = 'https://spam.example/users/spammer';
 	private const LOCAL_ACTOR = 'https://cloud.example.org/apps/social/@alice';
@@ -49,7 +52,7 @@ class ModerationServiceTest extends TestCase {
 	private StreamDestRequest|MockObject $streamDestRequest;
 	private StreamService|MockObject $streamService;
 	private ActorCascadeService|MockObject $actorCascadeService;
-	private StrikeService|MockObject $strikeService;
+	private StrikeService|Stub $strikeService;
 	private AuditService|MockObject $auditService;
 
 	/** @var array<int, array<string, mixed>> the strikes that were recorded */
@@ -65,7 +68,7 @@ class ModerationServiceTest extends TestCase {
 
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
-		$this->strikeService = $this->createMock(StrikeService::class);
+		$this->strikeService = $this->createStub(StrikeService::class);
 		$this->auditService = $this->createMock(AuditService::class);
 		$this->strikeService->method('record')->willReturnCallback(
 			function (string $actorId, string $action, string $text = '', int $reportId = 0): Strike {
@@ -351,7 +354,7 @@ class ModerationServiceTest extends TestCase {
 		// the server's logger reads a string `level` in a log context as a log
 		// level and throws on anything else, so 'silence' there took the whole
 		// request down. Found by running it; this keeps it found.
-		$logger = $this->createMock(LoggerInterface::class);
+		$logger = $this->createStub(LoggerInterface::class);
 		$logger->method('info')->willReturnCallback(function (string $message, array $context): void {
 			if (isset($context['level']) && is_string($context['level'])) {
 				throw new \Psr\Log\InvalidArgumentException('Unsupported custom log level');
@@ -360,7 +363,7 @@ class ModerationServiceTest extends TestCase {
 
 		$service = new ModerationService(
 			$this->moderationRequest, $this->streamRequest, $this->streamDestRequest,
-			$this->createMock(StreamService::class), $this->actorsRequest, $this->accountService,
+			$this->createStub(StreamService::class), $this->actorsRequest, $this->accountService,
 			$logger, $this->strikeService, $this->actorCascadeService, $this->auditService
 		);
 

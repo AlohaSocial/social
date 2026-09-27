@@ -19,11 +19,13 @@ use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialAppNotificationInterfaceTest extends ActivityPubTestCase {
 	private const ID = self::REMOTE_URL . '/follows/1/notification';
 
@@ -48,7 +50,7 @@ class SocialAppNotificationInterfaceTest extends ActivityPubTestCase {
 			$this->streamRequest,
 			$this->actorRelationRequest,
 			$this->miscService,
-			$this->createMock(NotificationService::class),
+			$this->createStub(NotificationService::class),
 			$this->accountRelationService,
 		);
 	}

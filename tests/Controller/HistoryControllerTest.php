@@ -26,8 +26,10 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -42,16 +44,17 @@ use RuntimeException;
  * refused rather than quietly downgraded to the anonymous read this route
  * otherwise allows.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HistoryControllerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const AUTHOR = 'https://cloud.example/users/bob';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
-	private CacheActorService|MockObject $cacheActorService;
-	private ClientService|MockObject $clientService;
-	private StreamService|MockObject $streamService;
+	private AccountService|Stub $accountService;
+	private CacheActorService|Stub $cacheActorService;
+	private ClientService|Stub $clientService;
+	private StreamService|Stub $streamService;
 	private IUserSession|MockObject $userSession;
 	private StatusRevisionsRequest|MockObject $revisionsRequest;
 
@@ -67,7 +70,7 @@ class HistoryControllerTest extends TestCase {
 	private bool $hasSession = true;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -76,25 +79,25 @@ class HistoryControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$userSession = $this->createMock(IUserSession::class);
 		$userSession->method('getUser')
 			->willReturnCallback(fn (): ?IUser => $this->hasSession ? $user : null);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (): Person => $this->person(self::VIEWER));
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromLocalAccount')
 			->willReturnCallback(fn (): Person => $this->person(self::VIEWER));
 		$this->cacheActorService->method('getFromId')
 			->willReturnCallback(fn (string $id): Person => $this->person($id));
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->streamService->method('setViewer')
 			->willReturnCallback(function (Person $viewer): void {
 				$this->streamViewer = $viewer;
@@ -325,7 +328,7 @@ class HistoryControllerTest extends TestCase {
 	 * not echoed on a public route.
 	 */
 	public function testAnUnexpectedFailureDoesNotLeakItsMessage(): void {
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->streamService->method('getStreamByNid')
 			->willThrowException(new RuntimeException('connection to 10.0.0.4 refused'));
 

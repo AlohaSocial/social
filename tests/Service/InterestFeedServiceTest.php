@@ -49,14 +49,14 @@ class InterestFeedServiceTest extends TestCase {
 	}
 
 	private function service(): InterestFeedService {
-		$interests = $this->createMock(InterestService::class);
+		$interests = $this->createStub(InterestService::class);
 		$interests->method('feedProfile')->willReturnCallback(fn (): array => $this->profile);
 		$interests->method('scorer')->willReturn(new InterestScorer());
 		$interests->method('windowDays')->willReturn(7);
 		$interests->method('hiddenFor')->willReturn([]);
 		$interests->method('languagesFor')->willReturn([]);
 
-		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest = $this->createStub(StreamRequest::class);
 		$streamRequest->method('interestCandidates')->willReturnCallback(
 			function (array $tags, string $since, int $cap, array $exclude): array {
 				$this->queries[] = compact('tags', 'since', 'exclude');
@@ -86,7 +86,7 @@ class InterestFeedServiceTest extends TestCase {
 			return $tags;
 		});
 
-		$streamService = $this->createMock(StreamService::class);
+		$streamService = $this->createStub(StreamService::class);
 		$streamService->method('visiblePosts')->willReturnCallback(function (array $nids): array {
 			$posts = [];
 			foreach ($nids as $nid) {
@@ -100,17 +100,17 @@ class InterestFeedServiceTest extends TestCase {
 			return $posts;
 		});
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $key) => $this->memory ? ($this->cache[$key] ?? null) : null);
 		$cache->method('set')->willReturnCallback(function (string $key, $value): bool {
 			$this->cache[$key] = $value;
 
 			return true;
 		});
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
 		return new InterestFeedService($interests, $streamRequest, $streamService, $cacheFactory, $time);

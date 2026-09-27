@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
 
 class SettingAndFilterTest extends TestCase {
 	public function testTheSettingIsInTheStreamByDefaultAndNeverASecondBell(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$setting = new Setting($l10n);
 
@@ -34,7 +34,7 @@ class SettingAndFilterTest extends TestCase {
 	}
 
 	public function testTheFilterNarrowsTheStreamToThisApp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$urlGenerator = $this->createMock(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->with('social', 'social-dark.svg')->willReturn('/apps/social/img/social-dark.svg');

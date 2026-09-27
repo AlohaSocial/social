@@ -15,6 +15,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IMemcache;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * class exists: there, `createDistributed()` is a cache that forgets every
  * write, and a counter kept in it never leaves zero.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DurableCacheTest extends TestCase {
 	private int $now = 1_760_000_000;
 	/** @var array<string, array<string, array{value: mixed, expires: int}>> the memcache, per namespace */
@@ -52,7 +54,7 @@ class DurableCacheTest extends TestCase {
 			$factory->expects($this->never())->method('createDistributed');
 		}
 
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 
 		return new DurableCache($factory, $this->table, $time);

@@ -21,7 +21,7 @@ class TestContainerTest extends TestCase {
 	}
 
 	public function testStaticServerFacadeResolvesRegisteredService(): void {
-		$logger = $this->createMock(LoggerInterface::class);
+		$logger = $this->createStub(LoggerInterface::class);
 		\OC::$server->register(LoggerInterface::class, $logger);
 
 		$this->assertSame($logger, Server::get(LoggerInterface::class));
@@ -35,7 +35,7 @@ class TestContainerTest extends TestCase {
 	}
 
 	public function testResetRestoresTheSilentLogger(): void {
-		\OC::$server->register(LoggerInterface::class, $this->createMock(LoggerInterface::class));
+		\OC::$server->register(LoggerInterface::class, $this->createStub(LoggerInterface::class));
 		\OC::$server->reset();
 
 		$this->assertInstanceOf(NullLogger::class, Server::get(LoggerInterface::class));

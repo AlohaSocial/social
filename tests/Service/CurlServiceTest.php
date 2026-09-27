@@ -33,15 +33,18 @@ use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class CurlServiceTest extends TestCase {
 	private const BOB = 'https://mastodon.example/users/bob';
 
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private FediverseService|MockObject $fediverseService;
 	private CurlService|MockObject $service;
 
@@ -50,12 +53,12 @@ class CurlServiceTest extends TestCase {
 
 	/** @var list<array{method: string, url: string, options: array}> every request handed to the (mocked) transport */
 	private array $requests = [];
-	private IClientService|MockObject $clientService;
+	private IClientService|Stub $clientService;
 	private IClient|MockObject $client;
 	private HttpSignatureService|MockObject $httpSignatureService;
 
 	protected function setUp(): void {
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key) => match ($key) {
 				ConfigService::SOCIAL_MAX_SIZE => '10',
@@ -70,7 +73,7 @@ class CurlServiceTest extends TestCase {
 			]);
 		$this->configService->method('activityPubHeaders')->willReturn([]);
 		$this->fediverseService = $this->createMock(FediverseService::class);
-		$this->clientService = $this->createMock(IClientService::class);
+		$this->clientService = $this->createStub(IClientService::class);
 		$this->client = $this->createMock(IClient::class);
 		$this->clientService->method('newClient')->willReturn($this->client);
 		// by default this instance has no key to sign a fetch with, so requests
@@ -405,7 +408,7 @@ class CurlServiceTest extends TestCase {
 	}
 
 	private function useActivityPubReturning(?Person $actor): void {
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		$ap->method('getItemFromData')->willReturn($actor ?? new Note());
 		$ap->method('isActor')->willReturnCallback(fn ($item) => $item instanceof Person);
 		AP::set($ap);
@@ -698,7 +701,7 @@ class CurlServiceTest extends TestCase {
 	}
 
 	public function testARequestThatMayReachLocalAddressesSaysSo(): void {
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturn('10');
 		$this->configService->method('requestOptions')->willReturn([
 			'timeout' => 10,
@@ -982,7 +985,7 @@ class CurlServiceTest extends TestCase {
 
 	/** One byte past the limit and no further, whatever the server sends. */
 	public function testReadAtMostStopsOneBytePastTheLimit(): void {
-		$response = $this->createMock(IResponse::class);
+		$response = $this->createStub(IResponse::class);
 		$response->method('getBody')->willReturn(EndlessStream::open());
 
 		$this->assertSame(1025, strlen(CurlService::readAtMost($response, 1024)));
@@ -1113,7 +1116,7 @@ class CurlServiceTest extends TestCase {
 	}
 
 	public function testAPromiseThatSettlesWithoutAResponseIsANetworkFailure(): void {
-		$promise = $this->createMock(\OCP\Http\Client\IPromise::class);
+		$promise = $this->createStub(\OCP\Http\Client\IPromise::class);
 		$promise->method('wait')->willReturn(null);
 		$this->client->method('postAsync')->willReturn($promise);
 

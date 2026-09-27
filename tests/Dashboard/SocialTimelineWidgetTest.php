@@ -28,12 +28,15 @@ use OCP\Dashboard\IReloadableWidget;
 use OCP\Dashboard\Model\WidgetButton;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialTimelineWidgetTest extends TestCase {
-	/** @var IL10N&MockObject */
+	/** @var IL10N&Stub */
 	private $l10n;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
@@ -46,7 +49,7 @@ class SocialTimelineWidgetTest extends TestCase {
 	private SocialTimelineWidget $widget;
 
 	protected function setUp(): void {
-		$this->l10n = $this->createMock(IL10N::class);
+		$this->l10n = $this->createStub(IL10N::class);
 		$this->l10n->method('t')->willReturnCallback(
 			static fn (string $text, array $params = []): string => vsprintf($text, $params)
 		);
@@ -67,7 +70,7 @@ class SocialTimelineWidgetTest extends TestCase {
 
 	/** @return Person&MockObject */
 	private function viewer(string $uid = 'alice'): Person {
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
 		$this->accountService->method('getActorFromUserId')->with($uid, false)->willReturn($account);
 		$viewer = $this->createMock(Person::class);
@@ -192,7 +195,7 @@ class SocialTimelineWidgetTest extends TestCase {
 	public function testABoostShowsTheBoostedPostAndWhoBoostedIt(): void {
 		$this->viewer();
 		$boosted = $this->note('the original', 'https://remote.example/users/bob', 4001);
-		$announce = $this->createMock(Announce::class);
+		$announce = $this->createStub(Announce::class);
 		$announce->method('hasObject')->willReturn(true);
 		$announce->method('getObject')->willReturn($boosted);
 		$announce->method('getAttributedTo')->willReturn('https://remote.example/users/carol');

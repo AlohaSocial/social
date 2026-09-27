@@ -29,10 +29,13 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\Http\WellKnown\IRequestContext;
 use OCP\Http\WellKnown\IResponse;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class WebfingerHandlerTest extends TestCase {
 	private const ACTOR_URL = 'https://cloud.example/index.php/apps/social/@alice';
 	private const INSTANCE_ACTOR_URL = 'https://cloud.example/index.php/apps/social/actor';
@@ -41,27 +44,27 @@ class WebfingerHandlerTest extends TestCase {
 	private $cacheActorsRequest;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var FediverseService&MockObject */
+	/** @var FediverseService&Stub */
 	private $fediverseService;
 	/** @var ConfigService&MockObject */
 	private $configService;
-	/** @var InstanceActorService&MockObject */
+	/** @var InstanceActorService&Stub */
 	private $instanceActorService;
 	/** @var IRequest&MockObject */
 	private $request;
-	/** @var IRequestContext&MockObject */
+	/** @var IRequestContext&Stub */
 	private $context;
 	private WebfingerHandler $handler;
 
 	protected function setUp(): void {
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->fediverseService = $this->createMock(FediverseService::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
 		$this->instanceActorService->method('getId')->willReturn(self::INSTANCE_ACTOR_URL);
 		$this->request = $this->createMock(IRequest::class);
-		$this->context = $this->createMock(IRequestContext::class);
+		$this->context = $this->createStub(IRequestContext::class);
 		$this->context->method('getHttpRequest')->willReturn($this->request);
 
 		$this->configService->method('getCloudUrl')->willReturnCallback(
@@ -110,14 +113,14 @@ class WebfingerHandlerTest extends TestCase {
 
 	public function testJailedInstanceLeavesThePreviousResponseUntouched(): void {
 		$this->fediverseService->method('jailed')->willThrowException(new UnauthorizedFediverseException());
-		$previous = $this->createMock(IResponse::class);
+		$previous = $this->createStub(IResponse::class);
 		$this->cacheActorService->expects($this->never())->method('getFromLocalAccount');
 
 		$this->assertSame($previous, $this->handler->handle('webfinger', $this->context, $previous));
 	}
 
 	public function testUnknownServicesLeaveThePreviousResponseUntouched(): void {
-		$previous = $this->createMock(IResponse::class);
+		$previous = $this->createStub(IResponse::class);
 
 		$this->assertSame($previous, $this->handler->handle('openid-configuration', $this->context, $previous));
 		$this->assertNull($this->handler->handle('openid-configuration', $this->context, null));
@@ -165,10 +168,10 @@ class WebfingerHandlerTest extends TestCase {
 	}
 
 	public function testHostMetaIsSkippedWhenTheCloudUrlIsNotConfigured(): void {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willThrowException(new SocialAppConfigException());
 		$handler = new WebfingerHandler($this->cacheActorsRequest, $this->cacheActorService, $this->fediverseService, $configService, $this->instanceActorService);
-		$previous = $this->createMock(IResponse::class);
+		$previous = $this->createStub(IResponse::class);
 
 		$this->assertSame($previous, $handler->handle('host-meta', $this->context, $previous));
 	}
@@ -271,7 +274,7 @@ class WebfingerHandlerTest extends TestCase {
 		$this->resource('acct:ghost@cloud.example');
 		$this->cacheActorService->method('getFromLocalAccount')->willThrowException(new ActorDoesNotExistException());
 		$this->cacheActorsRequest->expects($this->never())->method('getFromId');
-		$previous = $this->createMock(IResponse::class);
+		$previous = $this->createStub(IResponse::class);
 
 		$this->assertNull($this->handler->handleWebfinger($this->context, $previous));
 		$this->assertSame($previous, $this->handler->handle('webfinger', $this->context, $previous));
@@ -280,7 +283,7 @@ class WebfingerHandlerTest extends TestCase {
 	public function testUnconfiguredAppLeavesThePreviousResponseUntouched(): void {
 		$this->resource('acct:alice@cloud.example');
 		$this->cacheActorService->method('getFromLocalAccount')->willThrowException(new SocialAppConfigException());
-		$previous = $this->createMock(IResponse::class);
+		$previous = $this->createStub(IResponse::class);
 
 		$this->assertSame($previous, $this->handler->handle('webfinger', $this->context, $previous));
 	}
@@ -302,7 +305,7 @@ class WebfingerHandlerTest extends TestCase {
 		$this->cacheActorService->method('getFromLocalAccount')->willThrowException(new CacheActorDoesNotExistException());
 		$this->cacheActorsRequest->method('getFromId')->willThrowException(new CacheActorDoesNotExistException());
 
-		$response = $this->handler->handleWebfinger($this->context, $this->createMock(IResponse::class));
+		$response = $this->handler->handleWebfinger($this->context, $this->createStub(IResponse::class));
 
 		$this->assertInstanceOf(JrdResponse::class, $response);
 		$this->assertTrue($response->isEmpty());
@@ -360,7 +363,7 @@ class WebfingerHandlerTest extends TestCase {
 
 	public function testAnActorWithoutAStoredIdIsA404(): void {
 		$this->resource('acct:alice@cloud.example');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('');
 		$actor->method('isLocal')->willReturn(true);
 		$this->cacheActorService->method('getFromLocalAccount')->willReturn($actor);

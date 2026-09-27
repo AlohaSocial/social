@@ -25,7 +25,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -40,19 +42,20 @@ use Psr\Log\NullLogger;
  * route that changes a filter without writing it back fails here rather than
  * appearing to work.
  */
+#[AllowMockObjectsWithoutExpectations]
 class FilterControllerTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private ClientService|MockObject $clientService;
-	private FiltersRequest|MockObject $filtersRequest;
+	private FiltersRequest|Stub $filtersRequest;
 	/** how many times the controller has asked for one change to be one change */
 	private int $transactions = 0;
-	private TimelineRevisionService|MockObject $timelineRevisionService;
-	private IUserSession|MockObject $userSession;
+	private TimelineRevisionService|Stub $timelineRevisionService;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -69,7 +72,7 @@ class FilterControllerTest extends TestCase {
 	private int $nextStatusId = 1;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -78,12 +81,12 @@ class FilterControllerTest extends TestCase {
 		$this->request->method('getParam')
 			->willReturnCallback(fn (string $key, $default = null) => $this->params[$key] ?? $default);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(function (): Person {
 				$viewer = new Person();
@@ -104,8 +107,8 @@ class FilterControllerTest extends TestCase {
 	}
 
 	private function stubStore(): void {
-		$this->filtersRequest = $this->createMock(FiltersRequest::class);
-		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
+		$this->filtersRequest = $this->createStub(FiltersRequest::class);
+		$this->timelineRevisionService = $this->createStub(TimelineRevisionService::class);
 
 		// The stub stands in for the database, so it stands in for the
 		// transaction too: everything it holds is put back where a refusal

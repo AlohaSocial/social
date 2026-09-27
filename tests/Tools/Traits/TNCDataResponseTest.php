@@ -74,7 +74,7 @@ class TNCDataResponseTest extends TestCase {
 	}
 
 	public function testActivityPubSuccessSetsTheJsonLdContentType(): void {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getId')->willReturn('req-1');
 		\OC::$server->register(IRequest::class, $request);
 		$store = new SimpleDataStore(['type' => 'Note']);

@@ -18,20 +18,23 @@ use OCA\Social\Tests\Helper\EndlessStream;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 class BlocklistSubscriptionServiceTest extends TestCase {
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private FediverseService|MockObject $fediverseService;
-	private IClient|MockObject $client;
+	private IClient|Stub $client;
 	private BlocklistSubscriptionService $service;
 	private string $stored = '[]';
 
 	protected function setUp(): void {
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->stored);
 		$this->configService->method('setAppValue')
@@ -42,8 +45,8 @@ class BlocklistSubscriptionServiceTest extends TestCase {
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->fediverseService->method('getAccessType')->willReturn('all_but');
 
-		$this->client = $this->createMock(IClient::class);
-		$clientService = $this->createMock(IClientService::class);
+		$this->client = $this->createStub(IClient::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
 
 		$this->service = new BlocklistSubscriptionService(
@@ -55,7 +58,7 @@ class BlocklistSubscriptionServiceTest extends TestCase {
 	}
 
 	private function answers(string $body): void {
-		$response = $this->createMock(IResponse::class);
+		$response = $this->createStub(IResponse::class);
 		$response->method('getBody')->willReturn($body);
 		$this->client->method('get')->willReturn($response);
 	}

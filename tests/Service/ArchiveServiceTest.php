@@ -14,6 +14,7 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\ArchiveService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -21,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  * Putting a post away, and the two things that must stay true of it: nothing
  * is federated, and nothing anybody else can reach is changed.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ArchiveServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 

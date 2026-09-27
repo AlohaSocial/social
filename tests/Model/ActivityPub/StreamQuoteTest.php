@@ -37,7 +37,7 @@ class StreamQuoteTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->installActivityPub();
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	protected function tearDown(): void {
@@ -79,7 +79,7 @@ class StreamQuoteTest extends TestCase {
 
 	/** A StreamRequest that hands back the quoted post, and nothing else. */
 	private function holdingTheQuoted(): void {
-		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest = $this->createStub(StreamRequest::class);
 		$streamRequest->method('getStreamById')
 			->willReturnCallback(function (string $id, bool $asViewer = false, int $format = ACore::FORMAT_ACTIVITYPUB): Stream {
 				if ($id === self::QUOTED && $asViewer && $format === ACore::FORMAT_LOCAL) {
@@ -92,7 +92,7 @@ class StreamQuoteTest extends TestCase {
 	}
 
 	private function holdingNothing(): void {
-		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest = $this->createStub(StreamRequest::class);
 		$streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		\OC::$server->register(StreamRequest::class, $streamRequest);
 	}

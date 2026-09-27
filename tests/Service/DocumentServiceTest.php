@@ -36,10 +36,13 @@ use OCP\Files\NotPermittedException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAvatarManager;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class DocumentServiceTest extends TestCase {
 	private const DOC_ID = 'https://remote.example/media/1';
 	private const UUID = '2b5a7a87-8db1-445f-a17b-405790f91c80';
@@ -50,7 +53,7 @@ class DocumentServiceTest extends TestCase {
 	private StreamRequest|MockObject $streamRequest;
 	private CacheDocumentService|MockObject $cacheService;
 	private ConfigService|MockObject $configService;
-	private MiscService|MockObject $miscService;
+	private MiscService|Stub $miscService;
 	private DocumentService $service;
 	/** @var array<array{0: int, 1: int}> the (timeout, connect timeout) of every bounded scope entered */
 	private array $timeoutScopes = [];
@@ -63,7 +66,7 @@ class DocumentServiceTest extends TestCase {
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->cacheService = $this->createMock(CacheDocumentService::class);
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->miscService = $this->createMock(MiscService::class);
+		$this->miscService = $this->createStub(MiscService::class);
 		$this->configService->method('withRequestTimeout')->willReturnCallback(
 			function (int $timeout, callable $action, int $connectTimeout = 0): mixed {
 				$this->timeoutScopes[] = [$timeout, $connectTimeout];
@@ -79,13 +82,13 @@ class DocumentServiceTest extends TestCase {
 		$this->service = new DocumentService(
 			$this->urlGenerator,
 			$this->cacheDocumentsRequest,
-			$this->createMock(\OCA\Social\Db\RenditionsRequest::class),
+			$this->createStub(\OCA\Social\Db\RenditionsRequest::class),
 			$this->actorsRequest,
 			$this->streamRequest,
 			$this->cacheService,
 			$this->configService,
 			$this->miscService,
-			$this->createMock(IAvatarManager::class),
+			$this->createStub(IAvatarManager::class),
 		);
 	}
 
@@ -119,7 +122,7 @@ class DocumentServiceTest extends TestCase {
 		$doc = $this->document('copy-1');
 		$doc->setPublic(true);
 		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->method('getContentFromCache')->with('copy-1')->willReturn($file);
 
 		$mime = '';
@@ -141,7 +144,7 @@ class DocumentServiceTest extends TestCase {
 		$doc = $this->document('copy-1');
 		$doc->setAccount('alice');
 		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->method('getContentFromCache')->willReturn($file);
 
 		$mime = '';
@@ -171,7 +174,7 @@ class DocumentServiceTest extends TestCase {
 		$this->streamRequest->expects($this->once())->method('getStreamById')
 			->with('https://remote.example/notes/1', true)
 			->willReturn(new Stream());
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->method('getContentFromCache')->willReturn($file);
 
 		$mime = '';
@@ -197,7 +200,7 @@ class DocumentServiceTest extends TestCase {
 		$doc->setParentId('https://cloud.example/@alice');
 		$this->cacheDocumentsRequest->method('getById')->willReturn($doc);
 		$this->streamRequest->expects($this->never())->method('getStreamById');
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->method('getContentFromCache')->willReturn($file);
 
 		$mime = '';
@@ -237,7 +240,7 @@ class DocumentServiceTest extends TestCase {
 	public function testGetCachedFromUrlServesTheStoredCopy(): void {
 		$this->cacheDocumentsRequest->method('getByUrl')
 			->with('https://remote.example/header.jpg')->willReturn($this->document('copy-9'));
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->method('getContentFromCache')->with('copy-9')->willReturn($file);
 
 		$mime = '';
@@ -272,8 +275,8 @@ class DocumentServiceTest extends TestCase {
 	}
 
 	public function testGetFromUuidReturnsThePublicCopyAndItsRow(): void {
-		$file = $this->createMock(ISimpleFile::class);
-		$document = $this->createMock(Document::class);
+		$file = $this->createStub(ISimpleFile::class);
+		$document = $this->createStub(Document::class);
 		$document->method('isPublic')->willReturn(true);
 		$this->cacheDocumentsRequest->expects($this->once())
 			->method('getByCopy')->with(self::UUID)->willReturn($document);
@@ -286,8 +289,8 @@ class DocumentServiceTest extends TestCase {
 		// the uuid is the capability: Mastodon fetches media unsigned, so a copy
 		// that is only handed out when its row says `public` is a broken image
 		// on every followers-only post with a picture
-		$file = $this->createMock(ISimpleFile::class);
-		$document = $this->createMock(Document::class);
+		$file = $this->createStub(ISimpleFile::class);
+		$document = $this->createStub(Document::class);
 		$document->method('isPublic')->willReturn(false);
 		$this->cacheDocumentsRequest->method('getByCopy')->with(self::UUID)->willReturn($document);
 		$this->cacheService->method('getFromUuid')->with(self::UUID)->willReturn($file);
@@ -546,7 +549,7 @@ class DocumentServiceTest extends TestCase {
 	public function testGetFromCacheReturnsTheLocalCopyAndItsMimeType(): void {
 		$doc = $this->document('local-1');
 		$this->cacheDocumentsRequest->method('getById')->with(self::DOC_ID, false)->willReturn($doc);
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->expects($this->once())->method('getContentFromCache')->with('local-1')->willReturn($file);
 
 		$mime = '';
@@ -557,7 +560,7 @@ class DocumentServiceTest extends TestCase {
 	public function testGetResizedFromCacheReturnsTheResizedCopy(): void {
 		$doc = $this->document('local-1');
 		$this->cacheDocumentsRequest->method('getById')->with(self::DOC_ID, true)->willReturn($doc);
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->cacheService->expects($this->once())->method('getContentFromCache')->with('resized-local-1')->willReturn($file);
 
 		$mime = '';

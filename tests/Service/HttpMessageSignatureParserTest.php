@@ -13,6 +13,7 @@ use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Service\HttpMessageSignatureParser;
 use OCA\Social\Tests\Helper\RsaPssSigner;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * B.2.3 covers a full set of components, and B.2.2 covers `@query-param`,
  * which this implementation deliberately refuses.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HttpMessageSignatureParserTest extends TestCase {
 	/** RFC 9421 B.1.2, `test-key-rsa-pss` (a plain rsaEncryption SPKI). */
 	private const RFC_RSA_PSS_PUBLIC_KEY = '-----BEGIN PUBLIC KEY-----

@@ -15,7 +15,7 @@ use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\RemoteMediaQuotaService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -30,11 +30,11 @@ use PHPUnit\Framework\TestCase;
 class MediaUsageServiceTest extends TestCase {
 	private const CLOUD = 'https://cloud.example';
 
-	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private CacheDocumentService|MockObject $cacheDocumentService;
-	private ConfigService|MockObject $configService;
+	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
+	private CacheDocumentService|Stub $cacheDocumentService;
+	private ConfigService|Stub $configService;
 	private MediaUsageService $service;
-	private RemoteMediaQuotaService|MockObject $remoteMediaQuotaService;
+	private RemoteMediaQuotaService|Stub $remoteMediaQuotaService;
 	/** @var string[] the hosts whose day counter the walk reset */
 	private array $forgotten = [];
 
@@ -52,7 +52,7 @@ class MediaUsageServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
+		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
 		$this->cacheDocumentsRequest->method('getUsagePage')
 			->willReturnCallback(function (int $limit, int $after): array {
 				$this->pages++;
@@ -68,11 +68,11 @@ class MediaUsageServiceTest extends TestCase {
 				$this->sized[$nid] = $size;
 			});
 
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		$this->cacheDocumentService->method('cachedFileSize')
 			->willReturnCallback(fn (string $copy): ?int => $this->onDisk[$copy] ?? null);
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getCloudUrl')->willReturn(self::CLOUD);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
@@ -83,7 +83,7 @@ class MediaUsageServiceTest extends TestCase {
 
 		// the walk clears the per-domain quota's day counters as it finishes,
 		// because everything they were counting is in the figure it just wrote
-		$this->remoteMediaQuotaService = $this->createMock(RemoteMediaQuotaService::class);
+		$this->remoteMediaQuotaService = $this->createStub(RemoteMediaQuotaService::class);
 		$this->remoteMediaQuotaService->method('forgetAll')
 			->willReturnCallback(function (array $hosts): void {
 				$this->forgotten = $hosts;

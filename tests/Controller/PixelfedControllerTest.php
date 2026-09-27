@@ -35,7 +35,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -48,25 +50,26 @@ use Psr\Log\NullLogger;
  * than any ranking of their own, and that "accounts you might follow" still
  * requires a viewer, because there is no anonymous answer to that question.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PixelfedControllerTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const OTHER = 'https://cloud.example/users/bob';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private IUserSession|MockObject $userSession;
-	private AccountService|MockObject $accountService;
-	private ClientService|MockObject $clientService;
-	private PixelfedConfigService|MockObject $pixelfedConfigService;
-	private TrendService|MockObject $trendService;
-	private SuggestionService|MockObject $suggestionService;
-	private HashtagService|MockObject $hashtagService;
+	private IUserSession|Stub $userSession;
+	private AccountService|Stub $accountService;
+	private ClientService|Stub $clientService;
+	private PixelfedConfigService|Stub $pixelfedConfigService;
+	private TrendService|Stub $trendService;
+	private SuggestionService|Stub $suggestionService;
+	private HashtagService|Stub $hashtagService;
 	private PixelfedService|MockObject $pixelfedService;
 	private StoryService|MockObject $storyService;
-	private StoryInteractionService|MockObject $storyInteractionService;
+	private StoryInteractionService|Stub $storyInteractionService;
 	private MediaTagService|MockObject $mediaTagService;
-	private ArchiveService|MockObject|null $archiveService = null;
-	private CacheActorService|MockObject|null $cacheActorService = null;
+	private ArchiveService|Stub|null $archiveService = null;
+	private CacheActorService|Stub|null $cacheActorService = null;
 
 	private bool $hasSession = true;
 	private bool $csrf = true;
@@ -79,30 +82,30 @@ class PixelfedControllerTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')->willReturn('');
 		$this->request->method('passesCSRFCheck')->willReturnCallback(fn (): bool => $this->csrf);
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')
 			->willReturnCallback(fn (): ?IUser => $this->hasSession ? $user : null);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (): Person => $this->person(self::VIEWER));
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 
-		$this->pixelfedConfigService = $this->createMock(PixelfedConfigService::class);
+		$this->pixelfedConfigService = $this->createStub(PixelfedConfigService::class);
 		$this->pixelfedConfigService->method('config')
 			->willReturn(['open_registration' => false, 'uploader' => ['album_limit' => 10]]);
 
-		$this->trendService = $this->createMock(TrendService::class);
+		$this->trendService = $this->createStub(TrendService::class);
 		$this->trendService->method('trendingStatuses')
 			->willReturnCallback(
 				function (string $period, int $limit, int $offset, bool $onlyMedia = false): array {
@@ -112,15 +115,15 @@ class PixelfedControllerTest extends TestCase {
 				}
 			);
 
-		$this->suggestionService = $this->createMock(SuggestionService::class);
+		$this->suggestionService = $this->createStub(SuggestionService::class);
 		$this->suggestionService->method('suggestions')
 			->willReturn([new Suggestion($this->person(self::OTHER), Suggestion::SOURCE_FRIENDS)]);
 
 		$this->pixelfedService = $this->createMock(PixelfedService::class);
 		$this->storyService = $this->createMock(StoryService::class);
-		$this->storyInteractionService = $this->createMock(StoryInteractionService::class);
+		$this->storyInteractionService = $this->createStub(StoryInteractionService::class);
 		$this->mediaTagService = $this->createMock(MediaTagService::class);
-		$this->hashtagService = $this->createMock(HashtagService::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
 		$this->hashtagService->method('getTrending')
 			->willReturnCallback(function (int $limit, string $period): array {
 				$this->tagsAsked = compact('limit', 'period');
@@ -152,8 +155,8 @@ class PixelfedControllerTest extends TestCase {
 	}
 
 	private function controller(): PixelfedController {
-		$this->archiveService ??= $this->createMock(ArchiveService::class);
-		$this->cacheActorService ??= $this->createMock(CacheActorService::class);
+		$this->archiveService ??= $this->createStub(ArchiveService::class);
+		$this->cacheActorService ??= $this->createStub(CacheActorService::class);
 
 		return new PixelfedController(
 			$this->request,
@@ -165,17 +168,17 @@ class PixelfedControllerTest extends TestCase {
 			$this->trendService,
 			$this->suggestionService,
 			$this->hashtagService,
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(PlaceService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(PlaceService::class),
 			$this->pixelfedService,
 			$this->storyService,
 			$this->storyInteractionService,
 			$this->mediaTagService,
-			$this->createMock(PortfolioService::class),
-			$this->createMock(TeamService::class),
+			$this->createStub(PortfolioService::class),
+			$this->createStub(TeamService::class),
 			$this->cacheActorService,
 			$this->archiveService,
-			$this->createMock(DiscoverCategoriesRequest::class)
+			$this->createStub(DiscoverCategoriesRequest::class)
 		);
 	}
 
@@ -356,7 +359,7 @@ class PixelfedControllerTest extends TestCase {
 	 * service, which knows how many tag rows it read, and not from the page.
 	 */
 	public function testTaggedPhotosSayWhereTheNextPageStarts(): void {
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('resolve')->willReturn($this->person(self::OTHER));
 		$this->request->method('getRequestUri')
 			->willReturn('/apps/social/api/v1.1/accounts/bob/tagged?limit=20&max_id=90');
@@ -375,7 +378,7 @@ class PixelfedControllerTest extends TestCase {
 	}
 
 	public function testTheLastPageOfTaggedPhotosHasNoNextLink(): void {
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('resolve')->willReturn($this->person(self::OTHER));
 		$this->mediaTagService->method('photosOf')
 			->willReturn(['posts' => [$this->note()], 'next' => null]);

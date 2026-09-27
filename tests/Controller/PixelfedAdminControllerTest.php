@@ -20,18 +20,21 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class PixelfedAdminControllerTest extends TestCase {
 	private const ADMIN = 'root';
 
-	private IRequest|MockObject $request;
-	private IUserSession|MockObject $userSession;
-	private ClientService|MockObject $clientService;
-	private AdminApiService|MockObject $adminApiService;
+	private IRequest|Stub $request;
+	private IUserSession|Stub $userSession;
+	private ClientService|Stub $clientService;
+	private AdminApiService|Stub $adminApiService;
 	private PixelfedAdminService|MockObject $pixelfedAdminService;
 	private array $headers = [];
 	private bool $csrf = true;
@@ -40,20 +43,20 @@ class PixelfedAdminControllerTest extends TestCase {
 	private array $scopes = ['admin:read', 'admin:write'];
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
 		$this->request->method('passesCSRFCheck')->willReturnCallback(fn (): bool => $this->csrf);
 		$this->request->method('getParam')->willReturn('');
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn(self::ADMIN);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')
 			->willReturnCallback(fn (): ?IUser => $this->signedIn ? $user : null);
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 		$this->clientService->method('getFromToken')
 			->willReturnCallback(function (string $token): SocialClient {
 				if ($token !== 'token') {
@@ -68,7 +71,7 @@ class PixelfedAdminControllerTest extends TestCase {
 
 		\OC::$server->register(IRequest::class, $this->request);
 
-		$this->adminApiService = $this->createMock(AdminApiService::class);
+		$this->adminApiService = $this->createStub(AdminApiService::class);
 		$this->adminApiService->method('isAdministrator')
 			->willReturnCallback(fn (string $userId): bool => $this->isAdmin && $userId === self::ADMIN);
 		$this->pixelfedAdminService = $this->createMock(PixelfedAdminService::class);

@@ -17,6 +17,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Tools\Nid;
 use OCP\DB\IResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -34,6 +35,7 @@ use ReflectionProperty;
  * which must give exactly the page the unbounded query gives, and that is what
  * is checked here, against a recipient table held in memory.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HomeTimelineWindowTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 	private const DAY = 86400;
@@ -195,7 +197,7 @@ class HomeTimelineWindowTest extends TestCase {
 			}
 		);
 
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValueBool')->willReturn(true);
 
 		$viewer = new Person();
@@ -347,7 +349,7 @@ class HomeTimelineWindowTest extends TestCase {
 	public function testAReaderWhoFollowsNobodyStillReadsTheirOwnPosts(): void {
 		$this->row($this->own(), 3600, 1);
 		$request = $this->request();
-		$follows = $this->createMock(FollowsRequest::class);
+		$follows = $this->createStub(FollowsRequest::class);
 		$follows->method('limitToHomeCollections')->willReturn('');
 		(new ReflectionProperty(StreamRequest::class, 'followsRequest'))->setValue($request, $follows);
 

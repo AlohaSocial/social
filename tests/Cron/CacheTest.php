@@ -28,10 +28,13 @@ use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\TimedJob;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class CacheTest extends TestCase {
 	private const NOW = 1700000000;
 
@@ -46,7 +49,7 @@ class CacheTest extends TestCase {
 	/** @var StreamService&MockObject */
 	private $streamService;
 	private $streamPruneService;
-	private PollService|MockObject $pollService;
+	private PollService|Stub $pollService;
 	private GroupListService|MockObject $groupListService;
 	private ProfileLinkVerifier|MockObject $profileLinkVerifier;
 	private CacheActorSweepService|MockObject $sweepService;
@@ -67,19 +70,19 @@ class CacheTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->now = self::NOW;
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->hashtagService = $this->createMock(HashtagService::class);
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->streamPruneService = $this->createMock(StreamPruneService::class);
+		$this->streamPruneService = $this->createStub(StreamPruneService::class);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
-		$this->pollService = $this->createMock(PollService::class);
+		$this->pollService = $this->createStub(PollService::class);
 		$this->groupListService = $this->createMock(GroupListService::class);
 		$this->profileLinkVerifier = $this->createMock(ProfileLinkVerifier::class);
 		$this->sweepService = $this->createMock(CacheActorSweepService::class);
@@ -130,8 +133,8 @@ class CacheTest extends TestCase {
 		// the catch-all behind the group listener runs every pass
 		$this->groupListService->expects($this->once())->method('reconcile');
 		$this->profileLinkVerifier->expects($this->once())->method('verifyLocalActors');
-		$bob = $this->createMock(Person::class);
-		$carol = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
+		$carol = $this->createStub(Person::class);
 		$this->cacheActorsRequest->expects($this->once())->method('getRemoteActorsToSync')->willReturn([$bob, $carol]);
 		$synced = [];
 		$this->streamService->expects($this->exactly(2))->method('syncRemoteTimeline')
@@ -232,9 +235,9 @@ class CacheTest extends TestCase {
 	}
 
 	public function testOneUnreachableRemoteActorDoesNotStopTheTimelineSync(): void {
-		$gone = $this->createMock(Person::class);
+		$gone = $this->createStub(Person::class);
 		$gone->method('getId')->willReturn('https://gone.example/users/x');
-		$alive = $this->createMock(Person::class);
+		$alive = $this->createStub(Person::class);
 		$alive->method('getId')->willReturn('https://alive.example/users/y');
 		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([$gone, $alive]);
 		$this->streamService->expects($this->exactly(2))->method('syncRemoteTimeline')
@@ -405,7 +408,7 @@ class CacheTest extends TestCase {
 	public function testTheTimelineSyncStopsMidBatchWhenTheBudgetIsSpent(): void {
 		$actors = [];
 		foreach (['a', 'b', 'c'] as $name) {
-			$actor = $this->createMock(Person::class);
+			$actor = $this->createStub(Person::class);
 			$actor->method('getId')->willReturn('https://slow.example/users/' . $name);
 			$actors[] = $actor;
 		}

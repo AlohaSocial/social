@@ -22,7 +22,7 @@ class MediaAttachmentTest extends TestCase {
 
 	/** Registers a URL generator that builds links for this instance. */
 	private function withUrlGenerator(): void {
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args): string => isset($args['nid'])
 				? 'https://cloud.example.org/media/stream/' . $args['nid']

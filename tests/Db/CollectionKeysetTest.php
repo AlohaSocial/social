@@ -14,6 +14,7 @@ use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -25,6 +26,7 @@ use ReflectionMethod;
  * large collection paid that on every fetch. Their `next` links are cursors
  * now, and a cursor page starts where the last one ended.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CollectionKeysetTest extends TestCase {
 	/** @var string[] */
 	private array $where = [];

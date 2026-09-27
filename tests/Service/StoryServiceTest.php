@@ -31,32 +31,35 @@ use OCA\Social\Service\MediaPurgeService;
 use OCA\Social\Service\StoryInteractionService;
 use OCA\Social\Service\StoryService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class StoryServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example.org/users/alice';
 	private const BOB = 'https://cloud.example.org/users/bob';
 
 	private StoriesRequest|MockObject $storiesRequest;
-	private StoryInteractionService|MockObject $storyInteractionService;
+	private StoryInteractionService|Stub $storyInteractionService;
 	private MediaPurgeService|MockObject $mediaPurgeService;
 	private DocumentService|MockObject $documentService;
 	private FollowService|MockObject $followService;
 	private StoryService $service;
-	private ActivityService|MockObject $activityService;
+	private ActivityService|Stub $activityService;
 	/** @var ACore[] what was queued for delivery */
 	private array $sent = [];
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->storiesRequest = $this->createMock(StoriesRequest::class);
-		$this->storyInteractionService = $this->createMock(StoryInteractionService::class);
+		$this->storyInteractionService = $this->createStub(StoryInteractionService::class);
 		$this->mediaPurgeService = $this->createMock(MediaPurgeService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->followService = $this->createMock(FollowService::class);
-		$this->activityService = $this->createMock(ActivityService::class);
+		$this->activityService = $this->createStub(ActivityService::class);
 		$this->activityService->method('request')
 			->willReturnCallback(function (ACore $activity): string {
 				$this->sent[] = $activity;
@@ -64,7 +67,7 @@ class StoryServiceTest extends TestCase {
 				return 'token';
 			});
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn('https://cloud.example/apps/social/');
 		$configService->method('getStorySecret')->willReturn('a-secret-of-this-instances-own');
 
@@ -72,11 +75,11 @@ class StoryServiceTest extends TestCase {
 			$this->storiesRequest,
 			$this->documentService,
 			$this->followService,
-			$this->createMock(CacheActorService::class),
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(CacheActorService::class),
+			$this->createStub(IURLGenerator::class),
 			$this->activityService,
 			$configService,
-			$this->createMock(DocumentInterface::class),
+			$this->createStub(DocumentInterface::class),
 			$this->storyInteractionService,
 			$this->mediaPurgeService,
 			new NullLogger(),
@@ -85,7 +88,7 @@ class StoryServiceTest extends TestCase {
 
 	/** The service with a cache of actors of the test's own choosing. */
 	private function serviceWith(CacheActorService $cacheActorService): StoryService {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn('https://cloud.example/apps/social/');
 		$configService->method('getStorySecret')->willReturn('a-secret-of-this-instances-own');
 
@@ -94,10 +97,10 @@ class StoryServiceTest extends TestCase {
 			$this->documentService,
 			$this->followService,
 			$cacheActorService,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			$this->activityService,
 			$configService,
-			$this->createMock(DocumentInterface::class),
+			$this->createStub(DocumentInterface::class),
 			$this->storyInteractionService,
 			$this->mediaPurgeService,
 			new NullLogger(),
@@ -127,7 +130,7 @@ class StoryServiceTest extends TestCase {
 	public function testTheAuthorIsHandedToAClientInTheClientFormat(): void {
 		$this->storiesRequest->method('getLiveByActor')->willReturn([$this->story(self::ALICE, 3)]);
 		$this->storiesRequest->method('seenAmong')->willReturn([]);
-		$cacheActorService = $this->createMock(CacheActorService::class);
+		$cacheActorService = $this->createStub(CacheActorService::class);
 		$cacheActorService->method('getFromId')->willReturn($this->person(self::ALICE));
 		$service = $this->serviceWith($cacheActorService);
 
@@ -147,7 +150,7 @@ class StoryServiceTest extends TestCase {
 	public function testTheOwnerGetsTheViewersThisServerCanStillName(): void {
 		$this->storiesRequest->method('getLiveById')->willReturn($this->story(self::ALICE, 7));
 		$this->storiesRequest->method('viewersOf')->with(7)->willReturn([self::BOB, 'https://gone.example/users/x']);
-		$cacheActorService = $this->createMock(CacheActorService::class);
+		$cacheActorService = $this->createStub(CacheActorService::class);
 		$cacheActorService->method('getFromId')->willReturnCallback(function (string $id): Person {
 			if ($id === self::BOB) {
 				return $this->person(self::BOB);

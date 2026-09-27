@@ -19,14 +19,17 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialFederationHealthWidgetTest extends TestCase {
-	/** @var IURLGenerator&MockObject */
+	/** @var IURLGenerator&Stub */
 	private $urlGenerator;
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	/** @var ModeratorService&MockObject */
 	private $moderatorService;
@@ -35,7 +38,7 @@ class SocialFederationHealthWidgetTest extends TestCase {
 	private SocialFederationHealthWidget $widget;
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(
 			static fn (string $text, array $params = []): string => vsprintf($text, $params)
 		);
@@ -43,11 +46,11 @@ class SocialFederationHealthWidgetTest extends TestCase {
 			static fn (string $one, string $many, int $count): string
 				=> str_replace('%n', (string)$count, $count === 1 ? $one : $many)
 		);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->moderatorService = $this->createMock(ModeratorService::class);
 		$this->federationHealthService = $this->createMock(FederationHealthService::class);
-		$formatter = $this->createMock(IDateTimeFormatter::class);
+		$formatter = $this->createStub(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturn('3 days ago');
 
 		$this->widget = new SocialFederationHealthWidget(
@@ -62,7 +65,7 @@ class SocialFederationHealthWidgetTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid, bool $moderator): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 		$this->moderatorService->method('isModerator')->with($uid)->willReturn($moderator);

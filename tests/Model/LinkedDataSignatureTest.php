@@ -42,7 +42,7 @@ class LinkedDataSignatureTest extends TestCase {
 	}
 
 	protected function setUp(): void {
-		$folder = $this->createMock(ISimpleFolder::class);
+		$folder = $this->createStub(ISimpleFolder::class);
 		$folder->method('getFile')->willReturnCallback(function (string $name): ISimpleFile {
 			$path = dirname(__DIR__, 2) . '/context/' . $name;
 			if (!is_file($path)) {

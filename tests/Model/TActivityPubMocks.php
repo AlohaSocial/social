@@ -40,7 +40,7 @@ use OCA\Social\Interfaces\Object\StoryInterface;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PeerTubeService;
 use OCP\IURLGenerator;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -94,48 +94,59 @@ trait TActivityPubMocks {
 		];
 	}
 
-	/** @var array<class-string, MockObject> */
+	/** @var array<class-string, Stub> */
 	private array $apInterfaces = [];
 
-	protected function createActivityPub(?string $cloudUrl = null): AP {
+	/**
+	 * @param list<class-string> $mocked the interfaces the test sets expectations
+	 *                                   on; every other one is a stub
+	 */
+	protected function createActivityPub(?string $cloudUrl = null, array $mocked = []): AP {
 		$cloudUrl ??= self::cloudUrl();
 		$args = [];
 		foreach (self::apInterfaceClasses() as $class) {
-			$this->apInterfaces[$class] = $this->createMock($class);
+			$this->apInterfaces[$class] = in_array($class, $mocked, true)
+				? $this->createMock($class)
+				: $this->createStub($class);
 			$args[] = $this->apInterfaces[$class];
 		}
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn($cloudUrl);
 		$args[] = $configService;
 
-		$args[] = $this->createMock(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class);
-		$args[] = $this->createMock(\OCA\Social\Interfaces\Object\DislikeInterface::class);
-		$args[] = $this->createMock(\OCA\Social\Interfaces\Object\PlaylistInterface::class);
+		$args[] = $this->createStub(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class);
+		$args[] = $this->createStub(\OCA\Social\Interfaces\Object\DislikeInterface::class);
+		$args[] = $this->createStub(\OCA\Social\Interfaces\Object\PlaylistInterface::class);
 
 		// the real one, not a double: reading a PeerTube `Video` is parsing,
 		// and a test that stubbed it would be asserting against its own stub.
-		// Only the two things it *writes* through are mocks.
+		// Only the two things it *writes* through are doubles.
 		$args[] = new PeerTubeService(
 			$this->apInterfaces[DocumentInterface::class],
-			$this->createMock(IURLGenerator::class),
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(IURLGenerator::class),
+			$this->createStub(LoggerInterface::class),
 		);
 
 		return new AP(...$args);
 	}
 
-	/** Installs a fresh AP as the global dispatcher the models reach for. */
-	protected function installActivityPub(?string $cloudUrl = null): AP {
-		AP::set($this->createActivityPub($cloudUrl));
+	/**
+	 * Installs a fresh AP as the global dispatcher the models reach for.
+	 *
+	 * @param list<class-string> $mocked see createActivityPub()
+	 */
+	protected function installActivityPub(?string $cloudUrl = null, array $mocked = []): AP {
+		AP::set($this->createActivityPub($cloudUrl, $mocked));
 
 		return AP::instance();
 	}
 
 	/**
-	 * @param class-string $class one of the 27 interface classes
+	 * @param class-string $class one of the 27 interface classes; a mock when
+	 *                            it was named in `$mocked`, a stub otherwise
 	 */
-	protected function apInterface(string $class): MockObject {
+	protected function apInterface(string $class): Stub {
 		return $this->apInterfaces[$class];
 	}
 }

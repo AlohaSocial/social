@@ -33,19 +33,22 @@ use OCP\IGroupManager;
 use OCP\IInitialStateService;
 use OCP\IRequest;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class NavigationControllerTest extends TestCase {
 	/** @var IRequest&MockObject */
 	private $request;
-	/** @var IConfig&MockObject */
+	/** @var IConfig&Stub */
 	private $config;
-	/** @var IInitialState&MockObject */
+	/** @var IInitialState&Stub */
 	private $initialState;
-	/** @var IURLGenerator&MockObject */
+	/** @var IURLGenerator&Stub */
 	private $urlGenerator;
 	/** @var AccountService&MockObject */
 	private $accountService;
@@ -69,21 +72,21 @@ class NavigationControllerTest extends TestCase {
 		putenv('front_controller_active');
 
 		$this->request = $this->createMock(IRequest::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->initialState = $this->createMock(IInitialState::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->config = $this->createStub(IConfig::class);
+		$this->initialState = $this->createStub(IInitialState::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->checkService = $this->createMock(CheckService::class);
 		$this->streamService = $this->createMock(\OCA\Social\Service\StreamService::class);
-		$this->filterService = $this->createMock(\OCA\Social\Service\FilterService::class);
+		$this->filterService = $this->createStub(\OCA\Social\Service\FilterService::class);
 		// what it does by default: hides nothing, hands each post back exported
 		$this->filterService->method('apply')->willReturnArgument(0);
-		$this->sensitiveMediaService = $this->createMock(\OCA\Social\Service\SensitiveMediaService::class);
+		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		$this->sensitiveMediaService->method('policyFor')->willReturn('default');
 		$this->sensitiveMediaService->method('choiceOf')->willReturn('');
-		$this->sectionsService = $this->createMock(\OCA\Social\Service\SectionsService::class);
+		$this->sectionsService = $this->createStub(\OCA\Social\Service\SectionsService::class);
 		$this->sectionsService->method('current')->willReturn([
 			'stories' => true,
 			'section_photos' => true,
@@ -124,7 +127,7 @@ class NavigationControllerTest extends TestCase {
 			$this->checkService,
 			$this->sensitiveMediaService,
 			$this->sectionsService,
-			$this->createMock(\OCA\Social\Service\InterestService::class),
+			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
 			$this->filterService,
 			new NullLogger()
@@ -208,7 +211,7 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	public function testNavigateServesThePublicTimelineToAnAnonymousVisitor(): void {
-		\OC::$server->register(IInitialStateService::class, $this->createMock(IInitialStateService::class));
+		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 		$this->accountService->expects($this->never())->method('getActorFromUserId');
 		$this->accountService->expects($this->never())->method('generateHandleFromUserId');
 		$this->configService->expects($this->never())->method('getCloudUrl');
@@ -224,7 +227,7 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	public function testReloadingThePublicTimelineRouteIsAvailableToAnAnonymousVisitor(): void {
-		\OC::$server->register(IInitialStateService::class, $this->createMock(IInitialStateService::class));
+		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 
 		$response = $this->controller(null)->timeline('timeline');
 
@@ -480,7 +483,7 @@ class NavigationControllerTest extends TestCase {
 	private function publicClock(): void {
 		\OC::$server->register(
 			\OCP\AppFramework\Utility\ITimeFactory::class,
-			$this->createMock(\OCP\AppFramework\Utility\ITimeFactory::class)
+			$this->createStub(\OCP\AppFramework\Utility\ITimeFactory::class)
 		);
 	}
 
@@ -491,7 +494,7 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	public function testDocumentGetServesTheCachedDocumentToItsViewer(): void {
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($viewer);
 		$this->cachedFileAsViewer('getFromCacheAsViewer', 'image/jpeg', $viewer);
 
@@ -548,7 +551,7 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	public function testResizedGetServesTheResizedCopyToItsViewer(): void {
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($viewer);
 		$this->cachedFileAsViewer('getResizedFromCacheAsViewer', 'image/webp', $viewer);
 

@@ -14,6 +14,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * home-timeline filters around it — needs a real database and is exercised by
  * the integration suite.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ListsRequestTest extends TestCase {
 	/** @var int[] the nids the row-reading query was handed, null if never asked */
 	private ?array $read = null;

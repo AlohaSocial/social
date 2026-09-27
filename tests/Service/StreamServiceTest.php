@@ -37,12 +37,15 @@ use OCA\Social\Service\ReactionSummaryService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class StreamServiceTest extends TestCase {
 	private const SOCIAL_URL = 'https://social.example/';
 	private const ACTOR_ID = 'https://social.example/@alice';
@@ -55,7 +58,7 @@ class StreamServiceTest extends TestCase {
 	private ConfigService|MockObject $configService;
 	private CurlService|MockObject $curlService;
 	private LinkPreviewService|MockObject $linkPreviewService;
-	private EmojiService|MockObject $emojiService;
+	private EmojiService|Stub $emojiService;
 	private LoggerInterface|MockObject $logger;
 
 	/** @var array[] the Emoji tags the instance has for whatever it is handed */
@@ -82,7 +85,7 @@ class StreamServiceTest extends TestCase {
 		$this->configService->method('generateId')->willReturn(self::GENERATED_ID);
 		$this->configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
 
-		$this->emojiService = $this->createMock(EmojiService::class);
+		$this->emojiService = $this->createStub(EmojiService::class);
 		$this->emojiService->method('tagsFor')->willReturnCallback(
 			function (string $text): array {
 				$this->emojiScanned = $text;
@@ -103,21 +106,21 @@ class StreamServiceTest extends TestCase {
 			$this->curlService,
 			$this->linkPreviewService,
 			$this->emojiService,
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			$this->logger,
-			$this->createMock(PlaceService::class),
-			$this->createMock(ReactionSummaryService::class),
-			$this->createMock(MediaTagsRequest::class),
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
 			$this->accountService
 		);
 
 		// `Note::fillMentions()` asks the registry for the Person interface, so
 		// a sync of a post that names anybody needs one; a mention nobody here
 		// knows keeps the handle the post wrote, which is what this produces.
-		$personInterface = $this->createMock(IActivityPubInterface::class);
+		$personInterface = $this->createStub(IActivityPubInterface::class);
 		$personInterface->method('getItemById')
 			->willThrowException(new ItemNotFoundException());
-		AP::set($this->createMock(AP::class));
+		AP::set($this->createStub(AP::class));
 		AP::instance()->method('getInterfaceFromType')->willReturn($personInterface);
 	}
 
@@ -568,7 +571,7 @@ class StreamServiceTest extends TestCase {
 	}
 
 	public function testAddHashtagDoesNotNeedTheSocialUrl(): void {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willThrowException(new SocialAppConfigException());
 		$service = new StreamService(
 			$this->urlGenerator,
@@ -579,12 +582,12 @@ class StreamServiceTest extends TestCase {
 			$this->curlService,
 			$this->linkPreviewService,
 			$this->emojiService,
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
-			$this->createMock(PlaceService::class),
-			$this->createMock(ReactionSummaryService::class),
-			$this->createMock(MediaTagsRequest::class),
-			$this->createMock(AccountService::class)
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
+			$this->createStub(AccountService::class)
 		);
 
 		$note = new Note();

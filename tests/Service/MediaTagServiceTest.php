@@ -22,13 +22,16 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\MediaTagService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
  * Naming people in a photograph: who may, who is told, and what it does not do.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MediaTagServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 	private const BOB = 'https://cloud.example/@bob';
@@ -37,10 +40,10 @@ class MediaTagServiceTest extends TestCase {
 
 	private MediaTagsRequest|MockObject $mediaTagsRequest;
 	private StreamService|MockObject $streamService;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private NotificationService|MockObject $notificationService;
 	private ActivityService|MockObject $activityService;
-	private StreamRequest|MockObject $streamRequest;
+	private StreamRequest|Stub $streamRequest;
 	private MediaTagService $service;
 
 	protected function setUp(): void {
@@ -48,10 +51,10 @@ class MediaTagServiceTest extends TestCase {
 
 		$this->mediaTagsRequest = $this->createMock(MediaTagsRequest::class);
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->notificationService = $this->createMock(NotificationService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 
 		$this->service = new MediaTagService(
 			$this->mediaTagsRequest,

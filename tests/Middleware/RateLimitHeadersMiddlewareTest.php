@@ -21,7 +21,9 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -47,9 +49,10 @@ class RateLimitedController extends Controller {
 /**
  * What a client is told about its budget, and what it is not told.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RateLimitHeadersMiddlewareTest extends TestCase {
-	private IUserSession|MockObject $userSession;
-	private ICacheFactory|MockObject $cacheFactory;
+	private IUserSession|Stub $userSession;
+	private ICacheFactory|Stub $cacheFactory;
 	private IRequest|MockObject $request;
 	private array $store = [];
 	private RateLimitHeadersMiddleware $middleware;
@@ -76,7 +79,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		// the X-Request-Id it merges in
 		\OC::$server->register(IRequest::class, $request);
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $k) => $this->store[$k] ?? null);
 		$cache->method('set')->willReturnCallback(
 			function (string $k, $v): bool {
@@ -86,12 +89,12 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 			}
 		);
 
-		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory = $this->createStub(ICacheFactory::class);
 		$this->cacheFactory->method('createDistributed')->willReturn($cache);
 		$this->cacheFactory->method('createLocal')->willReturn($cache);
 		$this->cacheFactory->method('isAvailable')->willReturn(true);
 
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->controller = new RateLimitedController('social', $request);
 
 		$this->request = $request;
@@ -101,7 +104,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 	}
 
 	private function service(ICacheFactory|MockObject $cacheFactory): RateLimitService {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
@@ -111,7 +114,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 	}
@@ -147,7 +150,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 
 	/** One account's spending is not another's. */
 	public function testTwoAccountsHaveTwoBudgets(): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$uid = 'alice';
 		$user->method('getUID')->willReturnCallback(static function () use (&$uid): string {
 			return $uid;
@@ -296,7 +299,7 @@ class RateLimitHeadersMiddlewareTest extends TestCase {
 		$cacheFactory->method('isAvailable')->willReturn(false);
 		$cacheFactory->method('isLocalCacheAvailable')->willReturn(true);
 		$cacheFactory->expects($this->once())->method('createLocal')
-			->willReturn($this->createMock(ICache::class));
+			->willReturn($this->createStub(ICache::class));
 
 		$middleware = new RateLimitHeadersMiddleware(
 			$this->userSession, $this->service($cacheFactory)

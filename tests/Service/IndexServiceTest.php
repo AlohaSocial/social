@@ -16,11 +16,13 @@ use OCA\Social\Db\StreamTagsRequest;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\IndexService;
 use OCP\IConfig;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 class IndexServiceTest extends TestCase {
 	private StreamRequest|MockObject $streamRequest;
 	private StreamDestRequest|MockObject $streamDestRequest;
@@ -45,8 +47,8 @@ class IndexServiceTest extends TestCase {
 	}
 
 	public function testRepairsOneBoundedChunkAndPersistsTheCursorAfterEachCompleteStream(): void {
-		$first = $this->createMock(Stream::class);
-		$second = $this->createMock(Stream::class);
+		$first = $this->createStub(Stream::class);
+		$second = $this->createStub(Stream::class);
 		$this->config->expects($this->once())->method('getAppValue')
 			->with(Application::APP_ID, 'index_nid', '0')->willReturn('0');
 		$this->streamRequest->expects($this->once())->method('getIndexChunk')
@@ -70,8 +72,8 @@ class IndexServiceTest extends TestCase {
 	}
 
 	public function testFailedStreamIsRetriedWithoutMovingTheCursorPastItsNid(): void {
-		$first = $this->createMock(Stream::class);
-		$second = $this->createMock(Stream::class);
+		$first = $this->createStub(Stream::class);
+		$second = $this->createStub(Stream::class);
 		$this->config->method('getAppValue')->willReturn('50');
 		$this->streamRequest->method('getIndexChunk')->willReturn([
 			['nid' => '100', 'id_prim' => 'first'],

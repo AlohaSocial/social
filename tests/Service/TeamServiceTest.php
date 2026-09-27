@@ -18,21 +18,24 @@ use OCA\Social\Service\TeamService;
 use OCP\IGroupManager;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
  * An account a group posts from: who may, who is told, and what is recorded.
  */
+#[AllowMockObjectsWithoutExpectations]
 class TeamServiceTest extends TestCase {
 	private const TEAM = 'https://cloud.example/@press';
 	private const ALICE = 'https://cloud.example/@alice';
 
 	private TeamsRequest|MockObject $teamsRequest;
 	private AccountService|MockObject $accountService;
-	private IGroupManager|MockObject $groupManager;
-	private IUserManager|MockObject $userManager;
+	private IGroupManager|Stub $groupManager;
+	private IUserManager|Stub $userManager;
 	private TeamService $service;
 
 	protected function setUp(): void {
@@ -40,10 +43,10 @@ class TeamServiceTest extends TestCase {
 
 		$this->teamsRequest = $this->createMock(TeamsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
-		$this->groupManager = $this->createMock(IGroupManager::class);
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->groupManager = $this->createStub(IGroupManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 
-		$this->userManager->method('get')->willReturn($this->createMock(IUser::class));
+		$this->userManager->method('get')->willReturn($this->createStub(IUser::class));
 
 		$this->service = new TeamService(
 			$this->teamsRequest,
@@ -176,7 +179,7 @@ class TeamServiceTest extends TestCase {
 	}
 
 	public function testSomebodyWhoIsNotAUserHasNoTeams(): void {
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturn(null);
 		$service = new TeamService(
 			$this->teamsRequest, $this->accountService,

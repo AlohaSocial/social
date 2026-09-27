@@ -11,20 +11,20 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Service\MarkerService;
 use OCP\Config\IUserConfig;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 class MarkerServiceTest extends TestCase {
 	private const USER = 'alice';
 
-	private IUserConfig|MockObject $userConfig;
+	private IUserConfig|Stub $userConfig;
 	private MarkerService $service;
 
 	/** in-memory stand-in for the user's stored config value */
 	private string $stored = '{}';
 
 	protected function setUp(): void {
-		$this->userConfig = $this->createMock(IUserConfig::class);
+		$this->userConfig = $this->createStub(IUserConfig::class);
 		$this->userConfig->method('getValueString')->willReturnCallback(
 			fn (string $user, string $app, string $key, string $default = '') => $this->stored
 		);

@@ -17,7 +17,9 @@ use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MediaPurgeService;
 use OCP\AppFramework\Utility\ITimeFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -30,13 +32,14 @@ use Psr\Log\NullLogger;
  * that an actor's pictures go with its row rather than being left in appdata
  * under a name nothing remembers any more.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CacheActorSweepServiceTest extends TestCase {
 	private const NOW = 1_700_000_000;
 
 	private ConfigService|MockObject $configService;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private CacheDocumentService|MockObject $cacheDocumentService;
+	private CacheDocumentService|Stub $cacheDocumentService;
 	private CacheActorSweepService $service;
 
 	protected function setUp(): void {
@@ -45,9 +48,9 @@ class CacheActorSweepServiceTest extends TestCase {
 			->with(ConfigService::SOCIAL_CACHE_ACTOR_DAYS)->willReturn(180);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
 		$this->service = new CacheActorSweepService(

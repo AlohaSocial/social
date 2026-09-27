@@ -13,7 +13,7 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Service\HttpSignatureService;
 use OCA\Social\Service\InstanceActorService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -28,7 +28,7 @@ class HttpSignatureServiceTest extends TestCase {
 	private static string $privateKey;
 	private static string $publicKey;
 
-	/** @var InstanceActorService&MockObject */
+	/** @var InstanceActorService&Stub */
 	private $instanceActorService;
 
 	public static function setUpBeforeClass(): void {
@@ -39,7 +39,7 @@ class HttpSignatureServiceTest extends TestCase {
 	}
 
 	protected function setUp(): void {
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
 	}
 
 	private function signsWith(string $privateKey): void {
@@ -52,7 +52,7 @@ class HttpSignatureServiceTest extends TestCase {
 
 	private function service(): HttpSignatureService {
 		return new HttpSignatureService(
-			$this->createMock(ActorsRequest::class), $this->instanceActorService, new NullLogger()
+			$this->createStub(ActorsRequest::class), $this->instanceActorService, new NullLogger()
 		);
 	}
 

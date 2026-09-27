@@ -113,7 +113,7 @@ class ActorsKeyStorageTest extends TestCase {
 		// rather than of the marker
 		$config = Server::get(ConfigService::class);
 		$config->setAppValue('migration_actor_keys_encrypted', '0');
-		$repair->run($this->createMock(IOutput::class));
+		$repair->run($this->createStub(IOutput::class));
 
 		$sealedOnce = $this->rawPrivateKey();
 		$this->assertStringNotContainsString('-----BEGIN', $sealedOnce, 'the repair sealed the row');
@@ -121,7 +121,7 @@ class ActorsKeyStorageTest extends TestCase {
 
 		// a second run must not double-encrypt
 		$config->setAppValue('migration_actor_keys_encrypted', '0');
-		$repair->run($this->createMock(IOutput::class));
+		$repair->run($this->createStub(IOutput::class));
 		$this->assertSame($pem, $this->actorsRequest->getFromUsername(self::USERNAME)->getPrivateKey());
 	}
 

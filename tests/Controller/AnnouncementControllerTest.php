@@ -24,7 +24,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -37,15 +39,16 @@ use Psr\Log\NullLogger;
  * announcement outside its window is not among what they are served, and that
  * the read state they are shown is their own and nobody else's.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AnnouncementControllerTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
-	private ClientService|MockObject $clientService;
-	private IUserSession|MockObject $userSession;
+	private AccountService|Stub $accountService;
+	private ClientService|Stub $clientService;
+	private IUserSession|Stub $userSession;
 	private AnnouncementService $announcementService;
 
 	/** @var array<string, string> the request headers the controller will see */
@@ -61,7 +64,7 @@ class AnnouncementControllerTest extends TestCase {
 	private string $uid = 'alice';
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -69,19 +72,19 @@ class AnnouncementControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturnCallback(fn (): string => $this->uid);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (string $userId): Person
 				=> $this->person('https://cloud.example/users/' . $userId));
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 		$this->announcementService = new AnnouncementService(
-			$this->mockAnnouncementsRequest(), $this->createMock(EmojiService::class)
+			$this->mockAnnouncementsRequest(), $this->createStub(EmojiService::class)
 		);
 
 		// Response::getHeaders() asks the container for the request

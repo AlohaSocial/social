@@ -19,7 +19,7 @@ use OCP\TaskProcessing\IProvider;
 use OCP\TaskProcessing\ShapeEnumValue;
 use OCP\TaskProcessing\Task;
 use OCP\TaskProcessing\TaskTypes\TextToTextTranslate;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -32,13 +32,13 @@ use Psr\Log\NullLogger;
  * from one that worked, which is exactly how the old stub survived.
  */
 class TranslationServiceTest extends TestCase {
-	private IManager|MockObject $taskManager;
+	private IManager|Stub $taskManager;
 	private TranslationService $service;
 	/** @var array<int, array<string, mixed>> what was asked of the provider */
 	private array $asked = [];
 
 	protected function setUp(): void {
-		$this->taskManager = $this->createMock(IManager::class);
+		$this->taskManager = $this->createStub(IManager::class);
 		$this->service = new TranslationService($this->taskManager, new NullLogger());
 	}
 
@@ -242,7 +242,7 @@ class TranslationServiceTest extends TestCase {
 
 	public function testTheProviderIsNamed(): void {
 		$this->providerTranslates();
-		$provider = $this->createMock(IProvider::class);
+		$provider = $this->createStub(IProvider::class);
 		$provider->method('getName')->willReturn('DeepL');
 		$this->taskManager->method('getPreferredProvider')->willReturn($provider);
 

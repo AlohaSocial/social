@@ -36,13 +36,13 @@ class TimelineTest extends TestCase {
 	private const WIDE = '92233720368547758070';
 
 	private function timeline(array $options): ?ProbeOptions {
-		$userManager = $this->createMock(IUserManager::class);
-		$userManager->method('get')->willReturn($this->createMock(IUser::class));
-		$accountService = $this->createMock(AccountService::class);
+		$userManager = $this->createStub(IUserManager::class);
+		$userManager->method('get')->willReturn($this->createStub(IUser::class));
+		$accountService = $this->createStub(AccountService::class);
 		$accountService->method('getActorFromUserId')->willReturn(new Person());
 
 		$asked = null;
-		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest = $this->createStub(StreamRequest::class);
 		$streamRequest->method('getTimeline')->willReturnCallback(
 			static function (ProbeOptions $options) use (&$asked): array {
 				$asked = $options;
@@ -55,8 +55,8 @@ class TimelineTest extends TestCase {
 			$userManager,
 			$streamRequest,
 			$accountService,
-			$this->createMock(CacheActorService::class),
-			$this->createMock(ConfigService::class),
+			$this->createStub(CacheActorService::class),
+			$this->createStub(ConfigService::class),
 		);
 
 		try {

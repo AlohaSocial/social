@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\ProfileHighlightsService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * only ever holds a part of — is reported as not chartable rather than as
  * quiet.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ProfileHighlightsServiceTest extends TestCase {
 	private const WEEK = 7 * 24 * 3600;
 

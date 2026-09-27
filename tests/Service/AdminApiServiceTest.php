@@ -30,7 +30,9 @@ use OCP\IGroupManager;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Settings\IManager as ISettingsManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -44,22 +46,23 @@ use Psr\Log\NullLogger;
  * become which question, which source a page is read from, and that every
  * decision is taken by the service that already took it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AdminApiServiceTest extends TestCase {
 	private const LOCAL = 'https://cloud.example/users/alice';
 	private const REMOTE = 'https://remote.example/users/bob';
 	private const PURGED = 'https://evil.example/users/carol';
 
-	private IGroupManager|MockObject $groupManager;
-	private AccountService|MockObject $accountService;
-	private CacheActorService|MockObject $cacheActorService;
-	private ConfigService|MockObject $configService;
+	private IGroupManager|Stub $groupManager;
+	private AccountService|Stub $accountService;
+	private CacheActorService|Stub $cacheActorService;
+	private ConfigService|Stub $configService;
 	private FediverseService|MockObject $fediverseService;
 	private ModerationService|MockObject $moderationService;
 	private ReportService|MockObject $reportService;
 	private ReportsRequest|MockObject $reportsRequest;
-	private StreamRequest|MockObject $streamRequest;
-	private IUserManager|MockObject $userManager;
-	private ISettingsManager|MockObject $settingsManager;
+	private StreamRequest|Stub $streamRequest;
+	private IUserManager|Stub $userManager;
+	private ISettingsManager|Stub $settingsManager;
 
 	/** @var string[] the user ids the Social settings section is delegated to */
 	private array $delegatedTo = [];
@@ -86,17 +89,17 @@ class AdminApiServiceTest extends TestCase {
 	private string $accessType = 'all_but';
 
 	protected function setUp(): void {
-		$this->groupManager = $this->createMock(IGroupManager::class);
-		$this->accountService = $this->createMock(AccountService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->groupManager = $this->createStub(IGroupManager::class);
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
 		$this->reportService = $this->createMock(ReportService::class);
 		$this->reportsRequest = $this->createMock(ReportsRequest::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->userManager = $this->createMock(IUserManager::class);
-		$this->settingsManager = $this->createMock(ISettingsManager::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->userManager = $this->createStub(IUserManager::class);
+		$this->settingsManager = $this->createStub(ISettingsManager::class);
 
 		$this->userManager->method('get')->willReturnCallback(
 			function (string $userId): ?IUser {

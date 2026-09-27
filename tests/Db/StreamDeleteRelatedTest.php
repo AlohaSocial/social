@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Db\StreamRequest;
 use OCP\DB\IResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * remembers, so an imported post that was deleted could never be imported
  * again.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StreamDeleteRelatedTest extends TestCase {
 	/** @var array<string, string> table => the column the delete filtered on */
 	private array $deleted = [];
@@ -57,7 +59,7 @@ class StreamDeleteRelatedTest extends TestCase {
 		});
 		$qb->method('expr')->willReturn(new FakeExpressions());
 		$qb->method('createNamedParameter')->willReturn(':prims');
-		$none = $this->createMock(IResult::class);
+		$none = $this->createStub(IResult::class);
 		$none->method('fetchAll')->willReturn([]);
 		$qb->method('executeQuery')->willReturn($none);
 

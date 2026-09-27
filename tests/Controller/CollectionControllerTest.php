@@ -45,21 +45,21 @@ class CollectionControllerTest extends TestCase {
 	}
 
 	private function controller(): CollectionController {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getId')->willReturn('test');
 		$request->method('getHeader')->willReturn('');
 		$request->method('passesCSRFCheck')->willReturn(true);
 		$request->method('getParam')->willReturn('');
 		$request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
-		$userSession = $this->createMock(IUserSession::class);
+		$userSession = $this->createStub(IUserSession::class);
 		$userSession->method('getUser')->willReturn($user);
 
 		$viewer = new Person();
 		$viewer->setId('https://cloud.example/@alice');
-		$accountService = $this->createMock(AccountService::class);
+		$accountService = $this->createStub(AccountService::class);
 		$accountService->method('getActorFromUserId')->willReturn($viewer);
 
 		return new CollectionController(
@@ -67,11 +67,11 @@ class CollectionControllerTest extends TestCase {
 			$userSession,
 			new NullLogger(),
 			$accountService,
-			$this->createMock(ClientService::class),
-			$this->createMock(CacheActorService::class),
+			$this->createStub(ClientService::class),
+			$this->createStub(CacheActorService::class),
 			$this->collectionService,
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(PlaceService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(PlaceService::class),
 		);
 	}
 

@@ -33,10 +33,13 @@ use OCA\Social\Service\MiscService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class FollowInterfaceTest extends ActivityPubTestCase {
 	/** @var FollowsRequest&MockObject */
 	private $followsRequest;
@@ -44,7 +47,7 @@ class FollowInterfaceTest extends ActivityPubTestCase {
 	private $actorRelationRequest;
 	/** @var ActorsRequest&MockObject */
 	private $actorsRequest;
-	/** @var CacheActorService&MockObject */
+	/** @var CacheActorService&Stub */
 	private $cacheActorService;
 	/** @var AccountService&MockObject */
 	private $accountService;
@@ -52,7 +55,7 @@ class FollowInterfaceTest extends ActivityPubTestCase {
 	private $activityService;
 	/** @var MiscService&MockObject */
 	private $miscService;
-	private TimelineRevisionService|MockObject $timelineRevisionService;
+	private TimelineRevisionService|Stub $timelineRevisionService;
 	private FollowInterface $handler;
 
 	private Person $alice;
@@ -65,11 +68,11 @@ class FollowInterfaceTest extends ActivityPubTestCase {
 		$this->followsRequest = $this->createMock(FollowsRequest::class);
 		$this->actorRelationRequest = $this->createMock(ActorRelationRequest::class);
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->miscService = $this->createMock(MiscService::class);
-		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
+		$this->timelineRevisionService = $this->createStub(TimelineRevisionService::class);
 
 		$this->handler = new FollowInterface(
 			$this->followsRequest,

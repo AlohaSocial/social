@@ -34,23 +34,26 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class CheckServiceTest extends TestCase {
 	private IUserManager|MockObject $userManager;
 	private ICache|MockObject $cache;
-	private IConfig|MockObject $config;
+	private IConfig|Stub $config;
 	private IClient|MockObject $client;
-	private IRequest|MockObject $request;
-	private IURLGenerator|MockObject $urlGenerator;
+	private IRequest|Stub $request;
+	private IURLGenerator|Stub $urlGenerator;
 	private FollowsRequest|MockObject $followRequest;
 	private ActorsRequest|MockObject $actorsRequest;
-	private CacheActorsRequest|MockObject $cacheActorsRequest;
+	private CacheActorsRequest|Stub $cacheActorsRequest;
 	private StreamRequest|MockObject $streamRequest;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private MiscService|MockObject $miscService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private CheckService $service;
 	private ICacheFactory|MockObject $cacheFactory;
 	private IClientService|MockObject $clientService;
@@ -60,23 +63,23 @@ class CheckServiceTest extends TestCase {
 		$this->cache = $this->createMock(ICache::class);
 		$cacheFactory = $this->createMock(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($this->cache);
-		$this->config = $this->createMock(IConfig::class);
+		$this->config = $this->createStub(IConfig::class);
 		$this->client = $this->createMock(IClient::class);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
-		$this->request = $this->createMock(IRequest::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->request = $this->createStub(IRequest::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->followRequest = $this->createMock(FollowsRequest::class);
 		// The instance has one account, whose handle is deliberately not the
 		// user id the service below is built for: a handle is chosen at setup
 		// and the two need not match. Tests that want an instance with no
 		// account at all rebuild this.
 		$this->actorsRequest = $this->actorsHolding('wanderer');
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->miscService = $this->createMock(MiscService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->cacheFactory = $cacheFactory;
 		$this->clientService = $clientService;
 
@@ -133,14 +136,14 @@ class CheckServiceTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->expects($this->once())->method('createDistributed')
 			->with($this->stringContains('social'))
-			->willReturn($this->createMock(ICache::class));
+			->willReturn($this->createStub(ICache::class));
 
 		new CheckService(
 			$this->userManager,
 			'alice',
 			$factory,
 			$this->config,
-			$this->createMock(IClientService::class),
+			$this->createStub(IClientService::class),
 			$this->request,
 			$this->urlGenerator,
 			$this->followRequest,
@@ -799,9 +802,9 @@ class CheckServiceTest extends TestCase {
 	public function testCheckInstallationStatusRunsRepairsAndLoopbackFollows(): void {
 		$this->followRequest->method('getAll')->willReturn([]);
 		$this->streamRequest->method('getAll')->willReturn([]);
-		$alice = $this->createMock(IUser::class);
+		$alice = $this->createStub(IUser::class);
 		$alice->method('getUID')->willReturn('alice');
-		$bob = $this->createMock(IUser::class);
+		$bob = $this->createStub(IUser::class);
 		$bob->method('getUID')->willReturn('bob');
 		$this->userManager->method('search')->with('')->willReturn([$alice, $bob]);
 		$actor = new Person();

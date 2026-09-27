@@ -14,7 +14,9 @@ use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\MediaPurgeService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -22,16 +24,17 @@ use Psr\Log\NullLogger;
  * Taking stored media away: the files first, because the row is the only
  * thing that remembers their names.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MediaPurgeServiceTest extends TestCase {
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private CacheDocumentService|MockObject $cacheDocumentService;
+	private CacheDocumentService|Stub $cacheDocumentService;
 	/** @var list<string> what was removed, in order */
 	private array $removed = [];
 	private MediaPurgeService $service;
 
 	protected function setUp(): void {
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		$this->removed = [];
 		$this->cacheDocumentService->method('removeFromCache')->willReturnCallback(
 			function (string $name): void {

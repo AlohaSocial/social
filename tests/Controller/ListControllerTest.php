@@ -31,7 +31,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -44,6 +46,7 @@ use Psr\Log\NullLogger;
  * pagination cursor, the scopes, and — on every route that names a list — that
  * somebody else's list is a 404 and nothing at all is written.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ListControllerTest extends TestCase {
 	use TCacheActorServiceMock;
 
@@ -51,16 +54,16 @@ class ListControllerTest extends TestCase {
 	private const STRANGER = 'https://cloud.example/users/bob';
 	private const FOLLOWED = 'https://remote.example/users/carol';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private CacheActorService|MockObject $cacheActorService;
-	private ClientService|MockObject $clientService;
-	private FollowService|MockObject $followService;
-	private LinkPreviewService|MockObject $linkPreviewService;
-	private ListsRequest|MockObject $listsRequest;
+	private ClientService|Stub $clientService;
+	private FollowService|Stub $followService;
+	private LinkPreviewService|Stub $linkPreviewService;
+	private ListsRequest|Stub $listsRequest;
 	private GroupListService|MockObject $groupListService;
-	private IUserSession|MockObject $userSession;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -83,7 +86,7 @@ class ListControllerTest extends TestCase {
 	private bool $csrf = true;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -92,16 +95,16 @@ class ListControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn($this->person(self::VIEWER, 1));
 
-		$this->clientService = $this->createMock(ClientService::class);
-		$this->linkPreviewService = $this->createMock(LinkPreviewService::class);
+		$this->clientService = $this->createStub(ClientService::class);
+		$this->linkPreviewService = $this->createStub(LinkPreviewService::class);
 
 		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
@@ -128,7 +131,7 @@ class ListControllerTest extends TestCase {
 				return $actors;
 			});
 
-		$this->followService = $this->createMock(FollowService::class);
+		$this->followService = $this->createStub(FollowService::class);
 		$this->followService->method('getRelationshipWith')
 			->willReturnCallback(function (Person $target): Relationship {
 				$relationship = new Relationship($target->getNid());
@@ -162,7 +165,7 @@ class ListControllerTest extends TestCase {
 	 * is only ever reachable through the account that owns it.
 	 */
 	private function mockListsRequest(): void {
-		$this->listsRequest = $this->createMock(ListsRequest::class);
+		$this->listsRequest = $this->createStub(ListsRequest::class);
 
 		$this->listsRequest->method('getOwnedById')
 			->willReturnCallback(function (string $actorId, int $id): MastodonList {
@@ -264,7 +267,7 @@ class ListControllerTest extends TestCase {
 			$this->followService,
 			$this->linkPreviewService,
 			$this->listsRequest,
-			$this->createMock(PlaceService::class),
+			$this->createStub(PlaceService::class),
 			$this->groupListService
 		);
 	}
@@ -649,7 +652,7 @@ class ListControllerTest extends TestCase {
 		// most Nextcloud's dispatcher will pass through for a `limit` at all.
 		$this->given(4, self::VIEWER);
 		$asked = 0;
-		$this->listsRequest = $this->createMock(ListsRequest::class);
+		$this->listsRequest = $this->createStub(ListsRequest::class);
 		$this->listsRequest->method('getOwnedById')->willReturn($this->lists[4]);
 		$this->listsRequest->method('getMembers')
 			->willReturnCallback(function (MastodonList $list, int $limit) use (&$asked): array {

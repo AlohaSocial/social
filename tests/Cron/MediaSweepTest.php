@@ -15,24 +15,27 @@ use OCA\Social\Service\MediaPurgeService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\TimedJob;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class MediaSweepTest extends TestCase {
 	private MediaPurgeService|MockObject $mediaPurgeService;
 	private DocumentService|MockObject $documentService;
-	private LoggerInterface|MockObject $logger;
-	private IJobList|MockObject $jobList;
+	private LoggerInterface|Stub $logger;
+	private IJobList|Stub $jobList;
 	private MediaSweep $job;
 
 	protected function setUp(): void {
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1_757_937_600);
 		$this->mediaPurgeService = $this->createMock(MediaPurgeService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
-		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->jobList = $this->createMock(IJobList::class);
+		$this->logger = $this->createStub(LoggerInterface::class);
+		$this->jobList = $this->createStub(IJobList::class);
 
 		$this->job = new MediaSweep(
 			$time, $this->mediaPurgeService, $this->documentService, $this->logger

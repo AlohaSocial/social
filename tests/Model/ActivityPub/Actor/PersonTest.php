@@ -17,11 +17,13 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../TActivityPubMocks.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class PersonTest extends TestCase {
 	use TActivityPubMocks;
 

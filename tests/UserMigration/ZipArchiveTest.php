@@ -52,7 +52,7 @@ class ZipArchiveTest extends TestCase {
 		$zip = new ZipArchive();
 		$this->assertTrue($zip->open($this->path, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true);
 
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = (string)tempnam(sys_get_temp_dir(), 'social-zip-stream');
 			$this->tempFiles[] = $path;
@@ -192,7 +192,7 @@ class ZipArchiveTest extends TestCase {
 	 */
 	public function testCopyingAFolderIsRefusedAtBothEnds(): void {
 		[$zip, $destination] = $this->writing();
-		$folder = $this->createMock(Folder::class);
+		$folder = $this->createStub(Folder::class);
 
 		try {
 			$this->expectException(UserMigrationException::class);
@@ -210,7 +210,7 @@ class ZipArchiveTest extends TestCase {
 		[$zip, $source] = $this->reading();
 		try {
 			$this->expectException(UserMigrationException::class);
-			$source->copyToFolder($this->createMock(Folder::class), 'social');
+			$source->copyToFolder($this->createStub(Folder::class), 'social');
 		} finally {
 			$zip->close();
 		}

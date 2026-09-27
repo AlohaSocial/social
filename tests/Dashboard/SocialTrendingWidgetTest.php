@@ -15,26 +15,26 @@ use OCA\Social\Service\HashtagService;
 use OCP\Dashboard\IAPIWidgetV2;
 use OCP\IL10N;
 use OCP\IURLGenerator;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 class SocialTrendingWidgetTest extends TestCase {
-	/** @var IURLGenerator&MockObject */
+	/** @var IURLGenerator&Stub */
 	private $urlGenerator;
-	/** @var HashtagService&MockObject */
+	/** @var HashtagService&Stub */
 	private $hashtagService;
 	private SocialTrendingWidget $widget;
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$l10n->method('n')->willReturnCallback(
 			static fn (string $one, string $many, int $count): string
 				=> str_replace('%n', (string)$count, $count === 1 ? $one : $many)
 		);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->hashtagService = $this->createMock(HashtagService::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
 
 		$this->widget = new SocialTrendingWidget(
 			$l10n,

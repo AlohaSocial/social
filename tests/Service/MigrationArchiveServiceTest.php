@@ -19,7 +19,9 @@ use OCP\IUserManager;
 use OCP\UserMigration\IExportDestination;
 use OCP\UserMigration\IImportSource;
 use OCP\UserMigration\UserMigrationException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -32,22 +34,23 @@ use ZipArchive;
  * but the archive is a real zip, because the point of this class is the file
  * somebody downloads and hands back.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MigrationArchiveServiceTest extends TestCase {
-	private SocialMigrator|MockObject $migrator;
-	private IUserManager|MockObject $userManager;
-	private ITempManager|MockObject $tempManager;
+	private SocialMigrator|Stub $migrator;
+	private IUserManager|Stub $userManager;
+	private ITempManager|Stub $tempManager;
 	private MigrationArchiveService $service;
 	/** @var string[] */
 	private array $temporary = [];
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->migrator = $this->createMock(SocialMigrator::class);
+		$this->migrator = $this->createStub(SocialMigrator::class);
 		$this->migrator->method('getId')->willReturn('social');
 		$this->migrator->method('getVersion')->willReturn(1);
 
-		$this->userManager = $this->createMock(IUserManager::class);
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = tempnam(sys_get_temp_dir(), 'social-archive-test') . '.zip';
 			$this->temporary[] = $path;
@@ -55,7 +58,7 @@ class MigrationArchiveServiceTest extends TestCase {
 			return $path;
 		});
 
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValue')->willReturn('0.19.7');
 
 		$this->service = new MigrationArchiveService(

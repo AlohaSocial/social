@@ -13,7 +13,9 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RemoteMediaQuotaService;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -23,10 +25,11 @@ use PHPUnit\Framework\TestCase;
  * nothing bounded that by where it came from: one server posting large images
  * at a high rate fills the disk of every instance that follows anybody on it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RemoteMediaQuotaServiceTest extends TestCase {
 	private const MB = 1024 * 1024;
 
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private RemoteMediaQuotaService $service;
 
 	/** @var array<string, string> the app values */
@@ -37,7 +40,7 @@ class RemoteMediaQuotaServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
@@ -49,7 +52,7 @@ class RemoteMediaQuotaServiceTest extends TestCase {
 	}
 
 	private function cacheFactory(bool $available): ICacheFactory|MockObject {
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $k) => $this->store[$k] ?? null);
 		$cache->method('set')->willReturnCallback(function (string $k, $v): bool {
 			$this->store[$k] = $v;

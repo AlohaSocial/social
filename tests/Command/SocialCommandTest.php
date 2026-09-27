@@ -251,7 +251,7 @@ class SocialCommandTest extends TestCase {
 	 * The help line core's `Base` put on every command, still there.
 	 */
 	public function testHelpNamesTheDocumentation(): void {
-		$defaults = $this->createMock(Defaults::class);
+		$defaults = $this->createStub(Defaults::class);
 		$defaults->method('getDocBaseUrl')->willReturn('https://docs.nextcloud.com/server/35');
 		\OC::$server->register(Defaults::class, $defaults);
 
