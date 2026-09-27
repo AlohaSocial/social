@@ -6,22 +6,24 @@
 	<NcModal
 		v-if="open"
 		size="large"
-		:name="t('social', 'New short')"
+		:name="forStory ? t('social', 'Add to your story') : t('social', 'New short')"
 		:closeOnClickOutside="false"
 		@close="requestClose">
 		<div class="short" @dragover.prevent @drop.prevent="onDrop">
 			<!-- 1. where the video comes from -->
 			<div v-if="phase === 'choose'" class="short__choose">
 				<h2 class="short__title">
-					{{ t('social', 'Post a short') }}
+					{{ forStory ? t('social', 'Add to your story') : t('social', 'Post a short') }}
 				</h2>
 				<p class="short__lede">
-					{{ t('social', 'A video, watched full height, one after another. Upload one, drop one here, or record one now.') }}
+					{{ forStory
+						? t('social', 'For the people who follow you, gone after a day. Record a video, upload one, or post a picture or a few words.')
+						: t('social', 'A video, watched full height, one after another. Upload one, drop one here, or record one now.') }}
 				</p>
 				<input
 					ref="file"
 					type="file"
-					accept="video/mp4,video/webm,video/quicktime,video/*"
+					:accept="forStory ? 'video/mp4,video/webm,video/quicktime,video/*,image/*' : 'video/mp4,video/webm,video/quicktime,video/*'"
 					class="hidden-visually"
 					tabindex="-1"
 					aria-hidden="true"
@@ -29,7 +31,7 @@
 				<div class="short__sources">
 					<button type="button" class="short__source" @click="pickFile">
 						<IconUpload :size="36" />
-						<span class="short__source-name">{{ t('social', 'Upload a video') }}</span>
+						<span class="short__source-name">{{ forStory ? t('social', 'Upload') : t('social', 'Upload a video') }}</span>
 						<span class="short__source-hint">{{ t('social', 'or drop it here') }}</span>
 					</button>
 					<button
@@ -50,6 +52,17 @@
 						<span class="short__source-name">{{ t('social', 'Record') }}</span>
 						<span class="short__source-hint">{{ t('social', 'needs a secure (https) connection') }}</span>
 					</div>
+					<!-- a picture with stickers, or words on a card, are the
+					     story editor's; this dialog is for video -->
+					<button
+						v-if="forStory"
+						type="button"
+						class="short__source short__source--other"
+						@click="$emit('other', null)">
+						<IconImageText :size="36" />
+						<span class="short__source-name">{{ t('social', 'Picture or words') }}</span>
+						<span class="short__source-hint">{{ t('social', 'with stickers, or on a card') }}</span>
+					</button>
 				</div>
 				<p v-if="cameraError" class="short__error" role="alert">
 					{{ cameraError }}
@@ -78,7 +91,7 @@
 				<div class="short__rec-controls">
 					<div class="short__pills" role="radiogroup" :aria-label="t('social', 'Longest recording')">
 						<button
-							v-for="option in RECORD_LIMITS"
+							v-for="option in recordLimits"
 							:key="option"
 							type="button"
 							role="radio"
@@ -226,7 +239,7 @@
 							class="short__caption"
 							rows="3"
 							:maxlength="maxCharacters"
-							:placeholder="t('social', 'Say what it is. Add #hashtags so people find it.')" />
+							:placeholder="forStory ? t('social', 'Optional') : t('social', 'Say what it is. Add #hashtags so people find it.')" />
 						<span class="short__counter" :class="{ 'short__counter--near': caption.length > maxCharacters * 0.9 }">
 							{{ caption.length }} / {{ maxCharacters }}
 						</span>
@@ -243,7 +256,11 @@
 						</div>
 					</section>
 
-					<section class="short__section">
+					<p v-if="forStory" class="short__note short__note--plain">
+						{{ t('social', 'Your followers can watch it for a day.') }}
+					</p>
+
+					<section v-if="!forStory" class="short__section">
 						<h3 id="short-audience" class="short__heading">
 							{{ t('social', 'Who can watch') }}
 						</h3>
@@ -263,7 +280,7 @@
 						</div>
 					</section>
 
-					<section class="short__section">
+					<section v-if="!forStory" class="short__section">
 						<NcCheckboxRadioSwitch v-model="sensitive" type="switch">
 							{{ t('social', 'Sensitive content: hide it until somebody chooses to watch') }}
 						</NcCheckboxRadioSwitch>
@@ -330,6 +347,7 @@ import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconMoon from 'vue-material-design-icons/WeatherNight.vue'
 import IconRecord from 'vue-material-design-icons/RecordCircleOutline.vue'
 import IconSend from 'vue-material-design-icons/Send.vue'
+import IconImageText from 'vue-material-design-icons/ImageText.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
@@ -354,6 +372,9 @@ import {
 
 /** how many stills the trim bar shows */
 const FRAMES = 10
+
+/** the longest a story's caption may be, as the story editor has it */
+const STORY_CAPTION_MAX = 500
 
 /** how far one arrow key moves a trim handle, in seconds; shift moves five times as far */
 const NUDGE = 0.5
@@ -382,6 +403,7 @@ export default {
 		IconCameraFlip,
 		IconRecord,
 		IconSend,
+		IconImageText,
 		IconUpload,
 		IconVolumeHigh,
 		IconVolumeOff,
@@ -392,9 +414,20 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		/**
+		 * 'short' posts the video as a post; 'story' adds it to the writer's
+		 * story, for followers and for a day, and hands a picture or a text
+		 * story to the story editor through `other`.
+		 */
+		mode: {
+			type: String,
+			default: 'short',
+			validator: (value) => ['short', 'story'].includes(String(value)),
+		},
 	},
 
-	emits: ['update:open', 'posted'],
+	emits: ['update:open', 'posted', 'other'],
 
 	data() {
 		serial++
@@ -443,7 +476,6 @@ export default {
 			counter: 0,
 			coverId: `short-cover-${serial}`,
 			captionId: `short-caption-${serial}`,
-			RECORD_LIMITS,
 		}
 	},
 
@@ -473,9 +505,19 @@ export default {
 			return this.duration > 0 && isTrimmed(this.trim, this.duration)
 		},
 
+		/** @return {boolean} whether this is adding to a story rather than posting */
+		forStory() {
+			return this.mode === 'story'
+		},
+
 		/** @return {number} how long a caption may be */
 		maxCharacters() {
-			return knownLimits().maxCharacters
+			return this.forStory ? STORY_CAPTION_MAX : knownLimits().maxCharacters
+		},
+
+		/** @return {number[]} the recording limits on offer; a story is a minute at most */
+		recordLimits() {
+			return this.forStory ? RECORD_LIMITS.filter((seconds) => seconds <= 60) : RECORD_LIMITS
 		},
 
 		/** @return {object[]} the audiences a short can have */
@@ -500,7 +542,9 @@ export default {
 	watch: {
 		open(now) {
 			if (now) {
-				this.loadSuggestions()
+				if (!this.forStory) {
+					this.loadSuggestions()
+				}
 			} else {
 				this.reset()
 			}
@@ -514,7 +558,7 @@ export default {
 	},
 
 	mounted() {
-		if (this.open) {
+		if (this.open && !this.forStory) {
 			this.loadSuggestions()
 		}
 	},
@@ -562,7 +606,7 @@ export default {
 			if (this.phase !== 'choose') {
 				return
 			}
-			const dropped = [...(event.dataTransfer?.files ?? [])].find((one) => one.type.startsWith('video/'))
+			const dropped = [...(event.dataTransfer?.files ?? [])].find((one) => one.type.startsWith('video/') || (this.forStory && one.type.startsWith('image/')))
 			if (dropped) {
 				this.useFile(dropped)
 			}
@@ -574,6 +618,10 @@ export default {
 		 * @param {File} file the video
 		 */
 		useFile(file) {
+			if (this.forStory && file.type.startsWith('image/')) {
+				this.$emit('other', file)
+				return
+			}
 			if (!file.type.startsWith('video/')) {
 				showError(t('social', 'A short has to be a video'))
 				return
@@ -868,6 +916,19 @@ export default {
 
 				this.busy = 'post'
 				this.progress = 1
+				if (this.forStory) {
+					const { data } = await axios.post(generateUrl('apps/social/api/v1/stories'), {
+						media_id: media.id,
+						caption: this.caption.trim(),
+						// how long a picture is shown; a video plays for as long as it is
+						duration: 5,
+					})
+					feel('post')
+					showSuccess(t('social', 'Your story is up for a day'))
+					this.$emit('posted', data)
+					this.$emit('update:open', false)
+					return
+				}
 				const created = await this.timelineStore.post({
 					status: this.caption.trim(),
 					media_ids: [media.id],
@@ -887,7 +948,9 @@ export default {
 				this.$emit('update:open', false)
 			} catch (error) {
 				logger.error('the short could not be posted', { error })
-				showError(t('social', 'The short could not be posted'))
+				showError(this.forStory
+					? (error?.response?.data?.error || t('social', 'Could not post the story'))
+					: t('social', 'The short could not be posted'))
 			} finally {
 				this.busy = ''
 			}
@@ -1016,6 +1079,10 @@ export default {
 	&--record {
 		border-style: solid;
 		color: #fe2c55;
+	}
+
+	&--other {
+		border-style: solid;
 	}
 
 	&--unavailable {
@@ -1362,6 +1429,11 @@ export default {
 	strong {
 		color: var(--color-main-text);
 	}
+}
+
+.short__note.short__note--plain {
+	margin: 0;
+	color: var(--color-text-maxcontrast);
 }
 
 .short__note {

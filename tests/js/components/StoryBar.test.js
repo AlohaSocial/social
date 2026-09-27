@@ -27,7 +27,8 @@ function story(id, account, seen = false) {
 }
 
 const StoryViewerStub = { name: 'StoryViewer', props: ['groups', 'start'], emits: ['close', 'seen', 'deleted'], template: '<div class="viewer-stub" :data-start="start" />' }
-const StoryComposerStub = { name: 'StoryComposerDialog', props: ['open'], emits: ['update:open', 'posted'], template: '<div class="composer-stub" />' }
+const StoryComposerStub = { name: 'StoryComposerDialog', props: ['open', 'initialFile'], emits: ['update:open', 'posted'], template: '<div class="composer-stub" />' }
+const ShortComposerStub = { name: 'ShortComposerDialog', props: ['open', 'mode'], emits: ['update:open', 'posted', 'other'], template: '<div class="short-stub" />' }
 
 function mountBar(stories, { current = alice } = {}) {
 	get.mockResolvedValue({ data: stories })
@@ -42,7 +43,7 @@ function mountBar(stories, { current = alice } = {}) {
 	return mount(StoryBar, {
 		global: {
 			plugins: [pinia],
-			stubs: { StoryViewer: StoryViewerStub, StoryComposerDialog: StoryComposerStub, ActorAvatar: true },
+			stubs: { StoryViewer: StoryViewerStub, StoryComposerDialog: StoryComposerStub, ShortComposerDialog: ShortComposerStub, ActorAvatar: true },
 		},
 	})
 }
@@ -65,7 +66,7 @@ describe('StoryBar', () => {
 		expect(tiles[2].classes()).not.toContain('story-bar__tile--unseen')
 	})
 
-	it('keeps the reader\'s own place even with nothing in it, and opens the composer from it', async () => {
+	it('keeps the reader\'s own place even with nothing in it, and opens the short composer from it', async () => {
 		const wrapper = mountBar([story('2', bob)])
 		await flushPromises()
 
@@ -73,8 +74,25 @@ describe('StoryBar', () => {
 		expect(own.classes()).toContain('story-bar__tile--empty')
 		await own.trigger('click')
 
-		expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).exists()).toBe(true)
+		const composer = wrapper.findComponent({ name: 'ShortComposerDialog' })
+		expect(composer.exists()).toBe(true)
+		expect(composer.props('mode')).toBe('story')
+		expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).exists()).toBe(false)
 		expect(wrapper.findComponent({ name: 'StoryViewer' }).exists()).toBe(false)
+	})
+
+	/** a picture or a text story is the story editor's, which has the stickers and the cards */
+	it('hands a picture on to the story editor', async () => {
+		const wrapper = mountBar([])
+		await flushPromises()
+		await wrapper.find('.story-bar__add').trigger('click')
+
+		const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
+		wrapper.findComponent({ name: 'ShortComposerDialog' }).vm.$emit('other', picture)
+		await flushPromises()
+
+		expect(wrapper.findComponent({ name: 'ShortComposerDialog' }).exists()).toBe(false)
+		expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).props('initialFile')).toBe(picture)
 	})
 
 	it('plays the tapped account\'s stories and lets the viewer\'s "seen" take the ring off', async () => {
@@ -97,7 +115,7 @@ describe('StoryBar', () => {
 		await flushPromises()
 
 		await wrapper.find('.story-bar__add').trigger('click')
-		wrapper.findComponent({ name: 'StoryComposerDialog' }).vm.$emit('posted', story('9', alice))
+		wrapper.findComponent({ name: 'ShortComposerDialog' }).vm.$emit('posted', story('9', alice))
 		await flushPromises()
 
 		expect(wrapper.findAll('.story-bar__tile')[0].classes()).not.toContain('story-bar__tile--empty')
@@ -110,7 +128,7 @@ describe('StoryBar', () => {
 		// no account in the store at all: the request that fills it may not
 		// have come back, and the bar must not wait for it
 		const wrapper = mount(StoryBar, {
-			global: { plugins: [pinia], stubs: { StoryViewer: StoryViewerStub, StoryComposerDialog: StoryComposerStub, ActorAvatar: true } },
+			global: { plugins: [pinia], stubs: { StoryViewer: StoryViewerStub, StoryComposerDialog: StoryComposerStub, ShortComposerDialog: ShortComposerStub, ActorAvatar: true } },
 		})
 		await flushPromises()
 
@@ -126,7 +144,7 @@ describe('StoryBar', () => {
 		useAccountStore().addAccount({ actorId: alice.url, data: alice })
 		useAccountStore().setCurrentAccount('alice@cloud.example.org')
 
-		const wrapper = mount(StoryBar, { global: { plugins: [pinia], stubs: { StoryViewer: true, StoryComposerDialog: true, ActorAvatar: true } } })
+		const wrapper = mount(StoryBar, { global: { plugins: [pinia], stubs: { StoryViewer: true, StoryComposerDialog: true, ShortComposerDialog: true, ActorAvatar: true } } })
 		await flushPromises()
 
 		expect(wrapper.findAll('.story-bar__tile')).toHaveLength(1)

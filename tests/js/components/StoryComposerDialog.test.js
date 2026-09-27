@@ -36,7 +36,7 @@ const NcDialogStub = {
 		+ '<button v-for="(button, index) in buttons" :key="index" :class="\'nc-dialog__button--\' + index" :disabled="button.disabled" @click="button.callback()">{{ button.label }}</button><slot /></div>',
 }
 
-function mountDialog() {
+function mountDialog(props = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
 	const store = useTimelineStore()
@@ -51,7 +51,7 @@ function mountDialog() {
 	globalThis.URL.revokeObjectURL = () => {}
 
 	const wrapper = mount(StoryComposerDialog, {
-		props: { open: true },
+		props: { open: true, ...props },
 		global: { plugins: [pinia], stubs: { NcDialog: NcDialogStub } },
 	})
 
@@ -78,6 +78,17 @@ describe('StoryComposerDialog', () => {
 
 		expect(input.attributes('tabindex')).toBe('-1')
 		expect(input.attributes('aria-hidden')).toBe('true')
+	})
+
+	/** the video dialog on the story bar hands a picture on to this one */
+	it('starts from a picture it was handed', async () => {
+		const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
+		const { wrapper } = mountDialog({ initialFile: picture })
+		await flushPromises()
+
+		expect(wrapper.vm.file).toBe(picture)
+		expect(wrapper.find('.story-composer__pick').exists()).toBe(false)
+		expect(wrapper.find('.nc-dialog__button--1').attributes('disabled')).toBeUndefined()
 	})
 
 	it('cannot post before a picture was chosen', () => {

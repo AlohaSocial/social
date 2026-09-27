@@ -14,7 +14,10 @@ import { feel } from '../../../src/services/senses.js'
 import { trimVideo } from '../../../src/utils/shortVideo.js'
 
 vi.mock('@nextcloud/axios', () => ({
-	default: { get: vi.fn(() => Promise.resolve({ data: [{ name: 'dance' }, { name: 'cats' }] })) },
+	default: {
+		get: vi.fn(() => Promise.resolve({ data: [{ name: 'dance' }, { name: 'cats' }] })),
+		post: vi.fn(() => Promise.resolve({ data: { id: 'story1' } })),
+	},
 }))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -42,7 +45,7 @@ const stubs = {
 	},
 }
 
-function mountDialog() {
+function mountDialog(props = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
 	const store = useTimelineStore()
@@ -50,7 +53,7 @@ function mountDialog() {
 	store.post = vi.fn(async () => ({ id: 's1' }))
 
 	const wrapper = mount(ShortComposerDialog, {
-		props: { open: true },
+		props: { open: true, ...props },
 		global: { plugins: [pinia], stubs },
 	})
 
@@ -290,6 +293,49 @@ describe('ShortComposerDialog', () => {
 		expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:video')
 		expect(wrapper.vm.phase).toBe('choose')
 		expect(wrapper.vm.caption).toBe('')
+	})
+
+	describe('as a story', () => {
+		it('says it is a story, and offers a picture or words beside the video', async () => {
+			const { wrapper } = mountDialog({ mode: 'story' })
+			await flushPromises()
+
+			expect(wrapper.find('.modal-stub').attributes('data-name')).toBe('Add to your story')
+			expect(axios.get).not.toHaveBeenCalled()
+			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
+			expect(wrapper.emitted('other')[0]).toEqual([null])
+		})
+
+		it('passes a picture on rather than refusing it', async () => {
+			const { wrapper } = mountDialog({ mode: 'story' })
+			const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
+			const input = wrapper.find('input[type="file"]')
+			expect(input.attributes('accept')).toContain('image/*')
+			Object.defineProperty(input.element, 'files', { value: [picture] })
+			await input.trigger('change')
+
+			expect(showError).not.toHaveBeenCalled()
+			expect(wrapper.emitted('other')[0]).toEqual([picture])
+		})
+
+		it('adds the video to the story, not to a timeline', async () => {
+			const { wrapper, store } = mountDialog({ mode: 'story' })
+			await withVideo(wrapper)
+			await wrapper.find('textarea').setValue(' at the lake ')
+
+			expect(wrapper.find('textarea').attributes('maxlength')).toBe('500')
+			expect(button(wrapper, 'Followers')).toBeUndefined()
+			expect(wrapper.find('.switch').exists()).toBe(false)
+			await button(wrapper, 'Post').trigger('click')
+			await flushPromises()
+
+			expect(store.createMedia).toHaveBeenCalled()
+			expect(store.post).not.toHaveBeenCalled()
+			expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories', { media_id: 'm1', caption: 'at the lake', duration: 5 })
+			expect(showSuccess).toHaveBeenCalledWith('Your story is up for a day')
+			expect(wrapper.emitted('posted')[0]).toEqual([{ id: 'story1' }])
+			expect(wrapper.emitted('update:open')[0]).toEqual([false])
+		})
 	})
 
 	describe('recording', () => {
