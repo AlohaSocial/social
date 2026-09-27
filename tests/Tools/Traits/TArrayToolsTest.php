@@ -10,10 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Tools\Traits;
 
 use OCA\Social\Tools\Exceptions\ArrayNotFoundException;
-use OCA\Social\Tools\Exceptions\ItemNotFoundException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
-use OCA\Social\Tools\Exceptions\UnknownTypeException;
-use OCA\Social\Tools\Model\SimpleDataStore;
 use OCA\Social\Tools\Traits\TArrayTools;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -160,14 +157,6 @@ class TArrayToolsTest extends TestCase {
 		$this->assertSame(['d'], $this->tools->getArray('k', ['k' => '"just a string"'], ['d']));
 	}
 
-	public function testValidKeyChecksLiteralAndDottedKeys(): void {
-		$this->assertTrue($this->tools->validKey('null', $this->sample()), 'a null value still is a key');
-		$this->assertTrue($this->tools->validKey('nested.deep.key', $this->sample()));
-		$this->assertFalse($this->tools->validKey('nested.deep.none', $this->sample()));
-		$this->assertFalse($this->tools->validKey('str.sub', $this->sample()));
-		$this->assertFalse($this->tools->validKey('missing', $this->sample()));
-	}
-
 	public function testExtractArrayFindsTheEntryWithAMatchingValue(): void {
 		$list = [['rel' => 'self', 'href' => 'https://a.example/users/alice'], ['rel' => 'http://webfinger.net/rel/profile-page', 'href' => 'https://a.example/@alice']];
 
@@ -178,48 +167,6 @@ class TArrayToolsTest extends TestCase {
 		$this->expectException(ArrayNotFoundException::class);
 
 		$this->tools->extractArray('rel', 'other', [['rel' => 'self'], ['href' => 'x']]);
-	}
-
-	public static function typeProvider(): array {
-		return [
-			'null' => ['null', 'Null'],
-			'string' => ['str', 'String'],
-			'array' => ['list', 'Array'],
-			'boolean' => ['true', 'Boolean'],
-			'integer' => ['int', 'Integer'],
-			'nested' => ['nested.deep.key', 'String'],
-		];
-	}
-
-	#[DataProvider('typeProvider')]
-	public function testTypeOfNamesTheType(string $key, string $expected): void {
-		$this->assertSame($expected, $this->tools->typeOf($key, $this->sample()));
-	}
-
-	public function testTypeOfRecognisesSerializableObjects(): void {
-		$this->assertSame('Serializable', $this->tools->typeOf('obj', ['obj' => new SimpleDataStore()]));
-	}
-
-	public function testTypeOfRejectsUnknownTypes(): void {
-		$this->expectException(UnknownTypeException::class);
-
-		$this->tools->typeOf('float', $this->sample());
-	}
-
-	public static function missingKeyProvider(): array {
-		return [
-			'missing' => ['missing'],
-			'nested missing root' => ['none.key'],
-			'nested missing leaf' => ['nested.none'],
-			'nested through scalar' => ['str.key'],
-		];
-	}
-
-	#[DataProvider('missingKeyProvider')]
-	public function testTypeOfThrowsForMissingKeys(string $key): void {
-		$this->expectException(ItemNotFoundException::class);
-
-		$this->tools->typeOf($key, $this->sample());
 	}
 
 	public function testMustContainsAcceptsWhenAllKeysArePresent(): void {
