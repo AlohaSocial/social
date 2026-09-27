@@ -504,7 +504,6 @@ import SchedulePicker from './SchedulePicker.vue'
 import { defineAsyncComponent } from 'vue'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError, showSuccess } from '../../services/toast.js'
-import he from 'he'
 import FocusOnCreate from '../../directives/focusOnCreate.js'
 import axios from '@nextcloud/axios'
 import ActorAvatar from '../ActorAvatar.vue'
@@ -534,7 +533,8 @@ import { useAccountStore } from '../../store/account.js'
 import { useTimelineStore } from '../../store/timeline.js'
 import { applyFilterToFile } from '../../utils/imageFilters.js'
 import { focusParam, isFocalPoint } from '../../utils/focalPoint.js'
-import { htmlToPlainText } from '../../utils/plainText.js'
+import { editableToPlainText, htmlToPlainText } from '../../utils/plainText.js'
+import { mentionPills, participantsOf } from '../../utils/replyMentions.js'
 import { defaultLanguage, isLanguageCode, rememberedLanguage } from '../../utils/postLanguage.js'
 import { fullDateTime } from '../../utils/relativeTime.js'
 import { datePickerModule, isTooSoon, proposedSchedule } from '../../utils/schedule.js'
@@ -1287,7 +1287,7 @@ export default {
 			// everyone in the conversation, not only whoever wrote the post
 			// being answered: a reply that named one of three people reached
 			// one of three people
-			this.prefillMessageWithMentions(this.participantsOf(data))
+			this.prefillMessageWithMentions(participantsOf(data, this.currentUser.uid, this.hostname))
 			this.visibility = data.visibility
 			this.visibilityChosen = true
 			// somebody pressed reply, which is a request to write one — including
@@ -1522,64 +1522,8 @@ export default {
 				return
 			}
 
-			const nodes = accounts.flatMap((account) => {
-				const mention = document.createElement('span')
-				mention.className = 'mention'
-				mention.contentEditable = 'false'
-
-				const link = document.createElement('a')
-				link.href = account.url
-				link.target = '_blank'
-
-				// a Mention entity off a post carries no picture; the pill
-				// then carries none either rather than a broken one
-				if (account.avatar) {
-					const avatar = document.createElement('img')
-					avatar.src = account.avatar
-					link.append(avatar)
-				}
-				link.append(document.createTextNode(`@${this.fullHandle(account.acct)}`))
-				mention.append(link)
-
-				return [mention, document.createTextNode('\u00a0')]
-			})
-
-			this.inputElement().replaceChildren(...nodes)
+			this.inputElement().replaceChildren(...mentionPills(accounts, this.hostname))
 			this.updateStatusContent()
-		},
-
-		/**
-		 * @param {string} acct a handle, with or without its host
-		 * @return {string} the handle with its host, the way a mention is typed
-		 */
-		fullHandle(acct) {
-			return acct.includes('@') ? acct : `${acct}@${this.hostname}`
-		},
-
-		/**
-		 * Everyone a reply to this post should reach: its author, then
-		 * everyone it mentioned, each once, and never the reader — a reply
-		 * that addresses its own author is talking to itself.
-		 *
-		 * @param {object} post the post being answered, as the timeline holds it
-		 * @return {Array<{acct: string, url: string, avatar?: string}>}
-		 */
-		participantsOf(post) {
-			const self = `${this.currentUser.uid}@${this.hostname}`.toLowerCase()
-			const seen = new Set()
-
-			return [post.account, ...(Array.isArray(post.mentions) ? post.mentions : [])]
-				.filter((account) => typeof account?.acct === 'string' && account.acct !== '')
-				.filter((account) => {
-					const handle = this.fullHandle(account.acct).toLowerCase()
-					if (handle === self || seen.has(handle)) {
-						return false
-					}
-
-					seen.add(handle)
-
-					return true
-				})
 		},
 
 		updateStatusContent() {
@@ -1595,17 +1539,7 @@ export default {
 		 * @return {string}
 		 */
 		plainText() {
-			const input = this.inputElement()
-			if (input === undefined || input === null) {
-				return ''
-			}
-
-			const element = /** @type {HTMLElement} */ (input.cloneNode(true))
-			Array.from(element.getElementsByClassName('emoji')).forEach((emoji) => {
-				emoji.replaceWith(document.createTextNode(emoji.getAttribute('alt') ?? ''))
-			})
-
-			return he.decode(nodeToPlainText(element).trim())
+			return editableToPlainText(this.inputElement())
 		},
 
 		/**
@@ -2729,44 +2663,6 @@ function rememberedVisibility() {
 	}
 
 	return isKnownVisibility(remembered) ? remembered : ''
-}
-
-/**
- * What an element of the editable box says, as plain text.
- *
- * @param {Node} node the element
- * @return {string}
- */
-function nodeToPlainText(node) {
-	let text = ''
-	for (const child of Array.from(node.childNodes)) {
-		if (child.nodeType === Node.TEXT_NODE) {
-			text += child.textContent || ''
-			continue
-		}
-
-		if (child.nodeType !== Node.ELEMENT_NODE) {
-			continue
-		}
-
-		const element = /** @type {Element} */ (child)
-		if (element.tagName === 'BR') {
-			text += '\n'
-			continue
-		}
-
-		const isBlock = ['DIV', 'P', 'LI', 'BLOCKQUOTE', 'PRE'].includes(element.tagName)
-		if (isBlock && text !== '' && !text.endsWith('\n')) {
-			text += '\n'
-		}
-
-		text += nodeToPlainText(element)
-		if (isBlock && !text.endsWith('\n')) {
-			text += '\n'
-		}
-	}
-
-	return text
 }
 </script>
 
