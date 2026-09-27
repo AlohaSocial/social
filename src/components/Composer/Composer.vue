@@ -615,16 +615,6 @@ function contentWarningPresets() {
 }
 
 /**
- * The emoji picker's module, fetched at most once.
- *
- * It carries the whole emoji set — most of a megabyte of source — so it is its
- * own chunk and arrives when somebody asks for an emoji rather than with every
- * composer.
- *
- * @return {Promise<object>} the module
- */
-
-/**
  * The shared picture library, fetched when somebody first asks for it.
  *
  * Same reason as the emoji and date pickers: it brings `NcTextField` with it, and
@@ -1058,7 +1048,6 @@ export default {
 			return Object.values(this.attachments).some((attachment) => attachment.failed !== true && attachment.data === null)
 		},
 
-		/** @return {string[]} the ids the post will carry */
 		/**
 		 * Whether this post is a video: one attachment, and it a video.
 		 *
@@ -1075,6 +1064,7 @@ export default {
 					|| (attachments[0].data?.media_type || '').startsWith('video/'))
 		},
 
+		/** @return {string[]} the ids the post will carry */
 		mediaIds() {
 			return Object.values(this.attachments)
 				.map((attachment) => attachment.data?.id)
@@ -2027,7 +2017,7 @@ export default {
 			}
 
 			this.uploading = true
-			this.progressLabel = t('social', 'Attaching…')
+			this.progressLabel = translate('social', 'Attaching…')
 			const mediaData = await this.timelineStore.createMediaFromGif({ slug: gif.slug })
 			this.uploading = false
 
@@ -2096,12 +2086,6 @@ export default {
 			this.picking = false
 		},
 
-		/**
-		 * Previews each file, uploads it, and remembers what came back. The one
-		 * road in: the file dialog, a drop and a paste all arrive here.
-		 *
-		 * @param {File[]} allFiles the files to attach, in order
-		 */
 		/**
 		 * Bakes a filter into an attachment and replaces the uploaded copy.
 		 *
@@ -2181,6 +2165,12 @@ export default {
 			}
 		},
 
+		/**
+		 * Previews each file, uploads it, and remembers what came back. The one
+		 * road in: the file dialog, a drop and a paste all arrive here.
+		 *
+		 * @param {File[]} allFiles the files to attach, in order
+		 */
 		async attachFiles(allFiles) {
 			const files = this.roomFor(allFiles)
 			this.progressLabel = translate('social', 'Uploading…')
@@ -2445,25 +2435,6 @@ export default {
 			eventBus.emit('post-published', created)
 		},
 
-		/**
-		 * Presses or releases the clock. Pressing it fetches the picker and
-		 * proposes an hour from now, rounded to the picker's step, so there is
-		 * a time to move rather than a blank to fill.
-		 */
-		/**
-		 * Presses or releases the pin. Releasing it drops the place as well:
-		 * a pin that is not pressed says the post has no place, and it should
-		 * mean it.
-		 */
-		/**
-		 * Plays the games in a post where the writer can watch: each one
-		 * tumbles through what it could land on for half a second and then
-		 * lands on what it did. The result was decided before the tumble
-		 * started; this is only the showing of it.
-		 *
-		 * @param {Array<{ kind: string, result: string }>} results what was played
-		 * @return {Promise<void>}
-		 */
 		/** @param {object} option a background @return {string} it as CSS */
 		backgroundOf(option) {
 			return gradientCss(option)
@@ -2495,6 +2466,15 @@ export default {
 			return media.id
 		},
 
+		/**
+		 * Plays the games in a post where the writer can watch: each one
+		 * tumbles through what it could land on for half a second and then
+		 * lands on what it did. The result was decided before the tumble
+		 * started; this is only the showing of it.
+		 *
+		 * @param {Array<{ kind: string, result: string }>} results what was played
+		 * @return {Promise<void>}
+		 */
 		async roll(results) {
 			const icons = { dice: '🎲', flip: '🪙', pick: '🎯' }
 			const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
@@ -2517,6 +2497,11 @@ export default {
 			this.rolling = []
 		},
 
+		/**
+		 * Presses or releases the pin. Releasing it drops the place as well:
+		 * a pin that is not pressed says the post has no place, and it should
+		 * mean it.
+		 */
 		togglePlace() {
 			this.placing = !this.placing
 			if (!this.placing) {
@@ -2524,6 +2509,11 @@ export default {
 			}
 		},
 
+		/**
+		 * Presses or releases the clock. Pressing it fetches the picker and
+		 * proposes an hour from now, rounded to the picker's step, so there is
+		 * a time to move rather than a blank to fill.
+		 */
 		async toggleSchedule() {
 			if (this.scheduling) {
 				this.scheduling = false
@@ -2624,14 +2614,6 @@ export default {
 		},
 
 		/**
-		 * Remembers what an attachment shows. Kept locally while the post is
-		 * being written and sent when it goes, rather than on every keystroke.
-		 *
-		 * @param {object} update what changed
-		 * @param {string} update.key which attachment
-		 * @param {string} update.description what it shows
-		 */
-		/**
 		 * Sends whatever descriptions were written, once, as the post goes.
 		 *
 		 * Saving per keystroke would be a request per letter; saving here means
@@ -2671,6 +2653,14 @@ export default {
 			await this.timelineStore.describeMedia({ id: attachment.data.id, description: text })
 		},
 
+		/**
+		 * Remembers what an attachment shows. Kept locally while the post is
+		 * being written and sent when it goes, rather than on every keystroke.
+		 *
+		 * @param {object} update what changed
+		 * @param {string} update.key which attachment
+		 * @param {string} update.description what it shows
+		 */
 		describeAttachment({ key, description }) {
 			if (this.attachments[key] === undefined) {
 				return

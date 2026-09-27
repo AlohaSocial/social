@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+let picker = null
+
 /**
  * The one place the emoji picker is imported from.
  *
@@ -20,11 +22,6 @@
  * through this module keeps it one site and one chunk.
  *
  * @return {Promise<object>} the picker module, fetched once per page
- */
-let picker = null
-
-/**
- *
  */
 export function emojiPickerModule() {
 	if (picker === null) {
