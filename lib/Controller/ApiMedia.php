@@ -486,50 +486,6 @@ trait ApiMedia {
 	// --- where somebody stopped watching ----------------------------------
 
 	/**
-	 * Remembers where the reader got to in a video.
-	 *
-	 * A two-hour talk watched in three sittings is three sittings of finding
-	 * the place again, which is what this is for. It is a fact about the
-	 * reader: never federated, never shown to anybody else, never counted into
-	 * anything.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	// a player reports as it goes, so this is asked for often and is cheap
-	#[AnonRateLimit(limit: 600, period: 60)]
-	#[UserRateLimit(limit: 600, period: 60)]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1/statuses/{nid}/watched')]
-	public function statusWatched(int|string $nid, int $position = 0, int $duration = 0): DataResponse {
-		try {
-			$this->initViewer(true);
-			$post = $this->streamService->getStreamByNid($nid);
-			$this->watchService->remember($post, $this->viewer, $position, $duration);
-
-			return new DataResponse([], Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/** Takes a video off the reader's own "continue watching" list. */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 60, period: 3600)]
-	#[UserRateLimit(limit: 60, period: 3600)]
-	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/statuses/{nid}/watched')]
-	public function statusUnwatched(int|string $nid): DataResponse {
-		try {
-			$this->initViewer(true);
-			$post = $this->streamService->getStreamByNid($nid);
-			$this->watchService->forget($post, $this->viewer);
-
-			return new DataResponse([], Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
-
-	/**
 	 * The videos the reader was in the middle of, newest first.
 	 *
 	 * Neither the ones they barely started nor the ones they finished: a row

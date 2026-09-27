@@ -189,6 +189,31 @@ class NotificationController extends ClientApiController {
 		}
 	}
 
+	/**
+	 * What this account does with notifications from people it has no
+	 * relationship with.
+	 *
+	 * Declared ahead of `group()`: `/api/v2/notifications/{group_key}` matches
+	 * `/api/v2/notifications/policy` too, and the routes of one controller are
+	 * matched in declaration order.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/notifications/policy')]
+	// Mastodon moved the policy to v2 in 4.3 and a 4.3 client looks there
+	// only; the v1 spelling stays for the clients written against 4.2, which
+	// is the release this server used to announce.
+	#[FrontpageRoute(verb: 'GET', url: '/api/v2/notifications/policy', postfix: 'v2')]
+	public function policy(): DataResponse {
+		try {
+			$this->initViewer(['read:notifications']);
+
+			return new DataResponse($this->policyWithSummary(), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
 	/** One group, in the same shape the list serves it in. */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -274,24 +299,6 @@ class NotificationController extends ClientApiController {
 	}
 
 	// Mastodon 4.3: the policy, and the inbox it fills
-
-	/** What this account does with notifications from people it has no relationship with. */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[FrontpageRoute(verb: 'GET', url: '/api/v1/notifications/policy')]
-	// Mastodon moved the policy to v2 in 4.3 and a 4.3 client looks there
-	// only; the v1 spelling stays for the clients written against 4.2, which
-	// is the release this server used to announce.
-	#[FrontpageRoute(verb: 'GET', url: '/api/v2/notifications/policy', postfix: 'v2')]
-	public function policy(): DataResponse {
-		try {
-			$this->initViewer(['read:notifications']);
-
-			return new DataResponse($this->policyWithSummary(), Http::STATUS_OK);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
-	}
 
 	/**
 	 * Changes the policy. What is not named is left as it is, so a client that

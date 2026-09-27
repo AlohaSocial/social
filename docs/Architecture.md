@@ -119,6 +119,16 @@ app can match the same url:
   `/api/v1/accounts/{account}/lists` and `/api/v1/accounts/{account}/featured_tags`,
   which live in `ListController` and `DiscoveryController` — no arrangement of
   attributes can put it after routes of another class.
+- A trait's methods come after the class's own. `ApiController::statusWatched()`
+  sat in the `ApiMedia` trait, so `statusAction()`'s `/api/v1/statuses/{nid}/{act}`
+  was offered first and `POST …/watched` never reached it; it is declared in the
+  class, ahead of `statusAction()`, for that reason. `NotificationController::policy()`
+  is declared ahead of `group()` for the same one: `/api/v2/notifications/{group_key}`
+  matches `/api/v2/notifications/policy`.
+
+`tests/AppInfo/RouteOrderTest.php` holds all three rules: it reads the routes in
+the server's order and fails on any route a path of which is caught by one read
+before it — or by one in another controller, whose order is not defined.
 
 A route's name is derived, not written: the controller's short name without the
 `Controller` suffix, then `#`, then the method. Two routes on one method
