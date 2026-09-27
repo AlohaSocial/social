@@ -36,6 +36,7 @@ use OCA\Social\Service\ProfileHighlightsService;
 use OCA\Social\Service\StarterPackService;
 use OCA\Social\Service\SuggestionService;
 use OCA\Social\Service\TrendService;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
@@ -62,6 +63,8 @@ use stdClass;
  * anonymous answer to "who should I follow".
  */
 class DiscoveryControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const OTHER = 'https://cloud.example/users/bob';
 
@@ -125,7 +128,7 @@ class DiscoveryControllerTest extends TestCase {
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (): Person => $this->person(self::VIEWER, 1));
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
 			->willReturnCallback(fn (array $nids): array => ($nids === [2])
 				? [$this->person(self::OTHER, 2)]

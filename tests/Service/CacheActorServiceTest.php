@@ -100,6 +100,48 @@ class CacheActorServiceTest extends TestCase {
 		$this->assertSame($bob, $this->service->getFromId(self::BOB . '#main-key'));
 	}
 
+	/** a route answered to anybody is not a reason to go and fetch an actor */
+	public function testResolveDoesNotFetchAnUnknownUrlByDefault(): void {
+		$this->cacheActorsRequest->method('getFromIds')->willReturn([]);
+		$this->curlService->expects($this->never())->method('retrieveObject');
+
+		$this->expectException(CacheActorDoesNotExistException::class);
+		$this->service->resolve(self::BOB);
+	}
+
+	public function testResolveAnswersACachedUrlWithoutFetching(): void {
+		$bob = $this->person(self::BOB);
+		$this->cacheActorsRequest->method('getFromIds')->with([self::BOB])->willReturn([self::BOB => $bob]);
+		$this->curlService->expects($this->never())->method('retrieveObject');
+
+		$this->assertSame($bob, $this->service->resolve(self::BOB));
+	}
+
+	/** a signed-in viewer naming a stranger is, and says so */
+	public function testResolveFetchesAnUnknownUrlWhenAllowed(): void {
+		$this->cacheActorsRequest->method('getFromId')->willThrowException(new CacheActorDoesNotExistException());
+		$data = [
+			'id' => self::BOB, 'type' => 'Person', 'preferredUsername' => 'bob',
+			'_host' => 'remote.example', '_contentType' => 'application/activity+json',
+		];
+		$this->curlService->expects($this->once())->method('retrieveObject')->with(self::BOB)->willReturn($data);
+		$bob = $this->person(self::BOB);
+		$this->ap->method('getItemFromData')->willReturn($bob);
+
+		$this->assertSame(self::BOB, $this->service->resolve(self::BOB, true)->getId());
+	}
+
+	public function testResolveRefusesAnEmptyOrNonPositiveReference(): void {
+		foreach (['', '@', '0', '-3'] as $reference) {
+			try {
+				$this->service->resolve($reference);
+				$this->fail('resolved ' . var_export($reference, true));
+			} catch (CacheActorDoesNotExistException) {
+				$this->addToAssertionCount(1);
+			}
+		}
+	}
+
 	public function testGetFromIdFetchesSavesAndReturnsAnUnknownActor(): void {
 		$this->cacheActorsRequest->method('getFromId')->willThrowException(new CacheActorDoesNotExistException());
 		$data = [

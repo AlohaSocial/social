@@ -26,6 +26,7 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GroupListService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PlaceService;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
@@ -44,6 +45,8 @@ use Psr\Log\NullLogger;
  * somebody else's list is a 404 and nothing at all is written.
  */
 class ListControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const STRANGER = 'https://cloud.example/users/bob';
 	private const FOLLOWED = 'https://remote.example/users/carol';
@@ -100,7 +103,7 @@ class ListControllerTest extends TestCase {
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->linkPreviewService = $this->createMock(LinkPreviewService::class);
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
 			->willReturnCallback(function (array $nids): array {
 				$byNid = [1 => self::VIEWER, 2 => self::STRANGER, 3 => self::FOLLOWED];
@@ -665,7 +668,7 @@ class ListControllerTest extends TestCase {
 		$this->given(4, self::VIEWER);
 		// the newest membership row is the one whose actor has gone
 		$this->members[4] = [self::FOLLOWED, 'https://gone.example/users/dave'];
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getCachedFromIds')
 			->willReturn([self::FOLLOWED => $this->person(self::FOLLOWED, 3)]);
 
@@ -706,7 +709,7 @@ class ListControllerTest extends TestCase {
 	}
 
 	public function testAnAccountThatDoesNotExistIsA404(): void {
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')->willReturn([]);
 
 		$response = $this->controller()->accountLists('77');

@@ -332,7 +332,7 @@ class ListController extends Controller {
 			foreach ($this->accountIds($account_ids) as $accountId) {
 				// resolved, not trusted: the row is keyed by the actor id, and
 				// what a client sends is a numeric id or a handle
-				$this->listsRequest->removeMember($list, $this->resolveAccount($accountId)->getId());
+				$this->listsRequest->removeMember($list, $this->cacheActorService->resolve($accountId, true)->getId());
 			}
 
 			return new DataResponse([], Http::STATUS_OK);
@@ -354,7 +354,7 @@ class ListController extends Controller {
 	public function accountLists(string $account): DataResponse {
 		try {
 			$this->initViewer();
-			$actor = $this->resolveAccount($account);
+			$actor = $this->cacheActorService->resolve($account, true);
 
 			return new DataResponse(
 				$this->listsRequest->getByMember($this->viewer->getId(), $actor->getId()),
@@ -508,46 +508,12 @@ class ListController extends Controller {
 	}
 
 	/**
-	 * The account behind what a client sent: Mastodon's numeric local id, an
-	 * actor URI, or a handle. The same three forms `ApiController` accepts
-	 * wherever it takes an account.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 */
-	private function resolveAccount(string $id): Person {
-		$id = trim($id);
-
-		if (is_numeric($id)) {
-			if ((int)$id < 1) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			$actors = $this->cacheActorService->getFromNids([(int)$id]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($id, 'http://') || str_starts_with($id, 'https://')) {
-			return $this->cacheActorService->getFromId($id);
-		}
-
-		if ($id === '') {
-			throw new CacheActorDoesNotExistException('Record not found');
-		}
-
-		return $this->cacheActorService->getFromAccount(ltrim($id, '@'));
-	}
-
-	/**
 	 * The account, once it is established that the viewer follows it.
 	 *
 	 * @throws Exception the account does not exist, or is not followed
 	 */
 	private function followed(string $accountId): Person {
-		$actor = $this->resolveAccount($accountId);
+		$actor = $this->cacheActorService->resolve($accountId, true);
 		if ($actor->getId() === $this->viewer->getId()) {
 			// your own account needs no follow to belong to your own list
 			return $actor;

@@ -30,6 +30,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DomainBlockService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\RelationshipService;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
@@ -50,6 +51,8 @@ use Psr\Log\NullLogger;
  * out, because "whose rows" is decided between the two.
  */
 class RelationControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
 	private const CAROL = 'https://remote.example/users/carol';
@@ -103,7 +106,7 @@ class RelationControllerTest extends TestCase {
 
 		$this->clientService = $this->createMock(ClientService::class);
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
 			->willReturnCallback(function (array $nids): array {
 				$byNid = [1 => self::ALICE, 2 => self::BOB, 3 => self::CAROL];

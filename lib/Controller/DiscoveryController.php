@@ -369,7 +369,7 @@ class DiscoveryController extends Controller {
 	public function suggestionDismiss(string $id): DataResponse {
 		try {
 			$this->initViewer(['write']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 
 			$this->accountRelationService->dismissSuggestion($this->viewer, $target);
 
@@ -663,7 +663,7 @@ class DiscoveryController extends Controller {
 	public function accountFeaturedTags(string $account): DataResponse {
 		try {
 			$this->initViewer(['read'], false);
-			$actor = $this->resolveAccount($account);
+			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			return new DataResponse(
 				$this->featuredTagService->featured($actor->getId()), Http::STATUS_OK
@@ -692,7 +692,7 @@ class DiscoveryController extends Controller {
 	public function accountHighlights(string $account): DataResponse {
 		try {
 			$this->initViewer(['read'], false);
-			$actor = $this->resolveAccount($account);
+			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			return new DataResponse(
 				$this->profileHighlightsService->forActor($actor), Http::STATUS_OK
@@ -700,40 +700,6 @@ class DiscoveryController extends Controller {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
-	}
-
-	/**
-	 * The account behind what a client sent: Mastodon's numeric local id, an
-	 * actor URI, or a handle. The same three forms `ApiController` and
-	 * `ListController` accept wherever they take an account.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 */
-	private function resolveAccount(string $id): Person {
-		$id = trim($id);
-
-		if (is_numeric($id)) {
-			if ((int)$id < 1) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			$actors = $this->cacheActorService->getFromNids([(int)$id]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($id, 'http://') || str_starts_with($id, 'https://')) {
-			return $this->cacheActorService->getFromId($id);
-		}
-
-		if ($id === '') {
-			throw new CacheActorDoesNotExistException('Record not found');
-		}
-
-		return $this->cacheActorService->getFromAccount(ltrim($id, '@'));
 	}
 
 	/**

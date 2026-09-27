@@ -280,6 +280,57 @@ class CacheActorService {
 	}
 
 	/**
+	 * An account by whatever a client names it with: its numeric id, its
+	 * `name@host` (or a bare local name), or its actor URL.
+	 *
+	 * Mastodon's own routes take the numeric id, this app's `{account_id}`
+	 * paths were written for an actor URL, and a client that has an account
+	 * entity in hand has the numeric one. Rather than each route deciding,
+	 * they ask here.
+	 *
+	 * Nothing is fetched from elsewhere unless `$mayFetch` says so: a route
+	 * about accounts this server already holds, answered to anybody, is not a
+	 * reason to go and webfinger a name or fetch a URL. A signed-in viewer
+	 * naming a stranger is, and passes `true`.
+	 *
+	 * @throws CacheActorDoesNotExistException
+	 */
+	public function resolve(string $reference, bool $mayFetch = false): Person {
+		$reference = ltrim(trim($reference), '@');
+		if ($reference === '') {
+			throw new CacheActorDoesNotExistException('unknown account');
+		}
+
+		if (is_numeric($reference)) {
+			if ((int)$reference < 1) {
+				throw new CacheActorDoesNotExistException('unknown account');
+			}
+
+			$actors = $this->getFromNids([(int)$reference]);
+			if ($actors === []) {
+				throw new CacheActorDoesNotExistException('unknown account');
+			}
+
+			return $actors[0];
+		}
+
+		if (str_starts_with($reference, 'http://') || str_starts_with($reference, 'https://')) {
+			if ($mayFetch) {
+				return $this->getFromId($reference);
+			}
+
+			$cached = $this->getCachedFromIds([$reference]);
+			if ($cached === []) {
+				throw new CacheActorDoesNotExistException('unknown account');
+			}
+
+			return array_values($cached)[0];
+		}
+
+		return $this->getFromAccount($reference, $mayFetch);
+	}
+
+	/**
 	 * @param string $account
 	 *
 	 * @param bool $retrieve
@@ -302,47 +353,6 @@ class CacheActorService {
 	 * @throws RequestResultNotJsonException
 	 * @throws UnauthorizedFediverseException
 	 */
-	/**
-	 * An account by whatever a client names it with: its numeric id, its
-	 * `name@host` (or a bare local name), or its actor URL.
-	 *
-	 * Mastodon's own routes take the numeric id, this app's `{account_id}`
-	 * paths were written for an actor URL, and a client that has an account
-	 * entity in hand has the numeric one. Rather than each route deciding,
-	 * they ask here.
-	 *
-	 * Nothing is fetched from elsewhere: these are routes about accounts this
-	 * server already holds, and a page for a stranger is not a reason to go
-	 * and webfinger a name out of a URL.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 */
-	public function resolve(string $reference): Person {
-		$reference = ltrim(trim($reference), '@');
-		if ($reference === '') {
-			throw new CacheActorDoesNotExistException('unknown account');
-		}
-
-		if (is_numeric($reference)) {
-			if ((int)$reference < 1) {
-				throw new CacheActorDoesNotExistException('unknown account');
-			}
-
-			$actors = $this->getFromNids([(int)$reference]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('unknown account');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($reference, 'http://') || str_starts_with($reference, 'https://')) {
-			return $this->getFromId($reference);
-		}
-
-		return $this->getFromAccount($reference, false);
-	}
-
 	public function getFromAccount(string $account, bool $retrieve = true): Person {
 		try {
 			return $this->getFromLocalAccount($account);

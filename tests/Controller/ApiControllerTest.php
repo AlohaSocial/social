@@ -82,6 +82,7 @@ use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Service\TranslationService;
 use OCA\Social\Service\ViewCountService;
+use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -115,6 +116,8 @@ use ReflectionMethod;
 use stdClass;
 
 class ApiControllerTest extends TestCase {
+	use TCacheActorServiceMock;
+
 	private const REVOKED = 'the access_token was revoked';
 
 	/** @var IRequest&MockObject */
@@ -258,7 +261,7 @@ class ApiControllerTest extends TestCase {
 		$this->accountService->method('getDefaultPrivacy')->willReturnCallback(
 			fn (): string => $this->defaultPrivacy
 		);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->followService = $this->createMock(FollowService::class);

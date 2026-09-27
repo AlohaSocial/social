@@ -158,7 +158,7 @@ class RelationController extends Controller {
 	public function note(string $id, string $comment = ''): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->setNote($this->viewer, $target, $comment);
 
 			return new DataResponse($this->relationship($target), Http::STATUS_OK);
@@ -174,7 +174,7 @@ class RelationController extends Controller {
 	public function pin(string $id): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->endorse($this->viewer, $target);
 
 			return new DataResponse($this->relationship($target, true), Http::STATUS_OK);
@@ -190,7 +190,7 @@ class RelationController extends Controller {
 	public function unpin(string $id): DataResponse {
 		try {
 			$this->initViewer(['write:accounts']);
-			$target = $this->resolveAccount($id);
+			$target = $this->cacheActorService->resolve($id, true);
 			$this->accountRelationService->unendorse($this->viewer, $target);
 
 			return new DataResponse($this->relationship($target, false), Http::STATUS_OK);
@@ -249,40 +249,6 @@ class RelationController extends Controller {
 		);
 
 		return $relationship;
-	}
-
-	/**
-	 * The account behind what a client sent: Mastodon's numeric local id, an
-	 * actor URI, or a handle. The same three forms `ApiController` and
-	 * `ListController` accept wherever they take an account.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 */
-	private function resolveAccount(string $id): Person {
-		$id = trim($id);
-
-		if (is_numeric($id)) {
-			if ((int)$id < 1) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			$actors = $this->cacheActorService->getFromNids([(int)$id]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('Record not found');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($id, 'http://') || str_starts_with($id, 'https://')) {
-			return $this->cacheActorService->getFromId($id);
-		}
-
-		if ($id === '') {
-			throw new CacheActorDoesNotExistException('Record not found');
-		}
-
-		return $this->cacheActorService->getFromAccount(ltrim($id, '@'));
 	}
 
 	/**

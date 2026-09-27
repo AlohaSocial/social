@@ -632,7 +632,7 @@ class ApiController extends Controller {
 	private function followRequestAction(string $id, bool $authorize): DataResponse {
 		try {
 			$this->initViewer(true);
-			$follower = $this->resolveTargetAccount($id);
+			$follower = $this->cacheActorService->resolve($id, $this->viewer !== null);
 
 			if ($authorize) {
 				$this->followService->authorizeFollowRequest($follower);
@@ -718,7 +718,7 @@ class ApiController extends Controller {
 				return new DataResponse(['error' => 'account_id is required'], Http::STATUS_UNPROCESSABLE_ENTITY);
 			}
 
-			$target = $this->resolveTargetAccount($accountId);
+			$target = $this->cacheActorService->resolve($accountId, $this->viewer !== null);
 			if ($target->getId() === $this->viewer->getId()) {
 				return new DataResponse(['error' => 'you cannot report yourself'], Http::STATUS_UNPROCESSABLE_ENTITY);
 			}
@@ -2376,7 +2376,7 @@ class ApiController extends Controller {
 
 			$familiar = [];
 			foreach (array_slice($ids, 0, self::FAMILIAR_FOLLOWERS_MAX) as $one) {
-				$target = $this->resolveTargetAccount((string)$one);
+				$target = $this->cacheActorService->resolve((string)$one, $this->viewer !== null);
 				$accounts = $this->followService->familiarFollowers($this->viewer, $target);
 				$familiar[] = [
 					'id' => (string)$target->getNid(),
@@ -2405,7 +2405,7 @@ class ApiController extends Controller {
 	): DataResponse {
 		try {
 			$this->initViewer(true);
-			$target = $this->resolveTargetAccount($id);
+			$target = $this->cacheActorService->resolve($id, $this->viewer !== null);
 
 			// one counter moved by one, rather than all three recomputed with
 			// aggregate queries: see `AccountService::bumpActorCount()`. Only
@@ -2443,7 +2443,7 @@ class ApiController extends Controller {
 	public function accountUnfollow(string $id): DataResponse {
 		try {
 			$this->initViewer(true);
-			$target = $this->resolveTargetAccount($id);
+			$target = $this->cacheActorService->resolve($id, $this->viewer !== null);
 
 			if ($this->followService->unfollowAccount($this->viewer, $target->getAccount())) {
 				$this->accountService->bumpActorCount($this->viewer->getId(), 'count_following', -1);
@@ -2613,7 +2613,7 @@ class ApiController extends Controller {
 	): DataResponse {
 		try {
 			$this->initViewer(true);
-			$target = $this->resolveTargetAccount($id);
+			$target = $this->cacheActorService->resolve($id, $this->viewer !== null);
 
 			switch ($action) {
 				case 'block':
@@ -2712,7 +2712,7 @@ class ApiController extends Controller {
 	public function accountGet(string $id): DataResponse {
 		try {
 			$this->initViewer(false);
-			$account = $this->resolveTargetAccount($id);
+			$account = $this->cacheActorService->resolve($id, $this->viewer !== null);
 			$account->setExportFormat(ACore::FORMAT_LOCAL);
 
 			return new DataResponse($account, Http::STATUS_OK);
@@ -2763,65 +2763,6 @@ class ApiController extends Controller {
 		}
 
 		return $reference;
-	}
-
-	/**
-	 * Resolve an account reference in any of the shapes a client can hold it:
-	 * the numeric id every API entity emits, an `@user` or `user@host` handle,
-	 * a bare local username, or the actor's ActivityPub id.
-	 *
-	 * The numeric id is the important one, because it is the only shape a
-	 * client ever gets *from* this app. It used to fall through to
-	 * `getFromId()`, which treats its argument as a URL: asking for account
-	 * `42` meant a WebFinger lookup for the string "42", an exception, and
-	 * (before the status codes were fixed) a 401 that logged the reader out.
-	 *
-	 * Only a caller with a session may make this instance *discover* an
-	 * account. The other two shapes are strings the caller writes, and
-	 * resolving an unknown one means fetching whatever URL or handle they
-	 * wrote, storing the actor and downloading its icon into appdata — an HTTP
-	 * reflector and a way to fill the disk, a request at a time. Accounts this
-	 * instance already knows stay readable by anybody, because a public
-	 * profile has to work without a login. `LocalController::knownActor()`
-	 * refuses the same thing for the same reason.
-	 *
-	 * @throws CacheActorDoesNotExistException
-	 * @throws Exception
-	 */
-	private function resolveTargetAccount(string $id): Person {
-		$id = trim($id);
-
-		if (is_numeric($id)) {
-			if ((int)$id < 1) {
-				throw new CacheActorDoesNotExistException('unknown account');
-			}
-
-			$actors = $this->cacheActorService->getFromNids([(int)$id]);
-			if ($actors === []) {
-				throw new CacheActorDoesNotExistException('unknown account');
-			}
-
-			return $actors[0];
-		}
-
-		if (str_starts_with($id, 'http://') || str_starts_with($id, 'https://')) {
-			if ($this->viewer === null) {
-				$cached = $this->cacheActorService->getCachedFromIds([$id]);
-				if ($cached === []) {
-					throw new CacheActorDoesNotExistException('unknown account');
-				}
-
-				return array_values($cached)[0];
-			}
-
-			return $this->cacheActorService->getFromId($id);
-		}
-
-		if ($id === '') {
-			throw new CacheActorDoesNotExistException('unknown account');
-		}
-
-		return $this->cacheActorService->getFromAccount(ltrim($id, '@'), $this->viewer !== null);
 	}
 
 	/**
@@ -2880,7 +2821,7 @@ class ApiController extends Controller {
 			// `{account}` is whatever the client holds, which for every entity
 			// this app emits is the numeric id — not the acct handle this route
 			// used to insist on.
-			$local = $this->resolveTargetAccount($account);
+			$local = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			if ($pinned) {
 				return new DataResponse(
@@ -2941,7 +2882,7 @@ class ApiController extends Controller {
 	): DataResponse {
 		try {
 			$this->initViewer(false);
-			$actor = $this->resolveTargetAccount($account);
+			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			$parts = explode('@', $this->handleOf($account, $actor));
 			$domain = end($parts);
@@ -2996,7 +2937,7 @@ class ApiController extends Controller {
 		try {
 			$this->initViewer(false);
 
-			$actor = $this->resolveTargetAccount($account);
+			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
 
 			$parts = explode('@', $this->handleOf($account, $actor));
 			$domain = end($parts);
