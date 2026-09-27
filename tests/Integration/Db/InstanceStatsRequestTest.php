@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 namespace OCA\Social\Tests\Integration\Db;
+
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\InstancesRequest;
