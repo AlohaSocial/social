@@ -94,7 +94,9 @@ class SubscriptionService {
 			$feeds[] = [
 				'id' => $id,
 				'title' => ($row['title'] ?? '') !== '' ? $row['title'] : $row['url'],
-				'site_url' => (string)($row['site_url'] ?? ''),
+				// Feed metadata is remote input too. Keep only web links before
+				// the page puts this value in an anchor's href.
+				'site_url' => $this->safeExternalLink((string)($row['site_url'] ?? '')),
 				'items' => $counts[$id] ?? 0,
 				'error' => (string)($row['error'] ?? ''),
 				// a feed with nothing in it means one thing before its first
