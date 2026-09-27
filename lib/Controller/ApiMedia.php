@@ -93,7 +93,7 @@ trait ApiMedia {
 			// sniffed and (for an image) decoded.
 			$this->refuseOversized($size, $type);
 
-			$this->logger->debug('[ApiController] mediaNew: ' . json_encode($file));
+			$this->logger->debug('[' . static::class . '] mediaNew: ' . json_encode($file));
 
 			// a cover for a video, as Mastodon's API names it; anything
 			// wrong with it costs the cover and not the upload

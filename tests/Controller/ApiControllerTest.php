@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\AP;
 use OCA\Social\Controller\ApiController;
+use OCA\Social\Controller\MastodonApiController;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
@@ -82,6 +83,7 @@ use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Service\TranslationService;
 use OCA\Social\Service\ViewCountService;
+use OCA\Social\Tests\Helper\ApiControllerRouter;
 use OCA\Social\Tests\Mock\TCacheActorServiceMock;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Http;
@@ -362,7 +364,7 @@ class ApiControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	private function controller(string $authorization = ''): ApiController {
+	private function controller(string $authorization = ''): ApiControllerRouter {
 		return $this->controllerWithHeaders($authorization);
 	}
 
@@ -371,69 +373,69 @@ class ApiControllerTest extends TestCase {
 		string $authorization,
 		array $headers = [],
 		?LoggerInterface $logger = null,
-	): ApiController {
+	): ApiControllerRouter {
 		// the callback is registered once, in setUp(): a second method() on the
 		// same mock never wins over the first, so per-controller headers have to
 		// go through a property
 		$this->headers = array_merge(['Authorization' => $authorization], $headers);
 
-		return new ApiController(
-			$this->request,
-			$this->urlGenerator,
-			$this->userSession,
-			$logger ?? new NullLogger(),
-			$this->instanceService,
-			$this->clientService,
-			$this->accountService,
-			$this->cacheActorService,
-			$this->cacheDocumentService,
-			$this->documentService,
-			$this->followService,
-			$this->relationshipService,
-			$this->streamService,
-			$this->actionService,
-			$this->postService,
-			$this->pollService,
-			$this->session,
-			$this->pinService,
-			$this->hashtagService,
-			$this->markerService,
-			$this->streamRequest,
-			$this->reportService,
-			$this->searchService,
-			$this->configService,
-			$this->curlService,
-			$this->cacheDocumentsRequest,
-			$this->cacheFactory,
-			$this->rootFolder,
-			$this->tempManager,
-			$this->filterService,
-			$this->bannerService,
-			$this->avatarService,
-			$this->accountRelationService,
-			$this->scheduledStatusService,
-			$this->postReviewService,
-			$this->sensitiveMediaService,
-			$this->viewCountService,
-			$this->teamService,
-			$this->emojiService,
-			$this->appManager,
-			$this->fediverseService,
-			$this->placeService,
-			$this->deliveryService,
-			$this->reactionService,
-			$this->reactionSummaryService,
-			$this->gifService,
-			$this->notificationService,
-			$this->translationService,
-			$this->notificationPolicyService,
-			$this->quoteService,
-			$this->annualReportService,
-			$this->createMock(\OCA\Social\Service\WatchService::class),
-			$this->l10nFactory,
-			$this->timelineRevisionService,
-			$this->durableCache(),
-		);
+		return new ApiControllerRouter([
+			'request' => $this->request,
+			'urlGenerator' => $this->urlGenerator,
+			'userSession' => $this->userSession,
+			'logger' => $logger ?? new NullLogger(),
+			'instanceService' => $this->instanceService,
+			'clientService' => $this->clientService,
+			'accountService' => $this->accountService,
+			'cacheActorService' => $this->cacheActorService,
+			'cacheDocumentService' => $this->cacheDocumentService,
+			'documentService' => $this->documentService,
+			'followService' => $this->followService,
+			'relationshipService' => $this->relationshipService,
+			'streamService' => $this->streamService,
+			'actionService' => $this->actionService,
+			'postService' => $this->postService,
+			'pollService' => $this->pollService,
+			'session' => $this->session,
+			'pinService' => $this->pinService,
+			'hashtagService' => $this->hashtagService,
+			'markerService' => $this->markerService,
+			'streamRequest' => $this->streamRequest,
+			'reportService' => $this->reportService,
+			'searchService' => $this->searchService,
+			'configService' => $this->configService,
+			'curlService' => $this->curlService,
+			'cacheDocumentsRequest' => $this->cacheDocumentsRequest,
+			'cacheFactory' => $this->cacheFactory,
+			'rootFolder' => $this->rootFolder,
+			'tempManager' => $this->tempManager,
+			'filterService' => $this->filterService,
+			'bannerService' => $this->bannerService,
+			'avatarService' => $this->avatarService,
+			'accountRelationService' => $this->accountRelationService,
+			'scheduledStatusService' => $this->scheduledStatusService,
+			'postReviewService' => $this->postReviewService,
+			'sensitiveMediaService' => $this->sensitiveMediaService,
+			'viewCountService' => $this->viewCountService,
+			'teamService' => $this->teamService,
+			'emojiService' => $this->emojiService,
+			'appManager' => $this->appManager,
+			'fediverseService' => $this->fediverseService,
+			'placeService' => $this->placeService,
+			'deliveryService' => $this->deliveryService,
+			'reactionService' => $this->reactionService,
+			'reactionSummaryService' => $this->reactionSummaryService,
+			'gifService' => $this->gifService,
+			'notificationService' => $this->notificationService,
+			'translationService' => $this->translationService,
+			'notificationPolicyService' => $this->notificationPolicyService,
+			'quoteService' => $this->quoteService,
+			'annualReportService' => $this->annualReportService,
+			'watchService' => $this->createMock(\OCA\Social\Service\WatchService::class),
+			'l10nFactory' => $this->l10nFactory,
+			'timelineRevisionService' => $this->timelineRevisionService,
+			'durableCache' => $this->durableCache(),
+		]);
 	}
 
 	/**
@@ -542,10 +544,8 @@ class ApiControllerTest extends TestCase {
 	 * middleware, before this controller runs at all.
 	 */
 	public function testEveryRouteDeclaresItsAccessAsAnAttribute(): void {
-		$reflection = new \ReflectionClass(ApiController::class);
-
-		foreach ($reflection->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
-			if ($method->isConstructor() || $method->getDeclaringClass()->getName() !== ApiController::class) {
+		foreach (self::apiMethods() as $method) {
+			if ($method->isConstructor()) {
 				continue;
 			}
 
@@ -745,13 +745,32 @@ class ApiControllerTest extends TestCase {
 	}
 
 	/**
-	 * Every route of this controller, as its own attributes declare it.
+	 * The public methods of every client API controller, each where it is
+	 * declared.
+	 *
+	 * @return list<ReflectionMethod>
+	 */
+	private static function apiMethods(): array {
+		$methods = [];
+		foreach (ApiControllerRouter::CONTROLLERS as $class) {
+			foreach ((new ReflectionClass($class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+				if ($method->getDeclaringClass()->getName() === $class) {
+					$methods[] = $method;
+				}
+			}
+		}
+
+		return $methods;
+	}
+
+	/**
+	 * Every route of the client API, as its own attributes declare it.
 	 *
 	 * @return array<string, string> method name => HTTP verb
 	 */
 	private static function declaredRoutes(): array {
 		$routes = [];
-		foreach ((new ReflectionClass(ApiController::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+		foreach (self::apiMethods() as $method) {
 			foreach ($method->getAttributes() as $attribute) {
 				if (!in_array($attribute->getName(), [FrontpageRoute::class, ApiRoute::class], true)) {
 					continue;
@@ -822,9 +841,9 @@ class ApiControllerTest extends TestCase {
 	 * @return string[]
 	 */
 	private function scopesFor(string $route, string $verb, string $act = ''): array {
-		$resolve = new ReflectionMethod(ApiController::class, 'scopesForRoute');
+		$resolve = new ReflectionMethod(MastodonApiController::class, 'scopesForRoute');
 
-		return $resolve->invoke($this->controller(), $route, $verb, $act);
+		return $resolve->invoke($this->controller()->controller(ApiController::class), $route, $verb, $act);
 	}
 
 	/**
@@ -4726,7 +4745,7 @@ class ApiControllerTest extends TestCase {
 	 */
 	public function testEveryRateLimitedRouteAlsoLimitsSessionlessCallers(): void {
 		$bare = [];
-		foreach ((new ReflectionClass(ApiController::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+		foreach (self::apiMethods() as $method) {
 			if ($method->getAttributes(UserRateLimit::class) !== []
 				&& $method->getAttributes(AnonRateLimit::class) === []) {
 				$bare[] = $method->getName();
