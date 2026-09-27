@@ -126,7 +126,7 @@ class SubscriptionsController extends Controller {
 			return new DataResponse(['error' => 'no file was uploaded'], Http::STATUS_BAD_REQUEST);
 		}
 
-		if ((int)($file['size'] ?? 0) > self::TAKEOUT_MAX_BYTES) {
+		if (($file['size'] ?? 0) > self::TAKEOUT_MAX_BYTES) {
 			return new DataResponse(
 				['error' => 'that file is larger than 5 MB'],
 				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
@@ -134,7 +134,7 @@ class SubscriptionsController extends Controller {
 		}
 
 		$path = $file['tmp_name'] ?? '';
-		if (!is_string($path) || $path === '') {
+		if ($path === '') {
 			return new DataResponse(['error' => 'that file could not be read'], Http::STATUS_BAD_REQUEST);
 		}
 

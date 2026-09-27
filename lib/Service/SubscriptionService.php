@@ -179,8 +179,8 @@ class SubscriptionService {
 	private function safeExternalLink(string $link): string {
 		$parts = parse_url($link);
 		if (!is_array($parts)
-			|| !in_array(strtolower((string)($parts['scheme'] ?? '')), ['http', 'https'], true)
-			|| (string)($parts['host'] ?? '') === ''
+			|| !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+			|| ($parts['host'] ?? '') === ''
 			|| isset($parts['user'])
 			|| isset($parts['pass'])) {
 			return '';
@@ -196,19 +196,19 @@ class SubscriptionService {
 			return '';
 		}
 
-		$host = strtolower((string)($parts['host'] ?? ''));
+		$host = strtolower($parts['host'] ?? '');
 		if (!in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'], true)) {
 			return '';
 		}
 
 		$id = '';
 		if ($host === 'youtu.be') {
-			$id = trim((string)($parts['path'] ?? ''), '/');
+			$id = trim($parts['path'] ?? '', '/');
 		} elseif (($parts['path'] ?? '') === '/watch') {
-			parse_str((string)($parts['query'] ?? ''), $query);
-			$id = (string)($query['v'] ?? '');
-		} elseif (preg_match('#^/(?:shorts|embed|live)/([^/?]+)#', (string)($parts['path'] ?? ''), $matches) === 1) {
-			$id = $matches[1];
+			parse_str($parts['query'] ?? '', $query);
+			$id = is_string($query['v'] ?? null) ? $query['v'] : '';
+		} elseif (preg_match('#^/(?:shorts|embed|live)/([^/?]+)#', $parts['path'] ?? '', $matches) === 1) {
+			$id = $matches[1] ?? '';
 		}
 
 		return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : '';
@@ -462,7 +462,7 @@ class SubscriptionService {
 		// Bring in the newest videos before the import request returns, without
 		// making a large Takeout hold the request open for every feed. Feeds not
 		// read inside this bounded window remain unread and are picked up by cron.
-		$deadline = microtime(true) + self::FIRST_READ_TIMEOUT;
+		$deadline = microtime(true) + (float)self::FIRST_READ_TIMEOUT;
 		foreach (array_chunk($newFeeds, self::PARALLEL) as $batch) {
 			$remaining = $deadline - microtime(true);
 			if ($remaining <= 0) {
