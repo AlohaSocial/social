@@ -189,6 +189,8 @@ class TranslatableStringsTest extends TestCase {
 			'src/components/PostMenu.vue',
 			'src/components/Composer/Composer.vue',
 			'src/App.vue',
+			'src/views/SwitchWizard.vue',
+			'src/views/Statistics.vue',
 		];
 		$messages = [];
 		foreach (self::singulars() as $message => $paths) {
@@ -216,7 +218,95 @@ class TranslatableStringsTest extends TestCase {
 			}
 		}
 
-		$this->assertSame([], $missing, 'navigation, timeline, conversation, composer, and app labels must exist in both German catalog formats');
+		$this->assertSame([], $missing, 'navigation, timeline, conversation, statistics, composer, setup, and app labels must exist in both German catalog formats');
+	}
+
+	public function testSwitchWizardPluralMessagesHaveGermanCatalogEntries(): void {
+		$messages = [
+			'_Looked up %n name so far_::_Looked up %n names so far_' => ['%n Name geprüft', 'Bisher %n Namen geprüft'],
+			'_found %n_::_found %n_' => ['%n gefunden', '%n gefunden'],
+			'_%n left_::_%n left_' => ['%n übrig', '%n übrig'],
+			'_Follow %n account_::_Follow %n accounts_' => ['%n Konto folgen', '%n Konten folgen'],
+			'_Brought over %n post._::_Brought over %n posts._' => ['%n Beitrag übernommen.', '%n Beiträge übernommen.'],
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message => $translation) {
+				if (($catalog[$message] ?? null) !== $translation) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'setup wizard plurals must exist in both German catalog formats');
+	}
+
+	public function testStatisticsPluralMessagesHaveGermanCatalogEntries(): void {
+		$messages = [
+			'_post_::_posts_' => ['Beitrag', 'Beiträge'],
+			'_{days} day. Directly comparable._::_{days} days. Directly comparable._' => ['{days} Tag. Direkt vergleichbar.', '{days} Tage. Direkt vergleichbar.'],
+			'_%n post_::_%n posts_' => ['%n Beitrag', '%n Beiträge'],
+			'_%n day_::_%n days_' => ['%n Tag', '%n Tage'],
+			'_picture posted_::_pictures posted_' => ['Bild veröffentlicht', 'Bilder veröffentlicht'],
+			'_Last %n day_::_Last %n days_' => ['%n Tag zuvor', '%n Tage zuvor'],
+			'_{counted} post, all of them_::_{counted} posts, all of them_' => ['Alle {counted} Beiträge', 'Alle {counted} Beiträge'],
+			'_The audience of one account that boosted you is not known here, and counts as nobody._::_The audiences of {count} accounts that boosted you are not known here, and count as nobody._' => [
+				'Die Reichweite des einen Kontos, das dich geboostet hat, ist hier unbekannt und wird nicht mitgezählt.',
+				'Die Reichweite von {count} Konten, die dich geboostet haben, ist hier unbekannt und wird nicht mitgezählt.',
+			],
+			'_The one post of the window._::_All {posts} posts of the window._' => ['Der einzige Beitrag dieses Zeitraums.', 'Alle {posts} Beiträge dieses Zeitraums.'],
+			'_Counted over your one post._::_Counted over all {count} of your posts._' => ['Für deinen einzigen Beitrag berechnet.', 'Für alle {count} deiner Beiträge berechnet.'],
+			'_%n engagement in {month}_::_%n engagement in {month}_' => ['%n Interaktion im {month}', '%n Interaktionen im {month}'],
+			'_%n follower in {month}_::_%n followers in {month}_' => ['%n Follower im {month}', '%n Follower im {month}'],
+			'_%n post in {month}_::_%n posts in {month}_' => ['%n Beitrag im {month}', '%n Beiträge im {month}'],
+			'_%n post at {hour}:00 UTC_::_%n posts at {hour}:00 UTC_' => ['%n Beitrag um {hour}:00 UTC', '%n Beiträge um {hour}:00 UTC'],
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message => $translation) {
+				if (($catalog[$message] ?? null) !== $translation) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'statistics plurals must exist in both German catalog formats');
+	}
+
+	public function testGermanJsonAndJavascriptCatalogValuesAgree(): void {
+		$mismatched = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($catalog as $message => $translation) {
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$mismatched[] = $locale . ': ' . $message;
+				}
+			}
+		}
+
+		$this->assertSame([], $mismatched, 'Nextcloud must serve the same German translations from JSON and JavaScript catalogs');
 	}
 
 	public function testSubscriptionVideoControlsHaveGermanCatalogEntries(): void {
