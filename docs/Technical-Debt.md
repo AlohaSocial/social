@@ -327,7 +327,7 @@ resolves, and there are no unused exports.
 
 **Dead model classes: none** (77 checked). **Dead exception classes: none** (48
 checked). **Unused controllers: none** (28 checked; `ClientApiController` is the
-abstract base of three of them and `SocialPubController` is called by
+abstract base of sixteen of them and `SocialPubController` is called by
 `ActivityPubController` rather than routed to).
 
 **Repair steps that re-scan on every upgrade: none.** All five carry a version
