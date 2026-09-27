@@ -243,7 +243,7 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 			$uuid = ($icon->getResizedCopy() === '') ? $icon->getLocalCopy() : $icon->getResizedCopy();
 			$actor->setAvatar(
 				$this->urlGenerator->linkToRouteAbsolute(
-					'social.Api.mediaOpen',
+					'social.MediaApi.mediaOpen',
 					['uuid' => $uuid]
 				)
 			);

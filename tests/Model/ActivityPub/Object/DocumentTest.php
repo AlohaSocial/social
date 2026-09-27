@@ -116,9 +116,9 @@ class DocumentTest extends TestCase {
 		$document->setLocalCopy('abc')
 			->setResizedCopy('abc_s');
 
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc.jpeg', $document->getMediaUrl($this->urlGenerator, 'image/jpeg'));
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc', $document->getMediaUrl($this->urlGenerator));
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc_s.png', $document->getResizedMediaUrl($this->urlGenerator, 'image/png'));
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc.jpeg', $document->getMediaUrl($this->urlGenerator, 'image/jpeg'));
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc', $document->getMediaUrl($this->urlGenerator));
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc_s.png', $document->getResizedMediaUrl($this->urlGenerator, 'image/png'));
 	}
 
 	public function testConvertToMediaAttachmentBuildsTheMastodonEntity(): void {
@@ -137,8 +137,8 @@ class DocumentTest extends TestCase {
 
 		$this->assertSame('8', $media->getId());
 		$this->assertSame('image', $media->getType());
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc.jpeg', $media->getUrl());
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc_s.jpeg', $media->getPreviewUrl());
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc.jpeg', $media->getUrl());
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc_s.jpeg', $media->getPreviewUrl());
 		$this->assertSame('https://files.mastodon.social/media/cat.jpg', $media->getRemoteUrl());
 		$this->assertSame('A cat', $media->getDescription());
 		$this->assertSame('UBL_:rOp', $media->getBlurHash());
@@ -159,7 +159,7 @@ class DocumentTest extends TestCase {
 		$media = $document->convertToMediaAttachment($this->urlGenerator);
 
 		$this->assertSame('video', $media->getType());
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/vid.mp4', $media->getUrl());
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/vid.mp4', $media->getUrl());
 		$this->assertSame($media->getUrl(), $media->getPreviewUrl(), 'no resized copy: the media is the preview');
 	}
 
@@ -180,7 +180,7 @@ class DocumentTest extends TestCase {
 
 		$this->assertSame('unknown', $media->getType());
 		$this->assertSame('application/pdf', $media->getMediaType());
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/doc.pdf', $media->getUrl());
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/doc.pdf', $media->getUrl());
 		$this->assertSame('', $media->getPreviewUrl(), 'a file is not its own preview');
 		$this->assertSame('minutes.pdf', $media->getDescription());
 	}
@@ -301,6 +301,6 @@ class DocumentTest extends TestCase {
 
 		$media = $document->convertToMediaAttachment($this->urlGenerator);
 
-		$this->assertSame('https://cloud.example.org/social.Api.mediaOpen/abc.jpeg', $media->getUrl());
+		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc.jpeg', $media->getUrl());
 	}
 }

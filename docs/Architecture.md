@@ -341,7 +341,7 @@ file. On a page of twenty videos that was twenty full downloads before anybody
 had pressed play. The rules are RFC 9110's, and an unparseable range is answered
 with the whole file rather than refused, because that is always correct.
 
-**Posting a picture that is already in Nextcloud.** `ApiController::mediaFromFile()`
+**Posting a picture that is already in Nextcloud.** `MediaApiController::mediaFromFile()`
 (`POST /api/v1/media/from-file`) attaches a file out of the user's own storage,
 so the one thing this app should never ask of the person running it — download
 your own photo, then upload it back — is not required. The path is resolved
@@ -355,7 +355,7 @@ that has already federated, and the attachment can take the post's visibility
 the way an upload does. The copy goes through a temp file into
 `saveFromTempToCache()`, which is the same code an upload takes — so the MIME
 allow-list, the size ceiling, the resizing and the blurhash cannot drift between
-the two ways a picture gets in. `ApiController::storeAttachment()` is the shared
+the two ways a picture gets in. `MediaApiController::storeAttachment()` is the shared
 half that guarantees it.
 
 Note what this means for where the file lives afterwards: attachments are held
@@ -1266,7 +1266,7 @@ row rather than a copy, but it was written under whichever `overwrite.cli.url`
 the inbox request ran under, which on many instances is not the address anybody
 browses.
 
-Playing it goes through **`GET /media/stream/{nid}`** (`ApiController::mediaStream()`),
+Playing it goes through **`GET /media/stream/{nid}`** (`MediaApiController::mediaStream()`),
 which opens the origin and copies it to the reader a chunk at a time, storing
 nothing. It exists because the page cannot point a `<video>` at the origin
 directly — Nextcloud's content security policy says `media-src 'self'` — and

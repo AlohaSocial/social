@@ -10,9 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Controller\ActivityPubController;
-use OCA\Social\Controller\ApiController;
 use OCA\Social\Controller\InstanceApiController;
 use OCA\Social\Controller\LocalController;
+use OCA\Social\Controller\MediaApiController;
 use OCA\Social\Controller\NavigationController;
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Controller\SocialPubController;
@@ -64,7 +64,7 @@ class RateLimitService {
 	 */
 	private const EXEMPT_ROUTES = [
 		NavigationController::class => ['documentGetPublic', 'resizedGetPublic'],
-		ApiController::class => ['mediaOpen'],
+		MediaApiController::class => ['mediaOpen'],
 		InstanceApiController::class => ['emojiOpen', 'gifOpen'],
 		LocalController::class => ['globalActorAvatar'],
 	];

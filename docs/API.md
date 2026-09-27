@@ -732,7 +732,7 @@ remote one, as on Mastodon: both describe a user of *this* instance.
 | DELETE | `/api/v1/statuses/{nid}/watched` | public, no-csrf (viewer required) | `nid` | Takes a video off the reader's own list. |
 | GET | `/api/v1/videos/continue` | public, no-csrf (viewer required) | `limit` (20, max 40) | The videos the reader was in the middle of, newest first — neither the ones they barely started (under 10 seconds) nor the ones they finished. |
 
-`POST /api/v1/media` and `POST /api/v2/media` are both served by `ApiController::mediaNew()`, and it and `mediaFromFile()` share the storing half (`storeAttachment()`) so the two ways in cannot drift apart on the things that matter — the mime filter, the resizing, and the row not being public. On the wire an attachment's alt text travels as the ActivityPub `name`, both incoming and outgoing.
+`POST /api/v1/media` and `POST /api/v2/media` are both served by `MediaApiController::mediaNew()`, and it and `mediaFromFile()` share the storing half (`storeAttachment()`) so the two ways in cannot drift apart on the things that matter — the mime filter, the resizing, and the row not being public. On the wire an attachment's alt text travels as the ActivityPub `name`, both incoming and outgoing.
 
 Every key of a `MediaAttachment` is always present, `null` when there is nothing to put in it (`url`, `preview_url`, `remote_url`, `meta`, `description`, `blurhash`). `meta` is an object, never a list.
 

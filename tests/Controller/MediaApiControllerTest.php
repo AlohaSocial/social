@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
-use OCA\Social\Controller\ApiMedia;
+use OCA\Social\Controller\MediaApiController;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
@@ -18,13 +18,13 @@ use ReflectionClass;
 use ReflectionMethod;
 
 /**
- * What the routes of `ApiMedia` promise, read off the attributes themselves.
+ * What the routes of `MediaApiController` promise, read off the attributes themselves.
  *
  * Nothing here calls the controller. These are the guards that are easy to
  * leave off a new route and impossible to notice missing afterwards, which is
  * exactly what happened to `/media/{uuid}`.
  */
-class ApiMediaTest extends TestCase {
+class MediaApiControllerTest extends TestCase {
 	/**
 	 * Every method of the controller with the routes declared on it.
 	 *
@@ -33,7 +33,7 @@ class ApiMediaTest extends TestCase {
 	private function routes(): array {
 		$routes = [];
 
-		foreach ((new ReflectionClass(ApiMedia::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+		foreach ((new ReflectionClass(MediaApiController::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
 			foreach ($method->getAttributes(FrontpageRoute::class) as $attribute) {
 				$arguments = $attribute->getArguments();
 				$url = (string)($arguments['url'] ?? $arguments[1] ?? '');
@@ -47,7 +47,7 @@ class ApiMediaTest extends TestCase {
 	}
 
 	private function has(string $method, string $attribute): bool {
-		return (new ReflectionMethod(ApiMedia::class, $method))->getAttributes($attribute) !== [];
+		return (new ReflectionMethod(MediaApiController::class, $method))->getAttributes($attribute) !== [];
 	}
 
 	/**
@@ -132,7 +132,7 @@ class ApiMediaTest extends TestCase {
 
 	/** The verb a route was declared with. */
 	private function verbOf(string $method, string $url): string {
-		foreach ((new ReflectionMethod(ApiMedia::class, $method))->getAttributes(FrontpageRoute::class) as $attribute) {
+		foreach ((new ReflectionMethod(MediaApiController::class, $method))->getAttributes(FrontpageRoute::class) as $attribute) {
 			$arguments = $attribute->getArguments();
 			if ((string)($arguments['url'] ?? $arguments[1] ?? '') === $url) {
 				return strtoupper((string)($arguments['verb'] ?? $arguments[0] ?? ''));

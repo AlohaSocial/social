@@ -35,7 +35,6 @@ use OCA\Social\Service\ActionService;
 use OCA\Social\Service\AvatarService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
-use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
@@ -44,9 +43,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
-use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
-use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\PinService;
@@ -78,9 +75,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
-use OCP\Files\IRootFolder;
 use OCP\IRequest;
-use OCP\ITempManager;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
@@ -93,7 +88,6 @@ use Throwable;
  * @package OCA\Social\Controller
  */
 class ApiController extends MastodonApiController {
-	use ApiMedia;
 
 	/** where a used Idempotency-Key is remembered, and for how long */
 	private const IDEMPOTENCY_CACHE = 'social_idempotency';
@@ -101,12 +95,6 @@ class ApiController extends MastodonApiController {
 	/** Accounts one `familiar_followers` call answers for; Mastodon's cap too. */
 	private const FAMILIAR_FOLLOWERS_MAX = 20;
 	private const IDEMPOTENCY_TTL = 3600;
-
-	/**
-	 * How long `/media/{uuid}` may be cached: a year, the conventional
-	 * "forever" for content whose URL names its bytes and never changes.
-	 */
-	private const MEDIA_CACHE_SECONDS = 31536000;
 
 	public function __construct(
 		IRequest $request,
@@ -118,8 +106,6 @@ class ApiController extends MastodonApiController {
 		CacheActorService $cacheActorService,
 		StreamService $streamService,
 		FollowService $followService,
-		private InstanceService $instanceService,
-		private CacheDocumentService $cacheDocumentService,
 		private DocumentService $documentService,
 		private RelationshipService $relationshipService,
 		private ActionService $actionService,
@@ -132,8 +118,6 @@ class ApiController extends MastodonApiController {
 		private ConfigService $configService,
 		private CurlService $curlService,
 		private CacheDocumentsRequest $cacheDocumentsRequest,
-		private IRootFolder $rootFolder,
-		private ITempManager $tempManager,
 		private FilterService $filterService,
 		private BannerService $bannerService,
 		private AvatarService $avatarService,
@@ -148,7 +132,6 @@ class ApiController extends MastodonApiController {
 		private DeliveryService $deliveryService,
 		private ReactionService $reactionService,
 		private ReactionSummaryService $reactionSummaryService,
-		private GifService $gifService,
 		private NotificationService $notificationService,
 		private TranslationService $translationService,
 		private QuoteService $quoteService,
@@ -679,65 +662,6 @@ class ApiController extends MastodonApiController {
 		return 'An account on this server is a Nextcloud account, created by an '
 			. 'administrator. Once it exists, this application gives it a fediverse '
 			. 'identity; there is nothing to sign up for here.';
-	}
-
-	/**
-	 * Attaches a picture from the instance's library to a post being written.
-	 *
-	 * A copy, through the same `storeAttachment()` an upload and a Files pick
-	 * go through — so the sniffing, the size guard and the resizing are one
-	 * path rather than three that can drift. A copy rather than a reference
-	 * for the reason `mediaFromFile()` gives: a post keeps the picture it was
-	 * published with, and an administrator removing something from the library
-	 * must not empty a post that has already federated.
-	 */
-	#[PublicPage]
-	#[NoCSRFRequired]
-	#[AnonRateLimit(limit: 30, period: 60)]
-	#[UserRateLimit(limit: 30, period: 60)]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1/media/from-gif')]
-	public function mediaFromGif(): DataResponse {
-		try {
-			$this->initViewer(true);
-
-			$input = $this->convertInput(file_get_contents('php://input'));
-			$slug = trim((string)($input['slug'] ?? $this->request->getParam('slug', '')));
-			if ($slug === '') {
-				throw new InvalidActionException('no picture named');
-			}
-
-			$gif = $this->gifService->bySlug($slug);
-			if ($gif === null) {
-				throw new InvalidActionException('no such picture');
-			}
-
-			$file = $this->gifService->file($slug);
-			$this->refuseOversized($file->getSize(), $gif->getMediaType());
-
-			$tmpPath = $this->tempManager->getTemporaryFile();
-			if ($tmpPath === false) {
-				throw new InvalidActionException('no temporary file to copy into');
-			}
-
-			if (file_put_contents($tmpPath, $file->getContent()) === false) {
-				throw new InvalidActionException('the picture could not be copied');
-			}
-
-			// the title is the description unless the writer gave one: a
-			// library picture arriving with no alt text at all is the thing
-			// the ALT badge exists to complain about
-			$description = trim((string)($input['description'] ?? $this->request->getParam('description', '')));
-			if ($description === '') {
-				$description = $gif->getTitle();
-			}
-
-			return new DataResponse(
-				$this->storeAttachment($tmpPath, $description, '', $gif->getFilename()),
-				Http::STATUS_OK
-			);
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
 	}
 
 	/**

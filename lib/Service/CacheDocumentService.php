@@ -472,7 +472,7 @@ class CacheDocumentService {
 	/**
 	 * The size ceiling, applied to what the content turned out to be.
 	 *
-	 * The request-time check (`ApiController::refuseOversized()`) can only go
+	 * The request-time check (`MediaApiController::refuseOversized()`) can only go
 	 * on the type the *client* declared, and video is allowed to be far larger
 	 * than anything else — because it is copied to storage a chunk at a time
 	 * and never held in memory. A file that declared `video/mp4` to get past

@@ -324,7 +324,7 @@ class MediaAttachment implements JsonSerializable {
 		// `overwrite.cli.url` the inbox request ran under
 		if (preg_match(self::MEDIA_STREAM, $stored, $matches) === 1) {
 			return Server::get(IURLGenerator::class)
-				->linkToRouteAbsolute('social.Api.mediaStream', ['nid' => $matches[1]]);
+				->linkToRouteAbsolute('social.MediaApi.mediaStream', ['nid' => $matches[1]]);
 		}
 
 		$uuid = substr($stored, (int)strrpos($stored, '/') + 1);
@@ -333,7 +333,7 @@ class MediaAttachment implements JsonSerializable {
 		}
 
 		return Server::get(IURLGenerator::class)
-			->linkToRouteAbsolute('social.Api.mediaOpen', ['uuid' => $uuid]);
+			->linkToRouteAbsolute('social.MediaApi.mediaOpen', ['uuid' => $uuid]);
 	}
 
 	/**
