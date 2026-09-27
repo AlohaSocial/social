@@ -192,24 +192,6 @@ class NavigationControllerTest extends TestCase {
 		], $this->serverData());
 	}
 
-	public function testEverySocialPageAllowsVideoPreviewAndPlayerHosts(): void {
-		$this->systemValues([]);
-		$this->configuredCloud();
-		$this->existingActor();
-		// The reader can enter Subscriptions after the Vue router has already
-		// loaded this route, so the app shell must carry the policy here too.
-		$this->request->method('getPathInfo')->willReturn('/apps/social/discover');
-		$this->groupManager->method('isAdmin')->willReturn(false);
-
-		$response = $this->controller()->navigate();
-		$policy = $response->getContentSecurityPolicy()->buildPolicy();
-
-		$this->assertStringContainsString('i1.ytimg.com', $policy);
-		$this->assertStringContainsString('i4.ytimg.com', $policy);
-		$this->assertStringContainsString('https://www.youtube-nocookie.com', $policy);
-		$this->assertStringNotContainsString('img-src https:', $policy);
-	}
-
 	public function testNavigateServesThePublicTimelineToAnAnonymousVisitor(): void {
 		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 		$this->accountService->expects($this->never())->method('getActorFromUserId');

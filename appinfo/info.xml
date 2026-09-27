@@ -99,7 +99,6 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<job>OCA\Social\Cron\Ladder</job>
 		<job>OCA\Social\Cron\GifPack</job>
 		<job>OCA\Social\Cron\MediaSweep</job>
-		<job>OCA\Social\Cron\Subscriptions</job>
 		<job>OCA\Social\Cron\BlocklistSync</job>
 	</background-jobs>
 

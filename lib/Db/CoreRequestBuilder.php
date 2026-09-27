@@ -73,10 +73,6 @@ class CoreRequestBuilder {
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_SCHEDULED = 'social_scheduled';
-
-	/** The feeds an account follows, and the entries read out of them. */
-	public const TABLE_FEEDS = 'social_feed';
-	public const TABLE_FEED_ITEMS = 'social_feed_item';
 	public const TABLE_PLACES = 'social_place';
 	public const TABLE_STORIES = 'social_story';
 	public const TABLE_STORY_VIEWS = 'social_story_view';
@@ -655,29 +651,6 @@ class CoreRequestBuilder {
 			'cache_key',
 			'cache_value',
 			'expires'
-		],
-		self::TABLE_FEEDS => [
-			'id',
-			'user_id',
-			'url',
-			'url_prim',
-			'site_url',
-			'title',
-			'error',
-			'etag',
-			'modified_at',
-			'fetched_at',
-			'creation'
-		],
-		self::TABLE_FEED_ITEMS => [
-			'id',
-			'feed_id',
-			'guid_prim',
-			'link',
-			'title',
-			'summary',
-			'thumbnail',
-			'published'
 		],
 		self::TABLE_HOST_BREAKER => [
 			'host_prim',

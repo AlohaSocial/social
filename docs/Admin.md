@@ -825,15 +825,6 @@ covers fewer, 30 to 90 a pass. Past those sizes the cycle stretches and the
 stalest still go first; a key that rotated in between is fetched again the
 first time a signature fails to verify.
 
-**Feed subscriptions** are re-read by `Cron\Subscriptions` every fifteen
-minutes, for up to 240 seconds a pass, ten feeds at a time, never-read first and
-then stalest first. A batch costs about as long as its slowest feed, so a pass
-reads roughly 1,200 to 2,400 feeds when they answer within one to two seconds —
-five to ten thousand an hour, which is how many subscribed feeds the hourly
-re-read holds for — and still 80 a pass when every batch holds one that runs
-into the 30-second timeout. Before, it was twenty a pass, 80 an hour. Past that the re-read interval simply stretches; nothing
-starves, because the stalest feed always goes next.
-
 **Plan the upgrade window on a large instance.** Three upgrade steps rewrite
 `social_stream` row by row, and they run inside `occ upgrade`, while the server
 is in maintenance mode — there is no way to defer them:

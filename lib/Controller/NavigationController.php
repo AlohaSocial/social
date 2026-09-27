@@ -35,7 +35,6 @@ use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
-use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\Template\PublicTemplateResponse;
@@ -94,10 +93,10 @@ class NavigationController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	// The client-side router owns `/follow_requests`, `/blocked`, `/discover`,
-	// `/migration`, `/statistics`, `/settings`, `/search`, `/reels`, `/switch`
-	// and `/subscriptions`; the server has to answer them too, or reloading or
-	// bookmarking one of those pages is a 404 — and a page nobody can link to
-	// is one nobody can be sent.
+	// `/migration`, `/statistics`, `/settings`, `/search`, `/reels` and
+	// `/switch`; the server has to answer them too, or reloading or bookmarking
+	// one of those pages is a 404 — and a page nobody can link to is one
+	// nobody can be sent.
 	// `postfix` keeps the route names apart: a route is keyed by controller,
 	// method and postfix, so several routes on one method without it would
 	// leave only the last. The profile and post pages, `/@{username}` and
@@ -109,7 +108,6 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/discover', postfix: 'discover')]
 	#[FrontpageRoute(verb: 'GET', url: '/migration', postfix: 'migration')]
 	#[FrontpageRoute(verb: 'GET', url: '/switch', postfix: 'switch')]
-	#[FrontpageRoute(verb: 'GET', url: '/subscriptions', postfix: 'subscriptions')]
 	#[FrontpageRoute(verb: 'GET', url: '/statistics', postfix: 'statistics')]
 	#[FrontpageRoute(verb: 'GET', url: '/settings', postfix: 'settings')]
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
@@ -265,19 +263,7 @@ class NavigationController extends Controller {
 		$this->provideViewerAccount();
 		$this->provideFirstPage($path);
 
-		$response = new TemplateResponse(Application::APP_ID, 'main');
-		// Vue changes routes without another document request. The first route
-		// can therefore be anything in Social before the reader opens
-		// Subscriptions, so these narrow media exceptions belong on every app
-		// shell response rather than only a direct /subscriptions load.
-		$policy = new ContentSecurityPolicy();
-		foreach (['i.ytimg.com', 'i1.ytimg.com', 'i2.ytimg.com', 'i3.ytimg.com', 'i4.ytimg.com'] as $host) {
-			$policy->addAllowedImageDomain($host);
-		}
-		$policy->addAllowedFrameDomain('https://www.youtube-nocookie.com');
-		$response->setContentSecurityPolicy($policy);
-
-		return $response;
+		return new TemplateResponse(Application::APP_ID, 'main');
 	}
 
 	/**
