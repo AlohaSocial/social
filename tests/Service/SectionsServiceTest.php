@@ -13,7 +13,7 @@ use InvalidArgumentException;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\SectionsService;
 use OCP\IGroupManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,8 +25,8 @@ use PHPUnit\Framework\TestCase;
  * somebody chooses.
  */
 class SectionsServiceTest extends TestCase {
-	private ConfigService|MockObject $configService;
-	private IGroupManager|MockObject $groupManager;
+	private ConfigService|Stub $configService;
+	private IGroupManager|Stub $groupManager;
 	private SectionsService $service;
 
 	/** What the app values hold, so a write can be read back. */
@@ -43,7 +43,7 @@ class SectionsServiceTest extends TestCase {
 			ConfigService::SOCIAL_GROUP_LISTS => '[]',
 		];
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->stored[$key] ?? '');
 		$this->configService->method('getAppValueBool')
@@ -53,7 +53,7 @@ class SectionsServiceTest extends TestCase {
 				$this->stored[$key] = $value;
 			});
 
-		$this->groupManager = $this->createMock(IGroupManager::class);
+		$this->groupManager = $this->createStub(IGroupManager::class);
 		$this->groupManager->method('groupExists')
 			->willReturnCallback(fn (string $gid): bool => in_array($gid, $this->groups, true));
 

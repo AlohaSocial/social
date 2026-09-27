@@ -16,10 +16,12 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\RequestQueueService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class QueueControllerTest extends TestCase {
 	private RequestQueueService|MockObject $requestQueueService;
 	private ActivityService|MockObject $activityService;
@@ -31,7 +33,7 @@ class QueueControllerTest extends TestCase {
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->controller = new TestableQueueController(
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$this->requestQueueService,
 			$this->activityService,
 			$this->logger

@@ -13,9 +13,11 @@ use OCA\Social\Interfaces\Actor\GroupInterface;
 use OCA\Social\Interfaces\Actor\PersonInterface;
 use OCA\Social\Model\ActivityPub\Actor\Group;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 
 require_once __DIR__ . '/ActorInterfaceTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class GroupInterfaceTest extends ActorInterfaceTestCase {
 	protected function createHandler(): PersonInterface {
 		return new GroupInterface(

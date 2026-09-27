@@ -19,6 +19,7 @@ use OCA\Social\Service\TrendReviewService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -34,10 +35,10 @@ use RuntimeException;
 class PeerTrendServiceTest extends TestCase {
 	private const LOCAL = 'cloud.example';
 
-	private CurlService|MockObject $curlService;
-	private FediverseDirectoryService|MockObject $directoryService;
-	private HashtagService|MockObject $hashtagService;
-	private TrendReviewService|MockObject $trendReviewService;
+	private CurlService|Stub $curlService;
+	private FediverseDirectoryService|Stub $directoryService;
+	private HashtagService|Stub $hashtagService;
+	private TrendReviewService|Stub $trendReviewService;
 	private PeerTrendService $service;
 
 	/** url fragment => what that request answers with, or a Throwable to raise */
@@ -54,7 +55,7 @@ class PeerTrendServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->curlService = $this->createMock(CurlService::class);
+		$this->curlService = $this->createStub(CurlService::class);
 		$this->curlService->method('retrieveJson')
 			->willReturnCallback(function (string $method, string $url): array {
 				$this->asked[] = $url;
@@ -71,10 +72,10 @@ class PeerTrendServiceTest extends TestCase {
 				throw new RuntimeException('nothing answers ' . $url);
 			});
 
-		$this->directoryService = $this->createMock(FediverseDirectoryService::class);
+		$this->directoryService = $this->createStub(FediverseDirectoryService::class);
 		$this->directoryService->method('sources')->willReturnCallback(fn (): array => $this->sources);
 
-		$this->hashtagService = $this->createMock(HashtagService::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
 		$this->hashtagService->method('getTrending')->willReturnCallback(fn (): array => $this->localTags);
 		$this->hashtagService->method('searchHashtags')
 			->willReturnCallback(function (string $term): array {
@@ -84,7 +85,7 @@ class PeerTrendServiceTest extends TestCase {
 				));
 			});
 
-		$this->trendReviewService = $this->createMock(TrendReviewService::class);
+		$this->trendReviewService = $this->createStub(TrendReviewService::class);
 		$this->trendReviewService->method('filterTags')
 			->willReturnCallback(function (array $rows): array {
 				return array_values(array_filter(
@@ -93,11 +94,11 @@ class PeerTrendServiceTest extends TestCase {
 				));
 			});
 
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 	}
 
 	private function build(ICache|MockObject $cache): PeerTrendService {
-		$factory = $this->createMock(ICacheFactory::class);
+		$factory = $this->createStub(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
 		return new PeerTrendService(
@@ -371,7 +372,7 @@ class PeerTrendServiceTest extends TestCase {
 	}
 
 	public function testAnAnswerIsKeptSoTypingDoesNotHammerFourServers(): void {
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$held = [];
 		// a closure and not an arrow function: an arrow function captures
 		// `$held` by value when it is created, which is while it is still empty

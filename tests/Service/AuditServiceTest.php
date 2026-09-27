@@ -32,17 +32,17 @@ class AuditServiceTest extends TestCase {
 
 	private function service(?string $uid): AuditService {
 		$this->events = [];
-		$dispatcher = $this->createMock(IEventDispatcher::class);
+		$dispatcher = $this->createStub(IEventDispatcher::class);
 		$dispatcher->method('dispatchTyped')->willReturnCallback(function (Event $event): void {
 			$this->assertInstanceOf(CriticalActionPerformedEvent::class, $event);
 			$this->events[] = $event;
 		});
 
-		$userSession = $this->createMock(IUserSession::class);
+		$userSession = $this->createStub(IUserSession::class);
 		if ($uid === null) {
 			$userSession->method('getUser')->willReturn(null);
 		} else {
-			$user = $this->createMock(IUser::class);
+			$user = $this->createStub(IUser::class);
 			$user->method('getUID')->willReturn($uid);
 			$userSession->method('getUser')->willReturn($user);
 		}

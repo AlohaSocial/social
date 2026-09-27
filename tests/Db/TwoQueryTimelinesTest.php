@@ -14,6 +14,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * all. The SQL of each page needs a database and is exercised by the
  * integration suite (TimelineSeedTest, StreamFilterTest, MediaTypeTimelineTest).
  */
+#[AllowMockObjectsWithoutExpectations]
 class TwoQueryTimelinesTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 

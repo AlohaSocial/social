@@ -14,7 +14,9 @@ use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\TimelineRevisionService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,11 +28,12 @@ use PHPUnit\Framework\TestCase;
  * unfollows an account is answered `304` on every poll and goes on being shown
  * the posts they just asked to stop seeing.
  */
+#[AllowMockObjectsWithoutExpectations]
 class TimelineRevisionServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 
 	private ActorsRequest|MockObject $actorsRequest;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private TimelineRevisionService $service;
 
 	/** @var array<string, string> the stored user values, by user */
@@ -40,7 +43,7 @@ class TimelineRevisionServiceTest extends TestCase {
 		parent::setUp();
 
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getValueForUser')->willReturnCallback(
 			fn (string $userId, string $key): string => $this->stored[$userId . '/' . $key] ?? ''
 		);

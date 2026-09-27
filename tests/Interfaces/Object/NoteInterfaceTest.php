@@ -37,20 +37,23 @@ use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class NoteInterfaceTest extends ActivityPubTestCase {
 	private const NOTE = self::REMOTE_URL . '/notes/1';
 	private const PARENT = self::LOCAL_URL . '/notes/parent';
 
 	/** @var StreamRequest&MockObject */
 	private $streamRequest;
-	/** @var CacheActorsRequest&MockObject */
+	/** @var CacheActorsRequest&Stub */
 	private $cacheActorsRequest;
-	/** @var PollService&MockObject */
+	/** @var PollService&Stub */
 	private $pollService;
 	/** @var PushService&MockObject */
 	private $pushService;
@@ -68,10 +71,10 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		parent::setUp();
 
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$this->pushService = $this->createMock(PushService::class);
 
-		$this->pollService = $this->createMock(PollService::class);
+		$this->pollService = $this->createStub(PollService::class);
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->linkPreviewService = $this->createMock(LinkPreviewService::class);
 		$this->forwardService = $this->createMock(ForwardService::class);
@@ -84,7 +87,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 			$this->streamQueueService,
 			$this->linkPreviewService,
 			$this->forwardService,
-			$this->createMock(\OCA\Social\Service\NotificationService::class),
+			$this->createStub(\OCA\Social\Service\NotificationService::class),
 			$this->revisionService
 		);
 

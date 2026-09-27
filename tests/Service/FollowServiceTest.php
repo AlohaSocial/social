@@ -35,12 +35,15 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class FollowServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const ALICE_ID = 'https://social.example/@alice';
@@ -54,8 +57,8 @@ class FollowServiceTest extends TestCase {
 	private AccountRelationService|MockObject $accountRelationService;
 	private ActivityService|MockObject $activityService;
 	private CacheActorService|MockObject $cacheActorService;
-	/** @var FollowInterface&MockObject */
-	/** @var ConfigService&MockObject */
+	/** @var FollowInterface&Stub */
+	/** @var ConfigService&Stub */
 	private $configService;
 	private TimelineRevisionService|MockObject $timelineRevisionService;
 	private AccountService|MockObject $accountService;
@@ -74,7 +77,7 @@ class FollowServiceTest extends TestCase {
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->followInterface = $this->createMock(FollowInterface::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
@@ -106,7 +109,7 @@ class FollowServiceTest extends TestCase {
 		$args = [];
 		foreach ((new ReflectionClass(AP::class))->getConstructor()->getParameters() as $parameter) {
 			$class = $parameter->getType()->getName();
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}

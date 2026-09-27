@@ -41,7 +41,7 @@ class ProfileSectionListenerTest extends TestCase {
 	public function testUnrelatedEventsAreIgnored(string $eventKind): void {
 		$event = match ($eventKind) {
 			'generic' => new Event(),
-			'user-updated' => new UserUpdatedEvent($this->createMock(IUser::class), []),
+			'user-updated' => new UserUpdatedEvent($this->createStub(IUser::class), []),
 		};
 
 		(new ProfileSectionListener())->handle($event);

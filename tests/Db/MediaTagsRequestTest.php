@@ -15,6 +15,7 @@ use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IFunctionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\DB\QueryBuilder\IQueryFunction;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -27,6 +28,7 @@ use PHPUnit\Framework\TestCase;
  * The statements are not run; what they were asked to bind is what is
  * asserted.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MediaTagsRequestTest extends TestCase {
 	private const WIDE = '92233720368547758070';
 	private const ALICE = 'https://cloud.example/@alice';
@@ -51,8 +53,8 @@ class MediaTagsRequestTest extends TestCase {
 			});
 		}
 		$qb->method('expr')->willReturn(new FakeExpressions());
-		$functions = $this->createMock(IFunctionBuilder::class);
-		$functions->method('count')->willReturn($this->createMock(IQueryFunction::class));
+		$functions = $this->createStub(IFunctionBuilder::class);
+		$functions->method('count')->willReturn($this->createStub(IQueryFunction::class));
 		$qb->method('func')->willReturn($functions);
 		$qb->method('prim')->willReturnCallback(static fn (string $id): string => md5($id));
 		$qb->method('createNamedParameter')->willReturnCallback(function ($value, $type = IQueryBuilder::PARAM_STR): string {
@@ -61,7 +63,7 @@ class MediaTagsRequestTest extends TestCase {
 			return is_scalar($value) ? (string)$value : ':p';
 		});
 
-		$result = $this->createMock(IResult::class);
+		$result = $this->createStub(IResult::class);
 		$result->method('fetch')->willReturnCallback(fn () => array_shift($this->rows) ?? false);
 		$qb->method('executeQuery')->willReturn($result);
 		$qb->method('executeStatement')->willReturn(1);

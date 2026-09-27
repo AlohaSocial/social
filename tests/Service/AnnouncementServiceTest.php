@@ -16,7 +16,10 @@ use OCA\Social\Model\Client\Announcement;
 use OCA\Social\Model\CustomEmoji;
 use OCA\Social\Service\AnnouncementService;
 use OCA\Social\Service\EmojiService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -29,6 +32,7 @@ use PHPUnit\Framework\TestCase;
  * standalone suite has no database. The SQL that has to make the same two
  * decisions is exercised by the integration suite.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AnnouncementServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
@@ -44,7 +48,7 @@ class AnnouncementServiceTest extends TestCase {
 	private array $reactions = [];
 	/** @var array<string, CustomEmoji> what this instance publishes */
 	private array $published = [];
-	private EmojiService|MockObject $emojiService;
+	private EmojiService|Stub $emojiService;
 
 	protected function setUp(): void {
 		/** @var AnnouncementsRequest&MockObject $request */
@@ -149,7 +153,7 @@ class AnnouncementServiceTest extends TestCase {
 			}
 		);
 
-		$this->emojiService = $this->createMock(EmojiService::class);
+		$this->emojiService = $this->createStub(EmojiService::class);
 		$this->emojiService->method('byShortcode')->willReturnCallback(
 			fn (string $shortcode): ?CustomEmoji => $this->published[$shortcode] ?? null
 		);
@@ -515,9 +519,7 @@ class AnnouncementServiceTest extends TestCase {
 		$this->assertArrayNotHasKey('url', $this->reactionsSeenBy('alice', $id)[0]);
 	}
 
-	/**
-	 * @dataProvider provideThingsThatAreNotEmoji
-	 */
+	#[DataProvider('provideThingsThatAreNotEmoji')]
 	public function testWhatIsNotAnEmojiIsRefused(string $name): void {
 		$id = $this->service->create('read this')->getId();
 
@@ -526,7 +528,7 @@ class AnnouncementServiceTest extends TestCase {
 		$this->service->react($id, 'alice', $name);
 	}
 
-	public function provideThingsThatAreNotEmoji(): iterable {
+	public static function provideThingsThatAreNotEmoji(): iterable {
 		// a label somebody wrote on an instance-wide notice, shown to everybody
 		// who reads it, is not a reaction — it is a second announcement
 		yield 'a word' => ['nope'];
@@ -543,9 +545,7 @@ class AnnouncementServiceTest extends TestCase {
 		yield 'a sentence of emoji' => ['👍👍👍👍👍👍👍👍👍👍👍👍👍'];
 	}
 
-	/**
-	 * @dataProvider provideEmoji
-	 */
+	#[DataProvider('provideEmoji')]
 	public function testWhatIsOneEmojiIsAccepted(string $name): void {
 		$id = $this->service->create('read this')->getId();
 
@@ -554,7 +554,7 @@ class AnnouncementServiceTest extends TestCase {
 		$this->assertSame([$name], array_column($this->reactionsSeenBy('alice', $id), 'name'));
 	}
 
-	public function provideEmoji(): iterable {
+	public static function provideEmoji(): iterable {
 		yield 'plain' => ['👍'];
 		// one emoji is often several code points, and a check that counted
 		// them would refuse every one of these

@@ -14,9 +14,11 @@ use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\RequestQueueService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class FederationHealthServiceTest extends TestCase {
 	private RequestQueueRequest|MockObject $requestQueueRequest;
 	private FederationHealthService $service;

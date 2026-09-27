@@ -28,9 +28,9 @@ class PeerTubeVideoMetaTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		$this->service = new PeerTubeService(
-			$this->createMock(DocumentInterface::class),
-			$this->createMock(IURLGenerator::class),
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(DocumentInterface::class),
+			$this->createStub(IURLGenerator::class),
+			$this->createStub(LoggerInterface::class),
 		);
 	}
 

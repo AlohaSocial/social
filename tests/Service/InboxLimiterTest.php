@@ -18,6 +18,7 @@ use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICacheFactory;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -26,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * off: the counters were kept in `createDistributed()`, a cache there that
  * forgets every write, so every delivery read a count of zero.
  */
+#[AllowMockObjectsWithoutExpectations]
 class InboxLimiterTest extends TestCase {
 	private ConfigService|MockObject $configService;
 	private InboxLimiter $limiter;
@@ -33,9 +35,9 @@ class InboxLimiterTest extends TestCase {
 	private InMemoryDurableCacheRequest $table;
 
 	protected function setUp(): void {
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn(false);
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(static fn (): int => time());
 		$this->table = new InMemoryDurableCacheRequest();
 

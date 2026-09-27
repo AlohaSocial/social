@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Model\Client;
 
 use OCA\Social\Model\Client\Collection;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 class CollectionTest extends TestCase {
@@ -38,7 +39,7 @@ class CollectionTest extends TestCase {
 		];
 	}
 
-	/** @dataProvider visibilityProvider */
+	#[DataProvider('visibilityProvider')]
 	public function testOnlyTheTwoMeaningfulVisibilitiesAreKept(string $given, string $expected): void {
 		$this->assertSame($expected, (new Collection())->setVisibility($given)->getVisibility());
 	}

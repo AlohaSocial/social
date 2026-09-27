@@ -25,7 +25,7 @@ class IndexTest extends TestCase {
 	private Index $job;
 
 	protected function setUp(): void {
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1_757_937_600);
 		$this->indexService = $this->createMock(IndexService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
@@ -44,13 +44,13 @@ class IndexTest extends TestCase {
 		$this->indexService->expects($this->once())->method('repairNextChunk')->willReturn(500);
 		$this->logger->expects($this->once())->method('info')
 			->with($this->stringContains('repaired stream side indexes'), ['count' => 500]);
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 	}
 
 	public function testAnEmptyPassDoesNotProduceAnInformationLog(): void {
 		$this->indexService->expects($this->once())->method('repairNextChunk')->willReturn(0);
 		$this->logger->expects($this->never())->method('info');
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 	}
 
 	public function testAServiceFailureIsLoggedForTheNextScheduledRetry(): void {
@@ -58,6 +58,6 @@ class IndexTest extends TestCase {
 		$this->indexService->expects($this->once())->method('repairNextChunk')->willThrowException($failure);
 		$this->logger->expects($this->once())->method('error')
 			->with($this->stringContains('repair pass failed'), ['exception' => $failure]);
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 	}
 }

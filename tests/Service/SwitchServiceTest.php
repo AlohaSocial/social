@@ -13,15 +13,15 @@ use Exception;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\SwitchService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 class SwitchServiceTest extends TestCase {
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private SwitchService $service;
 
 	protected function setUp(): void {
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->service = new SwitchService($this->cacheActorService);
 	}
 

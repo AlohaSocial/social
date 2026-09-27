@@ -15,6 +15,7 @@ use OCA\Social\Db\HashtagsRequest;
 use OCA\Social\Db\RequestQueueRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Tools\IExtendedQueryBuilder;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -33,6 +34,7 @@ use ReflectionClass;
  * `FakeExpressions` refuses an empty composite outright, so a return to the
  * old shape fails these tests rather than only changing their output.
  */
+#[AllowMockObjectsWithoutExpectations]
 class LoopBuiltPredicatesTest extends TestCase {
 	/** @var string[] every condition the query was given */
 	private array $where = [];

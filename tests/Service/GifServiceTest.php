@@ -18,8 +18,10 @@ use OCA\Social\Service\ImageMetadataService;
 use OCP\Files\IAppData;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -30,31 +32,32 @@ use Psr\Log\NullLogger;
  * URL *and* the stem of a filename in appdata, so anything it lets through is
  * something both of those have to survive.
  */
+#[AllowMockObjectsWithoutExpectations]
 class GifServiceTest extends TestCase {
 	private GifRequest&MockObject $gifRequest;
 	private ISimpleFolder&MockObject $folder;
-	private GifPackService&MockObject $pack;
+	private GifPackService&Stub $pack;
 	private GifService $service;
 
 	protected function setUp(): void {
 		$this->gifRequest = $this->createMock(GifRequest::class);
 		$this->folder = $this->createMock(ISimpleFolder::class);
 
-		$appData = $this->createMock(IAppData::class);
+		$appData = $this->createStub(IAppData::class);
 		$appData->method('getFolder')->willReturn($this->folder);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')
 			->willReturnCallback(
 				static fn (string $route, array $args): string => 'https://cloud.example/gif/' . $args['slug']
 			);
 
-		$metadata = $this->createMock(ImageMetadataService::class);
+		$metadata = $this->createStub(ImageMetadataService::class);
 		$metadata->method('strip')->willReturnArgument(0);
 
 		// the shipped emoji have their own suite; here they would put 881
 		// rows in front of every assertion about the handful an instance adds
-		$this->pack = $this->createMock(GifPackService::class);
+		$this->pack = $this->createStub(GifPackService::class);
 		$this->pack->method('all')->willReturn([]);
 		$this->pack->method('search')->willReturn([]);
 		$this->pack->method('owns')->willReturnCallback(
@@ -140,7 +143,7 @@ class GifServiceTest extends TestCase {
 	 * @param Gif[] $found what it answers a search with
 	 */
 	private function serviceWithPack(array $all, array $found): GifService {
-		$pack = $this->createMock(GifPackService::class);
+		$pack = $this->createStub(GifPackService::class);
 		$pack->method('all')->willReturn($all);
 		$pack->method('search')->willReturn($found);
 		$pack->method('owns')->willReturnCallback(
@@ -150,12 +153,12 @@ class GifServiceTest extends TestCase {
 		return $this->serviceWithMock($pack);
 	}
 
-	private function serviceWithMock(GifPackService&MockObject $pack): GifService {
-		$appData = $this->createMock(IAppData::class);
+	private function serviceWithMock(GifPackService&Stub $pack): GifService {
+		$appData = $this->createStub(IAppData::class);
 		$appData->method('getFolder')->willReturn($this->folder);
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/gif/x');
-		$metadata = $this->createMock(ImageMetadataService::class);
+		$metadata = $this->createStub(ImageMetadataService::class);
 		$metadata->method('strip')->willReturnArgument(0);
 
 		return new GifService(

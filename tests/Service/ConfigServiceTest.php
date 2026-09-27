@@ -16,10 +16,12 @@ use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ConfigServiceTest extends TestCase {
 	private IAppConfig|MockObject $appConfig;
 	private IUserConfig|MockObject $userConfig;

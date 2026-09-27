@@ -57,8 +57,10 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -74,11 +76,12 @@ class AsyncFreeActivityPubController extends ActivityPubController {
 	}
 }
 
+#[AllowMockObjectsWithoutExpectations]
 class ActivityPubControllerTest extends TestCase {
 	private const SOCIAL_URL = 'https://cloud.example/apps/social/';
 	private const LD_JSON = 'application/ld+json; profile="https://www.w3.org/ns/activitystreams"';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
 	/** @var SocialPubController&MockObject */
 	private $socialPubController;
@@ -92,7 +95,7 @@ class ActivityPubControllerTest extends TestCase {
 	private $streamQueueService;
 	/** @var ImportService&MockObject */
 	private $importService;
-	/** @var AccountService&MockObject */
+	/** @var AccountService&Stub */
 	private $accountService;
 	/** @var FollowService&MockObject */
 	private $followService;
@@ -102,7 +105,7 @@ class ActivityPubControllerTest extends TestCase {
 	private $streamRequest;
 	/** @var PinService&MockObject */
 	private $pinService;
-	/** @var InstanceActorService&MockObject */
+	/** @var InstanceActorService&Stub */
 	private $instanceActorService;
 	private $authorizedFetchService;
 	/** @var StoryService|\PHPUnit\Framework\MockObject\MockObject */
@@ -112,7 +115,7 @@ class ActivityPubControllerTest extends TestCase {
 	private ?Person $signedReader = null;
 	/** Whether this instance answers only signed GETs. */
 	private bool $secureMode = false;
-	/** @var ConfigService&MockObject */
+	/** @var ConfigService&Stub */
 	private $configService;
 	/** @var InboxLimiter&MockObject */
 	private $inboxLimiter;
@@ -121,7 +124,7 @@ class ActivityPubControllerTest extends TestCase {
 	private AsyncFreeActivityPubController $controller;
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->socialPubController = $this->createMock(SocialPubController::class);
 		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
@@ -129,13 +132,13 @@ class ActivityPubControllerTest extends TestCase {
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->importService = $this->createMock(ImportService::class);
 		$this->inboxLimiter = $this->createMock(InboxLimiter::class);
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->followService = $this->createMock(FollowService::class);
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->pinService = $this->createMock(PinService::class);
-		$this->instanceActorService = $this->createMock(InstanceActorService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->instanceActorService = $this->createStub(InstanceActorService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
 		$this->configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
@@ -145,7 +148,7 @@ class ActivityPubControllerTest extends TestCase {
 
 		$this->storyService = $this->createMock(StoryService::class);
 
-		$this->authorizedFetchService = $this->createMock(AuthorizedFetchService::class);
+		$this->authorizedFetchService = $this->createStub(AuthorizedFetchService::class);
 		$this->authorizedFetchService->method('reader')->willReturnCallback(
 			fn (): ?Person => $this->signedReader
 		);
@@ -174,7 +177,7 @@ class ActivityPubControllerTest extends TestCase {
 			$this->instanceActorService,
 			$this->authorizedFetchService,
 			$this->storyService,
-			$this->createMock(\OCA\Social\Service\FeedService::class),
+			$this->createStub(\OCA\Social\Service\FeedService::class),
 			$this->configService,
 			$this->logger
 		);
@@ -493,7 +496,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->forwardedActivity('Create', 'https://gts.example/users/dan/statuses/1', 'https://gts.example/users/dan');
 		$this->importService->expects($this->never())->method('parseIncomingRequest');
 		$this->streamQueueService->expects($this->once())->method('queueFetch')
-			->with($this->isType('string'), 'https://gts.example/users/dan/statuses/1')
+			->with($this->isString(), 'https://gts.example/users/dan/statuses/1')
 			->willReturn(true);
 		$this->streamQueueService->expects($this->once())->method('cacheStreamByToken');
 
@@ -1141,7 +1144,7 @@ class ActivityPubControllerTest extends TestCase {
 
 	public function testDisplayPostReturnsTheStreamAsActivityPub(): void {
 		$this->acceptHeader('application/activity+json');
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$this->accountService->method('getCurrentViewer')->willReturn($viewer);
 		$this->streamService->expects($this->once())->method('setViewer')->with($viewer);
 		$stream = $this->createMock(Stream::class);
@@ -1155,7 +1158,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->acceptHeader('application/activity+json');
 		$this->accountService->method('getCurrentViewer')->willThrowException(new AccountDoesNotExistException());
 		$this->streamService->expects($this->never())->method('setViewer');
-		$stream = $this->createMock(Stream::class);
+		$stream = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamById')->willReturn($stream);
 
 		$this->assertActivityPubResponse($this->controller->displayPost('alice', 'abc123'), $stream);
@@ -1449,9 +1452,9 @@ class ActivityPubControllerTest extends TestCase {
 		$this->acceptHeader('application/activity+json');
 		$this->accountService->method('getCurrentViewer')
 			->willThrowException(new AccountDoesNotExistException());
-		$this->signedReader = $this->createMock(Person::class);
+		$this->signedReader = $this->createStub(Person::class);
 		$this->streamService->expects($this->once())->method('setViewer')->with($this->signedReader);
-		$stream = $this->createMock(Stream::class);
+		$stream = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamById')->willReturn($stream);
 
 		$this->assertActivityPubResponse($this->controller->displayPost('alice', 'abc123'), $stream);
@@ -1463,7 +1466,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->accountService->method('getCurrentViewer')
 			->willThrowException(new AccountDoesNotExistException());
 		$this->streamService->expects($this->never())->method('setViewer');
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 
 		$this->controller->displayPost('alice', 'abc123');
 	}
@@ -1471,11 +1474,11 @@ class ActivityPubControllerTest extends TestCase {
 	/** A local session wins: the person at the keyboard is who is asking. */
 	public function testALocalViewerIsNotReplacedByASignedFetch(): void {
 		$this->acceptHeader('application/activity+json');
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$this->accountService->method('getCurrentViewer')->willReturn($viewer);
-		$this->signedReader = $this->createMock(Person::class);
+		$this->signedReader = $this->createStub(Person::class);
 		$this->streamService->expects($this->once())->method('setViewer')->with($viewer);
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 
 		$this->controller->displayPost('alice', 'abc123');
 	}
@@ -1504,7 +1507,7 @@ class ActivityPubControllerTest extends TestCase {
 	public function testInSecureModeASignedActorFetchIsAnswered(): void {
 		$this->acceptHeader('application/activity+json');
 		$this->secureMode = true;
-		$this->signedReader = $this->createMock(Person::class);
+		$this->signedReader = $this->createStub(Person::class);
 		$actor = $this->localActor('alice');
 
 		$this->assertActivityPubResponse($this->controller->actor('alice'), $actor);
@@ -1562,7 +1565,7 @@ class ActivityPubControllerTest extends TestCase {
 		$this->acceptHeader('text/html');
 		$this->secureMode = true;
 		$this->cacheActorService->method('getFromLocalAccount')
-			->willReturn($this->createMock(Person::class));
+			->willReturn($this->createStub(Person::class));
 		$this->socialPubController->method('actor')
 			->willReturn(new \OCP\AppFramework\Http\TemplateResponse('social', 'main'));
 
@@ -1576,7 +1579,7 @@ class ActivityPubControllerTest extends TestCase {
 		$author = new Person();
 		$author->setId('https://cloud.example/@alice');
 		$this->localActor('alice', $author);
-		$this->signedReader = $this->createMock(Person::class);
+		$this->signedReader = $this->createStub(Person::class);
 
 		$story = new ClientStory();
 		$this->storyService->method('idOf')->with($author, 7)
@@ -1597,7 +1600,7 @@ class ActivityPubControllerTest extends TestCase {
 		$author = new Person();
 		$author->setId('https://cloud.example/@alice');
 		$this->localActor('alice', $author);
-		$this->signedReader = $this->createMock(Person::class);
+		$this->signedReader = $this->createStub(Person::class);
 
 		$this->storyService->method('idOf')->willReturn('https://cloud.example/@alice/stories/7');
 		$this->storyService->method('bySourceId')->willReturn(new ClientStory());
@@ -1679,7 +1682,14 @@ class ActivityPubControllerTest extends TestCase {
 		$this->assertSame($expected, $built->getHeaders()['Content-Type']);
 	}
 
-	#[DataProvider('peerAcceptHeaders')]
+	/** @return iterable<string, array{string}> the same peers, by what they ask for */
+	public static function peerAccepts(): iterable {
+		foreach (self::peerAcceptHeaders() as $name => [$accept]) {
+			yield $name => [$accept];
+		}
+	}
+
+	#[DataProvider('peerAccepts')]
 	public function testResponderKeepsTheStatusAndHeaders(string $accept): void {
 		$response = new DataResponse(['status' => -1], Http::STATUS_GONE);
 		$response->addHeader('X-Social-Test', 'kept');

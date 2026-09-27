@@ -15,17 +15,20 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ProfileLinkVerifier;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class ProfileLinkVerifierTest extends TestCase {
 	private const ACTOR = 'https://cloud.example/apps/social/@alice';
 	private const PROFILE = 'https://cloud.example/apps/social/@alice/profile';
 
-	private CacheDocumentService|MockObject $documents;
-	private ConfigService|MockObject $config;
+	private CacheDocumentService|Stub $documents;
+	private ConfigService|Stub $config;
 	private ActorsRequest|MockObject $actorsRequest;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
 	private ProfileLinkVerifier $verifier;
@@ -35,7 +38,7 @@ class ProfileLinkVerifierTest extends TestCase {
 	private array $fetched = [];
 
 	protected function setUp(): void {
-		$this->documents = $this->createMock(CacheDocumentService::class);
+		$this->documents = $this->createStub(CacheDocumentService::class);
 		$this->documents->method('retrieveContent')->willReturnCallback(function (string $url): string {
 			$this->fetched[] = $url;
 			if (!isset($this->pages[$url])) {
@@ -47,7 +50,7 @@ class ProfileLinkVerifierTest extends TestCase {
 		// nothing is refused as local, failing closed -- so the tests that
 		// fetch run with the local network allowed, and the one that checks
 		// the refusal builds its own verifier
-		$this->config = $this->createMock(ConfigService::class);
+		$this->config = $this->createStub(ConfigService::class);
 		$this->config->method('isLocalNetworkAllowed')->willReturn(true);
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
@@ -108,7 +111,7 @@ class ProfileLinkVerifierTest extends TestCase {
 	public function testALocalAddressIsNeverFetched(): void {
 		// a profile field is user input, and this would otherwise be a way to
 		// make the server read its own network
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('isLocalNetworkAllowed')->willReturn(false);
 		$verifier = new ProfileLinkVerifier($this->documents, $config, $this->actorsRequest, $this->cacheActorsRequest, new NullLogger());
 

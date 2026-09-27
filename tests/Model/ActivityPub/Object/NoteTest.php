@@ -27,7 +27,7 @@ class NoteTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->installActivityPub();
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	protected function tearDown(): void {
@@ -148,6 +148,7 @@ class NoteTest extends TestCase {
 	}
 
 	public function testFillMentionsResolvesKnownActors(): void {
+		$this->installActivityPub(mocked: [PersonInterface::class]);
 		$bob = new Person();
 		$bob->setNid(77)
 			->setPreferredUsername('bob')
@@ -336,11 +337,11 @@ class NoteTest extends TestCase {
 	 * refuses, so the publisher asks for one before it makes the shape.
 	 */
 	private function publishVideoObjects(bool $enabled, bool $hasChannel = true): void {
-		$config = $this->createMock(\OCA\Social\Service\ConfigService::class);
+		$config = $this->createStub(\OCA\Social\Service\ConfigService::class);
 		$config->method('getAppValueBool')->willReturn($enabled);
 		\OC::$server->register(\OCA\Social\Service\ConfigService::class, $config);
 
-		$channels = $this->createMock(\OCA\Social\Service\ChannelService::class);
+		$channels = $this->createStub(\OCA\Social\Service\ChannelService::class);
 		$channels->method('attributionOf')->willReturn($hasChannel ? [
 			['type' => 'Group', 'id' => 'https://cloud.example.org/apps/social/@alice_channel'],
 			['type' => 'Person', 'id' => 'https://cloud.example.org/apps/social/@alice'],

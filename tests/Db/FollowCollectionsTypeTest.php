@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Object\Follow;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -22,6 +23,7 @@ use PHPUnit\Framework\TestCase;
  * follows have to leave it out, or each actor follows itself and the page is
  * one longer than the collection's `totalItems`.
  */
+#[AllowMockObjectsWithoutExpectations]
 class FollowCollectionsTypeTest extends TestCase {
 	/** @var string[] */
 	private array $types = [];

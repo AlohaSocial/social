@@ -22,6 +22,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -32,6 +33,7 @@ use Throwable;
  * The contract every client-API controller answers through: who the caller
  * is, whether their token may do this, and what a failure looks like.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ClientApiControllerTest extends TestCase {
 	private array $headers = [];
 	private bool $csrf = true;

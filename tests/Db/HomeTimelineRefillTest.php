@@ -14,6 +14,7 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -31,6 +32,7 @@ use ReflectionProperty;
  * and no `Link: rel="next"` is sent. The timeline ended in the middle, with
  * older posts the reader can see sitting a few hundred rows further down.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HomeTimelineRefillTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 
@@ -69,7 +71,7 @@ class HomeTimelineRefillTest extends TestCase {
 		(new ReflectionProperty(StreamRequest::class, 'viewer'))->setValue($this->request, $viewer);
 
 		// the followed-tag half is not what is under test here
-		$tags = $this->createMock(FollowedTagsRequest::class);
+		$tags = $this->createStub(FollowedTagsRequest::class);
 		$tags->method('countByActor')->willReturn(0);
 		(new ReflectionProperty(StreamRequest::class, 'followedTagsRequest'))
 			->setValue($this->request, $tags);

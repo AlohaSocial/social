@@ -32,11 +32,14 @@ use OCA\Social\Service\PollService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamActionService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class PollServiceTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/@viewer';
 	private const AUTHOR = 'https://mastodon.social/users/alice';
@@ -46,41 +49,41 @@ class PollServiceTest extends TestCase {
 	private CacheActorService|MockObject $cacheActorService;
 	private ActivityService|MockObject $activityService;
 	private StreamActionService|MockObject $streamActionService;
-	private StreamActionsRequest|MockObject $streamActionsRequest;
-	private NotificationService|MockObject $notificationService;
-	private ConfigService|MockObject $configService;
+	private StreamActionsRequest|Stub $streamActionsRequest;
+	private NotificationService|Stub $notificationService;
+	private ConfigService|Stub $configService;
 
 	/** @var array<int, array<string, mixed>> the polls that were announced closed */
 	private array $announced = [];
 	/** @var array<string, string> the app values the sweep reads and writes */
 	private array $stored = [];
-	private ActionsRequest|MockObject $actionsRequest;
+	private ActionsRequest|Stub $actionsRequest;
 	private AccountService|MockObject $accountService;
 	private PollService $service;
 
 	protected function setUp(): void {
 		$this->bootActivityPub();
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->streamActionService = $this->createMock(StreamActionService::class);
-		$this->streamActionsRequest = $this->createMock(StreamActionsRequest::class);
+		$this->streamActionsRequest = $this->createStub(StreamActionsRequest::class);
 		$this->streamActionsRequest->method('getAction')
 			->willThrowException(new StreamActionDoesNotExistException());
 
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
 		$this->actionsRequest->method('getAction')
 			->willThrowException(new ActionDoesNotExistException());
 		$this->accountService = $this->createMock(AccountService::class);
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('onPollClosed')->willReturnCallback(
 			function (Question $poll, array $voters): void {
 				$this->announced[] = ['poll' => $poll->getId(), 'voters' => $voters];
 			}
 		);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
 			fn (string $key): string => $this->stored[$key] ?? ''
 		);
@@ -96,7 +99,7 @@ class PollServiceTest extends TestCase {
 			$this->accountService,
 			$this->cacheActorService,
 			$this->activityService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->streamActionService,
 			$this->streamActionsRequest,
 			$this->notificationService,
@@ -115,7 +118,7 @@ class PollServiceTest extends TestCase {
 		$args = [];
 		foreach ((new ReflectionClass(AP::class))->getConstructor()->getParameters() as $parameter) {
 			$class = $parameter->getType()->getName();
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn('https://cloud.example');
 			}
@@ -322,14 +325,14 @@ class PollServiceTest extends TestCase {
 	public function testADuplicateVoteIsConsumedButNotCounted(): void {
 		$poll = $this->localPoll();
 		// every dedupe lookup finds an existing vote row
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('onPollClosed')->willReturnCallback(
 			function (Question $poll, array $voters): void {
 				$this->announced[] = ['poll' => $poll->getId(), 'voters' => $voters];
 			}
 		);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
 			fn (string $key): string => $this->stored[$key] ?? ''
 		);
@@ -342,7 +345,7 @@ class PollServiceTest extends TestCase {
 		$this->service = new PollService(
 			$this->streamRequest, $this->actionsRequest, $this->accountService,
 			$this->cacheActorService, $this->activityService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->streamActionService, $this->streamActionsRequest,
 			$this->notificationService, $this->configService, new NullLogger()
 		);
@@ -380,14 +383,14 @@ class PollServiceTest extends TestCase {
 
 	/** An ActionsRequest that only knows about the votes named here. */
 	private function votesAlreadyCast(array $options): void {
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('onPollClosed')->willReturnCallback(
 			function (Question $poll, array $voters): void {
 				$this->announced[] = ['poll' => $poll->getId(), 'voters' => $voters];
 			}
 		);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
 			fn (string $key): string => $this->stored[$key] ?? ''
 		);
@@ -400,7 +403,7 @@ class PollServiceTest extends TestCase {
 		$this->service = new PollService(
 			$this->streamRequest, $this->actionsRequest, $this->accountService,
 			$this->cacheActorService, $this->activityService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->streamActionService, $this->streamActionsRequest,
 			$this->notificationService, $this->configService, new NullLogger()
 		);

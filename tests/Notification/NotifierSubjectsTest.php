@@ -15,8 +15,10 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
 use OCP\Notification\INotification;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,14 +28,15 @@ use PHPUnit\Framework\TestCase;
  * asserted against each other here: a subject nothing renders reaches the user
  * as a thrown InvalidArgumentException and no notification at all.
  */
+#[AllowMockObjectsWithoutExpectations]
 class NotifierSubjectsTest extends TestCase {
 	private const APP_ICON = 'https://cloud.example/apps/social/img/social_dark.svg';
 	private const POST = 'https://cloud.example/@alice/post-1';
 	private const AVATAR = 'https://remote.example/avatars/bob.png';
 
-	/** @var IFactory&MockObject */
+	/** @var IFactory&Stub */
 	private $factory;
-	/** @var IURLGenerator&MockObject */
+	/** @var IURLGenerator&Stub */
 	private $urlGenerator;
 	private Notifier $notifier;
 
@@ -41,20 +44,20 @@ class NotifierSubjectsTest extends TestCase {
 	private array $rendered = [];
 
 	protected function setUp(): void {
-		$this->factory = $this->createMock(IFactory::class);
-		$l10n = $this->createMock(IL10N::class);
+		$this->factory = $this->createStub(IFactory::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(
 			fn (string $text, $params = []): string
 				=> ((array)$params === []) ? $text : vsprintf($text, (array)$params)
 		);
 		$this->factory->method('get')->willReturn($l10n);
 
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social_dark.svg');
 		$this->urlGenerator->method('getAbsoluteURL')->willReturn(self::APP_ICON);
 
 		$this->notifier = new Notifier(
-			$this->createMock(IL10N::class),
+			$this->createStub(IL10N::class),
 			$this->factory,
 			$this->urlGenerator
 		);
@@ -104,7 +107,14 @@ class NotifierSubjectsTest extends TestCase {
 		$this->assertSame($expected, $this->rendered['subject']);
 	}
 
-	#[DataProvider('subjectProvider')]
+	/** @return iterable<string, array{string}> the same subjects, without what they say */
+	public static function subjects(): iterable {
+		foreach (self::subjectProvider() as $name => [$subject]) {
+			yield $name => [$subject];
+		}
+	}
+
+	#[DataProvider('subjects')]
 	public function testEachSubjectPointsAtWhatItIsAbout(string $subject): void {
 		$this->notifier->prepare($this->notification($subject, $this->params()), 'en');
 

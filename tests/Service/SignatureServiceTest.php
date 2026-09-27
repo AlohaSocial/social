@@ -44,11 +44,13 @@ use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SignatureServiceTest extends TestCase {
 	private const CLOUD_HOST = 'cloud.example.com';
 
@@ -90,12 +92,12 @@ class SignatureServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		// no key is in the local cache unless a test puts one there
 		$this->cacheActorsRequest->method('getFromId')
 			->willThrowException(new CacheActorDoesNotExistException());
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudHost')->willReturn(self::CLOUD_HOST);
 		$configService->method('getCloudAuthority')->willReturnCallback(fn (): string => $this->cloudAuthority);
 		// the real one narrows the request timeout around the call; here it only
@@ -107,7 +109,7 @@ class SignatureServiceTest extends TestCase {
 		$this->seenSignatures = new InMemoryDurableCacheRequest();
 		$this->keyAttempts = [];
 		$this->cacheTtl = [];
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturnCallback(
 			fn (string $prefix): ICache => $this->arrayCache($this->keyAttempts)
 		);
@@ -117,7 +119,7 @@ class SignatureServiceTest extends TestCase {
 			$this->cacheActorsRequest,
 			$configService,
 			new HttpSignatureService(
-				$this->actorsRequest, $this->createMock(InstanceActorService::class), new NullLogger()
+				$this->actorsRequest, $this->createStub(InstanceActorService::class), new NullLogger()
 			),
 			$cacheFactory,
 			new NullLogger(),
@@ -131,9 +133,9 @@ class SignatureServiceTest extends TestCase {
 	 * accepted the same signature twice.
 	 */
 	private function durableCache(): DurableCache {
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn(false);
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(static fn (): int => time());
 
 		return new DurableCache($cacheFactory, $this->seenSignatures, $time);
@@ -1028,7 +1030,7 @@ class SignatureServiceTest extends TestCase {
 		$body = '{"type":"Follow"}';
 		$headers = $this->signedHeaders($body, self::$privateKey);
 		$seen = [];
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudHost')->willReturn(self::CLOUD_HOST);
 		$configService->method('getCloudAuthority')->willReturnCallback(fn (): string => $this->cloudAuthority);
 		$configService->method('withRequestTimeout')->willReturnCallback(
@@ -1169,7 +1171,7 @@ class SignatureServiceTest extends TestCase {
 		$body = '{"type":"Follow"}';
 		$headers = $this->signedHeaders($body, self::$privateKey);
 		// known locally, but with a key the signature does not verify against
-		$cached = $this->createMock(CacheActorsRequest::class);
+		$cached = $this->createStub(CacheActorsRequest::class);
 		$cached->method('getFromId')
 			->willReturn($this->person(self::REMOTE_ACTOR, self::$otherPublicKey));
 		$this->replaceLocalActorCache($cached);
@@ -1196,14 +1198,14 @@ class SignatureServiceTest extends TestCase {
 
 	private function rebuildWith(?ConfigService $configService): void {
 		if ($configService === null) {
-			$configService = $this->createMock(ConfigService::class);
+			$configService = $this->createStub(ConfigService::class);
 			$configService->method('getCloudHost')->willReturn(self::CLOUD_HOST);
 			$configService->method('getCloudAuthority')->willReturnCallback(fn (): string => $this->cloudAuthority);
 			$configService->method('withRequestTimeout')
 				->willReturnCallback(fn (int $timeout, callable $action) => $action());
 		}
 
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturnCallback(
 			fn (string $prefix): ICache => $this->arrayCache($this->keyAttempts)
 		);
@@ -1213,7 +1215,7 @@ class SignatureServiceTest extends TestCase {
 			$this->cacheActorsRequest,
 			$configService,
 			new HttpSignatureService(
-				$this->actorsRequest, $this->createMock(InstanceActorService::class), new NullLogger()
+				$this->actorsRequest, $this->createStub(InstanceActorService::class), new NullLogger()
 			),
 			$cacheFactory,
 			new NullLogger(),
@@ -1275,7 +1277,7 @@ class SignatureServiceTest extends TestCase {
 	 * folder. Serve the copies shipped in context/ so nothing hits the network.
 	 */
 	private function registerContextCache(): void {
-		$folder = $this->createMock(ISimpleFolder::class);
+		$folder = $this->createStub(ISimpleFolder::class);
 		$folder->method('getFile')->willReturnCallback(function (string $name) {
 			$path = __DIR__ . '/../../context/' . $name;
 			if (!is_file($path)) {

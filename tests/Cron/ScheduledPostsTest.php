@@ -14,27 +14,30 @@ use OCA\Social\Service\ScheduledStatusService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\TimedJob;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class ScheduledPostsTest extends TestCase {
 	private const NOW = 1757937600;
 
 	/** @var ScheduledStatusService&MockObject */
 	private $scheduledStatusService;
-	/** @var IJobList&MockObject */
+	/** @var IJobList&Stub */
 	private $jobList;
-	/** @var LoggerInterface&MockObject */
+	/** @var LoggerInterface&Stub */
 	private $logger;
 	private ScheduledPosts $job;
 
 	protected function setUp(): void {
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 		$this->scheduledStatusService = $this->createMock(ScheduledStatusService::class);
-		$this->jobList = $this->createMock(IJobList::class);
-		$this->logger = $this->createMock(LoggerInterface::class);
+		$this->jobList = $this->createStub(IJobList::class);
+		$this->logger = $this->createStub(LoggerInterface::class);
 
 		$this->job = new ScheduledPosts($time, $this->scheduledStatusService, $this->logger);
 	}

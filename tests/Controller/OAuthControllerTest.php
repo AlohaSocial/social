@@ -35,18 +35,21 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class OAuthControllerTest extends TestCase {
 	private const OOB = 'urn:ietf:wg:oauth:2.0:oob';
 
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
-	/** @var InstanceService&MockObject */
+	/** @var InstanceService&Stub */
 	private $instanceService;
 	/** @var AccountService&MockObject */
 	private $accountService;
@@ -54,7 +57,7 @@ class OAuthControllerTest extends TestCase {
 	private $clientService;
 	/** @var ConfigService&MockObject */
 	private $configService;
-	private CheckService|MockObject $checkService;
+	private CheckService|Stub $checkService;
 	/** @var IInitialState&MockObject */
 	private $initialState;
 	/** @var IRequest&MockObject */
@@ -62,13 +65,13 @@ class OAuthControllerTest extends TestCase {
 	private OAuthController $controller;
 
 	protected function setUp(): void {
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->instanceService = $this->createStub(InstanceService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->checkService = $this->createMock(CheckService::class);
+		$this->checkService = $this->createStub(CheckService::class);
 		$this->initialState = $this->createMock(IInitialState::class);
 		$this->request = $this->createMock(IRequest::class);
 
@@ -100,11 +103,11 @@ class OAuthControllerTest extends TestCase {
 		string $accountName = 'Alice Ackermann',
 		?string $profileName = null,
 	): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$user->method('getDisplayName')->willReturn($accountName);
 		$this->userSession->method('getUser')->willReturn($user);
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getPreferredUsername')->willReturn($uid);
 		// what Person::getDisplayName() does when the profile carries no name
 		$actor->method('getDisplayName')->willReturn($profileName ?? $uid);
@@ -778,7 +781,7 @@ class OAuthControllerTest extends TestCase {
 	public function testTokenIssuesATokenToAClientRegisteredAfterTheAuthorizationSplit(): void {
 		$hasher = new SecretHasher();
 		$clientRequest = $this->createMock(ClientRequest::class);
-		$clientAuthRequest = $this->createMock(ClientAuthRequest::class);
+		$clientAuthRequest = $this->createStub(ClientAuthRequest::class);
 		$clientService = new ClientService(
 			$clientRequest, $hasher, $clientAuthRequest
 		);

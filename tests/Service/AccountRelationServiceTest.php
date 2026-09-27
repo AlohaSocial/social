@@ -22,7 +22,9 @@ use OCA\Social\Model\Relationship;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\DomainBlockService;
 use OCA\Social\Service\RelationshipService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -34,6 +36,7 @@ use PHPUnit\Framework\TestCase;
  * rows a read can reach as what each of them does — and, for the mute, that the
  * expiry is answered by the read rather than by something that has to run.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AccountRelationServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
@@ -41,11 +44,11 @@ class AccountRelationServiceTest extends TestCase {
 
 	private const NOW = 1757600000;
 
-	private AccountNotesRequest|MockObject $accountNotesRequest;
-	private ActorRelationRequest|MockObject $actorRelationRequest;
-	private FollowsRequest|MockObject $followsRequest;
-	private MuteExpiryRequest|MockObject $muteExpiryRequest;
-	private DomainBlockService|MockObject $domainBlockService;
+	private AccountNotesRequest|Stub $accountNotesRequest;
+	private ActorRelationRequest|Stub $actorRelationRequest;
+	private FollowsRequest|Stub $followsRequest;
+	private MuteExpiryRequest|Stub $muteExpiryRequest;
+	private DomainBlockService|Stub $domainBlockService;
 	private RelationshipService|MockObject $relationshipService;
 
 	/** @var array<string, string> "author|subject" => note */
@@ -61,7 +64,7 @@ class AccountRelationServiceTest extends TestCase {
 	private int $expiryReads = 0;
 
 	protected function setUp(): void {
-		$this->accountNotesRequest = $this->createMock(AccountNotesRequest::class);
+		$this->accountNotesRequest = $this->createStub(AccountNotesRequest::class);
 		$this->accountNotesRequest->method('save')
 			->willReturnCallback(function (string $actorId, string $objectId, string $note): void {
 				$this->writes[] = ['note', $actorId, $objectId, $note];
@@ -76,7 +79,7 @@ class AccountRelationServiceTest extends TestCase {
 			->willReturnCallback(fn (string $actorId, string $objectId): string
 				=> $this->notes[$actorId . '|' . $objectId] ?? '');
 
-		$this->actorRelationRequest = $this->createMock(ActorRelationRequest::class);
+		$this->actorRelationRequest = $this->createStub(ActorRelationRequest::class);
 		$this->actorRelationRequest->method('save')
 			->willReturnCallback(function (string $actorId, string $objectId, string $type): void {
 				$this->writes[] = ['relation', $actorId, $objectId, $type];
@@ -106,7 +109,7 @@ class AccountRelationServiceTest extends TestCase {
 			->willReturnCallback(fn (string $actorId, string $objectId, string $type): bool
 				=> isset($this->relations[$actorId . '|' . $objectId . '|' . $type]));
 
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->followsRequest->method('getByPersons')
 			->willReturnCallback(function (string $actorId, string $objectId): Follow {
 				$key = $actorId . '|' . $objectId;
@@ -117,7 +120,7 @@ class AccountRelationServiceTest extends TestCase {
 				return (new Follow())->setAccepted($this->follows[$key]);
 			});
 
-		$this->muteExpiryRequest = $this->createMock(MuteExpiryRequest::class);
+		$this->muteExpiryRequest = $this->createStub(MuteExpiryRequest::class);
 		$this->muteExpiryRequest->method('save')
 			->willReturnCallback(function (string $actorId, string $objectId, int $expiresAt): void {
 				$this->writes[] = ['expiry', $actorId, $objectId, $expiresAt];
@@ -144,7 +147,7 @@ class AccountRelationServiceTest extends TestCase {
 				return $found;
 			});
 
-		$this->domainBlockService = $this->createMock(DomainBlockService::class);
+		$this->domainBlockService = $this->createStub(DomainBlockService::class);
 		$this->relationshipService = $this->createMock(RelationshipService::class);
 	}
 

@@ -17,9 +17,11 @@ use OCA\Social\Service\TestService;
 use OCA\Social\Tools\Model\SimpleDataStore;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ConfigControllerTest extends TestCase {
 	/** @var TestService&MockObject */
 	private $testService;
@@ -33,10 +35,10 @@ class ConfigControllerTest extends TestCase {
 
 		$this->controller = new ConfigController(
 			'social',
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$this->testService,
 			$this->configService,
-			$this->createMock(MiscService::class)
+			$this->createStub(MiscService::class)
 		);
 	}
 

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCP\IDBConnection;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -22,12 +23,13 @@ use PHPUnit\Framework\TestCase;
  * actor per keystroke. The handle has a lowercased, indexed copy now, and the
  * search compares a prefix of it as it stands.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AccountSearchTest extends TestCase {
 	/** @var string[] */
 	private array $where = [];
 
 	private function builder(): SocialQueryBuilder {
-		$connection = $this->createMock(IDBConnection::class);
+		$connection = $this->createStub(IDBConnection::class);
 		$connection->method('escapeLikeParameter')->willReturnCallback(
 			static fn (string $value): string => addcslashes($value, '\\%_')
 		);

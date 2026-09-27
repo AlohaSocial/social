@@ -35,7 +35,9 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -50,6 +52,7 @@ use Psr\Log\NullLogger;
  * nobody else's. The services are the real ones, with only the database mocked
  * out, because "whose rows" is decided between the two.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RelationControllerTest extends TestCase {
 	use TCacheActorServiceMock;
 
@@ -57,14 +60,14 @@ class RelationControllerTest extends TestCase {
 	private const BOB = 'https://cloud.example/users/bob';
 	private const CAROL = 'https://remote.example/users/carol';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private CacheActorService|MockObject $cacheActorService;
-	private ClientService|MockObject $clientService;
-	private FollowService|MockObject $followService;
+	private ClientService|Stub $clientService;
+	private FollowService|Stub $followService;
 	private RelationshipService|MockObject $relationshipService;
-	private IUserSession|MockObject $userSession;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -86,7 +89,7 @@ class RelationControllerTest extends TestCase {
 	private const ACTORS = ['alice' => self::ALICE, 'bob' => self::BOB];
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -95,16 +98,16 @@ class RelationControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$this->userSession = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturnCallback(fn (): string => $this->uid);
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')
 			->willReturnCallback(fn (string $userId): Person => $this->person(self::ACTORS[$userId], 1));
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 
 		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheActorService->method('getFromNids')
@@ -126,7 +129,7 @@ class RelationControllerTest extends TestCase {
 				throw new CacheActorDoesNotExistException('Record not found');
 			});
 
-		$this->followService = $this->createMock(FollowService::class);
+		$this->followService = $this->createStub(FollowService::class);
 		$this->followService->method('getRelationshipWith')
 			->willReturnCallback(static fn (Person $target): Relationship => new Relationship($target->getNid()));
 
@@ -161,7 +164,7 @@ class RelationControllerTest extends TestCase {
 	}
 
 	private function domainBlockService(): DomainBlockService {
-		$request = $this->createMock(DomainBlocksRequest::class);
+		$request = $this->createStub(DomainBlocksRequest::class);
 		$request->method('getByActor')
 			->willReturnCallback(fn (string $actorId, int $limit): array
 				=> array_slice($this->blocks[$actorId] ?? [], 0, $limit));
@@ -179,7 +182,7 @@ class RelationControllerTest extends TestCase {
 				$this->blocks[$actorId] = array_values(array_diff($this->blocks[$actorId] ?? [], [$domain]));
 			});
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialAddress')->willReturn('cloud.example');
 		$configService->method('getCloudHost')->willReturn('cloud.example');
 
@@ -187,7 +190,7 @@ class RelationControllerTest extends TestCase {
 	}
 
 	private function accountRelationService(DomainBlockService $domainBlockService): AccountRelationService {
-		$notes = $this->createMock(AccountNotesRequest::class);
+		$notes = $this->createStub(AccountNotesRequest::class);
 		$notes->method('save')
 			->willReturnCallback(function (string $actorId, string $objectId, string $note): void {
 				$this->writes[] = ['note', $actorId, $objectId, $note];
@@ -202,7 +205,7 @@ class RelationControllerTest extends TestCase {
 			->willReturnCallback(fn (string $actorId, string $objectId): string
 				=> $this->notes[$actorId . '|' . $objectId] ?? '');
 
-		$relations = $this->createMock(ActorRelationRequest::class);
+		$relations = $this->createStub(ActorRelationRequest::class);
 		$relations->method('save')
 			->willReturnCallback(function (string $actorId, string $objectId, string $type): void {
 				$this->writes[] = ['endorse', $actorId, $objectId, $type];
@@ -217,7 +220,7 @@ class RelationControllerTest extends TestCase {
 			->willReturnCallback(fn (string $actorId, string $objectId, string $type): bool
 				=> isset($this->relations[$actorId . '|' . $objectId . '|' . $type]));
 
-		$follows = $this->createMock(FollowsRequest::class);
+		$follows = $this->createStub(FollowsRequest::class);
 		$follows->method('getByPersons')
 			->willReturnCallback(function (string $actorId, string $objectId): Follow {
 				$key = $actorId . '|' . $objectId;
@@ -232,7 +235,7 @@ class RelationControllerTest extends TestCase {
 			$notes,
 			$relations,
 			$follows,
-			$this->createMock(MuteExpiryRequest::class),
+			$this->createStub(MuteExpiryRequest::class),
 			$domainBlockService,
 			$this->relationshipService,
 		);

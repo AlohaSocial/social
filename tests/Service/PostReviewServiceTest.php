@@ -27,7 +27,9 @@ use OCA\Social\Service\PostService;
 use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StrikeService;
 use OCP\IGroupManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -38,17 +40,18 @@ use Psr\Log\NullLogger;
  * person's writing reaches anybody, so each is asserted in both directions:
  * the post it holds, and the post it must not.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PostReviewServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 
 	private PostHoldsRequest|MockObject $postHoldsRequest;
 	private StreamRequest|MockObject $streamRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private ModerationService|MockObject $moderationService;
 	private PostService|MockObject $postService;
-	private StatusAssemblyService|MockObject $statusAssemblyService;
+	private StatusAssemblyService|Stub $statusAssemblyService;
 	private StrikeService|MockObject $strikeService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private IGroupManager|MockObject $groupManager;
 	private AccountService|MockObject $accountService;
 	private PostReviewService $service;
@@ -63,14 +66,14 @@ class PostReviewServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->postHoldsRequest = $this->createMock(PostHoldsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
 		$this->postService = $this->createMock(PostService::class);
-		$this->statusAssemblyService = $this->createMock(StatusAssemblyService::class);
+		$this->statusAssemblyService = $this->createStub(StatusAssemblyService::class);
 		$this->strikeService = $this->createMock(StrikeService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValueBool')->willReturnCallback(
 			fn (string $key): bool => ($this->settings[$key] ?? '0') === '1'
 		);

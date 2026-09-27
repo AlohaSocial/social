@@ -23,7 +23,9 @@ use OCA\Social\Service\SensitiveMediaService;
 use OCA\Social\Service\VideoLadderService;
 use OCA\Social\Service\VideoQuotaService;
 use OCP\IAppConfig;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -33,38 +35,39 @@ use PHPUnit\Framework\TestCase;
  * answered with PeerTube's default rather than with what is true here, and an
  * id invented to fill a field.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PeerTubeApiServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const POST = 'https://cloud.example/apps/social/@alice/17';
 
-	private SensitiveMediaService|MockObject $sensitiveMediaService;
-	private VideoQuotaService|MockObject $videoQuotaService;
-	private VideoLadderService|MockObject $videoLadderService;
+	private SensitiveMediaService|Stub $sensitiveMediaService;
+	private VideoQuotaService|Stub $videoQuotaService;
+	private VideoLadderService|Stub $videoLadderService;
 	private ChannelsRequest|MockObject $channelsRequest;
 	private PeerTubeApiService $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->sensitiveMediaService = $this->createMock(SensitiveMediaService::class);
+		$this->sensitiveMediaService = $this->createStub(SensitiveMediaService::class);
 		$this->sensitiveMediaService->method('instancePolicy')->willReturn(SensitiveMediaService::COVERED);
 		$this->sensitiveMediaService->method('policyFor')->willReturn(SensitiveMediaService::HIDE_ALL);
 
-		$this->videoQuotaService = $this->createMock(VideoQuotaService::class);
-		$this->videoLadderService = $this->createMock(VideoLadderService::class);
+		$this->videoQuotaService = $this->createStub(VideoQuotaService::class);
+		$this->videoLadderService = $this->createStub(VideoLadderService::class);
 		$this->channelsRequest = $this->createMock(ChannelsRequest::class);
 
-		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig = $this->createStub(IAppConfig::class);
 		$appConfig->method('getValueString')->willReturnCallback(
 			static fn (string $app, string $key, string $default = ''): string
 				=> ($key === 'name') ? 'Videos at Example' : $default
 		);
 
 		$this->service = new PeerTubeApiService(
-			$this->createMock(ConfigService::class),
-			$this->createMock(ChannelService::class),
+			$this->createStub(ConfigService::class),
+			$this->createStub(ChannelService::class),
 			$this->channelsRequest,
-			$this->createMock(CacheActorService::class),
+			$this->createStub(CacheActorService::class),
 			$this->sensitiveMediaService,
 			$this->videoQuotaService,
 			$this->videoLadderService,

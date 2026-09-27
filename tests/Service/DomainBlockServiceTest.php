@@ -14,7 +14,7 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DomainBlockService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -29,8 +29,8 @@ class DomainBlockServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
 
-	private DomainBlocksRequest|MockObject $domainBlocksRequest;
-	private ConfigService|MockObject $configService;
+	private DomainBlocksRequest|Stub $domainBlocksRequest;
+	private ConfigService|Stub $configService;
 
 	/** @var array<string, string[]> actor id => domains, newest first */
 	private array $blocks = [];
@@ -40,7 +40,7 @@ class DomainBlockServiceTest extends TestCase {
 	private int $reads = 0;
 
 	protected function setUp(): void {
-		$this->domainBlocksRequest = $this->createMock(DomainBlocksRequest::class);
+		$this->domainBlocksRequest = $this->createStub(DomainBlocksRequest::class);
 		$this->domainBlocksRequest->method('getByActor')
 			->willReturnCallback(function (string $actorId, int $limit): array {
 				$this->reads++;
@@ -63,7 +63,7 @@ class DomainBlockServiceTest extends TestCase {
 				);
 			});
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 	}

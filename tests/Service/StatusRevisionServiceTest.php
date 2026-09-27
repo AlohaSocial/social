@@ -15,7 +15,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\StatusRevision;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\StatusRevisionService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -34,8 +34,8 @@ class StatusRevisionServiceTest extends TestCase {
 	private const STATUS = 'https://cloud.example/users/alice/posts/1';
 	private const AUTHOR = 'https://cloud.example/users/alice';
 
-	private StatusRevisionsRequest|MockObject $revisionsRequest;
-	private CacheActorService|MockObject $cacheActorService;
+	private StatusRevisionsRequest|Stub $revisionsRequest;
+	private CacheActorService|Stub $cacheActorService;
 	private StatusRevisionService $service;
 
 	/** @var StatusRevision[] every revision handed to the store, in order */
@@ -45,7 +45,7 @@ class StatusRevisionServiceTest extends TestCase {
 	private bool $storeFails = false;
 
 	protected function setUp(): void {
-		$this->revisionsRequest = $this->createMock(StatusRevisionsRequest::class);
+		$this->revisionsRequest = $this->createStub(StatusRevisionsRequest::class);
 		$this->revisionsRequest->method('save')
 			->willReturnCallback(function (StatusRevision $revision): void {
 				if ($this->storeFails) {
@@ -59,7 +59,7 @@ class StatusRevisionServiceTest extends TestCase {
 		$this->revisionsRequest->method('getByStreamId')
 			->willReturnCallback(fn (): array => $this->stored);
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')
 			->willReturnCallback(function (string $id): Person {
 				$person = new Person();
@@ -160,7 +160,7 @@ class StatusRevisionServiceTest extends TestCase {
 	 * must not take the revisions down with it.
 	 */
 	public function testAnUncachedAuthorLeavesTheHistoryReadable(): void {
-		$cacheActorService = $this->createMock(CacheActorService::class);
+		$cacheActorService = $this->createStub(CacheActorService::class);
 		$cacheActorService->method('getFromId')->willThrowException(new RuntimeException('not cached'));
 
 		$service = new StatusRevisionService(

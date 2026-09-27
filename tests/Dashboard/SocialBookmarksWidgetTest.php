@@ -18,28 +18,31 @@ use OCA\Social\Service\StreamService;
 use OCP\Dashboard\IAPIWidgetV2;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialBookmarksWidgetTest extends TestCase {
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
-	/** @var AccountService&MockObject */
+	/** @var AccountService&Stub */
 	private $accountService;
-	/** @var CacheActorService&MockObject */
+	/** @var CacheActorService&Stub */
 	private $cacheActorService;
-	/** @var StreamService&MockObject */
+	/** @var StreamService&Stub */
 	private $streamService;
 	private SocialBookmarksWidget $widget;
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->accountService = $this->createMock(AccountService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 
 		$this->widget = new SocialBookmarksWidget(
 			$l10n,
@@ -59,10 +62,10 @@ class SocialBookmarksWidgetTest extends TestCase {
 	}
 
 	public function testItReadsTheBookmarksProbeAndOpensThatTimeline(): void {
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn('alice');
 		$this->accountService->method('getActorFromUserId')->willReturn($account);
-		$this->cacheActorService->method('getFromLocalAccount')->willReturn($this->createMock(Person::class));
+		$this->cacheActorService->method('getFromLocalAccount')->willReturn($this->createStub(Person::class));
 		$this->urlGenerator->method('linkToRoute')
 			->with('social.Navigation.timeline', ['path' => 'bookmarks'])
 			->willReturn('/apps/social/timeline/bookmarks');

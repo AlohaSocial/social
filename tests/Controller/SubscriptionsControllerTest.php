@@ -38,7 +38,7 @@ class SubscriptionsControllerTest extends TestCase {
 
 	private function controller(?string $userId = 'alice'): SubscriptionsController {
 		return new SubscriptionsController(
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$userId,
 			$this->subscriptionService,
 			new NullLogger(),

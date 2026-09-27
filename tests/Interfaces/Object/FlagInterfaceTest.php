@@ -16,11 +16,13 @@ use OCA\Social\Model\Report;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class FlagInterfaceTest extends ActivityPubTestCase {
 	/** @var ReportService&MockObject */
 	private $reportService;

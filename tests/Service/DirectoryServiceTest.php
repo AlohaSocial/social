@@ -14,7 +14,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Service\DirectoryService;
 use OCA\Social\Service\ModerationService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,8 +26,8 @@ use PHPUnit\Framework\TestCase;
  * has is what makes the opt-in enforceable at all.
  */
 class DirectoryServiceTest extends TestCase {
-	private DiscoveryRequest|MockObject $discoveryRequest;
-	private ModerationService|MockObject $moderationService;
+	private DiscoveryRequest|Stub $discoveryRequest;
+	private ModerationService|Stub $moderationService;
 	private DirectoryService $service;
 
 	/** @var array{order: string, limit: int, offset: int}|null what the store was asked */
@@ -40,7 +40,7 @@ class DirectoryServiceTest extends TestCase {
 	private array $decisions = [];
 
 	protected function setUp(): void {
-		$this->discoveryRequest = $this->createMock(DiscoveryRequest::class);
+		$this->discoveryRequest = $this->createStub(DiscoveryRequest::class);
 		$this->discoveryRequest->method('directoryPrims')
 			->willReturnCallback(function (string $order, int $limit, int $offset): array {
 				$this->asked = ['order' => $order, 'limit' => $limit, 'offset' => $offset];
@@ -59,7 +59,7 @@ class DirectoryServiceTest extends TestCase {
 				}, $prims);
 			});
 
-		$this->moderationService = $this->createMock(ModerationService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->moderationService->method('decisions')
 			->willReturnCallback(fn (): array => $this->decisions);
 

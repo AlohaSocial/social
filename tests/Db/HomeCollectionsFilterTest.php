@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Db;
 
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -25,6 +26,7 @@ use PHPUnit\Framework\TestCase;
  * thousand others would have built a ten-thousand-parameter statement on every
  * read of its timeline.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HomeCollectionsFilterTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 

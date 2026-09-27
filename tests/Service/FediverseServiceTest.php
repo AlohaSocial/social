@@ -18,13 +18,16 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\MiscService;
 use OCP\BackgroundJob\IJobList;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class FediverseServiceTest extends TestCase {
 	private ConfigService|MockObject $configService;
-	private CacheActorsRequest|MockObject $cacheActorsRequest;
+	private CacheActorsRequest|Stub $cacheActorsRequest;
 	private IJobList|MockObject $jobList;
 	private AuditService|MockObject $auditService;
 	private FediverseService $service;
@@ -33,11 +36,11 @@ class FediverseServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->auditService = $this->createMock(AuditService::class);
 		$this->service = new FediverseService(
-			$this->configService, $this->createMock(MiscService::class), $this->cacheActorsRequest,
+			$this->configService, $this->createStub(MiscService::class), $this->cacheActorsRequest,
 			$this->jobList, $this->auditService
 		);
 	}

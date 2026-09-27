@@ -17,7 +17,9 @@ use OCP\IAvatar;
 use OCP\IAvatarManager;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -30,16 +32,17 @@ use RuntimeException;
  * request — so what is asserted there is every refusal, and the bytes-to-avatar
  * path is reached through the archive restore, which shares `store()` with it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AvatarServiceTest extends TestCase {
 	private const USER = 'alice';
 
-	private IAvatarManager|MockObject $avatarManager;
-	private IUserManager|MockObject $userManager;
-	private AccountService|MockObject $accountService;
+	private IAvatarManager|Stub $avatarManager;
+	private IUserManager|Stub $userManager;
+	private AccountService|Stub $accountService;
 	private AvatarService $service;
 
 	/** the avatar core holds for the account */
-	private IAvatar|MockObject $avatar;
+	private IAvatar|Stub $avatar;
 	private bool $custom = false;
 	private ?string $stored = null;
 	private bool $removed = false;
@@ -51,7 +54,7 @@ class AvatarServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->avatar = $this->createMock(IAvatar::class);
+		$this->avatar = $this->createStub(IAvatar::class);
 		$this->avatar->method('isCustomAvatar')->willReturnCallback(fn (): bool => $this->custom);
 		$this->avatar->method('set')->willReturnCallback(function ($data): void {
 			$this->stored = (string)$data;
@@ -60,17 +63,17 @@ class AvatarServiceTest extends TestCase {
 			$this->removed = true;
 		});
 
-		$this->avatarManager = $this->createMock(IAvatarManager::class);
+		$this->avatarManager = $this->createStub(IAvatarManager::class);
 		$this->avatarManager->method('getAvatar')->willReturn($this->avatar);
 
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturnCallback(
 			fn (string $userId): ?IUser => ($userId === self::USER) ? $this->user(true) : null
 		);
 
 		$actor = new Person();
 		$actor->setPreferredUsername(self::USER);
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn($actor);
 		$this->accountService->method('cacheLocalActorByUsername')
 			->willReturnCallback(function (string $username): void {
@@ -133,7 +136,7 @@ class AvatarServiceTest extends TestCase {
 	 * refusal tells somebody on LDAP or SAML why their picture did not change.
 	 */
 	public function testAnAccountWhoseAvatarLivesElsewhereIsToldSo(): void {
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturn($this->user(false));
 		$service = $this->build();
 
@@ -169,9 +172,9 @@ class AvatarServiceTest extends TestCase {
 	}
 
 	public function testAPictureCoreWouldNotTakeIsReportedRatherThanSwallowed(): void {
-		$this->avatar = $this->createMock(IAvatar::class);
+		$this->avatar = $this->createStub(IAvatar::class);
 		$this->avatar->method('set')->willThrowException(new RuntimeException('no'));
-		$this->avatarManager = $this->createMock(IAvatarManager::class);
+		$this->avatarManager = $this->createStub(IAvatarManager::class);
 		$this->avatarManager->method('getAvatar')->willReturn($this->avatar);
 		$service = $this->build();
 
@@ -201,7 +204,7 @@ class AvatarServiceTest extends TestCase {
 	}
 
 	public function testRemovingIsRefusedWhereTheBackendOwnsThePicture(): void {
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturn($this->user(false));
 		$service = $this->build();
 
@@ -222,7 +225,7 @@ class AvatarServiceTest extends TestCase {
 	}
 
 	public function testAnArchiveRestoreForAnAccountThatCannotHaveOneIsSkippedQuietly(): void {
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturn($this->user(false));
 		$service = $this->build();
 

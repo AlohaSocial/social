@@ -14,7 +14,8 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\AccessBlock;
 use OCA\Social\Service\AccessBlockService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -26,7 +27,7 @@ use PHPUnit\Framework\TestCase;
  * admin told it was stored believes it is being enforced.
  */
 class AccessBlockServiceTest extends TestCase {
-	private AccessBlocksRequest|MockObject $accessBlocksRequest;
+	private AccessBlocksRequest|Stub $accessBlocksRequest;
 	private AccessBlockService $service;
 
 	/** @var array<string, AccessBlock> "type value" => the block */
@@ -34,7 +35,7 @@ class AccessBlockServiceTest extends TestCase {
 	private int $nextId = 1;
 
 	protected function setUp(): void {
-		$this->accessBlocksRequest = $this->createMock(AccessBlocksRequest::class);
+		$this->accessBlocksRequest = $this->createStub(AccessBlocksRequest::class);
 
 		$this->accessBlocksRequest->method('save')->willReturnCallback(
 			function (AccessBlock $block): void {
@@ -89,16 +90,14 @@ class AccessBlockServiceTest extends TestCase {
 
 	// which addresses a range covers
 
-	/**
-	 * @dataProvider provideAddressesAndRanges
-	 */
+	#[DataProvider('provideAddressesAndRanges')]
 	public function testWhetherAnAddressFallsInsideARange(
 		string $ip, string $range, bool $inside,
 	): void {
 		$this->assertSame($inside, AccessBlockService::inRange($ip, $range), $ip . ' in ' . $range);
 	}
 
-	public function provideAddressesAndRanges(): iterable {
+	public static function provideAddressesAndRanges(): iterable {
 		yield 'the address itself' => ['1.2.3.4', '1.2.3.4/32', true];
 		yield 'inside a /24' => ['1.2.3.4', '1.2.3.0/24', true];
 		yield 'outside a /24' => ['1.2.4.4', '1.2.3.0/24', false];
@@ -118,14 +117,12 @@ class AccessBlockServiceTest extends TestCase {
 		yield 'not a range at all' => ['1.2.3.4', 'nonsense', false];
 	}
 
-	/**
-	 * @dataProvider provideRangesAsTyped
-	 */
+	#[DataProvider('provideRangesAsTyped')]
 	public function testARangeIsStoredInOneShape(string $typed, string $stored): void {
 		$this->assertSame($stored, AccessBlockService::normaliseRange($typed));
 	}
 
-	public function provideRangesAsTyped(): iterable {
+	public static function provideRangesAsTyped(): iterable {
 		// a bare address is the range holding only itself, so there is one
 		// shape to match against rather than two
 		yield 'a bare v4 address' => ['1.2.3.4', '1.2.3.4/32'];
@@ -174,9 +171,8 @@ class AccessBlockServiceTest extends TestCase {
 	 * Storing a rule nothing will ever read is worse than saying it cannot be
 	 * honoured: an admin told it was stored believes sign-ups from that range
 	 * are being turned away.
-	 *
-	 * @dataProvider provideSeveritiesThisInstanceHasNoSignUpFor
 	 */
+	#[DataProvider('provideSeveritiesThisInstanceHasNoSignUpFor')]
 	public function testASeverityThatPolicesASignUpIsRefused(string $severity): void {
 		$this->expectException(InvalidResourceException::class);
 		$this->expectExceptionMessage('no sign-up');
@@ -188,7 +184,7 @@ class AccessBlockServiceTest extends TestCase {
 		}
 	}
 
-	public function provideSeveritiesThisInstanceHasNoSignUpFor(): iterable {
+	public static function provideSeveritiesThisInstanceHasNoSignUpFor(): iterable {
 		yield 'sign-up block' => [AccessBlock::SEVERITY_SIGN_UP_BLOCK];
 		yield 'sign-up requires approval' => [AccessBlock::SEVERITY_SIGN_UP_REQUIRES_APPROVAL];
 		yield 'something that is not a severity at all' => ['banish'];
@@ -265,16 +261,14 @@ class AccessBlockServiceTest extends TestCase {
 		$this->assertTrue($this->service->isBlockedEmail('bob@THROWAWAY.example'));
 	}
 
-	/**
-	 * @dataProvider provideThingsThatAreNotAddresses
-	 */
+	#[DataProvider('provideThingsThatAreNotAddresses')]
 	public function testSomethingWithNoDomainInItIsNotBlocked(string $email): void {
 		$this->service->blockEmailDomain('throwaway.example');
 
 		$this->assertFalse($this->service->isBlockedEmail($email));
 	}
 
-	public function provideThingsThatAreNotAddresses(): iterable {
+	public static function provideThingsThatAreNotAddresses(): iterable {
 		yield 'no at sign' => ['bob'];
 		yield 'nothing after the at sign' => ['bob@'];
 		yield 'nothing at all' => [''];

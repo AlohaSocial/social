@@ -15,7 +15,9 @@ use OCP\IGroupManager;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\Settings\IManager as ISettingsManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
@@ -29,17 +31,18 @@ use Psr\Log\NullLogger;
  * widgets offered themselves to the `admin` group, and a new report walked
  * every Nextcloud account to find the same group the hard way.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ModeratorServiceTest extends TestCase {
 	private IGroupManager|MockObject $groupManager;
 	private IUserManager|MockObject $userManager;
 	private ISettingsManager|MockObject $settingsManager;
-	private ContainerInterface|MockObject $container;
+	private ContainerInterface|Stub $container;
 
 	protected function setUp(): void {
 		$this->groupManager = $this->createMock(IGroupManager::class);
 		$this->userManager = $this->createMock(IUserManager::class);
 		$this->settingsManager = $this->createMock(ISettingsManager::class);
-		$this->container = $this->createMock(ContainerInterface::class);
+		$this->container = $this->createStub(ContainerInterface::class);
 	}
 
 	private function service(): ModeratorService {
@@ -107,7 +110,7 @@ class ModeratorServiceTest extends TestCase {
 
 	public function testWhoeverTheSettingsSectionIsDelegatedToMayModerate(): void {
 		$this->groupManager->method('isAdmin')->willReturn(false);
-		$bob = $this->createMock(IUser::class);
+		$bob = $this->createStub(IUser::class);
 		$this->userManager->method('get')->with('bob')->willReturn($bob);
 		$this->settingsManager->method('getAllowedAdminSettings')
 			->with('social', $bob)
@@ -118,7 +121,7 @@ class ModeratorServiceTest extends TestCase {
 
 	public function testAnOrdinaryUserMayNot(): void {
 		$this->groupManager->method('isAdmin')->willReturn(false);
-		$this->userManager->method('get')->willReturn($this->createMock(IUser::class));
+		$this->userManager->method('get')->willReturn($this->createStub(IUser::class));
 		$this->settingsManager->method('getAllowedAdminSettings')->willReturn([]);
 
 		$this->assertFalse($this->service()->isModerator('carol'));

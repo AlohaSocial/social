@@ -28,7 +28,9 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
@@ -38,6 +40,7 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * the actor's `featured` collection as `target`. Mastodon sends `object` as a
  * bare URI, which is why both used to do nothing at all.
  */
+#[AllowMockObjectsWithoutExpectations]
 class FeaturedCollectionTest extends ActivityPubTestCase {
 	private const ACTOR = self::REMOTE_URL . '/users/bob';
 	private const FEATURED = self::REMOTE_URL . '/users/bob/collections/featured';
@@ -45,7 +48,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 
 	/** @var CacheActorsRequest&MockObject */
 	private $cacheActorsRequest;
-	/** @var StreamRequest&MockObject */
+	/** @var StreamRequest&Stub */
 	private $streamRequest;
 	/** @var ActionsRequest&MockObject */
 	private $actionsRequest;
@@ -58,7 +61,7 @@ class FeaturedCollectionTest extends ActivityPubTestCase {
 		parent::setUp();
 
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->actionsRequest = $this->createMock(ActionsRequest::class);
 
 		$this->curlService = $this->createMock(CurlService::class);

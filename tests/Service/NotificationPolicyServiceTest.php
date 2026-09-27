@@ -21,7 +21,9 @@ use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\NotificationPolicyService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -33,14 +35,15 @@ use PHPUnit\Framework\TestCase;
  * default and the "already decided" paths are pinned here as hard as the
  * filtering itself.
  */
+#[AllowMockObjectsWithoutExpectations]
 class NotificationPolicyServiceTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 	private const STRANGER = 'https://elsewhere.example/users/carol';
 
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private FollowsRequest|MockObject $followsRequest;
-	private ModerationService|MockObject $moderationService;
-	private AccountRelationService|MockObject $accountRelationService;
+	private ModerationService|Stub $moderationService;
+	private AccountRelationService|Stub $accountRelationService;
 	private NotificationPolicyService $service;
 
 	/** @var array<string, string> the user values the store holds */
@@ -49,7 +52,7 @@ class NotificationPolicyServiceTest extends TestCase {
 	private array $decisions = ['accepted' => [], 'dismissed' => []];
 
 	protected function setUp(): void {
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getUserValue')
 			->willReturnCallback(fn (string $key, string $userId = '', string $app = ''): string
 				=> $this->stored[$key] ?? '');
@@ -62,10 +65,10 @@ class NotificationPolicyServiceTest extends TestCase {
 		$this->followsRequest->method('getBetweenMany')
 			->willReturn(['following' => [], 'followedBy' => []]);
 
-		$this->moderationService = $this->createMock(ModerationService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->moderationService->method('silenced')->willReturn([]);
 
-		$this->accountRelationService = $this->createMock(AccountRelationService::class);
+		$this->accountRelationService = $this->createStub(AccountRelationService::class);
 		$this->accountRelationService->method('notificationDecisions')
 			->willReturnCallback(fn (): array => $this->decisions);
 

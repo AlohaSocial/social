@@ -13,6 +13,7 @@ use DateTime;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Object\Follow;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * returns need a database (tests/Integration/Db/FollowLifecycleTest reads
  * them); what it asks for does not.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PendingFollowsPagingTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 	private const KEY = '0123456789abcdef0123456789abcdef';

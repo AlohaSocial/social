@@ -21,7 +21,9 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\IRequest;
 use OCP\UserMigration\UserMigrationException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -32,12 +34,13 @@ use Psr\Log\NullLogger;
  * a multipart upload and what the controller reads; the tests set it the way a
  * request would and clear it afterwards.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MigrationControllerTest extends TestCase {
 	private MigrationArchiveService|MockObject $archiveService;
 	private MigrationService|MockObject $migrationService;
 	private PostImportService|MockObject $postImportService;
-	private AccountService|MockObject $accountService;
-	private SwitchService|MockObject $switchService;
+	private AccountService|Stub $accountService;
+	private SwitchService|Stub $switchService;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -46,11 +49,11 @@ class MigrationControllerTest extends TestCase {
 		$_FILES = [];
 
 		// Response::getHeaders() asks the container for the request
-		\OC::$server->register(IRequest::class, $this->createMock(IRequest::class));
+		\OC::$server->register(IRequest::class, $this->createStub(IRequest::class));
 
 		$this->postImportService = $this->createMock(PostImportService::class);
-		$this->accountService = $this->createMock(AccountService::class);
-		$this->switchService = $this->createMock(SwitchService::class);
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->switchService = $this->createStub(SwitchService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn(new Person());
 	}
 

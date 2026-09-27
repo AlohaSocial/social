@@ -20,6 +20,7 @@ use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -32,6 +33,7 @@ use PHPUnit\Framework\TestCase;
  * nobody else — in particular not for a group the Social section was
  * delegated to, which passes `ModerationController` and not this.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ServerSettingsControllerTest extends TestCase {
 	private ServerSettingsService|MockObject $serverSettingsService;
 	private RelayService|MockObject $relayService;
@@ -41,7 +43,7 @@ class ServerSettingsControllerTest extends TestCase {
 		$this->serverSettingsService = $this->createMock(ServerSettingsService::class);
 		$this->relayService = $this->createMock(RelayService::class);
 		$this->controller = new ServerSettingsController(
-			$this->createMock(IRequest::class), $this->serverSettingsService, $this->relayService
+			$this->createStub(IRequest::class), $this->serverSettingsService, $this->relayService
 		);
 	}
 

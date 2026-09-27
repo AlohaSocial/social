@@ -24,21 +24,25 @@ use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\StreamService;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ZipArchive;
 
+#[AllowMockObjectsWithoutExpectations]
 class PostImportServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 
-	private ImportedPostsRequest|MockObject $importedPostsRequest;
-	private \OCA\Social\Service\CurlService|MockObject $curlService;
-	private \OCA\Social\Service\ConfigService|MockObject $configService;
-	private StreamRequest|MockObject $streamRequest;
+	private ImportedPostsRequest|Stub $importedPostsRequest;
+	private \OCA\Social\Service\CurlService|Stub $curlService;
+	private \OCA\Social\Service\ConfigService|Stub $configService;
+	private StreamRequest|Stub $streamRequest;
 	private DocumentService|MockObject $documentService;
 	private CacheDocumentService|MockObject $cacheDocumentService;
-	private AccountService|MockObject $accountService;
+	private AccountService|Stub $accountService;
 	private PostImportService $service;
 
 	/** @var Note[] what the run wrote */
@@ -51,14 +55,14 @@ class PostImportServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->importedPostsRequest = $this->createMock(ImportedPostsRequest::class);
+		$this->importedPostsRequest = $this->createStub(ImportedPostsRequest::class);
 		$this->importedPostsRequest->method('knownAmong')->willReturn([]);
 		$this->importedPostsRequest->method('remember')
 			->willReturnCallback(function (string $actor, string $source, string $stream): void {
 				$this->remembered[$source] = $stream;
 			});
 
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->streamRequest->method('save')
 			->willReturnCallback(function (Stream $stream): void {
 				$this->written[] = $stream;
@@ -76,7 +80,7 @@ class PostImportServiceTest extends TestCase {
 
 		// the real one mints an id and sets the addressing; what matters here
 		// is that the importer asks for it and then overrides the date
-		$streamService = $this->createMock(StreamService::class);
+		$streamService = $this->createStub(StreamService::class);
 		$streamService->method('assignItem')
 			->willReturnCallback(static function (Stream $stream): void {
 				$stream->setId(self::ALICE . '/' . bin2hex(random_bytes(6)));
@@ -101,10 +105,10 @@ class PostImportServiceTest extends TestCase {
 
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 
-		$linkify = $this->createMock(LinkifyService::class);
+		$linkify = $this->createStub(LinkifyService::class);
 		$linkify->method('toHtml')->willReturnCallback(static fn (string $text): string => '<p>' . $text . '</p>');
 
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = tempnam(sys_get_temp_dir(), 'import');
 			$this->temps[] = $path;
@@ -114,10 +118,10 @@ class PostImportServiceTest extends TestCase {
 
 		// an Instagram post carries no audience, so the importer asks the
 		// account what its own posts get
-		$this->accountService = $this->createMock(AccountService::class);
+		$this->accountService = $this->createStub(AccountService::class);
 
-		$this->curlService = $this->createMock(\OCA\Social\Service\CurlService::class);
-		$this->configService = $this->createMock(\OCA\Social\Service\ConfigService::class);
+		$this->curlService = $this->createStub(\OCA\Social\Service\CurlService::class);
+		$this->configService = $this->createStub(\OCA\Social\Service\ConfigService::class);
 		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example/');
 
 		$this->service = new PostImportService(
@@ -129,11 +133,11 @@ class PostImportServiceTest extends TestCase {
 			$linkify,
 			$this->accountService,
 			$tempManager,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			$this->curlService,
 			new \OCA\Social\Service\PeerTubeService(
-				$this->createMock(\OCA\Social\Interfaces\Object\DocumentInterface::class),
-				$this->createMock(IURLGenerator::class),
+				$this->createStub(\OCA\Social\Interfaces\Object\DocumentInterface::class),
+				$this->createStub(IURLGenerator::class),
 				new NullLogger(),
 			),
 			$this->configService,
@@ -297,7 +301,7 @@ class PostImportServiceTest extends TestCase {
 
 	public function testWhatWasBroughtOverAlreadyIsNotBroughtAgain(): void {
 		$service = $this->service;
-		$this->importedPostsRequest = $this->createMock(ImportedPostsRequest::class);
+		$this->importedPostsRequest = $this->createStub(ImportedPostsRequest::class);
 
 		$path = $this->outbox([$this->note('https://old.example/1'), $this->note('https://old.example/2')]);
 		$service->import($this->alice(), $path);
@@ -503,9 +507,8 @@ class PostImportServiceTest extends TestCase {
 	/**
 	 * Each is a video its author decided not to publish, and there is no
 	 * audience here that means "the people who had the password".
-	 *
-	 * @dataProvider providePrivacies
 	 */
+	#[DataProvider('providePrivacies')]
 	public function testAVideoItsAuthorDidNotPublishIsNotBroughtOver(int $privacy): void {
 		$tally = $this->service->import(
 			$this->alice(), $this->peerTubeExport([$this->peerTubeVideo(['privacy' => $privacy])])
@@ -676,24 +679,24 @@ class PostImportServiceTest extends TestCase {
 		$this->curlService->method('retrieveObject')->willReturn($this->videoObject());
 		$this->cacheDocumentService->method('retrieveContent')->willReturn('not really a video');
 
-		$this->importedPostsRequest = $this->createMock(ImportedPostsRequest::class);
+		$this->importedPostsRequest = $this->createStub(ImportedPostsRequest::class);
 		$this->importedPostsRequest->method('knownAmong')
 			->willReturn(['https://tube.example/videos/watch/abc' => 'someprim']);
 
 		$service = new PostImportService(
 			$this->importedPostsRequest,
 			$this->streamRequest,
-			$this->createMock(StreamService::class),
+			$this->createStub(StreamService::class),
 			$this->documentService,
 			$this->cacheDocumentService,
-			$this->createMock(LinkifyService::class),
+			$this->createStub(LinkifyService::class),
 			$this->accountService,
-			$this->createMock(ITempManager::class),
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(ITempManager::class),
+			$this->createStub(IURLGenerator::class),
 			$this->curlService,
 			new \OCA\Social\Service\PeerTubeService(
-				$this->createMock(\OCA\Social\Interfaces\Object\DocumentInterface::class),
-				$this->createMock(IURLGenerator::class),
+				$this->createStub(\OCA\Social\Interfaces\Object\DocumentInterface::class),
+				$this->createStub(IURLGenerator::class),
 				new NullLogger(),
 			),
 			$this->configService,
@@ -982,7 +985,7 @@ class PostImportServiceTest extends TestCase {
 
 	/** @param array<string, string> $known */
 	private function serviceKnowing(array $known): PostImportService {
-		$request = $this->createMock(ImportedPostsRequest::class);
+		$request = $this->createStub(ImportedPostsRequest::class);
 		$request->method('knownAmong')->willReturn($known);
 		$request->method('remember')
 			->willReturnCallback(function (string $actor, string $source, string $stream): void {

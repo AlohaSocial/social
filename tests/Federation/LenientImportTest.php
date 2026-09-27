@@ -16,6 +16,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -27,12 +28,13 @@ require_once __DIR__ . '/../Model/TActivityPubMocks.php';
  * object is, a short spelling of a well-known IRI. Each of these arrives from
  * some peer, and each was lost or broke the delivery.
  */
+#[AllowMockObjectsWithoutExpectations]
 class LenientImportTest extends TestCase {
 	use TActivityPubMocks;
 
 	protected function setUp(): void {
 		$this->installActivityPub();
-		\OC::$server->register(\OCP\IURLGenerator::class, $this->createMock(\OCP\IURLGenerator::class));
+		\OC::$server->register(\OCP\IURLGenerator::class, $this->createStub(\OCP\IURLGenerator::class));
 		$this->apInterface(\OCA\Social\Interfaces\Actor\PersonInterface::class)
 			->method('getItemById')
 			->willThrowException(new \OCA\Social\Exceptions\ItemNotFoundException());
@@ -127,7 +129,7 @@ class LenientImportTest extends TestCase {
 	public function testAModelTypeErrorIsAFormatError(): void {
 		// what a 500 used to be made of: a model handed a string where it
 		// declares an array, deep inside the import
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		$ap->method('getItemFromData')->willThrowException(new \TypeError('must be of type array, string given'));
 		AP::set($ap);
 		$service = $this->getMockBuilder(ImportService::class)->disableOriginalConstructor()->onlyMethods([])->getMock();

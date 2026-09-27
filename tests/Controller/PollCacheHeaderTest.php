@@ -16,6 +16,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
@@ -38,6 +39,7 @@ use ReflectionProperty;
  * described in a comment — it is the reason these routes hand back a
  * `JSONResponse` themselves, which the dispatcher passes through untouched.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PollCacheHeaderTest extends TestCase {
 	private const TAG = '"h123-20"';
 
@@ -50,7 +52,7 @@ class PollCacheHeaderTest extends TestCase {
 		// `Response::getHeaders()` asks the container for the request id and
 		// for who is signed in
 		\OC::$server->register(IRequest::class, $this->request);
-		\OC::$server->register(IUserSession::class, $this->createMock(IUserSession::class));
+		\OC::$server->register(IUserSession::class, $this->createStub(IUserSession::class));
 	}
 
 	protected function tearDown(): void {

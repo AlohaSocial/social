@@ -16,9 +16,11 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class DeleteInterfaceTest extends ActivityPubTestCase {
 	private const BOB = self::REMOTE_URL . '/users/bob';
 	private const NOTE = self::REMOTE_URL . '/notes/1';

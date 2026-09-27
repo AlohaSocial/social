@@ -15,7 +15,9 @@ use OCA\Social\Service\AccessBlockService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -27,8 +29,9 @@ use Psr\Log\NullLogger;
  * app: a block that held on the inbox but not on the API, or on last month's
  * routes but not on the ones added since, is not what an admin switched on.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AccessBlockMiddlewareTest extends TestCase {
-	private IRequest|MockObject $request;
+	private IRequest|Stub $request;
 	private AccessBlockService|MockObject $accessBlockService;
 	private AccessBlockMiddleware $middleware;
 
@@ -37,7 +40,7 @@ class AccessBlockMiddlewareTest extends TestCase {
 	private string $remoteAddress = '1.2.3.4';
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->accessBlockService = $this->createMock(AccessBlockService::class);
 
 		$this->request->method('getRemoteAddress')->willReturnCallback(

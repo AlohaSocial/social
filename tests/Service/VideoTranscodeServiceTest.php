@@ -13,7 +13,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\VideoTranscodeService;
 use OCP\IBinaryFinder;
 use OCP\ITempManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -24,19 +24,19 @@ use Psr\Log\NullLogger;
  * that shelled out would be testing the server it happened to be on.
  */
 class VideoTranscodeServiceTest extends TestCase {
-	private IBinaryFinder|MockObject $binaryFinder;
-	private ConfigService|MockObject $configService;
+	private IBinaryFinder|Stub $binaryFinder;
+	private ConfigService|Stub $configService;
 	private VideoTranscodeService $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->binaryFinder = $this->createMock(IBinaryFinder::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->binaryFinder = $this->createStub(IBinaryFinder::class);
+		$this->configService = $this->createStub(ConfigService::class);
 
 		$this->service = new VideoTranscodeService(
 			$this->binaryFinder,
-			$this->createMock(ITempManager::class),
+			$this->createStub(ITempManager::class),
 			$this->configService,
 			new NullLogger(),
 		);

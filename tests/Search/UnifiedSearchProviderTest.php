@@ -24,11 +24,14 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\Search\ISearchQuery;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class UnifiedSearchProviderTest extends TestCase {
-	/** @var IL10N&MockObject */
+	/** @var IL10N&Stub */
 	private $l10n;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
@@ -37,7 +40,7 @@ class UnifiedSearchProviderTest extends TestCase {
 	private UnifiedSearchProvider $provider;
 
 	protected function setUp(): void {
-		$this->l10n = $this->createMock(IL10N::class);
+		$this->l10n = $this->createStub(IL10N::class);
 		$this->l10n->method('t')->willReturnArgument(0);
 		$this->l10n->method('n')->willReturnCallback(
 			fn (string $singular, string $plural, int $count, array $params = []): string
@@ -49,11 +52,11 @@ class UnifiedSearchProviderTest extends TestCase {
 		$this->provider = new UnifiedSearchProvider(
 			$this->l10n,
 			$this->urlGenerator,
-			$this->createMock(StreamService::class),
-			$this->createMock(StreamRequest::class),
-			$this->createMock(FollowService::class),
-			$this->createMock(CacheActorService::class),
-			$this->createMock(AccountService::class),
+			$this->createStub(StreamService::class),
+			$this->createStub(StreamRequest::class),
+			$this->createStub(FollowService::class),
+			$this->createStub(CacheActorService::class),
+			$this->createStub(AccountService::class),
 			$this->searchService
 		);
 	}
@@ -120,7 +123,7 @@ class UnifiedSearchProviderTest extends TestCase {
 		$person->method('getAccount')->willReturn($account);
 		$person->method('hasIcon')->willReturn($iconUrl !== null);
 		if ($iconUrl !== null) {
-			$icon = $this->createMock(Document::class);
+			$icon = $this->createStub(Document::class);
 			$icon->method('getUrl')->willReturn($iconUrl);
 			$person->method('getIcon')->willReturn($icon);
 		}

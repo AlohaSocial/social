@@ -42,8 +42,10 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -51,6 +53,7 @@ use Psr\Log\NullLogger;
  * PostService is exercised with a real StreamService (the Note it builds is
  * what matters) and a mocked ActivityService that records what it is handed.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PostServiceTest extends TestCase {
 	private const SOCIAL_URL = 'https://social.example/';
 	private const ACTOR_ID = 'https://social.example/@alice';
@@ -66,32 +69,32 @@ class PostServiceTest extends TestCase {
 	private ActivityService|MockObject $activityService;
 	private CacheActorService|MockObject $cacheActorService;
 	private ModerationService|MockObject $moderationService;
-	private \OCP\EventDispatcher\IEventDispatcher|MockObject $eventDispatcher;
+	private \OCP\EventDispatcher\IEventDispatcher|Stub $eventDispatcher;
 	/** @var object[] every event the service dispatched */
 	private array $dispatched = [];
 	private PostService $service;
 
 	/** what the poster's Nextcloud is set to, as IFactory::getUserLanguage() reports it */
-	private StatusRevisionService|MockObject $revisionService;
+	private StatusRevisionService|Stub $revisionService;
 	private string $userLanguage = 'de_DE';
 
 	private \OCA\Social\Service\InterestService|MockObject $interestService;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
-		$this->revisionService = $this->createMock(StatusRevisionService::class);
+		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('generateId')->willReturn(self::GENERATED_ID);
 		$configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
 
 		// hashtag hrefs are built through the router, the way the app's own
 		// timeline URLs are
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args = []): string => self::SOCIAL_URL . ($args['path'] ?? $route)
 		);
@@ -102,22 +105,22 @@ class PostServiceTest extends TestCase {
 			$this->activityService,
 			$this->cacheActorService,
 			$configService,
-			$this->createMock(CurlService::class),
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(EmojiService::class),
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(CurlService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(EmojiService::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
-			$this->createMock(PlaceService::class),
-			$this->createMock(ReactionSummaryService::class),
-			$this->createMock(MediaTagsRequest::class),
-			$this->createMock(AccountService::class)
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
+			$this->createStub(AccountService::class)
 		);
 
-		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory = $this->createStub(IFactory::class);
 		$l10nFactory->method('getUserLanguage')->willReturnCallback(fn (): string => $this->userLanguage);
 
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->eventDispatcher = $this->createMock(\OCP\EventDispatcher\IEventDispatcher::class);
+		$this->eventDispatcher = $this->createStub(\OCP\EventDispatcher\IEventDispatcher::class);
 		$this->eventDispatcher->method('dispatchTyped')->willReturnCallback(
 			function (object $event): void {
 				$this->dispatched[] = $event;
@@ -129,13 +132,13 @@ class PostServiceTest extends TestCase {
 			$this->accountService,
 			$this->activityService,
 			$l10nFactory,
-			$this->createMock(IUserManager::class),
+			$this->createStub(IUserManager::class),
 			$this->moderationService,
 			$this->revisionService,
-			$this->createMock(\OCA\Social\Service\NotificationService::class),
+			$this->createStub(\OCA\Social\Service\NotificationService::class),
 			new \OCA\Social\Service\LinkifyService(),
-			$this->createMock(\OCA\Social\Service\ChannelService::class),
-			$this->createMock(\OCA\Social\Service\ConfigService::class),
+			$this->createStub(\OCA\Social\Service\ChannelService::class),
+			$this->createStub(\OCA\Social\Service\ConfigService::class),
 			$this->eventDispatcher,
 			new NullLogger(),
 			$this->interestService,

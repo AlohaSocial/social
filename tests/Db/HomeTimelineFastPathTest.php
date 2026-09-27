@@ -13,8 +13,9 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\ConfigService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -32,10 +33,11 @@ use ReflectionProperty;
  * All four refusals happen before the query touches the database, which is what
  * makes them testable without one.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HomeTimelineFastPathTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private StreamRequest $request;
 
 	/** @var array<string, string> the app settings, as the request reads them */
@@ -44,7 +46,7 @@ class HomeTimelineFastPathTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValueBool')->willReturnCallback(
 			fn (string $key): bool => ($this->settings[$key] ?? '0') === '1'
 		);

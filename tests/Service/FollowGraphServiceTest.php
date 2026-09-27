@@ -20,6 +20,7 @@ use OCA\Social\Service\SuggestionService;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -36,11 +37,11 @@ use RuntimeException;
 class FollowGraphServiceTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 
-	private FollowsRequest|MockObject $followsRequest;
-	private CacheActorService|MockObject $cacheActorService;
-	private CurlService|MockObject $curlService;
-	private FediverseService|MockObject $fediverseService;
-	private SuggestionService|MockObject $suggestionService;
+	private FollowsRequest|Stub $followsRequest;
+	private CacheActorService|Stub $cacheActorService;
+	private CurlService|Stub $curlService;
+	private FediverseService|Stub $fediverseService;
+	private SuggestionService|Stub $suggestionService;
 	private FollowGraphService $service;
 
 	/** actor id => the actor ids they follow, as their server would publish them */
@@ -59,7 +60,7 @@ class FollowGraphServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->followsRequest->method('getFollowingByActorId')
 			->willReturnCallback(function (string $actorId): array {
 				$follows = [];
@@ -72,7 +73,7 @@ class FollowGraphServiceTest extends TestCase {
 				return $follows;
 			});
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromId')
 			->willReturnCallback(function (string $id): Person {
 				$host = (string)parse_url($id, PHP_URL_HOST);
@@ -87,7 +88,7 @@ class FollowGraphServiceTest extends TestCase {
 				return $person;
 			});
 
-		$this->curlService = $this->createMock(CurlService::class);
+		$this->curlService = $this->createStub(CurlService::class);
 		// the walk asks every server at once now; a peer that refuses is a
 		// null in its place rather than an exception, which is what the
 		// batch's callers cope with
@@ -127,7 +128,7 @@ class FollowGraphServiceTest extends TestCase {
 				return ['orderedItems' => $items];
 			});
 
-		$this->fediverseService = $this->createMock(FediverseService::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
 		$this->fediverseService->method('authorized')
 			->willReturnCallback(function (string $handle): bool {
 				foreach ($this->blocked as $host) {
@@ -139,17 +140,17 @@ class FollowGraphServiceTest extends TestCase {
 				return true;
 			});
 
-		$this->suggestionService = $this->createMock(SuggestionService::class);
+		$this->suggestionService = $this->createStub(SuggestionService::class);
 		$this->suggestionService->method('excludedPrims')
 			->willReturnCallback(fn (): array => array_fill_keys(
 				array_map(static fn (string $id): string => md5($id), $this->excluded), true
 			));
 
-		$this->service = $this->build($this->createMock(ICache::class));
+		$this->service = $this->build($this->createStub(ICache::class));
 	}
 
 	private function build(ICache|MockObject $cache): FollowGraphService {
-		$factory = $this->createMock(ICacheFactory::class);
+		$factory = $this->createStub(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
 		return new FollowGraphService(
@@ -324,7 +325,7 @@ class FollowGraphServiceTest extends TestCase {
 		];
 
 		$kept = [];
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('set')->willReturnCallback(function (string $key, $value) use (&$kept): bool {
 			$kept[$key] = $value;
 

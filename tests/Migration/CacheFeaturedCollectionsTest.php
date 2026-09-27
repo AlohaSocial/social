@@ -15,25 +15,28 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ConfigService;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The repair step that rebuilds the cached copy of every local actor, and the
  * guard that hands the job to the admin on a large instance instead.
  */
+#[AllowMockObjectsWithoutExpectations]
 class CacheFeaturedCollectionsTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private AccountService|MockObject $accountService;
 	private ConfigService|MockObject $configService;
-	private IOutput|MockObject $output;
+	private IOutput|Stub $output;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->output = $this->createMock(IOutput::class);
+		$this->output = $this->createStub(IOutput::class);
 	}
 
 	private function step(FakeConnection $connection): CacheFeaturedCollections {

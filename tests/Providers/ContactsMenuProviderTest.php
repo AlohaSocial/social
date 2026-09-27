@@ -20,9 +20,11 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ContactsMenuProviderTest extends TestCase {
 	/** @var IActionFactory&MockObject */
 	private $actionFactory;
@@ -39,7 +41,7 @@ class ContactsMenuProviderTest extends TestCase {
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->userManager = $this->createMock(IUserManager::class);
 		$this->accountService = $this->createMock(AccountService::class);
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(fn (string $text, array $params): string => vsprintf($text, $params));
 
 		$this->provider = new ContactsMenuProvider(
@@ -63,7 +65,7 @@ class ContactsMenuProviderTest extends TestCase {
 	}
 
 	private function knownUser(string $uid, string $displayName): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$user->method('getDisplayName')->willReturn($displayName);
 		$this->userManager->method('get')->with($uid)->willReturn($user);
@@ -71,14 +73,14 @@ class ContactsMenuProviderTest extends TestCase {
 
 	public function testUsersWithASocialAccountGetAFollowAction(): void {
 		$this->knownUser('bob', 'Bob Builder');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getPreferredUsername')->willReturn('bob');
 		$this->accountService->method('getActorFromUserId')->with('bob')->willReturn($actor);
 		$this->urlGenerator->method('imagePath')->with('social', 'social-dark.svg')->willReturn('/apps/social/img/social-dark.svg');
 		$this->urlGenerator->method('getAbsoluteURL')->with('/apps/social/img/social-dark.svg')->willReturn('https://cloud.example/apps/social/img/social-dark.svg');
 		$this->urlGenerator->method('linkToRouteAbsolute')->with('social.ActivityPub.actorAlias', ['username' => 'bob'])
 			->willReturn('https://cloud.example/apps/social/@bob');
-		$action = $this->createMock(ILinkAction::class);
+		$action = $this->createStub(ILinkAction::class);
 		$this->actionFactory->expects($this->once())->method('newLinkAction')
 			->with(
 				'https://cloud.example/apps/social/img/social-dark.svg',

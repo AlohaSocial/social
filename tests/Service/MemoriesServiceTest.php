@@ -18,6 +18,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MemoriesService;
 use OCA\Social\Service\ProfileHighlightsService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -28,6 +29,7 @@ use PHPUnit\Framework\TestCase;
  * as "about a year ago", the reader's own timezone decides where a day starts,
  * and the 29th of February is not quietly turned into the 1st of March.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MemoriesServiceTest extends TestCase {
 	private StreamRequest&MockObject $streamRequest;
 	private ConfigService&MockObject $configService;

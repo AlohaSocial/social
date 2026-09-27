@@ -16,7 +16,9 @@ use OCA\Social\Service\VideoTranscodeService;
 use OCA\Social\Service\VideoTranscodingWorker;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\ITempManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -24,11 +26,12 @@ use Psr\Log\NullLogger;
  * The bookkeeping around a conversion: what is picked, what is recorded, and
  * the order in which the file is replaced.
  */
+#[AllowMockObjectsWithoutExpectations]
 class VideoTranscodingWorkerTest extends TestCase {
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private CacheDocumentService|MockObject $cacheDocumentService;
+	private CacheDocumentService|Stub $cacheDocumentService;
 	private VideoTranscodeService|MockObject $videoTranscodeService;
-	private ITempManager|MockObject $tempManager;
+	private ITempManager|Stub $tempManager;
 	private VideoTranscodingWorker $worker;
 
 	/** paths made during a test, removed afterwards */
@@ -38,9 +41,9 @@ class VideoTranscodingWorkerTest extends TestCase {
 		parent::setUp();
 
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		$this->videoTranscodeService = $this->createMock(VideoTranscodeService::class);
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(
 			function (string $suffix = ''): string {

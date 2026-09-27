@@ -18,7 +18,9 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Channel;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ChannelService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -29,18 +31,19 @@ use Psr\Log\NullLogger;
  * anywhere else — a `Group` actor, owned by a `Person`, named in that order —
  * and the rule that nobody should have to learn the word in order to post.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ChannelServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const CHANNEL = 'https://cloud.example/apps/social/@alice_channel';
 
 	private ChannelsRequest|MockObject $channelsRequest;
-	private ActorsRequest|MockObject $actorsRequest;
+	private ActorsRequest|Stub $actorsRequest;
 	private AccountService|MockObject $accountService;
 	private ChannelService $service;
 
 	protected function setUp(): void {
 		$this->channelsRequest = $this->createMock(ChannelsRequest::class);
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
 		$this->service = new ChannelService(

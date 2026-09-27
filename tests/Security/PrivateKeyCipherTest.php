@@ -12,10 +12,12 @@ namespace OCA\Social\Tests\Security;
 use Exception;
 use OCA\Social\Security\PrivateKeyCipher;
 use OCP\Security\ICrypto;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class PrivateKeyCipherTest extends TestCase {
 	private const PEM = "-----BEGIN PRIVATE KEY-----\nMIIEvT...\n-----END PRIVATE KEY-----\n";
 

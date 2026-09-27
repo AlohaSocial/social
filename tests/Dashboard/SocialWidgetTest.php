@@ -13,9 +13,11 @@ use OCA\Social\Dashboard\SocialWidget;
 use OCP\Dashboard\IWidget;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialWidgetTest extends TestCase {
 	/** @var IL10N&MockObject */
 	private $l10n;

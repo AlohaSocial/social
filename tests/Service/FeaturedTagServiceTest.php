@@ -16,7 +16,7 @@ use OCA\Social\Model\Client\FeaturedTag;
 use OCA\Social\Service\FeaturedTagService;
 use OCA\Social\Service\HashtagService;
 use OCP\IURLGenerator;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -29,7 +29,7 @@ use PHPUnit\Framework\TestCase;
 class FeaturedTagServiceTest extends TestCase {
 	private const ACTOR = 'https://cloud.example/users/alice';
 
-	private FeaturedTagsRequest|MockObject $featuredTagsRequest;
+	private FeaturedTagsRequest|Stub $featuredTagsRequest;
 	private FeaturedTagService $service;
 
 	/** @var array<int, FeaturedTag> the stored rows, by id */
@@ -45,7 +45,7 @@ class FeaturedTagServiceTest extends TestCase {
 	private int $nextId = 1;
 
 	protected function setUp(): void {
-		$this->featuredTagsRequest = $this->createMock(FeaturedTagsRequest::class);
+		$this->featuredTagsRequest = $this->createStub(FeaturedTagsRequest::class);
 
 		$this->featuredTagsRequest->method('getByActor')
 			->willReturnCallback(fn (): array => array_values($this->stored));
@@ -88,14 +88,14 @@ class FeaturedTagServiceTest extends TestCase {
 				unset($this->stored[$tag->getId()]);
 			});
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')
 			->willReturnCallback(
 				static fn (string $route, array $args): string
 					=> 'https://cloud.example/apps/social/' . ($args['path'] ?? '')
 			);
 
-		$hashtagService = $this->createMock(HashtagService::class);
+		$hashtagService = $this->createStub(HashtagService::class);
 		$hashtagService->method('tagEntity')
 			->willReturnCallback(static fn (string $hashtag): array => ['name' => $hashtag]);
 

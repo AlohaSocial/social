@@ -13,6 +13,7 @@ use OCA\Social\Db\StreamViewsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\ViewCountService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -20,6 +21,7 @@ use Psr\Log\NullLogger;
 /**
  * Who is counted, who is told, and what must never happen to a read.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ViewCountServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 	private const BOB = 'https://cloud.example/@bob';
@@ -33,10 +35,10 @@ class ViewCountServiceTest extends TestCase {
 		$this->streamViewsRequest = $this->createMock(StreamViewsRequest::class);
 		$this->service = new ViewCountService(
 			$this->streamViewsRequest,
-			$this->createMock(\OCA\Social\Db\StreamRequest::class),
-			$this->createMock(\OCA\Social\Service\CacheActorService::class),
-			$this->createMock(\OCA\Social\Service\SignatureService::class),
-			$this->createMock(\OCA\Social\Service\ActivityService::class),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
+			$this->createStub(\OCA\Social\Service\CacheActorService::class),
+			$this->createStub(\OCA\Social\Service\SignatureService::class),
+			$this->createStub(\OCA\Social\Service\ActivityService::class),
 			new NullLogger(),
 		);
 	}
@@ -169,7 +171,7 @@ class ViewCountServiceTest extends TestCase {
 
 		$owner = $this->person('https://peertube.example/video-channels/news');
 		$owner->setInbox('https://peertube.example/inbox');
-		$cacheActorService = $this->createMock(\OCA\Social\Service\CacheActorService::class);
+		$cacheActorService = $this->createStub(\OCA\Social\Service\CacheActorService::class);
 		$cacheActorService->method('getFromId')->willReturn($owner);
 
 		$activityService = $this->createMock(\OCA\Social\Service\ActivityService::class);
@@ -179,9 +181,9 @@ class ViewCountServiceTest extends TestCase {
 
 		$service = new ViewCountService(
 			$this->streamViewsRequest,
-			$this->createMock(\OCA\Social\Db\StreamRequest::class),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
 			$cacheActorService,
-			$this->createMock(\OCA\Social\Service\SignatureService::class),
+			$this->createStub(\OCA\Social\Service\SignatureService::class),
 			$activityService,
 			new NullLogger(),
 		);
@@ -201,9 +203,9 @@ class ViewCountServiceTest extends TestCase {
 
 		$service = new ViewCountService(
 			$this->streamViewsRequest,
-			$this->createMock(\OCA\Social\Db\StreamRequest::class),
-			$this->createMock(\OCA\Social\Service\CacheActorService::class),
-			$this->createMock(\OCA\Social\Service\SignatureService::class),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
+			$this->createStub(\OCA\Social\Service\CacheActorService::class),
+			$this->createStub(\OCA\Social\Service\SignatureService::class),
 			$activityService,
 			new NullLogger(),
 		);
@@ -219,15 +221,15 @@ class ViewCountServiceTest extends TestCase {
 	}
 
 	private function serviceHolding(\OCA\Social\Model\ActivityPub\Stream $post): ViewCountService {
-		$streamRequest = $this->createMock(\OCA\Social\Db\StreamRequest::class);
+		$streamRequest = $this->createStub(\OCA\Social\Db\StreamRequest::class);
 		$streamRequest->method('getStreamById')->willReturn($post);
 
 		return new ViewCountService(
 			$this->streamViewsRequest,
 			$streamRequest,
-			$this->createMock(\OCA\Social\Service\CacheActorService::class),
-			$this->createMock(\OCA\Social\Service\SignatureService::class),
-			$this->createMock(\OCA\Social\Service\ActivityService::class),
+			$this->createStub(\OCA\Social\Service\CacheActorService::class),
+			$this->createStub(\OCA\Social\Service\SignatureService::class),
+			$this->createStub(\OCA\Social\Service\ActivityService::class),
 			new NullLogger(),
 		);
 	}

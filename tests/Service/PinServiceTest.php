@@ -22,10 +22,13 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class PinServiceTest extends TestCase {
 	private const AUTHOR = 'https://cloud.example/@alice';
 	private const POST_ID = self::AUTHOR . '/notes/1';
@@ -33,8 +36,8 @@ class PinServiceTest extends TestCase {
 	private StreamRequest|MockObject $streamRequest;
 	private ActionsRequest|MockObject $actionsRequest;
 	private ActivityService|MockObject $activityService;
-	private SignatureService|MockObject $signatureService;
-	private ActorsRequest|MockObject $actorsRequest;
+	private SignatureService|Stub $signatureService;
+	private ActorsRequest|Stub $actorsRequest;
 	private PinService $service;
 	private Person $author;
 
@@ -44,8 +47,8 @@ class PinServiceTest extends TestCase {
 		$this->actionsRequest->method('getAction')
 			->willThrowException(new ActionDoesNotExistException());
 		$this->activityService = $this->createMock(ActivityService::class);
-		$this->signatureService = $this->createMock(SignatureService::class);
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
+		$this->signatureService = $this->createStub(SignatureService::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
 		$this->service = new PinService(
 			$this->streamRequest,
 			$this->actionsRequest,

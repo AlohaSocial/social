@@ -22,10 +22,12 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class BlockInterfaceTest extends TestCase {
 	private const LOCAL_ALICE = 'https://cloud.example.org/users/alice';
 	private const REMOTE_BOB = 'https://remote.example/users/bob';

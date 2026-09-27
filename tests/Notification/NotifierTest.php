@@ -15,9 +15,11 @@ use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
 use OCP\Notification\IAction;
 use OCP\Notification\INotification;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class NotifierTest extends TestCase {
 	/** @var IL10N&MockObject */
 	private $l10n;

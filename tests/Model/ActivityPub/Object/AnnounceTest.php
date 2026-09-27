@@ -26,7 +26,7 @@ class AnnounceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->installActivityPub();
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	protected function tearDown(): void {

@@ -40,8 +40,10 @@ use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
@@ -50,6 +52,7 @@ use ReflectionClass;
  * BoostService relies on StreamService::assignItem() to address the Announce,
  * so a real StreamService (over a mocked StreamRequest) is used here.
  */
+#[AllowMockObjectsWithoutExpectations]
 class BoostServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const ALICE_ID = 'https://social.example/@alice';
@@ -68,11 +71,11 @@ class BoostServiceTest extends TestCase {
 	private StreamQueueService|MockObject $streamQueueService;
 	private CacheActorService|MockObject $cacheActorService;
 	private AnnounceInterface|MockObject $announceInterface;
-	private ModerationService|MockObject $moderationService;
+	private ModerationService|Stub $moderationService;
 	private BoostService $service;
 
 	protected function setUp(): void {
-		$this->moderationService = $this->createMock(ModerationService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
 		$this->announceInterface = $this->createMock(AnnounceInterface::class);
 		$this->bootActivityPub([AnnounceInterface::class => $this->announceInterface]);
 
@@ -83,25 +86,25 @@ class BoostServiceTest extends TestCase {
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('generateId')->willReturn(self::GENERATED_ID);
 		$configService->method('getSocialUrl')->willReturn('https://social.example/');
 
 		$streamService = new StreamService(
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			$this->streamRequest,
 			$this->activityService,
 			$this->cacheActorService,
 			$configService,
-			$this->createMock(CurlService::class),
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(EmojiService::class),
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(CurlService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(EmojiService::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
-			$this->createMock(PlaceService::class),
-			$this->createMock(ReactionSummaryService::class),
-			$this->createMock(MediaTagsRequest::class),
-			$this->createMock(AccountService::class)
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
+			$this->createStub(AccountService::class)
 		);
 
 		$this->service = new BoostService(
@@ -132,7 +135,7 @@ class BoostServiceTest extends TestCase {
 				$args[] = $interfaces[$class];
 				continue;
 			}
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}

@@ -14,7 +14,7 @@ use OCA\Social\Cron\ScheduledPosts;
 use OCA\Social\Service\BackgroundHealthService;
 use OCP\BackgroundJob\IJob;
 use OCP\BackgroundJob\IJobList;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -28,7 +28,7 @@ use RuntimeException;
  * page an administrator learns to ignore.
  */
 class BackgroundHealthServiceTest extends TestCase {
-	private IJobList|MockObject $jobList;
+	private IJobList|Stub $jobList;
 	private BackgroundHealthService $service;
 
 	/** @var array<class-string, int> the jobs that are registered, and their last run */
@@ -39,7 +39,7 @@ class BackgroundHealthServiceTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->jobList = $this->createMock(IJobList::class);
+		$this->jobList = $this->createStub(IJobList::class);
 		$this->jobList->method('getJobsIterator')->willReturnCallback(
 			function (?string $class): iterable {
 				if ($this->broken) {
@@ -50,7 +50,7 @@ class BackgroundHealthServiceTest extends TestCase {
 					return [];
 				}
 
-				$job = $this->createMock(IJob::class);
+				$job = $this->createStub(IJob::class);
 				$job->method('getLastRun')->willReturn($this->registered[$class]);
 
 				return [$job];

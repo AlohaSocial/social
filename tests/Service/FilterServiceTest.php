@@ -16,7 +16,7 @@ use OCA\Social\Model\Client\Filter;
 use OCA\Social\Model\Client\FilterKeyword;
 use OCA\Social\Model\Client\FilterStatus;
 use OCA\Social\Service\FilterService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -31,7 +31,7 @@ class FilterServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/users/alice';
 	private const BOB = 'https://cloud.example/users/bob';
 
-	private FiltersRequest|MockObject $filtersRequest;
+	private FiltersRequest|Stub $filtersRequest;
 	private FilterService $service;
 	/** @var array<string, Filter[]> actor id => the filters the store holds */
 	private array $stored = [];
@@ -39,7 +39,7 @@ class FilterServiceTest extends TestCase {
 	private array $asked = [];
 
 	protected function setUp(): void {
-		$this->filtersRequest = $this->createMock(FiltersRequest::class);
+		$this->filtersRequest = $this->createStub(FiltersRequest::class);
 		$this->filtersRequest->method('getActiveByActor')
 			->willReturnCallback(function (string $actorId, ?int $now = null): array {
 				$this->asked[] = $actorId;

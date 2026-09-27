@@ -27,10 +27,13 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class LikeInterfaceTest extends ActivityPubTestCase {
 	private const POST = self::LOCAL_URL . '/notes/1';
 
@@ -38,7 +41,7 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 	private $actionsRequest;
 	/** @var StreamRequest&MockObject */
 	private $streamRequest;
-	/** @var CacheActorService&MockObject */
+	/** @var CacheActorService&Stub */
 	private $cacheActorService;
 	private LikeInterface $handler;
 
@@ -50,9 +53,9 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 
 		$this->actionsRequest = $this->createMock(ActionsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 
-		$this->handler = new LikeInterface($this->actionsRequest, $this->streamRequest, $this->cacheActorService, $this->createMock(\OCA\Social\Service\NotificationService::class));
+		$this->handler = new LikeInterface($this->actionsRequest, $this->streamRequest, $this->cacheActorService, $this->createStub(\OCA\Social\Service\NotificationService::class));
 
 		$this->alice = $this->person(self::LOCAL_URL . '/users/alice', true);
 		$this->bob = $this->person(self::REMOTE_URL . '/users/bob');

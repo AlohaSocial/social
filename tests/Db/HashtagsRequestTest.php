@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\HashtagsRequest;
 use OCP\IDBConnection;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -28,6 +29,7 @@ use ReflectionProperty;
  * The statements need a real database; which of them is sent, and what it
  * carries, does not.
  */
+#[AllowMockObjectsWithoutExpectations]
 class HashtagsRequestTest extends TestCase {
 	private const TREND = ['1h' => 3, '12h' => 4, '1d' => 9, '3d' => 9, '10d' => 12];
 

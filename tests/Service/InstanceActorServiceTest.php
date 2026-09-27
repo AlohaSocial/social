@@ -14,7 +14,7 @@ use OCA\Social\Security\PrivateKeyCipher;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceActorService;
 use OCP\Security\ICrypto;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -29,13 +29,13 @@ class InstanceActorServiceTest extends TestCase {
 	/** @var array<string, string> the app config, in memory */
 	private array $appConfig = [];
 
-	/** @var ConfigService&MockObject */
+	/** @var ConfigService&Stub */
 	private $configService;
 
 	protected function setUp(): void {
 		$this->appConfig = [];
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example.com');
 		$this->configService->method('getAppValue')
@@ -49,7 +49,7 @@ class InstanceActorServiceTest extends TestCase {
 	private function service(): InstanceActorService {
 		// a real cipher over a reversible stand-in for the instance secret, so
 		// the test can tell a sealed value from a bare one
-		$crypto = $this->createMock(ICrypto::class);
+		$crypto = $this->createStub(ICrypto::class);
 		$crypto->method('encrypt')->willReturnCallback(static fn (string $v): string => 'sealed:' . $v);
 		$crypto->method('decrypt')->willReturnCallback(
 			static fn (string $v): string => str_starts_with($v, 'sealed:') ? substr($v, 7) : ''
@@ -179,10 +179,10 @@ class InstanceActorServiceTest extends TestCase {
 	 * A failure to sign must not become a failure to fetch.
 	 */
 	public function testWithoutASocialUrlThereIsNobodyToSignAs(): void {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')
 			->willThrowException(new SocialAppConfigException());
-		$crypto = $this->createMock(ICrypto::class);
+		$crypto = $this->createStub(ICrypto::class);
 
 		$service = new InstanceActorService(
 			$configService, new PrivateKeyCipher($crypto, new NullLogger()), new NullLogger()

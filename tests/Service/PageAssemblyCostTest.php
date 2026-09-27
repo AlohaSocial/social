@@ -60,7 +60,7 @@ class PageAssemblyCostTest extends TestCase {
 	#[DataProvider('pageSizes')]
 	public function testTheLinkCardsOfAPageCostOneQuery(int $size): void {
 		$asked = 0;
-		$request = $this->createMock(StreamCardsRequest::class);
+		$request = $this->createStub(StreamCardsRequest::class);
 		$request->method('getByStreamIds')->willReturnCallback(
 			function (array $ids) use (&$asked): array {
 				$asked++;
@@ -71,7 +71,7 @@ class PageAssemblyCostTest extends TestCase {
 
 		$service = new LinkPreviewService(
 			$request,
-			$this->createMock(\OCA\Social\Service\CurlService::class),
+			$this->createStub(\OCA\Social\Service\CurlService::class),
 			new \Psr\Log\NullLogger(),
 		);
 		$service->attachCards($this->page($size));
@@ -95,7 +95,7 @@ class PageAssemblyCostTest extends TestCase {
 		);
 		$places->expects($this->never())->method('getById');
 
-		$service = new PlaceService($places, $this->createMock(StreamRequest::class));
+		$service = new PlaceService($places, $this->createStub(StreamRequest::class));
 		$service->attachPlaces($this->page($size));
 
 		$this->assertSame(1, $asked, 'the places were fetched post by post');
@@ -108,7 +108,7 @@ class PageAssemblyCostTest extends TestCase {
 	 */
 	public function testAPlaceSharedByManyPostsIsAskedForOnce(): void {
 		$wanted = [];
-		$places = $this->createMock(PlacesRequest::class);
+		$places = $this->createStub(PlacesRequest::class);
 		$places->method('getByIds')->willReturnCallback(
 			function (array $ids) use (&$wanted): array {
 				$wanted = $ids;
@@ -117,7 +117,7 @@ class PageAssemblyCostTest extends TestCase {
 			}
 		);
 
-		$service = new PlaceService($places, $this->createMock(StreamRequest::class));
+		$service = new PlaceService($places, $this->createStub(StreamRequest::class));
 		$service->attachPlaces($this->page(60));
 
 		$this->assertSame(

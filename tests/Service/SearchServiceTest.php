@@ -21,19 +21,22 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../Model/TActivityPubMocks.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class SearchServiceTest extends TestCase {
 	use TActivityPubMocks;
 
 	private CacheActorService|MockObject $cacheActorService;
 	private HashtagService|MockObject $hashtagService;
-	private StreamRequest|MockObject $streamRequest;
+	private StreamRequest|Stub $streamRequest;
 	private CurlService|MockObject $curlService;
 	private SearchService $service;
 
@@ -133,11 +136,11 @@ class SearchServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->installActivityPub();
 		// importing a Note reaches the container for the hashtag links it builds
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 		$this->curlService = $this->createMock(CurlService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->hashtagService = $this->createMock(HashtagService::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->service = new SearchService(
 			$this->cacheActorService,
 			$this->hashtagService,

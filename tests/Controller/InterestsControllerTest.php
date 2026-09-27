@@ -24,11 +24,13 @@ use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /** The routes of My interests: who may call them, and what they answer. */
+#[AllowMockObjectsWithoutExpectations]
 class InterestsControllerTest extends TestCase {
 	private InterestService|MockObject $interestService;
 	private InterestFeedService|MockObject $feedService;
@@ -38,7 +40,7 @@ class InterestsControllerTest extends TestCase {
 	private string $uri = '/index.php/apps/social/api/v1/timelines/interests?limit=2';
 
 	private function controller(): InterestsController {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getHeader')->willReturn('');
 		$request->method('passesCSRFCheck')->willReturn(true);
 		$request->method('getParam')->willReturnCallback(fn (string $key, $default = null) => $this->params[$key] ?? $default);
@@ -46,12 +48,12 @@ class InterestsControllerTest extends TestCase {
 		// Response::getHeaders() asks the server for the request
 		\OC::$server->register(IRequest::class, $request);
 
-		$session = $this->createMock(IUserSession::class);
-		$user = $this->createMock(IUser::class);
+		$session = $this->createStub(IUserSession::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$session->method('getUser')->willReturnCallback(fn () => $this->signedIn ? $user : null);
 
-		$accounts = $this->createMock(AccountService::class);
+		$accounts = $this->createStub(AccountService::class);
 		$accounts->method('getActorFromUserId')->willReturn(
 			(new Person())->setId('https://cloud.example/users/alice')->setUserId('alice')
 		);
@@ -60,11 +62,11 @@ class InterestsControllerTest extends TestCase {
 		$this->interestService->method('isEnabled')->willReturnCallback(fn (): bool => $this->enabled);
 		$this->feedService ??= $this->createMock(InterestFeedService::class);
 
-		$filters = $this->createMock(FilterService::class);
+		$filters = $this->createStub(FilterService::class);
 		$filters->method('apply')->willReturnArgument(0);
 
 		return new InterestsController(
-			$request, $session, new NullLogger(), $accounts, $this->createMock(ClientService::class),
+			$request, $session, new NullLogger(), $accounts, $this->createStub(ClientService::class),
 			$this->interestService, $this->feedService, $filters
 		);
 	}

@@ -54,25 +54,28 @@ use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\SignatureService;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 class ImportServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example.com';
 
 	private MiscService|MockObject $miscService;
-	private ModerationService|MockObject $moderationService;
-	private RelayService|MockObject $relayService;
+	private ModerationService|Stub $moderationService;
+	private RelayService|Stub $relayService;
 	private ImportService $service;
 
 	protected function setUp(): void {
 		$this->miscService = $this->createMock(MiscService::class);
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn(self::CLOUD_URL);
-		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->relayService = $this->createMock(RelayService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
+		$this->relayService = $this->createStub(RelayService::class);
 		$this->service = new ImportService(
 			$this->miscService, $this->moderationService, $this->relayService
 		);
@@ -85,47 +88,47 @@ class ImportServiceTest extends TestCase {
 
 	/** A real AP dispatcher over mocked persistence interfaces, so JSON is parsed into the real models. */
 	private function useRealActivityPub(): AP {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 		// Stream::import resolves the URL generator statically for attachment links
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 
 		$ap = new AP(
-			$this->createMock(AcceptInterface::class),
-			$this->createMock(AddInterface::class),
-			$this->createMock(StoryAnswerInterface::class),
-			$this->createMock(AnnounceInterface::class),
-			$this->createMock(BlockInterface::class),
-			$this->createMock(CreateInterface::class),
-			$this->createMock(DeleteInterface::class),
-			$this->createMock(DocumentInterface::class),
-			$this->createMock(FlagInterface::class),
-			$this->createMock(FollowInterface::class),
-			$this->createMock(ImageInterface::class),
-			$this->createMock(LikeInterface::class),
-			$this->createMock(EmojiReactInterface::class),
-			$this->createMock(StoryInterface::class),
-			$this->createMock(MoveInterface::class),
-			$this->createMock(NoteInterface::class),
-			$this->createMock(SocialAppNotificationInterface::class),
-			$this->createMock(PersonInterface::class),
-			$this->createMock(ServiceInterface::class),
-			$this->createMock(GroupInterface::class),
-			$this->createMock(OrganizationInterface::class),
-			$this->createMock(ApplicationInterface::class),
-			$this->createMock(RejectInterface::class),
-			$this->createMock(RemoveInterface::class),
-			$this->createMock(UndoInterface::class),
-			$this->createMock(UpdateInterface::class),
-			$this->createMock(QuoteRequestInterface::class),
+			$this->createStub(AcceptInterface::class),
+			$this->createStub(AddInterface::class),
+			$this->createStub(StoryAnswerInterface::class),
+			$this->createStub(AnnounceInterface::class),
+			$this->createStub(BlockInterface::class),
+			$this->createStub(CreateInterface::class),
+			$this->createStub(DeleteInterface::class),
+			$this->createStub(DocumentInterface::class),
+			$this->createStub(FlagInterface::class),
+			$this->createStub(FollowInterface::class),
+			$this->createStub(ImageInterface::class),
+			$this->createStub(LikeInterface::class),
+			$this->createStub(EmojiReactInterface::class),
+			$this->createStub(StoryInterface::class),
+			$this->createStub(MoveInterface::class),
+			$this->createStub(NoteInterface::class),
+			$this->createStub(SocialAppNotificationInterface::class),
+			$this->createStub(PersonInterface::class),
+			$this->createStub(ServiceInterface::class),
+			$this->createStub(GroupInterface::class),
+			$this->createStub(OrganizationInterface::class),
+			$this->createStub(ApplicationInterface::class),
+			$this->createStub(RejectInterface::class),
+			$this->createStub(RemoveInterface::class),
+			$this->createStub(UndoInterface::class),
+			$this->createStub(UpdateInterface::class),
+			$this->createStub(QuoteRequestInterface::class),
 			$configService,
-			$this->createMock(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class),
-			$this->createMock(\OCA\Social\Interfaces\Object\DislikeInterface::class),
-			$this->createMock(\OCA\Social\Interfaces\Object\PlaylistInterface::class),
+			$this->createStub(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class),
+			$this->createStub(\OCA\Social\Interfaces\Object\DislikeInterface::class),
+			$this->createStub(\OCA\Social\Interfaces\Object\PlaylistInterface::class),
 			new PeerTubeService(
-				$this->createMock(DocumentInterface::class),
-				$this->createMock(IURLGenerator::class),
-				$this->createMock(LoggerInterface::class),
+				$this->createStub(DocumentInterface::class),
+				$this->createStub(IURLGenerator::class),
+				$this->createStub(LoggerInterface::class),
 			),
 		);
 		AP::set($ap);
@@ -266,7 +269,7 @@ class ImportServiceTest extends TestCase {
 	}
 
 	public function testParseIncomingRequestAcceptsAnAccountUnderNoDecision(): void {
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		AP::set($ap);
 		$this->moderationService->method('isSuspended')->willReturn(false);
 		$interface = $this->createMock(NoteInterface::class);
@@ -277,9 +280,9 @@ class ImportServiceTest extends TestCase {
 	}
 
 	public function testParseIncomingRequestPropagatesAnUnexpectedFailure(): void {
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		AP::set($ap);
-		$interface = $this->createMock(NoteInterface::class);
+		$interface = $this->createStub(NoteInterface::class);
 		// A database or other unexpected failure must not be swallowed behind a 200:
 		// it propagates so the inbox answers 5xx and the sender retries.
 		$interface->method('processIncomingRequest')->willThrowException(new Exception('boom'));
@@ -290,9 +293,9 @@ class ImportServiceTest extends TestCase {
 	}
 
 	public function testParseIncomingRequestToleratesAnUnprocessableActivity(): void {
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		AP::set($ap);
-		$interface = $this->createMock(NoteInterface::class);
+		$interface = $this->createStub(NoteInterface::class);
 		$interface->method('processIncomingRequest')
 			->willThrowException(new InvalidResourceException('nothing to resolve'));
 		$ap->method('getInterfaceForItem')->willReturn($interface);
@@ -313,7 +316,7 @@ class ImportServiceTest extends TestCase {
 	}
 
 	public function testParseIncomingRequestRefusesAnItemWithoutOrigin(): void {
-		AP::set($this->createMock(AP::class));
+		AP::set($this->createStub(AP::class));
 		$note = new Note();
 		$note->setId('https://remote.example/notes/1');
 
@@ -322,7 +325,7 @@ class ImportServiceTest extends TestCase {
 	}
 
 	public function testParseIncomingRequestRejectsUnknownInterface(): void {
-		$ap = $this->createMock(AP::class);
+		$ap = $this->createStub(AP::class);
 		AP::set($ap);
 		$ap->method('getInterfaceForItem')->willThrowException(new ItemUnknownException());
 		$person = new Person();

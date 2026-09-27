@@ -32,7 +32,7 @@ class TestServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->curlService = $this->createMock(CurlService::class);
-		AP::set($this->createMock(AP::class));
+		AP::set($this->createStub(AP::class));
 		$this->service = new TestService(
 			$this->curlService,
 		);

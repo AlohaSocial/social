@@ -17,7 +17,9 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DomainPurgeService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\NotificationService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -30,15 +32,16 @@ use Psr\Log\NullLogger;
  * repeating one is free and an interrupted one resumes), and it terminates
  * only when all three places an account can be left behind are empty.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DomainPurgeServiceTest extends TestCase {
 	private const DOMAIN = 'spam.example';
 
-	private CacheActorsRequest|MockObject $cacheActorsRequest;
-	private StreamRequest|MockObject $streamRequest;
-	private FollowsRequest|MockObject $followsRequest;
+	private CacheActorsRequest|Stub $cacheActorsRequest;
+	private StreamRequest|Stub $streamRequest;
+	private FollowsRequest|Stub $followsRequest;
 	private ModerationService|MockObject $moderationService;
-	private ConfigService|MockObject $configService;
-	private NotificationService|MockObject $notificationService;
+	private ConfigService|Stub $configService;
+	private NotificationService|Stub $notificationService;
 
 	/** @var array<int, array<string, mixed>> who was told their follows were cut */
 	private array $severed = [];
@@ -47,15 +50,15 @@ class DomainPurgeServiceTest extends TestCase {
 	private array $state = ['cached' => [], 'authors' => [], 'follows' => []];
 
 	protected function setUp(): void {
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->followsRequest = $this->createMock(FollowsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
 		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('onRelationshipsSevered')->willReturnCallback(
 			function (string $actorId, string $domain, int $lost): void {
 				$this->severed[] = compact('actorId', 'domain', 'lost');

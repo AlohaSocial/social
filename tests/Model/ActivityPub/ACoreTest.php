@@ -322,9 +322,7 @@ class ACoreTest extends TestCase {
 		]], $result);
 	}
 
-	/**
-	 * @dataProvider provideIconsThatNameNoPicture
-	 */
+	#[DataProvider('provideIconsThatNameNoPicture')]
 	public function testAnIconWithNoUsableAddressIsNotKept(array $icon): void {
 		$result = (new ACore())->validateArray(ACore::AS_TAGS, 'tag', [
 			'tag' => [['type' => 'Emoji', 'name' => ':blobcat:', 'icon' => $icon]],
@@ -335,7 +333,7 @@ class ACoreTest extends TestCase {
 		$this->assertArrayNotHasKey('icon', $result[0]);
 	}
 
-	public function provideIconsThatNameNoPicture(): iterable {
+	public static function provideIconsThatNameNoPicture(): iterable {
 		yield 'no url' => [['type' => 'Image', 'mediaType' => 'image/png']];
 		yield 'an empty url' => [['url' => '']];
 		yield 'not a url' => [['url' => 'http:///broken']];

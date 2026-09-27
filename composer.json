@@ -2,7 +2,7 @@
 	"name": "nextcloud/social",
 	"description": "Social app",
 	"license": "AGPL-3.0-or-later",
-	"version": "0.26.91",
+	"version": "0.26.92",
 	"minimum-stability": "stable",
 	"authors": [
 		{
@@ -39,7 +39,7 @@
 		"kornrunner/blurhash": "^1.2"
 	},
 	"require-dev": {
-		"phpunit/phpunit": "^10.5",
+		"phpunit/phpunit": "^12.5",
 		"nextcloud/coding-standard": "^1.0.0",
 		"nextcloud/ocp": "dev-master",
 		"vimeo/psalm": "^6.17",

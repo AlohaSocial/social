@@ -31,7 +31,9 @@ use OCA\Social\Service\StatusAssemblyService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -39,6 +41,7 @@ use Psr\Log\NullLogger;
  * A post that was scheduled must not be published now, must be published then,
  * and must be published the way an immediate post is.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ScheduledStatusServiceTest extends TestCase {
 	/** a Friday, 14:00 in whatever zone the test process runs in */
 	private const NOW = 1757937600;
@@ -46,11 +49,11 @@ class ScheduledStatusServiceTest extends TestCase {
 	private const BOB = 'https://social.example/@bob';
 
 	private ScheduledStatusesRequest|MockObject $scheduledRequest;
-	private AccountService|MockObject $accountService;
-	private DocumentService|MockObject $documentService;
+	private AccountService|Stub $accountService;
+	private DocumentService|Stub $documentService;
 	private StreamService|MockObject $streamService;
-	private PostService|MockObject $postService;
-	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
+	private PostService|Stub $postService;
+	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
 	private ScheduledStatusService $service;
 
 	/** the row the service handed to save(), as save() saw it */
@@ -60,13 +63,13 @@ class ScheduledStatusServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->scheduledRequest = $this->createMock(ScheduledStatusesRequest::class);
-		$this->accountService = $this->createMock(AccountService::class);
-		$this->documentService = $this->createMock(DocumentService::class);
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->documentService = $this->createStub(DocumentService::class);
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->postService = $this->createMock(PostService::class);
-		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
+		$this->postService = $this->createStub(PostService::class);
+		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
 
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
 		$this->accountService->method('getDefaultPrivacy')->willReturn(Stream::TYPE_PUBLIC);
@@ -79,7 +82,7 @@ class ScheduledStatusServiceTest extends TestCase {
 			$this->documentService,
 			$this->streamService,
 			$this->cacheDocumentsRequest,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			new NullLogger()
 		);
 
@@ -89,7 +92,7 @@ class ScheduledStatusServiceTest extends TestCase {
 			$this->documentService,
 			$this->postService,
 			$assembly,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			$time,
 			new NullLogger()
 		);

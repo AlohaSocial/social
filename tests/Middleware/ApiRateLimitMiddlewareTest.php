@@ -26,6 +26,7 @@ use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -50,9 +51,9 @@ class BudgetedController extends Controller {
  * and, as carefully, everything this must not start counting.
  */
 class ApiRateLimitMiddlewareTest extends TestCase {
-	private IUserSession|MockObject $userSession;
-	private ICacheFactory|MockObject $cacheFactory;
-	private IRequest|MockObject $request;
+	private IUserSession|Stub $userSession;
+	private ICacheFactory|Stub $cacheFactory;
+	private IRequest|Stub $request;
 	private ApiRateLimitMiddleware $middleware;
 	private BudgetedController $controller;
 
@@ -73,12 +74,12 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getRemoteAddress')->willReturn('203.0.113.7');
 		$this->request->method('getId')->willReturn('test-request');
 		\OC::$server->register(IRequest::class, $this->request);
 
-		$cache = $this->createMock(ICache::class);
+		$cache = $this->createStub(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $k) => $this->store[$k] ?? null);
 		$cache->method('set')->willReturnCallback(function (string $k, $v): bool {
 			$this->store[$k] = $v;
@@ -86,17 +87,17 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 			return true;
 		});
 
-		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory = $this->createStub(ICacheFactory::class);
 		$this->cacheFactory->method('isAvailable')->willReturn(true);
 		$this->cacheFactory->method('createDistributed')->willReturn($cache);
 
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->controller = new BudgetedController('social', $this->request);
 		$this->middleware = new ApiRateLimitMiddleware($this->service($this->cacheFactory));
 	}
 
 	private function service(ICacheFactory|MockObject $cacheFactory): RateLimitService {
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getAppValue')
 			->willReturnCallback(fn (string $key): string => $this->appValues[$key] ?? '');
 
@@ -104,7 +105,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 	}
@@ -142,7 +143,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 
 	/** One account's spending is not another's. */
 	public function testTwoAccountsHaveTwoBudgets(): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$uid = 'alice';
 		$user->method('getUID')->willReturnCallback(function () use (&$uid): string {
 			return $uid;
@@ -190,7 +191,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	 */
 	public function testFederationIsNotMeasuredAsIfItWereAClient(): void {
 		$this->userSession->method('getUser')->willReturn(null);
-		$inbox = $this->createMock(ActivityPubController::class);
+		$inbox = $this->createStub(ActivityPubController::class);
 
 		$this->callTimes(20, 'sharedInbox', $inbox);
 
@@ -203,7 +204,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	 */
 	public function testServingBytesDoesNotSpendAReadersBudget(): void {
 		$this->userSession->method('getUser')->willReturn(null);
-		$navigation = $this->createMock(NavigationController::class);
+		$navigation = $this->createStub(NavigationController::class);
 
 		$this->callTimes(20, 'documentGetPublic', $navigation);
 
@@ -225,7 +226,7 @@ class ApiRateLimitMiddlewareTest extends TestCase {
 	 * take the app away from the instances least able to debug it.
 	 */
 	public function testAnInstanceWithNoCacheRefusesNobody(): void {
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn(false);
 		$cacheFactory->method('isLocalCacheAvailable')->willReturn(false);
 		$middleware = new ApiRateLimitMiddleware($this->service($cacheFactory));

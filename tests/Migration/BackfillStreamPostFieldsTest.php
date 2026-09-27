@@ -13,7 +13,9 @@ use DateTime;
 use OCA\Social\Migration\BackfillStreamPostFields;
 use OCA\Social\Service\ConfigService;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -25,6 +27,7 @@ use PHPUnit\Framework\TestCase;
  * rather than a second copy of the parsing, so what it writes is exactly what a
  * read of the row would otherwise have derived.
  */
+#[AllowMockObjectsWithoutExpectations]
 class BackfillStreamPostFieldsTest extends TestCase {
 	private const MARKER = 'migration_stream_post_fields_backfilled';
 
@@ -44,12 +47,12 @@ class BackfillStreamPostFieldsTest extends TestCase {
 		JSON;
 
 	private ConfigService|MockObject $configService;
-	private IOutput|MockObject $output;
+	private IOutput|Stub $output;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->configService = $this->createMock(ConfigService::class);
-		$this->output = $this->createMock(IOutput::class);
+		$this->output = $this->createStub(IOutput::class);
 	}
 
 	private function step(FakeConnection $connection): BackfillStreamPostFields {

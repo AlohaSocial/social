@@ -16,11 +16,13 @@ use OCP\DB\Types;
 use OCP\IAppConfig;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
 /**
  * `social_cache_actor.account_lower`, the column an account search compares.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AccountLowerColumnTest extends TestCase {
 	/** @return array{columns: array, indexes: array, primary: array} */
 	private function cacheActors(bool $twice = false): array {
@@ -61,7 +63,7 @@ class AccountLowerColumnTest extends TestCase {
 		}
 		$rows[7]['account'] = 'Ärger@host.example';
 
-		$connection = $this->createMock(IDBConnection::class);
+		$connection = $this->createStub(IDBConnection::class);
 		$connection->method('executeQuery')->willReturnCallback(
 			function (string $sql, array $params) use (&$rows): IResult {
 				$this->assertStringContainsString('ORDER BY `nid` ASC LIMIT ' . Version1000Date20260925000002::BATCH, $sql);
@@ -87,7 +89,7 @@ class AccountLowerColumnTest extends TestCase {
 		);
 
 		(new Version1000Date20260925000002($connection))
-			->postSchemaChange($this->createMock(IOutput::class), static fn () => null, []);
+			->postSchemaChange($this->createStub(IOutput::class), static fn () => null, []);
 
 		$this->assertSame('user1@mastodon.example', $rows[1]['account_lower']);
 		$this->assertSame('ärger@host.example', $rows[7]['account_lower']);

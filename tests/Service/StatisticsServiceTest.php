@@ -25,9 +25,11 @@ use OCA\Social\Service\StatisticsService;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICacheFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class StatisticsServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://remote.example/users/bob';
@@ -46,9 +48,9 @@ class StatisticsServiceTest extends TestCase {
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		// an instance with no memcache, and a table of its own per test, so each
 		// test counts rather than reading what the one before it left behind
-		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory = $this->createStub(ICacheFactory::class);
 		$cacheFactory->method('isAvailable')->willReturn(false);
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(static fn (): int => time());
 
 		$this->service = new StatisticsService(

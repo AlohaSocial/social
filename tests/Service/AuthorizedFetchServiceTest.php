@@ -18,7 +18,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\SignatureService;
 use OCP\IRequest;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -37,11 +37,11 @@ use Psr\Log\NullLogger;
 class AuthorizedFetchServiceTest extends TestCase {
 	private const REMOTE = 'https://remote.example/users/bob';
 
-	private SignatureService|MockObject $signatureService;
-	private CacheActorService|MockObject $cacheActorService;
-	private FediverseService|MockObject $fediverseService;
-	private ConfigService|MockObject $configService;
-	private IRequest|MockObject $request;
+	private SignatureService|Stub $signatureService;
+	private CacheActorService|Stub $cacheActorService;
+	private FediverseService|Stub $fediverseService;
+	private ConfigService|Stub $configService;
+	private IRequest|Stub $request;
 	private AuthorizedFetchService $service;
 
 	/** What the signature check answers: an origin, or an exception to throw. */
@@ -56,11 +56,11 @@ class AuthorizedFetchServiceTest extends TestCase {
 	private string $secureMode = '0';
 
 	protected function setUp(): void {
-		$this->signatureService = $this->createMock(SignatureService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->fediverseService = $this->createMock(FediverseService::class);
-		$this->configService = $this->createMock(ConfigService::class);
-		$this->request = $this->createMock(IRequest::class);
+		$this->signatureService = $this->createStub(SignatureService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$this->request = $this->createStub(IRequest::class);
 
 		$this->signatureService->method('checkGetRequest')->willReturnCallback(
 			function (IRequest $request, string &$signer): string {

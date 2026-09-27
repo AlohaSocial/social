@@ -13,6 +13,7 @@ use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\ConfigService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -30,6 +31,7 @@ use ReflectionProperty;
  * Using filesort` over every public post ever written, or over every
  * notification an account ever received.
  */
+#[AllowMockObjectsWithoutExpectations]
 class RecipientPagingTest extends TestCase {
 	/** @var string[] */
 	private array $where = [];
@@ -73,7 +75,7 @@ class RecipientPagingTest extends TestCase {
 			->onlyMethods([])
 			->getMock();
 
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValueBool')->willReturn($filled);
 		(new ReflectionProperty(StreamRequest::class, 'configService'))->setValue($request, $config);
 		(new ReflectionProperty(StreamRequest::class, 'recipientNidsFilled'))->setValue($request, null);

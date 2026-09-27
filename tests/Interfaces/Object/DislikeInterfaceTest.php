@@ -17,6 +17,7 @@ use OCA\Social\Interfaces\Object\DislikeInterface;
 use OCA\Social\Model\ActivityPub\Object\Dislike;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\SignatureService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -27,6 +28,7 @@ use PHPUnit\Framework\TestCase;
  * type and dropped — so a video whose author cared about the number showed
  * none of them.
  */
+#[AllowMockObjectsWithoutExpectations]
 class DislikeInterfaceTest extends TestCase {
 	private const POST = 'https://cloud.example/apps/social/@alice/1';
 	private const CAROL = 'https://peertube.example/accounts/carol';

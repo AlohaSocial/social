@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
 
 class ExtendedQueryBuilderTest extends TestCase {
 	public function testNidsInsideTheNativeIntegerRangeUseTheIntegerPredicate(): void {
-		$queryBuilder = $this->createMock(IQueryBuilder::class);
+		$queryBuilder = $this->createStub(IQueryBuilder::class);
 		$builder = $this->getMockBuilder(ExtendedQueryBuilder::class)
 			->setConstructorArgs([$queryBuilder])
 			->onlyMethods(['limitToDBFieldInt', 'limitToDBField'])
@@ -27,7 +27,7 @@ class ExtendedQueryBuilderTest extends TestCase {
 	}
 
 	public function testOversizedNidsAreBoundAsExactDecimalStrings(): void {
-		$queryBuilder = $this->createMock(IQueryBuilder::class);
+		$queryBuilder = $this->createStub(IQueryBuilder::class);
 		$builder = $this->getMockBuilder(ExtendedQueryBuilder::class)
 			->setConstructorArgs([$queryBuilder])
 			->onlyMethods(['limitToDBFieldInt', 'limitToDBField'])

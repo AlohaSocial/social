@@ -19,18 +19,20 @@ use OCP\Accounts\IAccountManager;
 use OCP\Accounts\IAccountProperty;
 use OCP\IUser;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
  * The `fediverse` field of this Nextcloud's profiles, read as who to follow.
  */
+#[AllowMockObjectsWithoutExpectations]
 class ColleagueServiceTest extends TestCase {
-	private IUserManager|MockObject $userManager;
-	private IAccountManager|MockObject $accountManager;
-	private CacheActorService|MockObject $cacheActorService;
+	private IUserManager|Stub $userManager;
+	private IAccountManager|Stub $accountManager;
+	private CacheActorService|Stub $cacheActorService;
 	private ColleagueService $service;
 
 	/** @var array<string, array{string, string}> uid => [fediverse value, scope] */
@@ -41,7 +43,7 @@ class ColleagueServiceTest extends TestCase {
 	private array $asked = [];
 
 	protected function setUp(): void {
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('searchDisplayName')
 			->willReturnCallback(fn (): array => array_map(
 				fn (string $uid): IUser => $this->user($uid), array_keys($this->profiles)
@@ -50,11 +52,11 @@ class ColleagueServiceTest extends TestCase {
 			->willReturnCallback(fn (string $uid): ?IUser
 				=> isset($this->profiles[$uid]) ? $this->user($uid) : null);
 
-		$this->accountManager = $this->createMock(IAccountManager::class);
+		$this->accountManager = $this->createStub(IAccountManager::class);
 		$this->accountManager->method('getAccount')
 			->willReturnCallback(function (IUser $user): IAccount {
 				[$value, $scope] = $this->profiles[$user->getUID()];
-				$property = $this->createMock(IAccountProperty::class);
+				$property = $this->createStub(IAccountProperty::class);
 				$property->method('getValue')->willReturn($value);
 				$property->method('getScope')->willReturn($scope);
 				$account = $this->createMock(IAccount::class);
@@ -63,10 +65,10 @@ class ColleagueServiceTest extends TestCase {
 				return $account;
 			});
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialAddress')->willReturn('cloud.example');
 
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->cacheActorService->method('getFromLocalAccount')
 			->willReturnCallback(fn (string $username): Person
 				=> $this->person('https://cloud.example/users/' . $username));

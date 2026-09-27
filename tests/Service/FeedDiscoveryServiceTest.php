@@ -15,24 +15,26 @@ use OCA\Social\Tests\Helper\EndlessStream;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 class FeedDiscoveryServiceTest extends TestCase {
 	private IClient|MockObject $client;
 	private FeedDiscoveryService $service;
 
 	protected function setUp(): void {
 		$this->client = $this->createMock(IClient::class);
-		$clientService = $this->createMock(IClientService::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
 		$this->service = new FeedDiscoveryService($clientService);
 	}
 
 	private function answers(string $body, string $contentType = 'text/html'): void {
-		$response = $this->createMock(IResponse::class);
+		$response = $this->createStub(IResponse::class);
 		$response->method('getBody')->willReturn($body);
 		$response->method('getHeader')->willReturn($contentType);
 		$this->client->method('get')->willReturn($response);

@@ -14,25 +14,28 @@ use OCA\Social\Migration\EncryptPrivateKeys;
 use OCA\Social\Security\PrivateKeyCipher;
 use OCA\Social\Service\ConfigService;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The repair step that rewrites bare-PEM actor private keys into their sealed
  * form, and what it does with a row it cannot seal.
  */
+#[AllowMockObjectsWithoutExpectations]
 class EncryptPrivateKeysTest extends TestCase {
-	private PrivateKeyCipher|MockObject $keyCipher;
-	private ConfigService|MockObject $configService;
+	private PrivateKeyCipher|Stub $keyCipher;
+	private ConfigService|Stub $configService;
 	private IOutput|MockObject $output;
 	/** @var string[] */
 	private array $warnings = [];
 
 	protected function setUp(): void {
 		parent::setUp();
-		$this->keyCipher = $this->createMock(PrivateKeyCipher::class);
+		$this->keyCipher = $this->createStub(PrivateKeyCipher::class);
 		// the marker short-circuits the step, so it has to read as unset here
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValueInt')->willReturn(0);
 		$this->output = $this->createMock(IOutput::class);
 		$this->warnings = [];
@@ -100,7 +103,7 @@ class EncryptPrivateKeysTest extends TestCase {
 		// life of the instance, with the instance in maintenance mode, only to
 		// find nothing to do. Once a run finishes clean, it must not look again.
 		$connection = new FakeConnection([[]]);
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getAppValueInt')->willReturn(1);
 
 		(new EncryptPrivateKeys($connection, $this->keyCipher, $configService))->run($this->output);

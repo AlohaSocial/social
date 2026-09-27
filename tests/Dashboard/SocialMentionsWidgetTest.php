@@ -20,12 +20,15 @@ use OCA\Social\Service\StreamService;
 use OCP\Dashboard\IAPIWidgetV2;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialMentionsWidgetTest extends TestCase {
-	/** @var IL10N&MockObject */
+	/** @var IL10N&Stub */
 	private $l10n;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
@@ -33,19 +36,19 @@ class SocialMentionsWidgetTest extends TestCase {
 	private $accountService;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var StreamService&MockObject */
+	/** @var StreamService&Stub */
 	private $streamService;
 	private SocialMentionsWidget $widget;
 
 	protected function setUp(): void {
-		$this->l10n = $this->createMock(IL10N::class);
+		$this->l10n = $this->createStub(IL10N::class);
 		$this->l10n->method('t')->willReturnCallback(
 			static fn (string $text, array $params = []): string => vsprintf($text, $params)
 		);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 
 		$this->widget = new SocialMentionsWidget(
 			$this->l10n,
@@ -58,11 +61,11 @@ class SocialMentionsWidgetTest extends TestCase {
 	}
 
 	private function viewer(string $uid = 'alice'): void {
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
 		$this->accountService->method('getActorFromUserId')->with($uid, false)->willReturn($account);
 		$this->cacheActorService->method('getFromLocalAccount')->with($uid)
-			->willReturn($this->createMock(Person::class));
+			->willReturn($this->createStub(Person::class));
 	}
 
 	public function testIdentity(): void {
@@ -103,16 +106,16 @@ class SocialMentionsWidgetTest extends TestCase {
 
 	public function testARowShowsThePostThatMentionsTheReader(): void {
 		$this->viewer();
-		$status = $this->createMock(Note::class);
+		$status = $this->createStub(Note::class);
 		$status->method('getContent')->willReturn('<p>hey @alice</p>');
 		$status->method('getAttributedTo')->willReturn('https://remote.example/users/bob');
-		$notification = $this->createMock(SocialAppNotification::class);
+		$notification = $this->createStub(SocialAppNotification::class);
 		$notification->method('hasObject')->willReturn(true);
 		$notification->method('getObject')->willReturn($status);
 		$notification->method('getAttributedTo')->willReturn('https://remote.example/users/bob');
 		$notification->method('getNid')->willReturn(5150);
 		$this->streamService->method('getTimeline')->willReturn([$notification]);
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getName')->willReturn('Bob B.');
 		$bob->method('getAvatar')->willReturn('https://remote.example/bob.png');
 		$this->cacheActorService->method('getFromId')->willReturn($bob);
@@ -128,7 +131,7 @@ class SocialMentionsWidgetTest extends TestCase {
 
 	public function testANotificationWithoutAStatusIsSkipped(): void {
 		$this->viewer();
-		$notification = $this->createMock(SocialAppNotification::class);
+		$notification = $this->createStub(SocialAppNotification::class);
 		$notification->method('hasObject')->willReturn(false);
 		$this->streamService->method('getTimeline')->willReturn([$notification]);
 

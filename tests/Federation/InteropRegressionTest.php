@@ -41,6 +41,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -55,12 +56,23 @@ require_once __DIR__ . '/../Model/TActivityPubMocks.php';
  * Every fixture is a document as the implementation named in its filename
  * actually sends it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class InteropRegressionTest extends TestCase {
 	use TActivityPubMocks;
 
 	protected function setUp(): void {
-		$this->installActivityPub();
-		\OC::$server->register(\OCP\IURLGenerator::class, $this->createMock(\OCP\IURLGenerator::class));
+		$this->installDispatcher();
+		\OC::$server->register(\OCP\IURLGenerator::class, $this->createStub(\OCP\IURLGenerator::class));
+	}
+
+	/**
+	 * The dispatcher with no actor known locally, so an import never reaches
+	 * for the network.
+	 *
+	 * @param list<class-string> $mocked the interfaces the test expects calls on
+	 */
+	private function installDispatcher(array $mocked = []): void {
+		$this->installActivityPub(mocked: $mocked);
 		$this->apInterface(\OCA\Social\Interfaces\Actor\PersonInterface::class)
 			->method('getItemById')
 			->willThrowException(new \OCA\Social\Exceptions\ItemNotFoundException());
@@ -267,6 +279,7 @@ class InteropRegressionTest extends TestCase {
 	 * the peer believed it had granted.
 	 */
 	public function testAnAcceptCarryingOnlyTheFollowsUriStillConfirmsIt(): void {
+		$this->installDispatcher([FollowInterface::class]);
 		$accept = AP::instance()->getItemFromData($this->fixture('linked-accept-follow'));
 		$accept->setOrigin('gotosocial.example', SignatureService::ORIGIN_HEADER, time());
 
@@ -282,10 +295,10 @@ class InteropRegressionTest extends TestCase {
 		$follows = $this->createMock(FollowsRequest::class);
 		$follows->method('getById')->with($accept->getObjectId())->willReturn($stored);
 		$resolver = new ActivityObjectResolver(
-			$this->createMock(StreamRequest::class),
+			$this->createStub(StreamRequest::class),
 			$follows,
-			$this->createMock(ActionsRequest::class),
-			$this->createMock(CacheActorsRequest::class)
+			$this->createStub(ActionsRequest::class),
+			$this->createStub(CacheActorsRequest::class)
 		);
 
 		$this->apInterface(FollowInterface::class)
@@ -356,13 +369,13 @@ class InteropRegressionTest extends TestCase {
 		$actor->setId('https://mastodon.social/users/alice');
 		$actor->setFeatured('https://mastodon.social/users/alice/collections/featured');
 
-		$actors = $this->createMock(CacheActorsRequest::class);
+		$actors = $this->createStub(CacheActorsRequest::class);
 		$actors->method('getFromId')->willReturn($actor);
 
 		$note = new Note();
 		$note->setId('https://mastodon.social/users/alice/statuses/109876');
 		$note->setAttributedTo($actor->getId());
-		$streams = $this->createMock(StreamRequest::class);
+		$streams = $this->createStub(StreamRequest::class);
 		$streams->method('getStreamById')->willReturn($note);
 
 		return new FeaturedCollection($actors, $streams, $actions, new NullLogger());

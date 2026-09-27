@@ -15,11 +15,13 @@ use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Model\ActivityPub\Activity\Reject;
 use OCA\Social\Model\ActivityPub\Object\Follow;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/DispatchingActivityTestCase.php';
 require_once __DIR__ . '/TResolvesActivityObjects.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class RejectInterfaceTest extends DispatchingActivityTestCase {
 	use TResolvesActivityObjects;
 

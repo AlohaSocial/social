@@ -30,7 +30,7 @@ class FeedServiceTest extends TestCase {
 	private FeedService $service;
 
 	protected function setUp(): void {
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getCloudHost')->willReturn('cloud.example');
 		$this->service = new FeedService($config);
 	}

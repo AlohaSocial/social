@@ -21,7 +21,9 @@ use OCP\IUser;
 use OCP\IUserSession;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -35,14 +37,15 @@ use Psr\Log\NullLogger;
  * every decision, that the account is told when it is one of ours, and that
  * neither of those can take a moderator's decision down with it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StrikeServiceTest extends TestCase {
 	private const LOCAL = 'https://cloud.example/users/alice';
 	private const REMOTE = 'https://remote.example/users/bob';
 
 	private StrikesRequest|MockObject $strikesRequest;
-	private ActorsRequest|MockObject $actorsRequest;
+	private ActorsRequest|Stub $actorsRequest;
 	private INotificationManager|MockObject $notificationManager;
-	private IUserSession|MockObject $userSession;
+	private IUserSession|Stub $userSession;
 	private StrikeService $service;
 
 	/** @var Strike[] what was written */
@@ -51,15 +54,15 @@ class StrikeServiceTest extends TestCase {
 	private ?array $notified = null;
 	/** Who is taking the decision. */
 	private ?string $currentUser = 'mod';
-	private NotificationService|MockObject $notificationService;
+	private NotificationService|Stub $notificationService;
 	/** @var array<int, array<string, mixed>> the warnings a client would see */
 	private array $clientWarnings = [];
 
 	protected function setUp(): void {
 		$this->strikesRequest = $this->createMock(StrikesRequest::class);
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
 		$this->notificationManager = $this->createMock(INotificationManager::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 
 		$this->strikesRequest->method('save')->willReturnCallback(
 			function (Strike $strike): void {
@@ -107,7 +110,7 @@ class StrikeServiceTest extends TestCase {
 			}
 		);
 
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->notificationService->method('onModerationWarning')->willReturnCallback(
 			function (string $actorId, string $action, string $text): void {
 				$this->clientWarnings[] = compact('actorId', 'action', 'text');

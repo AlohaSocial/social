@@ -19,9 +19,11 @@ use OCA\Social\Interfaces\Object\ImageInterface;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Service\ActorService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ActorServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example.com/apps/social/@alice';
 	private const ICON_URL = 'https://cloud.example.com/avatar/alice/128';

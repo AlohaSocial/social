@@ -47,21 +47,24 @@ use OCP\Accounts\IAccountProperty;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class AccountServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example.com/apps/social/@alice';
 
 	private IUserManager|MockObject $userManager;
-	private IUserSession|MockObject $userSession;
-	private IAccountManager|MockObject $accountManager;
+	private IUserSession|Stub $userSession;
+	private IAccountManager|Stub $accountManager;
 	private ActorsRequest|MockObject $actorsRequest;
 	private ClientAuthRequest|MockObject $clientAuthRequest;
-	private ChannelsRequest|MockObject $channelsRequest;
+	private ChannelsRequest|Stub $channelsRequest;
 	private FollowsRequest|MockObject $followsRequest;
 	private StreamRequest|MockObject $streamRequest;
 	private ActorService|MockObject $actorService;
@@ -69,7 +72,7 @@ class AccountServiceTest extends TestCase {
 	private DocumentService|MockObject $documentService;
 	private SignatureService|MockObject $signatureService;
 	private ConfigService|MockObject $configService;
-	private AccessBlockService|MockObject $accessBlockService;
+	private AccessBlockService|Stub $accessBlockService;
 	private CacheActorService|MockObject $cacheActorService;
 	private \OCA\Social\Db\CacheActorsRequest|MockObject $cacheActorsRequest;
 	private ModerationRequest|MockObject $moderationRequest;
@@ -83,8 +86,8 @@ class AccountServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->userManager = $this->createMock(IUserManager::class);
-		$this->userSession = $this->createMock(IUserSession::class);
-		$this->accountManager = $this->createMock(IAccountManager::class);
+		$this->userSession = $this->createStub(IUserSession::class);
+		$this->accountManager = $this->createStub(IAccountManager::class);
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->followsRequest = $this->createMock(FollowsRequest::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
@@ -111,8 +114,8 @@ class AccountServiceTest extends TestCase {
 		$this->cacheActorsRequest = $this->createMock(\OCA\Social\Db\CacheActorsRequest::class);
 		$this->moderationRequest = $this->createMock(ModerationRequest::class);
 		$this->clientAuthRequest = $this->createMock(ClientAuthRequest::class);
-		$this->channelsRequest = $this->createMock(ChannelsRequest::class);
-		$this->accessBlockService = $this->createMock(AccessBlockService::class);
+		$this->channelsRequest = $this->createStub(ChannelsRequest::class);
+		$this->accessBlockService = $this->createStub(AccessBlockService::class);
 		$this->accessBlockService->method('isBlockedEmail')->willReturnCallback(
 			fn (string $email): bool => in_array($email, $this->blockedEmails, true)
 		);
@@ -178,7 +181,7 @@ class AccountServiceTest extends TestCase {
 	 * write -- it asks for both now.
 	 */
 	private function withDisplayName(string $name, string $scope): void {
-		$displayName = $this->createMock(IAccountProperty::class);
+		$displayName = $this->createStub(IAccountProperty::class);
 		$displayName->method('getScope')->willReturn($scope);
 		$displayName->method('getValue')->willReturn($name);
 
@@ -192,10 +195,10 @@ class AccountServiceTest extends TestCase {
 			return $fediverse;
 		});
 
-		$avatar = $this->createMock(IAccountProperty::class);
+		$avatar = $this->createStub(IAccountProperty::class);
 		$avatar->method('getScope')->willReturnCallback(fn (): string => $this->avatarScope);
 
-		$account = $this->createMock(IAccount::class);
+		$account = $this->createStub(IAccount::class);
 		$account->method('getProperty')->willReturnCallback(
 			fn (string $property): IAccountProperty => match ($property) {
 				IAccountManager::PROPERTY_FEDIVERSE => $fediverse,
@@ -273,7 +276,7 @@ class AccountServiceTest extends TestCase {
 	 * from `LocalController` when the page started needing the same lookup.
 	 */
 	public function testGetCachedLocalActorReturnsTheCachedCopy(): void {
-		$cached = $this->createMock(Person::class);
+		$cached = $this->createStub(Person::class);
 		$this->cacheActorService->expects($this->once())
 			->method('getFromLocalAccount')->with('alice')->willReturn($cached);
 		$this->cacheActorService->expects($this->never())->method('getFromId');
@@ -283,12 +286,17 @@ class AccountServiceTest extends TestCase {
 
 	public function testGetCachedLocalActorRebuildsTheCacheOnAMiss(): void {
 		$cached = $this->createMock(Person::class);
+		$reads = 0;
 		$this->cacheActorService->expects($this->exactly(2))
 			->method('getFromLocalAccount')
 			->with('alice')
-			->will($this->onConsecutiveCalls(
-				$this->throwException(new CacheActorDoesNotExistException()), $cached
-			));
+			->willReturnCallback(function () use (&$reads, $cached): Person {
+				if ($reads++ === 0) {
+					throw new CacheActorDoesNotExistException();
+				}
+
+				return $cached;
+			});
 		// the rebuild is cacheLocalActorByUsername(), which reads the actor row
 		$this->actorsRequest->method('getFromUsername')
 			->willThrowException(new ActorDoesNotExistException());
@@ -483,7 +491,7 @@ class AccountServiceTest extends TestCase {
 
 	/** The rest of the deletion path, which these tests do not re-assert. */
 	private function deleteThrough(Person $actor): void {
-		$personInterface = $this->createMock(PersonInterface::class);
+		$personInterface = $this->createStub(PersonInterface::class);
 		$ap = $this->createMock(AP::class);
 		$ap->method('getInterfaceFromType')->with(Person::TYPE)->willReturn($personInterface);
 		AP::set($ap);

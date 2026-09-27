@@ -13,7 +13,7 @@ use OCA\Social\Migration\HashClientSecrets;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ConfigService;
 use OCP\Migration\IOutput;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -24,8 +24,8 @@ use RuntimeException;
  */
 class HashClientSecretsTest extends TestCase {
 	private SecretHasher $secretHasher;
-	private ConfigService|MockObject $configService;
-	private IOutput|MockObject $output;
+	private ConfigService|Stub $configService;
+	private IOutput|Stub $output;
 	/** @var string[] */
 	private array $warnings = [];
 
@@ -35,9 +35,9 @@ class HashClientSecretsTest extends TestCase {
 		// have the database pick out the rows that are not hashed yet
 		$this->secretHasher = new SecretHasher();
 		// the marker short-circuits the step, so it has to read as unset here
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValueInt')->willReturn(0);
-		$this->output = $this->createMock(IOutput::class);
+		$this->output = $this->createStub(IOutput::class);
 		$this->warnings = [];
 		$this->output->method('warning')->willReturnCallback(
 			function (string $message): void {
@@ -125,7 +125,7 @@ class HashClientSecretsTest extends TestCase {
 		// coming back empty still meant running the query, on every upgrade,
 		// forever. Once a run finishes clean, it must not look again.
 		$connection = new FakeConnection([[]]);
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getAppValueInt')->willReturn(1);
 
 		(new HashClientSecrets($connection, $this->secretHasher, $configService))->run($this->output);

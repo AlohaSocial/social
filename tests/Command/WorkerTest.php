@@ -17,7 +17,9 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\StreamQueueService;
 use OCP\IDBConnection;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -32,25 +34,26 @@ use Symfony\Component\Console\Tester\CommandTester;
  * thousands of times a second for as long as the breaker was open, which is up
  * to an hour.
  */
+#[AllowMockObjectsWithoutExpectations]
 class WorkerTest extends TestCase {
 	private RequestQueueService|MockObject $requestQueueService;
-	private StreamQueueService|MockObject $streamQueueService;
-	private ActivityService|MockObject $activityService;
+	private StreamQueueService|Stub $streamQueueService;
+	private ActivityService|Stub $activityService;
 	private CommandTester $tester;
 
 	protected function setUp(): void {
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
-		$this->streamQueueService = $this->createMock(StreamQueueService::class);
-		$this->activityService = $this->createMock(ActivityService::class);
+		$this->streamQueueService = $this->createStub(StreamQueueService::class);
+		$this->activityService = $this->createStub(ActivityService::class);
 		$this->streamQueueService->method('getRequestStandby')->willReturn([]);
 
 		$this->tester = new CommandTester(new Worker(
 			$this->requestQueueService,
 			$this->streamQueueService,
 			$this->activityService,
-			$this->createMock(ConfigService::class),
-			$this->createMock(CacheActorService::class),
-			$this->createMock(IDBConnection::class),
+			$this->createStub(ConfigService::class),
+			$this->createStub(CacheActorService::class),
+			$this->createStub(IDBConnection::class),
 			new NullLogger()
 		));
 	}

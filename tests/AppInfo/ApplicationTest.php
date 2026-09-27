@@ -122,7 +122,7 @@ class ApplicationTest extends TestCase {
 	 */
 	public function testTheAccessBlockIsEnforcedForEveryRoute(): void {
 		$registered = [];
-		$context = $this->createMock(IRegistrationContext::class);
+		$context = $this->createStub(IRegistrationContext::class);
 		$context->method('registerMiddleware')->willReturnCallback(
 			static function (string $class) use (&$registered): void {
 				$registered[] = $class;
@@ -142,7 +142,7 @@ class ApplicationTest extends TestCase {
 	 */
 	public function testTheRateLimitersComeAfterTheAccessCheck(): void {
 		$registered = [];
-		$context = $this->createMock(IRegistrationContext::class);
+		$context = $this->createStub(IRegistrationContext::class);
 		$context->method('registerMiddleware')->willReturnCallback(
 			static function (string $class) use (&$registered): void {
 				$registered[] = $class;

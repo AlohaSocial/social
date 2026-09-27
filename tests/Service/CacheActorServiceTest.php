@@ -29,12 +29,15 @@ use OCA\Social\Service\ProfileLinkVerifier;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class CacheActorServiceTest extends TestCase {
 	private const BOB = 'https://remote.example/users/bob';
 	private const ALICE = 'https://cloud.example.com/apps/social/@alice';
@@ -48,7 +51,7 @@ class CacheActorServiceTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
 	private CurlService|MockObject $curlService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private AP|MockObject $ap;
 	private PersonInterface|MockObject $personInterface;
 	private CacheActorService $service;
@@ -57,7 +60,7 @@ class CacheActorServiceTest extends TestCase {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
 		$this->curlService = $this->createMock(CurlService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getCloudHost')->willReturn('cloud.example.com');
 		$this->configService->method('getSocialAddress')->willReturn('social.example.com');
 
@@ -494,7 +497,7 @@ class CacheActorServiceTest extends TestCase {
 
 	/** The same service, with a clock a test can hold still. */
 	private function serviceWithClock(int $now = self::NOW): CacheActorService {
-		$time = $this->createMock(ITimeFactory::class);
+		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn($now);
 
 		return new CacheActorService(
@@ -567,7 +570,7 @@ class CacheActorServiceTest extends TestCase {
 		$verifier->expects($this->once())->method('verify')->with($this->identicalTo($bob));
 		// resolved through the container at call time, not injected: injecting
 		// FeaturedCollection would close a dependency cycle through StreamRequest
-		$container = $this->createMock(ContainerInterface::class);
+		$container = $this->createStub(ContainerInterface::class);
 		$container->method('get')->willReturnMap([
 			[FeaturedCollection::class, $featured],
 			[ProfileLinkVerifier::class, $verifier],

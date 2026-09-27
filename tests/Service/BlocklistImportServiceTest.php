@@ -12,10 +12,12 @@ namespace OCA\Social\Tests\Service;
 use InvalidArgumentException;
 use OCA\Social\Service\BlocklistImportService;
 use OCA\Social\Service\FediverseService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class BlocklistImportServiceTest extends TestCase {
 	private FediverseService|MockObject $fediverseService;
 	private BlocklistImportService $service;

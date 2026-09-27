@@ -27,13 +27,16 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StoryInteractionService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
  * Answering a story: who may, how often, who is told, and what goes on the wire.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StoryInteractionServiceTest extends TestCase {
 	private const LOCAL = 'https://cloud.example/';
 	private const ALICE = 'https://cloud.example/@alice';
@@ -44,8 +47,8 @@ class StoryInteractionServiceTest extends TestCase {
 
 	private StoriesRequest|MockObject $storiesRequest;
 	private StoryInteractionsRequest|MockObject $interactionsRequest;
-	private FollowService|MockObject $followService;
-	private CacheActorService|MockObject $cacheActorService;
+	private FollowService|Stub $followService;
+	private CacheActorService|Stub $cacheActorService;
 	private NotificationService|MockObject $notificationService;
 	private StoryInteractionService $service;
 
@@ -57,11 +60,11 @@ class StoryInteractionServiceTest extends TestCase {
 
 		$this->storiesRequest = $this->createMock(StoriesRequest::class);
 		$this->interactionsRequest = $this->createMock(StoryInteractionsRequest::class);
-		$this->followService = $this->createMock(FollowService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->followService = $this->createStub(FollowService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 		$this->notificationService = $this->createMock(NotificationService::class);
 
-		$activityService = $this->createMock(ActivityService::class);
+		$activityService = $this->createStub(ActivityService::class);
 		$activityService->method('request')->willReturnCallback(
 			function (ACore $activity): string {
 				$this->sent[] = $activity;
@@ -70,7 +73,7 @@ class StoryInteractionServiceTest extends TestCase {
 			}
 		);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn(self::LOCAL);
 
 		$this->service = new StoryInteractionService(
@@ -79,7 +82,7 @@ class StoryInteractionServiceTest extends TestCase {
 			$this->followService,
 			$this->cacheActorService,
 			$activityService,
-			$this->createMock(SignatureService::class),
+			$this->createStub(SignatureService::class),
 			$this->notificationService,
 			$configService,
 			new NullLogger(),

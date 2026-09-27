@@ -14,28 +14,28 @@ use OCA\Social\Db\RenditionsRequest;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\VideoQuotaService;
 use OCP\IConfig;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
  * How much video one account may keep, and what counts towards it.
  */
 class VideoQuotaServiceTest extends TestCase {
-	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private ConfigService|MockObject $configService;
-	private IConfig|MockObject $config;
+	private CacheDocumentsRequest|Stub $cacheDocumentsRequest;
+	private ConfigService|Stub $configService;
+	private IConfig|Stub $config;
 	private VideoQuotaService $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
-		$this->configService = $this->createMock(ConfigService::class);
-		$this->config = $this->createMock(IConfig::class);
+		$this->cacheDocumentsRequest = $this->createStub(CacheDocumentsRequest::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$this->config = $this->createStub(IConfig::class);
 
 		$this->service = new VideoQuotaService(
 			$this->cacheDocumentsRequest,
-			$this->createMock(RenditionsRequest::class),
+			$this->createStub(RenditionsRequest::class),
 			$this->configService,
 			$this->config,
 		);

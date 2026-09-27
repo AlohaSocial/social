@@ -24,7 +24,9 @@ use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
@@ -35,12 +37,13 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * is refused, a redelivery is not counted twice, and nothing a peer sends can
  * put text — or a picture from their server — into somebody's reaction bar.
  */
+#[AllowMockObjectsWithoutExpectations]
 class EmojiReactInterfaceTest extends ActivityPubTestCase {
 	private const POST = self::LOCAL_URL . '/notes/1';
 
 	/** @var ReactionsRequest&MockObject */
 	private $reactionsRequest;
-	/** @var StreamRequest&MockObject */
+	/** @var StreamRequest&Stub */
 	private $streamRequest;
 	private EmojiReactInterface $handler;
 
@@ -51,7 +54,7 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 		parent::setUp();
 
 		$this->reactionsRequest = $this->createMock(ReactionsRequest::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest);
 
 		$this->alice = $this->person(self::LOCAL_URL . '/users/alice', true);

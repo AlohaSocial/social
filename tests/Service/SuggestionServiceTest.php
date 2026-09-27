@@ -18,7 +18,7 @@ use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\ColleagueService;
 use OCA\Social\Service\DirectoryService;
 use OCA\Social\Service\SuggestionService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -37,7 +37,7 @@ use PHPUnit\Framework\TestCase;
 class SuggestionServiceTest extends TestCase {
 	private const VIEWER = 'https://cloud.example/users/alice';
 
-	private DiscoveryRequest|MockObject $discoveryRequest;
+	private DiscoveryRequest|Stub $discoveryRequest;
 	private SuggestionService $service;
 
 	/** @var string[] actor ids the graph walk offers */
@@ -58,7 +58,7 @@ class SuggestionServiceTest extends TestCase {
 	private array $asked = [];
 
 	protected function setUp(): void {
-		$this->discoveryRequest = $this->createMock(DiscoveryRequest::class);
+		$this->discoveryRequest = $this->createStub(DiscoveryRequest::class);
 
 		$this->discoveryRequest->method('friendsOfFriendsPrims')
 			->willReturnCallback(fn (): array => array_map('md5', $this->friends));
@@ -80,7 +80,7 @@ class SuggestionServiceTest extends TestCase {
 				}, $prims);
 			});
 
-		$directoryService = $this->createMock(DirectoryService::class);
+		$directoryService = $this->createStub(DirectoryService::class);
 		$directoryService->method('withoutModerated')
 			->willReturnCallback(function (array $prims): array {
 				$moderated = array_map('md5', $this->moderated);
@@ -90,7 +90,7 @@ class SuggestionServiceTest extends TestCase {
 				));
 			});
 
-		$colleagueService = $this->createMock(ColleagueService::class);
+		$colleagueService = $this->createStub(ColleagueService::class);
 		$colleagueService->method('accounts')
 			->willReturnCallback(function (string $exceptUserId): array {
 				$this->colleaguesExcept = $exceptUserId;
@@ -106,7 +106,7 @@ class SuggestionServiceTest extends TestCase {
 		$viewer = new Person();
 		$viewer->setId(self::VIEWER);
 		$viewer->setUserId('alice');
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getFromId')->willReturn($viewer);
 
 		$this->service = new SuggestionService(
@@ -152,7 +152,7 @@ class SuggestionServiceTest extends TestCase {
 	/** All three directions of `social_actor_relation` are asked for. */
 	public function testBlocksMutesBeingBlockedAndDismissalsAreAllAskedFor(): void {
 		$asked = null;
-		$this->discoveryRequest = $this->createMock(DiscoveryRequest::class);
+		$this->discoveryRequest = $this->createStub(DiscoveryRequest::class);
 		$this->discoveryRequest->method('relatedPrims')
 			->willReturnCallback(function (string $viewerId, array $types) use (&$asked): array {
 				$asked = $types;
@@ -160,13 +160,13 @@ class SuggestionServiceTest extends TestCase {
 				return [];
 			});
 
-		$directoryService = $this->createMock(DirectoryService::class);
+		$directoryService = $this->createStub(DirectoryService::class);
 		$directoryService->method('withoutModerated')->willReturnArgument(0);
 
-		$colleagues = $this->createMock(ColleagueService::class);
+		$colleagues = $this->createStub(ColleagueService::class);
 		$colleagues->method('accounts')->willReturn([]);
 		(new SuggestionService(
-			$this->discoveryRequest, $directoryService, $colleagues, $this->createMock(ActorsRequest::class)
+			$this->discoveryRequest, $directoryService, $colleagues, $this->createStub(ActorsRequest::class)
 		))->suggestions(self::VIEWER, SuggestionService::LIMIT);
 
 		$this->assertSame(

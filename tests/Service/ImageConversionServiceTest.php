@@ -13,13 +13,14 @@ use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ImageConversionService;
 use OCA\Social\Service\ImageMetadataService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 class ImageConversionServiceTest extends TestCase {
 	private ImageConversionService $service;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 
 	/** @var array<string, int> the instance's own settings */
 	private array $settings = [];
@@ -28,7 +29,7 @@ class ImageConversionServiceTest extends TestCase {
 		parent::setUp();
 		// off by default, as on an instance nobody has configured: everything
 		// below is about storing an upload correctly rather than smaller
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValueInt')->willReturnCallback(
 			fn (string $key): int => $this->settings[$key] ?? 0
 		);
@@ -36,7 +37,7 @@ class ImageConversionServiceTest extends TestCase {
 		$this->service = new ImageConversionService(
 			new ImageMetadataService(),
 			$this->configService,
-			$this->createMock(LoggerInterface::class)
+			$this->createStub(LoggerInterface::class)
 		);
 	}
 
@@ -134,7 +135,7 @@ class ImageConversionServiceTest extends TestCase {
 		];
 	}
 
-	/** @dataProvider orientationProvider */
+	#[DataProvider('orientationProvider')]
 	public function testEveryOrientationLandsTheRightWayUp(int $orientation, int $width, int $height): void {
 		[$content] = $this->service->prepareForStorage($this->jpeg(24, 12, $orientation), 'image/jpeg');
 

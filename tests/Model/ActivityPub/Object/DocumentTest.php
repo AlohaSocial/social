@@ -15,15 +15,15 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Service\DocumentService;
 use OCP\IURLGenerator;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 class DocumentTest extends TestCase {
-	/** @var IURLGenerator&MockObject */
+	/** @var IURLGenerator&Stub */
 	private $urlGenerator;
 
 	protected function setUp(): void {
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args): string => 'https://cloud.example.org/' . $route . '/' . $args['uuid']
 		);

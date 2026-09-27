@@ -42,7 +42,8 @@ use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -57,6 +58,7 @@ require_once __DIR__ . '/../Model/TActivityPubMocks.php';
  * and that dismissing a notification takes both halves of it away — the stored
  * row the client lists and the Nextcloud notification raised from it.
  */
+#[AllowMockObjectsWithoutExpectations]
 class NotificationServiceTest extends TestCase {
 	use TActivityPubMocks;
 
@@ -65,15 +67,15 @@ class NotificationServiceTest extends TestCase {
 	private const CAROL = 'https://cloud.example/users/carol';
 	private const POST = 'https://cloud.example/@alice/post-1';
 
-	private StreamRequest|MockObject $streamRequest;
-	private StreamService|MockObject $streamService;
-	private ActorsRequest|MockObject $actorsRequest;
-	private CacheActorsRequest|MockObject $cacheActorsRequest;
-	private ActorRelationRequest|MockObject $actorRelationRequest;
-	private ActionsRequest|MockObject $actionsRequest;
-	private AccountRelationService|MockObject $accountRelationService;
-	private INotificationManager|MockObject $notificationManager;
-	private ActivityPublisher|MockObject $activityPublisher;
+	private StreamRequest|Stub $streamRequest;
+	private StreamService|Stub $streamService;
+	private ActorsRequest|Stub $actorsRequest;
+	private CacheActorsRequest|Stub $cacheActorsRequest;
+	private ActorRelationRequest|Stub $actorRelationRequest;
+	private ActionsRequest|Stub $actionsRequest;
+	private AccountRelationService|Stub $accountRelationService;
+	private INotificationManager|Stub $notificationManager;
+	private ActivityPublisher|Stub $activityPublisher;
 	/** @var array<int, array> every Activity entry published: user, subject, actor label, link, excerpt */
 	private array $activities = [];
 	private NotificationService $service;
@@ -103,7 +105,7 @@ class NotificationServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->local = [self::ALICE => 'alice', self::CAROL => 'carol'];
 
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->streamRequest->method('getStreamById')
 			->willReturnCallback(function (string $id): Stream {
 				if ($id !== self::POST) {
@@ -120,7 +122,7 @@ class NotificationServiceTest extends TestCase {
 				));
 			});
 
-		$this->streamService = $this->createMock(StreamService::class);
+		$this->streamService = $this->createStub(StreamService::class);
 		$this->streamService->method('getTimeline')
 			->willReturnCallback(function (ProbeOptions $options): array {
 				$this->asked[] = $options;
@@ -133,7 +135,7 @@ class NotificationServiceTest extends TestCase {
 				return array_slice(array_values($rows), 0, $options->getLimit());
 			});
 
-		$this->actorsRequest = $this->createMock(ActorsRequest::class);
+		$this->actorsRequest = $this->createStub(ActorsRequest::class);
 		$this->actorsRequest->method('getFromId')
 			->willReturnCallback(function (string $id): Person {
 				if (!array_key_exists($id, $this->local)) {
@@ -143,7 +145,7 @@ class NotificationServiceTest extends TestCase {
 				return $this->person($id, $this->local[$id]);
 			});
 
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		$this->cacheActorsRequest->method('getFromId')
 			->willReturnCallback(function (string $id): Person {
 				if ($id !== self::BOB) {
@@ -159,22 +161,22 @@ class NotificationServiceTest extends TestCase {
 				return $bob;
 			});
 
-		$this->actorRelationRequest = $this->createMock(ActorRelationRequest::class);
+		$this->actorRelationRequest = $this->createStub(ActorRelationRequest::class);
 		$this->actorRelationRequest->method('getBetween')
 			->willReturnCallback(
 				fn (string $reader, string $actor): array => $this->relations[$reader . '|' . $actor] ?? []
 			);
 
-		$this->actionsRequest = $this->createMock(ActionsRequest::class);
+		$this->actionsRequest = $this->createStub(ActionsRequest::class);
 		$this->actionsRequest->method('getByObjectId')->willReturnCallback(fn (): array => $this->actions);
 
-		$this->accountRelationService = $this->createMock(AccountRelationService::class);
+		$this->accountRelationService = $this->createStub(AccountRelationService::class);
 		$this->accountRelationService->method('isMuteExpired')->willReturnCallback(
 			fn (string $reader, string $actor): bool
 				=> in_array($reader . '|' . $actor, $this->expired, true)
 		);
 
-		$this->notificationManager = $this->createMock(INotificationManager::class);
+		$this->notificationManager = $this->createStub(INotificationManager::class);
 		$this->notificationManager->method('createNotification')
 			->willReturnCallback(fn (): INotification => $this->notification());
 		$this->notificationManager->method('notify')
@@ -190,7 +192,7 @@ class NotificationServiceTest extends TestCase {
 				$this->withdrawn[] = $this->fieldsOf($notification);
 			});
 
-		$this->activityPublisher = $this->createMock(ActivityPublisher::class);
+		$this->activityPublisher = $this->createStub(ActivityPublisher::class);
 		$this->activityPublisher->method('publish')->willReturnCallback(
 			function (string $userId, string $subject, ?Person $actor, string $actorId, string $link, string $excerpt, int $objectId): void {
 				$this->activities[] = [

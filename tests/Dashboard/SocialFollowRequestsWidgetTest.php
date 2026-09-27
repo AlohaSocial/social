@@ -21,14 +21,17 @@ use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SocialFollowRequestsWidgetTest extends TestCase {
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	/** @var AccountService&MockObject */
 	private $accountService;
@@ -41,10 +44,10 @@ class SocialFollowRequestsWidgetTest extends TestCase {
 	private SocialFollowRequestsWidget $widget;
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
 		$this->followService = $this->createMock(FollowService::class);
@@ -63,14 +66,14 @@ class SocialFollowRequestsWidgetTest extends TestCase {
 	}
 
 	private function signedInAs(string $uid = 'alice'): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 	}
 
 	/** @return Person&MockObject */
 	private function socialAccount(bool $locked, string $uid = 'alice'): Person {
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
 		$this->accountService->method('getActorFromUserId')->with($uid, false)->willReturn($account);
 
@@ -135,11 +138,11 @@ class SocialFollowRequestsWidgetTest extends TestCase {
 		$viewer = $this->socialAccount(true);
 		$this->followService->expects($this->once())->method('setViewer')->with($viewer);
 
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getName')->willReturn('Bob B.');
 		$bob->method('getAccount')->willReturn('bob@remote.example');
 		$bob->method('getAvatar')->willReturn('https://remote.example/bob.png');
-		$carol = $this->createMock(Person::class);
+		$carol = $this->createStub(Person::class);
 		$carol->method('getName')->willReturn('');
 		$carol->method('getPreferredUsername')->willReturn('carol');
 		$carol->method('getAccount')->willReturn('carol@remote.example');

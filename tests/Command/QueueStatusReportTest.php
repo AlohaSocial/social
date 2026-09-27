@@ -14,7 +14,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Service\RequestQueueService;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -26,15 +26,15 @@ use Symfony\Component\Console\Tester\CommandTester;
  * is asserted here rather than left to the settings page.
  */
 class QueueStatusReportTest extends TestCase {
-	private FederationHealthService|MockObject $federationHealthService;
+	private FederationHealthService|Stub $federationHealthService;
 	private CommandTester $tester;
 
 	protected function setUp(): void {
-		$this->federationHealthService = $this->createMock(FederationHealthService::class);
+		$this->federationHealthService = $this->createStub(FederationHealthService::class);
 		$this->tester = new CommandTester(new QueueStatus(
-			$this->createMock(RequestQueueService::class),
-			$this->createMock(ConfigService::class),
-			$this->createMock(MiscService::class),
+			$this->createStub(RequestQueueService::class),
+			$this->createStub(ConfigService::class),
+			$this->createStub(MiscService::class),
 			$this->federationHealthService
 		));
 	}

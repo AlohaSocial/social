@@ -35,7 +35,7 @@ class WireCompatibilityTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->installActivityPub();
-		\OC::$server->register(\OCP\IURLGenerator::class, $this->createMock(\OCP\IURLGenerator::class));
+		\OC::$server->register(\OCP\IURLGenerator::class, $this->createStub(\OCP\IURLGenerator::class));
 		// mentioned actors are not in the (mocked) cache: keep the wire values
 		$this->apInterface(\OCA\Social\Interfaces\Actor\PersonInterface::class)
 			->method('getItemById')

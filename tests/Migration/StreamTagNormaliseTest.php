@@ -13,6 +13,7 @@ use OCA\Social\Migration\Version1000Date20260925000001;
 use OCP\DB\IResult;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -23,6 +24,7 @@ use PHPUnit\Framework\TestCase;
  * up holding which tag, that the unique (stream_id, hashtag) index is never
  * asked to hold two equal tags of one post, and that the walk ends.
  */
+#[AllowMockObjectsWithoutExpectations]
 class StreamTagNormaliseTest extends TestCase {
 	/** @var array<int, array{id: int, stream_id: string, hashtag: string}> the table, by id */
 	private array $table = [];
@@ -101,7 +103,7 @@ class StreamTagNormaliseTest extends TestCase {
 
 	private function migrate(string $platform = IDBConnection::PLATFORM_MYSQL): void {
 		(new Version1000Date20260925000001($this->connection($platform)))
-			->postSchemaChange($this->createMock(IOutput::class), static fn () => null, []);
+			->postSchemaChange($this->createStub(IOutput::class), static fn () => null, []);
 	}
 
 	/** @return array<string, list<string>> stream => its tags, sorted */

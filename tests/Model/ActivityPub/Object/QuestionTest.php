@@ -24,7 +24,7 @@ class QuestionTest extends TestCase {
 	protected function setUp(): void {
 		$this->installActivityPub();
 		// Stream::import() resolves the URL generator statically for attachments
-		\OC::$server->register(IURLGenerator::class, $this->createMock(IURLGenerator::class));
+		\OC::$server->register(IURLGenerator::class, $this->createStub(IURLGenerator::class));
 	}
 
 	protected function tearDown(): void {

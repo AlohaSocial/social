@@ -27,12 +27,15 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\TimelineRevisionService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class RelationshipServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const ALICE_ID = 'https://social.example/@alice';
@@ -47,7 +50,7 @@ class RelationshipServiceTest extends TestCase {
 	private $activityService;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var ConfigService&MockObject */
+	/** @var ConfigService&Stub */
 	private $configService;
 	private TimelineRevisionService|MockObject $timelineRevisionService;
 	/** @var LoggerInterface&MockObject */
@@ -61,7 +64,7 @@ class RelationshipServiceTest extends TestCase {
 		$this->followsRequest = $this->createMock(FollowsRequest::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
 
@@ -88,7 +91,7 @@ class RelationshipServiceTest extends TestCase {
 		$args = [];
 		foreach ((new ReflectionClass(AP::class))->getConstructor()->getParameters() as $parameter) {
 			$class = $parameter->getType()->getName();
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}

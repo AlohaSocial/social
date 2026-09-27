@@ -27,34 +27,37 @@ use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class InstanceServiceTest extends TestCase {
 	private InstancesRequest|MockObject $instancesRequest;
 	private InstanceStatsRequest|MockObject $statsRequest;
-	private TranslationService|MockObject $translationService;
+	private TranslationService|Stub $translationService;
 	private AccountService|MockObject $accountService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private IAppConfig|MockObject $appConfig;
-	private IConfig|MockObject $config;
-	private IUserManager|MockObject $userManager;
-	private CacheDocumentService|MockObject $cacheDocumentService;
+	private IConfig|Stub $config;
+	private IUserManager|Stub $userManager;
+	private CacheDocumentService|Stub $cacheDocumentService;
 	private InstanceService $service;
 
 	protected function setUp(): void {
 		$this->instancesRequest = $this->createMock(InstancesRequest::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
-		$this->config = $this->createMock(IConfig::class);
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->config = $this->createStub(IConfig::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('countUsers')->willReturn(['Database' => 3]);
-		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
+		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
 		$this->statsRequest = $this->createMock(InstanceStatsRequest::class);
-		$this->translationService = $this->createMock(TranslationService::class);
+		$this->translationService = $this->createStub(TranslationService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('imagePath')->willReturn('/apps/social/img/social.svg');
 		$urlGenerator->method('getAbsoluteURL')
 			->willReturnCallback(static fn (string $path): string => 'https://cloud.example.org' . $path);
@@ -208,7 +211,7 @@ class InstanceServiceTest extends TestCase {
 		$this->statsRequest->expects($this->once())->method('countRemoteDomains')->willReturn(7);
 		$remembered = null;
 		$this->appConfig->expects($this->once())->method('setValueString')
-			->with('social', InstanceService::STATS_CACHE_KEY, $this->isType('string'))
+			->with('social', InstanceService::STATS_CACHE_KEY, $this->isString())
 			->willReturnCallback(function (string $app, string $key, string $value) use (&$remembered): bool {
 				$remembered = json_decode($value, true);
 

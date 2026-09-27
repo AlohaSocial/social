@@ -56,7 +56,7 @@ class MiscServiceTest extends TestCase {
 		};
 		\OC::$server->register(ServerVersion::class, $version);
 
-		$service = new MiscService($this->createMock(LoggerInterface::class));
+		$service = new MiscService($this->createStub(LoggerInterface::class));
 
 		$this->assertSame(31, $service->getNcVersion());
 	}

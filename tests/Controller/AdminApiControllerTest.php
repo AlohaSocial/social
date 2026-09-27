@@ -28,8 +28,10 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use ReflectionClass;
@@ -51,20 +53,21 @@ use ReflectionMethod;
  * work: the refusals, the scopes, the parameters it turns into a query, and
  * the statuses it maps a failure onto.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AdminApiControllerTest extends TestCase {
 	private const ADMIN = 'root';
 	private const ACTOR = 'https://cloud.example/users/alice';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
 	private AdminApiService|MockObject $adminApiService;
-	private AccessBlockService|MockObject $accessBlockService;
-	private MetricsService|MockObject $metricsService;
-	private HashtagService|MockObject $hashtagService;
-	private TrendService|MockObject $trendService;
-	private TrendReviewService|MockObject $trendReviewService;
-	private ClientService|MockObject $clientService;
-	private IUserSession|MockObject $userSession;
+	private AccessBlockService|Stub $accessBlockService;
+	private MetricsService|Stub $metricsService;
+	private HashtagService|Stub $hashtagService;
+	private TrendService|Stub $trendService;
+	private TrendReviewService|Stub $trendReviewService;
+	private ClientService|Stub $clientService;
+	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
 	private array $headers = [];
@@ -141,7 +144,7 @@ class AdminApiControllerTest extends TestCase {
 	];
 
 	protected function setUp(): void {
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -150,13 +153,13 @@ class AdminApiControllerTest extends TestCase {
 		$this->request->method('getParam')->willReturn('');
 		$this->request->method('getParams')->willReturn([]);
 
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn(self::ADMIN);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->userSession->method('getUser')
 			->willReturnCallback(fn (): ?IUser => $this->signedIn ? $user : null);
 
-		$this->clientService = $this->createMock(ClientService::class);
+		$this->clientService = $this->createStub(ClientService::class);
 		$this->clientService->method('getFromToken')
 			->willReturnCallback(function (string $token): SocialClient {
 				if ($token !== 'token') {
@@ -174,11 +177,11 @@ class AdminApiControllerTest extends TestCase {
 		\OC::$server->register(IRequest::class, $this->request);
 
 		$this->adminApiService = $this->createMock(AdminApiService::class);
-		$this->accessBlockService = $this->createMock(AccessBlockService::class);
-		$this->metricsService = $this->createMock(MetricsService::class);
-		$this->hashtagService = $this->createMock(HashtagService::class);
-		$this->trendService = $this->createMock(TrendService::class);
-		$this->trendReviewService = $this->createMock(TrendReviewService::class);
+		$this->accessBlockService = $this->createStub(AccessBlockService::class);
+		$this->metricsService = $this->createStub(MetricsService::class);
+		$this->hashtagService = $this->createStub(HashtagService::class);
+		$this->trendService = $this->createStub(TrendService::class);
+		$this->trendReviewService = $this->createStub(TrendReviewService::class);
 		$this->adminApiService->method('isAdministrator')
 			->willReturnCallback(fn (string $userId): bool => $this->isAdmin && $userId === self::ADMIN);
 	}

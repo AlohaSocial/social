@@ -29,10 +29,13 @@ use OCA\Social\Service\MiscService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class AnnounceInterfaceTest extends ActivityPubTestCase {
 	private const POST = self::LOCAL_URL . '/notes/1';
 
@@ -42,9 +45,9 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 	private $actionsRequest;
 	/** @var StreamQueueService&MockObject */
 	private $streamQueueService;
-	/** @var CacheActorService&MockObject */
+	/** @var CacheActorService&Stub */
 	private $cacheActorService;
-	/** @var MiscService&MockObject */
+	/** @var MiscService&Stub */
 	private $miscService;
 	private AnnounceInterface $handler;
 
@@ -58,8 +61,8 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->actionsRequest = $this->createMock(ActionsRequest::class);
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->miscService = $this->createMock(MiscService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
+		$this->miscService = $this->createStub(MiscService::class);
 
 		$this->handler = new AnnounceInterface(
 			$this->streamRequest,
@@ -67,7 +70,7 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 			$this->streamQueueService,
 			$this->cacheActorService,
 			$this->miscService,
-			$this->createMock(\OCA\Social\Service\NotificationService::class)
+			$this->createStub(\OCA\Social\Service\NotificationService::class)
 		);
 
 		$this->alice = $this->person(self::LOCAL_URL . '/users/alice', true);

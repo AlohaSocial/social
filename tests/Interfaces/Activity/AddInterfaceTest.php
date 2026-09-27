@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Add;
 use OCA\Social\Model\ActivityPub\Object\Story;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
 
@@ -23,6 +24,7 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * the author's followers. The pin half — `Add` with a `featured` target — is
  * covered by FeaturedCollectionTest.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AddInterfaceTest extends ActivityPubTestCase {
 	private const BOB = self::REMOTE_URL . '/users/bob';
 
@@ -31,7 +33,7 @@ class AddInterfaceTest extends ActivityPubTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->handler = new AddInterface($this->createMock(FeaturedCollection::class));
+		$this->handler = new AddInterface($this->createStub(FeaturedCollection::class));
 	}
 
 	private function addStory(string $actorId, string $attributedTo): ACore {

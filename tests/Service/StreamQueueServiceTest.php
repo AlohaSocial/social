@@ -35,10 +35,12 @@ use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Model\Cache;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class StreamQueueServiceTest extends TestCase {
 	private const STREAM_ID = 'https://cloud.example.com/apps/social/@alice/1';
 	private const REPLY_URL = 'https://remote.example/notes/99';
@@ -381,7 +383,7 @@ class StreamQueueServiceTest extends TestCase {
 		$this->curlService->method('retrieveObject')->willReturn(['id' => self::PARENT_URL, 'type' => 'Note']);
 		$this->ap->method('getItemFromData')->willReturn($parent);
 		$this->cacheActorService->method('getFromId')->willReturn(new Person());
-		$noteInterface = $this->createMock(NoteInterface::class);
+		$noteInterface = $this->createStub(NoteInterface::class);
 		$noteInterface->method('save')->willReturnCallback(function () use (&$saved) {
 			$saved = true;
 		});
@@ -409,7 +411,7 @@ class StreamQueueServiceTest extends TestCase {
 			});
 		$this->curlService->method('retrieveObject')->willReturn(['id' => 'x']);
 		$this->ap->method('getItemFromData')->willReturn($fetched);
-		$this->ap->method('getInterfaceForItem')->willReturn($this->createMock(NoteInterface::class));
+		$this->ap->method('getInterfaceForItem')->willReturn($this->createStub(NoteInterface::class));
 		$this->miscService->expects($this->once())
 			->method('log')
 			->with($this->stringContains('InvalidOriginException'), 1);
@@ -437,7 +439,7 @@ class StreamQueueServiceTest extends TestCase {
 				throw new StreamNotFoundException();
 			});
 		$this->curlService->method('retrieveObject')->willThrowException(new RequestContentException('gone', 410));
-		$this->ap->method('getInterfaceForItem')->willReturn($this->createMock(NoteInterface::class));
+		$this->ap->method('getInterfaceForItem')->willReturn($this->createStub(NoteInterface::class));
 		$this->miscService->expects($this->once())->method('log')->with($this->stringContains('RequestContentException'), 1);
 		$this->streamQueueRequest->expects($this->once())->method('setAsSuccess');
 
@@ -457,7 +459,7 @@ class StreamQueueServiceTest extends TestCase {
 				throw new StreamNotFoundException();
 			});
 		$this->curlService->method('retrieveObject')->willThrowException(new RequestNetworkException('timeout'));
-		$this->ap->method('getInterfaceForItem')->willReturn($this->createMock(NoteInterface::class));
+		$this->ap->method('getInterfaceForItem')->willReturn($this->createStub(NoteInterface::class));
 		$this->streamRequest->expects($this->once())->method('updateCache');
 		$this->streamQueueRequest->expects($this->once())->method('setAsFailure')->with($this->identicalTo($queue));
 		$this->streamQueueRequest->expects($this->never())->method('setAsSuccess');

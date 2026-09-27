@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Model\ActivityPub\Object;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaFocus;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -58,7 +59,7 @@ class DocumentFocusTest extends TestCase {
 		];
 	}
 
-	/** @dataProvider focusStringProvider */
+	#[DataProvider('focusStringProvider')]
 	public function testTheApiFormatIsParsedOrRefused(string $input, ?array $expected): void {
 		$this->assertSame($expected, Document::parseFocus($input));
 	}

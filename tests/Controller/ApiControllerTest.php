@@ -107,8 +107,10 @@ use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -116,16 +118,17 @@ use ReflectionClass;
 use ReflectionMethod;
 use stdClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class ApiControllerTest extends TestCase {
 	use TCacheActorServiceMock;
 
 	private const REVOKED = 'the access_token was revoked';
 
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
-	/** @var IUserSession&MockObject */
+	/** @var IUserSession&Stub */
 	private $userSession;
 	/** @var InstanceService&MockObject */
 	private $instanceService;
@@ -149,7 +152,7 @@ class ApiControllerTest extends TestCase {
 	private $actionService;
 	/** @var PostService&MockObject */
 	private $postService;
-	/** @var PollService&MockObject */
+	/** @var PollService&Stub */
 	private $pollService;
 	/** @var PinService&MockObject */
 	private $session;
@@ -162,32 +165,32 @@ class ApiControllerTest extends TestCase {
 	private $reportService;
 	/** @var SearchService&MockObject */
 	private $searchService;
-	/** @var ConfigService&MockObject */
+	/** @var ConfigService&Stub */
 	private $configService;
 	/** @var CurlService&MockObject */
 	private $curlService;
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
-	private AccountRelationService|MockObject $accountRelationService;
+	private AccountRelationService|Stub $accountRelationService;
 	private ScheduledStatusService|MockObject $scheduledStatusService;
 	private PostReviewService|MockObject $postReviewService;
-	private \OCA\Social\Service\SensitiveMediaService|MockObject $sensitiveMediaService;
-	private ViewCountService|MockObject $viewCountService;
-	private TeamService|MockObject $teamService;
-	private EmojiService|MockObject $emojiService;
-	private PlaceService|MockObject $placeService;
+	private \OCA\Social\Service\SensitiveMediaService|Stub $sensitiveMediaService;
+	private ViewCountService|Stub $viewCountService;
+	private TeamService|Stub $teamService;
+	private EmojiService|Stub $emojiService;
+	private PlaceService|Stub $placeService;
 	private DeliveryService|MockObject $deliveryService;
-	private ReactionService|MockObject $reactionService;
-	private ReactionSummaryService|MockObject $reactionSummaryService;
-	private GifService|MockObject $gifService;
-	private NotificationService|MockObject $notificationService;
+	private ReactionService|Stub $reactionService;
+	private ReactionSummaryService|Stub $reactionSummaryService;
+	private GifService|Stub $gifService;
+	private NotificationService|Stub $notificationService;
 	private TranslationService|MockObject $translationService;
-	private NotificationPolicyService|MockObject $notificationPolicyService;
-	private IFactory|MockObject $l10nFactory;
+	private NotificationPolicyService|Stub $notificationPolicyService;
+	private IFactory|Stub $l10nFactory;
 	private QuoteService|MockObject $quoteService;
 	private AnnualReportService|MockObject $annualReportService;
-	private TimelineRevisionService|MockObject $timelineRevisionService;
-	private IAppManager|MockObject $appManager;
-	private FediverseService|MockObject $fediverseService;
+	private TimelineRevisionService|Stub $timelineRevisionService;
+	private IAppManager|Stub $appManager;
+	private FediverseService|Stub $fediverseService;
 
 	/** How this instance reads its access list, and what is on it. */
 	private string $accessType = 'all_but';
@@ -200,9 +203,9 @@ class ApiControllerTest extends TestCase {
 	private bool $registrationApp = false;
 	private BannerService|MockObject $bannerService;
 	private AvatarService|MockObject $avatarService;
-	private FilterService|MockObject $filterService;
+	private FilterService|Stub $filterService;
 	private IRootFolder|MockObject $rootFolder;
-	private ITempManager|MockObject $tempManager;
+	private ITempManager|Stub $tempManager;
 
 	/** the table behind the durable cache, shared by every controller one test makes */
 	private ?\OCA\Social\Tests\Helper\InMemoryDurableCacheRequest $durableCacheRequest = null;
@@ -229,7 +232,7 @@ class ApiControllerTest extends TestCase {
 		$this->filesBackup = $_FILES;
 		$_FILES = [];
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->headers = [];
 		$this->request->method('getHeader')
 			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
@@ -251,7 +254,7 @@ class ApiControllerTest extends TestCase {
 			}
 		);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
-		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession = $this->createStub(IUserSession::class);
 		$this->instanceService = $this->createMock(InstanceService::class);
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->accountService = $this->createMock(AccountService::class);
@@ -267,7 +270,7 @@ class ApiControllerTest extends TestCase {
 		$this->streamService = $this->createMock(StreamService::class);
 		$this->actionService = $this->createMock(ActionService::class);
 		$this->postService = $this->createMock(PostService::class);
-		$this->pollService = $this->createMock(PollService::class);
+		$this->pollService = $this->createStub(PollService::class);
 		$this->markerService = $this->createMock(MarkerService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->session = $this->createMock(ISession::class);
@@ -275,7 +278,7 @@ class ApiControllerTest extends TestCase {
 		$this->hashtagService = $this->createMock(HashtagService::class);
 		$this->reportService = $this->createMock(ReportService::class);
 		$this->searchService = $this->createMock(SearchService::class);
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
 			fn (string $key): string => $this->appValues[$key] ?? ''
 		);
@@ -285,34 +288,34 @@ class ApiControllerTest extends TestCase {
 
 		// a pass-through: these tests are about the routes, not about filtering,
 		// and a filter that removed anything would rewrite what they assert
-		$this->accountRelationService = $this->createMock(AccountRelationService::class);
+		$this->accountRelationService = $this->createStub(AccountRelationService::class);
 		$this->scheduledStatusService = $this->createMock(ScheduledStatusService::class);
 		$this->postReviewService = $this->createMock(PostReviewService::class);
-		$this->sensitiveMediaService = $this->createMock(\OCA\Social\Service\SensitiveMediaService::class);
+		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
 		$this->sensitiveMediaService->method('policyFor')->willReturn('default');
 		$this->sensitiveMediaService->method('instancePolicy')->willReturn('default');
-		$this->viewCountService = $this->createMock(ViewCountService::class);
-		$this->teamService = $this->createMock(TeamService::class);
-		$this->emojiService = $this->createMock(EmojiService::class);
-		$this->placeService = $this->createMock(PlaceService::class);
+		$this->viewCountService = $this->createStub(ViewCountService::class);
+		$this->teamService = $this->createStub(TeamService::class);
+		$this->emojiService = $this->createStub(EmojiService::class);
+		$this->placeService = $this->createStub(PlaceService::class);
 		$this->deliveryService = $this->createMock(DeliveryService::class);
-		$this->reactionService = $this->createMock(ReactionService::class);
-		$this->reactionSummaryService = $this->createMock(ReactionSummaryService::class);
-		$this->gifService = $this->createMock(GifService::class);
-		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->reactionService = $this->createStub(ReactionService::class);
+		$this->reactionSummaryService = $this->createStub(ReactionSummaryService::class);
+		$this->gifService = $this->createStub(GifService::class);
+		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->translationService = $this->createMock(TranslationService::class);
-		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$this->notificationPolicyService = $this->createStub(NotificationPolicyService::class);
 		$this->notificationPolicyService->method('partition')
 			->willReturnCallback(static fn (Person $viewer, array $page): array
 				=> ['shown' => $page, 'held' => []]);
-		$this->l10nFactory = $this->createMock(IFactory::class);
+		$this->l10nFactory = $this->createStub(IFactory::class);
 		$this->quoteService = $this->createMock(QuoteService::class);
 		$this->annualReportService = $this->createMock(AnnualReportService::class);
-		$this->timelineRevisionService = $this->createMock(TimelineRevisionService::class);
-		$this->appManager = $this->createMock(IAppManager::class);
-		$this->fediverseService = $this->createMock(FediverseService::class);
+		$this->timelineRevisionService = $this->createStub(TimelineRevisionService::class);
+		$this->appManager = $this->createStub(IAppManager::class);
+		$this->fediverseService = $this->createStub(FediverseService::class);
 		$this->fediverseService->method('getAccessType')->willReturnCallback(fn (): string => $this->accessType);
 		$this->fediverseService->method('getListedAddresses')->willReturnCallback(fn (): array => $this->blockedInstances);
 		$this->appManager->method('isEnabledForUser')->willReturnCallback(
@@ -321,16 +324,16 @@ class ApiControllerTest extends TestCase {
 		$this->accountRelationService->method('withoutExpiredMutes')->willReturnArgument(1);
 		$this->bannerService = $this->createMock(BannerService::class);
 		$this->avatarService = $this->createMock(AvatarService::class);
-		$this->filterService = $this->createMock(FilterService::class);
+		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('apply')->willReturnArgument(0);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
 		$this->filterService->method('applyToStatus')->willReturnArgument(0);
 		$this->rootFolder = $this->createMock(IRootFolder::class);
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 
 		\OC::$server->register(IRequest::class, $this->request);
 		// Response::cacheFor() stamps an Expires header from the clock
-		$clock = $this->createMock(ITimeFactory::class);
+		$clock = $this->createStub(ITimeFactory::class);
 		$clock->method('getTime')->willReturn(1700000000);
 		\OC::$server->register(ITimeFactory::class, $clock);
 	}
@@ -433,11 +436,11 @@ class ApiControllerTest extends TestCase {
 	private ?int $timelineRows = null;
 
 	private function loggedInAs(string $uid = 'alice'): Person {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn($uid);
 		$this->userSession->method('getUser')->willReturn($user);
 
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
 		$account->method('getId')->willReturn('https://cloud.example/apps/social/@' . $uid);
 		$this->accountService->method('getActorFromUserId')->with($uid)->willReturn($account);
@@ -582,10 +585,10 @@ class ApiControllerTest extends TestCase {
 		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
 		$this->userSession->method('getUser')->willReturn(null);
 
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn('alice');
 		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn($account);
-		$this->cacheActorService->method('getFromLocalAccount')->with('alice')->willReturn($this->createMock(Person::class));
+		$this->cacheActorService->method('getFromLocalAccount')->with('alice')->willReturn($this->createStub(Person::class));
 
 		$response = $this->controller('Bearer s3cret')->appsCredentials();
 
@@ -601,12 +604,12 @@ class ApiControllerTest extends TestCase {
 		$client->setAppName('Tusky')->setAuthUserId($uid)->setAuthScopes($scopes);
 		$this->clientService->method('getFromToken')->with('s3cret')->willReturn($client);
 
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn($uid);
 		$account->method('getId')->willReturn('https://cloud.example/apps/social/@' . $uid);
 		$this->accountService->method('getActorFromUserId')->with($uid)->willReturn($account);
 
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$viewer->method('getPreferredUsername')->willReturn($uid);
 		$viewer->method('getId')->willReturn('https://cloud.example/apps/social/@' . $uid);
 		$this->cacheActorService->method('getFromLocalAccount')->with($uid)->willReturn($viewer);
@@ -957,10 +960,10 @@ class ApiControllerTest extends TestCase {
 		$this->bearerFor(['read', 'write:statuses']);
 		$this->request->method('getParams')->willReturn(['status' => 'hi']);
 
-		$activity = $this->createMock(ACore::class);
+		$activity = $this->createStub(ACore::class);
 		$activity->method('getObjectId')->willReturn('https://cloud.example/apps/social/@alice/n1');
 		$this->postService->method('createPost')->willReturn($activity);
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 
 		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer s3cret')->statusNew()->getStatus());
 	}
@@ -984,7 +987,7 @@ class ApiControllerTest extends TestCase {
 
 				return $activity;
 			});
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 
 		$this->controller('Bearer s3cret')->statusNew();
 
@@ -1105,7 +1108,7 @@ class ApiControllerTest extends TestCase {
 	 * left that depends on this.
 	 */
 	public function testTheApiNeverCreatesTheAccountItReadsFor(): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('newcomer');
 		$this->userSession->method('getUser')->willReturn($user);
 
@@ -1124,18 +1127,26 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testViewerIsCachedOnDemandWhenMissingFromCache(): void {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn('alice');
 		$this->accountService->method('getActorFromUserId')->willReturn($account);
 
-		$viewer = $this->createMock(Person::class);
+		$viewer = $this->createStub(Person::class);
 		$viewer->method('jsonSerialize')->willReturn(['username' => 'alice']);
 		$viewer->method('exportSourceAsLocal')->willReturn([]);
+		// missing on the first read, there once the cache has been rebuilt
+		$reads = 0;
 		$this->cacheActorService->method('getFromLocalAccount')->with('alice')
-			->will($this->onConsecutiveCalls($this->throwException(new CacheActorDoesNotExistException()), $viewer));
+			->willReturnCallback(function () use (&$reads, $viewer): Person {
+				if ($reads++ === 0) {
+					throw new CacheActorDoesNotExistException();
+				}
+
+				return $viewer;
+			});
 		$this->accountService->expects($this->once())->method('cacheLocalActorByUsername')->with('alice');
 
 		$this->assertSame('alice', $this->controller()->verifyCredentials()->getData()['username']);
@@ -1277,7 +1288,7 @@ class ApiControllerTest extends TestCase {
 	#[DataProvider('statusActions')]
 	public function testStatusActionDispatchesToActionServiceAsTheViewersActor(string $action): void {
 		$this->loggedInAs();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$this->accountService->method('getActor')->with('alice')->willReturn($actor);
 		$item = $this->createMock(Stream::class);
 		$this->actionService->expects($this->once())->method('action')->with($actor, 12, $action)->willReturn($item);
@@ -1292,9 +1303,9 @@ class ApiControllerTest extends TestCase {
 
 	public function testStatusActionFallsBackToTheStatusWhenActionReturnsNothing(): void {
 		$this->loggedInAs();
-		$this->accountService->method('getActor')->willReturn($this->createMock(Person::class));
+		$this->accountService->method('getActor')->willReturn($this->createStub(Person::class));
 		$this->actionService->method('action')->willReturn(null);
-		$item = $this->createMock(Stream::class);
+		$item = $this->createStub(Stream::class);
 		$this->streamService->expects($this->once())->method('getStreamByNid')->with(12)->willReturn($item);
 
 		$this->assertSame($item, $this->controller()->statusAction(12, 'translate')->getData());
@@ -1302,7 +1313,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testStatusActionRejectsUnknownActions(): void {
 		$this->loggedInAs();
-		$this->accountService->method('getActor')->willReturn($this->createMock(Person::class));
+		$this->accountService->method('getActor')->willReturn($this->createStub(Person::class));
 		$this->actionService->method('action')->willThrowException(new InvalidActionException('unknown action'));
 
 		$this->assertUnprocessable($this->controller()->statusAction(12, 'explode'), 'unknown action');
@@ -1323,7 +1334,7 @@ class ApiControllerTest extends TestCase {
 			'visibility' => 'unlisted',
 			'in_reply_to_id' => 7,
 		]);
-		$parent = $this->createMock(Stream::class);
+		$parent = $this->createStub(Stream::class);
 		$parent->method('getId')->willReturn('https://remote.example/notes/7');
 		$this->streamService->method('getStreamByNid')->with(7)->willReturn($parent);
 
@@ -1336,7 +1347,7 @@ class ApiControllerTest extends TestCase {
 
 				return $activity;
 			});
-		$item = $this->createMock(Stream::class);
+		$item = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamById')
 			->with('https://cloud.example/apps/social/@alice/n1', true, ACore::FORMAT_LOCAL)
 			->willReturn($item);
@@ -1360,7 +1371,7 @@ class ApiControllerTest extends TestCase {
 		$this->request->method('getParams')->willReturn([
 			'status' => 'later', 'scheduled_at' => '2030-01-01T12:00:00Z',
 		]);
-		$entity = $this->createMock(ScheduledStatus::class);
+		$entity = $this->createStub(ScheduledStatus::class);
 		$this->scheduledStatusService->method('requestedTime')->willReturn(1893499200);
 		$this->scheduledStatusService->expects($this->once())->method('schedule')->willReturn($entity);
 		$this->postService->expects($this->never())->method('createPost');
@@ -1435,7 +1446,7 @@ class ApiControllerTest extends TestCase {
 
 			return $activity;
 		});
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 
 		$this->controller()->statusNew();
 
@@ -1573,7 +1584,7 @@ class ApiControllerTest extends TestCase {
 		$this->request->method('getParams')->willReturn(['status' => 'x']);
 		$this->postService->expects($this->once())->method('editPost')
 			->with(5, $this->anything(), 'x', null, false)
-			->willReturn($this->createMock(Stream::class));
+			->willReturn($this->createStub(Stream::class));
 
 		$this->controller()->statusUpdate(5);
 	}
@@ -1740,7 +1751,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testMutesListTheMutedAccounts(): void {
 		$viewer = $this->loggedInAs();
-		$muted = $this->createMock(Person::class);
+		$muted = $this->createStub(Person::class);
 		$this->relationshipService->expects($this->once())
 			->method('getRelated')
 			->with($this->identicalTo($viewer), ActorRelation::TYPE_MUTE, 40)
@@ -1776,7 +1787,7 @@ class ApiControllerTest extends TestCase {
 	public function testTheMutedAccountsPageDoesNotEither(): void {
 		$this->loggedInAs();
 		$this->requestUri('/api/v1/mutes?limit=1');
-		$muted = $this->createMock(Person::class);
+		$muted = $this->createStub(Person::class);
 		$muted->method('getNid')->willReturn(4);
 		$this->relationshipService->method('getRelated')->willReturn([$muted]);
 
@@ -2142,10 +2153,10 @@ class ApiControllerTest extends TestCase {
 		// images not yet cached; a strict decoder fails the whole Account on a
 		// "" date, and Mastodon never sends an empty avatar — it sends a
 		// placeholder URL
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('alice');
 		$this->userSession->method('getUser')->willReturn($user);
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getPreferredUsername')->willReturn('alice');
 		$this->accountService->method('getActorFromUserId')->willReturn($account);
 		$fresh = new Person();
@@ -2269,9 +2280,9 @@ class ApiControllerTest extends TestCase {
 
 	public function testFavouritedByListsTheAccountsThatLikedThePost(): void {
 		$this->loggedInAs();
-		$post = $this->createMock(Stream::class);
+		$post = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamByNid')->with(9)->willReturn($post);
-		$alice = $this->createMock(Person::class);
+		$alice = $this->createStub(Person::class);
 		$this->actionService->expects($this->once())
 			->method('reactedBy')
 			->with($this->identicalTo($post), 'Like', 40)
@@ -2285,7 +2296,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testRebloggedByAsksForBoostsRatherThanLikes(): void {
 		$this->loggedInAs();
-		$this->streamService->method('getStreamByNid')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamByNid')->willReturn($this->createStub(Stream::class));
 		$this->actionService->expects($this->once())
 			->method('reactedBy')
 			->with($this->anything(), 'Announce', 40)
@@ -2310,7 +2321,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testTheQuotesOfAPostAreWhatTheServiceHolds(): void {
 		$this->loggedInAs();
-		$post = $this->createMock(Stream::class);
+		$post = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamByNid')->with(9)->willReturn($post);
 		$quote = $this->createMock(Stream::class);
 		$quote->expects($this->once())->method('setExportFormat')->with(ACore::FORMAT_LOCAL);
@@ -2379,7 +2390,7 @@ class ApiControllerTest extends TestCase {
 			'share_url' => null,
 			'account_id' => '3',
 		]);
-		$best = $this->createMock(Stream::class);
+		$best = $this->createStub(Stream::class);
 		$this->streamService->method('getStreamByNid')->with(9)->willReturn($best);
 
 		$data = $this->controller()->annualReports()->getData();
@@ -2447,7 +2458,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountsSearchCompletesAHandle(): void {
 		$this->loggedInAs();
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getId')->willReturn('https://remote.example/users/bob');
 		$bob->method('setExportFormat')->willReturnSelf();
 		$this->searchService->expects($this->once())->method('searchAccounts')->with('bob', 40)->willReturn([$bob]);
@@ -2459,7 +2470,7 @@ class ApiControllerTest extends TestCase {
 	/** Without this, completing a handle from a server we have never seen finds nothing. */
 	public function testAccountsSearchGoesAndLooksWhenAskedTo(): void {
 		$this->loggedInAs();
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getId')->willReturn('https://remote.example/users/bob');
 		$bob->method('setExportFormat')->willReturnSelf();
 		$this->searchService->expects($this->once())
@@ -2485,7 +2496,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountsSearchDoesNotResolvePlainSearchTerms(): void {
 		$this->loggedInAs();
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getId')->willReturn('https://remote.example/users/bob');
 		$bob->method('setExportFormat')->willReturnSelf();
 		$this->searchService->expects($this->once())->method('searchAccounts')->with('bob', 40)->willReturn([$bob]);
@@ -2496,10 +2507,10 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountsSearchCapsFollowingChecksAtTheRequestedLimit(): void {
 		$this->loggedInAs();
-		$resolved = $this->createMock(Person::class);
+		$resolved = $this->createStub(Person::class);
 		$resolved->method('getId')->willReturn('https://remote.example/users/resolved');
 		$resolved->method('setExportFormat')->willReturnSelf();
-		$cached = $this->createMock(Person::class);
+		$cached = $this->createStub(Person::class);
 		$cached->method('getId')->willReturn('https://remote.example/users/cached');
 		$cached->method('setExportFormat')->willReturnSelf();
 		$this->searchService->expects($this->once())
@@ -2522,7 +2533,7 @@ class ApiControllerTest extends TestCase {
 	 */
 	public function testAccountsSearchNarrowsTheSearchItselfToFollowedAccounts(): void {
 		$this->loggedInAs();
-		$bob = $this->createMock(Person::class);
+		$bob = $this->createStub(Person::class);
 		$bob->method('getId')->willReturn('https://remote.example/users/bob');
 		$bob->method('setExportFormat')->willReturnSelf();
 		$this->searchService->expects($this->once())
@@ -2594,7 +2605,7 @@ class ApiControllerTest extends TestCase {
 		$viewer = $this->loggedInAs();
 		$target = $this->knownTarget();
 		$target->method('getNid')->willReturn(42);
-		$known = $this->createMock(Person::class);
+		$known = $this->createStub(Person::class);
 		$known->method('setExportFormat')->willReturnSelf();
 		$this->followService->expects($this->once())
 			->method('familiarFollowers')
@@ -2622,12 +2633,12 @@ class ApiControllerTest extends TestCase {
 
 	public function testSearchV2BundlesAccountsStatusesAndHashtags(): void {
 		$this->loggedInAs();
-		$account = $this->createMock(Person::class);
+		$account = $this->createStub(Person::class);
 		$account->method('getId')->willReturn('https://remote.example/@bob');
 		$account->method('setExportFormat')->willReturnSelf();
 		$this->searchService->method('searchUri')->with('bob')->willReturn([]);
 		$this->searchService->method('searchAccounts')->with('bob')->willReturn([$account, $account]);
-		$status = $this->createMock(Stream::class);
+		$status = $this->createStub(Stream::class);
 		$this->searchService->method('searchStreamContent')->with('bob')->willReturn([$status]);
 		$this->searchService->method('searchHashtags')->with('bob')
 			->willReturn([['hashtag' => 'bobcats', 'trend' => []]]);
@@ -2675,7 +2686,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testSearchV2ResolvesARemotePostOnRequest(): void {
 		$this->loggedInAs();
-		$resolved = $this->createMock(Stream::class);
+		$resolved = $this->createStub(Stream::class);
 		$resolved->method('setExportFormat')->willReturnSelf();
 		$this->searchService->method('searchUri')->willReturn([]);
 		$this->searchService->method('searchAccounts')->willReturn([]);
@@ -2694,7 +2705,7 @@ class ApiControllerTest extends TestCase {
 	/** What is already here is the answer; nothing goes out over the network. */
 	public function testSearchV2DoesNotFetchWhenTheSearchAlreadyFoundSomething(): void {
 		$this->loggedInAs();
-		$status = $this->createMock(Stream::class);
+		$status = $this->createStub(Stream::class);
 		$this->searchService->method('searchUri')->willReturn([]);
 		$this->searchService->method('searchAccounts')->willReturn([]);
 		$this->searchService->method('searchStreamContent')->willReturn([$status]);
@@ -2811,7 +2822,7 @@ class ApiControllerTest extends TestCase {
 	public function testReportNewRefusesReportingYourself(): void {
 		$viewer = $this->loggedInAs();
 		$this->request->method('getParams')->willReturn(['account_id' => '42']);
-		$self = $this->createMock(Person::class);
+		$self = $this->createStub(Person::class);
 		$self->method('getNid')->willReturn(42);
 		$self->method('getId')->willReturn($viewer->getId());
 		$this->cacheActorService->method('getFromNids')->with([42])->willReturn([$self]);
@@ -2841,7 +2852,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountStatusesSyncsThenProbesTheAccountTimeline(): void {
 		$this->loggedInAs();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->streamService->expects($this->once())->method('syncRemoteTimeline')->with($actor);
@@ -2865,7 +2876,7 @@ class ApiControllerTest extends TestCase {
 	 * `media_type` is the extension that tells the two tabs apart.
 	 */
 	public function testAccountStatusesPassesTheMediaFilterOn(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$options = $this->captureTimelineOptions(['p']);
@@ -2879,7 +2890,7 @@ class ApiControllerTest extends TestCase {
 
 	/** A tab that asks for everything must not quietly filter. */
 	public function testAccountStatusesAsksForEverythingByDefault(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$options = $this->captureTimelineOptions(['p']);
@@ -2892,7 +2903,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAccountStatusesFlagsThePinnedPostsOfThePage(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->method('getTimeline')->willReturn(['p']);
@@ -2903,7 +2914,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAccountStatusesWithPinnedReturnsThePinsWithoutASync(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
@@ -2929,7 +2940,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountFollowersOfLocalAccountAreProbedLocally(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
 		$this->cacheActorService->method('getFromAccount')->with('alice@cloud.example')->willReturn($actor);
 		$this->curlService->expects($this->never())->method('retrieveObject');
@@ -2950,7 +2961,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountFollowingOfBareUsernameIsProbedLocally(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$this->cacheActorService->method('getFromAccount')->with('alice')->willReturn($actor);
 		$captured = null;
 		$this->cacheActorService->method('probeActors')->willReturnCallback(function (ProbeOptions $o) use (&$captured): array {
@@ -2967,7 +2978,7 @@ class ApiControllerTest extends TestCase {
 	public function testAccountFollowersOfRemoteAccountAreFetchedFromTheirCollection(): void {
 		$this->loggedInAs();
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->curlService->method('retrieveObject')->willReturnMap([
@@ -2980,7 +2991,7 @@ class ApiControllerTest extends TestCase {
 		]);
 		$x = $this->createMock(Person::class);
 		$x->method('getNid')->willReturn(11);
-		$y = $this->createMock(Person::class);
+		$y = $this->createStub(Person::class);
 		$y->method('getNid')->willReturn(12);
 		$this->cacheActorService->method('getFromId')->willReturnMap([
 			['https://remote.example/users/x', false, $x],
@@ -2997,7 +3008,7 @@ class ApiControllerTest extends TestCase {
 	public function testRemoteCollectionDropsActorsWithoutANumericId(): void {
 		$this->loggedInAs();
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		// the page carries the actors inline, as Mastodon's collections do
@@ -3006,9 +3017,9 @@ class ApiControllerTest extends TestCase {
 			['id' => 'https://remote.example/users/y', 'type' => 'Person'],
 		]]);
 
-		$uncached = $this->createMock(Person::class);
+		$uncached = $this->createStub(Person::class);
 		$uncached->method('getNid')->willReturn(0);
-		$known = $this->createMock(Person::class);
+		$known = $this->createStub(Person::class);
 		$known->method('getNid')->willReturn(9);
 		$this->cacheActorService->method('getFromId')->willReturnMap([
 			['https://remote.example/users/x', false, $uncached],
@@ -3024,7 +3035,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAccountFollowingOfRemoteAccountSkipsUnresolvableActors(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getFollowing')->willReturn('https://remote.example/users/bob/following');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->curlService->method('retrieveObject')->willReturn(['items' => ['https://remote.example/users/x', '']]);
@@ -3037,7 +3048,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testRemoteCollectionFetchFailureYieldsAnEmptyList(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->curlService->method('retrieveObject')->willThrowException(new \RuntimeException('timeout'));
@@ -3050,7 +3061,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testRemoteFollowerFanOutIsBoundedByMaxLimit(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 
@@ -3134,7 +3145,7 @@ class ApiControllerTest extends TestCase {
 	private function pageOfStreams(int $high, int $low): array {
 		$posts = [];
 		for ($nid = $high; $nid >= $low; $nid--) {
-			$post = $this->createMock(Stream::class);
+			$post = $this->createStub(Stream::class);
 			$post->method('getNid')->willReturn($nid);
 			$post->method('getSubType')->willReturn('');
 			$posts[] = $post;
@@ -3221,12 +3232,12 @@ class ApiControllerTest extends TestCase {
 
 	public function testFollowerPagesArePagedByTheirActorIds(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->requestUri('/api/v1/accounts/alice/followers');
 
-		$follower = $this->createMock(Person::class);
+		$follower = $this->createStub(Person::class);
 		$follower->method('getNid')->willReturn(17);
 		$this->cacheActorService->method('probeActors')->willReturn([$follower]);
 
@@ -3252,7 +3263,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAnAccountIsAlsoReachableByHandle(): void {
 		$this->loggedInAs();
-		$target = $this->createMock(Person::class);
+		$target = $this->createStub(Person::class);
 		$this->cacheActorService->expects($this->once())
 			->method('getFromAccount')->with('bob@remote.example')->willReturn($target);
 
@@ -3261,7 +3272,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAnAccountIsAlsoReachableByActorUri(): void {
 		$this->loggedInAs();
-		$target = $this->createMock(Person::class);
+		$target = $this->createStub(Person::class);
 		$this->cacheActorService->expects($this->once())
 			->method('getFromId')->with('https://remote.example/users/bob')->willReturn($target);
 
@@ -3287,7 +3298,7 @@ class ApiControllerTest extends TestCase {
 	 */
 	public function testAnAnonymousCallerCannotMakeTheInstanceFetchAnActorUri(): void {
 		$this->cacheActorService->expects($this->never())->method('getFromId');
-		$known = $this->createMock(Person::class);
+		$known = $this->createStub(Person::class);
 		$this->cacheActorService->expects($this->once())
 			->method('getCachedFromIds')
 			->with(['https://remote.example/users/bob'])
@@ -3307,7 +3318,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAnAnonymousCallerCannotMakeTheInstanceWebfingerAHandle(): void {
-		$target = $this->createMock(Person::class);
+		$target = $this->createStub(Person::class);
 		// `false`: answered from the cache, never fetched
 		$this->cacheActorService->expects($this->once())
 			->method('getFromAccount')->with('bob@remote.example', false)->willReturn($target);
@@ -3316,7 +3327,7 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAnAnonymousCallerDoesNotMakeTheInstanceSyncARemoteOutbox(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
@@ -3327,7 +3338,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testAnAnonymousCallerDoesNotMakeTheInstanceReadARemoteCollection(): void {
 		$this->localHosts();
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
@@ -3398,7 +3409,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testStatusDeleteOfSomebodyElsesPostIsA404AndDeletesNothing(): void {
 		$this->loggedInAs();
-		$item = $this->createMock(Stream::class);
+		$item = $this->createStub(Stream::class);
 		$item->method('getAttributedTo')->willReturn('https://cloud.example/apps/social/@bob');
 		$this->streamService->method('getStreamByNid')->willReturn($item);
 		$this->streamService->expects($this->never())->method('deleteLocalItem');
@@ -3438,7 +3449,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testStatusSourceOfSomebodyElsesPostIsA404(): void {
 		$this->loggedInAs();
-		$item = $this->createMock(Stream::class);
+		$item = $this->createStub(Stream::class);
 		$item->method('getAttributedTo')->willReturn('https://cloud.example/apps/social/@bob');
 		$this->streamService->method('getStreamByNid')->willReturn($item);
 
@@ -3467,7 +3478,7 @@ class ApiControllerTest extends TestCase {
 
 	public function testStatusDeliveryOfSomebodyElsesPostIsA404(): void {
 		$this->loggedInAs();
-		$item = $this->createMock(Stream::class);
+		$item = $this->createStub(Stream::class);
 		$item->method('getAttributedTo')->willReturn('https://cloud.example/apps/social/@bob');
 		$this->streamService->method('getStreamByNid')->willReturn($item);
 		// which servers a post reached is a fact about the author's account and
@@ -3484,7 +3495,7 @@ class ApiControllerTest extends TestCase {
 		$this->bearerFor(['write']);
 		$this->request->method('getParams')->willReturn(['status' => 'hello']);
 
-		$activity = $this->createMock(ACore::class);
+		$activity = $this->createStub(ACore::class);
 		$activity->method('getObjectId')->willReturn('https://cloud.example/apps/social/@alice/n1');
 		$this->postService->method('createPost')->willReturn($activity);
 
@@ -3554,7 +3565,7 @@ class ApiControllerTest extends TestCase {
 
 				return $activity;
 			});
-		$this->streamService->method('getStreamById')->willReturn($this->createMock(Stream::class));
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
 		$this->controller()->statusNew();
 
 		return $created;
@@ -3647,10 +3658,10 @@ class ApiControllerTest extends TestCase {
 
 	public function testANotificationTypeNoClientKnowsIsLeftOutOfThePage(): void {
 		$this->loggedInAs();
-		$known = $this->createMock(Stream::class);
+		$known = $this->createStub(Stream::class);
 		$known->method('getSubType')->willReturn('Like');
 		$known->method('getNid')->willReturn(3);
-		$unknown = $this->createMock(Stream::class);
+		$unknown = $this->createStub(Stream::class);
 		$unknown->method('getSubType')->willReturn('SomethingElse');
 		$unknown->method('getNid')->willReturn(2);
 		$this->captureTimelineOptions([$known, $unknown]);
@@ -3672,12 +3683,12 @@ class ApiControllerTest extends TestCase {
 		$this->requestUri('/api/v1/notifications?limit=3');
 		$page = [];
 		foreach ([30, 29] as $nid) {
-			$known = $this->createMock(Stream::class);
+			$known = $this->createStub(Stream::class);
 			$known->method('getSubType')->willReturn('Like');
 			$known->method('getNid')->willReturn($nid);
 			$page[] = $known;
 		}
-		$unknown = $this->createMock(Stream::class);
+		$unknown = $this->createStub(Stream::class);
 		$unknown->method('getSubType')->willReturn('SomethingElse');
 		$unknown->method('getNid')->willReturn(28);
 		$page[] = $unknown;
@@ -3878,9 +3889,9 @@ class ApiControllerTest extends TestCase {
 				$saved = $document;
 				$tmpSeen = $tmpPath;
 			});
-		$interface = $this->createMock(IActivityPubInterface::class);
+		$interface = $this->createStub(IActivityPubInterface::class);
 		$interface->method('save');
-		AP::set($this->createMock(AP::class));
+		AP::set($this->createStub(AP::class));
 		AP::instance()->method('getInterfaceForItem')->willReturn($interface);
 	}
 
@@ -3977,7 +3988,7 @@ class ApiControllerTest extends TestCase {
 		$this->loggedInAs();
 		$this->pathParam = '/Photos';
 		$folder = $this->userFolderMock();
-		$folder->method('get')->with('/Photos')->willReturn($this->createMock(Folder::class));
+		$folder->method('get')->with('/Photos')->willReturn($this->createStub(Folder::class));
 		$this->rootFolder->method('getUserFolder')->with('alice')->willReturn($folder);
 		$this->cacheDocumentService->expects($this->never())->method('saveFromTempToCache');
 
@@ -4062,7 +4073,7 @@ class ApiControllerTest extends TestCase {
 
 		$interface = $this->createMock(IActivityPubInterface::class);
 		$interface->expects($this->once())->method('save')->with($this->isInstanceOf(Document::class));
-		AP::set($this->createMock(AP::class));
+		AP::set($this->createStub(AP::class));
 		AP::instance()->method('getInterfaceForItem')->willReturn($interface);
 
 		$response = $this->controller()->mediaNew();
@@ -4103,8 +4114,8 @@ class ApiControllerTest extends TestCase {
 			->willReturnCallback(function (Document $document) use (&$saved): void {
 				$saved = $document;
 			});
-		$interface = $this->createMock(IActivityPubInterface::class);
-		AP::set($this->createMock(AP::class));
+		$interface = $this->createStub(IActivityPubInterface::class);
+		AP::set($this->createStub(AP::class));
 		AP::instance()->method('getInterfaceForItem')->willReturn($interface);
 
 		$this->description = 'a cat sleeping on a laptop';
@@ -4211,11 +4222,11 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testMediaOpenServesTheStoredMediaType(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('abc');
 		$file->method('getETag')->willReturn('etag');
 		$file->method('getMTime')->willReturn(1700000000);
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('image/png');
 		$this->documentService->expects($this->once())->method('getFromUuid')->with('abc')->willReturn([$file, $document]);
 
@@ -4234,9 +4245,9 @@ class ApiControllerTest extends TestCase {
 	 * which is every Nextcloud, refuses to draw it.
 	 */
 	public function testMediaOpenServesAVideoPosterAsAnImage(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('poster');
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('video/mp4');
 		$document->method('getResizedCopy')->willReturn('poster');
 		$this->documentService->method('getFromUuid')->with('poster')->willReturn([$file, $document]);
@@ -4249,9 +4260,9 @@ class ApiControllerTest extends TestCase {
 
 	/** The video itself keeps its own type, resized copy or not. */
 	public function testMediaOpenServesTheVideoItselfAsAVideo(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('movie');
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('video/mp4');
 		$document->method('getResizedCopy')->willReturn('poster');
 		$this->documentService->method('getFromUuid')->with('movie')->willReturn([$file, $document]);
@@ -4264,9 +4275,9 @@ class ApiControllerTest extends TestCase {
 
 	public function testMediaOpenIgnoresTheRequestersExtension(): void {
 		// the media type was sniffed at ingest; the URL suffix is attacker-chosen
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('abc');
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('image/png');
 		$this->documentService->method('getFromUuid')->with('abc')->willReturn([$file, $document]);
 
@@ -4278,9 +4289,9 @@ class ApiControllerTest extends TestCase {
 		// the unguessable uuid, whatever the post's visibility — Mastodon fetches
 		// it unsigned. The `public` flag only decides whether a shared proxy may
 		// keep a copy.
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('abc');
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('image/jpeg');
 		$document->method('isPublic')->willReturn(false);
 		$this->documentService->expects($this->once())->method('getFromUuid')->with('abc')->willReturn([$file, $document]);
@@ -4293,9 +4304,9 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testMediaOpenOfAPublicAttachmentMayBeKeptByASharedCache(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$file->method('getName')->willReturn('abc');
-		$document = $this->createMock(\OCA\Social\Model\ActivityPub\Object\Document::class);
+		$document = $this->createStub(\OCA\Social\Model\ActivityPub\Object\Document::class);
 		$document->method('getMediaType')->willReturn('image/png');
 		$document->method('isPublic')->willReturn(true);
 		$this->documentService->method('getFromUuid')->willReturn([$file, $document]);
@@ -4743,9 +4754,9 @@ class ApiControllerTest extends TestCase {
 	 * memcache — so the Idempotency-Key round trip is exercised there.
 	 */
 	private function durableCache(): \OCA\Social\Service\DurableCache {
-		$factory = $this->createMock(ICacheFactory::class);
+		$factory = $this->createStub(ICacheFactory::class);
 		$factory->method('isAvailable')->willReturn(false);
-		$time = $this->createMock(\OCP\AppFramework\Utility\ITimeFactory::class);
+		$time = $this->createStub(\OCP\AppFramework\Utility\ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 		$this->durableCacheRequest ??= new \OCA\Social\Tests\Helper\InMemoryDurableCacheRequest();
 

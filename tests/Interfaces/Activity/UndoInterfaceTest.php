@@ -17,11 +17,13 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/DispatchingActivityTestCase.php';
 require_once __DIR__ . '/TResolvesActivityObjects.php';
 
+#[AllowMockObjectsWithoutExpectations]
 class UndoInterfaceTest extends DispatchingActivityTestCase {
 	use TResolvesActivityObjects;
 

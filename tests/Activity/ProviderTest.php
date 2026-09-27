@@ -17,29 +17,31 @@ use OCP\Activity\IManager;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\L10N\IFactory;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class ProviderTest extends TestCase {
-	private IManager|MockObject $activityManager;
+	private IManager|Stub $activityManager;
 	private Provider $provider;
 	/** @var array<string, mixed> what the event under test was told */
 	private array $told = [];
 
 	protected function setUp(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static fn (string $text): string => '[de] ' . $text);
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->with('social', 'de')->willReturn($l10n);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args): string => 'https://cloud.example/apps/social/@' . $args['username'] . '/'
 		);
 		$urlGenerator->method('imagePath')->willReturnCallback(static fn (string $app, string $file): string => '/apps/' . $app . '/img/' . $file);
 		$urlGenerator->method('getAbsoluteURL')->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . $path);
 
-		$this->activityManager = $this->createMock(IManager::class);
+		$this->activityManager = $this->createStub(IManager::class);
 
 		$this->provider = new Provider($factory, $urlGenerator, $this->activityManager);
 	}
@@ -102,7 +104,7 @@ class ProviderTest extends TestCase {
 	}
 
 	public function testEverySubjectTheBellKnowsIsWorded(): void {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnArgument(0);
 
 		$templates = Provider::templates($l10n);
@@ -115,7 +117,7 @@ class ProviderTest extends TestCase {
 	}
 
 	public function testAnotherAppsEventIsNotOurs(): void {
-		$event = $this->createMock(IEvent::class);
+		$event = $this->createStub(IEvent::class);
 		$event->method('getApp')->willReturn('comments');
 
 		$this->expectException(UnknownActivityException::class);

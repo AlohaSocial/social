@@ -56,13 +56,16 @@ use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class LocalControllerTest extends TestCase {
-	/** @var IRequest&MockObject */
+	/** @var IRequest&Stub */
 	private $request;
 	/** @var BannerService&MockObject */
 	private $bannerService;
@@ -70,7 +73,7 @@ class LocalControllerTest extends TestCase {
 	private $accountService;
 	/** @var CacheActorService&MockObject */
 	private $cacheActorService;
-	/** @var CacheActorsRequest&MockObject */
+	/** @var CacheActorsRequest&Stub */
 	private $cacheActorsRequest;
 	/** @var HashtagService&MockObject */
 	private $hashtagService;
@@ -80,19 +83,19 @@ class LocalControllerTest extends TestCase {
 	private $postService;
 	/** @var StreamService&MockObject */
 	private $streamService;
-	/** @var SearchService&MockObject */
+	/** @var SearchService&Stub */
 	private $searchService;
-	/** @var BoostService&MockObject */
+	/** @var BoostService&Stub */
 	private $boostService;
-	/** @var LikeService&MockObject */
+	/** @var LikeService&Stub */
 	private $likeService;
 	/** @var DocumentService&MockObject */
 	private $documentService;
-	/** @var ConfigService&MockObject */
+	/** @var ConfigService&Stub */
 	private $configService;
-	/** @var ActorService&MockObject */
+	/** @var ActorService&Stub */
 	private $actorService;
-	/** @var ActivityService&MockObject */
+	/** @var ActivityService&Stub */
 	private $activityService;
 	/** @var CacheDocumentService&MockObject */
 	private $cacheDocumentService;
@@ -109,10 +112,10 @@ class LocalControllerTest extends TestCase {
 		$this->filesBackup = $_FILES;
 		$_FILES = [];
 
-		$this->request = $this->createMock(IRequest::class);
+		$this->request = $this->createStub(IRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->cacheActorsRequest = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		// the public routes read the local actor cache first and only resolve an
 		// unknown id for a caller with a session
 		$this->localActors = [];
@@ -129,9 +132,9 @@ class LocalControllerTest extends TestCase {
 		$this->followService = $this->createMock(FollowService::class);
 		$this->postService = $this->createMock(PostService::class);
 		$this->streamService = $this->createMock(StreamService::class);
-		$this->searchService = $this->createMock(SearchService::class);
-		$this->boostService = $this->createMock(BoostService::class);
-		$this->likeService = $this->createMock(LikeService::class);
+		$this->searchService = $this->createStub(SearchService::class);
+		$this->boostService = $this->createStub(BoostService::class);
+		$this->likeService = $this->createStub(LikeService::class);
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->cachedRemoteFiles = [];
 		$this->documentService->method('getCachedFromUrl')->willReturnCallback(
@@ -144,9 +147,9 @@ class LocalControllerTest extends TestCase {
 				return $this->cachedRemoteFiles[$url];
 			}
 		);
-		$this->configService = $this->createMock(ConfigService::class);
-		$this->actorService = $this->createMock(ActorService::class);
-		$this->activityService = $this->createMock(ActivityService::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$this->actorService = $this->createStub(ActorService::class);
+		$this->activityService = $this->createStub(ActivityService::class);
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 
 		\OC::$server->register(IRequest::class, $this->request);
@@ -234,7 +237,7 @@ class LocalControllerTest extends TestCase {
 
 	public function testPostCreateBuildsThePostFromTheRequest(): void {
 		$actor = $this->actorForUser();
-		$object = $this->createMock(Note::class);
+		$object = $this->createStub(Note::class);
 		$activity = $this->createMock(ACore::class);
 		$activity->method('getObject')->willReturn($object);
 
@@ -328,7 +331,7 @@ class LocalControllerTest extends TestCase {
 
 	public function testPostDeleteRemovesTheUsersOwnNote(): void {
 		$this->actorForUser();
-		$note = $this->createMock(Stream::class);
+		$note = $this->createStub(Stream::class);
 		$note->method('getAttributedTo')->willReturn('https://cloud.example/apps/social/@alice');
 		$note->method('getType')->willReturn(Note::TYPE);
 		$this->streamService->method('getStreamById')->with('https://x/n/1')->willReturn($note);
@@ -339,7 +342,7 @@ class LocalControllerTest extends TestCase {
 
 	public function testPostDeleteRemovesAPollByItsOwnType(): void {
 		$this->actorForUser();
-		$poll = $this->createMock(Stream::class);
+		$poll = $this->createStub(Stream::class);
 		$poll->method('getAttributedTo')->willReturn('https://cloud.example/apps/social/@alice');
 		$poll->method('getType')->willReturn(Question::TYPE);
 		$this->streamService->method('getStreamById')->willReturn($poll);
@@ -350,7 +353,7 @@ class LocalControllerTest extends TestCase {
 
 	public function testPostDeleteRefusesSomeoneElsesNote(): void {
 		$this->actorForUser();
-		$note = $this->createMock(Stream::class);
+		$note = $this->createStub(Stream::class);
 		$note->method('getAttributedTo')->willReturn('https://remote.example/users/bob');
 		$this->streamService->method('getStreamById')->willReturn($note);
 		$this->streamService->expects($this->never())->method('deleteLocalItem');
@@ -480,7 +483,7 @@ class LocalControllerTest extends TestCase {
 	public function testAccountCreateFallsBackToTheSuggestedHandle(): void {
 		$this->accountService->method('generateHandleFromUserId')->with('alice')->willReturn('alice');
 		$this->accountService->expects($this->once())->method('createActor')->with('alice', 'alice');
-		$this->accountService->method('getCachedLocalActor')->willReturn($this->createMock(Person::class));
+		$this->accountService->method('getCachedLocalActor')->willReturn($this->createStub(Person::class));
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->accountCreate('')->getStatus());
 	}
@@ -622,7 +625,7 @@ class LocalControllerTest extends TestCase {
 	public function testGlobalAccountInfoNeverCreatesAnActorForOtherVisitors(): void {
 		// the route is public: creating here would let anonymous visitors force a
 		// Fediverse identity onto any Nextcloud user, and probe which users exist
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(true);
 		$this->accountService->expects($this->never())->method('getActorFromUserId');
 		$this->accountService->method('getCachedLocalActor')->with('bob')->willReturn($actor);
@@ -636,7 +639,7 @@ class LocalControllerTest extends TestCase {
 	public function testGlobalAccountInfoTreatsOwnDomainAsLocal(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 		$this->configService->method('getSocialAddress')->willReturn('social.example');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(true);
 		$this->accountService->method('getCachedLocalActor')->with('bob')->willReturn($actor);
 		$this->cacheActorService->expects($this->never())->method('getFromAccount');
@@ -647,7 +650,7 @@ class LocalControllerTest extends TestCase {
 	public function testGlobalAccountInfoFetchesRemoteActorsWithTheirCounters(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 		$this->configService->method('getSocialAddress')->willReturn('cloud.example');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->cacheActorService->expects($this->once())->method('addRemoteActorDetailCount')->with($actor);
@@ -658,7 +661,7 @@ class LocalControllerTest extends TestCase {
 
 	public function testGlobalAccountInfoToleratesCounterFailures(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->cacheActorService->method('addRemoteActorDetailCount')->willThrowException(new \RuntimeException('offline'));
@@ -700,7 +703,7 @@ class LocalControllerTest extends TestCase {
 	}
 
 	public function testALoggedInCallerStillResolvesAnUnknownActor(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$this->cacheActorService->expects($this->once())->method('getFromId')
 			->with('https://remote.example/users/new')->willReturn($actor);
 
@@ -722,10 +725,10 @@ class LocalControllerTest extends TestCase {
 	// avatar / header
 
 	public function testGlobalActorAvatarServesTheCachedIcon(): void {
-		\OC::$server->register(ITimeFactory::class, $this->createMock(ITimeFactory::class));
-		$icon = $this->createMock(Document::class);
+		\OC::$server->register(ITimeFactory::class, $this->createStub(ITimeFactory::class));
+		$icon = $this->createStub(Document::class);
 		$icon->method('getId')->willReturn('https://remote.example/avatar.png');
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('hasIcon')->willReturn(true);
 		$actor->method('getIcon')->willReturn($icon);
 		$this->localActors['https://remote.example/users/bob'] = $actor;
@@ -748,7 +751,7 @@ class LocalControllerTest extends TestCase {
 	}
 
 	public function testGlobalActorAvatarIs404WithoutIcon(): void {
-		$actor = $this->createMock(Person::class);
+		$actor = $this->createStub(Person::class);
 		$actor->method('hasIcon')->willReturn(false);
 		$this->localActors['https://x'] = $actor;
 

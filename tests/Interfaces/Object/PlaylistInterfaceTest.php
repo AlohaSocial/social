@@ -26,6 +26,7 @@ use OCA\Social\Service\PlaylistService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamService;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -44,7 +45,7 @@ class PlaylistInterfaceTest extends TestCase {
 	private const VIDEO = 'https://peertube.example/videos/watch/one';
 
 	private CollectionsRequest|MockObject $collections;
-	private CacheActorsRequest|MockObject $cacheActors;
+	private CacheActorsRequest|Stub $cacheActors;
 	private PlaylistInterface $interface;
 
 	/** @var array<string, Person> */
@@ -52,12 +53,12 @@ class PlaylistInterfaceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->collections = $this->createMock(CollectionsRequest::class);
-		$this->cacheActors = $this->createMock(CacheActorsRequest::class);
+		$this->cacheActors = $this->createStub(CacheActorsRequest::class);
 		$this->cacheActors->method('getFromId')->willReturnCallback(function (string $id): Person {
 			return $this->actors[$id] ?? throw new CacheActorDoesNotExistException();
 		});
 
-		$streams = $this->createMock(StreamService::class);
+		$streams = $this->createStub(StreamService::class);
 		$streams->method('getStreamById')->willReturnCallback(static function (string $id): Note {
 			if ($id !== self::LOCAL_VIDEO && $id !== self::VIDEO) {
 				throw new StreamNotFoundException();

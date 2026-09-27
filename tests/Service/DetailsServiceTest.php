@@ -19,9 +19,11 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\DetailsService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StreamService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class DetailsServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example.com/apps/social/@alice';
 	private const ALICE_FOLLOWERS = 'https://cloud.example.com/apps/social/@alice/followers';

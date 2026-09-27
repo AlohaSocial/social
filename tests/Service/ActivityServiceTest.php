@@ -46,12 +46,15 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 
+#[AllowMockObjectsWithoutExpectations]
 class ActivityServiceTest extends TestCase {
 	private const CLOUD_URL = 'https://cloud.example';
 	private const CLOUD_HOST = 'cloud.example';
@@ -65,9 +68,9 @@ class ActivityServiceTest extends TestCase {
 	private SignatureService|MockObject $signatureService;
 	private RequestQueueService|MockObject $requestQueueService;
 	private CurlService|MockObject $curlService;
-	private ConfigService|MockObject $configService;
+	private ConfigService|Stub $configService;
 	private ActorsRequest|MockObject $actorsRequest;
-	private RelayRequest|MockObject $relayRequest;
+	private RelayRequest|Stub $relayRequest;
 	private LoggerInterface|MockObject $logger;
 	private NoteInterface|MockObject $noteInterface;
 	private AnnounceInterface|MockObject $announceInterface;
@@ -90,11 +93,11 @@ class ActivityServiceTest extends TestCase {
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 		$this->curlService = $this->createMock(CurlService::class);
 
-		$this->configService = $this->createMock(ConfigService::class);
+		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getCloudHost')->willReturn(self::CLOUD_HOST);
 
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
-		$this->relayRequest = $this->createMock(RelayRequest::class);
+		$this->relayRequest = $this->createStub(RelayRequest::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
 		// the breaker's table, held in memory: a failure one pass records is
@@ -142,7 +145,7 @@ class ActivityServiceTest extends TestCase {
 				$args[] = $interfaces[$class];
 				continue;
 			}
-			$mock = $this->createMock($class);
+			$mock = $this->createStub($class);
 			if ($class === ConfigService::class) {
 				$mock->method('getCloudUrl')->willReturn(self::CLOUD_URL);
 			}
@@ -203,7 +206,7 @@ class ActivityServiceTest extends TestCase {
 				$paths = $instancePaths;
 
 				return true;
-			}), $this->isInstanceOf(ACore::class), $this->isType('string'))
+			}), $this->isInstanceOf(ACore::class), $this->isString())
 			// the real queue hands back no token when it was given nothing to
 			// send, and callers key off that
 			->willReturnCallback(fn (array $instancePaths): string => $instancePaths === [] ? '' : self::TOKEN);
@@ -857,7 +860,7 @@ class ActivityServiceTest extends TestCase {
 			->willReturn($direct);
 		$this->requestQueueService->expects($this->once())->method('initRequest')->with($this->identicalTo($direct));
 		$this->signatureService->expects($this->once())->method('signRequest')
-			->with($this->isType('string'), $this->isType('string'), $this->identicalTo($direct))
+			->with($this->isString(), $this->isString(), $this->identicalTo($direct))
 			->willReturn([]);
 		$this->curlService->expects($this->once())->method('retrieveJson')->willReturn([]);
 		$this->requestQueueService->expects($this->once())->method('endRequest')->with($this->identicalTo($direct), true);
@@ -930,7 +933,7 @@ class ActivityServiceTest extends TestCase {
 
 					return true;
 				}),
-				$this->isType('string'),
+				$this->isString(),
 				$this->identicalTo($queue)
 			)
 			->willReturn(['Signature' => 'keyId="k"']);
@@ -1275,7 +1278,7 @@ class ActivityServiceTest extends TestCase {
 		$service = new ActivityService(
 			$this->followsRequest, $this->cacheActorsRequest,
 			$this->signatureService, $this->requestQueueService, $this->curlService, $this->configService,
-			$this->actorsRequest, $this->relayRequest, $broken = $this->createMock(HostBreakerRequest::class), $this->logger
+			$this->actorsRequest, $this->relayRequest, $broken = $this->createStub(HostBreakerRequest::class), $this->logger
 		);
 		$broken->method('failingSince')->willThrowException(new \RuntimeException('no such table'));
 		$broken->method('open')->willThrowException(new \RuntimeException('no such table'));

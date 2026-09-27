@@ -14,6 +14,7 @@ use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCP\DB\IResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -30,6 +31,7 @@ use PHPUnit\Framework\TestCase;
  * The statements need a real database; what they were built to ask for does
  * not, and that is what is asserted here.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PagedOrderingTest extends TestCase {
 	private const ALICE = 'https://cloud.example/@alice';
 	private const POST = 'https://cloud.example/@bob/1';
@@ -47,7 +49,7 @@ class PagedOrderingTest extends TestCase {
 		$qb->method('prim')->willReturnCallback(static fn (string $id): string => md5($id));
 		$qb->method('createNamedParameter')->willReturnArgument(0);
 
-		$empty = $this->createMock(IResult::class);
+		$empty = $this->createStub(IResult::class);
 		$empty->method('fetch')->willReturn(false);
 		$qb->method('executeQuery')->willReturn($empty);
 

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Db;
 use OCA\Social\Db\MediaBlocksRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCP\DB\IResult;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -20,6 +21,7 @@ use PHPUnit\Framework\TestCase;
  * database (tests/Integration/Db/MediaBlocksPagingTest reads them); the
  * statement does not.
  */
+#[AllowMockObjectsWithoutExpectations]
 class MediaBlocksRequestTest extends TestCase {
 	/** @var string[] */
 	private array $where = [];
@@ -52,7 +54,7 @@ class MediaBlocksRequestTest extends TestCase {
 			return $qb;
 		});
 
-		$result = $this->createMock(IResult::class);
+		$result = $this->createStub(IResult::class);
 		$result->method('fetch')->willReturnOnConsecutiveCalls(
 			['id' => '7', 'hash' => str_repeat('a', 64), 'reason' => 'r', 'moderator' => 'alice', 'blocked' => '3', 'creation' => '2026-09-15 10:00:00'],
 			false

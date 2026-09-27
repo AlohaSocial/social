@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use InvalidArgumentException;
 use OCA\Social\Db\TrendReviewRequest;
 use OCA\Social\Service\TrendReviewService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,7 @@ use PHPUnit\Framework\TestCase;
  * everything else trends, rather than the other way round — the opposite
  * default would empty the Explore page of every instance on upgrade.
  */
+#[AllowMockObjectsWithoutExpectations]
 class TrendReviewServiceTest extends TestCase {
 	private TrendReviewRequest|MockObject $trendReviewRequest;
 	private TrendReviewService $service;

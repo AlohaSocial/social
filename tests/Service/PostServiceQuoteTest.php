@@ -38,7 +38,9 @@ use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -46,6 +48,7 @@ use Psr\Log\NullLogger;
  * A local user quoting a post: what ends up on the Note, who it is addressed
  * to, and what this instance may refuse to quote at all.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PostServiceQuoteTest extends TestCase {
 	private const SOCIAL_URL = 'https://social.example/';
 	private const ACTOR_ID = 'https://social.example/@alice';
@@ -53,21 +56,21 @@ class PostServiceQuoteTest extends TestCase {
 	private const BOB_ID = 'https://remote.example/users/bob';
 	private const QUOTED_ID = 'https://remote.example/users/bob/statuses/111';
 
-	private StreamRequest|MockObject $streamRequest;
+	private StreamRequest|Stub $streamRequest;
 	private ActivityService|MockObject $activityService;
-	private CacheActorService|MockObject $cacheActorService;
+	private CacheActorService|Stub $cacheActorService;
 	private PostService $service;
 
 	protected function setUp(): void {
-		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->activityService = $this->createMock(ActivityService::class);
-		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->cacheActorService = $this->createStub(CacheActorService::class);
 
-		$configService = $this->createMock(ConfigService::class);
+		$configService = $this->createStub(ConfigService::class);
 		$configService->method('generateId')->willReturn(self::GENERATED_ID);
 		$configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args = []): string => self::SOCIAL_URL . ($args['path'] ?? $route)
 		);
@@ -78,35 +81,35 @@ class PostServiceQuoteTest extends TestCase {
 			$this->activityService,
 			$this->cacheActorService,
 			$configService,
-			$this->createMock(CurlService::class),
-			$this->createMock(LinkPreviewService::class),
-			$this->createMock(EmojiService::class),
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(CurlService::class),
+			$this->createStub(LinkPreviewService::class),
+			$this->createStub(EmojiService::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
-			$this->createMock(PlaceService::class),
-			$this->createMock(ReactionSummaryService::class),
-			$this->createMock(MediaTagsRequest::class),
-			$this->createMock(AccountService::class)
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
+			$this->createStub(AccountService::class)
 		);
 
-		$l10nFactory = $this->createMock(IFactory::class);
+		$l10nFactory = $this->createStub(IFactory::class);
 		$l10nFactory->method('getUserLanguage')->willReturn('en');
 
 		$this->service = new PostService(
 			$streamService,
-			$this->createMock(AccountService::class),
+			$this->createStub(AccountService::class),
 			$this->activityService,
 			$l10nFactory,
-			$this->createMock(IUserManager::class),
-			$this->createMock(ModerationService::class),
-			$this->createMock(StatusRevisionService::class),
-			$this->createMock(\OCA\Social\Service\NotificationService::class),
+			$this->createStub(IUserManager::class),
+			$this->createStub(ModerationService::class),
+			$this->createStub(StatusRevisionService::class),
+			$this->createStub(\OCA\Social\Service\NotificationService::class),
 			new \OCA\Social\Service\LinkifyService(),
-			$this->createMock(\OCA\Social\Service\ChannelService::class),
-			$this->createMock(\OCA\Social\Service\ConfigService::class),
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->createStub(\OCA\Social\Service\ChannelService::class),
+			$this->createStub(\OCA\Social\Service\ConfigService::class),
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
-			$this->createMock(\OCA\Social\Service\InterestService::class),
+			$this->createStub(\OCA\Social\Service\InterestService::class),
 		);
 	}
 

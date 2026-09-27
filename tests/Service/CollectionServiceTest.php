@@ -19,26 +19,29 @@ use OCA\Social\Model\Client\Collection;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CollectionService;
 use OCA\Social\Service\FollowService;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class CollectionServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example.org/users/alice';
 	private const BOB = 'https://cloud.example.org/users/bob';
 
 	private CollectionsRequest|MockObject $collectionsRequest;
-	private StreamRequest|MockObject $streamRequest;
-	private FollowService|MockObject $followService;
+	private StreamRequest|Stub $streamRequest;
+	private FollowService|Stub $followService;
 	private CollectionService $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 		$this->collectionsRequest = $this->createMock(CollectionsRequest::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->followService = $this->createMock(FollowService::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->followService = $this->createStub(FollowService::class);
 		$this->service = new CollectionService(
 			$this->collectionsRequest, $this->streamRequest, $this->followService,
-			$this->createMock(CacheActorService::class)
+			$this->createStub(CacheActorService::class)
 		);
 	}
 

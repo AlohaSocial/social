@@ -20,7 +20,9 @@ use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\IURLGenerator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -31,27 +33,28 @@ use Psr\Log\NullLogger;
  * file and then serving the answer to everybody, so what it will accept, what
  * it will not, and how often it asks are the things worth pinning.
  */
+#[AllowMockObjectsWithoutExpectations]
 class GifPackServiceTest extends TestCase {
 	private ISimpleFolder&MockObject $folder;
 	private IClient&MockObject $client;
-	private ConfigService&MockObject $config;
+	private ConfigService&Stub $config;
 	private GifPackService $service;
 
 	protected function setUp(): void {
 		$this->folder = $this->createMock(ISimpleFolder::class);
-		$appData = $this->createMock(IAppData::class);
+		$appData = $this->createStub(IAppData::class);
 		$appData->method('getFolder')->willReturn($this->folder);
 
 		$this->client = $this->createMock(IClient::class);
-		$clientService = $this->createMock(IClientService::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
 
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			static fn (string $route, array $args): string => 'https://cloud.example/gif/' . $args['slug']
 		);
 
-		$this->config = $this->createMock(ConfigService::class);
+		$this->config = $this->createStub(ConfigService::class);
 		$this->config->method('getAppValueBool')->willReturn(true);
 
 		$this->service = new GifPackService(
@@ -150,7 +153,7 @@ class GifPackServiceTest extends TestCase {
 
 	/** A picture this instance already has is read, not asked for again. */
 	public function testACachedPictureIsNotFetched(): void {
-		$file = $this->createMock(ISimpleFile::class);
+		$file = $this->createStub(ISimpleFile::class);
 		$this->folder->method('getFile')->with('1f600.webp')->willReturn($file);
 		$this->client->expects($this->never())->method('get');
 
@@ -165,7 +168,7 @@ class GifPackServiceTest extends TestCase {
 			->with('https://fonts.gstatic.com/s/e/notoemoji/latest/1f600/512.webp')
 			->willReturn($this->answering(200, $webp));
 
-		$stored = $this->createMock(ISimpleFile::class);
+		$stored = $this->createStub(ISimpleFile::class);
 		$this->folder->expects($this->once())
 			->method('newFile')
 			->with('1f600.webp', $webp)
@@ -226,17 +229,17 @@ class GifPackServiceTest extends TestCase {
 	}
 
 	private function serviceWithPackOff(): GifPackService {
-		$appData = $this->createMock(IAppData::class);
+		$appData = $this->createStub(IAppData::class);
 		$appData->method('getFolder')->willReturn($this->folder);
-		$clientService = $this->createMock(IClientService::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
-		$config = $this->createMock(ConfigService::class);
+		$config = $this->createStub(ConfigService::class);
 		$config->method('getAppValueBool')->willReturn(false);
 
 		return new GifPackService(
 			$appData,
 			$clientService,
-			$this->createMock(IURLGenerator::class),
+			$this->createStub(IURLGenerator::class),
 			$config,
 			new NullLogger()
 		);

@@ -206,7 +206,7 @@ class ClientCredentialStorageTest extends TestCase {
 		// upgraded, so clearing it is what makes this a test of the repair
 		// rather than of the marker
 		Server::get(ConfigService::class)->setAppValue('migration_client_secrets_hashed', '0');
-		Server::get(HashClientSecrets::class)->run($this->createMock(IOutput::class));
+		Server::get(HashClientSecrets::class)->run($this->createStub(IOutput::class));
 
 		$this->assertStringStartsWith(
 			'sha256:', $this->authRow('legacy-user')['token'], 'the repair hashed the legacy token'

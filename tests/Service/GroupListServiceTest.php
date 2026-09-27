@@ -20,19 +20,21 @@ use OCP\IGroup;
 use OCP\IGroupManager;
 use OCP\IUser;
 use OCP\IUserManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class GroupListServiceTest extends TestCase {
 	private const CLOUD = 'https://cloud.example/apps/social/@';
 
-	private IGroupManager|MockObject $groupManager;
-	private SectionsService|MockObject $sectionsService;
+	private IGroupManager|Stub $groupManager;
+	private SectionsService|Stub $sectionsService;
 	/** Group ids the administrator has *not* chosen to become lists. */
 	private array $notChosen = [];
-	private IUserManager|MockObject $userManager;
-	private ListsRequest|MockObject $listsRequest;
+	private IUserManager|Stub $userManager;
+	private ListsRequest|Stub $listsRequest;
 	private GroupListService $service;
 
 	/** @var array<string, string[]> group id => user ids */
@@ -49,7 +51,7 @@ class GroupListServiceTest extends TestCase {
 	private int $nextId = 1;
 
 	protected function setUp(): void {
-		$this->groupManager = $this->createMock(IGroupManager::class);
+		$this->groupManager = $this->createStub(IGroupManager::class);
 		$this->groupManager->method('get')->willReturnCallback(fn (string $gid): ?IGroup => isset($this->groups[$gid]) ? $this->group($gid) : null);
 		$this->groupManager->method('getUserGroups')->willReturnCallback(function (IUser $user): array {
 			$groups = [];
@@ -61,10 +63,10 @@ class GroupListServiceTest extends TestCase {
 			return $groups;
 		});
 
-		$this->userManager = $this->createMock(IUserManager::class);
+		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturnCallback(fn (string $uid): ?IUser => $this->user($uid));
 
-		$actorsRequest = $this->createMock(ActorsRequest::class);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
 		$actorsRequest->method('getFromUserId')->willReturnCallback(function (string $uid): Person {
 			if (!in_array($uid, $this->withActor, true)) {
 				throw new ActorDoesNotExistException();
@@ -75,7 +77,7 @@ class GroupListServiceTest extends TestCase {
 			return $person;
 		});
 
-		$this->listsRequest = $this->createMock(ListsRequest::class);
+		$this->listsRequest = $this->createStub(ListsRequest::class);
 		$this->listsRequest->method('getByActor')->willReturnCallback(fn (string $actorId): array => array_values(array_filter(
 			$this->lists, static fn (MastodonList $l): bool => $l->getOwnerId() === $actorId
 		)));
@@ -122,7 +124,7 @@ class GroupListServiceTest extends TestCase {
 
 		// every group this test has is one an administrator chose, unless a
 		// test says otherwise: what the allow-list does is its own test below
-		$this->sectionsService = $this->createMock(SectionsService::class);
+		$this->sectionsService = $this->createStub(SectionsService::class);
 		$this->sectionsService->method('groupHasList')
 			->willReturnCallback(fn (string $gid): bool => !in_array($gid, $this->notChosen, true));
 

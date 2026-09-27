@@ -20,10 +20,13 @@ use OCA\Social\Service\ReportForwardService;
 use OCA\Social\Service\ReportService;
 use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class ReportServiceTest extends TestCase {
 	private const ALICE = 'https://cloud.example/apps/social/@alice';
 	private const BOB = 'https://cloud.example/apps/social/@bob';
@@ -31,7 +34,7 @@ class ReportServiceTest extends TestCase {
 
 	private ReportsRequest|MockObject $reportsRequest;
 	private CacheActorService|MockObject $cacheActorService;
-	private ModeratorService|MockObject $moderatorService;
+	private ModeratorService|Stub $moderatorService;
 	private INotificationManager|MockObject $notificationManager;
 	private ReportForwardService|MockObject $reportForwardService;
 	private ReportService $service;
@@ -39,7 +42,7 @@ class ReportServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->reportsRequest = $this->createMock(ReportsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
-		$this->moderatorService = $this->createMock(ModeratorService::class);
+		$this->moderatorService = $this->createStub(ModeratorService::class);
 		$this->notificationManager = $this->createMock(INotificationManager::class);
 		$this->reportForwardService = $this->createMock(ReportForwardService::class);
 

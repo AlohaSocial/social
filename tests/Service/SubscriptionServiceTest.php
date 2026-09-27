@@ -18,17 +18,20 @@ use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IPromise;
 use OCP\Http\Client\IResponse;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
+#[AllowMockObjectsWithoutExpectations]
 class SubscriptionServiceTest extends TestCase {
 	private const FEED = '<?xml version="1.0"?><rss version="2.0"><channel><title>Blog</title>'
 		. '<link>https://blog.example/</link><item><guid>1</guid><title>One</title>'
 		. '<link>https://blog.example/1</link></item></channel></rss>';
 
 	private FeedsRequest|MockObject $feedsRequest;
-	private FeedDiscoveryService|MockObject $discovery;
+	private FeedDiscoveryService|Stub $discovery;
 	private IClient|MockObject $client;
 	private SubscriptionService $service;
 	/** @var array<array<string, mixed>> the options of every request made */
@@ -36,9 +39,9 @@ class SubscriptionServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->feedsRequest = $this->createMock(FeedsRequest::class);
-		$this->discovery = $this->createMock(FeedDiscoveryService::class);
+		$this->discovery = $this->createStub(FeedDiscoveryService::class);
 		$this->client = $this->createMock(IClient::class);
-		$clientService = $this->createMock(IClientService::class);
+		$clientService = $this->createStub(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->client);
 
 		$this->service = new SubscriptionService(
@@ -294,9 +297,9 @@ class SubscriptionServiceTest extends TestCase {
 
 	/** The pass goes on to the next batch while it has time, not after twenty. */
 	public function testThePassKeepsTakingBatchesUntilNothingIsDue(): void {
-		$response = $this->createMock(IResponse::class);
+		$response = $this->createStub(IResponse::class);
 		$response->method('getStatusCode')->willReturn(304);
-		$promise = $this->createMock(IPromise::class);
+		$promise = $this->createStub(IPromise::class);
 		$promise->method('wait')->willReturn($response);
 		$this->client->method('getAsync')->willReturn($promise);
 
@@ -325,7 +328,7 @@ class SubscriptionServiceTest extends TestCase {
 	 * recorded — is not read again: the pass ends instead of spinning.
 	 */
 	public function testAFeedIsReadOncePerPass(): void {
-		$promise = $this->createMock(IPromise::class);
+		$promise = $this->createStub(IPromise::class);
 		$promise->method('wait')->willThrowException(new \RuntimeException('down'));
 		$this->client->expects($this->once())->method('getAsync')->willReturn($promise);
 		$this->feedsRequest->method('due')->willReturn($this->feeds(1, 1));

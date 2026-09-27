@@ -28,7 +28,8 @@ use OCP\IUser;
 use OCP\IUserSession;
 use OCP\L10N\IFactory;
 use OCP\Settings\IDelegatedSettings;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -41,16 +42,17 @@ use PHPUnit\Framework\TestCase;
  * about is that payload: a key the components read but nobody provides is a
  * section that draws nothing and says nothing about why.
  */
+#[AllowMockObjectsWithoutExpectations]
 class AdminSettingsTest extends TestCase {
-	private FederationHealthService|MockObject $federationHealthService;
-	private ModerationService|MockObject $moderationService;
-	private PostReviewService|MockObject $postReviewService;
-	private StreamRequest|MockObject $streamRequest;
-	private MediaUsageService|MockObject $mediaUsageService;
-	private ReportService|MockObject $reportService;
-	private ServerSettingsService|MockObject $serverSettingsService;
+	private FederationHealthService|Stub $federationHealthService;
+	private ModerationService|Stub $moderationService;
+	private PostReviewService|Stub $postReviewService;
+	private StreamRequest|Stub $streamRequest;
+	private MediaUsageService|Stub $mediaUsageService;
+	private ReportService|Stub $reportService;
+	private ServerSettingsService|Stub $serverSettingsService;
 	private $sectionsService;
-	private IInitialState|MockObject $initialState;
+	private IInitialState|Stub $initialState;
 	private AdminSettings $settings;
 
 	/** Translates nothing, which is what a test needs of it. */
@@ -64,17 +66,17 @@ class AdminSettingsTest extends TestCase {
 	protected function setUp(): void {
 		// getForm() registers the page's scripts, which resolve the l10n
 		// factory off the container rather than taking it as a dependency
-		\OC::$server->register(IFactory::class, $this->createMock(IFactory::class));
+		\OC::$server->register(IFactory::class, $this->createStub(IFactory::class));
 
-		$this->reportService = $this->createMock(ReportService::class);
-		$this->federationHealthService = $this->createMock(FederationHealthService::class);
-		$this->moderationService = $this->createMock(ModerationService::class);
-		$this->initialState = $this->createMock(IInitialState::class);
+		$this->reportService = $this->createStub(ReportService::class);
+		$this->federationHealthService = $this->createStub(FederationHealthService::class);
+		$this->moderationService = $this->createStub(ModerationService::class);
+		$this->initialState = $this->createStub(IInitialState::class);
 
-		$this->serverSettingsService = $this->createMock(ServerSettingsService::class);
+		$this->serverSettingsService = $this->createStub(ServerSettingsService::class);
 		$this->serverSettingsService->method('current')->willReturn($this->serverSettings());
 
-		$this->sectionsService = $this->createMock(\OCA\Social\Service\SectionsService::class);
+		$this->sectionsService = $this->createStub(\OCA\Social\Service\SectionsService::class);
 		$this->sectionsService->method('current')->willReturn([
 			'stories' => true,
 			'section_photos' => true,
@@ -97,42 +99,42 @@ class AdminSettingsTest extends TestCase {
 	 * @param bool $administrator whether the viewer administers the server
 	 */
 	private function settingsFor(bool $administrator): AdminSettings {
-		$user = $this->createMock(IUser::class);
+		$user = $this->createStub(IUser::class);
 		$user->method('getUID')->willReturn('admin');
-		$userSession = $this->createMock(IUserSession::class);
+		$userSession = $this->createStub(IUserSession::class);
 		$userSession->method('getUser')->willReturn($user);
 
-		$groupManager = $this->createMock(IGroupManager::class);
+		$groupManager = $this->createStub(IGroupManager::class);
 		$groupManager->method('isAdmin')->willReturn($administrator);
 		// the picker is sent every group there is; a mock that was never told
 		// what to answer gives null, and the page then walks over it
 		$groupManager->method('search')->willReturn([]);
 
-		$this->postReviewService = $this->createMock(PostReviewService::class);
-		$this->streamRequest = $this->createMock(StreamRequest::class);
-		$this->mediaUsageService = $this->createMock(MediaUsageService::class);
+		$this->postReviewService = $this->createStub(PostReviewService::class);
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->mediaUsageService = $this->createStub(MediaUsageService::class);
 		$this->streamRequest->method('localActivitySince')->willReturn(['posts' => 0, 'authors' => 0]);
 
-		$fediverseService = $this->createMock(FediverseService::class);
+		$fediverseService = $this->createStub(FediverseService::class);
 		$fediverseService->method('getAccessType')->willReturn('all_but');
 		$fediverseService->method('getListedAddresses')->willReturn(['noisy.example']);
 
 		return new AdminSettings(
 			$this->reportService,
 			$fediverseService,
-			$this->createMock(ConfigService::class),
+			$this->createStub(ConfigService::class),
 			$this->moderationService,
 			$this->postReviewService,
 			$this->streamRequest,
 			$this->mediaUsageService,
-			$this->createMock(\OCA\Social\Service\VideoQuotaService::class),
-			$this->createMock(\OCA\Social\Service\SensitiveMediaService::class),
+			$this->createStub(\OCA\Social\Service\VideoQuotaService::class),
+			$this->createStub(\OCA\Social\Service\SensitiveMediaService::class),
 			$this->federationHealthService,
-			$this->createMock(\OCA\Social\Service\BackgroundHealthService::class),
+			$this->createStub(\OCA\Social\Service\BackgroundHealthService::class),
 			$this->l10n(),
 			$this->serverSettingsService,
 			$this->sectionsService,
-			$this->createMock(\OCA\Social\Service\InterestService::class),
+			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$userSession,
 			$groupManager,
 			$this->initialState,
@@ -218,7 +220,7 @@ class AdminSettingsTest extends TestCase {
 	 * that method would only prove the test agrees with itself.
 	 */
 	private function report(string $actorId = 'https://spam.example/users/spammer'): Report {
-		$target = $this->createMock(\OCA\Social\Model\ActivityPub\Actor\Person::class);
+		$target = $this->createStub(\OCA\Social\Model\ActivityPub\Actor\Person::class);
 		$target->method('getId')->willReturn($actorId);
 		$target->method('getAccount')->willReturn('spammer@spam.example');
 
