@@ -29,7 +29,7 @@ class InstancesRequest extends InstancesRequestBuilder {
 	public function save(Instance $instance) {
 		$qb = $this->getInstanceInsertSql();
 		$qb->setValue('uri', $qb->createNamedParameter($instance->getUri()))
-			->setValue('local', $qb->createNamedParameter($instance->isLocal(), IQueryBuilder::PARAM_BOOL))
+			->setValue('local', $qb->createNamedParameter($instance->isLocal() ? 1 : 0, IQueryBuilder::PARAM_INT))
 			->setValue('title', $qb->createNamedParameter($instance->getTitle()))
 			->setValue('version', $qb->createNamedParameter($instance->getVersion()))
 			->setValue('short_description', $qb->createNamedParameter($instance->getShortDescription()))
