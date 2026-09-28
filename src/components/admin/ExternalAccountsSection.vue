@@ -13,6 +13,14 @@
 				type="search"
 				:label="t('social', 'Search by username or name')" />
 			<label class="external-accounts__filter">
+				{{ t('social', 'Sort by') }}
+				<select v-model="sort">
+					<option value="handle">{{ t('social', 'Username') }}</option>
+					<option value="newest">{{ t('social', 'Newest first') }}</option>
+					<option value="oldest">{{ t('social', 'Oldest first') }}</option>
+				</select>
+			</label>
+			<label class="external-accounts__filter">
 				{{ t('social', 'Account status') }}
 				<select v-model="status">
 					<option value="any">{{ t('social', 'Any status') }}</option>
@@ -184,6 +192,7 @@ export default {
 		return {
 			users: this.external.users ?? [],
 			query: '',
+			sort: 'handle',
 			status: 'any',
 			source: 'any',
 			lastLogin: 'any',
@@ -269,6 +278,7 @@ export default {
 					params: {
 						search: this.query.trim(),
 						offset: more ? this.nextOffset : 0,
+						sort: this.sort,
 						status: this.status,
 						source: this.source,
 						lastLogin: this.lastLogin,

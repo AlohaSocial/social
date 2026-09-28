@@ -523,9 +523,9 @@ for a week, at most ten open at a time.
 **External accounts.** Every external account with its email and verification
 status, enabled or disabled status, registration source, when it registered
 and last logged in, media usage, and the version and time of any accepted
-registration notice. Search matches the username and display name. Filters
-cover account status, registration source and date, login activity, minimum
-media usage and notice acceptance. The list is paged and scans at most a
+registration notice. Search matches the username and display name. Sort by username or registration
+date, newest or oldest. Filters cover account status, registration source and
+date, login activity, minimum media usage and notice acceptance. The list is paged and scans at most a
 bounded number of candidates per request.
 *Disable* and
 *Enable* are Nextcloud's own. *Promote* makes one an ordinary account of this

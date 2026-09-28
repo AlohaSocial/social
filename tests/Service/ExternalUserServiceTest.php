@@ -293,14 +293,14 @@ class ExternalUserServiceTest extends TestCase {
 		$this->userManager->method('get')->willReturnCallback(static fn (string $uid): ?IUser => $users[$uid] ?? null);
 		$this->usersRequest->expects($this->once())->method('search')->with('car', 100, 0, [
 			'status' => 'enabled', 'source' => 'open', 'lastLogin' => 'seen', 'minimumMediaBytes' => 1024,
-			'noticeAcceptance' => 'any', 'registeredAfter' => 5, 'registeredBefore' => 40,
+			'noticeAcceptance' => 'any', 'registeredAfter' => 5, 'registeredBefore' => 40, 'sort' => 'newest',
 		])->willReturn($rows);
 		$this->cacheDocumentsRequest->method('localBytesByAccount')->willReturn(['alice' => 2048, 'bob' => 4096, 'carol' => 2048]);
 		$this->config->method('getUserValue')->willReturnCallback(static fn (string $uid, string $app, string $key, string $default = ''): string => $default);
 
 		$page = $this->service()->listPage('car', 50, 0, [
 			'status' => 'enabled', 'source' => 'open', 'lastLogin' => 'seen', 'minimumMediaBytes' => 1024,
-			'registeredAfter' => 5, 'registeredBefore' => 40,
+			'registeredAfter' => 5, 'registeredBefore' => 40, 'sort' => 'newest',
 		]);
 
 		$this->assertSame(['carol'], array_column($page['users'], 'uid'));

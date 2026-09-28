@@ -94,9 +94,14 @@ class ExternalUsersRequest {
 	 */
 	public function search(string $search = '', ?int $limit = null, ?int $offset = null, array $filters = []): array {
 		$qb = $this->connection->getQueryBuilder();
-		$qb->select('*')
-			->from(self::TABLE)
-			->orderBy('uid_lower', 'ASC');
+		$qb->select('*')->from(self::TABLE);
+		$sort = $filters['sort'] ?? 'handle';
+		if ($sort === 'newest' || $sort === 'oldest') {
+			$qb->orderBy('creation', $sort === 'newest' ? 'DESC' : 'ASC')
+				->addOrderBy('uid_lower', 'ASC');
+		} else {
+			$qb->orderBy('uid_lower', 'ASC');
+		}
 		if ($search !== '') {
 			$like = '%' . $this->connection->escapeLikeParameter(mb_strtolower($search)) . '%';
 			$qb->where($qb->expr()->orX(

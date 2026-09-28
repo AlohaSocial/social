@@ -516,7 +516,7 @@ class ExternalUserService {
 	 * than one batch, but each request has a fixed work budget and carries its
 	 * candidate cursor forward to the next call.
 	 *
-	 * @param array{status?: string, source?: string, lastLogin?: string, minimumMediaBytes?: int, noticeAcceptance?: string, registeredAfter?: int, registeredBefore?: int} $filters
+	 * @param array{status?: string, source?: string, lastLogin?: string, minimumMediaBytes?: int, noticeAcceptance?: string, registeredAfter?: int, registeredBefore?: int, sort?: string} $filters
 	 * @return array{users: list<array<string, mixed>>, nextOffset: int, hasMore: bool}
 	 */
 	public function listPage(string $search = '', int $limit = 50, int $offset = 0, array $filters = []): array {
@@ -525,6 +525,7 @@ class ExternalUserService {
 		$filters['source'] = in_array($filters['source'] ?? 'any', ['any', 'open', 'approval', 'invite'], true) ? ($filters['source'] ?? 'any') : 'any';
 		$filters['lastLogin'] = in_array($filters['lastLogin'] ?? 'any', ['any', 'never', 'seen'], true) ? ($filters['lastLogin'] ?? 'any') : 'any';
 		$filters['noticeAcceptance'] = in_array($filters['noticeAcceptance'] ?? 'any', ['any', 'accepted', 'missing'], true) ? ($filters['noticeAcceptance'] ?? 'any') : 'any';
+		$filters['sort'] = in_array($filters['sort'] ?? 'handle', ['handle', 'newest', 'oldest'], true) ? ($filters['sort'] ?? 'handle') : 'handle';
 		$filters['minimumMediaBytes'] = max(0, (int)($filters['minimumMediaBytes'] ?? 0));
 		$filters['registeredAfter'] = max(0, (int)($filters['registeredAfter'] ?? 0));
 		$filters['registeredBefore'] = max(0, (int)($filters['registeredBefore'] ?? 0));

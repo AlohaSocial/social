@@ -107,6 +107,7 @@ class ExternalUsersController extends Controller {
 		int $offset = 0,
 		string $status = 'any',
 		string $source = 'any',
+		string $sort = 'handle',
 		string $lastLogin = 'any',
 		int $minimumMediaBytes = 0,
 		string $noticeAcceptance = 'any',
@@ -116,6 +117,7 @@ class ExternalUsersController extends Controller {
 		return new DataResponse($this->externalUserService->listPage($search, 50, $offset, [
 			'status' => $status,
 			'source' => $source,
+			'sort' => $sort,
 			'lastLogin' => $lastLogin,
 			'minimumMediaBytes' => $minimumMediaBytes,
 			'noticeAcceptance' => $noticeAcceptance,
