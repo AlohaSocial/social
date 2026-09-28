@@ -30,6 +30,7 @@ use OCP\IUserSession;
 use OCP\Settings\IIconSection;
 use OCP\Settings\IManager as ISettingsManager;
 use OCP\Settings\ISettings;
+use OCP\UserInterface;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -110,6 +111,17 @@ class ExternalScopeMiddlewareTest extends TestCase {
 	public function testInternalUsersAreNeverStopped(): void {
 		$this->middleware($this->user(false))->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
 		$this->middleware(null)->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testGuestsAppUsersAreNotRestrictedBySocialMiddleware(): void {
+		$guestBackend = $this->createStub(UserInterface::class);
+		$guestBackend->method('getBackendName')->willReturn('Guests');
+		$guest = $this->createStub(IUser::class);
+		$guest->method('getBackend')->willReturn($guestBackend);
+
+		$this->middleware($guest)->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
 
 		$this->addToAssertionCount(1);
 	}
