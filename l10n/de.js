@@ -795,6 +795,7 @@ OC.L10N.register(
     "username" : "Benutzername",
     "your email address" : "Deine E-Mail-Adresse",
     "_%n external account_::_%n external accounts_" : ["%n externes Konto","%n externe Konten"],
+    "Show the introduction again" : "Einführung erneut anzeigen",
     "_%n entry_::_%n entries_" : ["%n Eintrag","%n Einträge"]
 },
 "nplurals=2; plural=(n != 1);");
