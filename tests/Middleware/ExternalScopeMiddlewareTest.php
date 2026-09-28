@@ -19,6 +19,8 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\OCSController;
+use OCP\Files\IRootFolder;
+use OCP\Files\IUserFolder;
 use OCP\IInitialStateService;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -28,6 +30,7 @@ use OCP\IUserSession;
 use OCP\Settings\IIconSection;
 use OCP\Settings\IManager as ISettingsManager;
 use OCP\Settings\ISettings;
+use OCP\User\Backend\ABackend;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -40,11 +43,12 @@ class ExternalScopeMiddlewareTest extends TestCase {
 	private function user(bool $external): IUser {
 		$user = $this->createStub(IUser::class);
 		$user->method('getBackend')->willReturn($external ? $this->createStub(ExternalUserBackend::class) : null);
+		$user->method('getUID')->willReturn('alice');
 
 		return $user;
 	}
 
-	private function middleware(?IUser $viewer, array $users = [], ?ISettingsManager $settings = null): ExternalScopeMiddleware {
+	private function middleware(?IUser $viewer, array $users = [], ?ISettingsManager $settings = null, ?IRootFolder $rootFolder = null): ExternalScopeMiddleware {
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturn($viewer);
 		$userManager = $this->createStub(IUserManager::class);
@@ -63,6 +67,12 @@ class ExternalScopeMiddlewareTest extends TestCase {
 				$this->provided[$app][$key] = $data;
 			}
 		);
+		if ($rootFolder === null) {
+			$folder = $this->createStub(IUserFolder::class);
+			$folder->method('getId')->willReturn(1);
+			$rootFolder = $this->createStub(IRootFolder::class);
+			$rootFolder->method('getUserFolder')->willReturn($folder);
+		}
 
 		return new ExternalScopeMiddleware(
 			$session,
@@ -71,6 +81,7 @@ class ExternalScopeMiddlewareTest extends TestCase {
 			$url,
 			$settings ?? $this->createStub(ISettingsManager::class),
 			$initialState,
+			$rootFolder,
 			new NullLogger(),
 		);
 	}
@@ -100,6 +111,17 @@ class ExternalScopeMiddlewareTest extends TestCase {
 	public function testInternalUsersAreNeverStopped(): void {
 		$this->middleware($this->user(false))->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
 		$this->middleware(null)->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
+
+		$this->addToAssertionCount(1);
+	}
+
+	public function testGuestsAppUsersAreNotRestrictedBySocialMiddleware(): void {
+		$guestBackend = $this->createStub(ABackend::class);
+		$guestBackend->method('getBackendName')->willReturn('Guests');
+		$guest = $this->createStub(IUser::class);
+		$guest->method('getBackend')->willReturn($guestBackend);
+
+		$this->middleware($guest)->beforeController($this->controller('OCA\\Files\\Controller\\ViewController'), 'index');
 
 		$this->addToAssertionCount(1);
 	}
@@ -171,6 +193,18 @@ class ExternalScopeMiddlewareTest extends TestCase {
 		$this->assertSame('settings.PersonalSettings.index?section=security', $refusal->getRedirect());
 	}
 
+	public function testPersonalSettingsCreateTheExternalUsersEmptyHomeBeforeCoreReadsItsQuota(): void {
+		$this->params = ['section' => 'personal-info'];
+		$folder = $this->createMock(IUserFolder::class);
+		$folder->expects($this->once())->method('getId')->willReturn(1);
+		$rootFolder = $this->createMock(IRootFolder::class);
+		$rootFolder->expects($this->once())->method('getUserFolder')->with('alice')->willReturn($folder);
+
+		$this->middleware($this->user(true), [], null, $rootFolder)->beforeController(
+			$this->controller('OCA\\Settings\\Controller\\PersonalSettingsController'), 'index'
+		);
+	}
+
 	public function testTheSettingsNavigationListsOnlyTheAllowedSections(): void {
 		$sections = [];
 		foreach (['personal-info' => 'Personal info', 'sharing' => 'Sharing', 'security' => 'Security', 'theming' => 'Appearance'] as $id => $name) {
@@ -206,6 +240,21 @@ class ExternalScopeMiddlewareTest extends TestCase {
 		);
 
 		$this->assertSame([], $this->provided);
+	}
+
+	public function testAThrowingOptionalSettingsProviderDoesNotBreakExternalSettings(): void {
+		$section = $this->createStub(IIconSection::class);
+		$section->method('getID')->willReturn('security');
+		$section->method('getName')->willThrowException(new \RuntimeException('optional provider failed'));
+		$settings = $this->createStub(ISettingsManager::class);
+		$settings->method('getPersonalSections')->willReturn([[ $section ]]);
+		$settings->method('getPersonalSettings')->willReturn([1 => [$this->createStub(ISettings::class)]]);
+
+		$this->middleware($this->user(true), [], $settings)->afterController(
+			$this->controller('OCA\\Settings\\Controller\\PersonalSettingsController'), 'index', new TemplateResponse('settings', 'settings/frame')
+		);
+
+		$this->assertSame(['personal' => [], 'admin' => []], $this->provided['settings']['sections']);
 	}
 
 	public function testTheCoreProfileOfAnExternalUserIsTheirSocialProfileForEverybody(): void {

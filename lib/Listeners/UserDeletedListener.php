@@ -12,8 +12,10 @@ namespace OCA\Social\Listeners;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\ConfigService;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\IConfig;
 use OCP\User\Events\UserDeletedEvent;
 use Psr\Log\LoggerInterface;
 
@@ -32,6 +34,7 @@ class UserDeletedListener implements IEventListener {
 	public function __construct(
 		private ActorsRequest $actorsRequest,
 		private AccountService $accountService,
+		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -43,6 +46,17 @@ class UserDeletedListener implements IEventListener {
 		}
 
 		$userId = $event->getUser()->getUID();
+		try {
+			$this->config->deleteUserValue($userId, 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_VERSION);
+			$this->config->deleteUserValue($userId, 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED);
+			$this->config->deleteUserValue($userId, 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT);
+		} catch (\Throwable $e) {
+			// Account deletion must still reach the Social cleanup if the audit
+			// values cannot be removed independently.
+			$this->logger->warning('could not clear the registration notice record for a deleted user', [
+				'userId' => $userId, 'exception' => $e,
+			]);
+		}
 
 		try {
 			// the handle is the actor's own, which is not always the user id

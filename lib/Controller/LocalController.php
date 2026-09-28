@@ -53,6 +53,7 @@ use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
 use OCP\IUserManager;
+use OCP\IUserSession;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
@@ -87,6 +88,7 @@ class LocalController extends Controller {
 		private CacheDocumentService $cacheDocumentService,
 		private BannerService $bannerService,
 		private IUserManager $userManager,
+		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -486,29 +488,59 @@ class LocalController extends Controller {
 	#[UserRateLimit(limit: 3, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/account/delete')]
 	public function accountDelete(string $confirm = ''): DataResponse {
+		$sessionEnded = false;
+		$externalDeletion = false;
 		try {
 			if ($this->userId === null) {
 				throw new AccountDoesNotExistException('User not logged in');
 			}
 
-			$this->accountService->deleteOwnAccount($this->userId, $confirm);
-
-			// a self-registered external user has nothing on this server but
-			// the Social account, so their Nextcloud account goes with it
 			$user = $this->userManager->get($this->userId);
 			if (ExternalUserBackend::isExternal($user)) {
-				$user->delete();
+				$externalDeletion = true;
+				// Let Nextcloud own the deletion lifecycle. Its UserDeletedEvent
+				// listener removes and federates the Social actor once the hosting
+				// account has actually been removed. Deleting the actor first here
+				// made this path run Social cleanup twice.
+				$this->accountService->assertOwnAccountDeletionConfirmed($this->userId, $confirm);
+				$this->userSession->logout();
+				$sessionEnded = true;
+				if (!$user->delete()) {
+					throw new \RuntimeException('Nextcloud did not delete the external user');
+				}
 
 				return $this->success(['deleted' => true, 'userDeleted' => true]);
 			}
+
+			$this->accountService->deleteOwnAccount($this->userId, $confirm);
 
 			return $this->success(['deleted' => true]);
 		} catch (InvalidResourceException $e) {
 			// the message names the handle to type, which is the whole of the
 			// help there is
 			return new DataResponse(['status' => -1, 'error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		} catch (Exception $e) {
-			return $this->failFor($e);
+		} catch (\Throwable $e) {
+			// Core or app listeners can throw an Error as well as an Exception.
+			// If Core removed the user before a listener failed, finish the
+			// session and report completion instead of rendering an Internal
+			// Server Error after the account is already gone.
+			if ($externalDeletion && $this->userId !== null && $this->userManager->get($this->userId) === null) {
+				if (!$sessionEnded) {
+					$this->userSession->logout();
+				}
+
+				return $this->success(['deleted' => true, 'userDeleted' => true]);
+			}
+			if ($e instanceof Exception) {
+				return $this->failFor($e);
+			}
+
+			$this->logger->error('self-service account deletion failed', [
+				'userId' => $this->userId,
+				'exception' => $e,
+			]);
+
+			return new DataResponse(['status' => -1, 'error' => 'request failed'], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 	}
 

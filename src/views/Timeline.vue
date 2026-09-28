@@ -513,7 +513,18 @@ export default {
 			// `firstrun` from the server, or `?welcome=1`, which is what the
 			// setup screen reloads with once the account exists and what
 			// Settings links to for somebody who wants it again
-			return (this.settingsStore.getServerData.firstrun || this.$route.query?.welcome === '1') && !this.infoHidden
+			const replay = this.$route.query?.replay === '1'
+			const requested = this.settingsStore.getServerData.firstrun || this.$route.query?.welcome === '1'
+			let dismissedLocally = false
+			try {
+				dismissedLocally = window.localStorage.getItem(`social:introduction:${this.accountStore.currentAccountHandle}`) === 'dismissed'
+			} catch {
+				// Storage can be disabled by the browser; the server-side setting
+				// remains the source of truth in that case.
+			}
+
+			const dismissed = this.settingsStore.getServerData.introductionDismissed === true || dismissedLocally
+			return (replay || (requested && !dismissed)) && !this.infoHidden
 		},
 
 		/** @return {boolean} whether the first-post celebration is on screen */
@@ -595,10 +606,25 @@ export default {
 
 		hideInfo() {
 			this.infoHidden = true
-			// or reloading the page would bring it back
-			if (this.$route.query?.welcome !== undefined) {
+			// Keep the dismissal with the account, so it survives refreshes and
+			// signing in on another device. Settings can still explicitly reopen it.
+			try {
+				window.localStorage.setItem(`social:introduction:${this.accountStore.currentAccountHandle}`, 'dismissed')
+			} catch {
+				// Storage can be disabled by the browser; the server-side setting
+				// remains the source of truth in that case.
+			}
+			try {
+				axios.post(generateUrl('apps/social/api/v1/introduction/dismiss'))?.catch(() => {})
+			} catch {
+				// The local dismissal is enough for this browser session if the
+				// preference endpoint cannot be reached.
+			}
+			this.settingsStore.setServerDataEntry({ key: 'introductionDismissed', value: true })
+			if (this.$route.query?.welcome !== undefined || this.$route.query?.replay !== undefined) {
 				const query = { ...this.$route.query }
 				delete query.welcome
+				delete query.replay
 				this.$router.replace({ query })
 			}
 		},

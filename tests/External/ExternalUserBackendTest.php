@@ -15,6 +15,7 @@ use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IUser;
 use OCP\Security\Events\ValidatePasswordPolicyEvent;
 use OCP\Security\IHasher;
+use OCP\User\Backend\ABackend;
 use OCP\User\Backend\ICreateUserBackend;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -161,5 +162,14 @@ class ExternalUserBackendTest extends TestCase {
 		$this->assertTrue(ExternalUserBackend::isExternal($external));
 		$this->assertFalse(ExternalUserBackend::isExternal($local));
 		$this->assertFalse(ExternalUserBackend::isExternal(null));
+	}
+
+	public function testGuestsBackendIsNotTreatedAsSocialExternal(): void {
+		$guestBackend = $this->createMock(ABackend::class);
+		$guestBackend->method('getBackendName')->willReturn('Guests');
+		$guest = $this->createMock(IUser::class);
+		$guest->method('getBackend')->willReturn($guestBackend);
+
+		$this->assertFalse(ExternalUserBackend::isExternal($guest));
 	}
 }

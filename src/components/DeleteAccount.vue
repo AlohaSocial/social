@@ -68,7 +68,8 @@ import logger from '../services/logger.js'
 import { showError } from '../services/toast.js'
 
 /**
- * Deleting your own Social account, and keeping your Nextcloud one.
+ * Deleting your own Social account, and the hosting account when it exists
+ * only to provide Social.
  *
  * `occ social:account:delete` was the only way to do this, so somebody who
  * wanted their fediverse presence gone had to ask an administrator — which
@@ -136,7 +137,7 @@ export default {
 				if (response.data?.result?.userDeleted) {
 					// a self-registered external user: the whole account is
 					// gone with the Social one, and so is the session
-					window.location.assign(generateUrl('/login'))
+					window.location.assign(generateUrl('apps/social/account-deleted'))
 					return
 				}
 				// not a redirect and not a state change: what is left here is a

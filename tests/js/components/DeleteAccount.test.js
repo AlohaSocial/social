@@ -121,7 +121,7 @@ describe('deleting your own account', () => {
 			await buttonByText(wrapper, 'Delete it for good').trigger('click')
 			await flushPromises()
 
-			expect(assign).toHaveBeenCalledWith('/index.php/login')
+			expect(assign).toHaveBeenCalledWith('/index.php/apps/social/account-deleted')
 		} finally {
 			Object.defineProperty(window, 'location', { configurable: true, value: location })
 		}

@@ -41,6 +41,22 @@ class ExternalCollaboratorPluginTest extends TestCase {
 		$this->assertSame(['alice', 'carol'], $removed);
 	}
 
+	public function testGuestsAppUsersRemainAvailableAsShareRecipients(): void {
+		$backend = $this->createStub(ExternalUserBackend::class);
+		$backend->method('userExists')->willReturnCallback(static fn (string $uid): bool => $uid === 'social-only');
+
+		$entry = static fn (string $uid): array => ['label' => $uid, 'value' => ['shareType' => 0, 'shareWith' => $uid]];
+		$result = $this->createMock(ISearchResult::class);
+		$result->method('asArray')->willReturn([
+			'users' => [$entry('social-only'), $entry('guest-account')],
+			'exact' => ['users' => [], 'groups' => []],
+		]);
+		$result->expects($this->once())->method('removeCollaboratorResult')
+			->with($this->callback(static fn (SearchResultType $type): bool => $type->getLabel() === 'users'), 'social-only');
+
+		(new ExternalCollaboratorPlugin($backend))->search('guest', 10, 0, $result);
+	}
+
 	public function testNothingToRemoveTouchesNothing(): void {
 		$backend = $this->createStub(ExternalUserBackend::class);
 		$result = $this->createMock(ISearchResult::class);

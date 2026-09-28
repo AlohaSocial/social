@@ -51,6 +51,14 @@ jobs:
         with:
           path: apps/${{ env.APP_NAME }}
 
+      - name: Checkout the Guests app for the compatibility run
+        if: matrix.server-versions == 'stable35'
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          repository: nextcloud/guests
+          ref: v4.9.0
+          path: apps/guests
+
       - name: Set up php
         uses: shivammathur/setup-php@c541c155eee45413f5b09a52248675b1a2575231 # v2.31.1
         with:
@@ -60,6 +68,11 @@ jobs:
           ini-file: development
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Guests PHP dependencies
+        if: matrix.server-versions == 'stable35'
+        working-directory: apps/guests
+        run: composer i --no-dev
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/${{ env.APP_NAME }}
@@ -72,6 +85,14 @@ jobs:
           mkdir data
           ./occ maintenance:install --verbose --database=sqlite --database-name=nextcloud --admin-user admin --admin-pass admin
           ./occ app:enable --force ${{ env.APP_NAME }}
+          if [ "${{ matrix.server-versions }}" = "stable35" ]; then
+            ./occ app:enable --force guests
+            ./occ config:app:set guests usewhitelist --value yes --type boolean
+            # Start without Social allowed; the browser test verifies the real 403,
+            # then enables Social and verifies normal access for the Guests user.
+            ./occ config:app:set guests whitelist --value files
+            OC_PASS="$OC_PASS" ./occ guests:add admin guest@example.org --uid=guest --password-from-env --display-name "Guest account"
+          fi
           # a second account and a group, so the group list has somebody in it
           ./occ user:add --password-from-env --display-name "Bob" bob
           ./occ group:add design
@@ -131,6 +152,7 @@ jobs:
           E2E_USER: bob
           E2E_PASSWORD: Browser-Test-2026!
           E2E_GROUP: design
+          E2E_GUEST: ${{ matrix.server-versions == 'stable35' && 'guest' || '' }}
         run: npm run test:e2e
 
       - name: Keep the report when something failed

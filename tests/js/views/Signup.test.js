@@ -21,10 +21,14 @@ const OPEN = {
 	inviteToken: '',
 	approval: true,
 	verifyEmail: true,
+	twoFactorRequired: false,
 	minAge: 16,
 	rules: ['Be kind', 'No spam'],
 	privacyUrl: 'https://cloud.example/privacy',
 	legalUrl: '',
+	signupNotice: 'Instance registration notice',
+	signupNoticeRequired: false,
+	signupNoticeVersion: 'v1',
 	domain: 'cloud.example',
 	loginUrl: '/index.php/login',
 }
@@ -34,6 +38,10 @@ async function page(pageState) {
 	const { default: Signup } = await import('../../../src/views/Signup.vue')
 
 	return mount(Signup)
+}
+
+async function continueToForm(wrapper) {
+	await button(wrapper, 'Continue to registration').trigger('click')
 }
 
 function button(wrapper, text) {
@@ -55,6 +63,11 @@ describe('the registration page', () => {
 
 	it('shows the rules, the age to confirm and the address the handle becomes', async () => {
 		const wrapper = await page(OPEN)
+		expect(wrapper.text()).toContain('A Social account, connected to the fediverse')
+		expect(wrapper.text()).toContain('does not give you access to Files, Talk, WebDAV')
+		expect(wrapper.text()).toContain('finish the introduction, find people and any starter packs this server offers')
+		expect(wrapper.text()).not.toContain('This server requires two-factor authentication.')
+		await continueToForm(wrapper)
 		wrapper.vm.handle = '@Alice'
 		await wrapper.vm.$nextTick()
 
@@ -66,9 +79,15 @@ describe('the registration page', () => {
 		expect(wrapper.find('a[href="https://cloud.example/privacy"]').exists()).toBe(true)
 	})
 
+	it('explains the configured two-factor requirement before collecting details', async () => {
+		const wrapper = await page({ ...OPEN, twoFactorRequired: true })
+		expect(wrapper.text()).toContain('This server requires two-factor authentication.')
+	})
+
 	it('sends everything, the honeypot and the invitation included', async () => {
 		post.mockResolvedValue({ data: { state: 'verify', handle: 'alice' } })
 		const wrapper = await page({ ...OPEN, invited: true, inviteToken: 'tok' })
+		await continueToForm(wrapper)
 		Object.assign(wrapper.vm, { handle: 'alice', email: 'a@example.org', password: 'long enough', rules: true, age: true })
 		await wrapper.find('form').trigger('submit')
 		await flushPromises()
@@ -78,6 +97,8 @@ describe('the registration page', () => {
 			email: 'a@example.org',
 			password: 'long enough',
 			rules: true,
+			notice: false,
+			noticeVersion: 'v1',
 			age: true,
 			invite: 'tok',
 			website: '',
@@ -87,8 +108,24 @@ describe('the registration page', () => {
 		expect(wrapper.vm.password).toBe('')
 	})
 
+	it('requires and submits the configured notice acknowledgement', async () => {
+		post.mockResolvedValue({ data: { state: 'verify', handle: 'alice' } })
+		const wrapper = await page({ ...OPEN, signupNoticeRequired: true, signupNoticeVersion: 'notice-v2' })
+		await continueToForm(wrapper)
+		expect(wrapper.text()).toContain('I have read and accept this registration notice')
+		Object.assign(wrapper.vm, { handle: 'alice', email: 'a@example.org', password: 'long enough', rules: true, age: true, noticeAccepted: true })
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/signup', expect.objectContaining({
+			notice: true,
+			noticeVersion: 'notice-v2',
+		}))
+	})
+
 	it('keeps the honeypot out of sight and out of the tab order', async () => {
 		const wrapper = await page(OPEN)
+		await continueToForm(wrapper)
 		const trap = wrapper.find('input[name="website"]')
 
 		expect(trap.attributes('tabindex')).toBe('-1')
@@ -98,6 +135,7 @@ describe('the registration page', () => {
 	it('puts a refusal on the field it is about', async () => {
 		post.mockRejectedValue({ response: { status: 422, data: { message: 'This username is already taken.', field: 'handle' } } })
 		const wrapper = await page(OPEN)
+		await continueToForm(wrapper)
 		await wrapper.find('form').trigger('submit')
 		await flushPromises()
 

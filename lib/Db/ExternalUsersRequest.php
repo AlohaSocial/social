@@ -19,7 +19,7 @@ use OCP\IDBConnection;
  * on every request, before anybody is logged in, and needs nothing but the
  * connection. The table is still registered in `CoreRequestBuilder::$tables`.
  *
- * @psalm-type ExternalUserRow = array{uid: string, password: string, displayname: string, origin: string, creation: int}
+ * @psalm-type ExternalUserRow = array{uid: string, password: string, displayname: string, origin: string, creation: int, emailVerified: ?bool}
  */
 class ExternalUsersRequest {
 	private const TABLE = CoreRequestBuilder::TABLE_EXTERNAL_USERS;
@@ -48,7 +48,7 @@ class ExternalUsersRequest {
 		return ($row === false) ? null : self::row($row);
 	}
 
-	public function create(string $uid, string $passwordHash, string $displayName, string $origin, int $creation): void {
+	public function create(string $uid, string $passwordHash, string $displayName, string $origin, int $creation, bool $emailVerified = false): void {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->insert(self::TABLE)
 			->setValue('uid', $qb->createNamedParameter($uid))
@@ -56,7 +56,8 @@ class ExternalUsersRequest {
 			->setValue('password', $qb->createNamedParameter($passwordHash))
 			->setValue('displayname', $qb->createNamedParameter($displayName))
 			->setValue('origin', $qb->createNamedParameter($origin))
-			->setValue('creation', $qb->createNamedParameter($creation, IQueryBuilder::PARAM_INT));
+			->setValue('creation', $qb->createNamedParameter($creation, IQueryBuilder::PARAM_INT))
+			->setValue('email_verified', $qb->createNamedParameter($emailVerified ? 1 : 0, IQueryBuilder::PARAM_INT));
 		$qb->executeStatement();
 	}
 
@@ -91,17 +92,33 @@ class ExternalUsersRequest {
 	 *
 	 * @return list<ExternalUserRow>
 	 */
-	public function search(string $search = '', ?int $limit = null, ?int $offset = null): array {
+	public function search(string $search = '', ?int $limit = null, ?int $offset = null, array $filters = []): array {
 		$qb = $this->connection->getQueryBuilder();
-		$qb->select('*')
-			->from(self::TABLE)
-			->orderBy('uid_lower', 'ASC');
+		$qb->select('*')->from(self::TABLE);
+		$sort = $filters['sort'] ?? 'handle';
+		if ($sort === 'newest' || $sort === 'oldest') {
+			$qb->orderBy('creation', $sort === 'newest' ? 'DESC' : 'ASC')
+				->addOrderBy('uid_lower', 'ASC');
+		} else {
+			$qb->orderBy('uid_lower', 'ASC');
+		}
 		if ($search !== '') {
 			$like = '%' . $this->connection->escapeLikeParameter(mb_strtolower($search)) . '%';
 			$qb->where($qb->expr()->orX(
 				$qb->expr()->like('uid_lower', $qb->createNamedParameter($like)),
 				$qb->expr()->iLike('displayname', $qb->createNamedParameter($like)),
 			));
+		}
+		if (in_array($filters['source'] ?? 'any', ['open', 'approval'], true)) {
+			$qb->andWhere($qb->expr()->eq('origin', $qb->createNamedParameter($filters['source'])));
+		} elseif (($filters['source'] ?? 'any') === 'invite') {
+			$qb->andWhere($qb->expr()->like('origin', $qb->createNamedParameter('invite:%')));
+		}
+		if (($filters['registeredAfter'] ?? 0) > 0) {
+			$qb->andWhere($qb->expr()->gte('creation', $qb->createNamedParameter((int)$filters['registeredAfter'], IQueryBuilder::PARAM_INT)));
+		}
+		if (($filters['registeredBefore'] ?? 0) > 0) {
+			$qb->andWhere($qb->expr()->lte('creation', $qb->createNamedParameter((int)$filters['registeredBefore'], IQueryBuilder::PARAM_INT)));
 		}
 		if ($limit !== null && $limit > 0) {
 			$qb->setMaxResults($limit);
@@ -142,6 +159,7 @@ class ExternalUsersRequest {
 			'displayname' => (string)($row['displayname'] ?? ''),
 			'origin' => (string)($row['origin'] ?? ''),
 			'creation' => (int)($row['creation'] ?? 0),
+			'emailVerified' => !isset($row['email_verified']) || (int)$row['email_verified'] < 0 ? null : (int)$row['email_verified'] === 1,
 		];
 	}
 }

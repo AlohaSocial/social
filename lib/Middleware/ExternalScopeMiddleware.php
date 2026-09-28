@@ -20,6 +20,7 @@ use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Middleware;
 use OCP\AppFramework\OCSController;
+use OCP\Files\IRootFolder;
 use OCP\IInitialStateService;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -52,6 +53,7 @@ class ExternalScopeMiddleware extends Middleware {
 		private IURLGenerator $urlGenerator,
 		private ISettingsManager $settingsManager,
 		private IInitialStateService $initialStateService,
+		private IRootFolder $rootFolder,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -83,6 +85,15 @@ class ExternalScopeMiddleware extends Middleware {
 		}
 		if ($verdict === ExternalScope::SETTINGS) {
 			if (ExternalScope::allowsSettingsSection((string)$this->request->getParam('section', ''))) {
+				if ($viewer === null) {
+					throw new ExternalScopeException($this->urlGenerator->linkToRoute('social.Navigation.navigate'));
+				}
+
+				// Core's personal-info form reads the user's storage quota while
+				// building the page. Social-only accounts never open Files, so
+				// make sure their otherwise-empty home folder exists first.
+				$this->rootFolder->getUserFolder($viewer->getUID())->getId();
+
 				return;
 			}
 
@@ -137,17 +148,26 @@ class ExternalScopeMiddleware extends Middleware {
 		$sections = [];
 		foreach ($this->settingsManager->getPersonalSections() as $prioritized) {
 			foreach ($prioritized as $section) {
-				$id = $section->getID();
-				if (!ExternalScope::allowsSettingsSection($id) || $this->settingsManager->getPersonalSettings($id) === []) {
-					continue;
-				}
+				try {
+					$id = $section->getID();
+					if (!ExternalScope::allowsSettingsSection($id) || $this->settingsManager->getPersonalSettings($id) === []) {
+						continue;
+					}
 
-				$sections[] = [
-					'id' => $id,
-					'name' => $section->getName(),
-					'active' => $id === $current,
-					'icon' => $section->getIcon(),
-				];
+					$sections[] = [
+						'id' => $id,
+						'name' => $section->getName(),
+						'active' => $id === $current,
+						'icon' => $section->getIcon(),
+					];
+				} catch (\Throwable $e) {
+					// A broken optional settings provider must not turn the whole
+					// personal-settings page into a 500 for restricted accounts.
+					$this->logger->warning('Could not include a personal settings section for an external user', [
+						'app' => 'social',
+						'exception' => $e,
+					]);
+				}
 			}
 		}
 

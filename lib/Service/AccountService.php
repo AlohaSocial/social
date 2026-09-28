@@ -382,6 +382,16 @@ class AccountService {
 	 * @throws SocialAppConfigException
 	 */
 	public function deleteOwnAccount(string $userId, string $confirmation): void {
+		$actor = $this->getConfirmedOwnAccount($userId, $confirmation);
+		$this->deleteActor($actor->getPreferredUsername());
+	}
+
+	/** Validate an own-account deletion before the hosting Nextcloud account is removed. */
+	public function assertOwnAccountDeletionConfirmed(string $userId, string $confirmation): void {
+		$this->getConfirmedOwnAccount($userId, $confirmation);
+	}
+
+	private function getConfirmedOwnAccount(string $userId, string $confirmation): Person {
 		$actor = $this->getActorFromUserId($userId);
 
 		$typed = strtolower(ltrim(trim($confirmation), '@'));
@@ -393,7 +403,7 @@ class AccountService {
 			);
 		}
 
-		$this->deleteActor($actor->getPreferredUsername());
+		return $actor;
 	}
 
 	/**

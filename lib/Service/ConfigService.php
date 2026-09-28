@@ -425,6 +425,11 @@ class ConfigService {
 	public const SOCIAL_EXTERNAL_MIN_AGE = 'external_min_age';
 	public const SOCIAL_EXTERNAL_RESERVED = 'external_reserved';
 	public const SOCIAL_EXTERNAL_USER_INVITES = 'external_user_invites';
+	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE = 'external_signup_notice';
+	public const SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED = 'external_signup_notice_required';
+	public const USER_EXTERNAL_SIGNUP_NOTICE_VERSION = 'external_signup_notice_version';
+	public const USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED = 'external_signup_notice_accepted';
+	public const USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT = 'external_signup_notice_snapshot';
 
 	public array $defaults = [
 		self::CLOUD_URL => '',
@@ -488,6 +493,8 @@ class ConfigService {
 		self::SOCIAL_EXTERNAL_MIN_AGE => '16',
 		self::SOCIAL_EXTERNAL_RESERVED => '[]',
 		self::SOCIAL_EXTERNAL_USER_INVITES => '0',
+		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE => '',
+		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED => '0',
 	];
 
 	public array $accessTypeList = [

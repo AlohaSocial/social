@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="introduction-settings">
-		<NcButton :to="{ name: 'timeline', query: { welcome: '1' } }">
+		<NcButton :to="{ name: 'timeline', query: { replay: '1' } }">
 			<template #icon>
 				<IconIntroduction :size="20" />
 			</template>

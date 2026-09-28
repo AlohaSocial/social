@@ -76,7 +76,7 @@ function mountTimeline(route = {}) {
 	return mount(Timeline, {
 		global: {
 			plugins: [pinia],
-			mocks: { $route: { name: 'timeline', params: {}, query: {}, ...route } },
+			mocks: { $route: { name: 'timeline', params: {}, query: {}, ...route }, $router: { replace: vi.fn() } },
 			// OnThisDay reads the reader's own anniversaries on mount, and
 			// Announcements what the instance is telling everybody; each is its
 			// own request with its own tests, and left real they would answer
@@ -88,7 +88,30 @@ function mountTimeline(route = {}) {
 
 describe('Timeline', () => {
 	beforeEach(() => {
+		window.localStorage.clear()
 		makeStore()
+	})
+
+	it('remembers a dismissed introduction and allows an explicit replay', async () => {
+		accountStore.currentAccountHandle = 'alice@cloud.example'
+		useSettingsStore().setServerDataEntry({ key: 'introductionDismissed', value: false })
+		const first = mountTimeline({ query: { welcome: '1' } })
+		expect(first.find('.first-run-stub').exists()).toBe(true)
+
+		first.vm.hideInfo()
+		await nextTick()
+		expect(axios.post).toHaveBeenCalled()
+		expect(first.find('.first-run-stub').exists()).toBe(false)
+		expect(window.localStorage.getItem('social:introduction:alice@cloud.example')).toBe('dismissed')
+		first.unmount()
+
+		useSettingsStore().setServerDataEntry({ key: 'introductionDismissed', value: true })
+		const refreshed = mountTimeline({ query: { welcome: '1' } })
+		expect(refreshed.find('.first-run-stub').exists()).toBe(false)
+		refreshed.unmount()
+
+		const replay = mountTimeline({ query: { replay: '1' } })
+		expect(replay.find('.first-run-stub').exists()).toBe(true)
 	})
 
 	afterEach(() => {

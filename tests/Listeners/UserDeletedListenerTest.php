@@ -14,7 +14,9 @@ use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Listeners\UserDeletedListener;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\ConfigService;
 use OCP\EventDispatcher\Event;
+use OCP\IConfig;
 use OCP\IUser;
 use OCP\User\Events\UserDeletedEvent;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -31,16 +33,18 @@ use Psr\Log\LoggerInterface;
 class UserDeletedListenerTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private AccountService|MockObject $accountService;
+	private IConfig|MockObject $config;
 	private LoggerInterface|MockObject $logger;
 	private UserDeletedListener $listener;
 
 	protected function setUp(): void {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
+		$this->config = $this->createMock(IConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
 		$this->listener = new UserDeletedListener(
-			$this->actorsRequest, $this->accountService, $this->logger
+			$this->actorsRequest, $this->accountService, $this->config, $this->logger
 		);
 	}
 
@@ -88,6 +92,33 @@ class UserDeletedListenerTest extends TestCase {
 		$this->logger->expects($this->never())->method('error');
 
 		$this->listener->handle($this->deletionOf('bob'));
+	}
+
+	public function testAccountDeletionAlsoPurgesTheSignupAcknowledgementRecord(): void {
+		$this->actorsRequest->method('getFromUserId')->willThrowException(new ActorDoesNotExistException());
+		$deleted = [];
+		$this->config->expects($this->exactly(3))->method('deleteUserValue')->willReturnCallback(
+			static function (string $uid, string $app, string $key) use (&$deleted): void {
+				$deleted[] = [$uid, $app, $key];
+			}
+		);
+
+		$this->listener->handle($this->deletionOf('alice'));
+
+		$this->assertSame([
+			['alice', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_VERSION],
+			['alice', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED],
+			['alice', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT],
+		], $deleted);
+	}
+
+	public function testFailureToClearNoticeRecordDoesNotStopSocialCleanup(): void {
+		$this->config->method('deleteUserValue')->willThrowException(new \RuntimeException('database busy'));
+		$this->actorsRequest->method('getFromUserId')->willReturn($this->actor('alice'));
+		$this->accountService->expects($this->once())->method('deleteActor')->with('alice');
+		$this->logger->expects($this->once())->method('warning');
+
+		$this->listener->handle($this->deletionOf('alice'));
 	}
 
 	public function testAFailureToDeleteIsLoggedRatherThanThrown(): void {

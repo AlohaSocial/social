@@ -170,6 +170,7 @@ class NavigationControllerTest extends TestCase {
 		$this->assertSame([
 			'public' => false,
 			'firstrun' => false,
+			'introductionDismissed' => false,
 			'needsAccount' => false,
 			'setup' => false,
 			'isAdmin' => false,
@@ -211,6 +212,14 @@ class NavigationControllerTest extends TestCase {
 		$this->assertTrue($this->serverData()['public']);
 		$this->assertFalse($this->serverData()['needsAccount']);
 		$this->assertFalse($this->serverData()['isAdmin']);
+	}
+
+	public function testAccountDeletionFarewellIsAvailableAsAPublicPage(): void {
+		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
+		$response = $this->controller(null)->accountDeleted();
+
+		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
+		$this->assertSame('account_deleted', $response->getTemplateName());
 	}
 
 	public function testReloadingThePublicTimelineRouteIsAvailableToAnAnonymousVisitor(): void {

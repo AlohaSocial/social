@@ -82,6 +82,8 @@ class SignupController extends Controller {
 		bool $age = false,
 		string $invite = '',
 		string $website = '',
+		bool $notice = false,
+		string $noticeVersion = '',
 	): DataResponse {
 		if ($this->userSession->isLoggedIn()) {
 			return new DataResponse(['message' => 'You are already logged in.'], Http::STATUS_FORBIDDEN);
@@ -97,6 +99,8 @@ class SignupController extends Controller {
 				$invite,
 				$website,
 				$this->request->getRemoteAddress(),
+				$notice,
+				$noticeVersion,
 			));
 		} catch (ExternalUserException $e) {
 			return new DataResponse(

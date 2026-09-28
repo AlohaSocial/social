@@ -43,7 +43,7 @@ class ExternalUserBackend extends ABackend implements
 	ICountUsersBackend {
 	public const BACKEND_NAME = 'Social';
 
-	/** @var array<string, array{uid: string, password: string, displayname: string, origin: string, creation: int}|null> */
+	/** @var array<string, array{uid: string, password: string, displayname: string, origin: string, creation: int, emailVerified: ?bool}|null> */
 	private array $cache = [];
 
 	public function __construct(
@@ -64,7 +64,7 @@ class ExternalUserBackend extends ABackend implements
 	}
 
 	/**
-	 * @return array{uid: string, password: string, displayname: string, origin: string, creation: int}|null
+	 * @return array{uid: string, password: string, displayname: string, origin: string, creation: int, emailVerified: ?bool}|null
 	 */
 	private function row(string $uid): ?array {
 		$key = mb_strtolower($uid);
