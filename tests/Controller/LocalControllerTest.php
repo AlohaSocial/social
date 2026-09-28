@@ -560,7 +560,7 @@ class LocalControllerTest extends TestCase {
 		$this->userSession->expects($this->once())->method('logout');
 		$user = $this->createMock(\OCP\IUser::class);
 		$user->method('getBackend')->willReturn($this->createStub(\OCA\Social\External\ExternalUserBackend::class));
-		$user->method('delete')->willThrowException(new \Error('a deletion listener failed after removal'));
+		$user->method('delete')->willThrowException(new \RuntimeException('a deletion listener failed after removal'));
 		$this->userManager = $this->createMock(\OCP\IUserManager::class);
 		$this->userManager->expects($this->exactly(2))->method('get')->with('alice')->willReturnOnConsecutiveCalls($user, null);
 

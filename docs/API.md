@@ -1144,6 +1144,7 @@ These serve HTML or files for the app's own UI; they are not client API endpoint
 | GET | `/settings` | public, user, no-csrf | — | Same page, for the Settings view — what this app holds about how the reader uses it, which for now is the keyboard shortcuts. The client-side router owns the path; this route exists so that reloading or bookmarking it is not a 404. |
 | GET | `/search` | public, user, no-csrf | — | Same page, for the Search view with nothing searched yet. The client-side router owns the path; this route exists so that reloading it is not a 404. |
 | GET | `/search/{term}` | public, user, no-csrf | `term` (accepted and ignored; the client-side router reads it off the address) | Same page, for the results of one search. Reloading a search, or opening one somebody sent, used to be a 404: the client-side router had the route and the server did not. |
+| GET | `/account-deleted` | public, no-csrf | — | Public farewell page shown after a self-registered Social-only account and its active session have been removed. |
 | GET | `/document/get` | user, no-csrf | `id` (required) | Streams a cached document with its stored mime type. Errors: error envelope, HTTP 500. |
 | GET | `/document/public` | public, no-csrf | `id` (required) | Same for documents marked public. |
 | GET | `/document/get/resized` | user, no-csrf | `id` (required) | Streams the resized/preview variant. |

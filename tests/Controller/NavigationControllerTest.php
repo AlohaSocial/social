@@ -215,6 +215,7 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	public function testAccountDeletionFarewellIsAvailableAsAPublicPage(): void {
+		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 		$response = $this->controller(null)->accountDeleted();
 
 		$this->assertInstanceOf(PublicTemplateResponse::class, $response);

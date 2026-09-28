@@ -489,6 +489,7 @@ class LocalController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/account/delete')]
 	public function accountDelete(string $confirm = ''): DataResponse {
 		$sessionEnded = false;
+		$externalDeletion = false;
 		try {
 			if ($this->userId === null) {
 				throw new AccountDoesNotExistException('User not logged in');
@@ -496,6 +497,7 @@ class LocalController extends Controller {
 
 			$user = $this->userManager->get($this->userId);
 			if (ExternalUserBackend::isExternal($user)) {
+				$externalDeletion = true;
 				// Let Nextcloud own the deletion lifecycle. Its UserDeletedEvent
 				// listener removes and federates the Social actor once the hosting
 				// account has actually been removed. Deleting the actor first here
@@ -517,19 +519,20 @@ class LocalController extends Controller {
 			// the message names the handle to type, which is the whole of the
 			// help there is
 			return new DataResponse(['status' => -1, 'error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		} catch (Exception $e) {
-			return $this->failFor($e);
 		} catch (\Throwable $e) {
 			// Core or app listeners can throw an Error as well as an Exception.
 			// If Core removed the user before a listener failed, finish the
 			// session and report completion instead of rendering an Internal
 			// Server Error after the account is already gone.
-			if ($this->userId !== null && $this->userManager->get($this->userId) === null) {
+			if ($externalDeletion && $this->userId !== null && $this->userManager->get($this->userId) === null) {
 				if (!$sessionEnded) {
 					$this->userSession->logout();
 				}
 
 				return $this->success(['deleted' => true, 'userDeleted' => true]);
+			}
+			if ($e instanceof Exception) {
+				return $this->failFor($e);
 			}
 
 			$this->logger->error('self-service account deletion failed', [
