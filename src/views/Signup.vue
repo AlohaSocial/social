@@ -141,7 +141,7 @@
 				{{ state.signupNotice }}
 			</p>
 
-			<NcCheckboxRadioSwitch v-model="rules" :class="{ 'signup__check--error': field === 'rules' }">
+			<NcCheckboxRadioSwitch v-model="rules" class="signup__check" :class="{ 'signup__check--error': field === 'rules' }">
 				{{ t('social', 'I accept the server rules') }}
 			</NcCheckboxRadioSwitch>
 			<p v-if="state.privacyUrl || state.legalUrl" class="signup__legal">
@@ -160,6 +160,7 @@
 			<NcCheckboxRadioSwitch
 				v-if="state.minAge > 0"
 				v-model="age"
+				class="signup__check"
 				:class="{ 'signup__check--error': field === 'age' }">
 				{{ t('social', 'I am at least {age} years old', { age: state.minAge }) }}
 			</NcCheckboxRadioSwitch>
@@ -437,6 +438,12 @@ export default {
 
 	&__check--error {
 		color: var(--color-error-text, var(--color-error));
+	}
+
+	// Nextcloud's checkbox icon sits a few pixels above its label baseline;
+	// align the small signup confirmations with the first line of their text.
+	&__check :deep(.checkbox-radio-switch__icon) {
+		transform: translateY(0.25em);
 	}
 
 	&__actions {
