@@ -830,6 +830,11 @@ OC.L10N.register(
     "Type {handle} to confirm that this is the account you mean." : "Geben Sie {handle} ein, um zu bestätigen, dass Sie dieses Konto löschen möchten.",
     "External users then set up an authenticator app or a security key when they first log in. This is Nextcloud's own setting, the same as in Administration → Security." : "Externe Benutzer richten bei ihrer ersten Anmeldung eine Authenticator-App oder einen Sicherheitsschlüssel ein. Dies ist eine Nextcloud-Einstellung wie die unter Administration → Sicherheit.",
     "A post that already reached somebody else's server is deleted by asking that server to delete it. Almost all of them do; none of them can be made to." : "Wenn ein Beitrag bereits einen anderen Server erreicht hat, bitten wir diesen Server um die Löschung. Die meisten kommen der Bitte nach; erzwingen lässt es sich bei keinem.",
+    "Your Social account has been deleted" : "Ihr Social-Konto wurde gelöscht.",
+    "The Social account and the Nextcloud account created for it have been deleted. You are now signed out." : "Das Social-Konto und das dafür erstellte Nextcloud-Konto wurden gelöscht. Sie sind jetzt abgemeldet.",
+    "Social sent requests to remove your posts to the servers that received them. Those servers control copies they may already have stored." : "Social hat die Server, die Ihre Beiträge erhalten haben, um deren Löschung gebeten. Diese Server entscheiden selbst über bereits gespeicherte Kopien.",
+    "Return to Social" : "Zurück zu Social",
+    "Go to the sign-in page" : "Zur Anmeldeseite",
     "_%n entry_::_%n entries_" : ["%n Eintrag","%n Einträge"]
 },
 "nplurals=2; plural=(n != 1);");

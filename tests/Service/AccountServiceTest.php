@@ -455,6 +455,17 @@ class AccountServiceTest extends TestCase {
 		$this->service->deleteOwnAccount('alice', 'alice@cloud.example');
 	}
 
+	public function testExternalAccountDeletionCanValidateTheHandleWithoutDeletingTheActorFirst(): void {
+		$alice = $this->alice();
+		$alice->setAccount('alice@cloud.example');
+		$this->aliceIsKnown($alice);
+		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		$this->actorsRequest->expects($this->never())->method('setAsDeleted');
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->service->assertOwnAccountDeletionConfirmed('alice', 'alice@cloud.example');
+	}
+
 	public function testTheShortHandleConfirmsItToo(): void {
 		$alice = $this->alice();
 		$alice->setAccount('alice@cloud.example');

@@ -161,6 +161,7 @@ class LocalControllerTest extends TestCase {
 	}
 
 	private ?\OCP\IUserManager $userManager = null;
+	private ?\OCP\IUserSession $userSession = null;
 
 	private function controller(?string $userId = 'alice'): LocalController {
 		return new LocalController(
@@ -179,6 +180,7 @@ class LocalControllerTest extends TestCase {
 			$this->cacheDocumentService,
 			$this->bannerService,
 			$this->userManager ?? $this->createStub(\OCP\IUserManager::class),
+			$this->userSession ?? $this->createStub(\OCP\IUserSession::class),
 		);
 	}
 
@@ -539,7 +541,10 @@ class LocalControllerTest extends TestCase {
 
 	/** An external user has nothing here but Social, so their Nextcloud account goes too. */
 	public function testAccountDeleteTakesAnExternalUsersNextcloudAccountWithIt(): void {
-		$this->accountService->expects($this->once())->method('deleteOwnAccount')->with('alice', 'alice');
+		$this->accountService->expects($this->once())->method('assertOwnAccountDeletionConfirmed')->with('alice', 'alice');
+		$this->accountService->expects($this->never())->method('deleteOwnAccount');
+		$this->userSession = $this->createMock(\OCP\IUserSession::class);
+		$this->userSession->expects($this->once())->method('logout');
 		$user = $this->createMock(\OCP\IUser::class);
 		$user->method('getBackend')->willReturn($this->createStub(\OCA\Social\External\ExternalUserBackend::class));
 		$user->expects($this->once())->method('delete')->willReturn(true);
@@ -549,7 +554,22 @@ class LocalControllerTest extends TestCase {
 		$this->assertSuccess($this->controller()->accountDelete('alice'), ['deleted' => true, 'userDeleted' => true]);
 	}
 
+	public function testAccountDeleteStillCompletesIfAListenerErrorsAfterTheUserWasRemoved(): void {
+		$this->accountService->expects($this->once())->method('assertOwnAccountDeletionConfirmed')->with('alice', 'alice');
+		$this->userSession = $this->createMock(\OCP\IUserSession::class);
+		$this->userSession->expects($this->once())->method('logout');
+		$user = $this->createMock(\OCP\IUser::class);
+		$user->method('getBackend')->willReturn($this->createStub(\OCA\Social\External\ExternalUserBackend::class));
+		$user->method('delete')->willThrowException(new \Error('a deletion listener failed after removal'));
+		$this->userManager = $this->createMock(\OCP\IUserManager::class);
+		$this->userManager->expects($this->exactly(2))->method('get')->with('alice')->willReturnOnConsecutiveCalls($user, null);
+
+		$this->assertSuccess($this->controller()->accountDelete('alice'), ['deleted' => true, 'userDeleted' => true]);
+	}
+
 	public function testAccountDeleteKeepsAnInternalUsersNextcloudAccount(): void {
+		$this->userSession = $this->createMock(\OCP\IUserSession::class);
+		$this->userSession->expects($this->never())->method('logout');
 		$user = $this->createMock(\OCP\IUser::class);
 		$user->method('getBackend')->willReturn(null);
 		$user->expects($this->never())->method('delete');

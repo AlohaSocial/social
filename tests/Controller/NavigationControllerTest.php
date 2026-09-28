@@ -214,6 +214,13 @@ class NavigationControllerTest extends TestCase {
 		$this->assertFalse($this->serverData()['isAdmin']);
 	}
 
+	public function testAccountDeletionFarewellIsAvailableAsAPublicPage(): void {
+		$response = $this->controller(null)->accountDeleted();
+
+		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
+		$this->assertSame('account_deleted', $response->getTemplateName());
+	}
+
 	public function testReloadingThePublicTimelineRouteIsAvailableToAnAnonymousVisitor(): void {
 		\OC::$server->register(IInitialStateService::class, $this->createStub(IInitialStateService::class));
 

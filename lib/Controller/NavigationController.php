@@ -84,6 +84,15 @@ class NavigationController extends Controller {
 		$this->userId = $userId;
 	}
 
+	/** A public landing page after a self-registered account has been deleted. */
+	#[NoCSRFRequired]
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/account-deleted')]
+	public function accountDeleted(): PublicTemplateResponse {
+		return new PublicTemplateResponse(Application::APP_ID, 'account_deleted');
+	}
+
 	/**
 	 * Display the navigation page of the Social app.
 	 *

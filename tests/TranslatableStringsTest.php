@@ -228,6 +228,36 @@ class TranslatableStringsTest extends TestCase {
 		$this->assertSame([], $missing, 'navigation, timeline, conversation, statistics, composer, setup, and app labels must exist in both German catalog formats');
 	}
 
+	public function testAccountDeletionFarewellHasGermanCatalogEntries(): void {
+		$messages = [
+			'Your Social account has been deleted',
+			'The Social account and the Nextcloud account created for it have been deleted. You are now signed out.',
+			'Social sent requests to remove your posts to the servers that received them. Those servers control copies they may already have stored.',
+			'Return to Social',
+			'Go to the sign-in page',
+		];
+		$missing = [];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$jsCatalog = (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js');
+			foreach ($messages as $message) {
+				if (!array_key_exists($message, $catalog)) {
+					$missing[] = $locale . ': ' . $message;
+					continue;
+				}
+
+				$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				$value = json_encode($catalog[$message], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+				if (!str_contains($jsCatalog, $key . ' : ' . $value)) {
+					$missing[] = $locale . ': ' . $message . ' (JavaScript catalog)';
+				}
+			}
+		}
+
+		$this->assertSame([], $missing, 'the account deletion farewell should be translated in both German catalogs');
+	}
+
 	public function testExternalAccountPluralHasGermanCatalogEntries(): void {
 		$message = '_%n external account_::_%n external accounts_';
 		$translation = ['%n externes Konto', '%n externe Konten'];
