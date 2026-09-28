@@ -258,7 +258,9 @@ The sidebar is the map:
   playing as it comes up and pausing as you scroll past. The switch in the top
   corner picks whose videos (**My Feed**, **Local** or **Global**). It plays
   with sound; opened from a link, the browser may hold the sound back until
-  you tap the speaker, which a "Tap for sound" hint points at. Tap to pause,
+  you tap the speaker, which a "Tap for sound" hint points at. Once you have
+  tapped it, the videos after it keep their sound as you scroll, and if you
+  mute one they stay muted until you close the tab. Tap to pause,
   arrow keys to move, space to pause, `m` for sound, `l` to like. The **+**
   opens **New short**:
   - **Upload a video**, drop one on the dialog, or **Record** one with your
@@ -413,7 +415,10 @@ and then it is gone. A face with a coloured ring around it still holds
 something you have not seen; tap it and the stories play one after another,
 each for the seconds its poster gave it, and the ring goes grey. Hold the
 picture to pause it, tap the left or right of it to go back or forward, and
-use the arrows at the sides to move to the next account.
+use the arrows at the sides to move to the next account. A video story plays
+with its sound on; the speaker at the top turns it off (or `m`), and when the
+browser holds the sound back a "Tap for sound" hint points at the speaker, as
+on Shorts.
 
 Your own place is always first in the row, with a **+** on it. It opens the
 same dialog as a new short (see **Shorts**): **Record** a video with your
@@ -615,12 +620,13 @@ table as they always did — and if you already wrote a row called "Pronouns" by
 hand, it is picked up as one.
 
 
-- **Sound and touch.** **Settings → Sound and touch** has two switches:
+- **Sound and touch.** **Settings → Sound and touch** has three switches:
   **Play sounds** (a tick on a like, a breath of air when a post goes out, a
   chime when a direct message arrives; off until you turn it on, with
-  **Listen** to hear them first) and **Vibrate** (a short tap on a phone; on
-  unless you turn it off, and off whenever your system asks for less motion).
-  Both belong to the device you are on, not to your account.
+  **Listen** to hear them first), **Vibrate** (a short tap on a phone; on
+  unless you turn it off, and off whenever your system asks for less motion)
+  and **Start videos with sound** (Shorts and stories; on unless you turn it
+  off). All three belong to the device you are on, not to your account.
 - **Profile.** **My profile** (behind your portrait at the bottom of the
   sidebar) → **Edit profile**: a banner (upload one or give the address of
   one), a bio, and up to four name/value fields shown under it — your website,

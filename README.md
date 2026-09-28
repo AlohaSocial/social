@@ -120,7 +120,8 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 
 - **Stories** — a row of faces above your feed: whose stories are up. One picture or
   video, for followers, gone after a day; a ring on the face while there is something
-  you have not seen, a player that runs them one after another, and your own place
+  you have not seen, a player that runs them one after another (videos with sound, a
+  speaker to mute them, and the same "Tap for sound" hint as Shorts), and your own place
   first in the row with a **+** on it to add one. Adding one opens the same dialog as
   a new short: record a video with the camera (15 s or 1 min) or upload one, trim it and
   pick its cover; a picture or a text story goes on to the story editor below. The poster sees how many people
@@ -144,7 +145,9 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   somebody arriving from TikTok or YouTube Shorts already knows. A switch in the corner
   picks whose videos: the people you follow, this server, or everywhere. It plays with
   sound, or muted with a "Tap for sound" hint when the browser will not start with it,
-  one video at a time with the rest paused rather than left buffering, and reachable
+  one video at a time in a single player that moves from video to video (so the sound
+  one tap allowed stays on as you scroll, iPhone included) while the others show their
+  cover, and reachable
   with the arrow keys and the space bar. The **+** opens a composer made for a short:
   upload a video, drop one on it, or record one with the camera (a 3-2-1 countdown,
   front or back camera, 15 s, 60 s or 3 min; browsers offer the camera over https
@@ -517,7 +520,8 @@ the same app, not a second design.
 **Sound and touch**, in Settings: a soft tick on a like, a breath of air when a post
 goes out, a two-note chime when a direct message arrives, and a short tap in the hand
 on a phone. Sound is off until you turn it on; vibration is on, and your system's
-setting for less motion turns it off too. Both are kept on the device rather than the
+setting for less motion turns it off too. A third switch says whether Shorts and stories
+start with their sound on. All three are kept on the device rather than the
 account, so the laptop at work can stay quiet while your phone taps back. The sounds
 are synthesised in the browser, so there is nothing to download.
 

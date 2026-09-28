@@ -16,17 +16,14 @@
 				:ref="(el) => setSlide(el, index)"
 				class="reel"
 				:data-index="index">
-				<video
-					:ref="(el) => setVideo(el, index)"
-					class="reel__video"
-					:src="entry.video.url"
-					:poster="entry.video.preview_url || undefined"
-					:aria-label="entry.video.description || entry.text"
-					:muted="muted"
-					playsinline
-					loop
-					preload="none"
-					@click="onVideoTap(index, $event)" />
+				<!-- a still where the player is not: the one <video> below
+				     is over whichever slide is being watched -->
+				<img
+					v-if="entry.video.preview_url"
+					class="reel__poster"
+					:src="entry.video.preview_url"
+					:alt="index === playing ? '' : (entry.video.description || entry.text)"
+					loading="lazy">
 
 				<!-- the hearts a like releases: one where a double tap landed,
 				     and a few rising up the edge, the way live video does it.
@@ -62,9 +59,9 @@
 				<button
 					type="button"
 					class="reel__sound"
-					:aria-label="muted ? t('social', 'Unmute') : t('social', 'Mute')"
+					:aria-label="silent ? t('social', 'Unmute') : t('social', 'Mute')"
 					@click.stop="toggleSound">
-					<IconVolumeOff v-if="muted" :size="20" />
+					<IconVolumeOff v-if="silent" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
 				<!-- the browser would not start with sound: say where it is -->
@@ -96,6 +93,24 @@
 					</router-link>
 				</div>
 			</article>
+
+			<!-- one player for the whole stack, moved to the slide on screen and
+			     given its video. WebKit lets an element play with sound only
+			     once a gesture has allowed it, and a scroll is not a gesture:
+			     a new element per slide was refused the sound on every slide
+			     after the first. -->
+			<video
+				v-if="current"
+				ref="player"
+				class="reel__video"
+				:style="{ '--at': playing }"
+				:src="current.video.url"
+				:poster="current.video.preview_url || undefined"
+				:aria-label="current.video.description || current.text"
+				playsinline
+				loop
+				preload="auto"
+				@click="onVideoTap(playing, $event)" />
 
 			<div v-if="reels.length === 0 && loading" class="reels__empty">
 				<NcLoadingIcon :size="44" appearance="light" />
@@ -160,18 +175,22 @@
  * it goes past. This is that stack, over the same timeline — no new endpoint,
  * no second idea of what a video is.
  *
- * Three rules hold it together:
+ * Four rules hold it together:
  *
- *  - **One plays at a time.** An IntersectionObserver decides which, and every
- *    other element is paused rather than left buffering; a dozen videos
- *    playing behind the one on screen is a phone getting hot for nothing.
+ *  - **One plays at a time.** An IntersectionObserver decides which, and
+ *    there is only one element to play it with; a dozen videos buffering
+ *    behind the one on screen is a phone getting hot for nothing.
  *  - **Sound on, where the browser allows it.** Somebody who opens Shorts
  *    from the sidebar has pressed something to get here, and a browser
  *    counts that as leave to play with sound. Opened cold -- a pasted link,
  *    a reload -- the browser refuses, and the stack falls back to muted and
- *    says "Tap for sound" rather than showing a still. The choice is kept for
- *    the page and applies to every video, because it is a statement about
- *    this page rather than about one video.
+ *    says "Tap for sound" rather than showing a still. The reader's choice
+ *    applies to every video, because it is a statement about this page
+ *    rather than about one video; a refusal is not a choice, and the next
+ *    video is asked with sound again (see useSoundAutoplay).
+ *  - **One element.** A single <video> follows the slide on screen and the
+ *    others show their poster, so the element a tap once allowed to play
+ *    with sound keeps that leave for every video after it.
  *  - **The scroll does the work.** CSS scroll-snap rather than a transform per
  *    slide: it is the one thing that behaves the same under a finger, a
  *    trackpad, a wheel and a keyboard, and it keeps working when the
@@ -193,6 +212,7 @@ import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
+import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
 import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 
 /** How close to the end the reader gets before the next page is asked for. */
@@ -240,20 +260,22 @@ export default {
 		},
 	},
 
+	setup() {
+		const { muted, soundHeld, silent, playWithSound, toggleMute } = useSoundAutoplay()
+
+		return { muted, soundHeld, silent, playWithSound, toggleMute }
+	},
+
 	data() {
 		return {
-			muted: false,
 			/** the New short dialog is open */
 			composing: false,
-			/** the browser refused to start with sound, so it was muted for it */
-			soundHeld: false,
+			/** the slide on screen, which the player is over */
 			playing: 0,
 			loading: false,
 			/** the last page asked for could not be fetched */
 			failed: false,
 			allLoaded: false,
-			/** the <video> of each slide, by index */
-			videos: [],
 			slides: [],
 			/** tells onVisible which slide is on screen */
 			observer: null,
@@ -314,6 +336,11 @@ export default {
 
 			return entries
 		},
+
+		/** @return {object|undefined} the slide the player is over */
+		current() {
+			return this.reels[this.playing]
+		},
 	},
 
 	watch: {
@@ -338,9 +365,7 @@ export default {
 	beforeUnmount() {
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
-		for (const video of this.videos) {
-			video?.pause?.()
-		}
+		this.player()?.pause?.()
 	},
 
 	updated() {
@@ -372,15 +397,15 @@ export default {
 			this.slides[index] = el
 		},
 
-		setVideo(el, index) {
-			this.videos[index] = el
+		/** @return {HTMLVideoElement|undefined} the one player */
+		player() {
+			return /** @type {HTMLVideoElement|undefined} */ (this.$refs.player)
 		},
 
 		/**
-		 * Whichever slide is mostly on screen becomes the one playing, and
-		 * every other one stops. Pausing rather than leaving them be: a video
-		 * scrolled past keeps downloading otherwise, and a page of them is a
-		 * phone getting hot to buffer what nobody is watching.
+		 * Whichever slide is mostly on screen becomes the one playing. There
+		 * is only one element to play it with, so a slide scrolled past stops
+		 * by losing it rather than being paused and left buffering.
 		 *
 		 * @param {IntersectionObserverEntry[]} entries what moved
 		 */
@@ -400,41 +425,25 @@ export default {
 			}
 		},
 
-		play(index) {
-			this.videos.forEach((video, at) => {
-				if (!video) {
-					return
-				}
-
-				if (at === index) {
-					video.muted = this.muted
-					// a rejected play is the browser's autoplay rule, which is
-					// an answer rather than a fault. With sound it is usually
-					// the sound it refused, so the video plays muted instead
-					// and the page says where the sound is; muted and still
-					// refused, the poster stays up and the reader can press it
-					video.play?.().catch((error) => {
-						logger.debug('autoplay refused', { error })
-						if (error?.name === 'NotAllowedError' && !this.muted) {
-							this.muted = true
-							this.soundHeld = true
-							video.muted = true
-							video.play?.().catch((again) => logger.debug('muted autoplay refused', { error: again }))
-						}
-					})
-				} else {
-					video.pause?.()
-					// back to the first frame, so coming back to it is the
-					// video again rather than its last second
-					if (video.currentTime > 0) {
-						video.currentTime = 0
-					}
-				}
-			})
-
+		/**
+		 * Plays the slide once the player has moved to it and been given its
+		 * video. A new `src` starts from the first frame, so coming back to a
+		 * slide is the video again rather than its last second.
+		 *
+		 * @param {number} index the slide on screen
+		 * @return {Promise<void>}
+		 */
+		async play(index) {
 			if (index >= this.reels.length - LOOK_AHEAD) {
 				this.load()
 			}
+
+			await this.$nextTick()
+			if (index !== this.playing) {
+				return
+			}
+
+			await this.playWithSound(this.player())
 		},
 
 		/**
@@ -575,13 +584,13 @@ export default {
 
 		/** Opens the New short dialog, with the stack paused behind it. */
 		startShort() {
-			this.videos[this.playing]?.pause?.()
+			this.player()?.pause?.()
 			this.composing = true
 		},
 
 		togglePlay(index) {
-			const video = this.videos[index]
-			if (!video) {
+			const video = this.player()
+			if (!video || index !== this.playing) {
 				return
 			}
 
@@ -593,12 +602,7 @@ export default {
 		},
 
 		toggleSound() {
-			this.soundHeld = false
-			this.muted = !this.muted
-			const video = this.videos[this.playing]
-			if (video) {
-				video.muted = this.muted
-			}
+			this.toggleMute(this.player())
 		},
 
 		/**
@@ -695,6 +699,8 @@ export default {
 	background: #000;
 
 	&__track {
+		/* the player is placed against the track, a slide's height per slide */
+		position: relative;
 		block-size: 100%;
 		overflow-y: auto;
 		scroll-snap-type: y mandatory;
@@ -788,13 +794,26 @@ export default {
 	scroll-snap-align: start;
 	scroll-snap-stop: always;
 
-	&__video {
+	&__video,
+	&__poster {
+		position: absolute;
+		inset-inline: 0;
 		inline-size: 100%;
 		block-size: 100%;
 		/* contain rather than cover: a video shot wide is not improved by
 		   having its sides cut off to fill a tall window */
 		object-fit: contain;
 		background: #000;
+	}
+
+	&__poster {
+		inset-block-start: 0;
+	}
+
+	/* over the slide being watched: every slide is exactly the track's
+	   height, so the n-th starts n track-heights down */
+	&__video {
+		inset-block-start: calc(var(--at) * 100%);
 	}
 
 	&__sound {
@@ -880,6 +899,8 @@ export default {
 
 	&__hearts {
 		position: absolute;
+		/* over the player, which comes after the slides */
+		z-index: 1;
 		inset: 0;
 		overflow: hidden;
 		pointer-events: none;
@@ -910,6 +931,7 @@ export default {
 
 	&__caption {
 		position: absolute;
+		z-index: 1;
 		/* the caption's own links take presses; the rest of it lets them
 		   through to the video (tap to pause) and to the buttons */
 		pointer-events: none;

@@ -25,6 +25,7 @@ import { userKey } from '../utils/browserStore.js'
 
 const SOUND_KEY = 'social.sounds'
 const VIBRATION_KEY = 'social.vibration'
+const VIDEO_SOUND_KEY = 'social.videoSound'
 
 /**
  * The moments that make a sound or a buzz, and how each one feels.
@@ -93,6 +94,19 @@ export function vibrationEnabled() {
 /** @param {boolean} on whether this device should vibrate */
 export function setVibrationEnabled(on) {
 	writeSwitch(VIBRATION_KEY, on)
+}
+
+/**
+ * @return {boolean} whether Shorts and stories start with their sound on; on
+ *         unless turned off, because pressing play on a video is asking to hear it
+ */
+export function videoSoundEnabled() {
+	return readSwitch(VIDEO_SOUND_KEY, true)
+}
+
+/** @param {boolean} on whether videos on this device should start with sound */
+export function setVideoSoundEnabled(on) {
+	writeSwitch(VIDEO_SOUND_KEY, on)
 }
 
 /**
