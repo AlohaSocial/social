@@ -47,7 +47,7 @@
 			<p v-if="state.twoFactorRequired">
 				{{ t('social', 'This server requires two-factor authentication. You will need to set it up when you first sign in.') }}
 			</p>
-			<p>{{ t('social', 'After joining, you can finish the introduction, find people and starter packs to follow, write posts, and manage your profile and account settings. You can also import a follow list from another compatible service.') }}</p>
+			<p>{{ t('social', 'After joining, you can finish the introduction, find people and any starter packs this server offers, write posts, and manage your profile and account settings. If you have an export from a compatible service, you can import your follow list.') }}</p>
 			<p>{{ registrationPath }}</p>
 			<p>{{ t('social', 'Public posts may be delivered to other servers. Other servers may keep copies, so deleting a post here cannot guarantee that every copy elsewhere is removed.') }}</p>
 			<p class="signup__instance-notice">

@@ -62,7 +62,7 @@ describe('the registration page', () => {
 		const wrapper = await page(OPEN)
 		expect(wrapper.text()).toContain('A Social account, connected to the fediverse')
 		expect(wrapper.text()).toContain('does not give you access to Files, Talk, WebDAV')
-		expect(wrapper.text()).toContain('finish the introduction, find people and starter packs')
+		expect(wrapper.text()).toContain('finish the introduction, find people and any starter packs this server offers')
 		expect(wrapper.text()).not.toContain('This server requires two-factor authentication.')
 		await continueToForm(wrapper)
 		wrapper.vm.handle = '@Alice'
