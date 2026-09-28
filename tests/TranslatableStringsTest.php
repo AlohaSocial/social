@@ -176,6 +176,7 @@ class TranslatableStringsTest extends TestCase {
 		$files = [
 			'src/components/Navigation.vue',
 			'src/components/IntroductionSettings.vue',
+			'src/components/DeleteAccount.vue',
 			'src/components/admin/ExternalAccountsSection.vue',
 			'src/components/admin/ExternalUsersSection.vue',
 			'src/components/admin/ExternalRequestsSection.vue',

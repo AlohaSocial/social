@@ -819,6 +819,15 @@ OC.L10N.register(
     "your email address" : "Ihre E-Mail-Adresse",
     "_%n external account_::_%n external accounts_" : ["%n externes Konto","%n externe Konten"],
     "Show the introduction again" : "Einführung erneut anzeigen",
+    "Everything you posted from here is deleted, your followers and the people you follow are let go, and every server that knew this account is told it is gone. It cannot be undone, and there is no way to get any of it back afterwards — take an archive from the Export button above first if you might want one." : "Alle Beiträge, die Sie hier veröffentlicht haben, werden gelöscht; Follower und gefolgte Konten werden entfernt. Alle Server, die dieses Konto kennen, werden über die Löschung informiert. Dies lässt sich nicht rückgängig machen. Wenn Sie Ihre Inhalte später noch benötigen, exportieren Sie vorher über die Schaltfläche oben ein Archiv.",
+    "Your Nextcloud account is not touched: you stay signed in to everything else, and you can make a new Social account straight away. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go, so a new account needs a different one." : "Ihr Nextcloud-Konto bleibt bestehen und Sie bleiben bei allen anderen Diensten angemeldet. Sie können sofort ein neues Social-Konto erstellen. Der gelöschte Benutzername bleibt eine Stunde lang reserviert, damit ihn niemand direkt übernehmen kann. Für ein neues Konto benötigen Sie daher einen anderen Namen.",
+    "Your account on this server was made for Social, so it is deleted too, and you are signed out. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go." : "Ihr Konto auf diesem Server wurde ausschließlich für Social erstellt. Es wird ebenfalls gelöscht und Sie werden abgemeldet. Der gelöschte Benutzername bleibt eine Stunde lang reserviert, damit ihn niemand direkt übernehmen kann.",
+    "Could not delete your account" : "Ihr Konto konnte nicht gelöscht werden.",
+    "Delete it for good" : "Endgültig löschen",
+    "Delete my Social account" : "Mein Social-Konto löschen",
+    "Keep my account" : "Konto behalten",
+    "The handle of the account to delete" : "Benutzername des zu löschenden Kontos",
+    "Type {handle} to confirm that this is the account you mean." : "Geben Sie {handle} ein, um zu bestätigen, dass Sie dieses Konto löschen möchten.",
     "_%n entry_::_%n entries_" : ["%n Eintrag","%n Einträge"]
 },
 "nplurals=2; plural=(n != 1);");
