@@ -30,7 +30,7 @@ use OCP\IUserSession;
 use OCP\Settings\IIconSection;
 use OCP\Settings\IManager as ISettingsManager;
 use OCP\Settings\ISettings;
-use OCP\UserInterface;
+use OCP\User\Backend\ABackend;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -116,7 +116,7 @@ class ExternalScopeMiddlewareTest extends TestCase {
 	}
 
 	public function testGuestsAppUsersAreNotRestrictedBySocialMiddleware(): void {
-		$guestBackend = $this->createStub(UserInterface::class);
+		$guestBackend = $this->createStub(ABackend::class);
 		$guestBackend->method('getBackendName')->willReturn('Guests');
 		$guest = $this->createStub(IUser::class);
 		$guest->method('getBackend')->willReturn($guestBackend);
