@@ -208,6 +208,21 @@ class ExternalScopeMiddlewareTest extends TestCase {
 		$this->assertSame([], $this->provided);
 	}
 
+	public function testAThrowingOptionalSettingsProviderDoesNotBreakExternalSettings(): void {
+		$section = $this->createStub(IIconSection::class);
+		$section->method('getID')->willReturn('security');
+		$section->method('getName')->willThrowException(new \RuntimeException('optional provider failed'));
+		$settings = $this->createStub(ISettingsManager::class);
+		$settings->method('getPersonalSections')->willReturn([[ $section ]]);
+		$settings->method('getPersonalSettings')->willReturn([1 => [$this->createStub(ISettings::class)]]);
+
+		$this->middleware($this->user(true), [], $settings)->afterController(
+			$this->controller('OCA\\Settings\\Controller\\PersonalSettingsController'), 'index', new TemplateResponse('settings', 'settings/frame')
+		);
+
+		$this->assertSame(['personal' => [], 'admin' => []], $this->provided['settings']['sections']);
+	}
+
 	public function testTheCoreProfileOfAnExternalUserIsTheirSocialProfileForEverybody(): void {
 		$this->params = ['targetUserId' => 'alice'];
 		$controller = $this->controller('OCA\\Profile\\Controller\\ProfilePageController');

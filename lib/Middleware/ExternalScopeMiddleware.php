@@ -137,17 +137,26 @@ class ExternalScopeMiddleware extends Middleware {
 		$sections = [];
 		foreach ($this->settingsManager->getPersonalSections() as $prioritized) {
 			foreach ($prioritized as $section) {
-				$id = $section->getID();
-				if (!ExternalScope::allowsSettingsSection($id) || $this->settingsManager->getPersonalSettings($id) === []) {
-					continue;
-				}
+				try {
+					$id = $section->getID();
+					if (!ExternalScope::allowsSettingsSection($id) || $this->settingsManager->getPersonalSettings($id) === []) {
+						continue;
+					}
 
-				$sections[] = [
-					'id' => $id,
-					'name' => $section->getName(),
-					'active' => $id === $current,
-					'icon' => $section->getIcon(),
-				];
+					$sections[] = [
+						'id' => $id,
+						'name' => $section->getName(),
+						'active' => $id === $current,
+						'icon' => $section->getIcon(),
+					];
+				} catch (\Throwable $e) {
+					// A broken optional settings provider must not turn the whole
+					// personal-settings page into a 500 for restricted accounts.
+					$this->logger->warning('Could not include a personal settings section for an external user', [
+						'app' => 'social',
+						'exception' => $e,
+					]);
+				}
 			}
 		}
 

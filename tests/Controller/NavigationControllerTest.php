@@ -170,6 +170,7 @@ class NavigationControllerTest extends TestCase {
 		$this->assertSame([
 			'public' => false,
 			'firstrun' => false,
+			'introductionDismissed' => false,
 			'needsAccount' => false,
 			'setup' => false,
 			'isAdmin' => false,

@@ -142,6 +142,9 @@ class NavigationController extends Controller {
 		$serverData = [
 			'public' => false,
 			'firstrun' => false,
+			'introductionDismissed' => $this->config->getUserValue(
+				$this->userId, Application::APP_ID, 'introduction_dismissed', '0'
+			) === '1',
 			'needsAccount' => false,
 			'setup' => false,
 			'isAdmin' => Server::get(IGroupManager::class)->isAdmin($this->userId),
