@@ -96,12 +96,13 @@ class RequestQueueService {
 	 * @param array $instancePaths
 	 * @param ACore $item
 	 * @param string $author
+	 * @param int $holdUntil when the rows may first be delivered, 0 for now
 	 *
 	 * @return string
 	 */
-	public function generateRequestQueue(array $instancePaths, ACore $item, string $author): string {
+	public function generateRequestQueue(array $instancePaths, ACore $item, string $author, int $holdUntil = 0): string {
 		return $this->generateRequestQueueFromSource(
-			$instancePaths, json_encode($item, JSON_UNESCAPED_SLASHES), $author
+			$instancePaths, json_encode($item, JSON_UNESCAPED_SLASHES), $author, $holdUntil
 		);
 	}
 
@@ -113,16 +114,24 @@ class RequestQueueService {
 	 * model of it would both drop the signature and change what it signed.
 	 *
 	 * @param InstancePath[] $instancePaths
+	 * @param int $holdUntil when the rows may first be delivered, 0 for now.
+	 *                       Written as `last` with no tries spent, which is
+	 *                       the same hold `postponeRequest()` puts on a row
 	 *
 	 * @return string the token shared by every queued request
 	 */
-	public function generateRequestQueueFromSource(array $instancePaths, string $activity, string $author): string {
+	public function generateRequestQueueFromSource(
+		array $instancePaths, string $activity, string $author, int $holdUntil = 0,
+	): string {
 		$token = '';
 		$requests = [];
 		$objectIdPrim = self::objectIdPrimOf($activity);
 		foreach ($this->uniqueInboxes($instancePaths) as $instancePath) {
 			$request = new RequestQueue($activity, $instancePath, $author);
 			$request->setObjectIdPrim($objectIdPrim);
+			if ($holdUntil > time()) {
+				$request->setLast($holdUntil);
+			}
 			if ($token === '') {
 				$token = $request->getToken();
 			} else {
@@ -310,6 +319,36 @@ class RequestQueueService {
 		} catch (QueueStatusException $e) {
 			// somebody else claimed the row meanwhile; it is no longer ours to
 			// hold back
+		}
+	}
+
+	/**
+	 * The requests about one object that are still held back: on standby,
+	 * never attempted, and not due until some time from now.
+	 *
+	 * That is a held video post's fan-out — and also, for as long as it lasts,
+	 * a row the circuit breaker put off, which is the same state for the same
+	 * reason: it has not gone yet and must not go early.
+	 *
+	 * @return list<RequestQueue>
+	 */
+	public function getHeld(string $objectId): array {
+		return $this->requestQueueRequest->getHeldByObject(md5($objectId), time());
+	}
+
+	/**
+	 * Hands a held request the body it goes out with and makes it due now.
+	 *
+	 * @return bool false when the row was no longer on standby: a drain took
+	 *              it, or it was dropped, and it is not ours to change
+	 */
+	public function releaseRequest(RequestQueue $queue, string $activity): bool {
+		try {
+			$this->requestQueueRequest->release($queue, $activity);
+
+			return true;
+		} catch (QueueStatusException $e) {
+			return false;
 		}
 	}
 

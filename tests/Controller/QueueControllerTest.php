@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\QueueController;
 use OCA\Social\Exceptions\SignatureException;
+use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\RequestQueueService;
@@ -45,6 +46,21 @@ class QueueControllerTest extends TestCase {
 			->with('tok', RequestQueue::STATUS_STANDBY)
 			->willReturn([]);
 		$this->activityService->expects($this->never())->method('manageInit');
+
+		$response = $this->controller->asyncForRequest('tok');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	/**
+	 * A post waiting for its video is held by `last`; the async drain must not
+	 * deliver it early just because somebody asked for its token.
+	 */
+	public function testRowsThatAreHeldBackAreNotDrained(): void {
+		$held = new RequestQueue('{}', new InstancePath('https://remote.example/inbox', InstancePath::TYPE_INBOX), 'alice');
+		$held->setLast(time() + 600);
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([$held]);
+		$this->activityService->expects($this->never())->method('manageRequests');
 
 		$response = $this->controller->asyncForRequest('tok');
 

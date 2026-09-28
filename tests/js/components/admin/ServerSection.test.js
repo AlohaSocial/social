@@ -63,6 +63,15 @@ describe('the server card', () => {
 		expect(wrapper.text()).toContain('For development only.')
 	})
 
+	it('says video conversion is on where ffmpeg is, and that it replaces the original', () => {
+		const wrapper = mountServer({ video_transcode: true })
+
+		expect(wrapper.vm.form.videoTranscode).toBe(true)
+		expect(wrapper.text()).toContain('On by default when ffmpeg is installed on the server')
+		expect(wrapper.text()).toContain('The converted file replaces the original, which is deleted')
+		expect(wrapper.text()).toContain('An MP4 that is already H.264 is never touched.')
+	})
+
 	it('writes the whole card in one request, with the numbers as numbers', async () => {
 		const wrapper = mountServer()
 

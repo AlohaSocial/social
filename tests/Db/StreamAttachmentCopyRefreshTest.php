@@ -97,4 +97,31 @@ class StreamAttachmentCopyRefreshTest extends TestCase {
 		// the attachment that was not refreshed is left exactly as it was stored
 		$this->assertSame($stored[1], $refreshed[1]);
 	}
+
+	/**
+	 * A converted video has a new file and a new type. The copy is what the
+	 * post is served and federated from, so it has to name both: left alone
+	 * it named the original, which the conversion deletes.
+	 */
+	public function testAConvertedVideoIsNamedByItsNewFileAndType(): void {
+		$original = new Document();
+		$original->setId('https://cloud.example.org/documents/local/9');
+		$original->setNid(9);
+		$original->setMediaType('video/quicktime');
+		$original->setLocalCopy('11111111-2222-4333-8444-555555555555');
+		$stored = json_decode((string)json_encode([
+			$original->convertToMediaAttachment($this->urlGenerator)->asLocal(),
+		], JSON_UNESCAPED_SLASHES), true);
+
+		$converted = clone $original;
+		$converted->setMediaType('video/mp4');
+		$converted->setLocalCopy('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+
+		$refreshed = $this->refresh($converted, $stored);
+
+		$attachment = (new MediaAttachment())->import($refreshed[0]);
+		$this->assertSame('https://cloud.example.org/media/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.mp4', $attachment->getUrl());
+		$this->assertSame('video/mp4', $attachment->getMediaType());
+		$this->assertSame('video/mp4', $attachment->asDocument()['mediaType']);
+	}
 }

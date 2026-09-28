@@ -269,6 +269,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->createStub(RelayRequest::class),
 			$this->createStub(\OCA\Social\Db\HostBreakerRequest::class),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
 		);
 		$service->manageInit();
 
@@ -660,6 +661,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->unlimitedDomainQuota(),
 			$this->noExternalQuota(),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\VideoTranscodeService::class),
 		);
 
 		$service->retrieveContent('https://' . self::REMOTE . '/media/1.png?sig=abc');

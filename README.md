@@ -41,8 +41,10 @@ One box, and everything a post can carry.
   starts addressed to everyone in the conversation rather than to one person.
 - **Pictures, video and audio.** JPEG, PNG, GIF, WebP, AVIF and **HEIC/HEIF straight
   off an iPhone** (transcoded on the way in), MP4, WebM and QuickTime, MP3, AAC, Opus,
-  WAV and FLAC. Video is never re-encoded and is streamed to storage a chunk at a time,
-  so it gets a **2 GB** ceiling rather than the 10 MB a picture is held to.
+  WAV and FLAC. Video is streamed to storage a chunk at a time, so it gets a **2 GB**
+  ceiling rather than the 10 MB a picture is held to; where the server has ffmpeg, a
+  `.mov` or an HEVC video is converted to H.264 MP4 afterwards (see below), and an
+  H.264 MP4 is never re-encoded.
 - **And the files people actually have.** PDF, text, Markdown, CSV, ZIP, EPUB, ODF
   and the Office formats ride on a post too (`DOCUMENT_MIME_TYPES` in
   `lib/Service/CacheDocumentService.php`), stored as they are and drawn as a card you
@@ -364,12 +366,15 @@ own unified search. No external search engine to run.
   continuously and several may run at once, where the cron manages about a
   thousand deliveries an hour. Polls that have not changed are answered `304`,
   and the page arrives with its first screenful already in it.
-- **Videos that play elsewhere** — an administrator can turn on a background job
-  that converts stored videos to H.264 in an MP4, which is the one format the rest
-  of the network plays: Pixelfed's default accepts `video/mp4` and nothing else, so
-  a `.mov` straight off a phone was being dropped by its inbox without a word.
-  Off by default, because re-encoding is lossy and it is somebody's file, and never
-  during an upload.
+- **Videos that play elsewhere** — where ffmpeg is installed, a background job
+  converts stored videos to H.264 in an MP4, which is the one format the rest of
+  the network plays: Pixelfed's default accepts `video/mp4` and nothing else, so a
+  `.mov` straight off a phone was being dropped by its inbox without a word, and
+  the HEVC phones write into an `.mp4` plays in Safari alone. On by default; an
+  administrator can switch it off, since re-encoding is lossy and the converted
+  file replaces the original. Never during an upload: a new post with such a video
+  waits up to ten minutes for its conversion before it is sent, so it arrives as an
+  MP4, and a setup check says when ffmpeg is missing.
 - **Storage that fits video** — a per-account video quota beside the per-file ceiling,
   because a limit on one upload says nothing about a year of them, and a Storage card
   that says **who** is holding the disk rather than only how much of it is gone. Off

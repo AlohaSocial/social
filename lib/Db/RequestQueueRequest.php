@@ -38,6 +38,10 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	 * round trips before `createPost()` returned. The statement is prepared
 	 * once and the rows are committed in chunks instead.
 	 *
+	 * A row that carries a `last` is written with it, so a fan-out that is
+	 * held back until then is never due for a moment between the insert and
+	 * an update — a drain in that moment would deliver it.
+	 *
 	 * @param RequestQueue[] $queues
 	 *
 	 * @throws Exception
@@ -50,7 +54,7 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		$qb = $this->getRequestQueueInsertSql();
 		foreach ([
 			'token', 'author', 'author_prim', 'activity', 'object_id_prim', 'instance',
-			'priority', 'status', 'tries',
+			'priority', 'status', 'tries', 'last',
 		] as $field) {
 			$qb->setValue($field, $qb->createParameter($field));
 		}
@@ -81,6 +85,11 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		$qb->setParameter('priority', $queue->getPriority(), IQueryBuilder::PARAM_INT);
 		$qb->setParameter('status', $queue->getStatus(), IQueryBuilder::PARAM_INT);
 		$qb->setParameter('tries', $queue->getTries(), IQueryBuilder::PARAM_INT);
+		if ($queue->getLast() > 0) {
+			$qb->setParameter('last', new DateTime('@' . $queue->getLast()), IQueryBuilder::PARAM_DATE);
+		} else {
+			$qb->setParameter('last', null, IQueryBuilder::PARAM_NULL);
+		}
 	}
 
 	/**
@@ -412,6 +421,30 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
+	 * Hands a held request its final body and makes it due at once.
+	 *
+	 * `last` goes back to NULL, which is what a row that has never been
+	 * attempted has, so the next drain delivers it as it would a fresh one.
+	 *
+	 * @throws QueueStatusException when the row was not on standby any more
+	 * @throws Exception
+	 */
+	public function release(RequestQueue &$queue, string $activity): void {
+		$qb = $this->getRequestQueueUpdateSql();
+		$qb->set('activity', $qb->createNamedParameter($activity));
+		$qb->set('last', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL));
+		$qb->limitToId($queue->getId());
+		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
+
+		if ($qb->executeStatement() === 0) {
+			throw new QueueStatusException();
+		}
+
+		$queue->setActivity($activity);
+		$queue->setLast(0);
+	}
+
+	/**
 	 * Return every request stuck `running` since before $before to standby.
 	 *
 	 * @return int the number of requests re-queued
@@ -537,6 +570,41 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		)));
 
 		return $qb->executeStatement();
+	}
+
+	/**
+	 * The requests about one object that are on standby, never attempted, and
+	 * not due before some moment after `$now`.
+	 *
+	 * Narrowed in the query rather than after it: a post with a large fan-out
+	 * has a row per inbox kept for a week after delivery, and this is asked
+	 * on every delete.
+	 *
+	 * @return list<RequestQueue>
+	 * @throws Exception
+	 */
+	public function getHeldByObject(string $objectIdPrim, int $now): array {
+		if ($objectIdPrim === '') {
+			return [];
+		}
+
+		$qb = $this->getRequestQueueSelectSql();
+		$qb->limitToDBField('object_id_prim', $objectIdPrim);
+		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
+		$qb->andWhere($qb->expr()->eq('rq.tries', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+		$qb->andWhere($qb->expr()->gt('rq.last', $qb->createNamedParameter(
+			new DateTime('@' . $now), IQueryBuilder::PARAM_DATE
+		)));
+		$qb->orderBy('rq.id', 'asc');
+
+		$requests = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$requests[] = $this->parseRequestQueueSelectSql($data);
+		}
+		$cursor->closeCursor();
+
+		return $requests;
 	}
 
 	/**

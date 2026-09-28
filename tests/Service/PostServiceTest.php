@@ -79,9 +79,11 @@ class PostServiceTest extends TestCase {
 	private string $userLanguage = 'de_DE';
 
 	private \OCA\Social\Service\InterestService|MockObject $interestService;
+	private \OCA\Social\Service\VideoDeliveryHold|MockObject $videoDeliveryHold;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
+		$this->videoDeliveryHold = $this->createMock(\OCA\Social\Service\VideoDeliveryHold::class);
 		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
@@ -142,6 +144,7 @@ class PostServiceTest extends TestCase {
 			$this->eventDispatcher,
 			new NullLogger(),
 			$this->interestService,
+			$this->videoDeliveryHold,
 		);
 	}
 
@@ -520,6 +523,80 @@ class PostServiceTest extends TestCase {
 		$this->service->createPost($post);
 
 		$this->assertSame($medias, $note->getAttachments());
+	}
+
+	/**
+	 * A post with a video still to be converted is queued held, and its
+	 * conversion is queued once the post exists for the job to read.
+	 */
+	public function testAPostWithAVideoToConvertIsHeldAndItsConversionQueued(): void {
+		$until = time() + 600;
+		$this->videoDeliveryHold->method('holdUntil')->willReturn($until);
+
+		$order = [];
+		$this->activityService->expects($this->once())->method('createActivity')
+			->with($this->anything(), $this->isInstanceOf(Note::class), $this->anything(), $until)
+			->willReturnCallback(function (Person $actor, ACore $item, ?ACore &$activity = null) use (&$order): string {
+				$order[] = 'queued';
+				$activity = new Create();
+				$activity->setObject($item);
+
+				return 'token';
+			});
+		$this->videoDeliveryHold->expects($this->once())->method('convertSoon')
+			->with($this->isInstanceOf(Note::class))
+			->willReturnCallback(static function () use (&$order): void {
+				$order[] = 'conversion';
+			});
+
+		$this->service->createPost($this->post('my holiday'));
+
+		$this->assertSame(['queued', 'conversion'], $order);
+	}
+
+	/** Every other post goes as it always did: no hold, no job. */
+	public function testAPostWithNothingToConvertIsNeitherHeldNorQueuedForConversion(): void {
+		$this->videoDeliveryHold->method('holdUntil')->willReturn(0);
+		$this->activityService->expects($this->once())->method('createActivity')
+			->with($this->anything(), $this->anything(), $this->anything(), 0)
+			->willReturnCallback(function (Person $actor, ACore $item, ?ACore &$activity = null): string {
+				$activity = new Create();
+				$activity->setObject($item);
+
+				return 'token';
+			});
+		$this->videoDeliveryHold->expects($this->never())->method('convertSoon');
+
+		$this->service->createPost($this->post('just words'));
+	}
+
+	/**
+	 * An edit made while the post still waits for its video waits with it,
+	 * so the Update cannot overtake the Create it edits.
+	 */
+	public function testAnEditOfAHeldPostIsHeldToo(): void {
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($this->storedNote(), $this->storedNote());
+		$until = time() + 600;
+		$this->videoDeliveryHold->method('holdUntil')->willReturn($until);
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->with($this->anything(), $this->anything(), $until)
+			->willReturn('token');
+		$this->videoDeliveryHold->expects($this->once())->method('convertSoon');
+
+		$this->service->editPost(7, $this->actor(), 'better words');
+	}
+
+	public function testAnEditOfAnyOtherPostGoesAtOnce(): void {
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($this->storedNote(), $this->storedNote());
+		$this->videoDeliveryHold->method('holdUntil')->willReturn(0);
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->with($this->anything(), $this->anything(), 0)
+			->willReturn('token');
+		$this->videoDeliveryHold->expects($this->never())->method('convertSoon');
+
+		$this->service->editPost(7, $this->actor(), 'better words');
 	}
 
 	public function testCreatePostMergesExplicitAndInlineRecipients(): void {

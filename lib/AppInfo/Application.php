@@ -52,6 +52,7 @@ use OCA\Social\SetupChecks\OutboundQueueNotStuck;
 use OCA\Social\SetupChecks\ProxyForwardsTheScheme;
 use OCA\Social\SetupChecks\ReachableByStrictPeers;
 use OCA\Social\SetupChecks\UploadLimitsAgree;
+use OCA\Social\SetupChecks\VideoConverter;
 use OCA\Social\SetupChecks\WebFingerReachable;
 use OCA\Social\UserMigration\SocialMigrator;
 use OCA\Social\WellKnown\WebfingerHandler;
@@ -138,6 +139,7 @@ class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(CloudAddressMatches::class);
 		$context->registerSetupCheck(ReachableByStrictPeers::class);
 		$context->registerSetupCheck(UploadLimitsAgree::class);
+		$context->registerSetupCheck(VideoConverter::class);
 		$context->registerSetupCheck(CronRanRecently::class);
 		$context->registerSetupCheck(OutboundQueueNotStuck::class);
 		$context->registerSetupCheck(ClientApiAtRoot::class);

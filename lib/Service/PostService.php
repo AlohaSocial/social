@@ -76,6 +76,7 @@ class PostService {
 		private IEventDispatcher $eventDispatcher,
 		private LoggerInterface $logger,
 		private InterestService $interestService,
+		private VideoDeliveryHold $videoDeliveryHold,
 	) {
 	}
 
@@ -173,7 +174,14 @@ class PostService {
 		// this one assembled object, so they cannot disagree.
 		$this->snapshotSource($note);
 
-		$token = $this->activityService->createActivity($actor, $note, $activity);
+		// a video still to be converted holds the delivery back until it is,
+		// because the servers that refuse the original do so on arrival and
+		// are never asked again; 0, and nothing waits, for every other post
+		$holdUntil = $this->videoDeliveryHold->holdUntil($note);
+		$token = $this->activityService->createActivity($actor, $note, $activity, $holdUntil);
+		if ($holdUntil > 0) {
+			$this->videoDeliveryHold->convertSoon($note);
+		}
 		$this->learnFromReply($actor, $post->getReplyTo());
 		// One counter, moved by one. This used to recompute all three with
 		// aggregate queries on **every post written** — including a
@@ -285,7 +293,14 @@ class PostService {
 		$this->notificationService->onStatusEdited($updated);
 
 		try {
-			$this->activityService->updateActivity($actor, $updated);
+			// an edit to a post whose video is still being converted waits
+			// with it, and is rebuilt from the post when the conversion ends,
+			// so it cannot overtake the Create or carry the old file
+			$holdUntil = $this->videoDeliveryHold->holdUntil($updated);
+			$this->activityService->updateActivity($actor, $updated, $holdUntil);
+			if ($holdUntil > 0) {
+				$this->videoDeliveryHold->convertSoon($updated);
+			}
 		} catch (\Throwable $e) {
 			$this->logger->warning('Failed to federate post update', ['exception' => $e]);
 			throw new FederationDeliveryException(
