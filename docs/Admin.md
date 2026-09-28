@@ -486,6 +486,10 @@ the email address* on, which is the default, the account is made when the
 link in the confirmation email is followed, so the server needs working
 mail. The form also asks to accept the server rules (the **Rules** card) and
 links the privacy policy and legal notice set in Administration → Theming.
+The additional registration and privacy information box is plain text shown
+before the form. It starts with a translated explanation and can be adapted
+for this instance. It is informational, not a legal template or legal advice;
+the operator remains responsible for local policies and any consent required.
 *Usernames nobody may register* adds to a built-in list (`admin`, `root`,
 `support`, `social`, `postmaster` and similar). Email domains on the access
 block list are refused here as they are for every account.
@@ -508,8 +512,10 @@ ever). *Let everybody here send invitation links* also gives every user an
 *Invite people* section in their Social settings, single-use links that work
 for a week, at most ten open at a time.
 
-**External accounts.** Every external account with its email, when it
-registered and last logged in and what its media takes up. *Disable* and
+**External accounts.** Every external account with its email, enabled or
+disabled status, registration source, when it registered and last logged in,
+and what its media takes up. Search matches the username and display name.
+*Disable* and
 *Enable* are Nextcloud's own. *Promote* makes one an ordinary account of this
 server with the same username, password, two-factor setup and Social
 account; from then on the groups and apps you give them apply, and there is
@@ -517,6 +523,17 @@ no way back. *Delete* removes the account and its Social account, the way
 deleting any Nextcloud user does. Both ask for your password. External users
 also appear on the Users page, with *Social* as their backend and in the
 `social-external` group.
+
+**Guests app.** Social's self-registered accounts use Social's own `Social`
+user backend and the `social-external` group. They are distinct from accounts
+created by the [Guests app](https://github.com/nextcloud/guests), which uses
+the `Guests` backend and `guest_app` group. Social's account restrictions and
+collaborator filtering target only its own backend, so they do not classify a
+Guests-app account as a Social external account. The two apps can be installed
+together, but the Guests app controls which Nextcloud apps its accounts may
+open: add `social` to its app whitelist if those accounts should use Social.
+This setting does not grant a Guests account the Social-only restrictions;
+Guests accounts remain governed by the Guests app and Nextcloud group policy.
 
 What an external user reaches: Social, logging in and out, their personal
 settings for their details, language, security, appearance and

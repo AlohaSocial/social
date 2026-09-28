@@ -26,8 +26,10 @@
 					<tr>
 						<th>{{ t('social', 'Account') }}</th>
 						<th>{{ t('social', 'Email') }}</th>
+						<th>{{ t('social', 'Status') }}</th>
 						<th>{{ t('social', 'Registered') }}</th>
 						<th>{{ t('social', 'Last login') }}</th>
+						<th>{{ t('social', 'Registration source') }}</th>
 						<th>{{ t('social', 'Media') }}</th>
 						<th>{{ t('social', 'Actions') }}</th>
 					</tr>
@@ -39,8 +41,10 @@
 							<span class="external-accounts__handle">@{{ user.uid }}</span>
 						</td>
 						<td>{{ user.email }}</td>
+						<td>{{ user.enabled ? t('social', 'Enabled') : t('social', 'Disabled') }}</td>
 						<td>{{ day(user.created) }}</td>
 						<td>{{ user.lastLogin > 0 ? day(user.lastLogin) : t('social', 'Never') }}</td>
+						<td>{{ user.origin || t('social', 'Unknown') }}</td>
 						<td>{{ humanSize(user.mediaBytes) }}</td>
 						<td>
 							<div class="social-admin__actions">
