@@ -226,6 +226,19 @@ class TranslatableStringsTest extends TestCase {
 		$this->assertSame([], $missing, 'navigation, timeline, conversation, statistics, composer, setup, and app labels must exist in both German catalog formats');
 	}
 
+	public function testExternalAccountPluralHasGermanCatalogEntries(): void {
+		$message = '_%n external account_::_%n external accounts_';
+		$translation = ['%n externes Konto', '%n externe Konten'];
+		foreach (['de', 'de_DE'] as $locale) {
+			$catalogPath = dirname(__DIR__) . '/l10n/' . $locale . '.json';
+			$catalog = json_decode((string)file_get_contents($catalogPath), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			$this->assertSame($translation, $catalog[$message] ?? null, $locale . ' plural translation');
+			$key = json_encode($message, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+			$value = json_encode($translation, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+			$this->assertStringContainsString($key . ' : ' . $value, (string)file_get_contents(dirname(__DIR__) . '/l10n/' . $locale . '.js'));
+		}
+	}
+
 	public function testSwitchWizardPluralMessagesHaveGermanCatalogEntries(): void {
 		$messages = [
 			'_Looked up %n name so far_::_Looked up %n names so far_' => ['%n Name geprüft', 'Bisher %n Namen geprüft'],
