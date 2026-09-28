@@ -175,6 +175,11 @@ class TranslatableStringsTest extends TestCase {
 	public function testHighTrafficViewsHaveGermanCatalogEntries(): void {
 		$files = [
 			'src/components/Navigation.vue',
+			'src/components/admin/ExternalAccountsSection.vue',
+			'src/components/admin/ExternalUsersSection.vue',
+			'src/components/admin/ExternalRequestsSection.vue',
+			'src/views/Signup.vue',
+			'src/views/AccountSetup.vue',
 			'src/components/TimelinePost.vue',
 			'src/views/Timeline.vue',
 			'src/components/Search.vue',
