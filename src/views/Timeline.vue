@@ -235,7 +235,7 @@ export default {
 				case 'federated':
 					return t('social', 'Global timeline')
 				case 'interests':
-					return t('social', 'My interests')
+					return t('social', 'For you')
 				case 'favourites':
 					return t('social', 'Liked posts')
 				case 'bookmarks':
@@ -345,14 +345,14 @@ export default {
 
 			// the reader's own again, chosen by subject rather than by whom they
 			// follow, so it sits beside My Feed rather than after the distances.
-			// Not a scope of Photos: it is a ranking of its own, and a
-			// narrowing of it would be a second one
-			if (this.hasInterestsTab && !this.isScopedPage) {
+			// On Photos and Videos it is the same ranking narrowed to that
+			// kind, which the server keeps as a ranking of its own
+			if (this.hasInterestsTab) {
 				scopes.splice(1, 0, {
 					value: 'interests',
-					label: t('social', 'My interests'),
+					label: t('social', 'For you'),
 					icon: IconTagHeart,
-					to: { name: 'timeline', params: { type: 'interests' } },
+					to: this.isScopedPage ? routeFor('interests') : { name: 'timeline', params: { type: 'interests' } },
 				})
 			}
 
@@ -362,7 +362,7 @@ export default {
 		},
 
 		/**
-		 * Whether the reader has My interests: the administrators have it on
+		 * Whether the reader has For you: the administrators have it on
 		 * and the reader has not opted out. Paused still has the feed.
 		 *
 		 * @return {boolean}
@@ -394,8 +394,9 @@ export default {
 		 * three pages, so on them the scope comes from the query; everywhere
 		 * else the type *is* the scope. A query that says anything else is read
 		 * as the default rather than trusted: it arrives from the address bar.
+		 * `interests` is For you, for a reader who has it.
 		 *
-		 * @return {string} `home`, `timeline` or `federated`
+		 * @return {string} `home`, `timeline`, `federated` or `interests`
 		 */
 		scope() {
 			if (!this.isScopedPage) {
@@ -403,6 +404,9 @@ export default {
 			}
 
 			const scope = String(this.$route.query.scope ?? '')
+			if (scope === 'interests' && this.hasInterestsTab) {
+				return scope
+			}
 
 			return ['timeline', 'federated'].includes(scope) ? scope : 'home'
 		},

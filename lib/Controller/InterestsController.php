@@ -34,7 +34,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * My interests: the reader's hashtag interests, what teaches them, and the
+ * For you: the reader's hashtag interests, what teaches them, and the
  * feed made of them.
  *
  * Everything here is the viewer's own and nobody else's, so every route
@@ -191,17 +191,35 @@ class InterestsController extends ClientApiController {
 	 * `max_id` like every timeline, though what it names is a place in the
 	 * ranking rather than an age; `offset` is there for a client that pages
 	 * the way Mastodon's trends are paged.
+	 *
+	 * `media` narrows it to `photos` or `videos`, each a ranking of its own;
+	 * Mastodon's `only_media` is the two together, so a phone app asking the
+	 * way it asks every timeline gets the posts with pictures and videos.
+	 * Anything else is ignored rather than refused, as the other media
+	 * parameters are: an unknown kind is a client asking for a narrowing this
+	 * instance does not offer, and the whole feed is still an answer.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/timelines/interests')]
-	public function timeline(int $limit = 20, int|string $max_id = 0, int $offset = 0): DataResponse {
+	public function timeline(
+		int $limit = 20,
+		int|string $max_id = 0,
+		int $offset = 0,
+		string $media = '',
+		bool $only_media = false,
+	): DataResponse {
 		try {
 			$this->initViewer(['read:statuses']);
 			$this->assertEnabled();
 
-			return $this->feedPage($limit, (string)$max_id, $offset);
+			$media = in_array($media, ['photos', 'videos'], true) ? $media : '';
+			if ($media === '' && $only_media) {
+				$media = 'media';
+			}
+
+			return $this->feedPage($limit, (string)$max_id, $offset, $media);
 		} catch (Throwable $e) {
 			return $this->error($this->translate($e));
 		}
@@ -211,10 +229,10 @@ class InterestsController extends ClientApiController {
 	 * A page of the feed as a Mastodon client reads one: the statuses, and a
 	 * `Link` header whose `next` names the last of them.
 	 */
-	private function feedPage(int $limit, string $maxId, int $offset = 0): DataResponse {
+	private function feedPage(int $limit, string $maxId, int $offset = 0, string $media = ''): DataResponse {
 		$limit = max(1, min(ProbeOptions::MAX_LIMIT, $limit));
 		$maxId = ctype_digit($maxId) ? $maxId : '0';
-		$posts = $this->interestFeedService->page($this->viewer(), $limit, $maxId, max(0, $offset));
+		$posts = $this->interestFeedService->page($this->viewer(), $limit, $maxId, max(0, $offset), $media);
 		foreach ($posts as $post) {
 			$post->setExportFormat(ACore::FORMAT_LOCAL);
 		}

@@ -176,7 +176,7 @@ class NavigationController extends Controller {
 			// appeared and then vanished would read as a bug rather than as a
 			// setting.
 			'sections' => $this->sectionsService->current(),
-			// My interests: whether the feed, its settings and the tracking
+			// For you: whether the feed, its settings and the tracking
 			// that teaches it are on for this reader, decided before the
 			// switcher above the timeline is drawn
 			'interests' => $this->interestService->pageState($this->userId),

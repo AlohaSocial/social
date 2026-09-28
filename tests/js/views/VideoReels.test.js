@@ -16,6 +16,11 @@ vi.mock('../../../src/services/logger.js', () => ({
 }))
 const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
 vi.mock('../../../src/services/senses.js', () => ({ feel, videoSoundEnabled: () => true }))
+const { sendSignals } = vi.hoisted(() => ({ sendSignals: vi.fn(() => Promise.resolve()) }))
+vi.mock('../../../src/services/interests.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	sendSignals,
+}))
 
 /** The observers each mount made, so a test can fire one by hand. */
 let observers = []
@@ -32,9 +37,12 @@ function video(id, { attachments, content = '<p>a clip</p>', acct = 'alice@cloud
 	}
 }
 
-async function mountReels(statuses = [video('1'), video('2')]) {
+async function mountReels(statuses = [video('1'), video('2')], { props = {}, serverData = null } = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
+	if (serverData !== null) {
+		useSettingsStore().setServerData(serverData)
+	}
 	const store = useTimelineStore()
 	store.fetchTimeline = vi.fn(async () => {
 		// the first call fills the list, every later one says there is no more
@@ -48,6 +56,7 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 	})
 
 	const wrapper = mount(VideoReels, {
+		props,
 		global: { plugins: [pinia], stubs: {
 			NcButton: true,
 			RouterLink: RouterLinkStub,
@@ -68,6 +77,7 @@ describe('VideoReels', () => {
 		observers = []
 		// the mute choice is kept for the tab, and a test is a new tab
 		window.sessionStorage.clear()
+		sendSignals.mockClear()
 		vi.stubGlobal('IntersectionObserver', class {
 			constructor(callback) {
 				this.callback = callback
@@ -616,6 +626,103 @@ describe('VideoReels', () => {
 			])
 			// the corner used to hold a way back to the Videos grid
 			expect(wrapper.find('.reels__close').exists()).toBe(false)
+		})
+	})
+	/**
+	 * For you narrowed to videos: offered to a signed-in reader who has it,
+	 * and where the stack opens once reading has taught it something.
+	 */
+	describe('For you', () => {
+		const ON = { enabled: true, learning: true, paused: false, noticeAcknowledged: true }
+		const labels = (wrapper) => wrapper.findAll('.reels__scope').map((link) => link.text())
+
+		it('is offered beside My Feed while the reader has it', async () => {
+			const { wrapper } = await mountReels(undefined, { props: { scope: 'home' }, serverData: { public: false, interests: ON } })
+
+			expect(labels(wrapper)).toEqual(['My Feed', 'For you', 'Local', 'Global'])
+			expect(wrapper.findAllComponents(RouterLinkStub).filter((link) => link.classes().includes('reels__scope'))[1].props('to'))
+				.toEqual({ name: 'reels', query: { scope: 'interests' } })
+		})
+
+		it.each([
+			['the feature is off', { public: false, interests: { ...ON, enabled: false } }],
+			['the reader opted out', { public: false, interests: { ...ON, learning: false } }],
+			['nobody is signed in', { public: true, interests: ON }],
+		])('is not offered when %s', async (_, serverData) => {
+			const { wrapper } = await mountReels(undefined, { serverData })
+
+			expect(labels(wrapper)).not.toContain('For you')
+		})
+
+		it('is where the stack opens once reading has taught it something', async () => {
+			const { store } = await mountReels(undefined, { serverData: { public: false, interests: { ...ON, profile: true } } })
+
+			expect(store.type).toBe('videos')
+			expect(store.params.scope).toBe('interests')
+		})
+
+		it('is not the default before that, nor asked for by one who does not have it', async () => {
+			const fresh = await mountReels(undefined, { serverData: { public: false, interests: ON } })
+			expect(fresh.store.params.scope).toBe('home')
+
+			const without = await mountReels(undefined, { props: { scope: 'interests' }, serverData: { public: false, interests: { ...ON, enabled: false, profile: true } } })
+			expect(without.store.params.scope).toBe('home')
+		})
+
+		it('pages a ranking from where it ended, not from its oldest post', async () => {
+			const { wrapper, store } = await mountReels([video('1'), video('2')], {
+				props: { scope: 'interests' },
+				serverData: { public: false, interests: ON },
+			})
+
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[0].element }])
+			await flushPromises()
+
+			expect(store.fetchTimeline).toHaveBeenLastCalledWith({ max_id: '2' })
+		})
+
+		it('says why a video is there, as the chip over a post does', async () => {
+			const { wrapper } = await mountReels([video('1'), { ...video('2'), interest: { tags: [], reason: 'popular' } }], {
+				props: { scope: 'interests' },
+				serverData: { public: false, interests: ON },
+			})
+
+			const reasons = wrapper.findAll('.reel__reason')
+			expect(reasons).toHaveLength(1)
+			expect(reasons[0].text()).toBe('Popular right now')
+		})
+
+		it('reports what the reader watched when they move on, under reels', async () => {
+			const tagged = (id) => ({ ...video(id), tags: [{ name: 'skate' }] })
+			const { wrapper } = await mountReels([tagged('1'), tagged('2')], { serverData: { public: false, interests: ON } })
+			// one player, which follows the slide being watched
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[0].element }])
+			await flushPromises()
+			const player = wrapper.find('video')
+			Object.defineProperty(player.element, 'duration', { value: 10, configurable: true })
+			player.element.currentTime = 6
+			await player.trigger('timeupdate')
+			await player.trigger('ended')
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[1].element }])
+			await flushPromises()
+			await wrapper.find('video').trigger('timeupdate')
+			wrapper.unmount()
+
+			// newest first: the first slide is the second post
+			expect(sendSignals.mock.calls.map(([events]) => events[0])).toEqual([
+				{ status_id: '2', kind: 'dwell', ms: 10000, context: 'reels' },
+				{ status_id: '1', kind: 'skip', context: 'reels' },
+			])
+		})
+
+		it('reports nothing while learning is paused', async () => {
+			const tagged = (id) => ({ ...video(id), tags: [{ name: 'skate' }] })
+			const { wrapper } = await mountReels([tagged('1'), tagged('2')], { serverData: { public: false, interests: { ...ON, paused: true } } })
+
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[1].element }])
+			wrapper.unmount()
+
+			expect(sendSignals).not.toHaveBeenCalled()
 		})
 	})
 })

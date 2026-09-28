@@ -17,7 +17,7 @@ use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The two tables of My interests, as the step that adds them leaves them.
+ * The two tables of For you, as the step that adds them leaves them.
  *
  * Replayed after the squash, the way an existing instance meets it: the squash
  * is already recorded as run there, so this step is the only thing that makes

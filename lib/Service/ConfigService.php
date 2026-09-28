@@ -391,7 +391,7 @@ class ConfigService {
 	public const SOCIAL_CONTACT_ACCOUNT = 'contact_account';
 
 	/**
-	 * My interests: the feed built from the hashtags a reader lingers on.
+	 * For you: the feed built from the hashtags a reader lingers on.
 	 *
 	 * `interests` switches the whole feature, and off means off: nothing is
 	 * learned, the feed and its settings are gone, and what was learned is

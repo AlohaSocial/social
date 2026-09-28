@@ -121,7 +121,7 @@ class AdminSettings implements IDelegatedSettings {
 			// because a picker showing raw ids is a picker nobody can use.
 			'sections' => $this->isAdministrator() ? $this->sectionsService->current() : null,
 			'groups' => $this->isAdministrator() ? $this->availableGroups() : null,
-			// My interests, for the same administrator proper
+			// For you, for the same administrator proper
 			'interests' => $this->isAdministrator() ? $this->interestService->adminSettings() : null,
 			'accessType' => $this->fediverseService->getAccessType(),
 			'accessList' => $this->fediverseService->getListedAddresses(),

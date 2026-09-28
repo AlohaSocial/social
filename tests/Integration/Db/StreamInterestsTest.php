@@ -14,18 +14,19 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The reads behind My interests: candidate posts by hashtag, their tags, and
+ * The reads behind For you: candidate posts by hashtag, their tags, and
  * the viewer-filtered fetch of the posts chosen.
  */
 class StreamInterestsTest extends TestCase {
 	private const BASE = 'https://cloud.example.org/stream-interests';
 	private const VIEWER = self::BASE . '/users/viewer';
 	private const AUTHOR = 'https://remote.example/stream-interests/users/author';
-	private const NOTES = ['jazz', 'jazz-german', 'climbing', 'own', 'private'];
+	private const NOTES = ['jazz', 'jazz-german', 'climbing', 'own', 'private', 'jazz-photo', 'jazz-video', 'jazz-both'];
 
 	private StreamRequest $streamRequest;
 	private CacheActorsRequest $cacheActorsRequest;
@@ -69,8 +70,16 @@ class StreamInterestsTest extends TestCase {
 	}
 
 	/** @param string[] $hashtags */
-	private function note(string $suffix, array $hashtags, string $author = self::AUTHOR, bool $public = true, string $language = '', int $ago = 0): Note {
+	private function note(string $suffix, array $hashtags, string $author = self::AUTHOR, bool $public = true, string $language = '', int $ago = 0, array $media = []): Note {
 		$note = new Note();
+		$note->setAttachments(array_map(function (string $type) use ($suffix): MediaAttachment {
+			$attachment = new MediaAttachment();
+			$attachment->setId($suffix . '-' . $type);
+			$attachment->setType($type);
+			$attachment->setUrl(self::BASE . '/media/' . $suffix . '-' . $type);
+
+			return $attachment;
+		}, $media));
 		$note->setId(self::BASE . '/notes/' . $suffix);
 		$note->setAttributedTo($author);
 		$note->setTo($public ? ACore::CONTEXT_PUBLIC : $author . '/followers');
@@ -99,7 +108,7 @@ class StreamInterestsTest extends TestCase {
 	}
 
 	/** @return string[] the suffixes of the candidate rows, in order */
-	private function candidates(array $tags, array $exclude = [], array $languages = []): array {
+	private function candidates(array $tags, array $exclude = [], array $languages = [], string $media = ''): array {
 		$bySuffix = [];
 		foreach ($this->notes as $suffix => $note) {
 			$bySuffix[(string)$note->getNid()] = $suffix;
@@ -107,7 +116,7 @@ class StreamInterestsTest extends TestCase {
 
 		return array_values(array_filter(array_map(
 			fn (array $row) => $bySuffix[$row['nid']] ?? null,
-			$this->streamRequest->interestCandidates($tags, '0', 100, $exclude, $languages)
+			$this->streamRequest->interestCandidates($tags, '0', 100, $exclude, $languages, $media)
 		)));
 	}
 
@@ -125,6 +134,19 @@ class StreamInterestsTest extends TestCase {
 		$this->assertSame(['jazz'], $this->candidates(['jazz'], [(string)$this->notes['jazz-german']->getNid()]));
 		$this->assertSame(['jazz'], $this->candidates(['jazz'], [], ['en']));
 		$this->assertSame(['jazz-german', 'jazz'], $this->candidates(['jazz'], [], ['de']));
+	}
+
+	/** Photos, videos, or either: the kind each ranking of For you is narrowed to. */
+	public function testCandidatesCanBeNarrowedToOneKindOfMedia(): void {
+		$this->seed();
+		$this->note('jazz-photo', ['jazz'], ago: 50, media: ['image']);
+		$this->note('jazz-video', ['jazz'], ago: 40, media: ['video']);
+		$this->note('jazz-both', ['jazz'], ago: 30, media: ['image', 'video']);
+
+		$this->assertSame(['jazz-both', 'jazz-photo'], $this->candidates(['jazz'], media: 'photos'));
+		$this->assertSame(['jazz-both', 'jazz-video'], $this->candidates(['jazz'], media: 'videos'));
+		$this->assertSame(['jazz-both', 'jazz-video', 'jazz-photo'], $this->candidates(['jazz'], media: 'media'));
+		$this->assertSame(['jazz-both', 'jazz-video', 'jazz-photo', 'jazz-german', 'jazz'], $this->candidates(['jazz']));
 	}
 
 	public function testEveryTagOfEachPostIsReadLowered(): void {

@@ -253,10 +253,12 @@ The sidebar is the map:
   written on this Nextcloud; Global is every public post this server has
   received. **Photos** and **Videos** carry the same switcher over posts that
   are pictures, or videos — including videos from PeerTube channels anyone
-  here follows.
+  here follows — with **For you** in it as well (see below).
 - **Shorts** — the Videos timeline watched one at a time, full height, each
   playing as it comes up and pausing as you scroll past. The switch in the top
-  corner picks whose videos (**My Feed**, **Local** or **Global**). It plays
+  corner picks whose videos (**My Feed**, **For you**, **Local** or
+  **Global**); it opens on For you once your reading has taught it something,
+  and on My Feed before that. It plays
   with sound; opened from a link, the browser may hold the sound back until
   you tap the speaker, which a "Tap for sound" hint points at. Once you have
   tapped it, the videos after it keep their sound as you scroll, and if you
@@ -338,9 +340,9 @@ A post that links somewhere gets a preview card, read by this server rather
 than by your browser. With the `notify_push` app installed, new posts arrive
 live; without it the page checks every 30 seconds.
 
-### My interests
+### For you
 
-**My interests** is the second feed in the switcher above the posts, right
+**For you** is the second feed in the switcher above the posts, right
 after My Feed and before Local and Global. It is made of the hashtags you read: Social notices
 which posts you stay on longer than you usually do, which you scroll past, and
 what you like, boost, reply to, bookmark, open, or whose pictures and links you
@@ -353,11 +355,22 @@ hashtag that often comes up alongside yours. Each post says why it is there:
 something to show on the first day; until it has learned a little, it also
 shows what is trending here, and says so.
 
+**Photos, videos and Shorts.** Photos, Videos and Shorts have a **For you**
+of their own: the same hashtags, narrowed to posts with a picture, or to
+videos, and looking back twice as far, because such posts are rarer. Where
+that finds fewer than about forty, the rest is what is popular here in the
+same kind right now — the posts Explore's Pictures and Videos tabs show —
+and those say *Popular right now* rather than naming a hashtag they did not
+match. In Shorts, what counts is how much of each video you watch: all of it,
+or most, counts for a lot, half of it for a little, and swiping it away within
+about two seconds counts against its hashtags. In the Photos and Videos grids,
+opening a post counts.
+
 **Less like this**, in a post's menu, takes that post out of the feed and
 counts its hashtags down. On the feed itself the post goes at once and *Undo*
 brings it back. Muting somebody from one of their posts counts too.
 
-**Where you change it.** **Settings → My interests** shows the list as a cloud:
+**Where you change it.** **Settings → For you** shows the list as a cloud:
 the bigger and bolder a hashtag, the more it counts. Drag one to where you want
 it, or click it for *Higher priority*, *Lower priority*, *Move to top*, *Pin*
 and *Remove*; with the keyboard, the arrow keys move between hashtags, Enter
@@ -377,7 +390,7 @@ leaves this server, nobody else can see it, and it travels with your account
 when you export it. Your administrator may have turned the feature off, or made
 learning something you switch on yourself.
 
-**In a Mastodon app** there is no My interests feed: it is part of this web
+**In a Mastodon app** there is no For you feed: it is part of this web
 interface. What you like, boost, reply to and bookmark in an app still counts;
 only the web interface knows how long you looked at something.
 

@@ -19,7 +19,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 
 /**
- * The My interests card on the admin page.
+ * The For you card on the admin page.
  *
  * No attribute that would loosen access: without `#[NoAdminRequired]` the
  * framework refuses anybody but an administrator before this runs, which is

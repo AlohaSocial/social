@@ -16,20 +16,25 @@ use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Service\TrendService;
 use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\TestCase;
 
-/** How the My interests feed ranks, spreads and pages. */
+/** How the For you feed ranks, spreads and pages. */
 class InterestFeedServiceTest extends TestCase {
 	private const NOW = 1790000000;
 	private const HOUR = 3600;
 
 	private array $profile = ['weights' => [], 'reasons' => [], 'thin' => false, 'top' => []];
-	/** @var list<array{nid: string, author: string, tags: string[]}> every post there is */
+	/** @var list<array{nid: string, author: string, tags: string[], media: string}> every post there is */
 	private array $posts = [];
+	/** @var list<array{nid: string, author: string}> what TrendService calls trending */
+	private array $trending = [];
+	/** @var string[] the kind every trending question asked for */
+	private array $trendKinds = [];
 	/** @var string[] posts that are gone by the time they are read */
 	private array $gone = [];
 	private array $cache = [];
@@ -41,9 +46,9 @@ class InterestFeedServiceTest extends TestCase {
 		return Nid::fromPublishedTime(self::NOW - $ageSeconds, $n, StreamRequest::NID_LIMIT);
 	}
 
-	private function given(int $ageSeconds, array $tags, string $author = 'a', int $n = 1): string {
+	private function given(int $ageSeconds, array $tags, string $author = 'a', int $n = 1, string $media = ''): string {
 		$nid = $this->nid($ageSeconds, $n);
-		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags];
+		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags, 'media' => $media];
 
 		return $nid;
 	}
@@ -58,13 +63,17 @@ class InterestFeedServiceTest extends TestCase {
 
 		$streamRequest = $this->createStub(StreamRequest::class);
 		$streamRequest->method('interestCandidates')->willReturnCallback(
-			function (array $tags, string $since, int $cap, array $exclude): array {
-				$this->queries[] = compact('tags', 'since', 'exclude');
+			function (array $tags, string $since, int $cap, array $exclude, array $languages = [], string $media = ''): array {
+				$this->queries[] = compact('tags', 'since', 'exclude', 'media');
 				$rows = [];
 				$posts = $this->posts;
 				usort($posts, static fn (array $a, array $b): int => Nid::compare($b['nid'], $a['nid']));
 				foreach ($posts as $post) {
 					if (in_array($post['nid'], $exclude, true) || Nid::compare($post['nid'], $since) <= 0) {
+						continue;
+					}
+					// what the query's media filter does, by the kind each post is
+					if (($media === 'media' && $post['media'] === '') || !in_array($media, ['', 'media', $post['media']], true)) {
 						continue;
 					}
 					foreach (array_intersect($post['tags'], $tags) as $tag) {
@@ -113,7 +122,22 @@ class InterestFeedServiceTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
-		return new InterestFeedService($interests, $streamRequest, $streamService, $cacheFactory, $time);
+		$trends = $this->createStub(TrendService::class);
+		$trends->method('trendingStatuses')->willReturnCallback(
+			function (string $period, int $limit, int $offset, bool $onlyMedia, string $mediaType): array {
+				$this->trendKinds[] = $mediaType;
+
+				return array_map(static function (array $post): Note {
+					$note = new Note();
+					$note->setNid($post['nid']);
+					$note->setAttributedTo($post['author']);
+
+					return $note;
+				}, array_slice($this->trending, 0, $limit));
+			}
+		);
+
+		return new InterestFeedService($interests, $streamRequest, $streamService, $trends, $cacheFactory, $time);
 	}
 
 	private function viewer(): Person {
@@ -264,6 +288,124 @@ class InterestFeedServiceTest extends TestCase {
 		$this->gone[] = $this->given(120, ['cats'], 'b', 2);
 
 		$this->assertSame([$kept], array_map(static fn (Note $p): string => (string)$p->getNid(), $this->service()->page($this->viewer(), 20)));
+	}
+
+	public function testEachKindIsARankingOfItsOwn(): void {
+		$this->weights(['cats' => 1.0]);
+		$text = $this->given(60, ['cats'], 'a', 1);
+		$photo = $this->given(120, ['cats'], 'b', 2, 'photos');
+		$video = $this->given(180, ['cats'], 'c', 3, 'videos');
+		$service = $this->service();
+
+		$this->assertSame([$text, $photo, $video], array_column($service->rank($this->viewer()), 'nid'));
+		$this->assertSame([$photo], array_column($service->rank($this->viewer(), 'photos'), 'nid'));
+		$this->assertSame([$video], array_column($service->rank($this->viewer(), 'videos'), 'nid'));
+		$this->assertSame([$photo, $video], array_column($service->rank($this->viewer(), 'media'), 'nid'));
+	}
+
+	/**
+	 * Kept under three keys: a cursor from one ranking is not a place in
+	 * another, and a photo page must not overwrite the text one being paged.
+	 */
+	public function testTheRankingsAreKeptApartInTheCache(): void {
+		$this->weights(['cats' => 1.0]);
+		$texts = [];
+		foreach (range(1, 3) as $i) {
+			$texts[] = $this->given($i * 60, ['cats'], 't' . $i, $i);
+		}
+		$photos = [];
+		foreach (range(1, 3) as $i) {
+			$photos[] = $this->given(self::HOUR + $i * 60, ['cats'], 'p' . $i, 10 + $i, 'photos');
+		}
+		$service = $this->service();
+
+		$service->page($this->viewer(), 2);
+		$service->page($this->viewer(), 2, '0', 0, 'photos');
+
+		$viewerId = $this->viewer()->getId();
+		$this->assertArrayHasKey(InterestFeedService::snapshotKey($viewerId, ''), $this->cache);
+		$this->assertArrayHasKey(InterestFeedService::snapshotKey($viewerId, 'photos'), $this->cache);
+		$this->assertNotSame(InterestFeedService::snapshotKey($viewerId, ''), InterestFeedService::snapshotKey($viewerId, 'photos'));
+		$this->assertNotSame(InterestFeedService::snapshotKey($viewerId, 'photos'), InterestFeedService::snapshotKey($viewerId, 'videos'));
+
+		$ids = static fn (array $page): array => array_map(static fn (Note $p): string => (string)$p->getNid(), $page);
+		// the whole feed holds the photos too, after the newer texts
+		$this->assertSame([$texts[2], $photos[0]], $ids($service->page($this->viewer(), 2, $texts[1])));
+		$this->assertSame([$photos[2]], $ids($service->page($this->viewer(), 2, $photos[1], 0, 'photos')));
+		$this->assertSame([], $service->page($this->viewer(), 2, $texts[1], 0, 'photos'), 'a text cursor is not in the photos');
+	}
+
+	public function testAnUnknownKindIsTheWholeFeed(): void {
+		$this->weights(['cats' => 1.0]);
+		$text = $this->given(60, ['cats'], 'a', 1);
+
+		$this->service()->page($this->viewer(), 20, '0', 0, 'podcasts');
+
+		$this->assertSame('', $this->queries[0]['media']);
+		$this->assertArrayHasKey(InterestFeedService::snapshotKey($this->viewer()->getId(), ''), $this->cache);
+		$this->assertSame([$text], array_column($this->service()->rank($this->viewer(), 'podcasts'), 'nid'));
+	}
+
+	public function testAMediaRankingLooksTwiceAsFarBack(): void {
+		$this->weights(['cats' => 1.0]);
+		$this->given(10 * 86400, ['cats'], 'a', 1);
+		$photo = $this->given(10 * 86400, ['cats'], 'b', 2, 'photos');
+		$this->given(15 * 86400, ['cats'], 'c', 3, 'photos');
+
+		$this->assertSame([$photo], array_column($this->service()->rank($this->viewer(), 'photos'), 'nid'));
+		$this->assertSame([], $this->service()->rank($this->viewer()), 'the whole feed keeps its week');
+	}
+
+	/**
+	 * Short of a screenful, a photo ranking is topped up with what is trending
+	 * in photos — each marked popular, none twice, none the reader's own.
+	 */
+	public function testAShortMediaRankingIsFilledWithWhatIsPopular(): void {
+		$this->weights(['cats' => 1.0]);
+		$matched = $this->given(60, ['cats'], 'b', 1, 'photos');
+		$popular = $this->nid(120, 2);
+		$this->trending = [
+			['nid' => $matched, 'author' => 'b'],
+			['nid' => $this->nid(90, 3), 'author' => $this->viewer()->getId()],
+			['nid' => $popular, 'author' => 'c'],
+		];
+
+		$ranked = $this->service()->rank($this->viewer(), 'photos');
+
+		$this->assertSame([$matched, $popular], array_column($ranked, 'nid'));
+		$this->assertSame('interest', $ranked[0]['reason']);
+		$this->assertSame(['nid' => $popular, 'tags' => [], 'reason' => 'popular'], $ranked[1]);
+		$this->assertSame(['image'], $this->trendKinds);
+	}
+
+	public function testANewcomerStillGetsPopularVideos(): void {
+		$popular = $this->nid(60, 1);
+		$this->trending = [['nid' => $popular, 'author' => 'c']];
+
+		$this->assertSame([['nid' => $popular, 'tags' => [], 'reason' => 'popular']], $this->service()->rank($this->viewer(), 'videos'));
+		$this->assertSame(['video'], $this->trendKinds);
+		$this->assertSame([], $this->queries, 'no interests to ask the database about');
+	}
+
+	public function testTheWholeFeedIsNeverFilledWithWhatIsPopular(): void {
+		$this->trending = [['nid' => $this->nid(60, 1), 'author' => 'c']];
+
+		$this->assertSame([], $this->service()->rank($this->viewer()));
+		$this->assertSame([], $this->trendKinds);
+	}
+
+	public function testAFullMediaRankingIsLeftAlone(): void {
+		$this->weights(['cats' => 1.0]);
+		foreach (range(1, InterestFeedService::POPULAR_FILL) as $i) {
+			$this->given($i * 60, ['cats'], 'a' . $i, $i, 'videos');
+		}
+		$this->trending = [['nid' => $this->nid(1, 999), 'author' => 'c']];
+
+		$ranked = $this->service()->rank($this->viewer(), 'videos');
+
+		$this->assertCount(InterestFeedService::POPULAR_FILL, $ranked);
+		$this->assertNotContains('popular', array_column($ranked, 'reason'));
+		$this->assertSame([], $this->trendKinds);
 	}
 
 	/** The ranked entries with their authors put back, for the author count. */

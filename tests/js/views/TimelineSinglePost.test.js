@@ -501,7 +501,7 @@ describe('TimelineSinglePost', () => {
 	})
 })
 
-describe('opening a post, for My interests', () => {
+describe('opening a post, for For you', () => {
 	beforeEach(() => {
 		window.history.replaceState({}, '', '/apps/social/@bob/123')
 		setState('item', fromServer)

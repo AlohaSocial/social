@@ -13,7 +13,7 @@ use OCA\Social\Model\Interest;
 use OCA\Social\Service\InterestScorer;
 use PHPUnit\Framework\TestCase;
 
-/** The arithmetic of My interests, rule by rule. */
+/** The arithmetic of For you, rule by rule. */
 class InterestScorerTest extends TestCase {
 	private const NOW = 1790000000;
 	private const DAY = 86400;
@@ -29,6 +29,23 @@ class InterestScorerTest extends TestCase {
 		$this->assertSame(1200 + 35 * 100, $scorer->expectedDwellMs(100, 0));
 		$this->assertSame(1200 + 1500 * 2, $scorer->expectedDwellMs(0, 2));
 		$this->assertSame(20000, $scorer->expectedDwellMs(5000, 4), 'nobody is expected to read all of a long post');
+	}
+
+	public function testAVideoTakesAsLongAsItRunsUpToTheCapOnOneLook(): void {
+		$scorer = $this->scorer();
+
+		$this->assertSame(8000, $scorer->expectedWatchMs(8000));
+		$this->assertSame(InterestScorer::EXPECTED_WATCH_CAP_MS, $scorer->expectedWatchMs(600000));
+		$this->assertSame(1, $scorer->expectedWatchMs(0));
+	}
+
+	public function testWatchingIsJudgedByHowMuchOfTheVideoWasSeen(): void {
+		$scorer = $this->scorer();
+
+		$this->assertSame(InterestScorer::SIGNAL_LONG_DWELL, $scorer->classifyWatch(10000, 10000), 'all of it');
+		$this->assertSame(InterestScorer::SIGNAL_LONG_DWELL, $scorer->classifyWatch(9000, 10000), 'as good as all of it');
+		$this->assertSame(InterestScorer::SIGNAL_DWELL, $scorer->classifyWatch(5000, 10000), 'half');
+		$this->assertSame(0.0, $scorer->classifyWatch(2000, 10000), 'a moment says nothing');
 	}
 
 	public function testALookIsJudgedAgainstTheReadersOwnPace(): void {

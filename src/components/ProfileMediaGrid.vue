@@ -9,6 +9,7 @@
 				<router-link
 					class="media-grid__link"
 					:to="tile.route"
+					:data-status-id="tile.key"
 					:aria-label="tile.label">
 					<!-- A tile the reader's own keyword filters matched carries
 					     no picture at all: the grid is the other way this app

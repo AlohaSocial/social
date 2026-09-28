@@ -103,15 +103,20 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 
 <img src="img/readme/post-actions.gif" alt="Hovering a post opens its actions" width="680">
 
-![My interests in the settings](img/readme/interests.png)
+![For you in the settings](img/readme/interests.png)
 
-- **My interests** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
+- **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
   read. Social notices what you stay on, what you scroll past, and what you like,
   boost, reply to, bookmark and open, and keeps a list of hashtags from it; the feed
   is the last week's posts carrying them, the best matches and the freshest first, no
   author allowed to fill it, and now and then a hashtag that often travels with yours.
   Every post says why it is there, and **Less like this** in its menu takes it out.
-  **Settings → My interests** draws the list as a cloud — the bigger the hashtag, the
+  **Photos**, **Videos** and **Shorts** offer it too, narrowed to pictures or videos
+  and looking back two weeks; where that is too little, the rest is what is popular
+  in the same kind right now, marked *Popular right now*. Shorts opens on it once
+  your reading has taught it something, and learns from how much of each video you
+  watch.
+  **Settings → For you** draws the list as a cloud — the bigger the hashtag, the
   more it counts — where you drag, pin, remove and add them, choose languages, pause
   or turn it off. It never leaves this server and nobody else sees it.
   Administrators can switch it off or make it opt-in.
@@ -872,7 +877,7 @@ occ social:reset
 - [docs/User-Guide.md](docs/User-Guide.md)
   is the guide for the people using the app: getting an account, following,
   posting, reading, managing the account, keyboard shortcuts.
-- [docs/My-Interests.md](docs/My-Interests.md)
+- [docs/For-You.md](docs/For-You.md)
   is a specification, not a description of anything that exists: a feed built
   from the hashtags somebody's reading shows they care about, with every learned
   interest visible and editable. It records the decisions an interview settled —

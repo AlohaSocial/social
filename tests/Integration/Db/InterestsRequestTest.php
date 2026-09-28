@@ -16,7 +16,7 @@ use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
 /**
- * What My interests has learnt about a reader, and the posts they hid from it.
+ * What For you has learnt about a reader, and the posts they hid from it.
  */
 class InterestsRequestTest extends TestCase {
 	private const ALICE = 'https://itest.example/users/interests-alice';

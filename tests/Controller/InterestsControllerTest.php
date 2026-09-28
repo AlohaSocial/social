@@ -25,11 +25,12 @@ use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
-/** The routes of My interests: who may call them, and what they answer. */
+/** The routes of For you: who may call them, and what they answer. */
 #[AllowMockObjectsWithoutExpectations]
 class InterestsControllerTest extends TestCase {
 	private InterestService|MockObject $interestService;
@@ -184,5 +185,46 @@ class InterestsControllerTest extends TestCase {
 			->willReturn([]);
 
 		$this->controller()->timeline(20, 'abc');
+	}
+
+	/**
+	 * `media` is photos or videos; Mastodon's `only_media` is the two together;
+	 * anything else is the whole feed, as the other media parameters treat an
+	 * unknown kind.
+	 *
+	 * @return array<string, array{0: string, 1: bool, 2: string}>
+	 */
+	public static function mediaParams(): array {
+		return [
+			'the whole feed' => ['', false, ''],
+			'photos' => ['photos', false, 'photos'],
+			'videos' => ['videos', false, 'videos'],
+			'only_media' => ['', true, 'media'],
+			'a kind named beats only_media' => ['videos', true, 'videos'],
+			'unknown' => ['podcasts', false, ''],
+			'unknown with only_media' => ['image', true, 'media'],
+			'the internal name' => ['media', false, ''],
+		];
+	}
+
+	#[DataProvider('mediaParams')]
+	public function testTheFeedIsNarrowedOnlyToTheKindsItOffers(string $media, bool $onlyMedia, string $expected): void {
+		$this->feedService->expects($this->once())->method('page')
+			->with($this->isInstanceOf(Person::class), 20, '0', 0, $expected)
+			->willReturn([]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->timeline(20, 0, 0, $media, $onlyMedia)->getStatus());
+	}
+
+	public function testTheNextPageKeepsTheKind(): void {
+		$this->uri = '/index.php/apps/social/api/v1/timelines/interests?limit=1&media=photos';
+		$post = new Note();
+		$post->setNid('1789000000000000001');
+		$this->feedService->method('page')->willReturn([$post]);
+
+		$this->assertSame(
+			'</index.php/apps/social/api/v1/timelines/interests?limit=1&media=photos&max_id=1789000000000000001>; rel="next"',
+			$this->controller()->timeline(1, 0, 0, 'photos')->getHeaders()['Link']
+		);
 	}
 }

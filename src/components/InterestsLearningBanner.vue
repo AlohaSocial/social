@@ -36,7 +36,7 @@ import logger from '../services/logger.js'
 export const DISMISSED_KEY = 'social:interests:learning-dismissed'
 
 /**
- * The "still learning" note over My interests.
+ * The "still learning" note over For you.
  *
  * It asks for the state once, when the feed opens: whether learning is thin
  * changes as the reader reads, not while they look at one page of it. Put
@@ -68,7 +68,7 @@ export default {
 			this.thin = state?.thin === true
 		} catch (error) {
 			// nothing to say without an answer; the feed itself still works
-			logger.debug('Could not ask whether My interests is still learning', { error })
+			logger.debug('Could not ask whether For you is still learning', { error })
 		}
 	},
 

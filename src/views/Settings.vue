@@ -237,8 +237,8 @@ export default {
 							id: 'interests',
 							icon: 'IconInterests',
 							component: 'InterestsSettings',
-							title: t('social', 'My interests'),
-							lede: t('social', 'The hashtags Social has noticed you reading, the biggest first. They make up your My interests feed: drag one to change its place, pin it, remove it, or add your own. Nobody but you sees this.'),
+							title: t('social', 'For you'),
+							lede: t('social', 'The hashtags Social has noticed you reading, the biggest first. They make up your For you feed: drag one to change its place, pin it, remove it, or add your own. Nobody but you sees this.'),
 						}]
 					: []),
 				{

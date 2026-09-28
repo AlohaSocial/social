@@ -16,7 +16,7 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * The two tables of My interests.
+ * The two tables of For you.
  *
  * `social_interest` is one row per (reader, hashtag): the score reading earned
  * it and when, whether the reader added it themselves, and the rank they

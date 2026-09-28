@@ -118,7 +118,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	private const PATH_BOOKMARKS = self::PATH_ROOT . 'bookmarks.csv';
 	private const PATH_LIKES = self::PATH_ROOT . 'likes.csv';
 	private const PATH_OUTBOX = self::PATH_ROOT . 'outbox.json';
-	/** My interests: what was learned and chosen, and the reader's switches. */
+	/** For you: what was learned and chosen, and the reader's switches. */
 	private const PATH_INTERESTS = self::PATH_ROOT . 'interests.json';
 	/**
 	 * Where the files sit, relative to the app's folder in the archive, in the
@@ -301,7 +301,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	}
 
 	/**
-	 * My interests, as the JSON `InterestService::export()` writes. Not the
+	 * For you, as the JSON `InterestService::export()` writes. Not the
 	 * posts the reader hid: those name posts on this server, which mean
 	 * nothing anywhere else.
 	 */
@@ -896,7 +896,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		$this->importOutbox($actor, $importSource, $output);
 	}
 
-	/** Takes My interests back; an archive from before they existed has none. */
+	/** Takes For you back; an archive from before they existed has none. */
 	private function importInterests(Person $actor, IImportSource $importSource, OutputInterface $output): void {
 		$contents = $this->optionalFile($importSource, self::PATH_INTERESTS, $output);
 		if ($contents === null) {

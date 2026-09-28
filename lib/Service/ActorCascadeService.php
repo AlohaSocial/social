@@ -150,7 +150,7 @@ class ActorCascadeService {
 			'lists' => fn () => $this->listsRequest->deleteRelatedId($actorId),
 			'conversations' => fn () => $this->conversationsRequest->deleteRelatedId($actorId),
 			'featuredTags' => fn () => $this->featuredTagsRequest->deleteRelatedId($actorId),
-			// what My interests learned about it, and the posts it hid there
+			// what For you learned about it, and the posts it hid there
 			'interests' => fn () => $this->interestsRequest->deleteRelatedId($actorId),
 			'announcements' => fn () => $this->announcementsRequest->deleteRelatedId($actorId),
 			// the posts it had asked to have published later, which are the one

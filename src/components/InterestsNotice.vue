@@ -6,10 +6,10 @@
 	<!-- learning is on unless somebody turns it off, so the reader is told it
 	     is happening before anything else is: once per account, and the
 	     answer is kept on the server so another browser does not ask again -->
-	<section class="interests-notice" :aria-label="t('social', 'About My interests')">
+	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
-			{{ t('social', 'Social now learns which hashtags interest you from how you read, to build your My interests feed. This stays on this server and is only visible to you.') }}
+			{{ t('social', 'Social now learns which hashtags interest you from how you read, to build your For you feed. This stays on this server and is only visible to you.') }}
 		</p>
 		<div class="interests-notice__actions">
 			<NcButton variant="tertiary" :to="{ name: 'settings', hash: '#interests' }">
@@ -38,7 +38,7 @@ import { useSettingsStore } from '../store/settings.js'
 const PAGE_KEYS = ['enabled', 'learning', 'paused', 'noticeAcknowledged']
 
 /**
- * The one-time notice that My interests is learning.
+ * The one-time notice that For you is learning.
  *
  * Whether it shows is the page's decision; what it does is change the page
  * state the decision is made from, so it goes away — and with Turn off, the

@@ -12,7 +12,7 @@
 
 What it does:
 - 🧭 Timelines: home, local, global (federated), direct messages, liked posts, notifications, hashtags
-- 🏷️ My interests: a feed made of the hashtags you read, learned from what you stay on, skip, like and boost, with a tag cloud in the settings to reorder, pin, add and remove them. Private, never federated, and switchable to opt-in by the administrator
+- 🏷️ For you: a feed made of the hashtags you read, learned from what you stay on, skip, like, boost and watch, also for photos, videos and Shorts, with a tag cloud in the settings to reorder, pin, add and remove them. Private, never federated, and switchable to opt-in by the administrator
 - ✍️ Posts: write posts and replies with a visibility setting, mentions, hashtags, content warnings and media attachments
 - ✏️ Edit and delete your own posts; edits are federated as ActivityPub Update activities
 - 👍 🔁 💬 Like, boost and reply

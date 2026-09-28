@@ -287,7 +287,7 @@ describe('less like this', () => {
 	const tagged = { tags: [{ name: 'film' }] }
 	const offers = (wrapper) => items(wrapper).includes('Less like this')
 
-	it('is offered on somebody else\'s tagged post while My interests is on', () => {
+	it('is offered on somebody else\'s tagged post while For you is on', () => {
 		const wrapper = mountMenu(tagged, { interests: ON })
 
 		expect(offers(wrapper)).toBe(true)
