@@ -85,6 +85,12 @@
 				v-model="form.reserved"
 				:label="t('social', 'Usernames nobody may register, one per line')"
 				rows="3" />
+			<NcTextArea
+				v-model="form.signupNotice"
+				:label="t('social', 'Additional registration and privacy information')"
+				:helperText="t('social', 'Shown before people enter their details. Plain text only; adapt this information to your instance. It is not legal advice.')"
+				rows="5"
+				maxlength="4000" />
 
 			<div class="external__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">
@@ -190,6 +196,7 @@ export default {
 				minAge: String(settings.minAge),
 				reserved: (settings.reserved ?? []).join('\n'),
 				userInvites: settings.userInvites,
+				signupNotice: settings.signupNotice ?? '',
 			}
 		},
 
@@ -206,6 +213,7 @@ export default {
 					minAge: parseInt(this.form.minAge, 10) || 0,
 					reserved: this.form.reserved.split('\n').map((line) => line.trim()).filter(Boolean),
 					userInvites: this.form.userInvites,
+					signupNotice: this.form.signupNotice,
 				})
 				this.form = this.formOf(data)
 				this.$emit('changed', { ...this.external, settings: data })

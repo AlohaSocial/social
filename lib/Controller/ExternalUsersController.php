@@ -73,10 +73,11 @@ class ExternalUsersController extends Controller {
 		int $minAge = 16,
 		array $reserved = [],
 		bool $userInvites = false,
+		string $signupNotice = '',
 	): DataResponse {
 		try {
 			return new DataResponse($this->externalUserService->saveSettings(
-				$enabled, $max, $quota, $mode, $verifyEmail, $minAge, array_values(array_map('strval', $reserved)), $userInvites,
+				$enabled, $max, $quota, $mode, $verifyEmail, $minAge, array_values(array_map('strval', $reserved)), $userInvites, $signupNotice,
 			));
 		} catch (InvalidArgumentException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);

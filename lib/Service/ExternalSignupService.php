@@ -99,6 +99,8 @@ class ExternalSignupService {
 			'rules' => array_map(static fn (array $rule): string => $rule['text'], $this->instanceService->rules()),
 			'privacyUrl' => trim($this->appConfig->getValueString('theming', 'privacyUrl', '')),
 			'legalUrl' => trim($this->appConfig->getValueString('theming', 'imprintUrl', '')),
+			'signupNotice' => trim((string)$this->config->getAppValue(Application::APP_ID, ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE, ''))
+				?: $this->l10n->t('This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'),
 			'domain' => $this->domain(),
 			'loginUrl' => $this->urlGenerator->linkToRoute('core.login.showLoginForm'),
 		];

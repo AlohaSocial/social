@@ -36,6 +36,10 @@ async function page(pageState) {
 	return mount(Signup)
 }
 
+async function continueToForm(wrapper) {
+	await button(wrapper, 'Continue to registration').trigger('click')
+}
+
 function button(wrapper, text) {
 	return wrapper.findAll('button, a').find((element) => element.text() === text)
 }
@@ -55,6 +59,9 @@ describe('the registration page', () => {
 
 	it('shows the rules, the age to confirm and the address the handle becomes', async () => {
 		const wrapper = await page(OPEN)
+		expect(wrapper.text()).toContain('A Social account, connected to the fediverse')
+		expect(wrapper.text()).toContain('does not give you access to Files, Talk, WebDAV')
+		await continueToForm(wrapper)
 		wrapper.vm.handle = '@Alice'
 		await wrapper.vm.$nextTick()
 
@@ -69,6 +76,7 @@ describe('the registration page', () => {
 	it('sends everything, the honeypot and the invitation included', async () => {
 		post.mockResolvedValue({ data: { state: 'verify', handle: 'alice' } })
 		const wrapper = await page({ ...OPEN, invited: true, inviteToken: 'tok' })
+		await continueToForm(wrapper)
 		Object.assign(wrapper.vm, { handle: 'alice', email: 'a@example.org', password: 'long enough', rules: true, age: true })
 		await wrapper.find('form').trigger('submit')
 		await flushPromises()
@@ -89,6 +97,7 @@ describe('the registration page', () => {
 
 	it('keeps the honeypot out of sight and out of the tab order', async () => {
 		const wrapper = await page(OPEN)
+		await continueToForm(wrapper)
 		const trap = wrapper.find('input[name="website"]')
 
 		expect(trap.attributes('tabindex')).toBe('-1')
@@ -98,6 +107,7 @@ describe('the registration page', () => {
 	it('puts a refusal on the field it is about', async () => {
 		post.mockRejectedValue({ response: { status: 422, data: { message: 'This username is already taken.', field: 'handle' } } })
 		const wrapper = await page(OPEN)
+		await continueToForm(wrapper)
 		await wrapper.find('form').trigger('submit')
 		await flushPromises()
 

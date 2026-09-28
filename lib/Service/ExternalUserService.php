@@ -179,6 +179,7 @@ class ExternalUserService {
 			'minAge' => $this->minimumAge(),
 			'reserved' => $this->reservedHandles(),
 			'userInvites' => $this->usersMayInvite(),
+			'signupNotice' => $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE),
 			'count' => $this->count(),
 			'awaitingApproval' => $this->signupsRequest->countAwaitingApproval(),
 			// Social restricted to groups that leave the externals out: they
@@ -204,6 +205,7 @@ class ExternalUserService {
 		int $minAge,
 		array $reserved,
 		bool $userInvites,
+		string $signupNotice = '',
 	): array {
 		if ($max < 0 || $max > self::MAX_ACCOUNTS) {
 			throw new InvalidArgumentException('max must be between 0 and ' . self::MAX_ACCOUNTS);
@@ -216,6 +218,9 @@ class ExternalUserService {
 		}
 		if ($minAge < 0 || $minAge > self::MAX_MIN_AGE) {
 			throw new InvalidArgumentException('minAge must be between 0 and ' . self::MAX_MIN_AGE);
+		}
+		if (mb_strlen($signupNotice) > 4000) {
+			throw new InvalidArgumentException('signupNotice must be at most 4000 characters');
 		}
 
 		$handles = [];
@@ -234,6 +239,7 @@ class ExternalUserService {
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_MIN_AGE, (string)$minAge);
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_RESERVED, (string)json_encode(array_values(array_unique($handles))));
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES, $userInvites ? '1' : '0');
+		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE, trim($signupNotice));
 
 		if ($enabled) {
 			$this->includeExternalsInRestriction();

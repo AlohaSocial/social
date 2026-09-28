@@ -149,7 +149,7 @@ describe('the administration page', () => {
 	/** Who may have an account here is an administrator's decision; a delegate is sent none of it. */
 	it('draws the External users group above moderation when the server sends it', async () => {
 		const external = {
-			settings: { enabled: false, max: 100, quota: 1024, mode: 'approval', verifyEmail: true, minAge: 16, reserved: [], userInvites: false, count: 0, awaitingApproval: 0, restricted: false, restrictionIncludesExternals: true },
+			settings: { enabled: false, max: 100, quota: 1024, mode: 'approval', verifyEmail: true, minAge: 16, reserved: [], userInvites: false, signupNotice: '', count: 0, awaitingApproval: 0, restricted: false, restrictionIncludesExternals: true },
 			twoFactor: { enforced: false, everybody: false },
 			requests: [],
 			invites: [],

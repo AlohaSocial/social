@@ -34,6 +34,7 @@ function external(overrides = {}) {
 			minAge: 16,
 			reserved: ['ceo'],
 			userInvites: false,
+			signupNotice: '',
 			count: 3,
 			awaitingApproval: 1,
 			restricted: false,
@@ -74,6 +75,7 @@ describe('the External users cards', () => {
 			minAge: 16,
 			reserved: ['ceo', 'board'],
 			userInvites: false,
+			signupNotice: '',
 		})
 		expect(wrapper.emitted('changed')).toHaveLength(1)
 	})
