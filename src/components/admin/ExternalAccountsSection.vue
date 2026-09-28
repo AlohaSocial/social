@@ -44,7 +44,7 @@
 						<td>{{ user.enabled ? t('social', 'Enabled') : t('social', 'Disabled') }}</td>
 						<td>{{ day(user.created) }}</td>
 						<td>{{ user.lastLogin > 0 ? day(user.lastLogin) : t('social', 'Never') }}</td>
-						<td>{{ user.origin || t('social', 'Unknown') }}</td>
+						<td>{{ originLabel(user.origin) }}</td>
 						<td>{{ humanSize(user.mediaBytes) }}</td>
 						<td>
 							<div class="social-admin__actions">
@@ -155,6 +155,23 @@ export default {
 	methods: {
 		t,
 		humanSize,
+
+		/** @param {string} origin recorded registration path */
+		originLabel(origin) {
+			if (typeof origin !== 'string' || origin === '') {
+				return t('social', 'Unknown')
+			}
+			if (origin.startsWith('invite:')) {
+				return t('social', 'Invitation')
+			}
+			if (origin === 'approval') {
+				return t('social', 'Administrator approval')
+			}
+			if (origin === 'open') {
+				return t('social', 'Open registration')
+			}
+			return t('social', 'Unknown')
+		},
 
 		/**
 		 * @param {number} seconds a unix time

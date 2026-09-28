@@ -44,6 +44,10 @@
 			</h3>
 			<p>{{ t('social', 'Your address will look like @{username}@{domain}. You can follow and talk with people on Mastodon, Pixelfed, PeerTube and other services that use ActivityPub.', { username: 'your name', domain: state.domain }) }}</p>
 			<p>{{ t('social', 'This is a Social-only account. It does not give you access to Files, Talk, WebDAV or other Nextcloud apps on this server.') }}</p>
+			<p v-if="state.twoFactorRequired">
+				{{ t('social', 'This server requires two-factor authentication. You will need to set it up when you first sign in.') }}
+			</p>
+			<p>{{ t('social', 'After joining, you can finish the introduction, find people and starter packs to follow, write posts, and manage your profile and account settings. You can also import a follow list from another compatible service.') }}</p>
 			<p>{{ registrationPath }}</p>
 			<p>{{ t('social', 'Public posts may be delivered to other servers. Other servers may keep copies, so deleting a post here cannot guarantee that every copy elsewhere is removed.') }}</p>
 			<p class="signup__instance-notice">
@@ -203,6 +207,7 @@ const CLOSED = {
 	inviteToken: '',
 	approval: true,
 	verifyEmail: true,
+	twoFactorRequired: false,
 	minAge: 0,
 	rules: [],
 	privacyUrl: '',

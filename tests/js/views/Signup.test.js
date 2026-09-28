@@ -21,6 +21,7 @@ const OPEN = {
 	inviteToken: '',
 	approval: true,
 	verifyEmail: true,
+	twoFactorRequired: false,
 	minAge: 16,
 	rules: ['Be kind', 'No spam'],
 	privacyUrl: 'https://cloud.example/privacy',
@@ -61,6 +62,8 @@ describe('the registration page', () => {
 		const wrapper = await page(OPEN)
 		expect(wrapper.text()).toContain('A Social account, connected to the fediverse')
 		expect(wrapper.text()).toContain('does not give you access to Files, Talk, WebDAV')
+		expect(wrapper.text()).toContain('finish the introduction, find people and starter packs')
+		expect(wrapper.text()).not.toContain('This server requires two-factor authentication.')
 		await continueToForm(wrapper)
 		wrapper.vm.handle = '@Alice'
 		await wrapper.vm.$nextTick()
@@ -71,6 +74,11 @@ describe('the registration page', () => {
 		expect(wrapper.text()).toContain('@alice@cloud.example')
 		expect(wrapper.text()).toContain('An administrator looks at every registration')
 		expect(wrapper.find('a[href="https://cloud.example/privacy"]').exists()).toBe(true)
+	})
+
+	it('explains the configured two-factor requirement before collecting details', async () => {
+		const wrapper = await page({ ...OPEN, twoFactorRequired: true })
+		expect(wrapper.text()).toContain('This server requires two-factor authentication.')
 	})
 
 	it('sends everything, the honeypot and the invitation included', async () => {

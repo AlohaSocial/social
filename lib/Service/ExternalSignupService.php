@@ -60,6 +60,7 @@ class ExternalSignupService {
 
 	public function __construct(
 		private ExternalUserService $externalUserService,
+		private ExternalTwoFactorService $twoFactorService,
 		private ExternalSignupsRequest $signupsRequest,
 		private ExternalInvitesRequest $invitesRequest,
 		private InstanceService $instanceService,
@@ -95,6 +96,7 @@ class ExternalSignupService {
 			'inviteToken' => ($invite === null) ? '' : $inviteToken,
 			'approval' => $mode === ExternalUserService::MODE_APPROVAL && $invite === null,
 			'verifyEmail' => $this->externalUserService->verifiesEmail(),
+			'twoFactorRequired' => $this->twoFactorService->state()['enforced'],
 			'minAge' => $this->externalUserService->minimumAge(),
 			'rules' => array_map(static fn (array $rule): string => $rule['text'], $this->instanceService->rules()),
 			'privacyUrl' => trim($this->appConfig->getValueString('theming', 'privacyUrl', '')),

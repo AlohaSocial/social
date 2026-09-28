@@ -45,6 +45,7 @@ class ExternalSignupServiceTest extends TestCase {
 	private string $mode = ExternalUserService::MODE_OPEN;
 	private bool $verify = true;
 	private bool $room = true;
+	private bool $twoFactorRequired = false;
 	/** @var list<array{string, string}> subject, recipient */
 	private array $sent = [];
 	private bool $mailWorks = true;
@@ -128,8 +129,12 @@ class ExternalSignupServiceTest extends TestCase {
 		$instance = $this->createStub(InstanceService::class);
 		$instance->method('rules')->willReturn([['id' => '1', 'text' => 'Be kind']]);
 
+		$twoFactor = $this->createStub(\OCA\Social\Service\ExternalTwoFactorService::class);
+		$twoFactor->method('state')->willReturnCallback(fn (): array => ['enforced' => $this->twoFactorRequired, 'everybody' => false]);
+
 		return new ExternalSignupService(
 			$this->users,
+			$twoFactor,
 			$this->signups,
 			$this->invites,
 			$instance,
@@ -360,6 +365,11 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->assertTrue($state['open']);
 		$this->assertTrue($state['invited']);
 		$this->assertSame(['Be kind'], $state['rules']);
+	}
+
+	public function testThePageOnlySaysTwoFactorIsRequiredWhenItIs(): void {
+		$this->twoFactorRequired = true;
+		$this->assertTrue($this->service()->pageState()['twoFactorRequired']);
 	}
 
 	private function pending(bool $verified, bool $approval): array {
