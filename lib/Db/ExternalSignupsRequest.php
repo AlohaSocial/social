@@ -20,7 +20,7 @@ use OCP\IDBConnection;
  * email address for as long as it exists. The verification token is stored
  * as a SHA-256 hash, never as sent.
  *
- * @psalm-type ExternalSignupRow = array{id: int, handle: string, email: string, password: string, token: string, verified: bool, approval: bool, inviteId: int, ipHash: string, creation: int}
+ * @psalm-type ExternalSignupRow = array{id: int, handle: string, email: string, password: string, token: string, verified: bool, approval: bool, inviteId: int, ipHash: string, creation: int, emailVerified: bool, noticeVersion: string, noticeAcceptedAt: int, noticeSnapshot: string}
  */
 class ExternalSignupsRequest {
 	private const TABLE = CoreRequestBuilder::TABLE_EXTERNAL_SIGNUPS;
@@ -40,6 +40,10 @@ class ExternalSignupsRequest {
 		int $inviteId,
 		string $ipHash,
 		int $creation,
+		bool $emailVerified = false,
+		string $noticeVersion = '',
+		int $noticeAcceptedAt = 0,
+		string $noticeSnapshot = '',
 	): int {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->insert(self::TABLE)
@@ -51,7 +55,11 @@ class ExternalSignupsRequest {
 			->setValue('approval', $qb->createNamedParameter($approval ? 1 : 0, IQueryBuilder::PARAM_INT))
 			->setValue('invite_id', $qb->createNamedParameter($inviteId, IQueryBuilder::PARAM_INT))
 			->setValue('ip_hash', $qb->createNamedParameter($ipHash))
-			->setValue('creation', $qb->createNamedParameter($creation, IQueryBuilder::PARAM_INT));
+			->setValue('creation', $qb->createNamedParameter($creation, IQueryBuilder::PARAM_INT))
+			->setValue('email_verified', $qb->createNamedParameter($emailVerified ? 1 : 0, IQueryBuilder::PARAM_INT))
+			->setValue('notice_version', $qb->createNamedParameter($noticeVersion))
+			->setValue('notice_accepted', $qb->createNamedParameter($noticeAcceptedAt, IQueryBuilder::PARAM_INT))
+			->setValue('notice_snapshot', $qb->createNamedParameter($noticeSnapshot));
 		$qb->executeStatement();
 
 		return $qb->getLastInsertId();
@@ -81,6 +89,7 @@ class ExternalSignupsRequest {
 		$qb = $this->connection->getQueryBuilder();
 		$qb->update(self::TABLE)
 			->set('verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
+			->set('email_verified', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT))
 			->set('token', $qb->createNamedParameter(''))
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
 		$qb->executeStatement();
@@ -183,6 +192,10 @@ class ExternalSignupsRequest {
 				'inviteId' => (int)$row['invite_id'],
 				'ipHash' => (string)$row['ip_hash'],
 				'creation' => (int)$row['creation'],
+				'emailVerified' => (int)($row['email_verified'] ?? 0) === 1,
+				'noticeVersion' => (string)($row['notice_version'] ?? ''),
+				'noticeAcceptedAt' => (int)($row['notice_accepted'] ?? 0),
+				'noticeSnapshot' => (string)($row['notice_snapshot'] ?? ''),
 			];
 		}
 		$cursor->closeCursor();

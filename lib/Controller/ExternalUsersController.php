@@ -74,10 +74,11 @@ class ExternalUsersController extends Controller {
 		array $reserved = [],
 		bool $userInvites = false,
 		string $signupNotice = '',
+		bool $signupNoticeRequired = false,
 	): DataResponse {
 		try {
 			return new DataResponse($this->externalUserService->saveSettings(
-				$enabled, $max, $quota, $mode, $verifyEmail, $minAge, array_values(array_map('strval', $reserved)), $userInvites, $signupNotice,
+				$enabled, $max, $quota, $mode, $verifyEmail, $minAge, array_values(array_map('strval', $reserved)), $userInvites, $signupNotice, $signupNoticeRequired,
 			));
 		} catch (InvalidArgumentException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
@@ -101,8 +102,26 @@ class ExternalUsersController extends Controller {
 
 	/** A page of external accounts. */
 	#[FrontpageRoute(verb: 'GET', url: '/admin/external/users')]
-	public function users(string $search = '', int $offset = 0): DataResponse {
-		return new DataResponse($this->externalUserService->list($search, 50, $offset));
+	public function users(
+		string $search = '',
+		int $offset = 0,
+		string $status = 'any',
+		string $source = 'any',
+		string $lastLogin = 'any',
+		int $minimumMediaBytes = 0,
+		string $noticeAcceptance = 'any',
+		int $registeredAfter = 0,
+		int $registeredBefore = 0,
+	): DataResponse {
+		return new DataResponse($this->externalUserService->listPage($search, 50, $offset, [
+			'status' => $status,
+			'source' => $source,
+			'lastLogin' => $lastLogin,
+			'minimumMediaBytes' => $minimumMediaBytes,
+			'noticeAcceptance' => $noticeAcceptance,
+			'registeredAfter' => $registeredAfter,
+			'registeredBefore' => $registeredBefore,
+		]));
 	}
 
 	/** Makes an external user an ordinary local user. */

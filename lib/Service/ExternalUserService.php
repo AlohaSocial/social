@@ -132,6 +132,20 @@ class ExternalUserService {
 		return $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES) === '1';
 	}
 
+	public function requiresSignupNoticeAcceptance(): bool {
+		return $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED) === '1';
+	}
+
+	/**
+	 * Text shown before registration and in its form. The editable default gives
+	 * administrators a useful starting point instead of an empty textarea.
+	 */
+	public function signupNotice(): string {
+		$notice = trim($this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE));
+
+		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Social on this server. Read the server rules and the linked privacy information before registering. Public posts may be delivered to other servers.');
+	}
+
 	/** @return list<string> the handles the administrator reserved */
 	public function reservedHandles(): array {
 		$list = json_decode($this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_RESERVED), true);
@@ -179,7 +193,8 @@ class ExternalUserService {
 			'minAge' => $this->minimumAge(),
 			'reserved' => $this->reservedHandles(),
 			'userInvites' => $this->usersMayInvite(),
-			'signupNotice' => $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE),
+			'signupNotice' => $this->signupNotice(),
+			'signupNoticeRequired' => $this->requiresSignupNoticeAcceptance(),
 			'count' => $this->count(),
 			'awaitingApproval' => $this->signupsRequest->countAwaitingApproval(),
 			// Social restricted to groups that leave the externals out: they
@@ -206,6 +221,7 @@ class ExternalUserService {
 		array $reserved,
 		bool $userInvites,
 		string $signupNotice = '',
+		bool $signupNoticeRequired = false,
 	): array {
 		if ($max < 0 || $max > self::MAX_ACCOUNTS) {
 			throw new InvalidArgumentException('max must be between 0 and ' . self::MAX_ACCOUNTS);
@@ -240,6 +256,7 @@ class ExternalUserService {
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_RESERVED, (string)json_encode(array_values(array_unique($handles))));
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES, $userInvites ? '1' : '0');
 		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE, trim($signupNotice));
+		$this->configService->setAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED, $signupNoticeRequired ? '1' : '0');
 
 		if ($enabled) {
 			$this->includeExternalsInRestriction();
@@ -349,7 +366,17 @@ class ExternalUserService {
 	 * @param string $origin `open`, `invite:<id>`, `approval` or `occ`, kept for the record
 	 * @throws ExternalUserException
 	 */
-	public function createAccount(string $handle, string $email, string $passwordHash, string $origin, int $signupId = 0): IUser {
+	public function createAccount(
+		string $handle,
+		string $email,
+		string $passwordHash,
+		string $origin,
+		int $signupId = 0,
+		bool $emailVerified = false,
+		string $noticeVersion = '',
+		int $noticeAcceptedAt = 0,
+		string $noticeSnapshot = '',
+	): IUser {
 		$this->lock();
 		try {
 			if (!$this->hasRoom()) {
@@ -359,7 +386,7 @@ class ExternalUserService {
 			$email = $this->assertEmailAvailable($email, $signupId);
 
 			$this->eventDispatcher->dispatchTyped(new BeforeUserCreatedEvent($handle, ''));
-			$this->usersRequest->create($handle, $passwordHash, $handle, $origin, $this->timeFactory->getTime());
+			$this->usersRequest->create($handle, $passwordHash, $handle, $origin, $this->timeFactory->getTime(), $emailVerified);
 			$this->userBackend->forget($handle);
 		} finally {
 			$this->unlock();
@@ -372,6 +399,11 @@ class ExternalUserService {
 
 		try {
 			$this->prepare($user, $email);
+			if ($noticeVersion !== '' && $noticeAcceptedAt > 0) {
+				$this->config->setUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_VERSION, $noticeVersion);
+				$this->config->setUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED, (string)$noticeAcceptedAt);
+				$this->config->setUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT, $noticeSnapshot);
+			}
 			$this->eventDispatcher->dispatchTyped(new UserCreatedEvent($user, ''));
 			$this->accountService->createActor($user->getUID(), $handle);
 		} catch (Throwable $e) {
@@ -472,31 +504,97 @@ class ExternalUserService {
 	 * The external accounts for the administration page, with what each has
 	 * uploaded.
 	 *
-	 * @return list<array{uid: string, displayName: string, email: string, created: int, lastLogin: int, enabled: bool, mediaBytes: int, origin: string}>
+	 * @return list<array{uid: string, displayName: string, email: string, emailVerified: ?bool, created: int, lastLogin: int, enabled: bool, mediaBytes: int, origin: string, noticeVersion: string, noticeAcceptedAt: int, noticeSnapshot: string}>
 	 */
 	public function list(string $search = '', int $limit = 50, int $offset = 0): array {
-		$rows = $this->usersRequest->search($search, max(1, min($limit, 200)), max(0, $offset));
-		$bytes = $this->cacheDocumentsRequest->localBytesByAccount(array_map(
-			static fn (array $row): string => $row['uid'],
-			$rows
-		));
+		return $this->listPage($search, $limit, $offset)['users'];
+	}
 
-		$list = [];
-		foreach ($rows as $row) {
-			$user = $this->userManager->get($row['uid']);
-			$list[] = [
-				'uid' => $row['uid'],
-				'displayName' => ($user === null) ? $row['uid'] : $user->getDisplayName(),
-				'email' => ($user === null) ? '' : (string)$user->getEMailAddress(),
-				'created' => $row['creation'],
-				'lastLogin' => ($user === null) ? 0 : $user->getLastLogin(),
-				'enabled' => $user !== null && $user->isEnabled(),
-				'mediaBytes' => $bytes[$row['uid']] ?? 0,
-				'origin' => $row['origin'],
-			];
+	/**
+	 * A bounded page after the account-level filters have been applied.
+	 * Candidate records are read in batches; a selective filter may scan more
+	 * than one batch, but each request has a fixed work budget and carries its
+	 * candidate cursor forward to the next call.
+	 *
+	 * @param array{status?: string, source?: string, lastLogin?: string, minimumMediaBytes?: int, noticeAcceptance?: string, registeredAfter?: int, registeredBefore?: int} $filters
+	 * @return array{users: list<array<string, mixed>>, nextOffset: int, hasMore: bool}
+	 */
+	public function listPage(string $search = '', int $limit = 50, int $offset = 0, array $filters = []): array {
+		$limit = max(1, min($limit, 100));
+		$filters['status'] = in_array($filters['status'] ?? 'any', ['any', 'enabled', 'disabled'], true) ? ($filters['status'] ?? 'any') : 'any';
+		$filters['source'] = in_array($filters['source'] ?? 'any', ['any', 'open', 'approval', 'invite'], true) ? ($filters['source'] ?? 'any') : 'any';
+		$filters['lastLogin'] = in_array($filters['lastLogin'] ?? 'any', ['any', 'never', 'seen'], true) ? ($filters['lastLogin'] ?? 'any') : 'any';
+		$filters['noticeAcceptance'] = in_array($filters['noticeAcceptance'] ?? 'any', ['any', 'accepted', 'missing'], true) ? ($filters['noticeAcceptance'] ?? 'any') : 'any';
+		$filters['minimumMediaBytes'] = max(0, (int)($filters['minimumMediaBytes'] ?? 0));
+		$filters['registeredAfter'] = max(0, (int)($filters['registeredAfter'] ?? 0));
+		$filters['registeredBefore'] = max(0, (int)($filters['registeredBefore'] ?? 0));
+
+		$nextOffset = max(0, $offset);
+		$scanBudget = 1000;
+		$scanned = 0;
+		$users = [];
+		$hasMore = false;
+
+		while ($scanned < $scanBudget) {
+			$batchLimit = min(100, $scanBudget - $scanned);
+			$rows = $this->usersRequest->search($search, $batchLimit, $nextOffset, $filters);
+			if ($rows === []) {
+				break;
+			}
+			$batchOffset = $nextOffset;
+			$nextOffset += count($rows);
+			$scanned += count($rows);
+			$bytes = $this->cacheDocumentsRequest->localBytesByAccount(array_column($rows, 'uid'));
+
+			foreach ($rows as $index => $row) {
+				$user = $this->userManager->get($row['uid']);
+				$lastLogin = ($user === null) ? 0 : $user->getLastLogin();
+				$enabled = $user !== null && $user->isEnabled();
+				$mediaBytes = $bytes[$row['uid']] ?? 0;
+				$acceptedAt = ($user === null) ? 0 : (int)$this->config->getUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED, '0');
+				if (($filters['status'] === 'enabled' && !$enabled)
+					|| ($filters['status'] === 'disabled' && $enabled)
+					|| ($filters['lastLogin'] === 'never' && $lastLogin > 0)
+					|| ($filters['lastLogin'] === 'seen' && $lastLogin === 0)
+					|| ($filters['minimumMediaBytes'] > 0 && $mediaBytes < $filters['minimumMediaBytes'])
+					|| ($filters['noticeAcceptance'] === 'accepted' && $acceptedAt === 0)
+					|| ($filters['noticeAcceptance'] === 'missing' && $acceptedAt > 0)) {
+					continue;
+				}
+
+				$candidateOffset = $batchOffset + $index;
+				if (count($users) === $limit) {
+					$nextOffset = $candidateOffset;
+					$hasMore = true;
+					break 2;
+				}
+
+				$users[] = [
+					'uid' => $row['uid'],
+					'displayName' => ($user === null) ? $row['uid'] : $user->getDisplayName(),
+					'email' => ($user === null) ? '' : (string)$user->getEMailAddress(),
+					'emailVerified' => $row['emailVerified'],
+					'created' => $row['creation'],
+					'lastLogin' => $lastLogin,
+					'enabled' => $enabled,
+					'mediaBytes' => $mediaBytes,
+					'origin' => $row['origin'],
+					'noticeVersion' => ($user === null) ? '' : $this->config->getUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_VERSION, ''),
+					'noticeAcceptedAt' => $acceptedAt,
+					'noticeSnapshot' => ($user === null) ? '' : $this->config->getUserValue($user->getUID(), Application::APP_ID, ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT, ''),
+				];
+			}
+
+			if (count($rows) < $batchLimit) {
+				break;
+			}
 		}
 
-		return $list;
+		if (!$hasMore && $scanned >= $scanBudget) {
+			$hasMore = true;
+		}
+
+		return ['users' => $users, 'nextOffset' => $nextOffset, 'hasMore' => $hasMore];
 	}
 
 	/**

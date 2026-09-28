@@ -22,6 +22,7 @@ class ExternalScopeTest extends TestCase {
 			'the two-factor challenge' => ['OC\\Core\\Controller\\TwoFactorChallengeController', 'showChallenge'],
 			'a two-factor provider' => ['OCA\\TwoFactorTOTP\\Controller\\SettingsController', 'enable'],
 			'password reset' => ['OC\\Core\\Controller\\LostController', 'email'],
+			'dismissing the one-time Nextcloud welcome wizard' => ['OCA\\FirstRunWizard\\Controller\\WizardController', 'disable'],
 			'avatars' => ['OC\\Core\\Controller\\AvatarController', 'getAvatar'],
 			'theming' => ['OCA\\Theming\\Controller\\ThemingController', 'getImage'],
 			'notifications' => ['OCA\\Notifications\\Controller\\EndpointController', 'listNotifications'],
@@ -55,6 +56,8 @@ class ExternalScopeTest extends TestCase {
 			'identity proofs' => ['OC\\Core\\Controller\\OCSController', 'getIdentityProof'],
 			'the status of others' => ['OCA\\UserStatus\\Controller\\StatusesController', 'findAll'],
 			'help' => ['OCA\\Settings\\Controller\\HelpController', 'help'],
+			'a Guests app controller' => ['OCA\\Guests\\Controller\\PageController', 'index'],
+			'other first-run wizard actions' => ['OCA\\FirstRunWizard\\Controller\\WizardController', 'anythingElse'],
 			'an app installed next year' => ['OCA\\Whatever\\Controller\\PageController', 'index'],
 			'a look-alike namespace' => ['OCA\\SocialNetwork\\Controller\\PageController', 'index'],
 		];

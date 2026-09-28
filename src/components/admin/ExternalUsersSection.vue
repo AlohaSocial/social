@@ -88,9 +88,15 @@
 			<NcTextArea
 				v-model="form.signupNotice"
 				:label="t('social', 'Additional registration and privacy information')"
-				:helperText="t('social', 'Shown before people enter their details. Plain text only; adapt this information to your instance. It is not legal advice.')"
+				:helperText="t('social', 'Shown before people enter their details. Plain text only; adapt this information to your instance. It is not legal advice. When acceptance is required, changing this text creates a new notice version.')"
 				rows="5"
 				maxlength="4000" />
+			<NcCheckboxRadioSwitch v-model="form.signupNoticeRequired" type="switch">
+				{{ t('social', 'Require registrants to accept this notice') }}
+			</NcCheckboxRadioSwitch>
+			<p class="external__hint">
+				{{ t('social', 'The accepted notice version and time are kept with the account until the account is deleted. This records acceptance; it does not make the notice legally sufficient.') }}
+			</p>
 
 			<div class="external__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">
@@ -197,6 +203,7 @@ export default {
 				reserved: (settings.reserved ?? []).join('\n'),
 				userInvites: settings.userInvites,
 				signupNotice: settings.signupNotice ?? '',
+				signupNoticeRequired: Boolean(settings.signupNoticeRequired),
 			}
 		},
 
@@ -214,6 +221,7 @@ export default {
 					reserved: this.form.reserved.split('\n').map((line) => line.trim()).filter(Boolean),
 					userInvites: this.form.userInvites,
 					signupNotice: this.form.signupNotice,
+					signupNoticeRequired: this.form.signupNoticeRequired,
 				})
 				this.form = this.formOf(data)
 				this.$emit('changed', { ...this.external, settings: data })

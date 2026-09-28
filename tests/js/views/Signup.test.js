@@ -26,6 +26,9 @@ const OPEN = {
 	rules: ['Be kind', 'No spam'],
 	privacyUrl: 'https://cloud.example/privacy',
 	legalUrl: '',
+	signupNotice: 'Instance registration notice',
+	signupNoticeRequired: false,
+	signupNoticeVersion: 'v1',
 	domain: 'cloud.example',
 	loginUrl: '/index.php/login',
 }
@@ -94,6 +97,8 @@ describe('the registration page', () => {
 			email: 'a@example.org',
 			password: 'long enough',
 			rules: true,
+			notice: false,
+			noticeVersion: 'v1',
 			age: true,
 			invite: 'tok',
 			website: '',
@@ -101,6 +106,21 @@ describe('the registration page', () => {
 		expect(wrapper.text()).toContain('Check your email')
 		expect(wrapper.text()).toContain('a@example.org')
 		expect(wrapper.vm.password).toBe('')
+	})
+
+	it('requires and submits the configured notice acknowledgement', async () => {
+		post.mockResolvedValue({ data: { state: 'verify', handle: 'alice' } })
+		const wrapper = await page({ ...OPEN, signupNoticeRequired: true, signupNoticeVersion: 'notice-v2' })
+		await continueToForm(wrapper)
+		expect(wrapper.text()).toContain('I have read and accept this registration notice')
+		Object.assign(wrapper.vm, { handle: 'alice', email: 'a@example.org', password: 'long enough', rules: true, age: true, noticeAccepted: true })
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/signup', expect.objectContaining({
+			notice: true,
+			noticeVersion: 'notice-v2',
+		}))
 	})
 
 	it('keeps the honeypot out of sight and out of the tab order', async () => {

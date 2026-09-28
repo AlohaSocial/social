@@ -750,7 +750,8 @@ class CoreRequestBuilder {
 			'password',
 			'displayname',
 			'origin',
-			'creation'
+			'creation',
+			'email_verified'
 		],
 		self::TABLE_EXTERNAL_SIGNUPS => [
 			'id',
@@ -762,7 +763,11 @@ class CoreRequestBuilder {
 			'approval',
 			'invite_id',
 			'ip_hash',
-			'creation'
+			'creation',
+			'email_verified',
+			'notice_version',
+			'notice_accepted',
+			'notice_snapshot'
 		],
 		self::TABLE_EXTERNAL_INVITES => [
 			'id',

@@ -36,6 +36,7 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {string} cliUrl - The URL the background jobs address this instance by
  * @property {string} cloudAddress - This instance's own address
  * @property {boolean} firstrun - Whether the reader has not used the app before
+ * @property {boolean} [introductionDismissed] - Whether this account has dismissed Social's introduction
  * @property {boolean} isAdmin - Whether the reader administers this instance
  * @property {string} [linkedHandle] - The fediverse handle the reader's profile names, or '' (only with needsAccount)
  * @property {string} local - The local part of the account that the user wants to follow

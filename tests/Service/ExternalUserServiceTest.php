@@ -51,6 +51,7 @@ class ExternalUserServiceTest extends TestCase {
 	private array $app = [];
 	private ConfigService&MockObject $configService;
 	private ExternalUsersRequest&MockObject $usersRequest;
+	private CacheDocumentsRequest&MockObject $cacheDocumentsRequest;
 	private ExternalSignupsRequest&MockObject $signupsRequest;
 	private ExternalUserBackend&MockObject $userBackend;
 	private IUserManager&MockObject $userManager;
@@ -83,6 +84,7 @@ class ExternalUserServiceTest extends TestCase {
 			}
 		);
 		$this->usersRequest = $this->createMock(ExternalUsersRequest::class);
+		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 		$this->usersRequest->method('count')->willReturnCallback(fn (): int => $this->count);
 		$this->signupsRequest = $this->createMock(ExternalSignupsRequest::class);
 		$this->signupsRequest->method('getByEmail')->willReturn(null);
@@ -114,7 +116,7 @@ class ExternalUserServiceTest extends TestCase {
 			$this->usersRequest,
 			$this->signupsRequest,
 			$this->userBackend,
-			$this->createStub(CacheDocumentsRequest::class),
+			$this->cacheDocumentsRequest,
 			$this->userManager,
 			$this->accountManager,
 			$this->config,
@@ -242,15 +244,26 @@ class ExternalUserServiceTest extends TestCase {
 		$this->accountManager->method('getAccount')->willReturn($account);
 		$this->accountManager->expects($this->once())->method('updateAccount')->with($account);
 
-		$this->usersRequest->expects($this->once())->method('create')->with('erin', 'HASH', 'erin', 'open', 1000);
+		$this->usersRequest->expects($this->once())->method('create')->with('erin', 'HASH', 'erin', 'open', 1000, true);
 		$events = [];
 		$this->dispatcher->method('dispatchTyped')->willReturnCallback(function ($event) use (&$events): void {
 			$events[] = $event::class;
 		});
-		$this->config->expects($this->once())->method('setUserValue')->with('erin', 'core', 'defaultapp', 'social');
+		$values = [];
+		$this->config->expects($this->exactly(4))->method('setUserValue')->willReturnCallback(
+			static function (string $uid, string $app, string $key, string $value) use (&$values): void {
+				$values[] = [$uid, $app, $key, $value];
+			}
+		);
 		$this->accountService->expects($this->once())->method('createActor')->with('erin', 'erin');
 
-		$this->assertSame($user, $this->service()->createAccount('Erin', 'erin@example.org', 'HASH', 'open'));
+		$notice = 'Instance rules and privacy notice';
+		$version = hash('sha256', $notice);
+		$this->assertSame($user, $this->service()->createAccount('Erin', 'erin@example.org', 'HASH', 'open', 0, true, $version, 900, $notice));
+		$this->assertContains(['erin', 'core', 'defaultapp', 'social'], $values);
+		$this->assertContains(['erin', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_VERSION, $version], $values);
+		$this->assertContains(['erin', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED, '900'], $values);
+		$this->assertContains(['erin', 'social', ConfigService::USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT, $notice], $values);
 
 		$this->assertSame([BeforeUserCreatedEvent::class, UserCreatedEvent::class], $events);
 		$this->assertSame([
@@ -259,6 +272,40 @@ class ExternalUserServiceTest extends TestCase {
 			IAccountManager::PROPERTY_PHONE => IAccountManager::SCOPE_PRIVATE,
 			IAccountManager::PROPERTY_WEBSITE => IAccountManager::SCOPE_PRIVATE,
 		], $scopes);
+	}
+
+	public function testTheExternalAccountFiltersAreAppliedBeforeAResultPageIsReturned(): void {
+		$rows = [
+			['uid' => 'alice', 'displayname' => 'Alice', 'creation' => 10, 'origin' => 'open', 'emailVerified' => null],
+			['uid' => 'bob', 'displayname' => 'Bob', 'creation' => 20, 'origin' => 'invite:7', 'emailVerified' => true],
+			['uid' => 'carol', 'displayname' => 'Carol', 'creation' => 30, 'origin' => 'open', 'emailVerified' => false],
+		];
+		$users = [];
+		foreach (['alice' => [false, 0], 'bob' => [true, 0], 'carol' => [true, 100]] as $uid => [$enabled, $lastLogin]) {
+			$user = $this->createStub(IUser::class);
+			$user->method('getUID')->willReturn($uid);
+			$user->method('getDisplayName')->willReturn(ucfirst($uid));
+			$user->method('getEMailAddress')->willReturn($uid . '@example.org');
+			$user->method('isEnabled')->willReturn($enabled);
+			$user->method('getLastLogin')->willReturn($lastLogin);
+			$users[$uid] = $user;
+		}
+		$this->userManager->method('get')->willReturnCallback(static fn (string $uid): ?IUser => $users[$uid] ?? null);
+		$this->usersRequest->expects($this->once())->method('search')->with('car', 100, 0, [
+			'status' => 'enabled', 'source' => 'open', 'lastLogin' => 'seen', 'minimumMediaBytes' => 1024,
+			'noticeAcceptance' => 'any', 'registeredAfter' => 5, 'registeredBefore' => 40,
+		])->willReturn($rows);
+		$this->cacheDocumentsRequest->method('localBytesByAccount')->willReturn(['alice' => 2048, 'bob' => 4096, 'carol' => 2048]);
+		$this->config->method('getUserValue')->willReturnCallback(static fn (string $uid, string $app, string $key, string $default = ''): string => $default);
+
+		$page = $this->service()->listPage('car', 50, 0, [
+			'status' => 'enabled', 'source' => 'open', 'lastLogin' => 'seen', 'minimumMediaBytes' => 1024,
+			'registeredAfter' => 5, 'registeredBefore' => 40,
+		]);
+
+		$this->assertSame(['carol'], array_column($page['users'], 'uid'));
+		$this->assertFalse($page['hasMore']);
+		$this->assertSame(3, $page['nextOffset']);
 	}
 
 	public function testNoAccountIsMadeOnceTheServerIsFull(): void {
@@ -311,6 +358,7 @@ class ExternalUserServiceTest extends TestCase {
 		$this->assertSame(18, $settings['minAge']);
 		$this->assertSame(['ceo', 'board'], $settings['reserved']);
 		$this->assertTrue($settings['userInvites']);
+		$this->assertFalse($settings['signupNoticeRequired']);
 	}
 
 	public function testSwitchingOnLetsExternalUsersIntoARestrictedSocial(): void {

@@ -162,4 +162,11 @@ class ExternalUserBackendTest extends TestCase {
 		$this->assertFalse(ExternalUserBackend::isExternal($local));
 		$this->assertFalse(ExternalUserBackend::isExternal(null));
 	}
+
+	public function testGuestsBackendIsNotTreatedAsSocialExternal(): void {
+		$guest = $this->createMock(IUser::class);
+		$guest->method('getBackendClassName')->willReturn('OCA\\Guests\\UserBackend');
+
+		$this->assertFalse(ExternalUserBackend::isExternal($guest));
+	}
 }

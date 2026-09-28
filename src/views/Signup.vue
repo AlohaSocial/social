@@ -140,6 +140,13 @@
 			<p v-if="state.signupNotice" class="signup__instance-notice">
 				{{ state.signupNotice }}
 			</p>
+			<NcCheckboxRadioSwitch
+				v-if="state.signupNoticeRequired"
+				v-model="noticeAccepted"
+				class="signup__check"
+				:class="{ 'signup__check--error': field === 'notice' }">
+				{{ t('social', 'I have read and accept this registration notice') }}
+			</NcCheckboxRadioSwitch>
 
 			<NcCheckboxRadioSwitch v-model="rules" class="signup__check" :class="{ 'signup__check--error': field === 'rules' }">
 				{{ t('social', 'I accept the server rules') }}
@@ -214,6 +221,8 @@ const CLOSED = {
 	privacyUrl: '',
 	legalUrl: '',
 	signupNotice: '',
+	signupNoticeRequired: false,
+	signupNoticeVersion: '',
 	domain: '',
 	loginUrl: '/login',
 	result: null,
@@ -247,6 +256,7 @@ export default {
 			email: '',
 			password: '',
 			rules: false,
+			noticeAccepted: false,
 			age: false,
 			website: '',
 			sending: false,
@@ -345,6 +355,8 @@ export default {
 					email: this.email,
 					password: this.password,
 					rules: this.rules,
+					notice: this.noticeAccepted,
+					noticeVersion: this.state.signupNoticeVersion,
 					age: this.age,
 					invite: this.state.inviteToken,
 					website: this.website,

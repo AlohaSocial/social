@@ -35,6 +35,7 @@ function external(overrides = {}) {
 			reserved: ['ceo'],
 			userInvites: false,
 			signupNotice: '',
+			signupNoticeRequired: false,
 			count: 3,
 			awaitingApproval: 1,
 			restricted: false,
@@ -43,7 +44,7 @@ function external(overrides = {}) {
 		twoFactor: { enforced: false, everybody: false },
 		requests: [{ id: 7, handle: 'dave', email: 'd@example.org', created: 1700000000 }],
 		invites: [],
-		users: [{ uid: 'alice', displayName: 'Alice', email: 'a@example.org', created: 1700000000, lastLogin: 0, enabled: true, mediaBytes: 2048, origin: 'open' }],
+		users: [{ uid: 'alice', displayName: 'Alice', email: 'a@example.org', emailVerified: null, created: 1700000000, lastLogin: 0, enabled: true, mediaBytes: 2048, origin: 'open', noticeVersion: '', noticeAcceptedAt: 0, noticeSnapshot: '' }],
 		...overrides,
 	}
 }
@@ -76,6 +77,7 @@ describe('the External users cards', () => {
 			reserved: ['ceo', 'board'],
 			userInvites: false,
 			signupNotice: '',
+			signupNoticeRequired: false,
 		})
 		expect(wrapper.emitted('changed')).toHaveLength(1)
 	})

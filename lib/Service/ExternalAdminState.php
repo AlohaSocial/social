@@ -24,12 +24,16 @@ class ExternalAdminState {
 
 	/** @return array<string, mixed> */
 	public function current(): array {
+		$users = $this->externalUserService->listPage('', 50, 0);
+
 		return [
 			'settings' => $this->externalUserService->settings(),
 			'twoFactor' => $this->twoFactorService->state(),
 			'requests' => $this->signupService->awaitingApproval(),
 			'invites' => $this->signupService->invites(),
-			'users' => $this->externalUserService->list('', 50, 0),
+			'users' => $users['users'],
+			'usersNextOffset' => $users['nextOffset'],
+			'usersHasMore' => $users['hasMore'],
 		];
 	}
 }

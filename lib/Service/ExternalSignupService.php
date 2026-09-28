@@ -85,6 +85,7 @@ class ExternalSignupService {
 	public function pageState(string $inviteToken = ''): array {
 		$invite = $this->validInvite($inviteToken);
 		$mode = $this->externalUserService->mode();
+		$signupNotice = $this->signupNoticeText();
 		$open = $this->externalUserService->hasRoom()
 			&& ($mode !== ExternalUserService::MODE_INVITE || $invite !== null);
 
@@ -101,8 +102,9 @@ class ExternalSignupService {
 			'rules' => array_map(static fn (array $rule): string => $rule['text'], $this->instanceService->rules()),
 			'privacyUrl' => trim($this->appConfig->getValueString('theming', 'privacyUrl', '')),
 			'legalUrl' => trim($this->appConfig->getValueString('theming', 'imprintUrl', '')),
-			'signupNotice' => trim((string)$this->config->getAppValue(Application::APP_ID, ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE, ''))
-				?: $this->l10n->t('This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'),
+			'signupNotice' => $signupNotice,
+			'signupNoticeRequired' => $this->externalUserService->requiresSignupNoticeAcceptance(),
+			'signupNoticeVersion' => hash('sha256', $signupNotice),
 			'domain' => $this->domain(),
 			'loginUrl' => $this->urlGenerator->linkToRoute('core.login.showLoginForm'),
 		];
@@ -124,6 +126,12 @@ class ExternalSignupService {
 		return $this->l10n->t('This server does not accept registrations.');
 	}
 
+	private function signupNoticeText(): string {
+		$notice = $this->externalUserService->signupNotice();
+
+		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Social on this server. Review the server rules and linked privacy information before registering.');
+	}
+
 	/**
 	 * A registration, as submitted by the form.
 	 *
@@ -142,6 +150,8 @@ class ExternalSignupService {
 		string $inviteToken,
 		string $honeypot,
 		string $remoteAddress,
+		bool $acceptsSignupNotice = false,
+		string $signupNoticeVersion = '',
 	): array {
 		if ($honeypot !== '') {
 			$this->logger->info('[ExternalSignupService] dropped a registration that filled in the honeypot');
@@ -174,6 +184,19 @@ class ExternalSignupService {
 				'age'
 			);
 		}
+		$noticeRequired = $this->externalUserService->requiresSignupNoticeAcceptance();
+		$noticeText = $this->signupNoticeText();
+		$noticeVersion = hash('sha256', $noticeText);
+		$noticeAcceptedAt = 0;
+		if ($noticeRequired) {
+			if (!$acceptsSignupNotice) {
+				throw new ExternalUserException($this->l10n->t('Please accept the registration notice.'), 'notice');
+			}
+			if (!hash_equals($noticeVersion, $signupNoticeVersion)) {
+				throw new ExternalUserException($this->l10n->t('The registration notice changed. Reload this page and review it before continuing.'), 'notice');
+			}
+			$noticeAcceptedAt = $now;
+		}
 
 		if ($invite !== null && !$this->invitesRequest->consume($invite['id'])) {
 			throw new ExternalUserException($this->l10n->t('This invitation link is no longer valid.'));
@@ -185,7 +208,10 @@ class ExternalSignupService {
 
 		if ($this->externalUserService->verifiesEmail()) {
 			$token = $this->secureRandom->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
-			$id = $this->signupsRequest->create($handle, $email, $passwordHash, hash('sha256', $token), false, $needsApproval, $inviteId, $ipHash, $now);
+			$id = $this->signupsRequest->create(
+				$handle, $email, $passwordHash, hash('sha256', $token), false, $needsApproval, $inviteId, $ipHash, $now,
+				false, $noticeVersion, $noticeAcceptedAt, $noticeRequired ? $noticeText : '',
+			);
 			if (!$this->sendVerification($email, $handle, $token)) {
 				$this->signupsRequest->delete($id);
 
@@ -196,12 +222,12 @@ class ExternalSignupService {
 		}
 
 		if ($needsApproval) {
-			$this->signupsRequest->create($handle, $email, $passwordHash, '', true, true, 0, $ipHash, $now);
+			$this->signupsRequest->create($handle, $email, $passwordHash, '', true, true, 0, $ipHash, $now, false, $noticeVersion, $noticeAcceptedAt, $noticeRequired ? $noticeText : '');
 
 			return ['state' => self::STATE_APPROVAL, 'handle' => $handle];
 		}
 
-		$this->externalUserService->createAccount($handle, $email, $passwordHash, $this->origin($inviteId));
+		$this->externalUserService->createAccount($handle, $email, $passwordHash, $this->origin($inviteId), 0, false, $noticeRequired ? $noticeVersion : '', $noticeAcceptedAt, $noticeRequired ? $noticeText : '');
 		$this->sendWelcome($email, $handle);
 
 		return ['state' => self::STATE_CREATED, 'handle' => $handle];
@@ -226,7 +252,10 @@ class ExternalSignupService {
 			return ['state' => self::STATE_APPROVAL, 'handle' => $row['handle']];
 		}
 
-		$this->externalUserService->createAccount($row['handle'], $row['email'], $row['password'], $this->origin($row['inviteId']), $row['id']);
+		$this->externalUserService->createAccount(
+			$row['handle'], $row['email'], $row['password'], $this->origin($row['inviteId']), $row['id'],
+			$row['emailVerified'] ?? false, $row['noticeVersion'] ?? '', $row['noticeAcceptedAt'] ?? 0, $row['noticeSnapshot'] ?? '',
+		);
 		$this->signupsRequest->delete($row['id']);
 		$this->sendWelcome($row['email'], $row['handle']);
 
@@ -256,7 +285,10 @@ class ExternalSignupService {
 			throw new ExternalUserException($this->l10n->t('There is no such registration waiting.'));
 		}
 
-		$this->externalUserService->createAccount($row['handle'], $row['email'], $row['password'], 'approval', $row['id']);
+		$this->externalUserService->createAccount(
+			$row['handle'], $row['email'], $row['password'], 'approval', $row['id'],
+			$row['emailVerified'] ?? false, $row['noticeVersion'] ?? '', $row['noticeAcceptedAt'] ?? 0, $row['noticeSnapshot'] ?? '',
+		);
 		$this->signupsRequest->delete($row['id']);
 		$this->sendWelcome($row['email'], $row['handle']);
 

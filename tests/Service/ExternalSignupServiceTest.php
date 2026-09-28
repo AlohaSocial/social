@@ -46,6 +46,7 @@ class ExternalSignupServiceTest extends TestCase {
 	private bool $verify = true;
 	private bool $room = true;
 	private bool $twoFactorRequired = false;
+	private bool $noticeRequired = false;
 	/** @var list<array{string, string}> subject, recipient */
 	private array $sent = [];
 	private bool $mailWorks = true;
@@ -63,6 +64,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->users->method('hasRoom')->willReturnCallback(fn (): bool => $this->room);
 		$this->users->method('isEnabled')->willReturn(true);
 		$this->users->method('minimumAge')->willReturn(16);
+		$this->users->method('requiresSignupNoticeAcceptance')->willReturnCallback(fn (): bool => $this->noticeRequired);
 		$this->users->method('assertHandleAvailable')->willReturnArgument(0);
 		$this->users->method('assertEmailAvailable')->willReturnArgument(0);
 		$this->signups = $this->createMock(ExternalSignupsRequest::class);
@@ -151,8 +153,11 @@ class ExternalSignupServiceTest extends TestCase {
 		);
 	}
 
-	private function submit(string $invite = '', string $honeypot = '', bool $rules = true, bool $age = true, string $password = 'long enough'): array {
-		return $this->service()->submit('alice', 'alice@example.org', $password, $rules, $age, $invite, $honeypot, '192.0.2.1');
+	private function submit(string $invite = '', string $honeypot = '', bool $rules = true, bool $age = true, string $password = 'long enough', bool $notice = false, string $noticeVersion = ''): array {
+		$service = $this->service();
+		$noticeVersion = $noticeVersion !== '' ? $noticeVersion : $service->pageState()['signupNoticeVersion'];
+
+		return $service->submit('alice', 'alice@example.org', $password, $rules, $age, $invite, $honeypot, '192.0.2.1', $notice, $noticeVersion);
 	}
 
 	public function testTheHoneypotIsAnsweredAsIfItWorkedAndNothingIsStored(): void {
@@ -165,7 +170,7 @@ class ExternalSignupServiceTest extends TestCase {
 
 	public function testAnOpenRegistrationWaitsForItsEmailToBeConfirmed(): void {
 		$this->signups->expects($this->once())->method('create')
-			->with('alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW);
+			->with('alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
 		$this->users->expects($this->never())->method('createAccount');
 
 		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $this->submit());
@@ -183,7 +188,7 @@ class ExternalSignupServiceTest extends TestCase {
 	public function testWithoutConfirmationAnOpenRegistrationIsAnAccountAtOnce(): void {
 		$this->verify = false;
 		$this->users->expects($this->once())->method('createAccount')
-			->with('alice', 'alice@example.org', 'hash:long enough', 'open')
+			->with('alice', 'alice@example.org', 'hash:long enough', 'open', 0, false, '', 0, '')
 			->willReturn($this->createStub(IUser::class));
 
 		$this->assertSame(['state' => 'created', 'handle' => 'alice'], $this->submit());
@@ -194,7 +199,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->verify = false;
 		$this->mode = ExternalUserService::MODE_APPROVAL;
 		$this->signups->expects($this->once())->method('create')
-			->with('alice', $this->anything(), $this->anything(), '', true, true, 0, $this->anything(), self::NOW);
+			->with('alice', $this->anything(), $this->anything(), '', true, true, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
 		$this->users->expects($this->never())->method('createAccount');
 
 		$this->assertSame(['state' => 'approval', 'handle' => 'alice'], $this->submit());
@@ -205,7 +210,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->mode = ExternalUserService::MODE_APPROVAL;
 		$this->invites->expects($this->once())->method('consume')->with(5)->willReturn(true);
 		$this->users->expects($this->once())->method('createAccount')
-			->with('alice', $this->anything(), $this->anything(), 'invite:5')
+			->with('alice', $this->anything(), $this->anything(), 'invite:5', 0, false, '', 0, '')
 			->willReturn($this->createStub(IUser::class));
 
 		$this->assertSame('created', $this->submit('good')['state']);
@@ -259,6 +264,36 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->assertSame('password', $field(fn () => $this->submit()));
 	}
 
+	public function testAnEnabledNoticeMustBeAcceptedAtTheDisplayedVersion(): void {
+		$this->noticeRequired = true;
+		$this->users->expects($this->never())->method('createAccount');
+		$this->signups->expects($this->never())->method('create');
+
+		foreach ([ [false, ''], [true, 'stale-version'] ] as [$accepted, $version]) {
+			try {
+				$this->submit('', '', true, true, 'long enough', $accepted, $version);
+				$this->fail('a missing or stale acknowledgement was accepted');
+			} catch (ExternalUserException $e) {
+				$this->assertSame('notice', $e->getField());
+			}
+		}
+	}
+
+	public function testRequiredNoticeSnapshotAndAcceptanceMomentAreKeptWithPendingRegistration(): void {
+		$this->noticeRequired = true;
+		$service = $this->service();
+		$notice = $service->pageState()['signupNotice'];
+		$version = hash('sha256', $notice);
+		$this->signups->expects($this->once())->method('create')->with(
+			'alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0,
+			$this->anything(), self::NOW, false, $version, self::NOW, $notice,
+		);
+		$this->users->expects($this->never())->method('createAccount');
+
+		$result = $service->submit('alice', 'alice@example.org', 'long enough', true, true, '', '', '192.0.2.1', true, $version);
+		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $result);
+	}
+
 	public function testOneAddressCannotRegisterWithoutEnd(): void {
 		$this->signups->method('countFromIpSince')->willReturn(ExternalSignupService::PER_IP_PER_HOUR);
 		$this->signups->expects($this->never())->method('create');
@@ -269,7 +304,7 @@ class ExternalSignupServiceTest extends TestCase {
 
 	public function testConfirmingTheEmailMakesTheAccount(): void {
 		$this->signups->method('getByTokenHash')->with(hash('sha256', 'abc'))->willReturn($this->pending(false, false));
-		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'open', 9)
+		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'open', 9, true, '', 0, '')
 			->willReturn($this->createStub(IUser::class));
 		$this->signups->expects($this->once())->method('delete')->with(9);
 
@@ -301,7 +336,7 @@ class ExternalSignupServiceTest extends TestCase {
 
 	public function testApprovingAConfirmedRegistrationMakesTheAccountAndSaysSo(): void {
 		$this->signups->method('get')->with(9)->willReturn($this->pending(true, true));
-		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'approval', 9)
+		$this->users->expects($this->once())->method('createAccount')->with('bob', 'bob@example.org', 'H', 'approval', 9, true, '', 0, '')
 			->willReturn($this->createStub(IUser::class));
 
 		$this->assertSame('bob', $this->service()->approve(9));
@@ -374,6 +409,7 @@ class ExternalSignupServiceTest extends TestCase {
 
 	private function pending(bool $verified, bool $approval): array {
 		return ['id' => 9, 'handle' => 'bob', 'email' => 'bob@example.org', 'password' => 'H', 'token' => 'x',
-			'verified' => $verified, 'approval' => $approval, 'inviteId' => 0, 'ipHash' => '', 'creation' => self::NOW - 60];
+			'verified' => $verified, 'approval' => $approval, 'inviteId' => 0, 'ipHash' => '', 'creation' => self::NOW - 60,
+			'emailVerified' => true, 'noticeVersion' => '', 'noticeAcceptedAt' => 0, 'noticeSnapshot' => ''];
 	}
 }

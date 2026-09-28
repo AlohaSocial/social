@@ -72,6 +72,10 @@ final class ExternalScope {
 
 	/** Single methods of controllers that also serve things an external user may not see. */
 	private const METHODS = [
+		// The core welcome wizard records that its one-time introduction was
+		// completed through DELETE /apps/firstrunwizard/wizard. Allow only this
+		// method so external accounts do not see it again at every login.
+		'OCA\\FirstRunWizard\\Controller\\WizardController' => ['disable'],
 		'OC\\Core\\Controller\\OCSController' => ['getCapabilities', 'getConfig'],
 		'OCA\\Provisioning_API\\Controller\\UsersController' => [
 			'getCurrentUser', 'getUser', 'editUser', 'editUserMultiValue',

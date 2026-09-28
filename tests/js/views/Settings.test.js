@@ -122,7 +122,7 @@ describe('Settings', () => {
 		expect(section.exists()).toBe(true)
 		const button = section.findComponent({ name: 'NcButton' })
 		expect(button.text()).toBe('Show the introduction again')
-		expect(button.props('to')).toEqual({ name: 'timeline', query: { welcome: '1' } })
+		expect(button.props('to')).toEqual({ name: 'timeline', query: { replay: '1' } })
 	})
 
 	/**

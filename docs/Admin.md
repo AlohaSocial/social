@@ -487,9 +487,17 @@ link in the confirmation email is followed, so the server needs working
 mail. The form also asks to accept the server rules (the **Rules** card) and
 links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
-before the form. It starts with a translated explanation and can be adapted
-for this instance. It is informational, not a legal template or legal advice;
-the operator remains responsible for local policies and any consent required.
+on the introduction page and beside the form. It starts with a translated
+template and can be adapted for this instance. *Require registrants to accept
+this notice* adds a required checkbox. When enabled, Social records the text
+version, the time and the accepted text with the account. The record remains
+for the lifetime of that account and is removed when the account is deleted.
+Pending records transfer the acknowledgement to the account when it is made;
+rejected records are removed, and unconfirmed registrations expire after 24
+hours. These
+settings provide an audit trail, not legal advice or a guarantee that a notice
+is sufficient for a particular jurisdiction. The operator remains responsible
+for local policies and any consent required.
 *Usernames nobody may register* adds to a built-in list (`admin`, `root`,
 `support`, `social`, `postmaster` and similar). Email domains on the access
 block list are refused here as they are for every account.
@@ -512,9 +520,13 @@ ever). *Let everybody here send invitation links* also gives every user an
 *Invite people* section in their Social settings, single-use links that work
 for a week, at most ten open at a time.
 
-**External accounts.** Every external account with its email, enabled or
-disabled status, registration source, when it registered and last logged in,
-and what its media takes up. Search matches the username and display name.
+**External accounts.** Every external account with its email and verification
+status, enabled or disabled status, registration source, when it registered
+and last logged in, media usage, and the version and time of any accepted
+registration notice. Search matches the username and display name. Filters
+cover account status, registration source and date, login activity, minimum
+media usage and notice acceptance. The list is paged and scans at most a
+bounded number of candidates per request.
 *Disable* and
 *Enable* are Nextcloud's own. *Promote* makes one an ordinary account of this
 server with the same username, password, two-factor setup and Social
