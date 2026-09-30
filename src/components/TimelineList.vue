@@ -595,7 +595,7 @@ export default {
 		 *
 		 * They used to be one flat list, newest first — a reply to a reply
 		 * landed above the post it answered, and nothing said which reply it
-		 * answered (nextcloud/social#825, #1630). The tree is built from
+		 * answered (alohasocial/social#825, #1630). The tree is built from
 		 * `in_reply_to_id` over what this page holds; a reply whose parent is
 		 * not here (deleted, or a branch this instance holds only part of)
 		 * keeps its place in time at the top level, and its own replies hang

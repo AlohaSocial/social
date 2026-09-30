@@ -73,16 +73,16 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<extended_authentication/>
 	</types>
 	<category>social</category>
-	<website>https://github.com/nextcloud/social</website>
-	<bugs>https://github.com/nextcloud/social/issues</bugs>
-	<repository type="git">https://github.com/nextcloud/social.git</repository>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/home.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/photos.jpg</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/composer.jpg</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/discover.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/thread.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/interests.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/nextcloud/social/master/img/readme/admin.png</screenshot>
+	<website>https://github.com/alohasocial/social</website>
+	<bugs>https://github.com/alohasocial/social/issues</bugs>
+	<repository type="git">https://github.com/alohasocial/social.git</repository>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/home.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/photos.jpg</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/composer.jpg</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/discover.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/thread.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/interests.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/alohasocial/social/master/img/readme/admin.png</screenshot>
 	<dependencies>
 		<php min-version="8.3" max-version="8.5" />
 		<database>pgsql</database>

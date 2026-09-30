@@ -571,7 +571,7 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(
 			[
 				'name' => 'Nextcloud Social',
-				'website' => 'https://github.com/nextcloud/social/',
+				'website' => 'https://github.com/alohasocial/social/',
 				'vapid_key' => '',
 			],
 			$response->getData()

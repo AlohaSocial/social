@@ -358,7 +358,7 @@ sixty when twenty survive the check.
 
 ## What has been done
 
-### In [#2127](https://github.com/nextcloud/social/pull/2127)
+### In [#2127](https://github.com/alohasocial/social/pull/2127)
 
 | Item | Outcome |
 |---|---|
@@ -376,7 +376,7 @@ sixty when twenty survive the check.
 | The `AP` static registry | Resolved lazily instead of by an `AP::init();` at file scope. |
 | Unreachable controller methods | Six deleted from `LocalController`. |
 | Two unbounded loops | `NotificationService::clear()` and `MigrationService::refollowLocalFollowers()` bounded. |
-| The rest of the unbounded work | Closed in [#2132](https://github.com/nextcloud/social/pull/2132), with the N+1 behind `accounts/relationships` and the missing transaction around `StreamRequest::save()`. See [Performance.md](Performance.md), which tracks that category. |
+| The rest of the unbounded work | Closed in [#2132](https://github.com/alohasocial/social/pull/2132), with the N+1 behind `accounts/relationships` and the missing transaction around `StreamRequest::save()`. See [Performance.md](Performance.md), which tracks that category. |
 | `tests/stub.phpstub` | `QueryBuilder::SELECT` was the string `'select'`; Doctrine assigns the int `0`, so 28 comparisons were verified against fiction. Fixed and pinned by a test. |
 | Psalm 5 -> 6 | Now runs on supported PHP. Found five real type defects and five orphaned access-control attributes. |
 | Stylelint 15 -> 17 | Seven deprecated CSS declarations removed. |
@@ -399,8 +399,8 @@ sixty when twenty survive the check.
 
 | Item | Outcome |
 |---|---|
-| ESLint 8 (end of life) | [#2129](https://github.com/nextcloud/social/pull/2129): ESLint 10, `@nextcloud/eslint-config` 9, flat config. |
-| Nine conflicting dependabot bumps | [#2130](https://github.com/nextcloud/social/pull/2130): vue 3.5.42, webpack 5.110, jsdom 30, vue-router 5 with vite 8 behind it, dialogs 7.5. |
+| ESLint 8 (end of life) | [#2129](https://github.com/alohasocial/social/pull/2129): ESLint 10, `@nextcloud/eslint-config` 9, flat config. |
+| Nine conflicting dependabot bumps | [#2130](https://github.com/alohasocial/social/pull/2130): vue 3.5.42, webpack 5.110, jsdom 30, vue-router 5 with vite 8 behind it, dialogs 7.5. |
 
 ### In this wave
 

@@ -250,7 +250,7 @@ class NavigationController extends Controller {
 		 * a WebFinger-resolvable identity and a handle derived from the user
 		 * id, with no consent and no choice -- and somebody who already had an
 		 * account on Mastodon could not say so. The page carries what the
-		 * setup screen needs (nextcloud/social#1130, #1624); the account is
+		 * setup screen needs (alohasocial/social#1130, #1624); the account is
 		 * created by `LocalController::accountCreate()` when they ask.
 		 */
 		try {
