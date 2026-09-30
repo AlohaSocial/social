@@ -65,7 +65,7 @@ class OAuthController extends Controller {
 	 * The human title travels as `metadata.nodeName`.
 	 */
 	private const SOFTWARE_NAME = 'nextcloud-social';
-	private const REPOSITORY = 'https://github.com/nextcloud/social';
+	private const REPOSITORY = 'https://github.com/alohasocial/social';
 
 	/**
 	 * The NodeInfo schemas this instance serves, oldest first.

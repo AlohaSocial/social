@@ -3,7 +3,7 @@
 version = 1
 SPDX-PackageName = "Nextcloud Social"
 SPDX-PackageSupplier = "Nextcloud <https://nextcloud.com/contact/>"
-SPDX-PackageDownloadLocation = "https://github.com/nextcloud/social"
+SPDX-PackageDownloadLocation = "https://github.com/alohasocial/social"
 
 [[annotations]]
 path = ["package-lock.json", "package.json", "composer.json", "composer.lock", "jsconfig.json", "jsconfig.vue.json", ".tx/config"]
@@ -68,7 +68,7 @@ path = "img/undraw/**"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Katerina Limpitsouni"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
-SPDX-FileComment = "The undraw illustrations are released with a non-free license and thus not AGPL-compatible but we have the illustrators permissions to use these 8 images in this project. See https://github.com/nextcloud/social/issues/277#issuecomment-508480655 and below."
+SPDX-FileComment = "The undraw illustrations are released with a non-free license and thus not AGPL-compatible but we have the illustrators permissions to use these 8 images in this project. See https://github.com/alohasocial/social/issues/277#issuecomment-508480655 and below."
 
 [[annotations]]
 path = ["js/*", "js-backup/*"]

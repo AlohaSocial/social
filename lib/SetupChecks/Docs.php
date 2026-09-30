@@ -15,5 +15,5 @@ namespace OCA\Social\SetupChecks;
  * One place for the address, so that a moved guide is one edit and not four.
  */
 final class Docs {
-	public const ADMIN_GUIDE = 'https://github.com/nextcloud/social/blob/master/docs/Admin.md';
+	public const ADMIN_GUIDE = 'https://github.com/alohasocial/social/blob/master/docs/Admin.md';
 }

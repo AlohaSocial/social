@@ -169,8 +169,8 @@ class OAuthControllerTest extends TestCase {
 		$this->assertSame([
 			'name' => 'nextcloud-social',
 			'version' => '0.10.1',
-			'repository' => 'https://github.com/nextcloud/social',
-			'homepage' => 'https://github.com/nextcloud/social',
+			'repository' => 'https://github.com/alohasocial/social',
+			'homepage' => 'https://github.com/alohasocial/social',
 		], $data['software']);
 		$this->assertSame(['nodeName' => 'My Social', 'nodeDescription' => 'A cosy corner'], $data['metadata']);
 		$this->assertSame(['inbound' => [], 'outbound' => []], $data['services']);
@@ -1154,8 +1154,8 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame('2.0', $two['version']);
 		$this->assertSame('2.1', $twoOne['version']);
-		$this->assertSame('https://github.com/nextcloud/social', $twoOne['software']['repository']);
-		$this->assertSame('https://github.com/nextcloud/social', $twoOne['software']['homepage']);
+		$this->assertSame('https://github.com/alohasocial/social', $twoOne['software']['repository']);
+		$this->assertSame('https://github.com/alohasocial/social', $twoOne['software']['homepage']);
 		$this->assertArrayNotHasKey('repository', $two['software']);
 
 		unset($two['version'], $twoOne['version'], $two['software'], $twoOne['software']);

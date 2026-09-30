@@ -403,7 +403,7 @@ class Instance implements IQueryRow, JsonSerializable {
 			// read instead of the version string by a client that knows about
 			// it, and the string is the least reliable thing about a fork
 			'api_versions' => (object)self::API_VERSIONS,
-			'source_url' => 'https://github.com/nextcloud/social',
+			'source_url' => 'https://github.com/alohasocial/social',
 			'description' => ($this->getShortDescription() !== '')
 				? $this->getShortDescription() : $this->getDescription(),
 			'usage' => (object)[

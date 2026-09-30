@@ -79,7 +79,7 @@ class ApiController extends MastodonApiController {
 				return new DataResponse(
 					[
 						'name' => 'Nextcloud Social',
-						'website' => 'https://github.com/nextcloud/social/',
+						'website' => 'https://github.com/alohasocial/social/',
 						'vapid_key' => ''
 					], Http::STATUS_OK
 				);
