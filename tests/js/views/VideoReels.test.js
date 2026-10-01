@@ -15,7 +15,12 @@ vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
-vi.mock('../../../src/services/senses.js', () => ({ feel }))
+vi.mock('../../../src/services/senses.js', () => ({ feel, videoSoundEnabled: () => true }))
+const { sendSignals } = vi.hoisted(() => ({ sendSignals: vi.fn(() => Promise.resolve()) }))
+vi.mock('../../../src/services/interests.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	sendSignals,
+}))
 
 /** The observers each mount made, so a test can fire one by hand. */
 let observers = []
@@ -32,9 +37,12 @@ function video(id, { attachments, content = '<p>a clip</p>', acct = 'alice@cloud
 	}
 }
 
-async function mountReels(statuses = [video('1'), video('2')]) {
+async function mountReels(statuses = [video('1'), video('2')], { props = {}, serverData = null } = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
+	if (serverData !== null) {
+		useSettingsStore().setServerData(serverData)
+	}
 	const store = useTimelineStore()
 	store.fetchTimeline = vi.fn(async () => {
 		// the first call fills the list, every later one says there is no more
@@ -48,6 +56,7 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 	})
 
 	const wrapper = mount(VideoReels, {
+		props,
 		global: { plugins: [pinia], stubs: {
 			NcButton: true,
 			RouterLink: RouterLinkStub,
@@ -66,6 +75,9 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 describe('VideoReels', () => {
 	beforeEach(() => {
 		observers = []
+		// the mute choice is kept for the tab, and a test is a new tab
+		window.sessionStorage.clear()
+		sendSignals.mockClear()
 		vi.stubGlobal('IntersectionObserver', class {
 			constructor(callback) {
 				this.callback = callback
@@ -169,15 +181,41 @@ describe('VideoReels', () => {
 			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
 			.mockResolvedValue(undefined)
 
-		wrapper.vm.play(0)
+		await wrapper.vm.play(0)
 		await flushPromises()
 
-		expect(wrapper.vm.muted).toBe(true)
 		expect(first.muted).toBe(true)
 		expect(first.play).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('.reel__sound').attributes('aria-label')).toBe('Unmute')
 		expect(wrapper.find('.reel__sound-hint').text()).toBe('Tap for sound')
 
 		await wrapper.find('.reel__sound').trigger('click')
+		expect(first.muted).toBe(false)
+		expect(wrapper.find('.reel__sound').attributes('aria-label')).toBe('Mute')
+		expect(wrapper.find('.reel__sound-hint').exists()).toBe(false)
+	})
+
+	/**
+	 * A refusal is the browser's, not the reader's: on an iPhone the next
+	 * video after a scroll may be refused the sound too, and that must not
+	 * silence the rest of the stack for somebody who wanted to hear it.
+	 */
+	it('asks with sound again on the next slide after a refusal', async () => {
+		const { wrapper } = await mountReels()
+		const player = wrapper.find('video').element
+		player.play = vi.fn()
+			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
+			.mockResolvedValue(undefined)
+
+		await wrapper.vm.play(0)
+		await flushPromises()
+		expect(player.muted).toBe(true)
+
+		wrapper.vm.playing = 1
+		await wrapper.vm.play(1)
+		await flushPromises()
+
+		expect(player.muted).toBe(false)
 		expect(wrapper.vm.muted).toBe(false)
 		expect(wrapper.find('.reel__sound-hint').exists()).toBe(false)
 	})
@@ -197,24 +235,54 @@ describe('VideoReels', () => {
 	 * A dozen videos playing behind the one on screen is a phone getting hot
 	 * for nothing.
 	 */
-	it('plays the slide that is on screen and pauses every other one', async () => {
-		const { wrapper } = await mountReels()
-		const videos = wrapper.findAll('video').map((one) => one.element)
+	it('has one video element for the whole stack, and posters for the rest', async () => {
+		const { wrapper } = await mountReels([
+			video('1', { attachments: [{ id: 'a', type: 'video', url: 'https://cloud.example/a.mp4', preview_url: 'https://cloud.example/a.jpg' }] }),
+			video('2', { attachments: [{ id: 'b', type: 'video', url: 'https://cloud.example/b.mp4', preview_url: 'https://cloud.example/b.jpg' }] }),
+			video('3'),
+		])
 
-		wrapper.vm.play(1)
-
-		expect(videos[1].play).toHaveBeenCalled()
-		expect(videos[0].pause).toHaveBeenCalled()
+		expect(wrapper.findAll('.reel')).toHaveLength(3)
+		expect(wrapper.findAll('video')).toHaveLength(1)
+		expect(wrapper.findAll('.reel__poster').map((img) => img.attributes('src')).sort())
+			.toEqual(['https://cloud.example/a.jpg', 'https://cloud.example/b.jpg'])
 	})
 
-	it('rewinds a video it scrolled past, so coming back is the video again', async () => {
+	/**
+	 * The element a tap once allowed to play with sound is the one that
+	 * plays the next video, so WebKit has no new element to refuse.
+	 */
+	it('moves the one player to the slide on screen and plays that slide', async () => {
+		const { wrapper, store } = await mountReels([video('1'), video('2'), video('3'), video('4'), video('5')])
+		const player = wrapper.find('video').element
+		expect(player.getAttribute('src')).toBe(wrapper.vm.reels[0].video.url)
+		store.fetchTimeline.mockClear()
+
+		observers[0].callback([{ isIntersecting: true, target: wrapper.vm.slides[1] }])
+		await flushPromises()
+
+		const now = wrapper.find('video')
+		expect(now.element).toBe(player)
+		expect(now.attributes('src')).toBe(wrapper.vm.reels[1].video.url)
+		expect(now.attributes('src')).not.toBe(wrapper.vm.reels[0].video.url)
+		expect(now.attributes('style')).toContain('--at: 1')
+		expect(player.play).toHaveBeenCalled()
+		expect(wrapper.vm.playing).toBe(1)
+		expect(store.fetchTimeline).not.toHaveBeenCalled()
+	})
+
+	it('keeps the sound as it was when the player moves on', async () => {
 		const { wrapper } = await mountReels()
-		const first = wrapper.findAll('video')[0].element
-		Object.defineProperty(first, 'currentTime', { value: 12, writable: true })
+		const player = wrapper.find('video').element
 
-		wrapper.vm.play(1)
+		await wrapper.find('.reel__sound').trigger('click')
+		expect(player.muted).toBe(true)
 
-		expect(first.currentTime).toBe(0)
+		observers[0].callback([{ isIntersecting: true, target: wrapper.vm.slides[1] }])
+		await flushPromises()
+
+		expect(player.muted).toBe(true)
+		expect(wrapper.findAll('.reel__sound')[1].attributes('aria-label')).toBe('Unmute')
 	})
 
 	/** The sound is a statement about the page, not about one video. */
@@ -558,6 +626,103 @@ describe('VideoReels', () => {
 			])
 			// the corner used to hold a way back to the Videos grid
 			expect(wrapper.find('.reels__close').exists()).toBe(false)
+		})
+	})
+	/**
+	 * For you narrowed to videos: offered to a signed-in reader who has it,
+	 * and where the stack opens once reading has taught it something.
+	 */
+	describe('For you', () => {
+		const ON = { enabled: true, learning: true, paused: false, noticeAcknowledged: true }
+		const labels = (wrapper) => wrapper.findAll('.reels__scope').map((link) => link.text())
+
+		it('is offered beside My Feed while the reader has it', async () => {
+			const { wrapper } = await mountReels(undefined, { props: { scope: 'home' }, serverData: { public: false, interests: ON } })
+
+			expect(labels(wrapper)).toEqual(['My Feed', 'For you', 'Local', 'Global'])
+			expect(wrapper.findAllComponents(RouterLinkStub).filter((link) => link.classes().includes('reels__scope'))[1].props('to'))
+				.toEqual({ name: 'reels', query: { scope: 'interests' } })
+		})
+
+		it.each([
+			['the feature is off', { public: false, interests: { ...ON, enabled: false } }],
+			['the reader opted out', { public: false, interests: { ...ON, learning: false } }],
+			['nobody is signed in', { public: true, interests: ON }],
+		])('is not offered when %s', async (_, serverData) => {
+			const { wrapper } = await mountReels(undefined, { serverData })
+
+			expect(labels(wrapper)).not.toContain('For you')
+		})
+
+		it('is where the stack opens once reading has taught it something', async () => {
+			const { store } = await mountReels(undefined, { serverData: { public: false, interests: { ...ON, profile: true } } })
+
+			expect(store.type).toBe('videos')
+			expect(store.params.scope).toBe('interests')
+		})
+
+		it('is not the default before that, nor asked for by one who does not have it', async () => {
+			const fresh = await mountReels(undefined, { serverData: { public: false, interests: ON } })
+			expect(fresh.store.params.scope).toBe('home')
+
+			const without = await mountReels(undefined, { props: { scope: 'interests' }, serverData: { public: false, interests: { ...ON, enabled: false, profile: true } } })
+			expect(without.store.params.scope).toBe('home')
+		})
+
+		it('pages a ranking from where it ended, not from its oldest post', async () => {
+			const { wrapper, store } = await mountReels([video('1'), video('2')], {
+				props: { scope: 'interests' },
+				serverData: { public: false, interests: ON },
+			})
+
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[0].element }])
+			await flushPromises()
+
+			expect(store.fetchTimeline).toHaveBeenLastCalledWith({ max_id: '2' })
+		})
+
+		it('says why a video is there, as the chip over a post does', async () => {
+			const { wrapper } = await mountReels([video('1'), { ...video('2'), interest: { tags: [], reason: 'popular' } }], {
+				props: { scope: 'interests' },
+				serverData: { public: false, interests: ON },
+			})
+
+			const reasons = wrapper.findAll('.reel__reason')
+			expect(reasons).toHaveLength(1)
+			expect(reasons[0].text()).toBe('Popular right now')
+		})
+
+		it('reports what the reader watched when they move on, under reels', async () => {
+			const tagged = (id) => ({ ...video(id), tags: [{ name: 'skate' }] })
+			const { wrapper } = await mountReels([tagged('1'), tagged('2')], { serverData: { public: false, interests: ON } })
+			// one player, which follows the slide being watched
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[0].element }])
+			await flushPromises()
+			const player = wrapper.find('video')
+			Object.defineProperty(player.element, 'duration', { value: 10, configurable: true })
+			player.element.currentTime = 6
+			await player.trigger('timeupdate')
+			await player.trigger('ended')
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[1].element }])
+			await flushPromises()
+			await wrapper.find('video').trigger('timeupdate')
+			wrapper.unmount()
+
+			// newest first: the first slide is the second post
+			expect(sendSignals.mock.calls.map(([events]) => events[0])).toEqual([
+				{ status_id: '2', kind: 'dwell', ms: 10000, context: 'reels' },
+				{ status_id: '1', kind: 'skip', context: 'reels' },
+			])
+		})
+
+		it('reports nothing while learning is paused', async () => {
+			const tagged = (id) => ({ ...video(id), tags: [{ name: 'skate' }] })
+			const { wrapper } = await mountReels([tagged('1'), tagged('2')], { serverData: { public: false, interests: { ...ON, paused: true } } })
+
+			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.reel')[1].element }])
+			wrapper.unmount()
+
+			expect(sendSignals).not.toHaveBeenCalled()
 		})
 	})
 })

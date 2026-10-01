@@ -31,7 +31,7 @@
 				</li>
 			</ul>
 			<p v-else class="delivery-hint delivery-hint--muted">
-				{{ t('social', 'No server deliveries are on record. Public posts go to your followers, mentioned accounts, and subscribed relays; Social does not broadcast them to every known server. Delivery records are kept for {days} days, so an older post may no longer have records.', { days: retentionDays }) }}
+				{{ t('social', 'No server deliveries are on record. Public posts go to your followers, mentioned accounts, and subscribed relays; Aloha Social does not broadcast them to every known server. Delivery records are kept for {days} days, so an older post may no longer have records.', { days: retentionDays }) }}
 			</p>
 		</template>
 	</NcDialog>

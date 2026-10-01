@@ -350,7 +350,7 @@ describe('TimelineEntry', () => {
 	})
 })
 
-describe('why My interests shows a post', () => {
+describe('why For you shows a post', () => {
 	it('names the reason above the post, as a link to the tag', () => {
 		const { wrapper } = mountEntry({ ...post, interest: { tags: ['photography'], reason: 'followed' } }, { type: 'interests' })
 
@@ -361,6 +361,17 @@ describe('why My interests shows a post', () => {
 		expect(chip.attributes('aria-label')).toBe('Why you\'re seeing this: you follow #photography')
 		// before the post, not inside it
 		expect(wrapper.element.firstElementChild).toBe(chip.element)
+	})
+
+	it('says a popular post is popular, with no tag to link to', () => {
+		const { wrapper } = mountEntry({ ...post, interest: { tags: [], reason: 'popular' } }, { type: 'interests' })
+
+		const chip = wrapper.find('.interest-reason')
+		expect(chip.element.tagName).toBe('SPAN')
+		expect(chip.classes()).toContain('interest-reason--popular')
+		expect(chip.text()).toBe('Popular right now')
+		expect(chip.attributes('aria-label')).toBe('Why you\'re seeing this: popular right now')
+		expect(wrapper.findAllComponents(RouterLinkStub).some((link) => link.classes().includes('interest-reason'))).toBe(false)
 	})
 
 	it('draws nothing on a post the feed did not choose', () => {

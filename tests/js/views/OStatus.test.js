@@ -79,7 +79,7 @@ describe('OStatus', () => {
 		it('asks the logged-in user to confirm, naming the account before it is loaded', () => {
 			const wrapper = mountView()
 			const headings = wrapper.findAll('h2').map((heading) => heading.text())
-			expect(headings).toEqual(['Follow on Nextcloud Social', 'bob@remote.example'])
+			expect(headings).toEqual(['Follow on Aloha Social', 'bob@remote.example'])
 			expect(wrapper.text()).toContain('Hello')
 			expect(wrapper.text()).toContain('Alice')
 			// the greeting avatar is the real ActorAvatar, fed the current user as a local actor
@@ -104,7 +104,7 @@ describe('OStatus', () => {
 			pending = Promise.resolve(bob)
 			const wrapper = mountView()
 			await flushPromises()
-			expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Follow on Nextcloud Social', 'Bob'])
+			expect(wrapper.findAll('h2').map((heading) => heading.text())).toEqual(['Follow on Aloha Social', 'Bob'])
 		})
 
 		it('follows with the cloud id of the current user and the account handle on submit', async () => {

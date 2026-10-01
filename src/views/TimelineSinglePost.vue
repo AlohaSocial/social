@@ -337,7 +337,7 @@ export default {
 			await this.accountStore[fetchMethod](this.account)
 		},
 
-		/** Tells My interests the reader opened this post, when it is learning. */
+		/** Tells For you the reader opened this post, when it is learning. */
 		reportOpened() {
 			const post = this.timelineStore.getSinglePost
 			if (!post || this.serverData.public || !isTracking(this.serverData.interests)) {

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use DateTime;
 use InvalidArgumentException;
 use OCA\Social\Db\FeaturedTagsRequest;
 use OCA\Social\Db\FollowedTagsRequest;
@@ -18,9 +19,12 @@ use OCA\Social\Exceptions\InterestNotRemovableException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Client\AttachmentMeta;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Interest;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\HashtagService;
+use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -32,7 +36,7 @@ use Psr\Log\NullLogger;
 use RuntimeException;
 
 /**
- * Who My interests learns from, what it keeps, and what the reader can do to
+ * Who For you learns from, what it keeps, and what the reader can do to
  * it — against in-memory tables, so every rule is about behaviour rather than
  * about which query ran.
  */
@@ -58,6 +62,8 @@ class InterestServiceTest extends TestCase {
 	/** @var string[][] every set of nids asked for */
 	private array $asked = [];
 	private int $now = self::NOW;
+	/** @var DateTime[] every date a hide was asked back to */
+	private array $hideSince = [];
 	/** makes the interests table fail, as a database that went away would */
 	private bool $broken = false;
 
@@ -131,7 +137,16 @@ class InterestServiceTest extends TestCase {
 			unset($this->hidden[$nid]);
 		});
 		$this->interestsRequest->method('isHidden')->willReturnCallback(fn (string $actorId, string $nid): bool => isset($this->hidden[$nid]));
-		$this->interestsRequest->method('getHiddenSince')->willReturnCallback(fn (): array => array_map('strval', array_keys($this->hidden)));
+		$this->interestsRequest->method('getHiddenSince')->willReturnCallback(function (string $actorId, DateTime $since): array {
+			$this->hideSince[] = $since;
+
+			return array_map('strval', array_keys($this->hidden));
+		});
+		$this->interestsRequest->method('purgeHidesBefore')->willReturnCallback(function (DateTime $before): int {
+			$this->hideSince[] = $before;
+
+			return 0;
+		});
 
 		$this->streamRequest = $this->createStub(StreamRequest::class);
 		$this->streamRequest->method('getVisibleByNids')->willReturnCallback(function (array $nids): array {
@@ -190,6 +205,97 @@ class InterestServiceTest extends TestCase {
 
 		$this->assertSame(['cats' => 0.5, 'dogs' => 0.5], $this->scores());
 		$this->assertNotSame('', $this->user['interests_baseline'] ?? '', 'the reader\'s pace moved');
+	}
+
+	/** A post with one video of this many seconds. */
+	private function video(string $nid, array $tags, float $seconds): Note {
+		$note = $this->post($nid, $tags);
+		$note->setAttachments([
+			(new MediaAttachment())->setType('video')->setMeta((new AttachmentMeta())->setDuration($seconds)),
+		]);
+
+		return $note;
+	}
+
+	/**
+	 * In the Shorts stack a dwell is time watched, weighed against how long
+	 * the video runs: all of a ten-second clip is a strong signal, half of it
+	 * a mild one, a moment of it nothing — however short its text.
+	 */
+	public function testAVideoWatchedInTheShortsIsWeighedByItsRunningTime(): void {
+		$this->video('1', ['all'], 10.0);
+		$this->video('2', ['half'], 10.0);
+		$this->video('3', ['glance'], 10.0);
+		$this->video('4', ['long'], 120.0);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 10000, 'context' => 'reels'],
+			['status_id' => '2', 'kind' => 'dwell', 'ms' => 5000, 'context' => 'reels'],
+			['status_id' => '3', 'kind' => 'dwell', 'ms' => 2500, 'context' => 'reels'],
+			// the cap on one look is the cap on what a long video can expect
+			['status_id' => '4', 'kind' => 'dwell', 'ms' => 30000, 'context' => 'reels'],
+		]);
+
+		$this->assertSame(
+			['all' => InterestScorer::SIGNAL_LONG_DWELL, 'half' => InterestScorer::SIGNAL_DWELL, 'long' => InterestScorer::SIGNAL_LONG_DWELL],
+			$this->scores()
+		);
+		$this->assertSame('1', $this->user['interests_baseline'] ?? '', 'the reading pace is where it started: watching says nothing about it');
+	}
+
+	/** On a timeline the same post is judged as a post: the time it was on screen is not time the video played. */
+	public function testAVideoPostOnATimelineIsStillReadAsAPost(): void {
+		$this->video('1', ['cats'], 60.0);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 8000, 'context' => 'home'],
+		]);
+
+		$this->assertSame(['cats' => InterestScorer::SIGNAL_LONG_DWELL], $this->scores());
+	}
+
+	public function testAVideoThatNeverSaidHowLongItRunsIsReadAsAPost(): void {
+		$note = $this->post('1', ['cats']);
+		$note->setAttachments([(new MediaAttachment())->setType('video')]);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 8000, 'context' => 'reels'],
+		]);
+
+		$this->assertSame(['cats' => InterestScorer::SIGNAL_LONG_DWELL], $this->scores());
+	}
+
+	public function testTheShortsAndTheMediaPagesAreContexts(): void {
+		foreach (['photos', 'videos', 'reels'] as $context) {
+			$this->assertContains($context, InterestService::CONTEXTS);
+		}
+		$this->assertSame(['reels'], InterestService::WATCH_CONTEXTS);
+	}
+
+	/** Hides reach as far back as the widest ranking, the photo and video one. */
+	public function testAHideLastsAsLongAsAMediaRankingLooksBack(): void {
+		$service = $this->service();
+		$service->hiddenFor($this->actor());
+		$service->purgeHides();
+
+		$days = 7 * InterestFeedService::MEDIA_WINDOW_FACTOR;
+		foreach ($this->hideSince as $since) {
+			$this->assertSame(self::NOW - $days * 86400, $since->getTimestamp());
+		}
+		$this->assertCount(2, $this->hideSince);
+	}
+
+	/** Whether reading has taught it anything: the Shorts stack opens on For you once it has. */
+	public function testThePageIsToldWhetherThereIsAProfileYet(): void {
+		$this->assertFalse($this->service()->pageState('alice')['profile']);
+
+		$this->post('1', ['cats']);
+		$service = $this->service();
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'dwell', 'ms' => 5000]]);
+		$this->assertTrue($service->pageState('alice')['profile']);
+
+		$service->reset($this->actor());
+		$this->assertFalse($service->pageState('alice')['profile']);
 	}
 
 	public function testEachKindOfSignalWeighsWhatTheSpecSays(): void {

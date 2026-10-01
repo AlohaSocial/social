@@ -241,12 +241,14 @@ class SocialCrossQueryBuilder extends SocialCoreQueryBuilder {
 			// document: the thumbnail where one has been made, the full copy
 			// until then, and nothing at all while it is still being fetched
 			$uuid = ($icon->getResizedCopy() === '') ? $icon->getLocalCopy() : $icon->getResizedCopy();
-			$actor->setAvatar(
-				$this->urlGenerator->linkToRouteAbsolute(
-					'social.MediaApi.mediaOpen',
-					['uuid' => $uuid]
-				)
-			);
+			if ($uuid !== '') {
+				$actor->setAvatar(
+					$this->urlGenerator->linkToRouteAbsolute(
+						'social.MediaApi.mediaOpen',
+						['uuid' => $uuid]
+					)
+				);
+			}
 		} catch (InvalidResourceException $e) {
 		}
 

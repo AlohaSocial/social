@@ -13,15 +13,15 @@
 			v-else-if="bannerUrl"
 			class="social-profile__banner"
 			:src="bannerUrl"
-			:alt="t('social', 'Social profile banner')">
+			:alt="t('social', 'Aloha Social profile banner')">
 		<h2 class="social-profile__title">
-			{{ t('social', 'Social') }}
+			{{ t('social', 'Aloha Social') }}
 		</h2>
 		<TimelineSwitcher
 			class="social-profile__feeds"
 			:options="feedOptions"
 			:value="activeFeed"
-			:label="t('social', 'Which Social feed to show')"
+			:label="t('social', 'Which Aloha Social feed to show')"
 			@update:value="selectFeed" />
 		<p v-if="activeFeed === 'home'" class="social-profile__feed-description">
 			{{ t('social', 'Posts from accounts you follow, including private posts you are allowed to see.') }}

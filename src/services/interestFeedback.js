@@ -15,7 +15,7 @@ import { useTimelineStore } from '../store/timeline.js'
  * Here rather than in TimelinePost, which is shared by two bundles and carries
  * as little as it can: the post only says it was asked.
  *
- * On My interests the post leaves the feed at once, because that is the feed
+ * On For you the post leaves the feed at once, because that is the feed
  * the reader just said it does not belong in; the toast's Undo puts it back
  * where it was. Anywhere else the post stays — it is in that timeline for a
  * reason that has nothing to do with interests — and the reader is only told
@@ -31,10 +31,10 @@ export async function lessLikeThisFromPost(status, type) {
 	if (type !== 'interests') {
 		try {
 			await lessLikeThis(status.id)
-			showSuccess(t('social', 'My interests will show you fewer posts like this'))
+			showSuccess(t('social', 'For you will show you fewer posts like this'))
 		} catch (error) {
 			logger.error('Could not send less like this', { error })
-			showError(t('social', 'Could not tell My interests about this post'))
+			showError(t('social', 'Could not tell For you about this post'))
 		}
 
 		return
@@ -63,7 +63,7 @@ export async function lessLikeThisFromPost(status, type) {
 	} catch (error) {
 		logger.error('Could not send less like this', { error })
 		putBack()
-		showError(t('social', 'Could not tell My interests about this post'))
+		showError(t('social', 'Could not tell For you about this post'))
 
 		return
 	}

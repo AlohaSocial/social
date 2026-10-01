@@ -137,7 +137,7 @@ class InstanceService {
 
 		$instance->setUri($uri)
 			->setVersion($this->appConfig->getValueString(Application::APP_ID, 'installed_version', '0.0'))
-			->setTitle($this->appConfig->getValueString('theming', 'name', 'Nextcloud Social'))
+			->setTitle($this->appConfig->getValueString('theming', 'name', 'Aloha Social'))
 			->setShortDescription(
 				$this->appConfig->getValueString('theming', 'slogan', 'a safe home for your data')
 			)

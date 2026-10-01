@@ -9,7 +9,7 @@
 				{{ t('social', 'Join the fediverse from your Nextcloud') }}
 			</h1>
 			<p class="account-setup__lead">
-				{{ t('social', 'Social connects this Nextcloud to Mastodon, Pixelfed, PeerTube and every other server that speaks ActivityPub. Nothing has been created for you yet: an account here is a public identity with a key pair of its own, so it is yours to ask for.') }}
+				{{ t('social', 'Aloha Social connects this Nextcloud to Mastodon, Pixelfed, PeerTube and every other server that speaks ActivityPub. Nothing has been created for you yet: an account here is a public identity with a key pair of its own, so it is yours to ask for.') }}
 			</p>
 
 			<div class="account-setup__choices">

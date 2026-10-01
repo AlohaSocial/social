@@ -170,7 +170,7 @@ class ExternalSignupServiceTest extends TestCase {
 
 	public function testAnOpenRegistrationWaitsForItsEmailToBeConfirmed(): void {
 		$this->signups->expects($this->once())->method('create')
-			->with('alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
+			->with('alice', 'alice@example.org', 'hash:long enough', hash('sha256', 'TOKEN'), false, false, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Aloha Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
 		$this->users->expects($this->never())->method('createAccount');
 
 		$this->assertSame(['state' => 'verify', 'handle' => 'alice'], $this->submit());
@@ -199,7 +199,7 @@ class ExternalSignupServiceTest extends TestCase {
 		$this->verify = false;
 		$this->mode = ExternalUserService::MODE_APPROVAL;
 		$this->signups->expects($this->once())->method('create')
-			->with('alice', $this->anything(), $this->anything(), '', true, true, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
+			->with('alice', $this->anything(), $this->anything(), '', true, true, 0, $this->anything(), self::NOW, false, hash('sha256', 'This account is limited to Aloha Social on this server. Review the server rules and linked privacy information before registering.'), 0, '');
 		$this->users->expects($this->never())->method('createAccount');
 
 		$this->assertSame(['state' => 'approval', 'handle' => 'alice'], $this->submit());

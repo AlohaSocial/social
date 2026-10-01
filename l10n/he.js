@@ -1,9 +1,9 @@
 OC.L10N.register(
     "social",
     {
-    "Social" : "חברתי",
+    "Aloha Social" : "חברתי",
     "Help" : "עזרה",
-    "Follow %s on Social" : "לעקוב אחר %s ברשתות החברתיות",
+    "Follow %s on Aloha Social" : "לעקוב אחר %s ברשתות החברתיות",
     "Home" : "בית",
     "Direct messages" : "הודעות ישירות",
     "Notifications" : "התראות",
@@ -36,7 +36,7 @@ OC.L10N.register(
     "Reply" : "תגובה",
     "Like" : "אהבתי",
     "Deny" : "לדחות",
-    "Follow on Nextcloud Social" : "עקוב ב NextCloud חברתי",
+    "Follow on Aloha Social" : "עקוב ב NextCloud חברתי",
     "Hello" : "שלום",
     "Please confirm that you want to follow this account:" : "נא לאשר שרצונך הוא לעקוב אחר חשבון זה:",
     "Close" : "סגור",

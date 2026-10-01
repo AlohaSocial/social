@@ -58,18 +58,18 @@ function mountTimeline(route, serverData = {}) {
 
 const options = (wrapper) => wrapper.findComponent(TimelineSwitcher).props('options').map((option) => option.value)
 
-describe('My interests on the timeline page', () => {
+describe('For you on the timeline page', () => {
 	afterEach(() => {
 		vi.restoreAllMocks()
 	})
 
 	describe('the switcher', () => {
-		it('offers My interests second, right after My Feed, while the feed is on', () => {
+		it('offers For you second, right after My Feed, while the feed is on', () => {
 			const wrapper = mountTimeline({}, { interests: ON })
 
 			expect(options(wrapper)).toEqual(['home', 'interests', 'timeline', 'federated'])
 			const option = wrapper.findComponent(TimelineSwitcher).props('options')[1]
-			expect(option.label).toBe('My interests')
+			expect(option.label).toBe('For you')
 			expect(option.to).toEqual({ name: 'timeline', params: { type: 'interests' } })
 		})
 
@@ -91,23 +91,38 @@ describe('My interests on the timeline page', () => {
 			expect(options(wrapper)).not.toContain('interests')
 		})
 
-		it('leaves it out of the scopes of Photos', () => {
-			const wrapper = mountTimeline({ params: { type: 'photos' } }, { interests: ON })
+		it.each(['photos', 'videos'])('is a scope of %s too, narrowed to that kind', (type) => {
+			const wrapper = mountTimeline({ params: { type }, query: { scope: 'interests' } }, { interests: ON })
+
+			expect(options(wrapper)).toEqual(['home', 'interests', 'timeline', 'federated'])
+			const option = wrapper.findComponent(TimelineSwitcher).props('options')[1]
+			expect(option.label).toBe('For you')
+			expect(option.to).toEqual({ name: 'timeline', params: { type }, query: { scope: 'interests' } })
+			expect(wrapper.findComponent(TimelineSwitcher).props('value')).toBe('interests')
+			expect(useTimelineStore().changeTimelineType).toHaveBeenCalledWith(expect.objectContaining({
+				type,
+				params: { scope: 'interests' },
+			}))
+		})
+
+		it('reads a For you scope of Photos as My Feed for a reader without it', () => {
+			const wrapper = mountTimeline({ params: { type: 'photos' }, query: { scope: 'interests' } }, { interests: { ...ON, enabled: false } })
 
 			expect(options(wrapper)).toEqual(['home', 'timeline', 'federated'])
+			expect(wrapper.findComponent(TimelineSwitcher).props('value')).toBe('home')
 		})
 
 		it('is the chosen option on the feed itself, which is headed and listed as its own timeline', () => {
 			const wrapper = mountTimeline({ params: { type: 'interests' } }, { interests: ON })
 
 			expect(wrapper.findComponent(TimelineSwitcher).props('value')).toBe('interests')
-			expect(wrapper.find('h1').text()).toBe('My interests')
+			expect(wrapper.find('h1').text()).toBe('For you')
 			expect(wrapper.find('.timeline-list-stub').exists()).toBe(true)
 		})
 	})
 
 	describe('the still-learning note', () => {
-		it('is only over My interests', () => {
+		it('is only over For you', () => {
 			expect(mountTimeline({ params: { type: 'interests' } }, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(true)
 			expect(mountTimeline({}, { interests: ON }).find('.InterestsLearningBanner-stub').exists()).toBe(false)
 		})

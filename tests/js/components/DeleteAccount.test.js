@@ -51,7 +51,7 @@ describe('deleting your own account', () => {
 	it('asks for the handle rather than deleting on one press', async () => {
 		const wrapper = mountCard()
 		await flushPromises()
-		await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+		await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 
 		expect(post).not.toHaveBeenCalled()
 		expect(wrapper.text()).toContain('alice@cloud.example')
@@ -61,7 +61,7 @@ describe('deleting your own account', () => {
 	it('will not send an empty confirmation', async () => {
 		const wrapper = mountCard()
 		await flushPromises()
-		await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+		await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 
 		expect(buttonByText(wrapper, 'Delete it for good').attributes('disabled')).toBeDefined()
 	})
@@ -69,7 +69,7 @@ describe('deleting your own account', () => {
 	it('sends the handle that was typed', async () => {
 		const wrapper = mountCard()
 		await flushPromises()
-		await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+		await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 		wrapper.vm.typed = ' alice@cloud.example '
 		await wrapper.vm.$nextTick()
 		await buttonByText(wrapper, 'Delete it for good').trigger('click')
@@ -83,7 +83,7 @@ describe('deleting your own account', () => {
 		post.mockRejectedValue({ response: { data: { error: 'type alice@cloud.example to confirm' } } })
 		const wrapper = mountCard()
 		await flushPromises()
-		await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+		await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 		wrapper.vm.typed = 'bob'
 		await wrapper.vm.$nextTick()
 		await buttonByText(wrapper, 'Delete it for good').trigger('click')
@@ -96,7 +96,7 @@ describe('deleting your own account', () => {
 	it('lets the reader back out', async () => {
 		const wrapper = mountCard()
 		await flushPromises()
-		await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+		await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 		await buttonByText(wrapper, 'Keep my account').trigger('click')
 
 		expect(post).not.toHaveBeenCalled()
@@ -115,7 +115,7 @@ describe('deleting your own account', () => {
 			expect(wrapper.text()).not.toContain('Your Nextcloud account is not touched')
 
 			await flushPromises()
-			await buttonByText(wrapper, 'Delete my Social account').trigger('click')
+			await buttonByText(wrapper, 'Delete my Aloha Social account').trigger('click')
 			wrapper.vm.typed = 'alice'
 			await wrapper.vm.$nextTick()
 			await buttonByText(wrapper, 'Delete it for good').trigger('click')

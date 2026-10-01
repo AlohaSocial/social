@@ -1,5 +1,5 @@
 { "translations": {
-    "Social" : "Social",
+    "Aloha Social" : "Aloha Social",
     "Help" : "Palīdzība",
     "🎉 Nextcloud becomes part of the federated social networks!" : "🎉 Nextcloud kļūst par daļu apvainotajos sociālajos tīklos!",
     "Home" : "Sākums",
@@ -9,9 +9,9 @@
     "Local timeline" : "Vietējā laika josla",
     "Global timeline" : "Globālā laika josla",
     "Open documentation" : "Atvērt dokumentāciju",
-    "Social app setup" : "Social lietotnes iestatīšana",
+    "Aloha Social app setup" : "Aloha Social lietotnes iestatīšana",
     "Finish setup" : "Pabeigt iestatīšanu",
-    "The Social app needs to be set up by the server administrator." : "Social lietotne jāuzstāda servera pārvaldītājam.",
+    "The Aloha Social app needs to be set up by the server administrator." : "Aloha Social lietotne jāuzstāda servera pārvaldītājam.",
     "Following" : "Seko",
     "Uploading..." : "Augšupielādē...",
     "Delete" : "Izdzēst",

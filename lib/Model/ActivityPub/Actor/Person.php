@@ -13,6 +13,7 @@ use DateTime;
 use Exception;
 use JsonSerializable;
 use OCA\Social\AP;
+use OCA\Social\AppInfo\Application as SocialApp;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\SocialAppConfigException;
@@ -1394,12 +1395,35 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * The picture shown for an account that has none cached yet: for a local
+	 * account Nextcloud's own avatar, which every user has (generated from the
+	 * initials when nothing was uploaded), the app icon otherwise.
+	 */
+	public function placeholderImage(IURLGenerator $urlGenerator): string {
+		if ($this->isLocal()) {
+			return $urlGenerator->linkToRouteAbsolute(
+				'core.avatar.getAvatar', ['userId' => $this->getPreferredUsername(), 'size' => 128]
+			);
+		}
+
+		return $urlGenerator->getAbsoluteURL(
+			$urlGenerator->imagePath(SocialApp::APP_ID, 'social.svg')
+		);
+	}
+
+	/**
 	 * @return array
 	 */
 	#[\Override]
 	public function exportAsLocal(): array {
 		if ($this->hasIcon()) {
+			// an icon with no local copy yet -- fetched by the next cache run,
+			// or replaced a moment ago by a removed or renamed avatar -- has
+			// no address here, and the origin is not offered in its place
 			$avatar = $this->getIcon()->getMediaUrl(Server::get(IURLGenerator::class));
+			if ($avatar === '') {
+				$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
+			}
 		}
 
 		$headerUrl = $this->getHeader();

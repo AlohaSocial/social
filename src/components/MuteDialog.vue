@@ -84,7 +84,7 @@ export default {
 
 		/**
 		 * The post the mute was asked for from, when it was: muting somebody
-		 * over a post says something about its hashtags, which My interests
+		 * over a post says something about its hashtags, which For you
 		 * is told. Null from a profile, which is about the person.
 		 *
 		 */
@@ -153,7 +153,7 @@ export default {
 	methods: {
 		t,
 
-		/** Tells My interests, when the mute came from a post and learning is on. */
+		/** Tells For you, when the mute came from a post and learning is on. */
 		reportToInterests() {
 			if (this.status === null || !isTracking(useSettingsStore().getServerData.interests)) {
 				return

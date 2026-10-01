@@ -577,7 +577,7 @@ class NotificationService {
 			'account' => ($actor === null) ? $actorId : $this->labelOf($actor),
 			// into this app, not at the remote object: a bell entry that opened
 			// a Mastodon page for a post the reader can see here was the
-			// complaint in nextcloud/social#1628
+			// complaint in alohasocial/social#1628
 			'link' => in_array($subject, ['follow', 'follow_request'], true)
 				? $this->profileLink($actor, $actorId)
 				: $this->postLink($notification),

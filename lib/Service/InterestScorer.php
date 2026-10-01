@@ -13,7 +13,7 @@ use OCA\Social\Db\FollowedTagsRequest;
 use OCA\Social\Model\Interest;
 
 /**
- * The arithmetic of My interests, and nothing else.
+ * The arithmetic of For you, and nothing else.
  *
  * No database, no clock of its own and no configuration read behind the
  * caller's back: every number it needs is handed to it, so every rule the
@@ -47,6 +47,17 @@ class InterestScorer {
 	public const PER_MEDIA_MS = 1500;
 	/** Past this a post is long, and nobody is expected to read all of it. */
 	public const EXPECTED_CAP_MS = 20000;
+
+	/**
+	 * A video longer than this counts as watched once this much of it was:
+	 * one look is capped at `InterestService::MAX_DWELL_MS`, so a longer
+	 * expectation could never be met.
+	 */
+	public const EXPECTED_WATCH_CAP_MS = 30000;
+	/** Watched this much of it, or more, and a video held the reader. */
+	public const WATCHED_SHARE = 0.9;
+	/** Half of it is a video they watched rather than swiped past. */
+	public const WATCHED_SOME = 0.5;
 
 	/** How quickly the reader's own pace follows what they do. */
 	public const BASELINE_ALPHA = 0.05;
@@ -139,6 +150,31 @@ class InterestScorer {
 		$next = (1.0 - self::BASELINE_ALPHA) * $baseline + self::BASELINE_ALPHA * min($ratio, 10.0);
 
 		return [$signal, $next];
+	}
+
+	/**
+	 * How long a video takes to watch: its running time, up to the cap.
+	 *
+	 * @param int $durationMs how long it runs
+	 */
+	public function expectedWatchMs(int $durationMs): int {
+		return max(1, min(self::EXPECTED_WATCH_CAP_MS, $durationMs));
+	}
+
+	/**
+	 * What watching a video was worth. Most or all of it is a video that held
+	 * the reader, as a long look at a post is; half of it one they watched;
+	 * less says nothing either way, the swipe away within a moment being a
+	 * `skip` of its own.
+	 */
+	public function classifyWatch(int $watchedMs, int $expectedMs): float {
+		$share = (float)max(0, $watchedMs) / (float)max(1, $expectedMs);
+
+		if ($share >= self::WATCHED_SHARE) {
+			return self::SIGNAL_LONG_DWELL;
+		}
+
+		return ($share >= self::WATCHED_SOME) ? self::SIGNAL_DWELL : 0.0;
 	}
 
 	/**

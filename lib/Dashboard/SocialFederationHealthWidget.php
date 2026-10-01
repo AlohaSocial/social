@@ -52,7 +52,7 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social federation health');
+		return $this->l10n->t('Aloha Social federation health');
 	}
 
 	#[\Override]
@@ -94,7 +94,7 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 			new WidgetButton(
 				WidgetButton::TYPE_MORE,
 				$this->getSettingsUrl(),
-				$this->l10n->t('Open Social administration')
+				$this->l10n->t('Open Aloha Social administration')
 			),
 		];
 	}

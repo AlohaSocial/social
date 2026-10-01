@@ -19,7 +19,7 @@
 				v-model="form.contactAccount"
 				class="server__field"
 				:label="t('social', 'Contact account')"
-				:placeholder="t('social', 'Local Social username')"
+				:placeholder="t('social', 'Local Aloha Social username')"
 				:helperText="t('social', 'Shown to Mastodon-compatible clients as the account responsible for this instance. Leave empty to omit it.')" />
 
 			<NcTextArea
@@ -73,7 +73,7 @@
 				{{ t('social', 'Convert videos to MP4 in the background') }}
 			</NcCheckboxRadioSwitch>
 			<p class="server__hint">
-				{{ t('social', 'Off by default, because re-encoding is lossy and it is somebody\'s file. On, a background job converts one stored video at a time to H.264 in an MP4 — the only format Pixelfed accepts and the only one every browser plays. Needs ffmpeg on the server; nothing happens without it. Uploads are never held up: the conversion happens afterwards and the video plays as it is meanwhile.') }}
+				{{ t('social', 'On by default when ffmpeg is installed on the server; without it nothing happens. A background job converts iPhone .mov videos, HEVC and the other formats that do not travel to H.264 in an MP4 — the only format Pixelfed accepts and the only one every browser plays. An MP4 that is already H.264 is never touched. The converted file replaces the original, which is deleted: re-encoding is lossy, so switch this off if the uploaded files must be kept exactly as they are. Uploads are never held up. A new post with such a video waits up to ten minutes for its conversion before it is sent to other servers, so that it arrives in a format they accept.') }}
 			</p>
 			<NcTextField
 				v-if="form.videoTranscode"

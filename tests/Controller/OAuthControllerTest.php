@@ -137,7 +137,7 @@ class OAuthControllerTest extends TestCase {
 
 	public function testNodeinfo2DescribesTheLocalInstance(): void {
 		$instance = new Instance();
-		$instance->setTitle('My Social')->setVersion('0.10.1')->setUsage(['users' => ['total' => 3]])->setRegistrations(true);
+		$instance->setTitle('My Aloha Social')->setVersion('0.10.1')->setUsage(['users' => ['total' => 3]])->setRegistrations(true);
 		$this->instanceService->method('getLocal')->willReturn($instance);
 		$response = $this->controller->nodeinfo2();
 
@@ -153,13 +153,13 @@ class OAuthControllerTest extends TestCase {
 			// old `rootUrl` is gone
 			'usage' => ['users' => ['total' => 3]],
 			'openRegistrations' => true,
-			'metadata' => ['nodeName' => 'My Social', 'nodeDescription' => ''],
+			'metadata' => ['nodeName' => 'My Aloha Social', 'nodeDescription' => ''],
 		], $response->getData());
 	}
 
 	public function testNodeinfo21AddsTheRepositoryAndHomepage(): void {
 		$instance = new Instance();
-		$instance->setTitle('My Social')->setShortDescription('A cosy corner')->setVersion('0.10.1');
+		$instance->setTitle('My Aloha Social')->setShortDescription('A cosy corner')->setVersion('0.10.1');
 		$this->instanceService->method('getLocal')->willReturn($instance);
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/apps/social/');
 
@@ -169,10 +169,10 @@ class OAuthControllerTest extends TestCase {
 		$this->assertSame([
 			'name' => 'nextcloud-social',
 			'version' => '0.10.1',
-			'repository' => 'https://github.com/nextcloud/social',
-			'homepage' => 'https://github.com/nextcloud/social',
+			'repository' => 'https://github.com/alohasocial/social',
+			'homepage' => 'https://github.com/alohasocial/social',
 		], $data['software']);
-		$this->assertSame(['nodeName' => 'My Social', 'nodeDescription' => 'A cosy corner'], $data['metadata']);
+		$this->assertSame(['nodeName' => 'My Aloha Social', 'nodeDescription' => 'A cosy corner'], $data['metadata']);
 		$this->assertSame(['inbound' => [], 'outbound' => []], $data['services']);
 	}
 
@@ -184,7 +184,7 @@ class OAuthControllerTest extends TestCase {
 		$data = $this->controller->nodeinfo2()->getData();
 
 		$this->assertSame(['name' => 'nextcloud-social', 'version' => '0.10.1'], $data['software']);
-		$this->assertSame('Nextcloud Social', $data['metadata']['nodeName']);
+		$this->assertSame('Aloha Social', $data['metadata']['nodeName']);
 		$this->assertSame([], $data['usage']);
 		$this->assertFalse($data['openRegistrations']);
 	}
@@ -1154,8 +1154,8 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame('2.0', $two['version']);
 		$this->assertSame('2.1', $twoOne['version']);
-		$this->assertSame('https://github.com/nextcloud/social', $twoOne['software']['repository']);
-		$this->assertSame('https://github.com/nextcloud/social', $twoOne['software']['homepage']);
+		$this->assertSame('https://github.com/alohasocial/social', $twoOne['software']['repository']);
+		$this->assertSame('https://github.com/alohasocial/social', $twoOne['software']['homepage']);
 		$this->assertArrayNotHasKey('repository', $two['software']);
 
 		unset($two['version'], $twoOne['version'], $two['software'], $twoOne['software']);

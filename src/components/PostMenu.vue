@@ -117,7 +117,7 @@
 			</template>
 			{{ item.pinned ? t('social', 'Unpin from profile') : t('social', 'Pin to profile') }}
 		</NcActionButton>
-		<!-- teaches My interests about the post's hashtags; only offered where
+		<!-- teaches For you about the post's hashtags; only offered where
 		     there is something to teach it -->
 		<NcActionButton v-if="canLessLikeThis" closeAfterClick @click="$emit('lessLikeThis')">
 			<template #icon>
@@ -252,7 +252,7 @@ export default {
 			default: false,
 		},
 
-		/** `serverData.interests`: whether My interests is on for the reader */
+		/** `serverData.interests`: whether For you is on for the reader */
 		interests: {
 			type: Object,
 			default: null,
@@ -340,7 +340,7 @@ export default {
 		},
 
 		/**
-		 * @return {boolean} whether "Less like this" can teach My interests
+		 * @return {boolean} whether "Less like this" can teach For you
 		 * anything: the feed is on, somebody else wrote the post, and it
 		 * carries a hashtag to be lowered
 		 */

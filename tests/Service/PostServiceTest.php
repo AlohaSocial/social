@@ -22,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
@@ -29,6 +30,7 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\LinkPreviewService;
@@ -79,9 +81,13 @@ class PostServiceTest extends TestCase {
 	private string $userLanguage = 'de_DE';
 
 	private \OCA\Social\Service\InterestService|MockObject $interestService;
+	private \OCA\Social\Service\VideoDeliveryHold|MockObject $videoDeliveryHold;
+	private DocumentService|MockObject $documentService;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
+		$this->videoDeliveryHold = $this->createMock(\OCA\Social\Service\VideoDeliveryHold::class);
+		$this->documentService = $this->createMock(DocumentService::class);
 		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
@@ -142,6 +148,8 @@ class PostServiceTest extends TestCase {
 			$this->eventDispatcher,
 			new NullLogger(),
 			$this->interestService,
+			$this->videoDeliveryHold,
+			$this->documentService,
 		);
 	}
 
@@ -522,6 +530,80 @@ class PostServiceTest extends TestCase {
 		$this->assertSame($medias, $note->getAttachments());
 	}
 
+	/**
+	 * A post with a video still to be converted is queued held, and its
+	 * conversion is queued once the post exists for the job to read.
+	 */
+	public function testAPostWithAVideoToConvertIsHeldAndItsConversionQueued(): void {
+		$until = time() + 600;
+		$this->videoDeliveryHold->method('holdUntil')->willReturn($until);
+
+		$order = [];
+		$this->activityService->expects($this->once())->method('createActivity')
+			->with($this->anything(), $this->isInstanceOf(Note::class), $this->anything(), $until)
+			->willReturnCallback(function (Person $actor, ACore $item, ?ACore &$activity = null) use (&$order): string {
+				$order[] = 'queued';
+				$activity = new Create();
+				$activity->setObject($item);
+
+				return 'token';
+			});
+		$this->videoDeliveryHold->expects($this->once())->method('convertSoon')
+			->with($this->isInstanceOf(Note::class))
+			->willReturnCallback(static function () use (&$order): void {
+				$order[] = 'conversion';
+			});
+
+		$this->service->createPost($this->post('my holiday'));
+
+		$this->assertSame(['queued', 'conversion'], $order);
+	}
+
+	/** Every other post goes as it always did: no hold, no job. */
+	public function testAPostWithNothingToConvertIsNeitherHeldNorQueuedForConversion(): void {
+		$this->videoDeliveryHold->method('holdUntil')->willReturn(0);
+		$this->activityService->expects($this->once())->method('createActivity')
+			->with($this->anything(), $this->anything(), $this->anything(), 0)
+			->willReturnCallback(function (Person $actor, ACore $item, ?ACore &$activity = null): string {
+				$activity = new Create();
+				$activity->setObject($item);
+
+				return 'token';
+			});
+		$this->videoDeliveryHold->expects($this->never())->method('convertSoon');
+
+		$this->service->createPost($this->post('just words'));
+	}
+
+	/**
+	 * An edit made while the post still waits for its video waits with it,
+	 * so the Update cannot overtake the Create it edits.
+	 */
+	public function testAnEditOfAHeldPostIsHeldToo(): void {
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($this->storedNote(), $this->storedNote());
+		$until = time() + 600;
+		$this->videoDeliveryHold->method('holdUntil')->willReturn($until);
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->with($this->anything(), $this->anything(), $until)
+			->willReturn('token');
+		$this->videoDeliveryHold->expects($this->once())->method('convertSoon');
+
+		$this->service->editPost(7, $this->actor(), 'better words');
+	}
+
+	public function testAnEditOfAnyOtherPostGoesAtOnce(): void {
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($this->storedNote(), $this->storedNote());
+		$this->videoDeliveryHold->method('holdUntil')->willReturn(0);
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->with($this->anything(), $this->anything(), 0)
+			->willReturn('token');
+		$this->videoDeliveryHold->expects($this->never())->method('convertSoon');
+
+		$this->service->editPost(7, $this->actor(), 'better words');
+	}
+
 	public function testCreatePostMergesExplicitAndInlineRecipients(): void {
 		$carol = new Person();
 		$carol->setId('https://other.example/users/carol');
@@ -823,6 +905,48 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(self::ACTOR_ID, $paths[0]->getUri());
 		$this->assertSame(InstancePath::TYPE_FOLLOWERS, $paths[0]->getType());
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
+	}
+
+	/**
+	 * Mastodon edits the alt text of a published post's media through the
+	 * edit itself; nothing read `media_attributes`, so a description could only
+	 * be fixed by deleting the post.
+	 */
+	public function testAnEditRewritesTheDescriptionsOfThePostsOwnMedia(): void {
+		$stored = $this->storedNote();
+		$old = (new MediaAttachment())->setId('11')->setDescription('Old words');
+		$stored->setAttachments([$old]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$new = (new MediaAttachment())->setId('11')->setDescription('New words');
+		$attributes = [['id' => '11', 'description' => 'New words']];
+		$this->documentService->expects($this->once())->method('applyMediaAttributes')
+			->with([$old], 'alice', $attributes)
+			->willReturn([$new]);
+
+		$revisions = [];
+		$this->revisionService->method('recordEdit')->willReturnCallback(
+			function (Stream $before, Stream $after) use (&$revisions): void {
+				$revisions[] = $before->getAttachments()[0]->getDescription();
+			}
+		);
+
+		$this->service->editPost(7, $this->actor(), 'old', null, null, null, $attributes);
+
+		$this->assertSame([$new], $stored->getAttachments());
+		$this->assertSame(['Old words'], $revisions, 'the revision is the version the edit replaced');
+	}
+
+	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->documentService->expects($this->never())->method('applyMediaAttributes');
+
+		$this->service->editPost(7, $this->actor(), 'new words');
 	}
 
 	/**
@@ -1221,7 +1345,7 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(self::ACTOR_ID, $published[0]->getAuthorId());
 	}
 
-	/** Replying teaches My interests the hashtags of the post replied to. */
+	/** Replying teaches For you the hashtags of the post replied to. */
 	public function testAReplyTeachesTheParentsTags(): void {
 		$parentId = 'https://remote.example/notes/parent';
 		$parent = new Note();

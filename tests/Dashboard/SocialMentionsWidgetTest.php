@@ -71,7 +71,7 @@ class SocialMentionsWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IAPIWidgetV2::class, $this->widget);
 		$this->assertSame('social_mentions', $this->widget->getId());
-		$this->assertSame('Social mentions', $this->widget->getTitle());
+		$this->assertSame('Aloha Social mentions', $this->widget->getTitle());
 		$this->assertSame(12, $this->widget->getOrder());
 	}
 

@@ -49,7 +49,7 @@ class SocialTrendingWidget implements IAPIWidgetV2, IIconWidget, IButtonWidget, 
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social trending hashtags');
+		return $this->l10n->t('Aloha Social trending hashtags');
 	}
 
 	#[\Override]

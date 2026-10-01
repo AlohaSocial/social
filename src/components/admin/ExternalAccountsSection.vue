@@ -5,7 +5,7 @@
 <template>
 	<NcSettingsSection
 		:name="t('social', 'External accounts')"
-		:description="t('social', 'The accounts people registered themselves. Promoting one makes it an ordinary account of this server, with the same username, password and Social account; the groups and apps you give it are then up to you.')">
+		:description="t('social', 'The accounts people registered themselves. Promoting one makes it an ordinary account of this server, with the same username, password and Aloha Social account; the groups and apps you give it are then up to you.')">
 		<form class="external-accounts__search" @submit.prevent="load(false)">
 			<NcTextField
 				v-model="query"
@@ -218,7 +218,7 @@ export default {
 
 			return this.asking.action === 'delete'
 				? t('social', '@{handle} is deleted with everything they posted, and every server that knew the account is told. It cannot be undone.', { handle: this.asking.user.uid })
-				: t('social', '@{handle} becomes an ordinary account of this server. They keep their username, password and Social account, and from then on the apps and groups you give them apply. It cannot be turned back into an external account.', { handle: this.asking.user.uid })
+				: t('social', '@{handle} becomes an ordinary account of this server. They keep their username, password and Aloha Social account, and from then on the apps and groups you give them apply. It cannot be turned back into an external account.', { handle: this.asking.user.uid })
 		},
 	},
 

@@ -45,6 +45,11 @@ function mountViewer(groups, start = 0) {
 describe('StoryViewer', () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
+		// the mute choice is kept for the tab, and a test is a new tab
+		window.sessionStorage.clear()
+		// jsdom implements neither; a video story now calls play() itself
+		HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
+		HTMLMediaElement.prototype.pause = vi.fn()
 		post.mockReset().mockResolvedValue({ data: {} })
 		del.mockReset()
 		get.mockReset().mockResolvedValue({ data: { reactions: [] } })
@@ -290,6 +295,103 @@ describe('StoryViewer', () => {
 		wrapper.vm.resume()
 
 		expect(play).not.toHaveBeenCalled()
+	})
+
+	/** a story is opened by a tap on its ring, which is leave to play with sound */
+	it('plays a video story with its sound on, and has a speaker for it', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob)] }])
+		await flushPromises()
+
+		const element = wrapper.find('.story-viewer__video').element
+		expect(element.hasAttribute('muted')).toBe(false)
+		expect(element.muted).toBe(false)
+		expect(element.hasAttribute('autoplay')).toBe(false)
+		expect(wrapper.find('.story-viewer__sound').attributes('aria-label')).toBe('Mute')
+
+		await wrapper.find('.story-viewer__sound').trigger('click')
+		expect(element.muted).toBe(true)
+		expect(wrapper.find('.story-viewer__sound').attributes('aria-label')).toBe('Unmute')
+	})
+
+	it('has no speaker on a picture story', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [story('2', bob)] }])
+		await flushPromises()
+
+		expect(wrapper.find('.story-viewer__sound').exists()).toBe(false)
+	})
+
+	it('falls back to muted with a hint when the browser refuses the sound', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob)] }])
+		await flushPromises()
+		const { element } = videoControls(wrapper)
+		const play = vi.fn()
+			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
+			.mockResolvedValue(undefined)
+		Object.defineProperty(element, 'play', { value: play, configurable: true })
+
+		await wrapper.vm.playWithSound(element)
+		await flushPromises()
+
+		expect(element.muted).toBe(true)
+		expect(wrapper.find('.story-viewer__sound-hint').text()).toBe('Tap for sound')
+
+		await wrapper.find('.story-viewer__sound').trigger('click')
+		expect(element.muted).toBe(false)
+		expect(wrapper.find('.story-viewer__sound-hint').exists()).toBe(false)
+	})
+
+	/** holding the speaker is pressing it, not holding the story still */
+	it('does not pause the story when the speaker is pressed', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob)] }])
+		await flushPromises()
+		const { pause } = videoControls(wrapper)
+
+		await wrapper.find('.story-viewer__sound').trigger('pointerdown')
+
+		expect(pause).not.toHaveBeenCalled()
+		expect(wrapper.vm.paused).toBe(false)
+	})
+
+	it('mutes with the m key', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob)] }])
+		await flushPromises()
+
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm' }))
+		await flushPromises()
+
+		expect(wrapper.find('.story-viewer__video').element.muted).toBe(true)
+		wrapper.unmount()
+	})
+
+	/**
+	 * The next video story plays in the element the first one was allowed
+	 * sound in, and is started by the viewer rather than by `autoplay`.
+	 */
+	it('keeps one video element from one video story to the next, and plays each', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob), clip('3', bob)] }])
+		await flushPromises()
+		const { play, element } = videoControls(wrapper)
+
+		await wrapper.find('.story-viewer__video').trigger('ended')
+		await flushPromises()
+
+		const now = wrapper.find('.story-viewer__video')
+		expect(now.element).toBe(element)
+		expect(now.attributes('src')).toBe('https://cloud.example.org/3.mp4')
+		expect(play).toHaveBeenCalled()
+	})
+
+	it('stops the hidden video when a picture story comes up', async () => {
+		const wrapper = mountViewer([{ account: bob, own: false, seen: false, stories: [clip('2', bob), story('3', bob)] }])
+		await flushPromises()
+		const { pause } = videoControls(wrapper)
+
+		await wrapper.find('.story-viewer__tap--forward').trigger('click')
+		await flushPromises()
+
+		expect(pause).toHaveBeenCalled()
+		expect(wrapper.find('.story-viewer__image').exists()).toBe(true)
+		expect(wrapper.find('.story-viewer__sound').exists()).toBe(false)
 	})
 
 	// The clock a picture runs on is unchanged.

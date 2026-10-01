@@ -243,12 +243,13 @@ class ConfigService {
 	/**
 	 * Whether stored videos are re-encoded to H.264 in an MP4.
 	 *
-	 * Off by default, because re-encoding is lossy and it is somebody's file.
-	 * Turning it on is how an administrator says the other trade is the one
-	 * they want — and there is a concrete reason to: **Pixelfed's default
-	 * `media_types` accepts `video/mp4` and nothing else**, so every
-	 * `video/quicktime` posted from here, which is every video straight off an
-	 * iPhone, is dropped by its inbox without a word to anybody.
+	 * On by default, and it only does anything where ffmpeg is installed. The
+	 * trade is a lossy re-encode of somebody's file against that file being
+	 * seen at all: **Pixelfed's default `media_types` accepts `video/mp4` and
+	 * nothing else**, so every `video/quicktime` posted from here, which is
+	 * every video straight off an iPhone, is dropped by its inbox without a
+	 * word to anybody, and HEVC plays in Safari alone. The converted file
+	 * replaces the original.
 	 *
 	 * The work is done by a background job, never during an upload: converting
 	 * a video is minutes rather than the seconds a poster frame takes.
@@ -390,7 +391,7 @@ class ConfigService {
 	public const SOCIAL_CONTACT_ACCOUNT = 'contact_account';
 
 	/**
-	 * My interests: the feed built from the hashtags a reader lingers on.
+	 * For you: the feed built from the hashtags a reader lingers on.
 	 *
 	 * `interests` switches the whole feature, and off means off: nothing is
 	 * learned, the feed and its settings are gone, and what was learned is
@@ -464,7 +465,7 @@ class ConfigService {
 		self::SOCIAL_REVIEW_POSTS => '1',
 		self::SOCIAL_IMAGE_MAX_EDGE => '0',
 		self::SOCIAL_IMAGE_QUALITY => '85',
-		self::SOCIAL_VIDEO_TRANSCODE => '0',
+		self::SOCIAL_VIDEO_TRANSCODE => '1',
 		self::SOCIAL_VIDEO_MAX_HEIGHT => '1080',
 		self::SOCIAL_VIDEO_LADDER => '0',
 		self::SOCIAL_VIDEO_LADDER_HEIGHTS => '360,720,1080',

@@ -4,11 +4,11 @@
 -->
 <template>
 	<NcSettingsSection
-		:name="t('social', 'My interests')"
+		:name="t('social', 'For you')"
 		:description="t('social', 'A feed of posts carrying the hashtags each person reads most, learned from how they read here. What is learned stays on this server and is only ever shown to the person it is about — not to other users, and not to administrators.')">
 		<div class="interests-admin">
 			<NcCheckboxRadioSwitch v-model="form.enabled" type="switch">
-				{{ t('social', 'Enable My interests') }}
+				{{ t('social', 'Enable For you') }}
 			</NcCheckboxRadioSwitch>
 			<p class="interests-admin__hint">
 				{{ t('social', 'Off hides the feed and the settings, and nothing is learned. What was learned is kept, so turning it back on brings everybody\'s interests back.') }}
@@ -115,7 +115,7 @@ function formOf(settings) {
 }
 
 /**
- * Administration → Social → My interests.
+ * Administration → Social → For you.
  *
  * One save for the card, like the Sections card: the endpoint takes all six
  * values or refuses them all, and six fields that each saved on their own
@@ -211,7 +211,7 @@ export default {
 				}
 				showSuccess(t('social', 'Saved'))
 			} catch (error) {
-				showError(errorMessage(error, t('social', 'Could not save the My interests settings')))
+				showError(errorMessage(error, t('social', 'Could not save the For you settings')))
 			} finally {
 				this.saving = false
 			}

@@ -18,7 +18,7 @@ use Throwable;
 /**
  * Forgets the "less like this" hides that can no longer keep anything out.
  *
- * A hide names a post so the reader's My interests feed leaves it out, and
+ * A hide names a post so the reader's For you feed leaves it out, and
  * the feed only looks back a few days: once a post is older than that it
  * cannot come back into the feed, and the row that hid it is dead weight.
  * Once a day is plenty — a leftover row costs a line in a small table.

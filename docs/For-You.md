@@ -1,15 +1,15 @@
-# My Interests — feature specification
+# For you — feature specification
 
-Status: specified 2026-09-24, implemented on `feat/my-interests` (not yet released) · App: Social
+Status: specified 2026-09-24, implemented on `feat/my-interests` (not yet released) · App: Aloha Social
 
-Where the implementation settled something differently from the first draft, this document says what was built; the API reference is the `My interests` section of [API.md](API.md).
+Where the implementation settled something differently from the first draft, this document says what was built; the API reference is the `For you` section of [API.md](API.md). The feature was first called *For you*; every word a reader sees now says **For you** (German *Für dich*), while the code, the routes, the settings keys and the tables keep the name `interests`, which is an API and stored data.
 
 ## 1. Summary
 
-Social learns which hashtags a user cares about from how they read. It looks at
+Aloha Social learns which hashtags a user cares about from how they read. It looks at
 how long they linger on a post, what they skip, and what they like, boost,
 reply to, bookmark, open or play. From that it keeps a private, ranked list of
-**interest hashtags**. A new **My interests** feed shows posts carrying those
+**interest hashtags**. A new **For you** feed shows posts carrying those
 hashtags, ranked by relevance blended with recency. In Settings the user can
 see the list and add, remove, reorder and pin its entries.
 
@@ -24,7 +24,9 @@ Goals
 - Learning never leaves the server and is never visible to anyone else.
 
 Non-goals (v1)
-- Topics inferred from untagged text. The feed contains hashtagged posts only.
+- Topics inferred from untagged text. What is learned is hashtags; the only
+  untagged posts in the feed are the popular ones that fill a short photo or
+  video ranking (7.5), and they say so.
 - Fetching posts from peer servers to fill the feed. v1 uses the local cache.
 - Learning from accounts or links. Only hashtags are learned.
 - Hiding posts already seen in other feeds.
@@ -58,10 +60,13 @@ Non-goals (v1)
 ## 4. User experience
 
 ### 4.1 Feed
-- **My interests** is the second option in the timeline switcher: My Feed /
-  My interests / Local / Global ([src/views/Timeline.vue](../src/views/Timeline.vue)).
+- **For you** is the second option in the timeline switcher: My Feed /
+  For you / Local / Global ([src/views/Timeline.vue](../src/views/Timeline.vue)).
   Route `/timeline/interests`, which the existing `/timeline/{path}` server
-  route already serves.
+  route already serves. The path keeps the internal name.
+- **Photos** and **Videos** offer **For you** as a fourth scope beside My Feed,
+  Local and Global (`?scope=interests`), and so does the **Shorts** stack,
+  which opens on it once reading has taught the feed something (7.5).
 - Each post shows a small chip: "Because you follow #photography" (for a
   followed tag) or "Because you're interested in #photography" (learned or
   manual). With two or more matches: "#photography, #analog +1". Tapping the
@@ -79,8 +84,8 @@ Tracking is on by default, so users must be told about it. The first time the
 web UI records a signal for a user, it shows a one-time notice once per
 account. The acknowledgement is stored server-side:
 
-> Social now learns which hashtags interest you from how you read, to build
-> your My interests feed. This stays on this server and is only visible to
+> Aloha Social now learns which hashtags interest you from how you read, to build
+> your For you feed. This stays on this server and is only visible to
 > you. [Manage] [Turn off] [Got it]
 
 ### 4.3 Settings → Interests
@@ -99,8 +104,8 @@ A new section in [src/views/Settings.vue](../src/views/Settings.vue) with id
   tag is added as a manual interest. It floats with the listing threshold as
   its score, so it usually lands low in the cloud; the cloud brings it into
   view so the reader sees where it went.
-- **Languages for My interests**: multi-select, empty = all languages. This is
-  a new preference; Social has no language preference yet.
+- **Languages for For you**: multi-select, empty = all languages. This is
+  a new preference; Aloha Social has no language preference yet.
 - **Reset all interests**: clears learned scores, manual entries, pins and the
   dwell baseline. Needs a confirmation step built into the page (the viewer has
   no `confirm()`).
@@ -207,7 +212,15 @@ them from the stored post, so a client cannot inject tags):
 ```
 
 `kind` ∈ `dwell | skip | open | media | link`. `context` ∈ `home | local |
-federated | tag | explore | detail | interests`.
+federated | tag | explore | detail | interests | photos | videos | reels`.
+
+In the Photos and Videos grids every tile is on screen at once, so time in
+view says nothing about any one of them: there only opening a tile counts,
+as `media`. The Shorts stack (`src/services/reelSignals.js`) measures the
+player instead of the screen, under `reels`: a slide left within 2 s that had
+not played through is a `skip`; otherwise a `dwell` whose `ms` is how much of
+the video played — all of it once it ended or looped. The server weighs that
+against the video's running time (6.1).
 
 ### 5.2 Explicit and negative actions (server-side)
 These are recorded on the server where the action happens, so they also count
@@ -257,6 +270,17 @@ events (α = 0.05, starting at 1.0, stored per user):
 - skip → −0.2
 
 The baseline is updated only by `dwell` events, never by skips.
+
+A `dwell` from the Shorts stack (`context` `reels`) on a video that says how
+long it runs is watch time, not reading time, and is judged differently:
+
+```
+expected_ms = min(30 000, duration_ms)
+share       = dwell_ms / expected_ms
+```
+
+`share ≥ 0.9` → +1, `0.5 ≤ share < 0.9` → +0.3, less → 0, and the baseline
+is not touched: how fast someone watches says nothing about how fast they read.
 
 ### 6.2 Distribution across hashtags
 A post with `n` hashtags (from `social_stream_tag`, normalised with
@@ -357,6 +381,35 @@ snapshot is kept — it expired, or the instance has no memory cache — the
 ranking is made again and the cursor looked up in it, and a cursor that is no
 longer in it ends the feed. The `Link` header carries `next` only.
 
+### 7.5 Photos, videos and Shorts
+The same ranking comes narrowed to one kind: `media=photos` (a post with a
+picture: `limitToMediaType('image')`), `media=videos` (a video post,
+PeerTube's included: `limitToVideo()`), or Mastodon's `only_media=true` for
+both (`limitToMedia()`) — the Photos and Videos timelines' own filters on the
+indexed `media_kind` column. Anything else is ignored, as the other media
+parameters ignore an unknown kind.
+
+- Each kind is a snapshot of its own (`feed/{media}/{viewer}`), so paging one
+  never lands in another.
+- Pictures and videos carry fewer hashtags and are rarer, so a narrowed
+  ranking looks back twice the window; hides are kept that long too.
+- **Popular fill.** A newcomer has no reading yet, and few pictures carry the
+  tags someone reads. Where a narrowed ranking holds fewer than 40 posts, the
+  rest is what is trending in the same kind (`TrendService`, which feeds
+  Explore's Pictures and Videos tabs and tops itself up with the newest media
+  on a young instance), less the reader's own, hidden and already ranked
+  posts. Those carry `reason` `popular` and no tags, and the chip says
+  *Popular right now*, links nowhere and names no hashtag. The whole feed is
+  never filled this way.
+- **Watching.** For a `reels` dwell the expected time is the video's running
+  time, capped at the 30 s one look can be worth: 90 % of it or more is +1,
+  half +0.3, less nothing, and the reading pace is left alone. A video whose
+  running time is unknown is weighed as a post.
+- **Shorts default.** The page is told whether a reading pace has been
+  written (`profile` in the page state); once it has, Shorts opens on For you.
+- Nothing in the data says "short": Shorts is every video. A length or
+  orientation filter would need those stored.
+
 ## 8. API
 
 All under the app's API routing, all the viewer's own, all a 404 while the
@@ -373,7 +426,7 @@ administrator has the feature off:
 | PUT | `/api/v1/interests/settings` | learning, paused, languages, notice acknowledged |
 | POST | `/api/v1/interests/signals` | web events (5.1); 204; 30 a minute |
 | POST / DELETE | `/api/v1/interests/less/{nid}` | less like this / undo |
-| GET | `/api/v1/timelines/interests` | the feed; `limit`, `max_id`, `offset` |
+| GET | `/api/v1/timelines/interests` | the feed; `limit`, `max_id`, `offset`, `media`, `only_media` |
 | POST | `/admin/interests` | the admin card (administrators only) |
 
 Every mutation answers the full state, so the page never works out ranks
@@ -430,8 +483,8 @@ violation, which aborts the whole transaction on PostgreSQL.
 
 ## 10. Administration
 
-In `AdminSettings` (Social admin page):
-- **Enable My interests** (default on). Off: the switcher tab and settings
+In `AdminSettings` (Aloha Social admin page):
+- **Enable For you** (default on). Off: the switcher tab and settings
   section are hidden, all `/interests` endpoints return
   404, and nothing is collected. Existing data is kept, so
   switching the feature back on restores everyone's interests.
@@ -527,7 +580,7 @@ Resolved 2026-09-24:
    lasting suppression comes from "less like this" or a filter.
 3. **Admin disable keeps data**: confirmed (§10).
 4. **How the feed reaches Mastodon apps**: it does not. The feed is shown by
-   Social's own web interface only; a pseudo-list for apps was tried and
+   Aloha Social's own web interface only; a pseudo-list for apps was tried and
    removed as confusing (§8). Actions taken in apps still count.
 
 No open points remain.

@@ -407,7 +407,8 @@ class StatusApiController extends MastodonApiController {
 
 			$input = file_get_contents('php://input');
 			$status = new Status();
-			$status->import($this->convertInput($input));
+			$fields = $this->convertInput($input);
+			$status->import($fields);
 
 			$actor = $this->accountService->getActorFromUserId($this->currentSession());
 
@@ -417,7 +418,8 @@ class StatusApiController extends MastodonApiController {
 				$status->getStatus(),
 				$status->getSpoilerText() !== '' ? $status->getSpoilerText() : null,
 				$status->isSensitive(),
-				$status->getLanguage() !== '' ? $status->getLanguage() : null
+				$status->getLanguage() !== '' ? $status->getLanguage() : null,
+				$this->mediaAttributes($fields['media_attributes'] ?? [])
 			);
 			$item->setExportFormat(ACore::FORMAT_LOCAL);
 
@@ -425,6 +427,44 @@ class StatusApiController extends MastodonApiController {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * Mastodon's `media_attributes`, one entry per attachment.
+	 *
+	 * A JSON body sends a list of objects. A form body sends
+	 * `media_attributes[][id]=1&media_attributes[][description]=…`, which Rails
+	 * groups per attachment and PHP does not: every `[]` opens an entry of its
+	 * own, so an id and its description arrive as two. An entry naming an id
+	 * starts an attachment, and the entries after it fill that one in.
+	 *
+	 * @return list<array<string, mixed>>
+	 */
+	private function mediaAttributes(mixed $raw): array {
+		if (!is_array($raw)) {
+			return [];
+		}
+
+		$attributes = [];
+		$current = null;
+		foreach ($raw as $entry) {
+			if (!is_array($entry)) {
+				continue;
+			}
+			if (array_key_exists('id', $entry)) {
+				if ($current !== null) {
+					$attributes[] = $current;
+				}
+				$current = $entry;
+			} elseif ($current !== null) {
+				$current = array_merge($current, $entry);
+			}
+		}
+		if ($current !== null) {
+			$attributes[] = $current;
+		}
+
+		return $attributes;
 	}
 
 	/**

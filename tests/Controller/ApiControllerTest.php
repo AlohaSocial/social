@@ -64,6 +64,7 @@ use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MarkerService;
+use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PinService;
@@ -203,6 +204,7 @@ class ApiControllerTest extends TestCase {
 	private bool $registrationApp = false;
 	private BannerService|MockObject $bannerService;
 	private AvatarService|MockObject $avatarService;
+	private MultipartBodyService|MockObject $multipartBodyService;
 	private FilterService|Stub $filterService;
 	private IRootFolder|MockObject $rootFolder;
 	private ITempManager|Stub $tempManager;
@@ -324,6 +326,7 @@ class ApiControllerTest extends TestCase {
 		$this->accountRelationService->method('withoutExpiredMutes')->willReturnArgument(1);
 		$this->bannerService = $this->createMock(BannerService::class);
 		$this->avatarService = $this->createMock(AvatarService::class);
+		$this->multipartBodyService = $this->createMock(MultipartBodyService::class);
 		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('apply')->willReturnArgument(0);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
@@ -397,6 +400,7 @@ class ApiControllerTest extends TestCase {
 			'filterService' => $this->filterService,
 			'bannerService' => $this->bannerService,
 			'avatarService' => $this->avatarService,
+			'multipartBodyService' => $this->multipartBodyService,
 			'accountRelationService' => $this->accountRelationService,
 			'scheduledStatusService' => $this->scheduledStatusService,
 			'postReviewService' => $this->postReviewService,
@@ -570,8 +574,8 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame(
 			[
-				'name' => 'Nextcloud Social',
-				'website' => 'https://github.com/nextcloud/social/',
+				'name' => 'Aloha Social',
+				'website' => 'https://github.com/alohasocial/social/',
 				'vapid_key' => '',
 			],
 			$response->getData()
@@ -1577,6 +1581,41 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($item, $response->getData());
+	}
+
+	/**
+	 * A form body sends `media_attributes[][id]=11&media_attributes[][description]=…`,
+	 * which PHP splits into one entry per field. The edit has to see one entry
+	 * per attachment, as Mastodon does.
+	 */
+	public function testStatusUpdateGroupsFormEncodedMediaAttributesPerAttachment(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn([
+			'status' => 'same words',
+			'media_attributes' => [
+				['id' => '11'], ['description' => 'New words'], ['focus' => '0.5,-0.2'],
+				['id' => '12'], ['description' => 'Second'],
+			],
+		]);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'same words', null, false, null, [
+				['id' => '11', 'description' => 'New words', 'focus' => '0.5,-0.2'],
+				['id' => '12', 'description' => 'Second'],
+			])
+			->willReturn($this->createStub(Stream::class));
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
+	}
+
+	public function testStatusUpdatePassesJsonMediaAttributesAsTheyCame(): void {
+		$this->loggedInAs();
+		$attributes = [['id' => '11', 'description' => 'New words'], ['id' => '12', 'focus' => '0,0']];
+		$this->request->method('getParams')->willReturn(['status' => 'x', 'media_attributes' => $attributes]);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'x', null, false, null, $attributes)
+			->willReturn($this->createStub(Stream::class));
+
+		$this->controller()->statusUpdate(5);
 	}
 
 	public function testStatusUpdateWithoutSpoilerPassesNull(): void {
@@ -3845,6 +3884,69 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
 	}
 
+	/**
+	 * Mastodon clients send this route as multipart whenever a picture is in
+	 * it, and PHP parses a multipart body for a POST only: the fields and the
+	 * picture were never seen, and the client got a 200 over the old profile.
+	 */
+	public function testUpdateCredentialsAppliesAMultipartPatch(): void {
+		$this->loggedInAs();
+		$avatar = ['tmp_name' => '/tmp/parsed-avatar', 'error' => UPLOAD_ERR_OK, 'name' => 'me.png'];
+		$header = ['tmp_name' => '/tmp/parsed-header', 'error' => UPLOAD_ERR_OK, 'name' => 'banner.png'];
+		$this->multipartBodyService->method('read')->willReturn([
+			'fields' => ['display_name' => 'Changed', 'source' => ['privacy' => 'unlisted']],
+			'files' => ['avatar' => $avatar, 'header' => $header],
+		]);
+
+		$this->accountService->expects($this->once())->method('setDisplayName')->with('alice', 'Changed');
+		$this->accountService->expects($this->once())->method('setDefaultPrivacy')->with('alice', 'unlisted');
+		$this->avatarService->expects($this->once())->method('setFromTempFile')->with('alice', $avatar);
+		$this->bannerService->expects($this->once())->method('setFromTempFile')->with('alice', '/tmp/parsed-header');
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
+	}
+
+	/** A body that cannot be read is an error, not a 200 over the old profile. */
+	public function testUpdateCredentialsRefusesAMultipartBodyItCannotRead(): void {
+		$this->loggedInAs();
+		$this->multipartBodyService->method('read')
+			->willThrowException(new InvalidActionException('the multipart body could not be read'));
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+	}
+
+	/**
+	 * A picture that was sent and did not arrive refuses the request before
+	 * any of it is written, so the client never shows half a save as done.
+	 */
+	public function testUpdateCredentialsRefusesAPictureThatWasTooLargeAndWritesNothing(): void {
+		$this->loggedInAs();
+		$this->multipartBodyService->method('read')->willReturn([
+			'fields' => ['display_name' => 'Changed'],
+			'files' => ['avatar' => ['tmp_name' => '', 'error' => UPLOAD_ERR_INI_SIZE, 'name' => 'huge.png']],
+		]);
+		$this->accountService->expects($this->never())->method('setDisplayName');
+		$this->avatarService->expects($this->never())->method('setFromTempFile');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('larger than this server accepts', $response->getData()['error']);
+	}
+
+	public function testUpdateCredentialsRefusesAHeaderUploadThatStoppedHalfway(): void {
+		$this->loggedInAs();
+		$_FILES['header'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_PARTIAL];
+		$this->bannerService->expects($this->never())->method('setFromTempFile');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
+	}
+
 	// mediaFromFile()
 
 	/**
@@ -4211,6 +4313,25 @@ class ApiControllerTest extends TestCase {
 		$this->documentService->expects($this->never())->method('updateFocus');
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->mediaUpdate('7')->getStatus());
+	}
+
+	/**
+	 * A post keeps its own copy of what it carries, and only an edit tells the
+	 * servers that hold the post. Changing the upload alone answered 200 while
+	 * the post kept the old words; it is refused now, as Mastodon refuses it.
+	 */
+	public function testMediaUpdateOfAnAttachedUploadIsRefusedAndPointsAtTheEdit(): void {
+		$this->loggedInAs();
+		$document = $this->ownDocumentInService('7', 'old');
+		$this->request->method('getParams')->willReturn(['description' => 'new alt text']);
+		$this->documentService->method('isAttachedToAPostBy')->with($document)->willReturn(true);
+		$this->documentService->expects($this->never())->method('updateDescription');
+
+		$response = $this->controller()->mediaUpdate('7');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('media_attributes', $response->getData()['error']);
+		$this->assertSame('old', $document->getDescription());
 	}
 
 	public function testMediaUpdateOfSomeoneElsesAttachmentIsA404(): void {

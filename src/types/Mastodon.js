@@ -146,7 +146,7 @@
  * @property {Poll} [poll] - Ex: null
  * @property {?number} [view_count] - how many accounts here opened the post; only on the author's own copy, null on everybody else's
  * @property {FilterResult[]} [filtered] - one entry per filter this post matched; only `warn` filters ever arrive, a `hide` match is not sent at all
- * @property {?{tags: string[], reason: string}} [interest] - why the My interests feed is showing this post: the reader's matching hashtags and which kind of match (`InterestFeedService`). Absent on every other timeline
+ * @property {?{tags: string[], reason: string}} [interest] - why the For you feed is showing this post: the reader's matching hashtags and which kind of match (`InterestFeedService`). Absent on every other timeline
  * @property {?{can_reply?: {always?: string[], approval_required?: boolean}, can_quote?: {always?: string[]}}} [interaction_policy] - who the author allows to reply and quote
  * @property {string} [nid] - this app's own id for the post; the same string as `id`
  * @property {boolean} [local] - written on this server

@@ -57,7 +57,7 @@ class SocialBookmarksWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IAPIWidgetV2::class, $this->widget);
 		$this->assertSame('social_bookmarks', $this->widget->getId());
-		$this->assertSame('Social bookmarks', $this->widget->getTitle());
+		$this->assertSame('Aloha Social bookmarks', $this->widget->getTitle());
 		$this->assertSame(14, $this->widget->getOrder());
 	}
 

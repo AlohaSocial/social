@@ -23,7 +23,7 @@ class SettingAndFilterTest extends TestCase {
 
 		$this->assertSame('social', $setting->getIdentifier());
 		$this->assertSame('social', $setting->getGroupIdentifier());
-		$this->assertSame('Social', $setting->getGroupName());
+		$this->assertSame('Aloha Social', $setting->getGroupName());
 		$this->assertStringContainsString('<strong>followed</strong>', $setting->getName());
 		$this->assertTrue($setting->canChangeStream());
 		$this->assertTrue($setting->isDefaultEnabledStream());
@@ -42,7 +42,7 @@ class SettingAndFilterTest extends TestCase {
 		$filter = new Filter($l10n, $urlGenerator);
 
 		$this->assertSame('social', $filter->getIdentifier());
-		$this->assertSame('Social', $filter->getName());
+		$this->assertSame('Aloha Social', $filter->getName());
 		$this->assertSame(['social'], $filter->allowedApps());
 		$this->assertSame(['a', 'b'], $filter->filterTypes(['a', 'b']), 'the app is the filter; every type of it passes');
 		$this->assertSame('https://cloud.example/apps/social/img/social-dark.svg', $filter->getIcon());

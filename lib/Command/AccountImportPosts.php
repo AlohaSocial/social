@@ -67,7 +67,7 @@ class AccountImportPosts extends SocialCommand {
 		try {
 			$actor = $this->accountService->getActorFromUserId($userId);
 		} catch (Throwable $e) {
-			$output->writeln('<error>' . $userId . ' has no Social account: ' . $e->getMessage() . '</error>');
+			$output->writeln('<error>' . $userId . ' has no Aloha Social account: ' . $e->getMessage() . '</error>');
 
 			return 1;
 		}

@@ -40,7 +40,7 @@ of work.
 
 ## 1. The answer in one paragraph
 
-Social 0.19.95 is a capable, standards-correct ActivityPub server with a broad
+Aloha Social 0.19.95 is a capable, standards-correct ActivityPub server with a broad
 and largely genuine Mastodon client API. A walk of Mastodon's 145 documented
 client routes against the route table found 23 genuinely unserved — the raw
 path diff said 45, and 22 of those were catch-alls a textual comparison cannot
@@ -260,12 +260,27 @@ picture (LDAP, SAML, anything provisioned elsewhere) makes the request a **422**
 rather than a silent success — which is what this section asked for, applied to
 the fields that cannot be honoured rather than to the whole request.
 
+Fixed in #2437: clients send this route as a multipart **PATCH** whenever a
+picture is in it, and PHP parses a multipart body by itself for a POST only.
+The body reached the controller unread, so no client could set an avatar or a
+header, and a text-only multipart save changed nothing, all under a 200. The
+body is now read with `request_parse_body()` on PHP 8.4 and later and by the
+app's own parser on PHP 8.3. A body that cannot be read, and a picture that was
+sent and did not arrive, are a **422** with nothing written.
+
+Fixed in #2439: the alt text and focal point of a published post's media are
+edited the way Mastodon edits them, with `media_attributes` on
+`PUT /api/v1/statuses/:id`. Nothing read that field, and `PUT /api/v1/media/:id`
+changed only the upload while the post kept its own copy, so a description
+could only be fixed by deleting the post. That route now refuses an upload a
+post carries, as Mastodon's does.
+
 ---
 
 ## 4. The peer test
 
 This is where the app is strongest, and it deserves saying plainly. A remote
-server talking to a Social instance on its own domain would find very little to
+server talking to a Aloha Social instance on its own domain would find very little to
 complain about.
 
 **Working and correct:** signed delivery and verification including RFC 9421, a
@@ -284,7 +299,7 @@ Two findings from the 0.11.63 review are fixed: outbound content is no longer
 escaped plain text, and delivery no longer sends one copy per mentioned user on
 the same host. Three more have gone since: `Add` and `Remove` federate a pin,
 `Move` is built by `occ social:account:move` with an `alsoKnownAs`
-back-reference check, and the WebFinger profile-page link points at a Social
+back-reference check, and the WebFinger profile-page link points at a Aloha Social
 profile rather than at `/index.php/u/alice`.
 
 **What a peer would still notice — one thing, and it is live today:**
@@ -343,7 +358,7 @@ feature parity, and it is where the honest answer is no.
 Every id is built from `ConfigService::getSocialUrl()`, which is the app's route
 root.
 
-| Object | Social | Mastodon |
+| Object | Aloha Social | Mastodon |
 |---|---|---|
 | actor | `https://host/apps/social/@alice` | `https://host/users/alice` |
 | status | `https://host/apps/social/@alice/17578…` | `https://host/users/alice/statuses/<id>` |
@@ -531,7 +546,7 @@ everything served carries `X-Content-Type-Options: nosniff`.
 
 And in the other direction, Mastodon has no equivalent for: dashboard
 widgets, profile-page integration, posting a picture straight from Nextcloud
-Files, Social data in `occ user:export`, and occ commands as an admin
+Files, Aloha Social data in `occ user:export`, and occ commands as an admin
 surface.
 
 ---
@@ -552,7 +567,7 @@ Since that paragraph was written, four more waves landed. **#2134** filled the
 small client gaps — the v1 filter routes, `instance/peers` and `instance/activity`,
 `preferences`, `familiar_followers`. **#2135** went after what a peer would
 notice — `Add` and `Remove` federate a pin, the WebFinger profile link points at
-a Social profile, and `mediaType`, which §4 has now reopened because the fix
+a Aloha Social profile, and `mediaType`, which §4 has now reopened because the fix
 never reached the object a peer is served. **#2136** is the admin and
 moderation tier almost entire: instance silencing, a moderator role that is
 Nextcloud's own settings delegation, an account browser and a takedown button,
@@ -668,7 +683,7 @@ meet. These three were it.
 
 | # | Work | Effort | What it fixes | Status |
 |---|---|---|---|---|
-| 48 | **Filters in Settings** | Days | The API had filters and this app's own client had no page for them, so the people most likely to be reading Social in a browser could not filter a word at all | done |
+| 48 | **Filters in Settings** | Days | The API had filters and this app's own client had no page for them, so the people most likely to be reading Aloha Social in a browser could not filter a word at all | done |
 | 49 | **Delete & re-draft** | Days | The correction people actually make. Words, warning, audience, language and pictures come back in the composer; the pictures by id, since deleting a post does not delete the uploads | done |
 | 50 | **The bell and hide-boosts on a profile** | Hours | Both relationship flags existed and neither had a control | done |
 
@@ -679,7 +694,7 @@ meet. These three were it.
 | 11 | **Authorized fetch inbound** — verify the HTTP signature on GET and resolve the remote reader | Weeks | Signature verification ran on inbox POSTs only, so a followers-only object could not be served to an authorized remote reader and secure mode was impossible. It failed closed, so nothing leaked | done (`AuthorizedFetchService`) |
 | 12 | **`Add` and `Remove` outbound** for pins | Days | A pin was only visible to a peer that re-polled `featured` | done |
 | 13 | **`mediaType` on attachments** | Hours | The stored row (`MediaAttachment::asLocal()`) now carries `media_type`, `import()` reads it back — with a guess from the extension for rows written before it existed — and the Document a post is served as states it. Since 0.20.5 the Document also **leaves out what it does not know** rather than sending `"width": 0`, `"height": 0` and `"blurhash": ""`: Pixelfed validates all three as `nullable|min:…` *when the key is present* and drops the whole post when one fails, so an attachment with no stored dimensions took its post with it, silently | done |
-| 14 | **The WebFinger profile-page link** | Hours | Pointed at the Nextcloud user profile rather than a Social one | done |
+| 14 | **The WebFinger profile-page link** | Hours | Pointed at the Nextcloud user profile rather than a Aloha Social one | done |
 | 15 | **Emoji reactions** | Days | Announcement reactions are stored and served. Reactions to a *status* are a Misskey and Pleroma extension Mastodon does not handle either, and are deliberately not implemented | done (announcements) |
 | 39 | **Serve attachments as ActivityPub `Document`s** | Hours | New, and verified on the wire rather than in a unit test: everything served on request — a single status, the outbox, `featured`, `replies`, and any re-fetch by a peer — carries Mastodon's *client* shape under `attachment` (`"type": "video"`, `preview_url`, `remote_url`, `meta`) instead of `{"type": "Document", "mediaType": "video/mp4", "name": …}`. `MediaAttachment::asDocument()` is correct and `ACore::FORMAT_ACTIVITYPUB` is set on the attachments of a freshly created post, so the original `Create` goes out right; but `StreamRequest::save()` stores `asLocal()` and hydration leaves the objects in the local format, so every later read of the same post is wrong. `WireCompatibilityTest` calls `asDocument()` directly and therefore passes | done — `Stream::jsonSerialize()` maps every attachment through `asDocument()` whatever format it was hydrated in, so a re-read post goes out the same as the original `Create`; `StreamTest::testAHydratedPostServesItsAttachmentsAsDocuments` pins it |
 | 51 | **Publish a video as a `Note`, not a `Video`, by default** | Hours | `Note::asVideoIfItIsOne()` sent a sole-video post in PeerTube's shape, and Pixelfed's `HandlesCreates` processes only a `Note` with a parent or an attachment — a `Video` is dropped without a word, so no video posted here ever reached a Pixelfed follower. Mastodon draws both shapes, PeerTube only the `Video`, Pixelfed only the `Note` | done — `publish_video_objects` defaults to `0`; an instance whose audience is on PeerTube turns it on |

@@ -16,17 +16,14 @@
 				:ref="(el) => setSlide(el, index)"
 				class="reel"
 				:data-index="index">
-				<video
-					:ref="(el) => setVideo(el, index)"
-					class="reel__video"
-					:src="entry.video.url"
-					:poster="entry.video.preview_url || undefined"
-					:aria-label="entry.video.description || entry.text"
-					:muted="muted"
-					playsinline
-					loop
-					preload="none"
-					@click="onVideoTap(index, $event)" />
+				<!-- a still where the player is not: the one <video> below
+				     is over whichever slide is being watched -->
+				<img
+					v-if="entry.video.preview_url"
+					class="reel__poster"
+					:src="entry.video.preview_url"
+					:alt="index === playing ? '' : (entry.video.description || entry.text)"
+					loading="lazy">
 
 				<!-- the hearts a like releases: one where a double tap landed,
 				     and a few rising up the edge, the way live video does it.
@@ -62,9 +59,9 @@
 				<button
 					type="button"
 					class="reel__sound"
-					:aria-label="muted ? t('social', 'Unmute') : t('social', 'Mute')"
+					:aria-label="silent ? t('social', 'Unmute') : t('social', 'Mute')"
 					@click.stop="toggleSound">
-					<IconVolumeOff v-if="muted" :size="20" />
+					<IconVolumeOff v-if="silent" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
 				<!-- the browser would not start with sound: say where it is -->
@@ -89,6 +86,10 @@
 					<p v-if="entry.text" class="reel__text">
 						{{ entry.text }}
 					</p>
+					<!-- why For you put it here, as the chip over a post says it -->
+					<p v-if="reasonOf(entry.status)" class="reel__reason" :aria-label="reasonOf(entry.status).label">
+						{{ reasonOf(entry.status).text }}
+					</p>
 					<router-link
 						class="reel__open"
 						:to="{ name: 'single-post', params: { account: entry.status.account.acct, id: entry.status.id } }">
@@ -96,6 +97,26 @@
 					</router-link>
 				</div>
 			</article>
+
+			<!-- one player for the whole stack, moved to the slide on screen and
+			     given its video. WebKit lets an element play with sound only
+			     once a gesture has allowed it, and a scroll is not a gesture:
+			     a new element per slide was refused the sound on every slide
+			     after the first. -->
+			<video
+				v-if="current"
+				ref="player"
+				class="reel__video"
+				:style="{ '--at': playing }"
+				:src="current.video.url"
+				:poster="current.video.preview_url || undefined"
+				:aria-label="current.video.description || current.text"
+				playsinline
+				loop
+				preload="auto"
+				@timeupdate="reelSignals.progress(current.status, $event.target)"
+				@ended="reelSignals.ended(current.status)"
+				@click="onVideoTap(playing, $event)" />
 
 			<div v-if="reels.length === 0 && loading" class="reels__empty">
 				<NcLoadingIcon :size="44" appearance="light" />
@@ -140,8 +161,8 @@
 				v-for="option in scopes"
 				:key="option.value"
 				class="reels__scope"
-				:class="{ 'reels__scope--current': option.value === scope }"
-				:aria-current="option.value === scope ? 'page' : undefined"
+				:class="{ 'reels__scope--current': option.value === watching }"
+				:aria-current="option.value === watching ? 'page' : undefined"
 				:to="{ name: 'reels', query: { scope: option.value } }">
 				{{ option.label }}
 			</router-link>
@@ -160,18 +181,22 @@
  * it goes past. This is that stack, over the same timeline — no new endpoint,
  * no second idea of what a video is.
  *
- * Three rules hold it together:
+ * Four rules hold it together:
  *
- *  - **One plays at a time.** An IntersectionObserver decides which, and every
- *    other element is paused rather than left buffering; a dozen videos
- *    playing behind the one on screen is a phone getting hot for nothing.
+ *  - **One plays at a time.** An IntersectionObserver decides which, and
+ *    there is only one element to play it with; a dozen videos buffering
+ *    behind the one on screen is a phone getting hot for nothing.
  *  - **Sound on, where the browser allows it.** Somebody who opens Shorts
  *    from the sidebar has pressed something to get here, and a browser
  *    counts that as leave to play with sound. Opened cold -- a pasted link,
  *    a reload -- the browser refuses, and the stack falls back to muted and
- *    says "Tap for sound" rather than showing a still. The choice is kept for
- *    the page and applies to every video, because it is a statement about
- *    this page rather than about one video.
+ *    says "Tap for sound" rather than showing a still. The reader's choice
+ *    applies to every video, because it is a statement about this page
+ *    rather than about one video; a refusal is not a choice, and the next
+ *    video is asked with sound again (see useSoundAutoplay).
+ *  - **One element.** A single <video> follows the slide on screen and the
+ *    others show their poster, so the element a tap once allowed to play
+ *    with sound keeps that leave for every video after it.
  *  - **The scroll does the work.** CSS scroll-snap rather than a transform per
  *    slide: it is the one thing that behaves the same under a finger, a
  *    trackpad, a wheel and a keyboard, and it keeps working when the
@@ -188,11 +213,15 @@ import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { useSettingsStore } from '../store/settings.js'
-import { useTimelineStore } from '../store/timeline.js'
+import { isRanked, useTimelineStore } from '../store/timeline.js'
+import { hasInterestsFeed, isTracking } from '../services/interests.js'
+import { createReelSignals } from '../services/reelSignals.js'
+import { interestReason } from '../utils/interestReason.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
+import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
 import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 
 /** How close to the end the reader gets before the next page is asked for. */
@@ -232,28 +261,31 @@ export default {
 		 * Which circle of people: 'home' (the ones you follow), 'timeline'
 		 * (this instance) or 'federated' (everywhere) — the same three the
 		 * Videos page is read at, carried here so that leaving the grid for
-		 * the stack does not silently change what is in it.
+		 * the stack does not silently change what is in it — or 'interests',
+		 * For you narrowed to videos. '' is the default, see `watching`.
 		 */
 		scope: {
 			type: String,
-			default: 'home',
+			default: '',
 		},
+	},
+
+	setup() {
+		const { muted, soundHeld, silent, playWithSound, toggleMute } = useSoundAutoplay()
+
+		return { muted, soundHeld, silent, playWithSound, toggleMute }
 	},
 
 	data() {
 		return {
-			muted: false,
 			/** the New short dialog is open */
 			composing: false,
-			/** the browser refused to start with sound, so it was muted for it */
-			soundHeld: false,
+			/** the slide on screen, which the player is over */
 			playing: 0,
 			loading: false,
 			/** the last page asked for could not be fetched */
 			failed: false,
 			allLoaded: false,
-			/** the <video> of each slide, by index */
-			videos: [],
 			slides: [],
 			/** tells onVisible which slide is on screen */
 			observer: null,
@@ -263,6 +295,15 @@ export default {
 			lastTap: null,
 			/** the pause a single tap is waiting to do */
 			tapTimer: null,
+			/** what watching teaches For you (`reelSignals.js`) */
+			reelSignals: createReelSignals({
+				enabled: () => {
+					const serverData = useSettingsStore().getServerData
+
+					return !serverData?.public && isTracking(serverData?.interests)
+				},
+			}),
+
 			HEART_PATH,
 		}
 	},
@@ -283,8 +324,35 @@ export default {
 				{ value: 'timeline', label: t('social', 'Local') },
 				{ value: 'federated', label: t('social', 'Global') },
 			]
+			// For you, for a signed-in reader who has it: beside My Feed, as
+			// above the timeline
+			if (this.hasForYou) {
+				all.splice(1, 0, { value: 'interests', label: t('social', 'For you') })
+			}
 
 			return this.settingsStore.getServerData?.public ? all.slice(1) : all
+		},
+
+		/** @return {boolean} whether For you is on for this reader */
+		hasForYou() {
+			const serverData = this.settingsStore.getServerData
+
+			return !serverData?.public && hasInterestsFeed(serverData?.interests)
+		},
+
+		/**
+		 * The scope being watched: the one asked for when it is on offer, and
+		 * otherwise For you once reading has taught it something, My Feed
+		 * before that.
+		 *
+		 * @return {string}
+		 */
+		watching() {
+			if (this.scopes.some((option) => option.value === this.scope)) {
+				return this.scope
+			}
+
+			return this.hasForYou && this.settingsStore.getServerData?.interests?.profile === true ? 'interests' : 'home'
 		},
 
 		/**
@@ -314,12 +382,17 @@ export default {
 
 			return entries
 		},
+
+		/** @return {object|undefined} the slide the player is over */
+		current() {
+			return this.reels[this.playing]
+		},
 	},
 
 	watch: {
 		// the query is the prop, and the router reuses this view when only
 		// the query changes, so a new scope has to switch the feed here
-		scope() {
+		watching() {
 			this.open()
 		},
 	},
@@ -336,11 +409,10 @@ export default {
 	},
 
 	beforeUnmount() {
+		this.reelSignals.leave()
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
-		for (const video of this.videos) {
-			video?.pause?.()
-		}
+		this.player()?.pause?.()
 	},
 
 	updated() {
@@ -359,28 +431,37 @@ export default {
 
 		/** Points the store at the videos of this scope and fetches the first page. */
 		open() {
+			this.reelSignals.leave()
 			this.timelineStore.changeTimelineType({
 				type: 'videos',
-				params: { scope: this.scope },
+				params: { scope: this.watching },
 			})
 			this.allLoaded = false
 			this.playing = 0
 			this.load()
 		},
 
+		/**
+		 * @param {object} status a slide's post
+		 * @return {{text: string, label: string}|null} why For you showed it
+		 */
+		reasonOf(status) {
+			return interestReason(status?.interest)
+		},
+
 		setSlide(el, index) {
 			this.slides[index] = el
 		},
 
-		setVideo(el, index) {
-			this.videos[index] = el
+		/** @return {HTMLVideoElement|undefined} the one player */
+		player() {
+			return /** @type {HTMLVideoElement|undefined} */ (this.$refs.player)
 		},
 
 		/**
-		 * Whichever slide is mostly on screen becomes the one playing, and
-		 * every other one stops. Pausing rather than leaving them be: a video
-		 * scrolled past keeps downloading otherwise, and a page of them is a
-		 * phone getting hot to buffer what nobody is watching.
+		 * Whichever slide is mostly on screen becomes the one playing. There
+		 * is only one element to play it with, so a slide scrolled past stops
+		 * by losing it rather than being paused and left buffering.
 		 *
 		 * @param {IntersectionObserverEntry[]} entries what moved
 		 */
@@ -400,41 +481,26 @@ export default {
 			}
 		},
 
-		play(index) {
-			this.videos.forEach((video, at) => {
-				if (!video) {
-					return
-				}
-
-				if (at === index) {
-					video.muted = this.muted
-					// a rejected play is the browser's autoplay rule, which is
-					// an answer rather than a fault. With sound it is usually
-					// the sound it refused, so the video plays muted instead
-					// and the page says where the sound is; muted and still
-					// refused, the poster stays up and the reader can press it
-					video.play?.().catch((error) => {
-						logger.debug('autoplay refused', { error })
-						if (error?.name === 'NotAllowedError' && !this.muted) {
-							this.muted = true
-							this.soundHeld = true
-							video.muted = true
-							video.play?.().catch((again) => logger.debug('muted autoplay refused', { error: again }))
-						}
-					})
-				} else {
-					video.pause?.()
-					// back to the first frame, so coming back to it is the
-					// video again rather than its last second
-					if (video.currentTime > 0) {
-						video.currentTime = 0
-					}
-				}
-			})
-
+		/**
+		 * Plays the slide once the player has moved to it and been given its
+		 * video. A new `src` starts from the first frame, so coming back to a
+		 * slide is the video again rather than its last second.
+		 *
+		 * @param {number} index the slide on screen
+		 * @return {Promise<void>}
+		 */
+		async play(index) {
+			this.reelSignals.enter(this.reels[index]?.status)
 			if (index >= this.reels.length - LOOK_AHEAD) {
 				this.load()
 			}
+
+			await this.$nextTick()
+			if (index !== this.playing) {
+				return
+			}
+
+			await this.playWithSound(this.player())
 		},
 
 		/**
@@ -575,13 +641,13 @@ export default {
 
 		/** Opens the New short dialog, with the stack paused behind it. */
 		startShort() {
-			this.videos[this.playing]?.pause?.()
+			this.player()?.pause?.()
 			this.composing = true
 		},
 
 		togglePlay(index) {
-			const video = this.videos[index]
-			if (!video) {
+			const video = this.player()
+			if (!video || index !== this.playing) {
 				return
 			}
 
@@ -593,12 +659,7 @@ export default {
 		},
 
 		toggleSound() {
-			this.soundHeld = false
-			this.muted = !this.muted
-			const video = this.videos[this.playing]
-			if (video) {
-				video.muted = this.muted
-			}
+			this.toggleMute(this.player())
 		},
 
 		/**
@@ -658,7 +719,8 @@ export default {
 			this.failed = false
 			const params = {}
 			const ids = this.timelineStore.getTimeline.map((status) => status.id)
-			const cursor = oldestId(ids)
+			// a ranking pages from where it ended, not from its oldest post
+			const cursor = isRanked(this.timelineStore) ? ids[ids.length - 1] : oldestId(ids)
 			if (cursor !== undefined) {
 				params.max_id = cursor
 			}
@@ -695,6 +757,8 @@ export default {
 	background: #000;
 
 	&__track {
+		/* the player is placed against the track, a slide's height per slide */
+		position: relative;
 		block-size: 100%;
 		overflow-y: auto;
 		scroll-snap-type: y mandatory;
@@ -788,13 +852,26 @@ export default {
 	scroll-snap-align: start;
 	scroll-snap-stop: always;
 
-	&__video {
+	&__video,
+	&__poster {
+		position: absolute;
+		inset-inline: 0;
 		inline-size: 100%;
 		block-size: 100%;
 		/* contain rather than cover: a video shot wide is not improved by
 		   having its sides cut off to fill a tall window */
 		object-fit: contain;
 		background: #000;
+	}
+
+	&__poster {
+		inset-block-start: 0;
+	}
+
+	/* over the slide being watched: every slide is exactly the track's
+	   height, so the n-th starts n track-heights down */
+	&__video {
+		inset-block-start: calc(var(--at) * 100%);
 	}
 
 	&__sound {
@@ -880,6 +957,8 @@ export default {
 
 	&__hearts {
 		position: absolute;
+		/* over the player, which comes after the slides */
+		z-index: 1;
 		inset: 0;
 		overflow: hidden;
 		pointer-events: none;
@@ -910,6 +989,7 @@ export default {
 
 	&__caption {
 		position: absolute;
+		z-index: 1;
 		/* the caption's own links take presses; the rest of it lets them
 		   through to the video (tap to pause) and to the buttons */
 		pointer-events: none;
@@ -962,6 +1042,12 @@ export default {
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	&__reason {
+		margin: 0;
+		font-size: 90%;
+		opacity: 0.8;
 	}
 
 	&__open {

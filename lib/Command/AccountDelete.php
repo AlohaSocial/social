@@ -32,7 +32,7 @@ class AccountDelete extends SocialCommand {
 	protected function configure(): void {
 		parent::configure();
 		$this->setName('social:account:delete')
-			->addArgument('account', InputArgument::REQUIRED, 'Social Local Account')
+			->addArgument('account', InputArgument::REQUIRED, 'Aloha Social Local Account')
 			->setDescription('Delete a local social account');
 	}
 

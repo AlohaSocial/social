@@ -187,7 +187,7 @@ class NavigationControllerTest extends TestCase {
 				'section_videos' => true,
 				'group_lists' => [],
 			],
-			// whether My interests is on for this reader; what it holds is
+			// whether For you is on for this reader; what it holds is
 			// InterestService::pageState()'s, tested there
 			'interests' => [],
 			// the media quota of a self-registered external user; alice is not one
@@ -242,7 +242,7 @@ class NavigationControllerTest extends TestCase {
 		$this->accountService->method('generateHandleFromUserId')->with('alice')->willReturn('alice');
 		$this->accountService->method('linkedHandle')->with('alice')->willReturn('alice@mastodon.social');
 		// an RSA key pair and a WebFinger identity used to appear on the first
-		// click of the app icon, with nobody asked (nextcloud/social#1130)
+		// click of the app icon, with nobody asked (alohasocial/social#1130)
 		$this->accountService->expects($this->never())->method('createActor');
 
 		$this->controller()->navigate();

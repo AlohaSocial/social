@@ -1,6 +1,6 @@
 # User guide
 
-How to use Nextcloud Social as a person with an account on this Nextcloud:
+How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
 looking after the account. It describes the web client that comes with the
 app; where something is only reachable through the Mastodon-compatible API or
@@ -28,7 +28,7 @@ names are the English strings of the web client.
 ## Getting an account
 
 A Nextcloud account is the account: the first time you
-open **Social** from the app menu, a short screen asks whether you want a
+open **Aloha Social** from the app menu, a short screen asks whether you want a
 fediverse identity here, or would rather name the one you already have
 somewhere else. Nothing is created until you choose. You pick your handle on
 that screen — it starts out as a suggestion made from your Nextcloud user id,
@@ -39,7 +39,7 @@ follow it.
 
 Your display name and avatar come from your Nextcloud account and are changed
 there. The rest of the profile — banner, bio, profile fields — is edited in
-Social (see [Managing your account](#managing-your-account)).
+Aloha Social (see [Managing your account](#managing-your-account)).
 
 On the first visit the app shows a four-step introduction: your address with a
 copy button, people to follow, a way to bring the follows you already have from
@@ -56,13 +56,13 @@ is `@username@your-nextcloud-host` from the start. Depending on the server you
 confirm your email address first, and an administrator may look at the
 registration before it becomes an account; you are emailed either way.
 
-Such an account is for Social only. You log in on the normal login page, with
+Such an account is for Aloha Social only. You log in on the normal login page, with
 two-factor authentication if you set it up or the server requires it, and
-land in Social. Your personal settings for your details, password, security,
+land in Aloha Social. Your personal settings for your details, password, security,
 appearance and notifications are there; Files, Talk and the other apps are
 not, and Nextcloud's own desktop and mobile clients are refused. Mastodon apps
 can. **Settings → Your storage** shows how much of the space the server gives
-each such account your pictures and videos take up. Deleting your Social
+each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
 Where the administrators let everybody invite people, **Settings → Invite
@@ -145,10 +145,14 @@ network hiccup.
   QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). Drag them in, use
   **Add attachment**, or **Add from Files** to attach something already in
   your Nextcloud without uploading it again — the Files app's own menu also
-  has **Share to Social** for the same thing. Every picture has its Exif
+  has **Share to Aloha Social** for the same thing. Every picture has its Exif
   metadata (including the location a phone writes) removed before it is
   stored or sent anywhere. A picture can be given one of eight mild filters,
-  previewed live and baked into the copy that is posted.
+  previewed live and baked into the copy that is posted when you press Post,
+  in every browser, Safari and iPhone included. A photo larger than 4096 pixels
+  on its longest side, or larger than the size your server takes, is made
+  smaller before it is uploaded. Animated GIFs and WebPs are never changed, so
+  one that is too large is refused before it is sent.
 - **The GIF button** opens a picker with 881 animated emoji in it, searchable by
   name — "party", "sad", "hedgehog" — plus whatever your administrator has added
   for this instance, which comes first. Nothing you type goes anywhere but your
@@ -249,12 +253,16 @@ The sidebar is the map:
   written on this Nextcloud; Global is every public post this server has
   received. **Photos** and **Videos** carry the same switcher over posts that
   are pictures, or videos — including videos from PeerTube channels anyone
-  here follows.
+  here follows — with **For you** in it as well (see below).
 - **Shorts** — the Videos timeline watched one at a time, full height, each
   playing as it comes up and pausing as you scroll past. The switch in the top
-  corner picks whose videos (**My Feed**, **Local** or **Global**). It plays
+  corner picks whose videos (**My Feed**, **For you**, **Local** or
+  **Global**); it opens on For you once your reading has taught it something,
+  and on My Feed before that. It plays
   with sound; opened from a link, the browser may hold the sound back until
-  you tap the speaker, which a "Tap for sound" hint points at. Tap to pause,
+  you tap the speaker, which a "Tap for sound" hint points at. Once you have
+  tapped it, the videos after it keep their sound as you scroll, and if you
+  mute one they stay muted until you close the tab. Tap to pause,
   arrow keys to move, space to pause, `m` for sound, `l` to like. The **+**
   opens **New short**:
   - **Upload a video**, drop one on the dialog, or **Record** one with your
@@ -332,10 +340,10 @@ A post that links somewhere gets a preview card, read by this server rather
 than by your browser. With the `notify_push` app installed, new posts arrive
 live; without it the page checks every 30 seconds.
 
-### My interests
+### For you
 
-**My interests** is the second feed in the switcher above the posts, right
-after My Feed and before Local and Global. It is made of the hashtags you read: Social notices
+**For you** is the second feed in the switcher above the posts, right
+after My Feed and before Local and Global. It is made of the hashtags you read: Aloha Social notices
 which posts you stay on longer than you usually do, which you scroll past, and
 what you like, boost, reply to, bookmark, open, or whose pictures and links you
 open. From that it keeps a list of hashtags, and the feed shows the posts of
@@ -347,17 +355,28 @@ hashtag that often comes up alongside yours. Each post says why it is there:
 something to show on the first day; until it has learned a little, it also
 shows what is trending here, and says so.
 
+**Photos, videos and Shorts.** Photos, Videos and Shorts have a **For you**
+of their own: the same hashtags, narrowed to posts with a picture, or to
+videos, and looking back twice as far, because such posts are rarer. Where
+that finds fewer than about forty, the rest is what is popular here in the
+same kind right now — the posts Explore's Pictures and Videos tabs show —
+and those say *Popular right now* rather than naming a hashtag they did not
+match. In Shorts, what counts is how much of each video you watch: all of it,
+or most, counts for a lot, half of it for a little, and swiping it away within
+about two seconds counts against its hashtags. In the Photos and Videos grids,
+opening a post counts.
+
 **Less like this**, in a post's menu, takes that post out of the feed and
 counts its hashtags down. On the feed itself the post goes at once and *Undo*
 brings it back. Muting somebody from one of their posts counts too.
 
-**Where you change it.** **Settings → My interests** shows the list as a cloud:
+**Where you change it.** **Settings → For you** shows the list as a cloud:
 the bigger and bolder a hashtag, the more it counts. Drag one to where you want
 it, or click it for *Higher priority*, *Lower priority*, *Move to top*, *Pin*
 and *Remove*; with the keyboard, the arrow keys move between hashtags, Enter
 opens that menu and Alt with ← or → moves one. A moved hashtag is **pinned**:
 it stays where you put it, while the others move as you read. *+ Add* puts a
-hashtag of your own on the list, and the ones Social has almost learned are
+hashtag of your own on the list, and the ones Aloha Social has almost learned are
 offered underneath. Removing a hashtag forgets it — reading more about it can
 bring it back — and a hashtag you follow stays for as long as you follow it.
 *Languages* limits the feed to posts in the languages you choose.
@@ -371,7 +390,7 @@ leaves this server, nobody else can see it, and it travels with your account
 when you export it. Your administrator may have turned the feature off, or made
 learning something you switch on yourself.
 
-**In a Mastodon app** there is no My interests feed: it is part of this web
+**In a Mastodon app** there is no For you feed: it is part of this web
 interface. What you like, boost, reply to and bookmark in an app still counts;
 only the web interface knows how long you looked at something.
 
@@ -399,7 +418,7 @@ one. Press one to add yours or to take it back, or press the smiley with a
 plus on it to choose another; you may put up to eight different emoji on the
 same announcement.
 
-Administrators post and remove announcements in **Administration → Social**.
+Administrators post and remove announcements in **Administration → Aloha Social**.
 
 ### Stories
 
@@ -409,7 +428,10 @@ and then it is gone. A face with a coloured ring around it still holds
 something you have not seen; tap it and the stories play one after another,
 each for the seconds its poster gave it, and the ring goes grey. Hold the
 picture to pause it, tap the left or right of it to go back or forward, and
-use the arrows at the sides to move to the next account.
+use the arrows at the sides to move to the next account. A video story plays
+with its sound on; the speaker at the top turns it off (or `m`), and when the
+browser holds the sound back a "Tap for sound" hint points at the speaker, as
+on Shorts.
 
 Your own place is always first in the row, with a **+** on it. It opens the
 same dialog as a new short (see **Shorts**): **Record** a video with your
@@ -611,12 +633,13 @@ table as they always did — and if you already wrote a row called "Pronouns" by
 hand, it is picked up as one.
 
 
-- **Sound and touch.** **Settings → Sound and touch** has two switches:
+- **Sound and touch.** **Settings → Sound and touch** has three switches:
   **Play sounds** (a tick on a like, a breath of air when a post goes out, a
   chime when a direct message arrives; off until you turn it on, with
-  **Listen** to hear them first) and **Vibrate** (a short tap on a phone; on
-  unless you turn it off, and off whenever your system asks for less motion).
-  Both belong to the device you are on, not to your account.
+  **Listen** to hear them first), **Vibrate** (a short tap on a phone; on
+  unless you turn it off, and off whenever your system asks for less motion)
+  and **Start videos with sound** (Shorts and stories; on unless you turn it
+  off). All three belong to the device you are on, not to your account.
 - **Profile.** **My profile** (behind your portrait at the bottom of the
   sidebar) → **Edit profile**: a banner (upload one or give the address of
   one), a bio, and up to four name/value fields shown under it — your website,
@@ -625,13 +648,13 @@ hand, it is picked up as one.
   at four, and a row with only one half filled in is dropped the same way;
   emptying the table and saving removes it from your profile everywhere.
 - **Your Nextcloud profile page.** The native `/u/username` page shows your
-  custom Social banner across the profile header, behind your profile picture,
+  custom Aloha Social banner across the profile header, behind your profile picture,
   and your posts below. The banner starts at the top of the native profile
   content and meets the profile details without an extra coloured strip.
   Without a native profile header, the banner appears at
-  the top of the Social section. Its **Posts**, **My Feed**, **Local** and
-  **Global** tabs read Social's feeds; **My Feed** is available only on your
-  own profile. This page is for reading. To publish, open the Social app.
+  the top of the Aloha Social section. Its **Posts**, **My Feed**, **Local** and
+  **Global** tabs read Aloha Social's feeds; **My Feed** is available only on your
+  own profile. This page is for reading. To publish, open the Aloha Social app.
 - **Missing pictures on older remote posts.** If a federated post shows its text
   but none of its pictures, an administrator can run
   `occ social:media:recover --dry-run` to list posts whose stored ActivityPub
@@ -757,7 +780,7 @@ hand, it is picked up as one.
   that first, in **Settings → Your account**, if you would rather they were not
   public. And your **stories, your archived posts and anything you deleted are
   not imported**: you put those away on purpose.
-- **Leaving.** **Settings → Delete your Social account** deletes your fediverse
+- **Leaving.** **Settings → Delete your Aloha Social account** deletes your fediverse
   account and keeps your Nextcloud one. Everything you posted goes, your
   followers and the people you follow are let go, and every server that knew
   the account is told it is gone — a post already on somebody else's server is
@@ -767,7 +790,7 @@ hand, it is picked up as one.
   first if you might want one. Afterwards you are back at the setup screen and
   can make a new account straight away, under a different handle: the old one
   is held for an hour so that nobody can take it the moment you let it go.
-  Deleting the Nextcloud user does the same thing to the Social account along
+  Deleting the Nextcloud user does the same thing to the Aloha Social account along
   the way.
 
 ## Keyboard shortcuts

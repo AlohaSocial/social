@@ -135,7 +135,7 @@ class CurlServiceTest extends TestCase {
 		$service = new CurlService($this->configService, $this->fediverseService, $this->clientService,
 			$this->httpSignatureService, new NullLogger());
 
-		$this->assertSame('Nextcloud Social 0.9.1', $service->userAgent());
+		$this->assertSame('Aloha Social 0.9.1', $service->userAgent());
 	}
 
 	public function testNothingIsSentToABlockedInstance(): void {
@@ -673,7 +673,7 @@ class CurlServiceTest extends TestCase {
 		$this->assertSame('get', $sent()['method']);
 		$this->assertSame('https://' . self::PUBLIC_IP . '/users/bob?page=2', $sent()['url']);
 		$this->assertSame('application/activity+json', $sent()['options']['headers']['Accept']);
-		$this->assertSame('Nextcloud Social 0.9.1', $sent()['options']['headers']['user-agent']);
+		$this->assertSame('Aloha Social 0.9.1', $sent()['options']['headers']['user-agent']);
 		$this->assertSame(7, $sent()['options']['timeout']);
 	}
 

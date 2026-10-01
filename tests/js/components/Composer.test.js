@@ -53,6 +53,17 @@ vi.mock('../../../src/utils/textCard.js', async (importOriginal) => ({
 	renderTextCard,
 }))
 
+// jsdom has no canvas either; a filtered picture is stood in for by a new file
+const { prepareImage } = vi.hoisted(() => ({
+	prepareImage: vi.fn(async (file, { filter = 'none' } = {}) => (filter === 'none'
+		? file
+		: new File(['filtered'], 'filtered.jpg', { type: 'image/jpeg' }))),
+}))
+vi.mock('../../../src/utils/imageFilters.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	prepareImage,
+}))
+
 // the composer asks the server which team accounts this account may post as,
 // and the mention/hashtag pickers reach for the same client
 const { get } = vi.hoisted(() => ({ get: vi.fn() }))
@@ -616,6 +627,46 @@ describe('Composer', () => {
 
 			finishUpload(media)
 			await flushPromises()
+			expect(canPost(wrapper)).toBe(true)
+		})
+	})
+
+	describe('a filtered picture', () => {
+		it('is uploaded once more, as the post is sent, and posted instead of the first', async () => {
+			const { wrapper, store } = mountComposer()
+			store.createMedia.mockImplementation(({ file }) => Promise.resolve({ ...media, id: file.name === 'filtered.jpg' ? 'media-filtered' : media.id }))
+			await setContent(wrapper, 'In black and white')
+			await attachFile(wrapper, new File(['x'], 'cat.png', { type: 'image/png' }))
+			await flushPromises()
+
+			const item = wrapper.findComponent(PreviewGridItem)
+			for (const filter of ['mono', 'noir', 'mono']) {
+				item.vm.$emit('filter', { key: item.props('randomKey'), filter })
+			}
+			await flushPromises()
+			expect(store.createMedia).toHaveBeenCalledTimes(1)
+
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(store.createMedia).toHaveBeenCalledTimes(2)
+			expect(prepareImage).toHaveBeenLastCalledWith(expect.any(File), expect.objectContaining({ filter: 'mono' }))
+			expect(postedStatus(store).media_ids).toEqual(['media-filtered'])
+		})
+
+		it('holds the post back when the filtered copy would not upload', async () => {
+			const { wrapper, store } = mountComposer()
+			await setContent(wrapper, 'In black and white')
+			await attachFile(wrapper, new File(['x'], 'cat.png', { type: 'image/png' }))
+			await flushPromises()
+			store.createMedia.mockResolvedValue(undefined)
+
+			const item = wrapper.findComponent(PreviewGridItem)
+			item.vm.$emit('filter', { key: item.props('randomKey'), filter: 'mono' })
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(store.post).not.toHaveBeenCalled()
 			expect(canPost(wrapper)).toBe(true)
 		})
 	})

@@ -79,7 +79,7 @@ class NotifierTest extends TestCase {
 	}
 
 	public function testNameIsTranslated(): void {
-		$this->l10n->method('t')->with('Social')->willReturn('Sozial');
+		$this->l10n->method('t')->with('Aloha Social')->willReturn('Sozial');
 
 		$this->assertSame('Sozial', $this->notifier->getName());
 	}

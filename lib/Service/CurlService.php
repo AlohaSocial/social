@@ -56,7 +56,7 @@ class CurlService {
 	use TPathTools;
 
 	public const ASYNC_REQUEST_TOKEN = '/async/request/{token}';
-	public const USER_AGENT = 'Nextcloud Social';
+	public const USER_AGENT = 'Aloha Social';
 
 	/** As many hops as the server's own HTTP client would have followed. */
 	private const MAX_REDIRECTS = 5;

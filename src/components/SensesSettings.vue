@@ -31,6 +31,16 @@
 		<p class="senses-settings__lede">
 			{{ t('social', 'A short tap in the hand on a phone when you like, boost, react or post. Your system setting for less motion turns it off as well.') }}
 		</p>
+
+		<NcCheckboxRadioSwitch
+			type="switch"
+			:modelValue="videoSound"
+			@update:modelValue="setVideoSound">
+			{{ t('social', 'Start videos with sound') }}
+		</NcCheckboxRadioSwitch>
+		<p class="senses-settings__lede">
+			{{ t('social', 'Shorts and stories start with their sound on, where the browser allows it; otherwise one tap on the speaker turns it on. Muting one keeps the rest muted until you close the tab.') }}
+		</p>
 	</div>
 </template>
 
@@ -39,19 +49,22 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import IconPlay from 'vue-material-design-icons/Play.vue'
+import { forgetMuteChoice } from '../composables/useSoundAutoplay.js'
 import {
 	buzz,
 	play,
 	setSoundsEnabled,
 	setVibrationEnabled,
+	setVideoSoundEnabled,
 	soundsEnabled,
 	vibrationEnabled,
+	videoSoundEnabled,
 } from '../services/senses.js'
 
 /**
- * The two switches for sound and vibration.
+ * The switches for sound, vibration and whether videos start with sound.
  *
- * Nothing goes to the server: both are about the device in front of the
+ * Nothing goes to the server: all three are about the device in front of the
  * reader, so they are kept in this browser -- see services/senses.js.
  */
 export default {
@@ -67,6 +80,7 @@ export default {
 		return {
 			sounds: soundsEnabled(),
 			vibration: vibrationEnabled(),
+			videoSound: videoSoundEnabled(),
 		}
 	},
 
@@ -89,6 +103,18 @@ export default {
 			if (on) {
 				buzz('like')
 			}
+		},
+
+		/**
+		 * The mute choice made in this tab is forgotten, or the switch would
+		 * seem to do nothing until the tab was closed.
+		 *
+		 * @param {boolean} on the new position
+		 */
+		setVideoSound(on) {
+			this.videoSound = on
+			setVideoSoundEnabled(on)
+			forgetMuteChoice()
 		},
 
 		/** Plays a few of them one after another, whatever the switch says. */

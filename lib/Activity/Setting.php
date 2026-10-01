@@ -33,7 +33,7 @@ class Setting extends ActivitySettings {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Somebody <strong>followed</strong> you, <strong>mentioned</strong> you, or <strong>boosted</strong> or <strong>favourited</strong> a post of yours on Social');
+		return $this->l10n->t('Somebody <strong>followed</strong> you, <strong>mentioned</strong> you, or <strong>boosted</strong> or <strong>favourited</strong> a post of yours on Aloha Social');
 	}
 
 	#[\Override]
@@ -43,7 +43,7 @@ class Setting extends ActivitySettings {
 
 	#[\Override]
 	public function getGroupName(): string {
-		return $this->l10n->t('Social');
+		return $this->l10n->t('Aloha Social');
 	}
 
 	#[\Override]

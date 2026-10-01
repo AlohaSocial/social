@@ -110,6 +110,8 @@ class PostServiceQuoteTest extends TestCase {
 			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\InterestService::class),
+			$this->createStub(\OCA\Social\Service\VideoDeliveryHold::class),
+			$this->createStub(\OCA\Social\Service\DocumentService::class),
 		);
 	}
 

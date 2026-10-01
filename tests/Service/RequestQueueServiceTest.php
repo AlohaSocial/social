@@ -57,6 +57,59 @@ class RequestQueueServiceTest extends TestCase {
 		return $queue;
 	}
 
+	/**
+	 * A held fan-out is written with its time as `last` and no tries spent,
+	 * which is what keeps every drain off it until then.
+	 */
+	public function testAHeldFanOutIsWrittenHeld(): void {
+		$stored = $this->captureQueued();
+		$until = time() + 600;
+
+		$this->service->generateRequestQueueFromSource(
+			[new InstancePath('https://remote.example/inbox', InstancePath::TYPE_INBOX, InstancePath::PRIORITY_HIGH)],
+			'{"type":"Create"}', self::AUTHOR, $until
+		);
+
+		$this->assertSame($until, $stored->requests[0]->getLast());
+		$this->assertSame(0, $stored->requests[0]->getTries());
+	}
+
+	public function testAFanOutThatIsNotHeldIsDueAtOnce(): void {
+		$stored = $this->captureQueued();
+
+		$this->service->generateRequestQueueFromSource(
+			[new InstancePath('https://remote.example/inbox', InstancePath::TYPE_INBOX, InstancePath::PRIORITY_HIGH)],
+			'{"type":"Create"}', self::AUTHOR
+		);
+
+		$this->assertSame(0, $stored->requests[0]->getLast());
+	}
+
+	public function testTheHeldRowsOfAPostAreAskedForByItsHash(): void {
+		$held = [$this->queued(InstancePath::PRIORITY_LOW)];
+		$this->requestQueueRequest->expects($this->once())->method('getHeldByObject')
+			->with(md5('https://cloud.example.com/apps/social/@alice/1'), $this->greaterThanOrEqual(time()))
+			->willReturn($held);
+
+		$this->assertSame($held, $this->service->getHeld('https://cloud.example.com/apps/social/@alice/1'));
+	}
+
+	/** A row a drain claimed meanwhile is not changed, and the caller is told. */
+	public function testReleasingARowThatIsNoLongerOnStandbySaysSo(): void {
+		$queue = $this->queued(InstancePath::PRIORITY_LOW);
+		$this->requestQueueRequest->method('release')->willThrowException(new QueueStatusException());
+
+		$this->assertFalse($this->service->releaseRequest($queue, '{}'));
+	}
+
+	public function testReleasingAHeldRowHandsItItsBody(): void {
+		$queue = $this->queued(InstancePath::PRIORITY_LOW);
+		$this->requestQueueRequest->expects($this->once())->method('release')
+			->with($this->identicalTo($queue), '{"type":"Create"}');
+
+		$this->assertTrue($this->service->releaseRequest($queue, '{"type":"Create"}'));
+	}
+
 	public function testGenerateRequestQueueCreatesOneEntryPerInstanceSharingAToken(): void {
 		$note = new Note();
 		$note->setId('https://cloud.example.com/apps/social/@alice/1');

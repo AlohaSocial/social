@@ -49,6 +49,21 @@
 					<IconEye :size="16" />
 					{{ n('social', '%n view', '%n views', story.view_count ?? 0) }}
 				</span>
+				<!-- the browser would not start with sound: say where it is -->
+				<span v-if="isVideo && soundHeld" class="story-viewer__sound-hint" aria-hidden="true">
+					{{ t('social', 'Tap for sound') }}
+				</span>
+				<button
+					v-if="isVideo"
+					type="button"
+					class="story-viewer__sound"
+					:aria-label="silent ? t('social', 'Unmute') : t('social', 'Mute')"
+					@pointerdown.stop
+					@pointerup.stop
+					@click="toggleSound">
+					<IconVolumeOff v-if="silent" :size="20" />
+					<IconVolumeHigh v-else :size="20" />
+				</button>
 				<NcButton
 					v-if="isOwn"
 					variant="tertiary"
@@ -63,24 +78,25 @@
 			</header>
 
 			<div class="story-viewer__media">
+				<!-- one element for every video story of the viewer, hidden while
+				     a picture is up: WebKit lets an element play with sound only
+				     once a gesture has allowed it, and a story that moves on by
+				     itself is not a gesture -->
 				<video
-					v-if="story.media && story.media.type === 'video'"
+					v-show="isVideo"
 					ref="video"
-					:key="story.id"
 					class="story-viewer__video"
-					:src="story.media.url"
-					:aria-label="story.media.description || story.caption || ''"
-					autoplay
-					muted
+					:src="isVideo ? story.media.url : undefined"
+					:aria-label="isVideo ? (story.media.description || story.caption || '') : undefined"
 					playsinline
 					@ended="next" />
 				<img
-					v-else-if="story.media"
+					v-if="!isVideo && story.media"
 					:key="story.id"
 					class="story-viewer__image"
 					:src="story.media.url"
 					:alt="story.media.description || story.caption || ''">
-				<p v-else class="story-viewer__gone">
+				<p v-else-if="!isVideo" class="story-viewer__gone">
 					{{ t('social', 'The picture of this story is gone.') }}
 				</p>
 			</div>
@@ -160,7 +176,10 @@ import NcModal from '@nextcloud/vue/components/NcModal'
 import IconDelete from 'vue-material-design-icons/Delete.vue'
 import IconEye from 'vue-material-design-icons/Eye.vue'
 import IconSend from 'vue-material-design-icons/Send.vue'
+import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
+import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import ActorAvatar from './ActorAvatar.vue'
+import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
 import { useAccountStore } from '../store/account.js'
@@ -197,6 +216,8 @@ export default {
 		IconDelete,
 		IconEye,
 		IconSend,
+		IconVolumeHigh,
+		IconVolumeOff,
 		NcButton,
 		NcModal,
 	},
@@ -216,6 +237,12 @@ export default {
 	},
 
 	emits: ['close', 'seen', 'deleted'],
+
+	setup() {
+		const { muted, soundHeld, silent, playWithSound, toggleMute } = useSoundAutoplay()
+
+		return { muted, soundHeld, silent, playWithSound, toggleMute }
+	},
 
 	data() {
 		return {
@@ -246,6 +273,11 @@ export default {
 		/** @return {object|undefined} */
 		story() {
 			return this.group?.stories[this.storyIndex]
+		},
+
+		/** @return {boolean} whether the story on screen is a video */
+		isVideo() {
+			return this.story?.media?.type === 'video'
 		},
 
 		/** @return {boolean} whether the story on screen is the reader's own */
@@ -304,6 +336,7 @@ export default {
 				ArrowDown: () => this.nextGroup(),
 				ArrowUp: () => this.previousGroup(),
 				' ': () => (this.paused ? this.resume() : this.pause()),
+				m: () => this.toggleSound(),
 			}
 			const action = actions[event.key]
 			if (action) {
@@ -331,17 +364,23 @@ export default {
 
 			// a video runs for as long as it runs; a picture for the seconds
 			// its poster chose
-			if (this.story.media?.type === 'video') {
-				// the element is replaced per story and autoplays, so a story
-				// stepped to while the stage is held would start playing under
-				// a reader who is holding it still
+			if (this.isVideo) {
+				// once the element has the new story's src; a story stepped to
+				// while the stage is held stays still under the reader holding it
 				this.$nextTick(() => {
-					if (this.paused) {
-						this.videoElement()?.pause()
+					if (!this.paused) {
+						this.playWithSound(this.videoElement())
 					}
 				})
 
 				return
+			}
+
+			// the element stays for the next video story; hidden, it must not
+			// go on playing the last one
+			const video = this.$refs.video
+			if (video instanceof HTMLVideoElement) {
+				video.pause()
 			}
 
 			const duration = Math.max(3, Number(this.story.duration) || 5) * 1000
@@ -398,17 +437,22 @@ export default {
 
 			const video = this.videoElement()
 			if (video && video.paused && !video.ended) {
-				// a browser may refuse to play without a gesture; the story is
-				// still on screen either way
-				video.play()?.catch?.(() => {})
+				// a browser may refuse to play without a gesture, or refuse
+				// the sound; the story is still on screen either way
+				this.playWithSound(video)
 			}
+		},
+
+		/** The speaker, for this story and every video story after it. */
+		toggleSound() {
+			this.toggleMute(this.videoElement())
 		},
 
 		/** @return {HTMLVideoElement|null} the story's video, when it has one */
 		videoElement() {
 			const video = this.$refs.video
 
-			return video instanceof HTMLVideoElement ? video : null
+			return this.isVideo && video instanceof HTMLVideoElement ? video : null
 		},
 
 		/**
@@ -677,6 +721,64 @@ export default {
 .story-viewer__delete {
 	margin-inline-start: auto;
 	color: #fff !important;
+}
+
+// the same speaker as on Shorts, at the end of the head
+.story-viewer__sound {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	margin-inline-start: auto;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: rgba(0, 0, 0, 0.55);
+	color: #fff;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid #fff;
+		outline-offset: 2px;
+	}
+}
+
+.story-viewer__sound-hint {
+	margin-inline-start: auto;
+	padding: 3px 10px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.7);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+	pointer-events: none;
+	animation: story-viewer-hint-in 0.4s ease-out both;
+}
+
+// whichever comes first of hint, speaker and delete takes the free space
+.story-viewer__sound-hint + .story-viewer__sound,
+.story-viewer__sound + .story-viewer__delete {
+	margin-inline-start: 0;
+}
+
+@keyframes story-viewer-hint-in {
+	from {
+		opacity: 0;
+		transform: translateX(8px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.story-viewer__sound-hint {
+		animation: none;
+	}
 }
 
 .story-viewer__media {

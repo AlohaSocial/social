@@ -1,7 +1,7 @@
 {
 	"name": "social",
 	"description": "Nextcloud becomes part of the federated social networks!",
-	"version": "0.26.97",
+	"version": "0.26.105",
 	"authors": [
 		{
 			"name": "Benedikt Schächner",
@@ -90,7 +90,7 @@
 		"terser-webpack-plugin": "^5.6.1",
 		"ts-loader": "^9.6.2",
 		"typescript": "^5.9.3",
-		"vite": "^8.3.0",
+		"vite": "^8.3.1",
 		"vitest": "^5.0.0",
 		"vue-loader": "^17.4.2",
 		"vue-tsc": "^3.3.11",

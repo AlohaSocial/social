@@ -29,8 +29,14 @@ use Throwable;
  * are a day's work at this rate, which is the right speed for something that
  * makes old uploads travel better and is not urgent for any of them.
  *
- * Off unless an administrator turned it on. Re-encoding is lossy and it is
- * somebody's file.
+ * A new post does not wait for this: `Cron\TranscodeBeforeDelivery` converts
+ * the video a held post is waiting on at the next cron run. This is the sweep
+ * behind it — older uploads, a job that never ran, a server where the setting
+ * was switched on after the fact.
+ *
+ * On by default, and a no-op on a server without ffmpeg; an administrator can
+ * switch it off, because re-encoding is lossy and the converted file replaces
+ * the original.
  */
 class Transcode extends TimedJob {
 	public function __construct(

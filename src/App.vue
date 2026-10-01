@@ -81,8 +81,8 @@
 	</NcContent>
 	<NcContent v-else appName="social">
 		<NcAppContent v-if="serverData.isAdmin" class="setup">
-			<h2>{{ t('social', 'Social app setup') }}</h2>
-			<p>{{ t('social', 'ActivityPub requires a fixed URL to make entries unique. Note that this cannot be changed later without resetting the Social app.') }}</p>
+			<h2>{{ t('social', 'Aloha Social app setup') }}</h2>
+			<p>{{ t('social', 'ActivityPub requires a fixed URL to make entries unique. Note that this cannot be changed later without resetting the Aloha Social app.') }}</p>
 			<form @submit.prevent="setCloudAddress">
 				<p>
 					<label class="hidden" for="setup-cloud-address">
@@ -109,7 +109,7 @@
 			</form>
 		</NcAppContent>
 		<NcAppContent v-else class="setup">
-			<p>{{ t('social', 'The Social app needs to be set up by the server administrator.') }}</p>
+			<p>{{ t('social', 'The Aloha Social app needs to be set up by the server administrator.') }}</p>
 		</NcAppContent>
 	</NcContent>
 </template>

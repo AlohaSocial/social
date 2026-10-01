@@ -8,7 +8,7 @@ import { getRequestToken } from '@nextcloud/auth'
 import { generateUrl } from '@nextcloud/router'
 
 /**
- * The server's side of My interests: the reader's list, the settings that go
+ * The server's side of For you: the reader's list, the settings that go
  * with it, and the signals the web UI reports about what was read.
  *
  * Every mutation answers the whole state — settings, the ranked list, the

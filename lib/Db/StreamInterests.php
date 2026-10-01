@@ -14,7 +14,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
- * What My interests asks of the stream table.
+ * What For you asks of the stream table.
  *
  * Every read here is as the viewer and through the same visibility filter the
  * timelines use, including the reader's blocks and mutes: a post the reader
@@ -62,14 +62,20 @@ trait StreamInterests {
 	 * The tags are compared lowered, as the hashtag timeline compares them,
 	 * because `social_stream_tag` keeps them as they were written.
 	 *
+	 * `$media` narrows them to one kind, on the indexed `media_kind` column the
+	 * Photos and Videos timelines read: `photos` is a post with a picture in
+	 * it, `videos` one that is a video, `media` either (Mastodon's
+	 * `only_media`), and '' every post.
+	 *
 	 * @param string[] $tags normalised
 	 * @param string[] $excludeNids the posts the reader hid
 	 * @param string[] $languages empty for every language
+	 * @param string $media '', 'photos', 'videos' or 'media'
 	 *
 	 * @return list<array{nid: string, idPrim: string, tag: string, author: string}>
 	 */
 	public function interestCandidates(
-		array $tags, string $sinceNid, int $cap, array $excludeNids = [], array $languages = [],
+		array $tags, string $sinceNid, int $cap, array $excludeNids = [], array $languages = [], string $media = '',
 	): array {
 		if ($tags === [] || $this->viewer === null) {
 			return [];
@@ -81,6 +87,13 @@ trait StreamInterests {
 
 		$qb->limitToStatusTypes();
 		$qb->andWhere($expr->gt('s.nid', $qb->createNamedParameter($sinceNid)));
+		if ($media === 'photos') {
+			$qb->limitToMediaType('image');
+		} elseif ($media === 'videos') {
+			$qb->limitToVideo();
+		} elseif ($media === 'media') {
+			$qb->limitToMedia();
+		}
 
 		$qb->joinCacheActors('ca', 's.attributed_to_prim');
 		$qb->linkToStreamTags('st', 's.id_prim');

@@ -107,7 +107,7 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(wrapper.findAll('.settings__section-heading').map((h) => h.text()))
-			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Sound and touch', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Social account'])
+			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Sound and touch', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
 	})
 
 	/**
@@ -306,6 +306,6 @@ describe('Settings', () => {
 		const ids = on.findAll('.settings__section').map((section) => section.attributes('id'))
 		expect(ids.indexOf('interests')).toBe(ids.indexOf('featured-tags') + 1)
 		expect(on.find('#interests .interests-settings-stub').exists()).toBe(true)
-		expect(on.findAll('.settings__toc-link').map((link) => link.text())).toContain('My interests')
+		expect(on.findAll('.settings__toc-link').map((link) => link.text())).toContain('For you')
 	})
 })

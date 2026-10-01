@@ -269,6 +269,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->createStub(RelayRequest::class),
 			$this->createStub(\OCA\Social\Db\HostBreakerRequest::class),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
 		);
 		$service->manageInit();
 
@@ -310,7 +311,7 @@ class OutboundFederationWireTest extends TestCase {
 			array_keys($headers)
 		);
 
-		$this->assertSame('Nextcloud Social 0.17.0', $headers['user-agent']);
+		$this->assertSame('Aloha Social 0.17.0', $headers['user-agent']);
 		$this->assertSame((string)strlen($body), $headers['content-length']);
 		$this->assertRfc1123($headers['date']);
 		$this->assertSame(self::REMOTE, $headers['host']);
@@ -660,6 +661,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->unlimitedDomainQuota(),
 			$this->noExternalQuota(),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\VideoTranscodeService::class),
 		);
 
 		$service->retrieveContent('https://' . self::REMOTE . '/media/1.png?sig=abc');

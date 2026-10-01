@@ -6,7 +6,7 @@
 	<div class="social-admin">
 		<header class="social-admin__header">
 			<h1 class="social-admin__heading">
-				{{ t('social', 'Social') }}
+				{{ t('social', 'Aloha Social') }}
 			</h1>
 			<p class="social-admin__lede">
 				{{ t('social', 'Everything this server decides for itself: what is moderated, what people are shown, what is kept, and who it federates with.') }}
@@ -152,7 +152,7 @@ const NOTHING = {
 	reviewFirstPost: true,
 	autospam: true,
 	/**
-	 * My interests, or null where this instance does not offer it — the
+	 * For you, or null where this instance does not offer it — the
 	 * card and its section are drawn only when the server sends it
 	 * (`InterestService::adminSettings()`).
 	 *
@@ -294,7 +294,7 @@ export default {
 						...(this.state.sections ? [{ id: 'sections', title: t('social', 'Sections') }] : []),
 						// an administrator's decision, like the sections: a delegate is
 						// sent no settings for it
-						...(this.state.interests ? [{ id: 'interests', title: t('social', 'My interests') }] : []),
+						...(this.state.interests ? [{ id: 'interests', title: t('social', 'For you') }] : []),
 					],
 				},
 				{

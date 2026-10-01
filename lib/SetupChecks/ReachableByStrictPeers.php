@@ -50,7 +50,7 @@ class ReachableByStrictPeers implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: reachable by other servers');
+		return $this->l10n->t('Aloha Social: reachable by other servers');
 	}
 
 	#[\Override]
@@ -58,7 +58,7 @@ class ReachableByStrictPeers implements ISetupCheck {
 		$url = (string)$this->configService->getAppValue(ConfigService::SOCIAL_URL);
 		if ($url === '') {
 			return SetupResult::info(
-				$this->l10n->t('Social has not been set up yet.'), self::DOC
+				$this->l10n->t('Aloha Social has not been set up yet.'), self::DOC
 			);
 		}
 

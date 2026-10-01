@@ -293,7 +293,7 @@ class SocialMigratorTest extends TestCase {
 		$archive = $this->export();
 
 		$this->assertSame([], $archive->paths());
-		$this->assertStringContainsString('no Social account', $this->output->text());
+		$this->assertStringContainsString('no Aloha Social account', $this->output->text());
 	}
 
 	public function testTheArchiveHoldsExactlyTheFilesThisMigratorKnowsAbout(): void {
@@ -787,7 +787,7 @@ class SocialMigratorTest extends TestCase {
 
 		$this->importing($archive);
 
-		$this->assertStringContainsString('no Social account', $this->output->text());
+		$this->assertStringContainsString('no Aloha Social account', $this->output->text());
 	}
 
 	public function testTheProfileFlagsAndFieldsAreRestored(): void {

@@ -55,7 +55,7 @@ class Reset extends SocialCommand {
 				'force', 'f', InputOption::VALUE_NONE,
 				'skip the confirmation prompts (required with --no-interaction)'
 			)
-			->setDescription('Reset ALL data related to the Social App');
+			->setDescription('Reset ALL data related to the Aloha Social App');
 	}
 
 	/**
@@ -67,7 +67,7 @@ class Reset extends SocialCommand {
 	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$output->writeln(
-			'<error>Beware, this operation will delete all content from the Social App.</error>'
+			'<error>Beware, this operation will delete all content from the Aloha Social App.</error>'
 		);
 		$output->writeln('');
 
@@ -103,7 +103,7 @@ class Reset extends SocialCommand {
 		if ($input->getOption('uninstall')) {
 			try {
 				$output->writeln('');
-				$output->write('Uninstalling Social App...');
+				$output->write('Uninstalling Aloha Social App...');
 				$this->fullUninstall();
 				$output->writeln('<info>uninstalled</info>');
 			} catch (Exception $e) {

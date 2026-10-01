@@ -5,7 +5,7 @@
 <template>
 	<div v-if="account">
 		<div v-if="!serverData.local">
-			<h2>{{ t('social', 'Follow on Nextcloud Social') }}</h2>
+			<h2>{{ t('social', 'Follow on Aloha Social') }}</h2>
 			<p>{{ t('social', 'Hello') }} <ActorAvatar :actor="currentUserActor" :size="16" :link="false" />{{ currentUser.displayName }}</p>
 			<p v-if="!isFollowing">
 				{{ t('social', 'Please confirm that you want to follow this account:') }}

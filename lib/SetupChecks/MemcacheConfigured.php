@@ -38,19 +38,19 @@ class MemcacheConfigured implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: memory cache');
+		return $this->l10n->t('Aloha Social: memory cache');
 	}
 
 	#[\Override]
 	public function run(): SetupResult {
 		if ($this->cacheFactory->isAvailable()) {
 			return SetupResult::success(
-				$this->l10n->t('A memory cache is configured, so Social keeps its counters and caches in it.')
+				$this->l10n->t('A memory cache is configured, so Aloha Social keeps its counters and caches in it.')
 			);
 		}
 
 		return SetupResult::warning(
-			$this->l10n->t('No memory cache is configured (memcache.local or memcache.distributed). Social keeps its inbox throttle, its record of signatures already accepted and its duplicate-post protection in the database instead, which is slower, and works out the network figures, trends and suggestions again on every request. Configure APCu or Redis.'),
+			$this->l10n->t('No memory cache is configured (memcache.local or memcache.distributed). Aloha Social keeps its inbox throttle, its record of signatures already accepted and its duplicate-post protection in the database instead, which is slower, and works out the network figures, trends and suggestions again on every request. Configure APCu or Redis.'),
 			self::DOC
 		);
 	}

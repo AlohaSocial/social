@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { interestReason } from '../../../src/utils/interestReason.js'
 
-describe('why a post is in My interests', () => {
+describe('why a post is in For you', () => {
 	it.each([
 		['interest', 'Because you\'re interested in #photography', 'Why you\'re seeing this: interested in #photography'],
 		['followed', 'Because you follow #photography', 'Why you\'re seeing this: you follow #photography'],
@@ -34,6 +34,14 @@ describe('why a post is in My interests', () => {
 
 	it('takes a tag written with its #, and an unknown reason as interest', () => {
 		expect(interestReason({ tags: ['#film'], reason: 'mystery' }).text).toBe('Because you\'re interested in #film')
+	})
+
+	it('says a post no hashtag brought is popular, and links nowhere', () => {
+		expect(interestReason({ tags: [], reason: 'popular' })).toEqual({
+			tag: null,
+			text: 'Popular right now',
+			label: 'Why you\'re seeing this: popular right now',
+		})
 	})
 
 	it('has nothing to say without a tag', () => {

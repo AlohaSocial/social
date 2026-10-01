@@ -37,7 +37,7 @@ async function type(wrapper, index, value) {
 	await fields(wrapper)[index].find('input').setValue(value)
 }
 
-describe('the My interests card', () => {
+describe('the For you card', () => {
 	beforeEach(() => {
 		post.mockReset().mockImplementation((url, body) => Promise.resolve({ data: body }))
 		showError.mockReset()

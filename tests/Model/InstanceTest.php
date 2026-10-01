@@ -20,7 +20,7 @@ class InstanceTest extends TestCase {
 		$result = $instance->importFromDatabase([
 			'local' => '1',
 			'uri' => 'cloud.example.org',
-			'title' => 'Nextcloud Social',
+			'title' => 'Aloha Social',
 			'version' => '0.7.0',
 			'short_description' => 'short',
 			'description' => 'long',
@@ -36,7 +36,7 @@ class InstanceTest extends TestCase {
 		$this->assertSame($instance, $result);
 		$this->assertTrue($instance->isLocal());
 		$this->assertSame('cloud.example.org', $instance->getUri());
-		$this->assertSame('Nextcloud Social', $instance->getTitle());
+		$this->assertSame('Aloha Social', $instance->getTitle());
 		$this->assertSame('0.7.0', $instance->getVersion());
 		$this->assertSame('short', $instance->getShortDescription());
 		$this->assertSame('long', $instance->getDescription());
@@ -53,7 +53,7 @@ class InstanceTest extends TestCase {
 	private function populated(): Instance {
 		return (new Instance())
 			->setUri('cloud.example.org')
-			->setTitle('Nextcloud Social')
+			->setTitle('Aloha Social')
 			->setVersion('0.7.0')
 			->setShortDescription('short')
 			->setDescription('long')
@@ -76,10 +76,10 @@ class InstanceTest extends TestCase {
 		// by shape, not by identity
 		$this->assertEquals([
 			'uri' => 'cloud.example.org',
-			'title' => 'Nextcloud Social',
+			'title' => 'Aloha Social',
 			// Pleroma-style: clients gate features on the advertised version,
 			// so the claim has to be one this app can honour
-			'version' => '4.3.0 (compatible; Nextcloud Social 0.7.0)',
+			'version' => '4.3.0 (compatible; Aloha Social 0.7.0)',
 			'short_description' => 'short',
 			'description' => 'long',
 			'email' => 'admin@cloud.example.org',
@@ -116,8 +116,8 @@ class InstanceTest extends TestCase {
 		$v2 = json_decode((string)json_encode($this->populated()->asV2()), false);
 
 		$this->assertSame('cloud.example.org', $v2->domain);
-		$this->assertSame('Nextcloud Social', $v2->title);
-		$this->assertSame('4.3.0 (compatible; Nextcloud Social 0.7.0)', $v2->version);
+		$this->assertSame('Aloha Social', $v2->title);
+		$this->assertSame('4.3.0 (compatible; Aloha Social 0.7.0)', $v2->version);
 		$this->assertSame('short', $v2->description);
 		$this->assertSame('https://cloud.example.org/thumb.png', $v2->thumbnail->url);
 		$this->assertSame(3, $v2->usage->users->active_month);

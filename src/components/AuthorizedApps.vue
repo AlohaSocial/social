@@ -9,7 +9,7 @@
 		</p>
 
 		<p v-else-if="apps.length === 0" class="apps__hint">
-			{{ t('social', 'No app has been signed in to this account. Apps appear here when you sign in to one with your Social account.') }}
+			{{ t('social', 'No app has been signed in to this account. Apps appear here when you sign in to one with your Aloha Social account.') }}
 		</p>
 
 		<ul v-else class="apps__list">

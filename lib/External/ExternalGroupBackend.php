@@ -92,7 +92,7 @@ class ExternalGroupBackend extends ABackend implements
 
 	#[\Override]
 	public function getDisplayName(string $gid): string {
-		return ($gid === self::GROUP_ID) ? 'Social external users' : $gid;
+		return ($gid === self::GROUP_ID) ? 'Aloha Social external users' : $gid;
 	}
 
 	#[\Override]

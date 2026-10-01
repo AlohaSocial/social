@@ -5,11 +5,11 @@
 <template>
 	<NcSettingsSection
 		:name="t('social', 'External users')"
-		:description="t('social', 'Let people without an account on this server register one themselves. They log in through the normal login page and can use Social and nothing else: no Files, no Talk, no other app, and nobody outside Social can find them.')">
+		:description="t('social', 'Let people without an account on this server register one themselves. They log in through the normal login page and can use Aloha Social and nothing else: no Files, no Talk, no other app, and nobody outside Aloha Social can find them.')">
 		<NcNoteCard v-if="settings.enabled && !settings.restrictionIncludesExternals" type="warning">
-			<p>{{ t('social', 'Social is limited to some groups, and external users are not in them, so they could register and then not open Social.') }}</p>
+			<p>{{ t('social', 'Aloha Social is limited to some groups, and external users are not in them, so they could register and then not open Aloha Social.') }}</p>
 			<NcButton :disabled="saving" @click="allowInRestriction">
-				{{ t('social', 'Let external users open Social') }}
+				{{ t('social', 'Let external users open Aloha Social') }}
 			</NcButton>
 		</NcNoteCard>
 
@@ -240,7 +240,7 @@ export default {
 				const { data } = await axios.post(externalUrl('/restriction'))
 				this.$emit('changed', { ...this.external, settings: data })
 			} catch {
-				showError(t('social', 'Could not change who may open Social'))
+				showError(t('social', 'Could not change who may open Aloha Social'))
 			} finally {
 				this.saving = false
 			}

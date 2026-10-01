@@ -72,6 +72,14 @@ class Document extends ACore implements JsonSerializable {
 	 * per attachment.
 	 */
 	private int $laddered = 0;
+
+	/**
+	 * Whether this video has been through the transcoder: the four states of
+	 * `social_cache_doc.transcoded` (`VideoTranscodingWorker::NOT_LOOKED` …).
+	 * Carried so that a new post can tell whether its delivery has a
+	 * conversion to wait for.
+	 */
+	private int $transcoded = 0;
 	private array $localCopySize = [0, 0];
 	private array $resizedCopySize = [0, 0];
 
@@ -411,6 +419,7 @@ class Document extends ACore implements JsonSerializable {
 		$this->setBlurHash($this->get('blurhash', $data, ''));
 		$this->setSizeBytes($this->getInt('size', $data, 0));
 		$this->setLaddered($this->getInt('laddered', $data, 0));
+		$this->setTranscoded($this->getInt('transcoded', $data, 0));
 		$this->setDescription($this->get('description', $data, ''));
 		$this->setMediaType($this->get('media_type', $data, ''));
 		$this->setMimeType($this->get('mime_type', $data, ''));
@@ -466,7 +475,18 @@ class Document extends ACore implements JsonSerializable {
 		return $result;
 	}
 
+	/**
+	 * Where this instance serves its copy of the document, or '' while it has
+	 * none: a document that is still being fetched, or was refused. The route
+	 * cannot be built with an empty uuid -- the router throws, and every
+	 * account or post that carried such a document answered 500 -- and with
+	 * only an extension it named `/media/.jpeg`, which has no bytes behind it.
+	 */
 	public function getMediaUrl(IURLGenerator $urlGenerator, string $mime = ''): string {
+		if ($this->getLocalCopy() === '') {
+			return '';
+		}
+
 		$ext = '';
 		if ($mime !== '') {
 			$parts = explode('/', $mime, 2);
@@ -523,6 +543,16 @@ class Document extends ACore implements JsonSerializable {
 
 	public function setLaddered(int $laddered): self {
 		$this->laddered = $laddered;
+
+		return $this;
+	}
+
+	public function getTranscoded(): int {
+		return $this->transcoded;
+	}
+
+	public function setTranscoded(int $transcoded): self {
+		$this->transcoded = $transcoded;
 
 		return $this;
 	}
@@ -587,14 +617,12 @@ class Document extends ACore implements JsonSerializable {
 		$media->setSizeBytes($this->getSizeBytes());
 
 		if (!is_null($urlGenerator)) {
-			// A refused copy names nothing. `getMediaUrl()` builds
-			// `/media/{local_copy}{ext}` whatever `local_copy` says, so a
-			// document this instance could not cache went out as
+			// A refused copy names nothing. It used to go out as
 			// `/media/.jpeg` — a link to this server with no bytes behind it.
 			// Every client fetched it, every fetch 404'd, and a third-party
 			// one has no way to tell that from an attachment that is merely
 			// slow. Mastodon leaves the url off such an attachment; so does
-			// this. `remote_url` and `cache_error` below still say where it
+			// this, preview included. `remote_url` and `cache_error` below still say where it
 			// came from and why it was refused, which is what the reader is
 			// shown instead — the origin is deliberately not offered as a
 			// fallback, see MediaAttachment::asLocal().
