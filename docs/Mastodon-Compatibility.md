@@ -268,6 +268,13 @@ body is now read with `request_parse_body()` on PHP 8.4 and later and by the
 app's own parser on PHP 8.3. A body that cannot be read, and a picture that was
 sent and did not arrive, are a **422** with nothing written.
 
+Fixed in #2439: the alt text and focal point of a published post's media are
+edited the way Mastodon edits them, with `media_attributes` on
+`PUT /api/v1/statuses/:id`. Nothing read that field, and `PUT /api/v1/media/:id`
+changed only the upload while the post kept its own copy, so a description
+could only be fixed by deleting the post. That route now refuses an upload a
+post carries, as Mastodon's does.
+
 ---
 
 ## 4. The peer test

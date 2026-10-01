@@ -341,6 +341,14 @@ class MediaApiController extends MastodonApiController {
 			$this->initViewer(true);
 
 			$document = $this->ownDocument($nid);
+			// a post keeps its own copy of what it carries, and an edit is what
+			// tells the servers that hold it: changing the upload alone answered
+			// 200 while the post kept the old words. Mastodon refuses this too.
+			if ($this->documentService->isAttachedToAPostBy($document, $this->viewer->getId())) {
+				throw new InvalidActionException(
+					'this media is attached to a post; edit the post with media_attributes to change it'
+				);
+			}
 			$input = $this->convertInput(file_get_contents('php://input'));
 			if (array_key_exists('description', $input)) {
 				$document->setDescription((string)$input['description']);

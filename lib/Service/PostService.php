@@ -77,6 +77,7 @@ class PostService {
 		private LoggerInterface $logger,
 		private InterestService $interestService,
 		private VideoDeliveryHold $videoDeliveryHold,
+		private DocumentService $documentService,
 	) {
 	}
 
@@ -219,12 +220,15 @@ class PostService {
 	 * @param ?string $language the language the client sent, null or empty to
 	 *                          keep the post's; a post that never had one gets
 	 *                          the poster's default
+	 * @param list<array<string, mixed>> $mediaAttributes Mastodon's `media_attributes`:
+	 *                                                    the new description and focal
+	 *                                                    point of attachments the post carries
 	 *
 	 * @throws \Exception
 	 */
 	public function editPost(
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
-		?string $language = null,
+		?string $language = null, array $mediaAttributes = [],
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$stream = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
@@ -256,6 +260,14 @@ class PostService {
 			$stream->setSensitive($sensitive);
 		}
 		$stream->setLanguage($this->languageFor((string)$language, $actor, $stream->getLanguage()));
+
+		// a new list rather than changed objects: `$original` shares them, and
+		// the revision recorded below is the version with the old words
+		if ($mediaAttributes !== []) {
+			$stream->setAttachments($this->documentService->applyMediaAttributes(
+				$stream->getAttachments(), $actor->getPreferredUsername(), $mediaAttributes
+			));
+		}
 
 		// `published` stays the creation time. The edit used to be stamped
 		// there instead, and Mastodon — which reads an Update without
