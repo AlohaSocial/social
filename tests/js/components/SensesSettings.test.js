@@ -9,12 +9,15 @@ import SensesSettings from '../../../src/components/SensesSettings.vue'
 const senses = vi.hoisted(() => ({
 	sounds: false,
 	vibration: true,
+	videoSound: true,
 	play: vi.fn(),
 	buzz: vi.fn(),
 }))
 vi.mock('../../../src/services/senses.js', () => ({
 	soundsEnabled: () => senses.sounds,
 	vibrationEnabled: () => senses.vibration,
+	videoSoundEnabled: () => senses.videoSound,
+	setVideoSoundEnabled: (on) => { senses.videoSound = on },
 	setSoundsEnabled: (on) => { senses.sounds = on },
 	setVibrationEnabled: (on) => { senses.vibration = on },
 	play: senses.play,
@@ -27,6 +30,8 @@ describe('SensesSettings', () => {
 	beforeEach(() => {
 		senses.sounds = false
 		senses.vibration = true
+		senses.videoSound = true
+		window.sessionStorage.clear()
 		senses.play.mockReset()
 		senses.buzz.mockReset()
 	})
@@ -36,6 +41,18 @@ describe('SensesSettings', () => {
 
 		expect(switches(wrapper)[0].props('modelValue')).toBe(false)
 		expect(switches(wrapper)[1].props('modelValue')).toBe(true)
+		expect(switches(wrapper)[2].props('modelValue')).toBe(true)
+	})
+
+	/** the switch has to win over a mute made earlier in this tab, or it seems to do nothing */
+	it('keeps whether videos start with sound, and forgets the tab\'s own mute', async () => {
+		window.sessionStorage.setItem('social.videoMuted', '1')
+		const wrapper = mount(SensesSettings)
+
+		await switches(wrapper)[2].vm.$emit('update:modelValue', false)
+
+		expect(senses.videoSound).toBe(false)
+		expect(window.sessionStorage.getItem('social.videoMuted')).toBeNull()
 	})
 
 	/** turning sound on plays one, so the reader knows what they turned on */

@@ -15,7 +15,7 @@ vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
-vi.mock('../../../src/services/senses.js', () => ({ feel }))
+vi.mock('../../../src/services/senses.js', () => ({ feel, videoSoundEnabled: () => true }))
 
 /** The observers each mount made, so a test can fire one by hand. */
 let observers = []
@@ -66,6 +66,8 @@ async function mountReels(statuses = [video('1'), video('2')]) {
 describe('VideoReels', () => {
 	beforeEach(() => {
 		observers = []
+		// the mute choice is kept for the tab, and a test is a new tab
+		window.sessionStorage.clear()
 		vi.stubGlobal('IntersectionObserver', class {
 			constructor(callback) {
 				this.callback = callback
@@ -169,15 +171,41 @@ describe('VideoReels', () => {
 			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
 			.mockResolvedValue(undefined)
 
-		wrapper.vm.play(0)
+		await wrapper.vm.play(0)
 		await flushPromises()
 
-		expect(wrapper.vm.muted).toBe(true)
 		expect(first.muted).toBe(true)
 		expect(first.play).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('.reel__sound').attributes('aria-label')).toBe('Unmute')
 		expect(wrapper.find('.reel__sound-hint').text()).toBe('Tap for sound')
 
 		await wrapper.find('.reel__sound').trigger('click')
+		expect(first.muted).toBe(false)
+		expect(wrapper.find('.reel__sound').attributes('aria-label')).toBe('Mute')
+		expect(wrapper.find('.reel__sound-hint').exists()).toBe(false)
+	})
+
+	/**
+	 * A refusal is the browser's, not the reader's: on an iPhone the next
+	 * video after a scroll may be refused the sound too, and that must not
+	 * silence the rest of the stack for somebody who wanted to hear it.
+	 */
+	it('asks with sound again on the next slide after a refusal', async () => {
+		const { wrapper } = await mountReels()
+		const player = wrapper.find('video').element
+		player.play = vi.fn()
+			.mockRejectedValueOnce(Object.assign(new Error('no'), { name: 'NotAllowedError' }))
+			.mockResolvedValue(undefined)
+
+		await wrapper.vm.play(0)
+		await flushPromises()
+		expect(player.muted).toBe(true)
+
+		wrapper.vm.playing = 1
+		await wrapper.vm.play(1)
+		await flushPromises()
+
+		expect(player.muted).toBe(false)
 		expect(wrapper.vm.muted).toBe(false)
 		expect(wrapper.find('.reel__sound-hint').exists()).toBe(false)
 	})
@@ -197,24 +225,54 @@ describe('VideoReels', () => {
 	 * A dozen videos playing behind the one on screen is a phone getting hot
 	 * for nothing.
 	 */
-	it('plays the slide that is on screen and pauses every other one', async () => {
-		const { wrapper } = await mountReels()
-		const videos = wrapper.findAll('video').map((one) => one.element)
+	it('has one video element for the whole stack, and posters for the rest', async () => {
+		const { wrapper } = await mountReels([
+			video('1', { attachments: [{ id: 'a', type: 'video', url: 'https://cloud.example/a.mp4', preview_url: 'https://cloud.example/a.jpg' }] }),
+			video('2', { attachments: [{ id: 'b', type: 'video', url: 'https://cloud.example/b.mp4', preview_url: 'https://cloud.example/b.jpg' }] }),
+			video('3'),
+		])
 
-		wrapper.vm.play(1)
-
-		expect(videos[1].play).toHaveBeenCalled()
-		expect(videos[0].pause).toHaveBeenCalled()
+		expect(wrapper.findAll('.reel')).toHaveLength(3)
+		expect(wrapper.findAll('video')).toHaveLength(1)
+		expect(wrapper.findAll('.reel__poster').map((img) => img.attributes('src')).sort())
+			.toEqual(['https://cloud.example/a.jpg', 'https://cloud.example/b.jpg'])
 	})
 
-	it('rewinds a video it scrolled past, so coming back is the video again', async () => {
+	/**
+	 * The element a tap once allowed to play with sound is the one that
+	 * plays the next video, so WebKit has no new element to refuse.
+	 */
+	it('moves the one player to the slide on screen and plays that slide', async () => {
+		const { wrapper, store } = await mountReels([video('1'), video('2'), video('3'), video('4'), video('5')])
+		const player = wrapper.find('video').element
+		expect(player.getAttribute('src')).toBe(wrapper.vm.reels[0].video.url)
+		store.fetchTimeline.mockClear()
+
+		observers[0].callback([{ isIntersecting: true, target: wrapper.vm.slides[1] }])
+		await flushPromises()
+
+		const now = wrapper.find('video')
+		expect(now.element).toBe(player)
+		expect(now.attributes('src')).toBe(wrapper.vm.reels[1].video.url)
+		expect(now.attributes('src')).not.toBe(wrapper.vm.reels[0].video.url)
+		expect(now.attributes('style')).toContain('--at: 1')
+		expect(player.play).toHaveBeenCalled()
+		expect(wrapper.vm.playing).toBe(1)
+		expect(store.fetchTimeline).not.toHaveBeenCalled()
+	})
+
+	it('keeps the sound as it was when the player moves on', async () => {
 		const { wrapper } = await mountReels()
-		const first = wrapper.findAll('video')[0].element
-		Object.defineProperty(first, 'currentTime', { value: 12, writable: true })
+		const player = wrapper.find('video').element
 
-		wrapper.vm.play(1)
+		await wrapper.find('.reel__sound').trigger('click')
+		expect(player.muted).toBe(true)
 
-		expect(first.currentTime).toBe(0)
+		observers[0].callback([{ isIntersecting: true, target: wrapper.vm.slides[1] }])
+		await flushPromises()
+
+		expect(player.muted).toBe(true)
+		expect(wrapper.findAll('.reel__sound')[1].attributes('aria-label')).toBe('Unmute')
 	})
 
 	/** The sound is a statement about the page, not about one video. */

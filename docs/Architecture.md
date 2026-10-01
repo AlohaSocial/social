@@ -29,7 +29,7 @@ Nextcloud Social is a federated social networking app built on the W3C ActivityP
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.99
+**App version:** 0.26.100
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -81,7 +81,7 @@ social/
 │   ├── views/                  # Route- and entry-level components
 │   ├── components/             # UI components (`.vue`, plus MessageContent.js)
 │   ├── services/               # eventBus, logger, notifications, clock, draft, shortcuts
-│   ├── composables/            # useAccount, useCurrentUser, useServerData
+│   ├── composables/            # useAccount, useCurrentUser, useServerData, useSoundAutoplay, …
 │   ├── directives/             # focusOnCreate
 │   ├── utils/                  # sanitizeHtml (+ its unit test), dominantColour, emojiCodePoint, instanceIdentity, relativeTime, viewTransition
 │   └── types/                  # JSDoc type definitions (ActivityPub, Mastodon)
@@ -1779,6 +1779,22 @@ on a like before the switch existed), and `buzz()` also answers
 `prefers-reduced-motion`. The DM chime rides on
 `fetchUnreadDirectMessages()`: it sounds when the count rises, never for the
 first count a page reads. `SensesSettings.vue` is the Settings section.
+
+**Videos with sound.** `src/composables/useSoundAutoplay.js` is shared by Shorts
+(`VideoReels.vue`) and the story player (`StoryViewer.vue`). It plays a video
+with sound; when `play()` is rejected with `NotAllowedError` it plays it muted
+once more and sets `soundHeld`, which draws the "Tap for sound" hint. `muted`
+is the reader's choice and `soundHeld` only the browser's refusal for the video
+playing now, so the next video is asked with sound again. The choice is kept in
+`sessionStorage` (`userKey('social.videoMuted')`); without one, the
+per-device **Start videos with sound** switch (`videoSoundEnabled()` in
+`senses.js`, on by default) decides. WebKit allows sound per element, only once
+a gesture has allowed that element, and a scroll is not a gesture. So Shorts
+has **one** `<video>` that sits absolutely over the slide on screen
+(`--at: playing`) and swaps its `src`, while the other slides show their
+`preview_url` as an `<img>`. The story player likewise keeps one `<video>`,
+behind `v-show`, for every video story instead of one keyed per story, and
+starts it itself instead of through `autoplay`.
 
 **Words and stickers drawn to a picture.** `src/utils/textCard.js` draws a text
 card (a story at 1080×1920, a post at 1080×1080) and bakes stickers into a
