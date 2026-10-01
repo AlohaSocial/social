@@ -82,9 +82,8 @@
 
 		<!-- Pictures only: there is nothing a filter could do to a video or an
 		     audio file, and offering one would be a button that does nothing.
-		     Not until the upload has landed either: choosing a filter replaces
-		     the uploaded copy, and starting that while the first upload is
-		     still in flight is a race with no winner. -->
+		     Not until the upload has landed either: the filtered copy baked in
+		     as the post is sent takes that upload's place. -->
 		<FilterPicker
 			v-if="!preview.failed && isPicture && preview.data"
 			class="preview-item__filters"

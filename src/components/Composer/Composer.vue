@@ -1541,6 +1541,14 @@ export default {
 				return
 			}
 
+			// filters are baked in here, once, and the filtered copies take
+			// the place of the uploads before their ids are read below
+			this.loading = true
+			if (!(await this.bakeFilters())) {
+				this.loading = false
+				return
+			}
+
 			// the games are played before anything is sent, so the result is
 			// part of the post and every server shows the same one
 			const played = resolveCommands(this.plainText())

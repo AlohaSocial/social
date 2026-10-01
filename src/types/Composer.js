@@ -13,6 +13,8 @@
  * @property {string} [saved] - the alt text the server already holds, so an unchanged one is not written again
  * @property {?import('../utils/focalPoint.js').FocalPoint} [focus] - the focal point; absent until one is set
  * @property {string} [filter] - the picture filter chosen, 'none' or absent for the picture as it was
+ * @property {string} [bakedFilter] - the filter `data` was uploaded with, absent for none; the filter is baked in as the post is sent
+ * @property {?import('./Mastodon.js').MediaAttachment} [unfiltered] - the upload made on attaching, kept once a filtered copy has replaced it
  */
 
 export {}

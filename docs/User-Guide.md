@@ -148,7 +148,11 @@ network hiccup.
   has **Share to Social** for the same thing. Every picture has its Exif
   metadata (including the location a phone writes) removed before it is
   stored or sent anywhere. A picture can be given one of eight mild filters,
-  previewed live and baked into the copy that is posted.
+  previewed live and baked into the copy that is posted when you press Post,
+  in every browser, Safari and iPhone included. A photo larger than 4096 pixels
+  on its longest side, or larger than the size your server takes, is made
+  smaller before it is uploaded. Animated GIFs and WebPs are never changed, so
+  one that is too large is refused before it is sent.
 - **The GIF button** opens a picker with 881 animated emoji in it, searchable by
   name — "party", "sad", "hedgehog" — plus whatever your administrator has added
   for this instance, which comes first. Nothing you type goes anywhere but your

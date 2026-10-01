@@ -251,6 +251,8 @@ OC.L10N.register(
     "Post as" : "Veröffentlichen als",
     "As myself" : "Als ich selbst",
     "Attaching…" : "Wird angehängt…",
+    "Applying filters…" : "Filter werden angewendet…",
+    "This file is larger than the {size} MB this server takes" : "Diese Datei ist größer als die {size} MB, die dieser Server annimmt",
     "You are reading this as a visitor." : "Du siehst diese Seite als Gast.",
     "Log in to {host}" : "Bei {host} anmelden",
     "Search …" : "Suche …",

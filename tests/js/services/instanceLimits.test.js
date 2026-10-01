@@ -37,12 +37,20 @@ describe('the server\'s limits', () => {
 
 		it('reads both numbers out of the instance entity', () => {
 			expect(limitsFrom(instance({ max_characters: 1000, max_media_attachments: 4 })))
-				.toEqual({ maxCharacters: 1000, maxAttachments: 4, translation: false })
+				.toEqual({ maxCharacters: 1000, maxAttachments: 4, imageSizeLimit: 10485760, translation: false })
+		})
+
+		/** what the composer shrinks a picture to before it uploads it */
+		it('reads the upload ceiling out of the instance entity', () => {
+			expect(limitsFrom({ configuration: { media_attachments: { image_size_limit: 20971520 } } }).imageSizeLimit)
+				.toBe(20971520)
+			expect(limitsFrom({ configuration: { media_attachments: { image_size_limit: 0 } } }).imageSizeLimit)
+				.toBe(10485760)
 		})
 
 		it('takes strings, as a JSON entity may carry them', () => {
 			expect(limitsFrom(instance({ max_characters: '750', max_media_attachments: '6' })))
-				.toEqual({ maxCharacters: 750, maxAttachments: 6, translation: false })
+				.toEqual({ maxCharacters: 750, maxAttachments: 6, imageSizeLimit: 10485760, translation: false })
 		})
 
 		it.each([
@@ -52,7 +60,7 @@ describe('the server\'s limits', () => {
 			['nonsense', instance({ max_characters: 'lots', max_media_attachments: -3 })],
 			['fractions', instance({ max_characters: 12.5, max_media_attachments: 2.5 })],
 		])('falls back to the old constants for %s', (_, entity) => {
-			expect(limitsFrom(entity)).toEqual({ maxCharacters: 500, maxAttachments: 10, translation: false })
+			expect(limitsFrom(entity)).toEqual({ maxCharacters: 500, maxAttachments: 10, imageSizeLimit: 10485760, translation: false })
 		})
 	})
 
@@ -72,7 +80,7 @@ describe('the server\'s limits', () => {
 				'/index.php/apps/social/api/v1/instance/',
 				{ credentials: 'same-origin', headers: { Accept: 'application/json' } },
 			)
-			expect(first).toEqual({ maxCharacters: 2000, maxAttachments: 8, translation: false })
+			expect(first).toEqual({ maxCharacters: 2000, maxAttachments: 8, imageSizeLimit: 10485760, translation: false })
 			expect(second).toBe(first)
 			expect(knownLimits()).toEqual(first)
 		})

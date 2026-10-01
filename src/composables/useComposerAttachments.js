@@ -10,7 +10,7 @@ import { showError } from '../services/toast.js'
 import { useInstanceStore } from '../store/instance.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { focusParam, isFocalPoint } from '../utils/focalPoint.js'
-import { applyFilterToFile } from '../utils/imageFilters.js'
+import { isFilterActive, prepareImage } from '../utils/imageFilters.js'
 
 /**
  * What the composer takes as an attachment. The file dialog is given these
@@ -46,13 +46,6 @@ const ACCEPTED_DOCUMENT_EXTENSIONS = ['.pdf', '.txt', '.md', '.csv', '.zip', '.e
  * out of a folder tree is not what this button is for.
  */
 const PICKABLE_MEDIA_TYPES = ['image/*', 'video/*', ...ACCEPTED_DOCUMENT_TYPES]
-
-/**
- * How long to wait before uploading a filtered copy. Flicking through the
- * filters to see them is the normal way to use them, and each stop should not
- * be an upload.
- */
-const FILTER_DEBOUNCE = 600
 
 /** how long the card says no for, in step with the refusal in TimelinePost */
 const REFUSAL_DURATION = 400
@@ -91,8 +84,6 @@ export function useComposerAttachments({ expand, root }) {
 	const draggingFiles = ref(false)
 	/** briefly true after a drop of something the composer cannot take */
 	const refusedDrop = ref(false)
-	/** pending re-uploads, one per attachment, keyed by its object URL */
-	const filterTimers = {}
 	/** when the refused-drop notice goes away */
 	let refusalTimer = null
 
@@ -464,16 +455,9 @@ export function useComposerAttachments({ expand, root }) {
 	}
 
 	/**
-	 * Bakes a filter into an attachment and replaces the uploaded copy.
-	 *
-	 * The picture was uploaded the moment it was attached, so choosing a
-	 * filter has to replace what is on the server -- the alternative, baking
-	 * every filter in at send time, would upload each picture twice and make
-	 * pressing Post the slow part.
-	 *
-	 * Debounced, because flicking through eight filters to see them is the
-	 * normal way to use this and should not be eight uploads. The preview is
-	 * CSS and updates immediately either way, so the wait is invisible.
+	 * Remembers the filter chosen for an attachment. Nothing is uploaded:
+	 * the preview is CSS and updates at once, and the filter is baked in
+	 * once, as the post is sent (`bakeFilters()`).
 	 *
 	 * @param {object} change what was chosen
 	 * @param {string} change.key the attachment's object URL
@@ -489,57 +473,123 @@ export function useComposerAttachments({ expand, root }) {
 			...attachments.value,
 			[key]: { ...attachment, filter },
 		}
-
-		window.clearTimeout(filterTimers[key])
-		filterTimers[key] = window.setTimeout(() => {
-			reuploadFiltered(key)
-		}, FILTER_DEBOUNCE)
 	}
 
 	/**
-	 * @param {string} key the attachment's object URL
+	 * Bakes each attachment's filter in and puts the filtered copy in place
+	 * of the upload, just before the post is sent.
+	 *
+	 * At send rather than when the choice settles: a settle is a guess at
+	 * when somebody has finished choosing, and every wrong guess was another
+	 * full upload, with a race against Post while it was in flight. Here each
+	 * filtered picture is uploaded exactly once more, and the post cannot go
+	 * out carrying the copy it was meant to replace. The upload made on
+	 * attaching stays what the post carries when no filter is chosen, and is
+	 * what descriptions and focal points are saved against until then.
+	 *
+	 * A picture the browser could not filter comes back as it was and is
+	 * posted as it was, as a filter is a decoration.
+	 *
+	 * @return {Promise<boolean>} false when a filtered copy would not upload,
+	 *         so the post should not go out without it
 	 */
-	async function reuploadFiltered(key) {
+	async function bakeFilters() {
+		const pending = Object.keys(attachments.value).filter((key) => {
+			const attachment = attachments.value[key]
+			return attachment.file instanceof File
+				&& attachment.data?.id !== undefined
+				&& (attachment.bakedFilter ?? 'none') !== chosenFilter(attachment)
+		})
+		if (pending.length === 0) {
+			return true
+		}
+
+		uploading.value = true
+		progressLabel.value = translate('social', 'Applying filters…')
+		try {
+			for (const [index, key] of pending.entries()) {
+				uploadProgress.value = index / pending.length
+				if (!(await bakeFilter(key))) {
+					return false
+				}
+			}
+		} finally {
+			uploading.value = false
+			uploadProgress.value = 0
+			progressLabel.value = ''
+		}
+
+		return true
+	}
+
+	/**
+	 * @param {import('../types/Composer.js').LocalAttachment} attachment an attachment
+	 * @return {string} the filter it should be posted with, 'none' for none
+	 */
+	function chosenFilter(attachment) {
+		return isFilterActive(attachment.filter) ? attachment.filter : 'none'
+	}
+
+	/**
+	 * Puts the copy an attachment's filter asks for in place of its upload.
+	 *
+	 * The upload made on attaching is kept as `unfiltered`, so that going
+	 * back to Original after a post that did not go out posts that upload
+	 * again rather than the filtered one.
+	 *
+	 * @param {string} key the attachment's object URL
+	 * @return {Promise<boolean>} whether the attachment is ready to be posted
+	 */
+	async function bakeFilter(key) {
 		const attachment = attachments.value[key]
-		if (attachment?.file === undefined) {
-			return
+		const filter = chosenFilter(attachment)
+		const unfiltered = attachment.unfiltered ?? attachment.data
+
+		let mediaData = unfiltered
+		if (filter !== 'none') {
+			const filtered = await prepareImage(attachment.file, {
+				filter,
+				sizeLimit: instanceStore.imageSizeLimit,
+			})
+			if (filtered === attachment.file) {
+				// the browser could not draw it; posted as it is
+				return true
+			}
+
+			mediaData = await timelineStore.createMedia({ file: filtered })
+			if (mediaData?.id === undefined) {
+				logger.warn('Could not upload the filtered copy')
+				return false
+			}
 		}
 
-		const filtered = await applyFilterToFile(attachment.file, attachment.filter || 'none')
-		// still there? the reader may have deleted it while this ran
-		if (attachments.value[key] === undefined) {
-			return
-		}
-
-		const mediaData = await timelineStore.createMedia({ file: filtered })
-		if (attachments.value[key] === undefined) {
-			return
-		}
-
-		if (mediaData?.id === undefined) {
-			// the filtered copy would not upload; the unfiltered one is
-			// still attached and still perfectly postable
-			logger.warn('Could not upload the filtered copy; keeping the original')
-
-			return
+		const current = attachments.value[key]
+		if (current === undefined) {
+			return true
 		}
 
 		// the description was typed against this picture and belongs to it
-		// rather than to the upload it happened to be stored as
-		const description = (attachment.description || '').trim()
-		if (description !== '') {
-			timelineStore.describeMedia({ id: mediaData.id, description })
-		}
-		// and so does the focal point: a filter changes the colours, not
-		// where the face is
-		if (isFocalPoint(attachment.focus)) {
-			timelineStore.focusMedia({ id: mediaData.id, focus: focusParam(attachment.focus) })
-		}
+		// rather than to the upload it happened to be stored as, and so does
+		// the focal point: a filter changes the colours, not where the face is
+		const description = (current.description || '').trim()
+		await Promise.all([
+			description !== '' ? timelineStore.describeMedia({ id: mediaData.id, description }) : null,
+			isFocalPoint(current.focus) ? timelineStore.focusMedia({ id: mediaData.id, focus: focusParam(current.focus) }) : null,
+		])
 
 		attachments.value = {
 			...attachments.value,
-			[key]: { ...attachments.value[key], data: mediaData, failed: false },
+			[key]: {
+				...current,
+				data: mediaData,
+				unfiltered,
+				failed: false,
+				bakedFilter: filter,
+				saved: description !== '' ? description : current.saved,
+			},
 		}
+
+		return true
 	}
 
 	/**
@@ -566,8 +616,21 @@ export function useComposerAttachments({ expand, root }) {
 			// real progress, from the request itself: the bar used to be
 			// hard-coded to 40% behind a `v-if="false"`
 			uploadProgress.value = index / files.length
+			const upload = await fitForUpload(file)
+			if (upload === null) {
+				uploading.value = false
+				uploadProgress.value = 0
+				if (attachments.value[url] !== undefined) {
+					attachments.value = {
+						...attachments.value,
+						[url]: { ...attachments.value[url], failed: true },
+					}
+				}
+				continue
+			}
+
 			const mediaData = await timelineStore.createMedia({
-				file,
+				file: upload,
 				onProgress: (fraction) => {
 					uploadProgress.value = (index + fraction) / files.length
 				},
@@ -592,6 +655,34 @@ export function useComposerAttachments({ expand, root }) {
 			}
 		}
 		progressLabel.value = ''
+	}
+
+	/**
+	 * What of a file is uploaded: the file itself, or a picture shrunk to
+	 * what the server and the canvas take, or nothing.
+	 *
+	 * The server holds every upload that is not a video to one size limit
+	 * and says so only after all of it has arrived; a picture is shrunk
+	 * before it goes (`prepareImage()`), and anything still over the limit
+	 * is refused here, where it costs nobody an upload. The file kept on the
+	 * attachment is the original, so a filter chosen later is drawn from it
+	 * rather than from a copy already compressed once.
+	 *
+	 * @param {File} file what was attached
+	 * @return {Promise<File|null>} what to upload, or null when it is too large
+	 */
+	async function fitForUpload(file) {
+		const limit = instanceStore.imageSizeLimit
+		const upload = await prepareImage(file, { sizeLimit: limit })
+		if ((upload.type || '').startsWith('video/') || limit <= 0 || upload.size <= limit) {
+			return upload
+		}
+
+		showError(translate('social', 'This file is larger than the {size} MB this server takes', {
+			size: Math.floor(limit / 1048576),
+		}))
+
+		return null
 	}
 
 	/**
@@ -793,6 +884,7 @@ export function useComposerAttachments({ expand, root }) {
 		attachPaths,
 		attachFiles,
 		applyFilter,
+		bakeFilters,
 		deletePreview,
 		saveDescriptions,
 		commitDescription,

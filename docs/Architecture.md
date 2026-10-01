@@ -29,7 +29,7 @@ Nextcloud Social is a federated social networking app built on the W3C ActivityP
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.98
+**App version:** 0.26.99
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1734,7 +1734,9 @@ was read.
 nothing kept them so. `src/services/instanceLimits.js` reads them from
 `GET /api/v1/instance` (`configuration.statuses.max_characters`,
 `max_media_attachments`), once per page, with the old constants as the fallback
-a failure leaves standing. It is framework-free — no Vue, no Pinia, no axios —
+a failure leaves standing. It reads the upload ceiling too
+(`media_attachments.image_size_limit`, the `max_size` app value, 10 MB until
+known), which the composer shrinks pictures to before they are sent. It is framework-free — no Vue, no Pinia, no axios —
 because the Files action is loaded on every Files page without any of them;
 `src/store/instance.js` is the reactive face of it for the components.
 
@@ -1787,6 +1789,34 @@ Pixelfed reader gets a picture. The words travel as the picture's description
 the layout, kept pure for the tests; the drawing returns `null`, or the original
 file for stickers, where a browser cannot draw, and the caller says so rather
 than posting something other than what was on screen.
+
+**Picture filters, and pictures too large to send.** `src/utils/imageFilters.js`
+holds each filter as a list of `[function, amount]` steps (`grayscale`, `sepia`,
+`saturate`, `hue-rotate`, `brightness`, `contrast`). The preview is the CSS built
+from those steps on an `<img>`; `prepareImage()` bakes the same steps in on a
+canvas. Where the 2D canvas really applies `filter` it is handed the same CSS.
+That is found out by drawing a red pixel through `grayscale(1)` and reading it
+back, once per page, because WebKit has the property and ignores it. Elsewhere
+the steps are worked out per pixel: the Filter Effects spec's own matrices and
+linear transfer functions, in sRGB 0..1, clamped after each step, alpha left
+alone, a band of rows at a time. Before any of that the picture is decoded with
+`imageOrientation: 'from-image'` (a canvas copy carries no EXIF) and drawn at a
+longest edge of at most 4096 px, because iOS will not make a canvas over 16.7 M
+pixels. With no filter, a picture within 4096 px and the instance's
+`image_size_limit` is uploaded exactly as it was chosen. A larger one is drawn
+at 4096 px, then smaller a step at a time while the encoded copy is still over
+the limit. PNG stays PNG, and GIF and WebP are never drawn, since a canvas would
+keep one frame of an animation. `useComposerAttachments` refuses a file that is
+not a video and is still over the limit before uploading it, which is the same
+check the server would make after the whole upload. The server's own
+`image_max_edge` resize still applies afterwards. Choosing a filter uploads
+nothing. `bakeFilters()` runs as Post is pressed, before the media ids are read:
+each filtered picture is uploaded once, its description and focal point are
+written to the new upload, and that upload takes the first one's place in the
+post. The first upload is kept, so taking the filter off again after a post that
+failed posts it again. A copy that will not upload holds the post back rather
+than sending the picture unfiltered. The first upload of a filtered picture is
+left on the server unattached.
 
 **The games.** `src/utils/composerCommands.js` resolves `/dice [n]`, `/roll`,
 `/flip` and `/pick a, b` in `Composer::createPost()` before anything is sent, so
