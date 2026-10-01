@@ -22,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
@@ -29,6 +30,7 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\LinkPreviewService;
@@ -80,10 +82,12 @@ class PostServiceTest extends TestCase {
 
 	private \OCA\Social\Service\InterestService|MockObject $interestService;
 	private \OCA\Social\Service\VideoDeliveryHold|MockObject $videoDeliveryHold;
+	private DocumentService|MockObject $documentService;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
 		$this->videoDeliveryHold = $this->createMock(\OCA\Social\Service\VideoDeliveryHold::class);
+		$this->documentService = $this->createMock(DocumentService::class);
 		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
@@ -145,6 +149,7 @@ class PostServiceTest extends TestCase {
 			new NullLogger(),
 			$this->interestService,
 			$this->videoDeliveryHold,
+			$this->documentService,
 		);
 	}
 
@@ -900,6 +905,48 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(self::ACTOR_ID, $paths[0]->getUri());
 		$this->assertSame(InstancePath::TYPE_FOLLOWERS, $paths[0]->getType());
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
+	}
+
+	/**
+	 * Mastodon edits the alt text of a published post's media through the
+	 * edit itself; nothing read `media_attributes`, so a description could only
+	 * be fixed by deleting the post.
+	 */
+	public function testAnEditRewritesTheDescriptionsOfThePostsOwnMedia(): void {
+		$stored = $this->storedNote();
+		$old = (new MediaAttachment())->setId('11')->setDescription('Old words');
+		$stored->setAttachments([$old]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$new = (new MediaAttachment())->setId('11')->setDescription('New words');
+		$attributes = [['id' => '11', 'description' => 'New words']];
+		$this->documentService->expects($this->once())->method('applyMediaAttributes')
+			->with([$old], 'alice', $attributes)
+			->willReturn([$new]);
+
+		$revisions = [];
+		$this->revisionService->method('recordEdit')->willReturnCallback(
+			function (Stream $before, Stream $after) use (&$revisions): void {
+				$revisions[] = $before->getAttachments()[0]->getDescription();
+			}
+		);
+
+		$this->service->editPost(7, $this->actor(), 'old', null, null, null, $attributes);
+
+		$this->assertSame([$new], $stored->getAttachments());
+		$this->assertSame(['Old words'], $revisions, 'the revision is the version the edit replaced');
+	}
+
+	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->documentService->expects($this->never())->method('applyMediaAttributes');
+
+		$this->service->editPost(7, $this->actor(), 'new words');
 	}
 
 	/**

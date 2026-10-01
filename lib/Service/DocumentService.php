@@ -28,6 +28,7 @@ use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\VideoRendition;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -700,6 +701,71 @@ class DocumentService {
 	 */
 	public function updateDescription(Document $document): void {
 		$this->cacheDocumentsRequest->updateDescription($document);
+	}
+
+	/**
+	 * Applies Mastodon's `media_attributes` to the attachments of a post being
+	 * edited: the description and the focal point of each one it names.
+	 *
+	 * Only the post's own attachments, and only documents `$account` uploaded:
+	 * an id the post does not carry is ignored, as Mastodon ignores it. Each
+	 * document is updated first, so a later rebuild of the post's copies (a
+	 * poster frame, a conversion) does not bring the old words back, and the
+	 * copy is then rebuilt from it the way `StreamRequest` rebuilds one.
+	 *
+	 * @param MediaAttachment[] $attachments the post's attachments
+	 * @param list<array<string, mixed>> $attributes `id` and `description` and/or `focus` each
+	 *
+	 * @return MediaAttachment[] the same list, the changed ones rebuilt
+	 */
+	public function applyMediaAttributes(array $attachments, string $account, array $attributes): array {
+		$carried = array_map(static fn (MediaAttachment $attachment): string => $attachment->getId(), $attachments);
+
+		$wanted = [];
+		foreach ($attributes as $attribute) {
+			$id = (string)($attribute['id'] ?? '');
+			if ($id !== '' && in_array($id, $carried, true)) {
+				$wanted[$id] = $attribute;
+			}
+		}
+		if ($wanted === []) {
+			return $attachments;
+		}
+
+		$rebuilt = [];
+		foreach ($this->getMediaFromArray(array_keys($wanted), $account) as $document) {
+			$attribute = $wanted[(string)$document->getNid()] ?? null;
+			if ($attribute === null) {
+				continue;
+			}
+
+			if (array_key_exists('description', $attribute)) {
+				$document->setDescription((string)$attribute['description']);
+				$this->updateDescription($document);
+			}
+			$focus = array_key_exists('focus', $attribute) ? Document::parseFocus((string)$attribute['focus']) : null;
+			if ($focus !== null) {
+				$this->updateFocus($document, $focus[0], $focus[1]);
+			}
+
+			$rebuilt[(string)$document->getNid()] = $document->convertToMediaAttachment($this->urlGenerator);
+		}
+
+		return array_map(
+			static fn (MediaAttachment $attachment): MediaAttachment => $rebuilt[$attachment->getId()] ?? $attachment,
+			$attachments
+		);
+	}
+
+	/**
+	 * Whether one of `$actorId`'s posts carries this upload.
+	 *
+	 * An upload is not tied to its post by `parent_id` (it exists before the
+	 * post does), so the post is found by its stored copy, which is keyed by
+	 * the document's nid.
+	 */
+	public function isAttachedToAPostBy(Document $document, string $actorId): bool {
+		return $this->streamRequest->carriesUpload($actorId, (string)$document->getNid());
 	}
 
 	/**

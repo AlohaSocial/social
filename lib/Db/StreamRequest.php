@@ -421,6 +421,29 @@ class StreamRequest extends StreamRequestBuilder {
 		return $rows;
 	}
 
+	/**
+	 * Whether one of `$actorId`'s posts carries the upload with this nid in
+	 * its stored attachment copies. Narrowed by the author first, which is
+	 * indexed, before the copies are matched.
+	 */
+	public function carriesUpload(string $actorId, string $nid): bool {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('nid')
+			->from(self::TABLE_STREAM)
+			->setMaxResults(1);
+		$qb->limitToAttributedTo($actorId, true);
+		$qb->andWhere($expr->like('attachments', $qb->createNamedParameter(
+			'%"id":"' . $this->dbConnection->escapeLikeParameter($nid) . '"%'
+		)));
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetch() !== false;
+		$cursor->closeCursor();
+
+		return $found;
+	}
+
 	/** Replaces one post's stored attachment copies with the JSON given. */
 	public function setStoredAttachmentCopies(string $id, string $attachments): void {
 		$qb = $this->getStreamUpdateSql();

@@ -1583,6 +1583,41 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame($item, $response->getData());
 	}
 
+	/**
+	 * A form body sends `media_attributes[][id]=11&media_attributes[][description]=…`,
+	 * which PHP splits into one entry per field. The edit has to see one entry
+	 * per attachment, as Mastodon does.
+	 */
+	public function testStatusUpdateGroupsFormEncodedMediaAttributesPerAttachment(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn([
+			'status' => 'same words',
+			'media_attributes' => [
+				['id' => '11'], ['description' => 'New words'], ['focus' => '0.5,-0.2'],
+				['id' => '12'], ['description' => 'Second'],
+			],
+		]);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'same words', null, false, null, [
+				['id' => '11', 'description' => 'New words', 'focus' => '0.5,-0.2'],
+				['id' => '12', 'description' => 'Second'],
+			])
+			->willReturn($this->createStub(Stream::class));
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
+	}
+
+	public function testStatusUpdatePassesJsonMediaAttributesAsTheyCame(): void {
+		$this->loggedInAs();
+		$attributes = [['id' => '11', 'description' => 'New words'], ['id' => '12', 'focus' => '0,0']];
+		$this->request->method('getParams')->willReturn(['status' => 'x', 'media_attributes' => $attributes]);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'x', null, false, null, $attributes)
+			->willReturn($this->createStub(Stream::class));
+
+		$this->controller()->statusUpdate(5);
+	}
+
 	public function testStatusUpdateWithoutSpoilerPassesNull(): void {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn(['status' => 'x']);
@@ -4278,6 +4313,25 @@ class ApiControllerTest extends TestCase {
 		$this->documentService->expects($this->never())->method('updateFocus');
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->mediaUpdate('7')->getStatus());
+	}
+
+	/**
+	 * A post keeps its own copy of what it carries, and only an edit tells the
+	 * servers that hold the post. Changing the upload alone answered 200 while
+	 * the post kept the old words; it is refused now, as Mastodon refuses it.
+	 */
+	public function testMediaUpdateOfAnAttachedUploadIsRefusedAndPointsAtTheEdit(): void {
+		$this->loggedInAs();
+		$document = $this->ownDocumentInService('7', 'old');
+		$this->request->method('getParams')->willReturn(['description' => 'new alt text']);
+		$this->documentService->method('isAttachedToAPostBy')->with($document)->willReturn(true);
+		$this->documentService->expects($this->never())->method('updateDescription');
+
+		$response = $this->controller()->mediaUpdate('7');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('media_attributes', $response->getData()['error']);
+		$this->assertSame('old', $document->getDescription());
 	}
 
 	public function testMediaUpdateOfSomeoneElsesAttachmentIsA404(): void {

@@ -111,6 +111,7 @@ class PostServiceQuoteTest extends TestCase {
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->createStub(\OCA\Social\Service\VideoDeliveryHold::class),
+			$this->createStub(\OCA\Social\Service\DocumentService::class),
 		);
 	}
 

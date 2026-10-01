@@ -24,6 +24,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
@@ -751,5 +752,67 @@ class DocumentServiceTest extends TestCase {
 				$this->assertSame('invalid document', $e->getMessage());
 			}
 		}
+	}
+
+	// applyMediaAttributes()
+
+	private function upload(int $nid, string $description): Document {
+		$document = new Document();
+		$document->setNid($nid);
+		$document->setLocalCopy('copy' . $nid);
+		$document->setMediaType('image/png');
+		$document->setDescription($description);
+
+		return $document;
+	}
+
+	/**
+	 * An edit names the attachments it changes by id. Only the post's own are
+	 * touched, only uploads of the editing account are read, and each document
+	 * is written first so a later rebuild of the copies keeps the new words.
+	 */
+	public function testMediaAttributesRewriteThePostsOwnAttachments(): void {
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/media/x');
+		$changed = (new MediaAttachment())->setId('11')->setDescription('Old words');
+		$untouched = (new MediaAttachment())->setId('12')->setDescription('Stays');
+
+		$this->cacheDocumentsRequest->expects($this->once())->method('getFromArray')
+			->with(['11'], 'alice')
+			->willReturn([$this->upload(11, 'Old words')]);
+		$this->cacheDocumentsRequest->expects($this->once())->method('updateDescription')
+			->with($this->callback(fn (Document $d): bool => $d->getDescription() === 'New words'));
+		$this->cacheDocumentsRequest->expects($this->once())->method('updateFocus');
+
+		$result = $this->service->applyMediaAttributes([$changed, $untouched], 'alice', [
+			['id' => '11', 'description' => 'New words', 'focus' => '0.5,-0.25'],
+			// not on this post: ignored, as Mastodon ignores it
+			['id' => '99', 'description' => 'Somebody else\'s'],
+		]);
+
+		$this->assertCount(2, $result);
+		$this->assertSame('11', $result[0]->getId());
+		$this->assertSame('New words', $result[0]->getDescription());
+		$this->assertSame(0.5, $result[0]->getMeta()?->getFocus()?->getX());
+		$this->assertSame(-0.25, $result[0]->getMeta()?->getFocus()?->getY());
+		$this->assertSame($untouched, $result[1]);
+		$this->assertSame('Old words', $changed->getDescription(), 'the copy the revision keeps is not changed in place');
+	}
+
+	/** A document of another account is never read, so the copy stays as it was. */
+	public function testMediaAttributesForAnUploadOfSomebodyElseChangeNothing(): void {
+		$attachment = (new MediaAttachment())->setId('11')->setDescription('Old words');
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([]);
+		$this->cacheDocumentsRequest->expects($this->never())->method('updateDescription');
+
+		$result = $this->service->applyMediaAttributes([$attachment], 'mallory', [['id' => '11', 'description' => 'x']]);
+
+		$this->assertSame([$attachment], $result);
+	}
+
+	public function testMediaAttributesNamingNothingOnThePostReadNothing(): void {
+		$attachment = (new MediaAttachment())->setId('11');
+		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
+
+		$this->assertSame([$attachment], $this->service->applyMediaAttributes([$attachment], 'alice', [['id' => '99']]));
 	}
 }
