@@ -1,6 +1,6 @@
 # User guide
 
-How to use Nextcloud Social as a person with an account on this Nextcloud:
+How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
 looking after the account. It describes the web client that comes with the
 app; where something is only reachable through the Mastodon-compatible API or
@@ -28,7 +28,7 @@ names are the English strings of the web client.
 ## Getting an account
 
 A Nextcloud account is the account: the first time you
-open **Social** from the app menu, a short screen asks whether you want a
+open **Aloha Social** from the app menu, a short screen asks whether you want a
 fediverse identity here, or would rather name the one you already have
 somewhere else. Nothing is created until you choose. You pick your handle on
 that screen — it starts out as a suggestion made from your Nextcloud user id,
@@ -39,7 +39,7 @@ follow it.
 
 Your display name and avatar come from your Nextcloud account and are changed
 there. The rest of the profile — banner, bio, profile fields — is edited in
-Social (see [Managing your account](#managing-your-account)).
+Aloha Social (see [Managing your account](#managing-your-account)).
 
 On the first visit the app shows a four-step introduction: your address with a
 copy button, people to follow, a way to bring the follows you already have from
@@ -56,13 +56,13 @@ is `@username@your-nextcloud-host` from the start. Depending on the server you
 confirm your email address first, and an administrator may look at the
 registration before it becomes an account; you are emailed either way.
 
-Such an account is for Social only. You log in on the normal login page, with
+Such an account is for Aloha Social only. You log in on the normal login page, with
 two-factor authentication if you set it up or the server requires it, and
-land in Social. Your personal settings for your details, password, security,
+land in Aloha Social. Your personal settings for your details, password, security,
 appearance and notifications are there; Files, Talk and the other apps are
 not, and Nextcloud's own desktop and mobile clients are refused. Mastodon apps
 can. **Settings → Your storage** shows how much of the space the server gives
-each such account your pictures and videos take up. Deleting your Social
+each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
 Where the administrators let everybody invite people, **Settings → Invite
@@ -145,7 +145,7 @@ network hiccup.
   QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). Drag them in, use
   **Add attachment**, or **Add from Files** to attach something already in
   your Nextcloud without uploading it again — the Files app's own menu also
-  has **Share to Social** for the same thing. Every picture has its Exif
+  has **Share to Aloha Social** for the same thing. Every picture has its Exif
   metadata (including the location a phone writes) removed before it is
   stored or sent anywhere. A picture can be given one of eight mild filters,
   previewed live and baked into the copy that is posted when you press Post,
@@ -343,7 +343,7 @@ live; without it the page checks every 30 seconds.
 ### For you
 
 **For you** is the second feed in the switcher above the posts, right
-after My Feed and before Local and Global. It is made of the hashtags you read: Social notices
+after My Feed and before Local and Global. It is made of the hashtags you read: Aloha Social notices
 which posts you stay on longer than you usually do, which you scroll past, and
 what you like, boost, reply to, bookmark, open, or whose pictures and links you
 open. From that it keeps a list of hashtags, and the feed shows the posts of
@@ -376,7 +376,7 @@ it, or click it for *Higher priority*, *Lower priority*, *Move to top*, *Pin*
 and *Remove*; with the keyboard, the arrow keys move between hashtags, Enter
 opens that menu and Alt with ← or → moves one. A moved hashtag is **pinned**:
 it stays where you put it, while the others move as you read. *+ Add* puts a
-hashtag of your own on the list, and the ones Social has almost learned are
+hashtag of your own on the list, and the ones Aloha Social has almost learned are
 offered underneath. Removing a hashtag forgets it — reading more about it can
 bring it back — and a hashtag you follow stays for as long as you follow it.
 *Languages* limits the feed to posts in the languages you choose.
@@ -418,7 +418,7 @@ one. Press one to add yours or to take it back, or press the smiley with a
 plus on it to choose another; you may put up to eight different emoji on the
 same announcement.
 
-Administrators post and remove announcements in **Administration → Social**.
+Administrators post and remove announcements in **Administration → Aloha Social**.
 
 ### Stories
 
@@ -648,13 +648,13 @@ hand, it is picked up as one.
   at four, and a row with only one half filled in is dropped the same way;
   emptying the table and saving removes it from your profile everywhere.
 - **Your Nextcloud profile page.** The native `/u/username` page shows your
-  custom Social banner across the profile header, behind your profile picture,
+  custom Aloha Social banner across the profile header, behind your profile picture,
   and your posts below. The banner starts at the top of the native profile
   content and meets the profile details without an extra coloured strip.
   Without a native profile header, the banner appears at
-  the top of the Social section. Its **Posts**, **My Feed**, **Local** and
-  **Global** tabs read Social's feeds; **My Feed** is available only on your
-  own profile. This page is for reading. To publish, open the Social app.
+  the top of the Aloha Social section. Its **Posts**, **My Feed**, **Local** and
+  **Global** tabs read Aloha Social's feeds; **My Feed** is available only on your
+  own profile. This page is for reading. To publish, open the Aloha Social app.
 - **Missing pictures on older remote posts.** If a federated post shows its text
   but none of its pictures, an administrator can run
   `occ social:media:recover --dry-run` to list posts whose stored ActivityPub
@@ -780,7 +780,7 @@ hand, it is picked up as one.
   that first, in **Settings → Your account**, if you would rather they were not
   public. And your **stories, your archived posts and anything you deleted are
   not imported**: you put those away on purpose.
-- **Leaving.** **Settings → Delete your Social account** deletes your fediverse
+- **Leaving.** **Settings → Delete your Aloha Social account** deletes your fediverse
   account and keeps your Nextcloud one. Everything you posted goes, your
   followers and the people you follow are let go, and every server that knew
   the account is told it is gone — a post already on somebody else's server is
@@ -790,7 +790,7 @@ hand, it is picked up as one.
   first if you might want one. Afterwards you are back at the setup screen and
   can make a new account straight away, under a different handle: the old one
   is held for an hour so that nobody can take it the moment you let it go.
-  Deleting the Nextcloud user does the same thing to the Social account along
+  Deleting the Nextcloud user does the same thing to the Aloha Social account along
   the way.
 
 ## Keyboard shortcuts

@@ -112,7 +112,7 @@ class MigrationArchiveService {
 			// mistake is picking the wrong zip, and only naming what was missing
 			// tells somebody that
 			throw new UserMigrationException(
-				'this archive holds no Social data (' . SocialMigrator::PATH_ACTOR_PUBLIC . ' is not in it)'
+				'this archive holds no Aloha Social data (' . SocialMigrator::PATH_ACTOR_PUBLIC . ' is not in it)'
 			);
 		}
 

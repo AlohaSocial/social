@@ -40,10 +40,10 @@
 
 		<section v-else-if="!showForm" class="signup__landing" aria-labelledby="signup-introduction-title">
 			<h3 id="signup-introduction-title">
-				{{ t('social', 'A Social account, connected to the fediverse') }}
+				{{ t('social', 'A Aloha Social account, connected to the fediverse') }}
 			</h3>
 			<p>{{ t('social', 'Your address will look like @{username}@{domain}. You can follow and talk with people on Mastodon, Pixelfed, PeerTube and other services that use ActivityPub.', { username: 'your name', domain: state.domain }) }}</p>
-			<p>{{ t('social', 'This is a Social-only account. It does not give you access to Files, Talk, WebDAV or other Nextcloud apps on this server.') }}</p>
+			<p>{{ t('social', 'This is a Aloha Social-only account. It does not give you access to Files, Talk, WebDAV or other Nextcloud apps on this server.') }}</p>
 			<p v-if="state.twoFactorRequired">
 				{{ t('social', 'This server requires two-factor authentication. You will need to set it up when you first sign in.') }}
 			</p>
@@ -288,13 +288,13 @@ export default {
 		/** @return {string} */
 		lede() {
 			if (this.state.invited) {
-				return t('social', 'You were invited to join {domain}. Your account can be used for Social, and nothing else on this server.', { domain: this.state.domain })
+				return t('social', 'You were invited to join {domain}. Your account can be used for Aloha Social, and nothing else on this server.', { domain: this.state.domain })
 			}
 			if (this.state.approval) {
-				return t('social', 'Join {domain}. Your account can be used for Social, and nothing else on this server. An administrator looks at every registration before it becomes an account.', { domain: this.state.domain })
+				return t('social', 'Join {domain}. Your account can be used for Aloha Social, and nothing else on this server. An administrator looks at every registration before it becomes an account.', { domain: this.state.domain })
 			}
 
-			return t('social', 'Join {domain}. Your account can be used for Social, and nothing else on this server.', { domain: this.state.domain })
+			return t('social', 'Join {domain}. Your account can be used for Aloha Social, and nothing else on this server.', { domain: this.state.domain })
 		},
 
 		/** @return {string} registration steps configured for this instance */

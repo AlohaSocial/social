@@ -57,7 +57,7 @@ class SocialDirectWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IAPIWidgetV2::class, $this->widget);
 		$this->assertSame('social_direct', $this->widget->getId());
-		$this->assertSame('Social direct messages', $this->widget->getTitle());
+		$this->assertSame('Aloha Social direct messages', $this->widget->getTitle());
 		$this->assertSame(13, $this->widget->getOrder());
 	}
 

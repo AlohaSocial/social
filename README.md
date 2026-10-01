@@ -2,7 +2,7 @@
 
 <img src="img/nextcloud.png" alt="" width="72">
 
-# Nextcloud Social
+# Aloha Social
 
 ### Your Nextcloud is a Fediverse server.
 
@@ -14,7 +14,7 @@ No new account. No new app. No algorithm. No advertising.
 
 ![The home timeline](img/readme/home.png)
 
-Nextcloud Social gives every user on your server a real Fediverse identity —
+Aloha Social gives every user on your server a real Fediverse identity —
 `@you@your.cloud` — that anyone on Mastodon can follow, mention and reply to. What you
 write leaves your server signed, and lands in their timeline. What they write comes
 back into yours. Nobody else holds it, nobody sells it, and nobody reorders it.
@@ -106,7 +106,7 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 ![For you in the settings](img/readme/interests.png)
 
 - **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
-  read. Social notices what you stay on, what you scroll past, and what you like,
+  read. Aloha Social notices what you stay on, what you scroll past, and what you like,
   boost, reply to, bookmark and open, and keeps a list of hashtags from it; the feed
   is the last week's posts carrying them, the best matches and the freshest first, no
   author allowed to fill it, and now and then a hashtag that often travels with yours.
@@ -347,10 +347,10 @@ own unified search. No external search engine to run.
   being empty: a relay rebroadcasts the public posts of every server on it, and
   carries this server's public posts out to all of them. Public posts only, and
   a relayed post arrives as the post it is rather than as a boost by the relay.
-- **Delete your Social account** from Settings, keeping your Nextcloud one —
+- **Delete your Aloha Social account** from Settings, keeping your Nextcloud one —
   the posts, the follows and a `Delete` to every server that knew you. No
   administrator, and no password to type for an account signed in through SSO. A
-  self-registered external user, who has nothing here but Social, loses the whole
+  self-registered external user, who has nothing here but Aloha Social, loses the whole
   account with it.
 - **Authorized apps** — every app holding a key to your account, with what it
   may do and when it was last used, and a button that signs one out. The page
@@ -532,8 +532,8 @@ are synthesised in the browser, so there is nothing to download.
 
 ## 🧩 It is a Nextcloud app, so it behaves like one
 
-- **Share to Social, from Files.** Select a picture or a video — up to ten — pick
-  *Share to Social* from the menu, and the composer opens with them already attached.
+- **Share to Aloha Social, from Files.** Select a picture or a video — up to ten — pick
+  *Share to Aloha Social* from the menu, and the composer opens with them already attached.
   Nothing is uploaded a second time.
 - **Links unfurl.** Paste a link to a post or a profile into a Talk message, a Text
   document or a Deck card and it becomes a card with the author, the text and the first
@@ -543,7 +543,7 @@ are synthesised in the browser, so there is nothing to download.
 - **The Activity app** lists your follows, mentions, boosts and favourites, and puts
   them in the Activity digest mail. Activity's own notifications stay off: the bell is
   the bell.
-- **Unified search**, so Social posts turn up where every other search result does.
+- **Unified search**, so Aloha Social posts turn up where every other search result does.
 - **Deleting a Nextcloud user takes their Fediverse account with it** — tombstoned,
   dropped, and a `Delete` federated so other servers drop their copies too.
 
@@ -579,7 +579,7 @@ are synthesised in the browser, so there is nothing to download.
 
 ![The administration page](img/readme/admin.png)
 
-Everything in Administration → Social, built out of the same components as the rest of
+Everything in Administration → Aloha Social, built out of the same components as the rest of
 the administration settings:
 
 - **Reports** with **Silence**, **Suspend**, **Lift** and take-a-post-down, each
@@ -597,17 +597,17 @@ the administration settings:
   never held**.
 - **An account browser** over every account this instance knows, with the standing
   decision and the strike history against each one.
-- **Let people without an account join — for Social only.** Switch on external users
+- **Let people without an account join — for Aloha Social only.** Switch on external users
   and people register themselves from a "Create an account" button on the login page:
   a username that becomes their handle, an email address they confirm, the server rules
   and an age to confirm. You choose how many such accounts may exist, how much media each
   may upload, and who gets one — anybody, anybody you approve from a queue on the same
   page, or only the holders of an invitation link you (or, if you allow it, anybody
   here) sent. They log in through the normal login page, two-factor authentication
-  included and enforceable with one switch, and reach Social and nothing else: no
-  Files, no Talk, no WebDAV, no other app, and nobody outside Social finds them in the
+  included and enforceable with one switch, and reach Aloha Social and nothing else: no
+  Files, no Talk, no WebDAV, no other app, and nobody outside Aloha Social finds them in the
   share dialog, the contacts menu or the address book. Mastodon apps work for them. One
-  click makes one an ordinary account of this server, password and Social account kept.
+  click makes one an ordinary account of this server, password and Aloha Social account kept.
   `occ social:external` lists, adds and promotes them.
 - **Federation health** — how many deliveries are waiting, how many keep failing, which
   instances they are stacked up against, how close each is to being abandoned (**16
@@ -626,7 +626,7 @@ the administration settings:
   already sent: its accounts, their posts, the follows in both directions and the
   deliveries still queued towards it.
 - **Setup checks in Administration → Overview** — whether `.well-known/webfinger`
-  answers, whether the address Social builds its ids from is still the server's,
+  answers, whether the address Aloha Social builds its ids from is still the server's,
   whether the delivery job has run lately, whether anything is stuck, whether
   Mastodon apps can reach the API, and more (see
   [docs/Admin.md](docs/Admin.md#the-setup-checks)). `occ social:check:install` runs
@@ -719,17 +719,17 @@ That banner has two quite different causes, and the app now tells them apart.
 The first is the one it names: the server does not answer `/.well-known/webfinger`.
 Follow the [documented redirects](https://docs.nextcloud.com/server/latest/go.php?to=admin-setup-well-known-URL).
 
-The second is that **Social is set up for a different address than the server now
-uses**. Social reads `overwrite.cli.url` once, the first time the app is opened, and
+The second is that **Aloha Social is set up for a different address than the server now
+uses**. Aloha Social reads `overwrite.cli.url` once, the first time the app is opened, and
 builds every account id, post id and WebFinger answer from that stored copy
 (`social.cloud_url`). Change the server's URL afterwards and the two drift apart in
 silence: WebFinger answers for a host nobody asks about, and the app blames
 `.well-known` when `.well-known` is fine.
 
-Social reports the mismatch with both addresses but will not correct it, because the
+Aloha Social reports the mismatch with both addresses but will not correct it, because the
 stored address is baked into every id already written. Either point
-`overwrite.cli.url` back at the address Social knows, or accept the rename and run
-`occ social:reset --uri=<new address>`, which deletes everything Social holds. It
+`overwrite.cli.url` back at the address Aloha Social knows, or accept the rename and run
+`occ social:reset --uri=<new address>`, which deletes everything Aloha Social holds. It
 asks twice; add `--force` to run it from a script (without it, `--no-interaction`
 refuses rather than quietly doing nothing).
 
@@ -741,7 +741,7 @@ occ config:system:get overwrite.cli.url
 ```
 
 Administration → Overview reports both of these — and two more things that break
-federation quietly — without anybody having to open Social. See
+federation quietly — without anybody having to open Aloha Social. See
 [docs/Admin.md](docs/Admin.md)
 for the whole setup, every configuration key and what to watch.
 
@@ -855,13 +855,13 @@ in, for the list test; without it that test is skipped.
 
 - Contributions welcome — open a pull request and run the build and tests locally
   first (`npm run lint`, `npm test`, `composer run test:unit`).
-- Reset local Social data for development with:
+- Reset local Aloha Social data for development with:
 
 ```bash
 occ social:reset
 ```
 
-  This prompts twice and then empties every Social table. `occ social:reset
+  This prompts twice and then empties every Aloha Social table. `occ social:reset
   --uninstall` additionally drops the tables, migrations, background jobs and app
   config. See [docs/OCC-Commands.md](docs/OCC-Commands.md) for all commands.
 - [docs/Admin.md](docs/Admin.md)

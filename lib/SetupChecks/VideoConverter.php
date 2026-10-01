@@ -46,21 +46,21 @@ class VideoConverter implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: video conversion');
+		return $this->l10n->t('Aloha Social: video conversion');
 	}
 
 	#[\Override]
 	public function run(): SetupResult {
 		if (!$this->videoTranscodeService->isAvailable()) {
 			return SetupResult::warning(
-				$this->l10n->t('ffmpeg was not found, so videos are stored as they were uploaded. iPhone .mov videos and HEVC videos will not play on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome and Firefox. Install ffmpeg on this server and Social converts them to H.264 in an MP4 by itself.'),
+				$this->l10n->t('ffmpeg was not found, so videos are stored as they were uploaded. iPhone .mov videos and HEVC videos will not play on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome and Firefox. Install ffmpeg on this server and Aloha Social converts them to H.264 in an MP4 by itself.'),
 				self::DOC
 			);
 		}
 
 		if (!$this->configService->getAppValueBool(ConfigService::SOCIAL_VIDEO_TRANSCODE)) {
 			return SetupResult::info(
-				$this->l10n->t('ffmpeg is installed, but converting videos is switched off in Administration → Social → Server. iPhone .mov videos and HEVC videos are stored and sent as they were uploaded, and will not play on other servers or in Chrome and Firefox.'),
+				$this->l10n->t('ffmpeg is installed, but converting videos is switched off in Administration → Aloha Social → Server. iPhone .mov videos and HEVC videos are stored and sent as they were uploaded, and will not play on other servers or in Chrome and Firefox.'),
 				self::DOC
 			);
 		}

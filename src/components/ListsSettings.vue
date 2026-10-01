@@ -102,7 +102,7 @@
 					</p>
 					<p v-else-if="members[list.id].length === 0" class="lists-settings__hint">
 						{{ list.nextcloud_group
-							? t('social', 'Nobody in this group has a Social account yet.')
+							? t('social', 'Nobody in this group has a Aloha Social account yet.')
 							: t('social', 'Nobody is in this list yet.') }}
 					</p>
 					<ul v-else class="lists-settings__member-list">

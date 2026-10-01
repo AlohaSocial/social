@@ -50,7 +50,7 @@ class CronRanRecently implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: delivery job');
+		return $this->l10n->t('Aloha Social: delivery job');
 	}
 
 	#[\Override]

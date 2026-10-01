@@ -19,7 +19,7 @@
 				v-model="form.contactAccount"
 				class="server__field"
 				:label="t('social', 'Contact account')"
-				:placeholder="t('social', 'Local Social username')"
+				:placeholder="t('social', 'Local Aloha Social username')"
 				:helperText="t('social', 'Shown to Mastodon-compatible clients as the account responsible for this instance. Leave empty to omit it.')" />
 
 			<NcTextArea

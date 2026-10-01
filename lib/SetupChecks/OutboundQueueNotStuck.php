@@ -40,7 +40,7 @@ class OutboundQueueNotStuck implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: outbound queue');
+		return $this->l10n->t('Aloha Social: outbound queue');
 	}
 
 	#[\Override]
@@ -71,7 +71,7 @@ class OutboundQueueNotStuck implements ISetupCheck {
 
 		return SetupResult::warning(
 			implode('; ', $parts) . '. '
-			. $this->l10n->t('The Federation health section of the Social settings names the instances; "occ social:queue:status" prints the same, and "occ social:queue:retry" re-queues what was abandoned.'),
+			. $this->l10n->t('The Federation health section of the Aloha Social settings names the instances; "occ social:queue:status" prints the same, and "occ social:queue:retry" re-queues what was abandoned.'),
 			self::DOC
 		);
 	}

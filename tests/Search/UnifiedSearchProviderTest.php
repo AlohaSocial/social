@@ -133,7 +133,7 @@ class UnifiedSearchProviderTest extends TestCase {
 
 	public function testIdentity(): void {
 		$this->assertSame('social', $this->provider->getId());
-		$this->assertSame('Social', $this->provider->getName());
+		$this->assertSame('Aloha Social', $this->provider->getName());
 		$this->assertSame(12, $this->provider->getOrder('files.View.index', []));
 		$this->assertSame(12, $this->provider->getOrder('social.Navigation.navigate', ['path' => 'home']));
 	}
@@ -145,7 +145,7 @@ class UnifiedSearchProviderTest extends TestCase {
 
 		$result = $this->provider->search($this->user(), $this->query('  alice '));
 
-		$this->assertSame('Social', $result->jsonSerialize()['name']);
+		$this->assertSame('Aloha Social', $result->jsonSerialize()['name']);
 		$this->assertSame([], $result->jsonSerialize()['entries']);
 	}
 

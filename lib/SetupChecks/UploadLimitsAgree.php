@@ -46,14 +46,14 @@ class UploadLimitsAgree implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: upload size');
+		return $this->l10n->t('Aloha Social: upload size');
 	}
 
 	#[\Override]
 	public function run(): SetupResult {
 		$promised = $this->configService->getAppValueInt(ConfigService::SOCIAL_MAX_SIZE) * 1024 * 1024;
 		if ($promised <= 0) {
-			return SetupResult::success($this->l10n->t('Social has no upload ceiling of its own.'));
+			return SetupResult::success($this->l10n->t('Aloha Social has no upload ceiling of its own.'));
 		}
 
 		$upload = $this->bytes((string)ini_get('upload_max_filesize'));
@@ -63,20 +63,20 @@ class UploadLimitsAgree implements ISetupCheck {
 		$limits = array_filter([$upload, $post], static fn (int $value): bool => $value > 0);
 		if ($limits === []) {
 			return SetupResult::success(
-				$this->l10n->t('PHP sets no upload limit, so Social\'s own ceiling of %1$s is what applies.', [$this->human($promised)])
+				$this->l10n->t('PHP sets no upload limit, so Aloha Social\'s own ceiling of %1$s is what applies.', [$this->human($promised)])
 			);
 		}
 
 		$lowest = min($limits);
 		if ($lowest >= $promised) {
 			return SetupResult::success(
-				$this->l10n->t('Social accepts uploads up to %1$s, and PHP allows at least that much.', [$this->human($promised)])
+				$this->l10n->t('Aloha Social accepts uploads up to %1$s, and PHP allows at least that much.', [$this->human($promised)])
 			);
 		}
 
 		return SetupResult::warning(
 			$this->l10n->t(
-				'Social offers its users uploads up to %1$s, but PHP refuses anything over %2$s (upload_max_filesize %3$s, post_max_size %4$s). An upload between the two is refused before this app can say why, and the person is told nothing useful. Raise both PHP values, or lower Social\'s own limit in Administration → Social → Server.',
+				'Aloha Social offers its users uploads up to %1$s, but PHP refuses anything over %2$s (upload_max_filesize %3$s, post_max_size %4$s). An upload between the two is refused before this app can say why, and the person is told nothing useful. Raise both PHP values, or lower Aloha Social\'s own limit in Administration → Aloha Social → Server.',
 				[
 					$this->human($promised), $this->human($lowest),
 					(string)ini_get('upload_max_filesize'), (string)ini_get('post_max_size'),

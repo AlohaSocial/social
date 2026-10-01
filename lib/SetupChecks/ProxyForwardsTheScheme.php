@@ -50,7 +50,7 @@ class ProxyForwardsTheScheme implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: the scheme behind the proxy');
+		return $this->l10n->t('Aloha Social: the scheme behind the proxy');
 	}
 
 	#[\Override]

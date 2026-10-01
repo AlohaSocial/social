@@ -51,7 +51,7 @@ class Notifier implements INotifier {
 	 */
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social');
+		return $this->l10n->t('Aloha Social');
 	}
 
 	/**
@@ -146,7 +146,7 @@ class Notifier implements INotifier {
 						: $l10n->t('New report about %s from another instance', [$account])
 				);
 				$notification->setParsedMessage(
-					$l10n->t('Review it in the Social section of the administration settings.')
+					$l10n->t('Review it in the Aloha Social section of the administration settings.')
 				);
 				$notification->setLink(
 					$this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'social'])

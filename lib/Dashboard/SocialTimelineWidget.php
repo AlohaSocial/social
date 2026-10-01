@@ -22,7 +22,7 @@ class SocialTimelineWidget extends TimelineWidget {
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social timeline');
+		return $this->l10n->t('Aloha Social timeline');
 	}
 
 	#[\Override]

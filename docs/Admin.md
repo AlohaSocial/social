@@ -1,4 +1,4 @@
-# Administering Nextcloud Social
+# Administering Aloha Social
 
 What an administrator has to set up, what they can change, and what tells them
 something is wrong. For the routes behind the settings page see
@@ -9,18 +9,18 @@ how the pieces fit together [Architecture.md](Architecture.md).
 
 ## Before it federates
 
-Social is a fediverse server that happens to live inside Nextcloud, so the
+Aloha Social is a fediverse server that happens to live inside Nextcloud, so the
 things it needs are the things any fediverse server needs: a stable public
 address, a `.well-known` answer, and a cron that runs.
 
-**A stable address.** Social copies `overwrite.cli.url` into its own
+**A stable address.** Aloha Social copies `overwrite.cli.url` into its own
 `cloud_url` the first time somebody opens the app, derives `social_url` (that
 address followed by `/apps/social/`) from it, and builds every account id,
 post id and WebFinger answer from those copies. It never reads the system value
-again. Set `overwrite.cli.url` — and get it right — before anyone opens Social;
+again. Set `overwrite.cli.url` — and get it right — before anyone opens Aloha Social;
 changing the server's address afterwards is the single most expensive mistake
 available here, because the old address is inside every id already federated.
-See [*the address Social is set up for*](#the-address-social-is-set-up-for).
+See [*the address Aloha Social is set up for*](#the-address-aloha-social-is-set-up-for).
 
 **`.well-known` redirects.** Another server looking for `@alice@example.com`
 asks `https://example.com/.well-known/webfinger`. Nextcloud serves that from
@@ -38,7 +38,7 @@ than after.
 
 **Behind a reverse proxy**, set `trusted_proxies` and `overwritehost`,
 `overwriteprotocol` and `overwrite.cli.url` as the Nextcloud documentation
-describes. Social signs its outbound requests over the `Host` and `Date`
+describes. Aloha Social signs its outbound requests over the `Host` and `Date`
 headers and verifies the signatures on what arrives, so a proxy that rewrites
 the host without Nextcloud knowing produces signature failures on both sides
 that look like nothing else.
@@ -58,7 +58,7 @@ and not one to carry into production.
 
 ## The setup checks
 
-Social registers its own checks in **Administration → Overview**, beside
+Aloha Social registers its own checks in **Administration → Overview**, beside
 Nextcloud's own. They are the things that break federation, or stop clients
 connecting, without anything else saying so, and each links back to this page.
 
@@ -67,15 +67,15 @@ prints each with its severity and exits `1` if any of them reports an error, so
 a deployment script can run it. `--offline` leaves out the WebFinger probe, the
 only one that goes out on the network.
 
-**Social: upload size.** Whether PHP will accept the uploads this app promises
-to. Social's `max_size` is in `/api/v1/instance` and in the composer's refusal
+**Aloha Social: upload size.** Whether PHP will accept the uploads this app promises
+to. Aloha Social's `max_size` is in `/api/v1/instance` and in the composer's refusal
 message; PHP's `upload_max_filesize` and `post_max_size` are enforced before a
 byte reaches this app's code. When the app's number is the larger one, an
 upload between the two is refused with **nothing in the log** — the request
 never reaches PHP — and the person is told nothing useful. Raise both PHP
-values, or lower the app's own in Administration → Social → Server.
+values, or lower the app's own in Administration → Aloha Social → Server.
 
-**Social: video conversion.** Whether the videos posted here will play
+**Aloha Social: video conversion.** Whether the videos posted here will play
 anywhere else. A warning when **ffmpeg is missing**: iPhone `.mov` videos and
 HEVC videos are then stored and sent as they were uploaded, and will not play
 on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome
@@ -83,7 +83,7 @@ and Firefox. Information, not a warning, when ffmpeg is there and
 `video_transcode` has been switched off, because that is a decision. See
 [Videos do not play elsewhere](#videos-do-not-play-elsewhere).
 
-**Social: reachable by other servers.** Whether the strict peers will talk to
+**Aloha Social: reachable by other servers.** Whether the strict peers will talk to
 this instance at all. Federation does not fail all at once: a plain-HTTP
 instance, or one on a private address, federates happily with a permissive
 server and is refused at the first gate by a strict one. The strictest in
@@ -93,7 +93,7 @@ before it checks a signature, from its inbox, its delivery and its actor fetch,
 with nothing to configure. This is expected on a development or intranet
 instance and is a warning rather than an error.
 
-**Social: client API.** Whether a Mastodon app can reach this instance at all.
+**Aloha Social: client API.** Whether a Mastodon app can reach this instance at all.
 See below — this is the one check that is about apps rather than about
 federation, and it is a warning rather than an error, because everything else
 works without it.
@@ -101,18 +101,18 @@ works without it.
 ### Mastodon apps cannot connect
 
 A Mastodon app is given a domain and builds `https://<domain>/api/v1/...` from
-it. Not one of them accepts a path, and Social's routes live under
+it. Not one of them accepts a path, and Aloha Social's routes live under
 `/index.php/apps/social`, so out of the box adding this instance to an app
 fails at its first request with nothing in the log to show for it. The web
 interface and federation with other servers are unaffected.
 
-An administrator opening Social sees this at the top of the app, with the
+An administrator opening Aloha Social sees this at the top of the app, with the
 Apache rules to paste, until the web server answers; it is the same check as
 in **Administration → Overview**, and it goes quiet within five minutes of the
 rules being in place.
 
 Nextcloud only lets a short list of apps claim URLs at the root of the domain,
-and Social is not on it, so this has to be done in the web server. Ready-made
+and Aloha Social is not on it, so this has to be done in the web server. Ready-made
 rules are in [`contrib/webserver/`](../contrib/webserver): include
 `apache-social-root.conf` from the `<VirtualHost>` that serves Nextcloud, or
 `nginx-social-root.conf` from its `server` block, and reload. For Apache that
@@ -230,7 +230,7 @@ rate limiting, brute-force protection and the log — one client tripping a limi
 locks out all of them. The real address arrives in `X-Forwarded-For`, which
 Apache's `mod_proxy` sends by itself and the nginx rules set explicitly.
 
-The check probes `/api/v1/instance` at the address Social is configured for,
+The check probes `/api/v1/instance` at the address Aloha Social is configured for,
 then at the host the request came in on, then at the server's base URL, and
 reads the answer rather than only its status, so a login page or a catch-all
 `index` at the root does not pass for a client API. A success is remembered for
@@ -247,20 +247,20 @@ Two quite different causes, and the check cannot tell them apart from outside:
 1. The redirects are missing. Add the
    [documented ones](https://docs.nextcloud.com/server/latest/go.php?to=admin-setup-well-known-URL)
    and reload the web server.
-2. Social is set up for a different address than the one the request arrives
+2. Aloha Social is set up for a different address than the one the request arrives
    on, so it answers for a host nobody asks about. The next check is about
    that.
 
-The probe is tried at the address Social is configured for, then at the host
+The probe is tried at the address Aloha Social is configured for, then at the host
 the request came in on, then at the server's base URL, and a success is
 remembered for an hour. If the instance uses a certificate the server itself
 does not trust — a private CA during setup — set `social.checkssl` to `false`
 in `config.php` to stop the probe verifying it. That switch is for the probe
 only, not for federation.
 
-### The address Social is set up for
+### The address Aloha Social is set up for
 
-Social builds every id from its stored `cloud_url` and the server now reports
+Aloha Social builds every id from its stored `cloud_url` and the server now reports
 something else. Accounts here cannot be found under the address the server
 advertises, and every new post carries an id that resolves nowhere.
 
@@ -280,10 +280,10 @@ proxy that does not pass the scheme on. If nothing has federated yet,
 the next time the app is opened; otherwise `occ social:reset --uri=<address>`
 moves both.
 
-Social reports the mismatch and will not correct it, because the stored address
+Aloha Social reports the mismatch and will not correct it, because the stored address
 is inside every id already written. Either point `overwrite.cli.url` back at
-the address Social knows, or accept the rename and run `occ social:reset
---uri=<new address>`, **which deletes everything Social holds** — every post,
+the address Aloha Social knows, or accept the rename and run `occ social:reset
+--uri=<new address>`, **which deletes everything Aloha Social holds** — every post,
 follow and cached account, local and remote alike.
 
 ### The delivery job has not run
@@ -311,14 +311,14 @@ occ social:queue:retry --min-tries 16    # give the abandoned ones the full run 
 occ social:queue:retry --flush --min-tries 16   # or drop them, for a peer that is gone
 ```
 
-The **Federation health** section of the Social settings names the instances
+The **Federation health** section of the Aloha Social settings names the instances
 the failures are stacked against, with the highest attempt count so far and
 when each was last tried.
 
 ### No memory cache
 
 Without `memcache.local` or `memcache.distributed` in `config.php`, every cache
-Social asks Nextcloud for is one that forgets each write. Nextcloud's own check
+Aloha Social asks Nextcloud for is one that forgets each write. Nextcloud's own check
 already says a memcache would be faster; this one is there because, for this
 app, some of what is lost is protection:
 
@@ -342,7 +342,7 @@ single web server; Redis is what several need.
 An iPhone records `.mov`; Android phones, and iPhones exporting through some
 apps, write **HEVC** inside an `.mp4`. Pixelfed's default `media_types` accepts
 `video/mp4` and nothing else and drops the rest the moment it arrives, and
-Chrome and Firefox do not play HEVC. Social converts such videos to H.264 in an
+Chrome and Firefox do not play HEVC. Aloha Social converts such videos to H.264 in an
 MP4 (`video_transcode`, on by default) — **but only where ffmpeg is installed**.
 Install it from the distribution's packages (`apt install ffmpeg`,
 `dnf install ffmpeg`, …); ffprobe comes with it, and is what tells an H.264
@@ -360,7 +360,7 @@ not sent again.
 
 ## The administration page
 
-**Administration → Social.** Cards, grouped by what they are for --
+**Administration → Aloha Social.** Cards, grouped by what they are for --
 Overview, External users, Moderation, What people see, What is kept,
 Federation, Server -- with
 a list of them beside the page on a wide screen:
@@ -385,9 +385,9 @@ a list of them beside the page on a wide screen:
   timelines. Turning one off takes it out of the sidebar and stops it being
   offered; nothing already posted is touched, so a video posted while Videos
   was off is still a video and appears again the moment it is turned back on.
-  The fourth setting is the Nextcloud groups that become Social lists, and it is
+  The fourth setting is the Nextcloud groups that become Aloha Social lists, and it is
   **empty by default**: everybody in a chosen group gets a list for it holding
-  the members who have a Social account, nobody is followed by it and nothing
+  the members who have a Aloha Social account, nobody is followed by it and nothing
   federates, but a group list does tell everybody in the group who else is in
   it -- which is why no group becomes one until an administrator chooses.
   Deselecting a group takes its lists away on the next cron reconcile.
@@ -435,7 +435,7 @@ a list of them beside the page on a wide screen:
   attachment** — after changing this instance's media limits or fixing a
   temporary origin problem, retry just that file with
   `occ social:media:retry <remote_url>`. Use the exact `remote_url` reported
-  by the attachment; Social clears the stored refusal for that one uncached
+  by the attachment; Aloha Social clears the stored refusal for that one uncached
   row and tries it immediately. The normal media checks still apply, so a
   retry can be refused again. A picture that simply took too long to arrive
   while its post was being received is not refused: the background job fetches
@@ -484,7 +484,7 @@ settings, and the three things that cannot be taken back — suspending an
 account, taking a post down, removing an announcement — ask in a dialog that
 says what they will cost before they do it.
 
-The page can be **delegated**: hand the Social section to a group under
+The page can be **delegated**: hand the Aloha Social section to a group under
 *Administration privileges* and that group can moderate without administering
 the server. Server and Relays are the exception — neither is rendered for a
 delegate and their endpoints refuse them, because what they hold is a decision
@@ -498,7 +498,7 @@ sent.
 
 People without an account on this server can register one themselves, when
 an administrator switches it on. They log in through the normal login page
-and reach Social and nothing else. It is off by default, and the three cards
+and reach Aloha Social and nothing else. It is off by default, and the three cards
 are in the **External users** group of the administration page, for
 administrators proper only: who may have an account here is not a
 moderator's decision.
@@ -516,7 +516,7 @@ links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
 on the introduction page and beside the form. It starts with a translated
 template and can be adapted for this instance. *Require registrants to accept
-this notice* adds a required checkbox. When enabled, Social records the text
+this notice* adds a required checkbox. When enabled, Aloha Social records the text
 version, the time and the accepted text with the account. The record remains
 for the lifetime of that account and is removed when the account is deleted.
 Pending records transfer the acknowledgement to the account when it is made;
@@ -534,7 +534,7 @@ setting for the `social-external` group, the same one as in Administration →
 Security; changing it asks for your password. With it on, external users set
 up a second factor when they first log in.
 
-Where Social is enabled for some groups only, external users are let in by
+Where Aloha Social is enabled for some groups only, external users are let in by
 adding `social-external` to them. Switching registration on does that, and
 the card warns and offers a button when the restriction leaves them out.
 
@@ -544,7 +544,7 @@ deletes the registration and emails them, with a reason if you give one.
 Below it, the invitation links: a note to remember who each is for, how many
 registrations it admits (0 for any number) and how many days it works (0 for
 ever). *Let everybody here send invitation links* also gives every user an
-*Invite people* section in their Social settings, single-use links that work
+*Invite people* section in their Aloha Social settings, single-use links that work
 for a week, at most ten open at a time.
 
 **External accounts.** Every external account with its email and verification
@@ -556,30 +556,30 @@ date, login activity, minimum media usage and notice acceptance. The list is pag
 bounded number of candidates per request.
 *Disable* and
 *Enable* are Nextcloud's own. *Promote* makes one an ordinary account of this
-server with the same username, password, two-factor setup and Social
+server with the same username, password, two-factor setup and Aloha Social
 account; from then on the groups and apps you give them apply, and there is
-no way back. *Delete* removes the account and its Social account, the way
+no way back. *Delete* removes the account and its Aloha Social account, the way
 deleting any Nextcloud user does. Both ask for your password. External users
-also appear on the Users page, with *Social* as their backend and in the
+also appear on the Users page, with *Aloha Social* as their backend and in the
 `social-external` group.
 
-**Guests app.** Social's self-registered accounts use Social's own `Social`
+**Guests app.** Aloha Social's self-registered accounts use Aloha Social's own `Social`
 user backend and the `social-external` group. They are distinct from accounts
 created by the [Guests app](https://github.com/nextcloud/guests), which uses
-the `Guests` backend and `guest_app` group. Social's account restrictions and
+the `Guests` backend and `guest_app` group. Aloha Social's account restrictions and
 collaborator filtering target only its own backend, so they do not classify a
-Guests-app account as a Social external account. The two apps can be installed
+Guests-app account as a Aloha Social external account. The two apps can be installed
 together, but the Guests app controls which Nextcloud apps its accounts may
-open: add `social` to its app whitelist if those accounts should use Social.
-This setting does not grant a Guests account the Social-only restrictions;
+open: add `social` to its app whitelist if those accounts should use Aloha Social.
+This setting does not grant a Guests account the Aloha Social-only restrictions;
 Guests accounts remain governed by the Guests app and Nextcloud group policy.
 
-What an external user reaches: Social, logging in and out, their personal
+What an external user reaches: Aloha Social, logging in and out, their personal
 settings for their details, language, security, appearance and
 notifications, and their notifications. Everything else is refused before it
 runs, including every app installed later, and WebDAV, CalDAV and CardDAV are
 refused altogether, so Nextcloud's desktop and mobile clients and Talk do not
-work for them; Mastodon apps do. Nobody outside Social finds them in the
+work for them; Mastodon apps do. Nobody outside Aloha Social finds them in the
 share dialog, the contacts menu, the user status list or the system address
 book. See [Architecture.md](Architecture.md#external-users) for how.
 
@@ -732,28 +732,28 @@ settings page, which validates the ranges given here; every one can be set with
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `contact_email` | *(empty)* | Who to write to about this instance. Mastodon's `instance.email`: every client reads it on its first request and shows it on the server's about page. Empty until somebody fills it in, which until now most instances never did, because nothing said it existed. |
-| `contact_account` | *(empty)* | The local Social account responsible for this instance. Choose a local account by username in the Server card; remote accounts and team accounts without a Nextcloud user are refused. Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
+| `contact_account` | *(empty)* | The local Aloha Social account responsible for this instance. Choose a local account by username in the Server card; remote accounts and team accounts without a Nextcloud user are refused. Aloha Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
 | `extended_description` | *(empty)* | The long form of what this instance is, for `/api/v1/instance/extended_description`. Up to 10000 characters. |
 | `max_size` | `10` | The largest picture or file an upload may be, in MB. 1–10240. |
 | `max_video_size` | `2048` | The largest video, in MB. 1–102400. A peer will refuse a great deal less than the ceiling. |
 | `image_max_edge` | `0` | The longest edge a **stored** picture may have, in pixels. `0` stores every upload exactly as it arrived — the default, and the only setting that loses nothing: this app strips metadata losslessly and re-encodes only a picture it has to rotate. Set it (480–16384) on an instance where storage costs money or whose people post from a 48-megapixel phone. A picture already inside the ceiling is not re-encoded, because shrinking nothing and losing a generation anyway is the worst of both. |
 | `image_quality` | `85` | What a re-encoded picture is stored at, 40–100. Only consulted when `image_max_edge` is set. |
-| `video_transcode` | `1` | Whether stored videos are re-encoded to H.264 in an MP4 by a background job. **On by default, and it does nothing where ffmpeg is not installed** — the *Social: video conversion* setup check says which it is. What it converts: `.mov`, WebM, Matroska and the other formats in `VideoTranscodeService::CONVERTIBLE`, and an MP4 whose video ffprobe does not report as H.264 (HEVC, which phones write and only Safari plays). An H.264 MP4 is never re-encoded; without ffprobe an MP4 is left as it is. Why: **Pixelfed's default `media_types` accepts `video/mp4` and nothing else**, so every `video/quicktime` posted from here, which is every video straight off an iPhone, is dropped by its inbox without a word to anybody, and Safari will not play WebM. **The converted file replaces the original, which is deleted** — re-encoding is lossy, so switch it off where the uploaded files must be kept exactly as they are. Never runs during an upload: converting a video is minutes rather than the seconds a poster frame takes, so the upload finishes as it always did. A **new post** carrying such a video is queued but **held back** while the video it carries is converted by a job of its own at the next cron run, and goes out naming the MP4 — for at most ten minutes (`VideoDeliveryHold::HOLD_SECONDS`), after which it is delivered as it is. Posts without such a video, and every post on a server without ffmpeg or with this off, are not held at all. Older videos are converted by a sweep, one every quarter of an hour, or `occ social:media:transcode` to work through a backlog now. An instance that never saved this key has it on after upgrading. |
+| `video_transcode` | `1` | Whether stored videos are re-encoded to H.264 in an MP4 by a background job. **On by default, and it does nothing where ffmpeg is not installed** — the *Aloha Social: video conversion* setup check says which it is. What it converts: `.mov`, WebM, Matroska and the other formats in `VideoTranscodeService::CONVERTIBLE`, and an MP4 whose video ffprobe does not report as H.264 (HEVC, which phones write and only Safari plays). An H.264 MP4 is never re-encoded; without ffprobe an MP4 is left as it is. Why: **Pixelfed's default `media_types` accepts `video/mp4` and nothing else**, so every `video/quicktime` posted from here, which is every video straight off an iPhone, is dropped by its inbox without a word to anybody, and Safari will not play WebM. **The converted file replaces the original, which is deleted** — re-encoding is lossy, so switch it off where the uploaded files must be kept exactly as they are. Never runs during an upload: converting a video is minutes rather than the seconds a poster frame takes, so the upload finishes as it always did. A **new post** carrying such a video is queued but **held back** while the video it carries is converted by a job of its own at the next cron run, and goes out naming the MP4 — for at most ten minutes (`VideoDeliveryHold::HOLD_SECONDS`), after which it is delivered as it is. Posts without such a video, and every post on a server without ffmpeg or with this off, are not held at all. Older videos are converted by a sweep, one every quarter of an hour, or `occ social:media:transcode` to work through a backlog now. An instance that never saved this key has it on after upgrading. |
 | `video_max_height` | `1080` | The tallest a converted video is written, 240–2160. Only smaller, never larger: a 480p video is left at 480p. Only consulted when `video_transcode` is on. |
 | `video_ladder` | `0` | Whether each stored MP4 is **also** written at a ladder of smaller sizes, as HLS, so a player can pick the one that fits the connection. A different question from `video_transcode`, which is about a video being playable at all elsewhere; this is about it being watchable on a phone on a train. Off by default, because it is several ffmpeg encodes per video on this server. Each rung is one file — `-hls_flags single_file` writes the rendition as a fragmented MP4 and the playlist addresses its segments as byte ranges — so a forty-minute video is three files rather than a thousand, which is also the shape PeerTube publishes. The original is kept and is what a player without HLS falls back to. Needs ffmpeg **and** ffprobe. One video every half-hour, or `occ social:media:ladder` to work through a backlog now. Built from `video/mp4` only: a `.mov` goes through the transcoder first. |
 | `video_ladder_heights` | `360,720,1080` | Which heights, comma-separated, 144–2160. Heights at or above a video's own are skipped rather than upscaled, and the video's own height is always a rung, so the best rung is never worse than the file beside it. A list with nothing usable in it is refused by the admin card rather than silently replaced with the default. Only consulted when `video_ladder` is on. |
 | `search_window_days` | `365` | How far back a content search looks. `content ILIKE '%term%'` cannot use an index — a leading wildcard never can — so an unbounded search reads every post the instance has ever stored, joined to seven other tables, **on every keystroke**; at ten million rows that is a table scan with the rate limit as the only defence. A year covers what anybody is looking for. `0` searches everything, which an instance small enough can afford to say. |
 | `local_actor_cursor` | `''` | Bookkeeping, not a setting: where the cron's local-account refresh walk got to. It used to read every local account into memory on every pass; it pages now, and this is what makes the next pass carry on rather than start again. |
 | `profile_link_cursor` | `''` | Bookkeeping, not a setting: where the cron's walk over the local accounts whose profile fields carry a link got to, so the next pass checks the next ones. |
-| `video_quota` | `0` | How many megabytes of video **one account** may keep here; `0` is no quota, which is what every instance has in effect today. A different question from `max_video_size`, which is a ceiling on one file: that is about a single request, this about a year of them. Off by default because an instance that has been running without a quota and acquires one on upgrade would start refusing uploads from exactly the accounts that use it most. Checked once, where an upload is written, against the size recorded on each stored file — so a video uploaded before this app recorded sizes counts as nothing until the daily usage job has been past it, which fills the column in as it walks. The **ladders this server builds do not count against it**: they are made because an administrator asked for them, are several times the size of the upload, and would turn a quota somebody was told about into one several times smaller. They are counted in what an administrator is shown, because they are real disk. Who is holding what is under **Administration → Social → Storage**. |
+| `video_quota` | `0` | How many megabytes of video **one account** may keep here; `0` is no quota, which is what every instance has in effect today. A different question from `max_video_size`, which is a ceiling on one file: that is about a single request, this about a year of them. Off by default because an instance that has been running without a quota and acquires one on upgrade would start refusing uploads from exactly the accounts that use it most. Checked once, where an upload is written, against the size recorded on each stored file — so a video uploaded before this app recorded sizes counts as nothing until the daily usage job has been past it, which fills the column in as it walks. The **ladders this server builds do not count against it**: they are made because an administrator asked for them, are several times the size of the upload, and would turn a quota somebody was told about into one several times smaller. They are counted in what an administrator is shown, because they are real disk. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `nsfw_policy` | `default` | What happens to media somebody marked sensitive, for readers who have not chosen for themselves. PeerTube's three NSFW policies under Mastodon's names for the same three states: `show_all` (PeerTube's *display*), `default` (its *blur* — covered, the blurhash showing, one press away, and what this app has always done) and `hide_all` (its *hide* — not drawn, and no button to draw it). Anybody can override it for themselves under **Settings** in the app, and "follow the instance" stays a state of its own, so changing this moves everybody who is following it and nobody who has chosen. A **content warning is a different thing** and always covers its post, whatever this says. |
-| `review_videos` | `0` | Whether every post with a video on it waits for a moderator. The third rule of the review queue, beside a new account's first post and the spam rules, and the one an instance that hosts video wants: a video is minutes of somebody's attention and a great deal of somebody else's disk. **Unlike the other two it is not about the account** — a trusted account with a thousand posts behind it is held by it too, every time, because what it is about is the video. A moderator's own video is not held, and neither is a direct message. Under **Administration → Social → Posts waiting to be looked at**. |
+| `review_videos` | `0` | Whether every post with a video on it waits for a moderator. The third rule of the review queue, beside a new account's first post and the spam rules, and the one an instance that hosts video wants: a video is minutes of somebody's attention and a great deal of somebody else's disk. **Unlike the other two it is not about the account** — a trusted account with a thousand posts behind it is held by it too, every time, because what it is about is the video. A moderator's own video is not held, and neither is a direct message. Under **Administration → Aloha Social → Posts waiting to be looked at**. |
 | `inbox_throttle` | `300` | Incoming inbox requests allowed per origin host per minute. `0` accepts everything, which is what an instance behind its own rate limiter wants. |
 | `rate_limit_user` | `900` | How many client API requests one **signed-in account** may make per window. The routes that fan out — search, the directories, the follow graph — carry limits of their own and Nextcloud enforces those; this is the budget for everything else, which was some three hundred routes with no limit at all. Generous on purpose: it exists to stop a scraper reading the whole instance at machine speed, not to pace an app. One budget for the whole API, not one per route. `0` switches it off, which is what an instance behind its own limiter wants. Federation, the internal queue and the routes that serve bytes (attachments, avatars, emoji, GIFs) are never counted — one public page is forty requests for pictures, and deliveries arrive in bursts from a handful of addresses. |
 | `rate_limit_anon` | `300` | The same budget for a caller with **no account**, counted per address. |
 | `rate_limit_window` | `300` | How long that window is, in seconds. |
 | `follow_limit` | `100` | How many follows **one account** may send in an hour. A compromised account, or one running a script, can fan out follows to thousands of servers from this instance's address in a few minutes — every one a signed request this instance is answerable for. An hour rather than a day because what this catches is a burst, and high enough that importing a follow list from another server still goes through. Counted from the rows, so it holds on an instance with no memcache. `0` is no limit. |
-| `domain_media_quota` | `0` | How many megabytes of media **one other server** may keep here. Every picture on a post somebody here follows is fetched and cached, and nothing bounded that by where it came from: one server posting large images at a high rate fills the disk of every instance that follows anybody on it. The server is the host of the file's own address (its `url`), which for a Mastodon instance is often a separate media host. Counted from the figure the daily storage walk takes, plus successfully cached bytes from that host since — rejected or unreadable downloads do not spend quota. The figure is up to a day coarse and errs towards refusing early. Off by default, because an instance that has been federating for a year and acquires a quota on upgrade would start refusing the pictures of the servers it talks to most. Who is holding what is under **Administration → Social → Storage**. |
+| `domain_media_quota` | `0` | How many megabytes of media **one other server** may keep here. Every picture on a post somebody here follows is fetched and cached, and nothing bounded that by where it came from: one server posting large images at a high rate fills the disk of every instance that follows anybody on it. The server is the host of the file's own address (its `url`), which for a Mastodon instance is often a separate media host. Counted from the figure the daily storage walk takes, plus successfully cached bytes from that host since — rejected or unreadable downloads do not spend quota. The figure is up to a day coarse and errs towards refusing early. Off by default, because an instance that has been federating for a year and acquires a quota on upgrade would start refusing the pictures of the servers it talks to most. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
 | `publish_blocks` | `0` | Publish the deny list on `/api/v1/instance/domain_blocks`, the way Mastodon does, so somebody choosing a server can see who it will not talk to. Whether *this* server wants that read by anybody is a disclosure decision. |
 | `allow_self_signed` | `0` | Accept peers whose certificates do not check out. **Development only**: on a server anybody else uses, this hands every federated request to whoever can answer for the address. |
@@ -780,7 +780,7 @@ Set from the External users cards; these are the keys they write.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `external_enabled` | `0` | Whether people without an account may register one for Social. |
+| `external_enabled` | `0` | Whether people without an account may register one for Aloha Social. |
 | `external_max` | `100` | How many external accounts may exist. |
 | `external_media_quota` | `1024` | Megabytes of media each external user may upload. `0` is no quota. |
 | `external_signup_mode` | `approval` | `open`, `approval` or `invite`. |
@@ -818,7 +818,7 @@ occ social:queue:status             # what the outbound queue is doing
 occ social:details <id>             # who can see one post and where it lands
 ```
 
-Social also repairs the recipient and hashtag side indexes automatically in
+Aloha Social also repairs the recipient and hashtag side indexes automatically in
 bounded five-minute cron passes. Each pass visits at most 500 streams, stores
 its last fully indexed NID, and resumes from there; a failed row is retried on a
 later pass rather than skipped. A repeatedly failing row holds the cursor at
@@ -1002,7 +1002,7 @@ of this costs on the hardware in front of you.
 ## What to watch
 
 - **Administration → Overview.** The setup checks above are there precisely so
-  that an administrator who never opens Social still hears about it.
+  that an administrator who never opens Aloha Social still hears about it.
 - **The delivery queue.** A rising count of failing deliveries against one host
   is that instance's problem; a rising count against all of them is this one's.
 - **`social.log` / the Nextcloud log.** Signature verification failures on

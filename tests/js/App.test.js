@@ -508,7 +508,7 @@ describe('App', () => {
 			vi.spyOn(axios, 'post').mockResolvedValue({ data: {} })
 			const wrapper = mountApp()
 
-			expect(wrapper.find('.setup h2').text()).toBe('Social app setup')
+			expect(wrapper.find('.setup h2').text()).toBe('Aloha Social app setup')
 
 			await wrapper.find('input.setup-input').setValue('https://social.example.org')
 			await wrapper.find('form').trigger('submit')
@@ -525,7 +525,7 @@ describe('App', () => {
 
 			expect(wrapper.find('.navigation-stub').exists()).toBe(false)
 			expect(wrapper.find('.router-view-stub').exists()).toBe(false)
-			expect(wrapper.find('.setup h2').text()).toBe('Social app setup')
+			expect(wrapper.find('.setup h2').text()).toBe('Aloha Social app setup')
 			const input = wrapper.find('input.setup-input')
 			expect(input.attributes('placeholder')).toBe('https://cloud.example.org')
 			expect(input.attributes('required')).toBeDefined()
@@ -552,7 +552,7 @@ describe('App', () => {
 		it('tells regular users to wait for the administrator', () => {
 			setServerData({ setup: true, isAdmin: false })
 			const wrapper = mountApp()
-			expect(wrapper.find('.setup').text()).toBe('The Social app needs to be set up by the server administrator.')
+			expect(wrapper.find('.setup').text()).toBe('The Aloha Social app needs to be set up by the server administrator.')
 			expect(wrapper.find('form').exists()).toBe(false)
 			expect(wrapper.find('.router-view-stub').exists()).toBe(false)
 		})

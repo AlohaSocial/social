@@ -18,7 +18,7 @@
 				<template #description>
 					<div v-if="state === 'error'" class="connect-button">
 						<a class="button" :href="appUrl">
-							{{ t('social', 'Go to Social app') }}
+							{{ t('social', 'Go to Aloha Social app') }}
 						</a>
 					</div>
 				</template>
@@ -70,7 +70,7 @@ export default {
 		return {
 			notifications: [],
 			showMoreUrl: generateUrl('/apps/social/timeline/notifications'),
-			showMoreText: t('social', 'Social notifications'),
+			showMoreText: t('social', 'Aloha Social notifications'),
 			/** the timeout of the next ask, while polling */
 			timer: null,
 			/** whether the widget asks on a timer, for want of notify_push */
@@ -102,9 +102,9 @@ export default {
 		/** @return {string} */
 		emptyContentMessage() {
 			if (this.state === 'error') {
-				return t('social', 'Error getting Social notifications')
+				return t('social', 'Error getting Aloha Social notifications')
 			} else if (this.state === 'ok') {
-				return t('social', 'No Social notifications!')
+				return t('social', 'No Aloha Social notifications!')
 			}
 			return ''
 		},
@@ -182,7 +182,7 @@ export default {
 				this.state = 'error'
 				if (error.response?.status && error.response.status >= 400) {
 					if (first) {
-						showError(t('social', 'Failed to get Social notifications'))
+						showError(t('social', 'Failed to get Aloha Social notifications'))
 					}
 				} else {
 					logger.error('Failed to get the Social notifications', { error })

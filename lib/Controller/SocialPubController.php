@@ -138,9 +138,9 @@ class SocialPubController extends Controller {
 			'public' => true,
 		]);
 		$page = new PublicTemplateResponse(Application::APP_ID, 'main', [
-			'application' => $displayName . ' - Social',
+			'application' => $displayName . ' - Aloha Social',
 		]);
-		$page->setHeaderTitle($this->l10n->t('Social'));
+		$page->setHeaderTitle($this->l10n->t('Aloha Social'));
 
 		return $page;
 	}

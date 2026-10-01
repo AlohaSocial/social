@@ -200,9 +200,9 @@ class CheckInstall extends SocialCommand {
 			return null;
 		}
 
-		$output->writeln('<error>This command will regenerate the index of the Social App.</error>');
+		$output->writeln('<error>This command will regenerate the index of the Aloha Social App.</error>');
 		$output->writeln(
-			'<error>This operation can takes a while, and the Social App might not be stable during the process.</error>'
+			'<error>This operation can takes a while, and the Aloha Social App might not be stable during the process.</error>'
 		);
 		$output->writeln('');
 

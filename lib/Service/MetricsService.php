@@ -310,7 +310,7 @@ class MetricsService {
 		return [
 			[
 				'key' => 'social',
-				'human_key' => 'Nextcloud Social',
+				'human_key' => 'Aloha Social',
 				'value' => (string)$this->configService->getAppValue('installed_version'),
 			],
 			[

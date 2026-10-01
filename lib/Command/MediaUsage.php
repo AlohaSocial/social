@@ -63,7 +63,7 @@ class MediaUsage extends SocialCommand {
 			$this->configService->getCloudUrl();
 		} catch (SocialAppConfigException $e) {
 			$output->writeln(
-				'<error>The Social app is not configured, so a document id cannot be told from'
+				'<error>The Aloha Social app is not configured, so a document id cannot be told from'
 				. ' a remote one: ' . $e->getMessage() . '</error>'
 			);
 

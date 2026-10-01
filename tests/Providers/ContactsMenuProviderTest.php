@@ -84,7 +84,7 @@ class ContactsMenuProviderTest extends TestCase {
 		$this->actionFactory->expects($this->once())->method('newLinkAction')
 			->with(
 				'https://cloud.example/apps/social/img/social-dark.svg',
-				'Follow Bob Builder on Social',
+				'Follow Bob Builder on Aloha Social',
 				'https://cloud.example/apps/social/@bob',
 				'social'
 			)

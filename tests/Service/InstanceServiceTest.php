@@ -127,8 +127,8 @@ class InstanceServiceTest extends TestCase {
 
 		$this->assertSame('0.0', $instance->getVersion());
 		$this->assertSame('a safe home for your data', $instance->getDescription());
-		$this->assertSame('Nextcloud Social', $instance->getTitle());
-		$this->assertSame('Nextcloud Social', $instance->jsonSerialize()['title']);
+		$this->assertSame('Aloha Social', $instance->getTitle());
+		$this->assertSame('Aloha Social', $instance->jsonSerialize()['title']);
 	}
 
 	public function testTheUriFallsBackToTheCloudHost(): void {
@@ -182,7 +182,7 @@ class InstanceServiceTest extends TestCase {
 		$instance = $this->service->getLocal();
 
 		$this->assertTrue($instance->isLocal());
-		$this->assertSame('Nextcloud Social', $instance->getTitle());
+		$this->assertSame('Aloha Social', $instance->getTitle());
 	}
 
 	public function testStatsAndUrlsAndConfigurationSerialiseAsObjects(): void {

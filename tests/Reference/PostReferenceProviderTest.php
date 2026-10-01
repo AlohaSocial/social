@@ -132,7 +132,7 @@ class PostReferenceProviderTest extends TestCase {
 
 		$this->assertNotNull($reference);
 		$this->assertTrue($reference->getAccessible());
-		$this->assertSame('Alice Adams (@alice@cloud.example) on Social', $reference->getTitle());
+		$this->assertSame('Alice Adams (@alice@cloud.example) on Aloha Social', $reference->getTitle());
 		$this->assertSame('Hello world! Second paragraph. — 2 attachments', $reference->getDescription());
 		$this->assertSame('https://cloud.example/preview/1.jpg', $reference->getImageUrl(), 'the first picture, not the video');
 		$this->assertSame(self::APP . '@alice/42', $reference->getUrl(), 'the canonical page of the post');
@@ -143,7 +143,7 @@ class PostReferenceProviderTest extends TestCase {
 		$pretty = $this->provider->resolveReference(self::PRETTY . '@alice/42/');
 
 		$this->assertNotNull($pretty);
-		$this->assertSame('Alice Adams (@alice@cloud.example) on Social', $pretty->getTitle());
+		$this->assertSame('Alice Adams (@alice@cloud.example) on Aloha Social', $pretty->getTitle());
 		$this->assertSame(self::PRETTY . '@alice/42/', $pretty->getId(), 'the id stays the text that was pasted');
 	}
 
@@ -225,7 +225,7 @@ class PostReferenceProviderTest extends TestCase {
 		$reference = $this->provider->resolveReference(self::APP . '@alice');
 
 		$this->assertNotNull($reference);
-		$this->assertSame('Alice Adams (@alice@cloud.example) on Social', $reference->getTitle());
+		$this->assertSame('Alice Adams (@alice@cloud.example) on Aloha Social', $reference->getTitle());
 		$this->assertSame('Gardener. Plants.', $reference->getDescription());
 		$this->assertSame(self::APP . 'avatar/alice', $reference->getImageUrl());
 		$this->assertSame(self::APP . '@alice@cloud.example/', $reference->getUrl());
@@ -238,7 +238,7 @@ class PostReferenceProviderTest extends TestCase {
 		$reference = $this->provider->resolveReference(self::APP . '@bob@remote.example');
 
 		$this->assertNotNull($reference);
-		$this->assertSame('Bob (@bob@remote.example) on Social', $reference->getTitle());
+		$this->assertSame('Bob (@bob@remote.example) on Aloha Social', $reference->getTitle());
 		$this->assertNull($reference->getImageUrl(), 'no portrait known, none invented');
 		$this->assertSame([['bob@remote.example', false]], $this->lookups, 'cached only: an unfurl is not a reason to call another server');
 	}
@@ -262,7 +262,7 @@ class PostReferenceProviderTest extends TestCase {
 		$reference = $this->provider->resolveReferencePublic(self::APP . '@alice/42', 'sharetoken');
 
 		$this->assertNotNull($reference);
-		$this->assertSame('Alice Adams (@alice@cloud.example) on Social', $reference->getTitle());
+		$this->assertSame('Alice Adams (@alice@cloud.example) on Aloha Social', $reference->getTitle());
 		$this->assertNull($this->provider->resolveReferencePublic(self::APP . '@alice/43', 'sharetoken'));
 	}
 

@@ -90,8 +90,8 @@ export function shareToSocial(nodes, navigate = (url) => window.location.assign(
 /** The action as the Files app sees it; exported so the tests can hold it. */
 export const shareAction = {
 	id: 'social-share',
-	displayName: () => t('social', 'Share to Social'),
-	title: ({ nodes }) => n('social', 'Post this picture on Social', 'Post these %n pictures on Social', nodes.length),
+	displayName: () => t('social', 'Share to Aloha Social'),
+	title: ({ nodes }) => n('social', 'Post this picture on Aloha Social', 'Post these %n pictures on Aloha Social', nodes.length),
 	iconSvgInline: () => ICON,
 	// every one of them has to be something a post can carry, and no more of
 	// them than a post can carry: the composer would have to refuse the rest,

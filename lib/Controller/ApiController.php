@@ -78,7 +78,7 @@ class ApiController extends MastodonApiController {
 			if ($this->client === null) {
 				return new DataResponse(
 					[
-						'name' => 'Nextcloud Social',
+						'name' => 'Aloha Social',
 						'website' => 'https://github.com/alohasocial/social/',
 						'vapid_key' => ''
 					], Http::STATUS_OK

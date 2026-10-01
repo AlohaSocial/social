@@ -126,7 +126,7 @@ class Instance implements IQueryRow, JsonSerializable {
 	public const API_VERSIONS = ['mastodon' => 3];
 
 	public function getCompatVersion(): string {
-		return self::COMPAT_VERSION . ' (compatible; Nextcloud Social ' . $this->version . ')';
+		return self::COMPAT_VERSION . ' (compatible; Aloha Social ' . $this->version . ')';
 	}
 
 	/**

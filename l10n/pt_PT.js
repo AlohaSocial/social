@@ -1,7 +1,7 @@
 OC.L10N.register(
     "social",
     {
-    "Social" : "Social",
+    "Aloha Social" : "Aloha Social",
     "Help" : "Ajuda",
     "Home" : "Início",
     "Direct messages" : "Mensagens diretas",
@@ -10,7 +10,7 @@ OC.L10N.register(
     "Local timeline" : "Linha temporal local",
     "Global timeline" : "Linha temporal global",
     "Open documentation" : "Abrir documentação",
-    "Social app setup" : "Configuração de aplicação social",
+    "Aloha Social app setup" : "Configuração de aplicação social",
     "Finish setup" : "Terminar configuração",
     "Following" : "A seguir",
     "Uploading..." : "A enviar...",

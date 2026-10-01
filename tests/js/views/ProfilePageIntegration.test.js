@@ -56,10 +56,10 @@ describe('ProfilePageIntegration', () => {
 		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/accounts/bob%40remote.example/statuses', { params: { limit: 20 } })
 	})
 
-	it('renders the Social profile banner and one entry per post', async () => {
+	it('renders the Aloha Social profile banner and one entry per post', async () => {
 		const wrapper = mountSection('bob')
 		await flushPromises()
-		expect(wrapper.find('h2').text()).toBe('Social')
+		expect(wrapper.find('h2').text()).toBe('Aloha Social')
 		expect(wrapper.find('.social-profile__banner').attributes('src')).toBe('banner.png')
 		expect(wrapper.findAllComponents(ProfileStatusCardStub).map((entry) => entry.props('status'))).toEqual(statuses)
 		expect(wrapper.find('.composer-stub').exists()).toBe(false)
@@ -93,7 +93,7 @@ describe('ProfilePageIntegration', () => {
 		expect(wrapper.findAllComponents(ProfileStatusCardStub).map((entry) => entry.props('status').id)).toEqual(['2', 'home-1'])
 	})
 
-	it('loads local and global public timelines from their Social API scopes', async () => {
+	it('loads local and global public timelines from their Aloha Social API scopes', async () => {
 		const wrapper = mountSection('bob')
 		await flushPromises()
 		await wrapper.findAll('.feed-switcher button').find((button) => button.text() === 'Local').trigger('click')
@@ -107,14 +107,14 @@ describe('ProfilePageIntegration', () => {
 	it('does not contact the server without a user id', () => {
 		const wrapper = mountSection('')
 		expect(get).not.toHaveBeenCalled()
-		expect(wrapper.find('h2').text()).toBe('Social')
+		expect(wrapper.find('h2').text()).toBe('Aloha Social')
 	})
 
 	it('keeps the section usable when posts cannot be loaded', async () => {
 		get.mockRejectedValue(new Error('404'))
 		const wrapper = mountSection('bob')
 		await flushPromises()
-		expect(wrapper.find('h2').text()).toBe('Social')
+		expect(wrapper.find('h2').text()).toBe('Aloha Social')
 		expect(wrapper.findAllComponents(ProfileStatusCardStub)).toHaveLength(0)
 	})
 })

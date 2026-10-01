@@ -1,4 +1,4 @@
-# Nextcloud Social — OCC Commands Reference
+# Aloha Social — OCC Commands Reference
 
 All commands are invoked via `php occ <command>` from the Nextcloud root directory.
 
@@ -15,7 +15,7 @@ but only `social:timeline` reads it (see below).
 
 ### `social:account:create`
 
-Create the Social actor for an existing Nextcloud user.
+Create the Aloha Social actor for an existing Nextcloud user.
 
 ```
 php occ social:account:create [--handle HANDLE] <userId>
@@ -27,7 +27,7 @@ php occ social:account:create [--handle HANDLE] <userId>
 
 | Option | Value | Description |
 |--------|-------|-------------|
-| `--handle` | required | Social handle. If omitted, the `userId` is used as the handle. |
+| `--handle` | required | Aloha Social handle. If omitted, the `userId` is used as the handle. |
 
 Fails with `Unknown user` if no such Nextcloud user exists. On success the command
 prints nothing.
@@ -36,7 +36,7 @@ prints nothing.
 
 ### `social:account:delete`
 
-Delete a local Social account.
+Delete a local Aloha Social account.
 
 ```
 php occ social:account:delete <account>
@@ -44,7 +44,7 @@ php occ social:account:delete <account>
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `account` | Yes | Local Social account (the handle / preferred username) |
+| `account` | Yes | Local Aloha Social account (the handle / preferred username) |
 
 Prints nothing on success.
 
@@ -385,7 +385,7 @@ php occ social:stream:prune [-d|--days DAYS] [--dry-run]
   or boosts it, or when it is a direct message. Local content is never touched.
 - The same pruning runs from the `Cron\Cache` background job (bounded to 5000
   statuses per run) whenever `retention_days` is greater than 0; the admin can
-  change the period in the Social section of the administration settings.
+  change the period in the Aloha Social section of the administration settings.
 
 ---
 
@@ -616,7 +616,7 @@ php occ social:media:retry <remote_url>
 |----------|----------|-------------|
 | `remote_url` | Yes | Exact HTTP(S) URL shown in the attachment's `remote_url` field |
 
-The argument must be the exact HTTP(S) `remote_url` exposed by Social. The
+The argument must be the exact HTTP(S) `remote_url` exposed by Aloha Social. The
 command finds the cache row by that media URL and only resets a row with a
 stored media error and no local copy; it does not touch healthy cached files or
 retry every failed attachment at once. It clears the old error and caching
@@ -743,7 +743,7 @@ as it is.
 
 On by default, and nothing happens on a server without ffmpeg. An administrator
 can switch it off — re-encoding is lossy, and **the converted file replaces the
-original** — under **Administration → Social → Server → Convert videos to MP4
+original** — under **Administration → Aloha Social → Server → Convert videos to MP4
 in the background**, or with `occ config:app:set social video_transcode
 --value=0`. The command exits 1 and changes nothing when it is off, or when the
 server has no ffmpeg.
@@ -784,7 +784,7 @@ as a fragmented MP4 and the playlist addresses each segment as a byte range into
 it, so a forty-minute video is three files rather than a thousand. Rungs at or
 above a video's own height are skipped rather than upscaled.
 
-Off unless an administrator turned it on: **Administration → Social → Server →
+Off unless an administrator turned it on: **Administration → Aloha Social → Server →
 Build a ladder of video sizes**, or `occ config:app:set social video_ladder
 --value=1`. Which heights, with `occ config:app:set social video_ladder_heights
 --value=360,720,1080`. The command exits 1 and changes nothing when it is off,
@@ -1128,7 +1128,7 @@ php occ social:external promote <handle>
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `action` | Yes | `list`, `add` or `promote` |
-| `handle` | No | The user id, which is also the Social handle; needed by `add` and `promote` |
+| `handle` | No | The user id, which is also the Aloha Social handle; needed by `add` and `promote` |
 
 | Option | Value | Description |
 |--------|-------|-------------|
@@ -1164,7 +1164,7 @@ Without `--index`:
 
 - runs `CheckService::checkInstallationStatus()`,
 - prints how many invalid followers and invalid notes were removed,
-- runs the four checks that Administration → Overview shows (`lib/SetupChecks/`) and prints each with its severity: whether `.well-known/webfinger` answers for an account of this instance, whether the address Social builds ids from still matches the one the server reports, whether the delivery job has run lately, and whether anything in the outbound queue is stuck. A check that fails links to [Admin.md](Admin.md),
+- runs the four checks that Administration → Overview shows (`lib/SetupChecks/`) and prints each with its severity: whether `.well-known/webfinger` answers for an account of this instance, whether the address Aloha Social builds ids from still matches the one the server reports, whether the delivery job has run lately, and whether anything in the outbound queue is stuck. A check that fails links to [Admin.md](Admin.md),
 - prints a verdict line — `all N checks passed`, or `M of N checks reported an error` — and **exits 1** when any check reported an error, so the command can stand in a deployment script
 - prints the current app configuration as pretty JSON.
 
@@ -1187,7 +1187,7 @@ and make the command exit `1`; the rest of the index is still rebuilt.
 
 ### `social:reset`
 
-Delete all Social data, or uninstall the app's database footprint.
+Delete all Aloha Social data, or uninstall the app's database footprint.
 
 ```
 php occ social:reset [--uninstall] [--uri ADDRESS] [-f|--force]
@@ -1216,7 +1216,7 @@ with `social:external promote`, first.
 
 Without `--uninstall`:
 
-- empties every Social table (`CoreRequestBuilder::emptyAll()`),
+- empties every Aloha Social table (`CoreRequestBuilder::emptyAll()`),
 - re-runs `checkInstallationStatus(true)`,
 - sets the cloud base address to `--uri`, or, with somebody at the keyboard and no
   `--uri`, offers to change it, pre-filled with the current one; entering the same
@@ -1225,7 +1225,7 @@ Without `--uninstall`:
 
 With `--uninstall`:
 
-- drops the Social tables,
+- drops the Aloha Social tables,
 - removes the app's rows from the migrations table,
 - removes the app's background jobs,
 - unsets the app configuration.

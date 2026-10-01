@@ -55,7 +55,7 @@ class MediaTranscode extends SocialCommand {
 
 		if (!$this->videoTranscodeService->isEnabled()) {
 			$output->writeln(
-				'<comment>Converting videos is off. Turn it on under Administration → Social,'
+				'<comment>Converting videos is off. Turn it on under Administration → Aloha Social,'
 				. ' or with: occ config:app:set social video_transcode --value=1</comment>'
 			);
 

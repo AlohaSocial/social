@@ -45,7 +45,7 @@ class WebFingerReachable implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: WebFinger');
+		return $this->l10n->t('Aloha Social: WebFinger');
 	}
 
 	#[\Override]
@@ -58,7 +58,7 @@ class WebFingerReachable implements ISetupCheck {
 
 		if ($actor === null) {
 			return SetupResult::info(
-				$this->l10n->t('Social has no account yet, so its WebFinger answer cannot be probed. It will be once somebody sets one up.'),
+				$this->l10n->t('Aloha Social has no account yet, so its WebFinger answer cannot be probed. It will be once somebody sets one up.'),
 				self::DOC
 			);
 		}
@@ -71,7 +71,7 @@ class WebFingerReachable implements ISetupCheck {
 
 		return SetupResult::error(
 			$this->l10n->t(
-				'Nothing answers for %1$s at /.well-known/webfinger, so other servers cannot find the accounts of this instance. Either the .well-known redirects are missing, or Social is set up for a different address than the server now uses.',
+				'Nothing answers for %1$s at /.well-known/webfinger, so other servers cannot find the accounts of this instance. Either the .well-known redirects are missing, or Aloha Social is set up for a different address than the server now uses.',
 				['@' . $actor->getPreferredUsername()]
 			),
 			self::DOC

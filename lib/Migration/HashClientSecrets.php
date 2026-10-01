@@ -89,14 +89,14 @@ class HashClientSecrets implements IRepairStep {
 		}
 
 		if ($converted > 0) {
-			$output->info('Hashed the credentials of ' . $converted . ' Social OAuth client(s)');
+			$output->info('Hashed the credentials of ' . $converted . ' Aloha Social OAuth client(s)');
 		}
 
 		if ($failed === []) {
 			$this->configService->setAppValue(self::MARKER, '1');
 		} else {
 			$output->warning(
-				'The credentials of ' . count($failed) . ' Social OAuth client(s) are still stored '
+				'The credentials of ' . count($failed) . ' Aloha Social OAuth client(s) are still stored '
 				. 'in plaintext: ' . implode(', ', $failed) . '. They keep working, and the next '
 				. 'upgrade will try again.'
 			);

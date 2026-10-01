@@ -64,7 +64,7 @@ class UnifiedSearchProvider implements IProvider {
 	 */
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social');
+		return $this->l10n->t('Aloha Social');
 	}
 
 	/**
@@ -108,10 +108,10 @@ class UnifiedSearchProvider implements IProvider {
 
 		$page = array_slice($result, $offset, $limit);
 		if (count($result) > $offset + $limit) {
-			return SearchResult::paginated($this->l10n->t('Social'), $page, $offset + $limit);
+			return SearchResult::paginated($this->l10n->t('Aloha Social'), $page, $offset + $limit);
 		}
 
-		return SearchResult::complete($this->l10n->t('Social'), $page);
+		return SearchResult::complete($this->l10n->t('Aloha Social'), $page);
 	}
 
 	/**

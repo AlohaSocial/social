@@ -311,7 +311,7 @@ class OutboundFederationWireTest extends TestCase {
 			array_keys($headers)
 		);
 
-		$this->assertSame('Nextcloud Social 0.17.0', $headers['user-agent']);
+		$this->assertSame('Aloha Social 0.17.0', $headers['user-agent']);
 		$this->assertSame((string)strlen($body), $headers['content-length']);
 		$this->assertRfc1123($headers['date']);
 		$this->assertSame(self::REMOTE, $headers['host']);

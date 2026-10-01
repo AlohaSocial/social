@@ -48,7 +48,7 @@ let get
 
 function mountWidget() {
 	return mount(Dashboard, {
-		props: { title: 'Social notifications' },
+		props: { title: 'Aloha Social notifications' },
 		global: { stubs: { NcDashboardWidget: NcDashboardWidgetStub } },
 	})
 }
@@ -219,7 +219,7 @@ describe('Dashboard', () => {
 		const wrapper = mountWidget()
 		await flushPromises()
 
-		expect(showError).toHaveBeenCalledWith('Failed to get Social notifications')
+		expect(showError).toHaveBeenCalledWith('Failed to get Aloha Social notifications')
 		const widget = wrapper.findComponent(NcDashboardWidgetStub)
 		expect(widget.props('loading')).toBe(false)
 		expect(widget.props('items')).toEqual([])

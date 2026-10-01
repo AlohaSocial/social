@@ -1,8 +1,8 @@
 OC.L10N.register(
     "social",
     {
-    "Social" : "Sosiaalinen",
-    "Social notifications" : "Sosiaaliset ilmoitukset",
+    "Aloha Social" : "Sosiaalinen",
+    "Aloha Social notifications" : "Sosiaaliset ilmoitukset",
     "Help" : "Ohje",
     "Home" : "Koti",
     "Direct messages" : "Suoraviestit",
@@ -13,10 +13,10 @@ OC.L10N.register(
     "Global timeline" : "Julkinen aikajana",
     ".well-known/webfinger isn't properly set up!" : ".well-known/webfinger ei ole asetettu oikein!",
     "Open documentation" : "Avaa dokumentaatio",
-    "Social app setup" : "Sosiaalinen -sovelluksen asennus",
+    "Aloha Social app setup" : "Sosiaalinen -sovelluksen asennus",
     "ActivityPub URL base" : "ActivityPub URL:n alkuosa",
     "Finish setup" : "Viimeistele asennus",
-    "The Social app needs to be set up by the server administrator." : "Sosiaalinen -sovellus täytyy asentaa pääkäyttäjän toimesta.",
+    "The Aloha Social app needs to be set up by the server administrator." : "Sosiaalinen -sovellus täytyy asentaa pääkäyttäjän toimesta.",
     "Following" : "Seuraa",
     "In reply to" : "Vastauksena",
     "Close reply" : "Sulje vastaus",

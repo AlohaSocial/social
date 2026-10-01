@@ -1,7 +1,7 @@
 OC.L10N.register(
     "social",
     {
-    "Social" : "Social",
+    "Aloha Social" : "Aloha Social",
     "Help" : "Ayuda",
     "🎉 Nextcloud becomes part of the federated social networks!" : "🎉 ¡Nextcloud se convierte en parte de las redes sociales federadas!",
     "Home" : "Casa",
@@ -11,7 +11,7 @@ OC.L10N.register(
     "Local timeline" : "Línea de tiempo local",
     "Global timeline" : "Línea de tiempo global",
     "Open documentation" : "Abrir documentación",
-    "Social app setup" : "Configuración de la aplicación social",
+    "Aloha Social app setup" : "Configuración de la aplicación social",
     "Finish setup" : "Terminar la configuración",
     "Uploading..." : "Cargando...",
     "Delete" : "Eliminar",

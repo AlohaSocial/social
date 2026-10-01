@@ -238,7 +238,7 @@ export default {
 							icon: 'IconInterests',
 							component: 'InterestsSettings',
 							title: t('social', 'For you'),
-							lede: t('social', 'The hashtags Social has noticed you reading, the biggest first. They make up your For you feed: drag one to change its place, pin it, remove it, or add your own. Nobody but you sees this.'),
+							lede: t('social', 'The hashtags Aloha Social has noticed you reading, the biggest first. They make up your For you feed: drag one to change its place, pin it, remove it, or add your own. Nobody but you sees this.'),
 						}]
 					: []),
 				{
@@ -325,7 +325,7 @@ export default {
 					id: 'delete',
 					icon: 'IconDelete',
 					component: 'DeleteAccount',
-					title: t('social', 'Delete your Social account'),
+					title: t('social', 'Delete your Aloha Social account'),
 					lede: this.serverData?.externalMedia
 						? t('social', 'Your account on this server, gone, with everything you posted. Last, and on its own, because it is the one thing on this page that cannot be undone.')
 						: t('social', 'Your fediverse account, gone, while your Nextcloud account stays exactly as it is. Last, and on its own, because it is the one thing on this page that cannot be undone.'),

@@ -1,12 +1,12 @@
 # For you — feature specification
 
-Status: specified 2026-09-24, implemented on `feat/my-interests` (not yet released) · App: Social
+Status: specified 2026-09-24, implemented on `feat/my-interests` (not yet released) · App: Aloha Social
 
 Where the implementation settled something differently from the first draft, this document says what was built; the API reference is the `For you` section of [API.md](API.md). The feature was first called *For you*; every word a reader sees now says **For you** (German *Für dich*), while the code, the routes, the settings keys and the tables keep the name `interests`, which is an API and stored data.
 
 ## 1. Summary
 
-Social learns which hashtags a user cares about from how they read. It looks at
+Aloha Social learns which hashtags a user cares about from how they read. It looks at
 how long they linger on a post, what they skip, and what they like, boost,
 reply to, bookmark, open or play. From that it keeps a private, ranked list of
 **interest hashtags**. A new **For you** feed shows posts carrying those
@@ -84,7 +84,7 @@ Tracking is on by default, so users must be told about it. The first time the
 web UI records a signal for a user, it shows a one-time notice once per
 account. The acknowledgement is stored server-side:
 
-> Social now learns which hashtags interest you from how you read, to build
+> Aloha Social now learns which hashtags interest you from how you read, to build
 > your For you feed. This stays on this server and is only visible to
 > you. [Manage] [Turn off] [Got it]
 
@@ -105,7 +105,7 @@ A new section in [src/views/Settings.vue](../src/views/Settings.vue) with id
   its score, so it usually lands low in the cloud; the cloud brings it into
   view so the reader sees where it went.
 - **Languages for For you**: multi-select, empty = all languages. This is
-  a new preference; Social has no language preference yet.
+  a new preference; Aloha Social has no language preference yet.
 - **Reset all interests**: clears learned scores, manual entries, pins and the
   dwell baseline. Needs a confirmation step built into the page (the viewer has
   no `confirm()`).
@@ -483,7 +483,7 @@ violation, which aborts the whole transaction on PostgreSQL.
 
 ## 10. Administration
 
-In `AdminSettings` (Social admin page):
+In `AdminSettings` (Aloha Social admin page):
 - **Enable For you** (default on). Off: the switcher tab and settings
   section are hidden, all `/interests` endpoints return
   404, and nothing is collected. Existing data is kept, so
@@ -580,7 +580,7 @@ Resolved 2026-09-24:
    lasting suppression comes from "less like this" or a filter.
 3. **Admin disable keeps data**: confirmed (§10).
 4. **How the feed reaches Mastodon apps**: it does not. The feed is shown by
-   Social's own web interface only; a pseudo-list for apps was tried and
+   Aloha Social's own web interface only; a pseudo-list for apps was tried and
    removed as confusing (§8). Actions taken in apps still count.
 
 No open points remain.

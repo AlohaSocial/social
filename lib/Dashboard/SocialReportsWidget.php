@@ -52,7 +52,7 @@ class SocialReportsWidget implements IAPIWidgetV2, IIconWidget, IButtonWidget, I
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social reports');
+		return $this->l10n->t('Aloha Social reports');
 	}
 
 	#[\Override]

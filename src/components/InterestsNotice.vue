@@ -9,7 +9,7 @@
 	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
-			{{ t('social', 'Social now learns which hashtags interest you from how you read, to build your For you feed. This stays on this server and is only visible to you.') }}
+			{{ t('social', 'Aloha Social now learns which hashtags interest you from how you read, to build your For you feed. This stays on this server and is only visible to you.') }}
 		</p>
 		<div class="interests-notice__actions">
 			<NcButton variant="tertiary" :to="{ name: 'settings', hash: '#interests' }">

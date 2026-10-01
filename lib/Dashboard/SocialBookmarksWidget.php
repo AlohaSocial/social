@@ -23,7 +23,7 @@ class SocialBookmarksWidget extends TimelineWidget {
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social bookmarks');
+		return $this->l10n->t('Aloha Social bookmarks');
 	}
 
 	#[\Override]
