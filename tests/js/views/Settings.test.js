@@ -306,6 +306,6 @@ describe('Settings', () => {
 		const ids = on.findAll('.settings__section').map((section) => section.attributes('id'))
 		expect(ids.indexOf('interests')).toBe(ids.indexOf('featured-tags') + 1)
 		expect(on.find('#interests .interests-settings-stub').exists()).toBe(true)
-		expect(on.findAll('.settings__toc-link').map((link) => link.text())).toContain('My interests')
+		expect(on.findAll('.settings__toc-link').map((link) => link.text())).toContain('For you')
 	})
 })

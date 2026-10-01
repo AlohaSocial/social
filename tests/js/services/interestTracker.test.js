@@ -122,6 +122,8 @@ describe('the interest tracker', () => {
 		expect(contextFor('federated')).toBe('federated')
 		expect(contextFor('tags')).toBe('tag')
 		expect(contextFor('interests')).toBe('interests')
+		expect(contextFor('photos')).toBe('photos')
+		expect(contextFor('videos')).toBe('videos')
 		expect(contextFor('single-post')).toBe('detail')
 		expect(contextFor('notifications')).toBeNull()
 		expect(contextFor('bookmarks')).toBeNull()

@@ -187,7 +187,7 @@ class NavigationControllerTest extends TestCase {
 				'section_videos' => true,
 				'group_lists' => [],
 			],
-			// whether My interests is on for this reader; what it holds is
+			// whether For you is on for this reader; what it holds is
 			// InterestService::pageState()'s, tested there
 			'interests' => [],
 			// the media quota of a self-registered external user; alice is not one

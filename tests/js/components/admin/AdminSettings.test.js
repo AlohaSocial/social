@@ -245,17 +245,17 @@ describe('the escaping of what a peer sent', () => {
 		expect(table.text()).toContain('javascript:alert(2)')
 	})
 	/**
-	 * My interests is decided for the whole instance, like the sections, so
+	 * For you is decided for the whole instance, like the sections, so
 	 * it sits with them — and only when the server sent its settings, which
 	 * it does not for a delegate.
 	 */
-	it('draws the My interests card next to the sections when it has its settings', async () => {
+	it('draws the For you card next to the sections when it has its settings', async () => {
 		const interests = { enabled: true, learningDefault: true, halfLife: 30, threshold: 3, cap: 30, window: 7 }
 		const wrapper = await mountPage({ ...STATE, interests })
 		const ids = wrapper.findAll('.social-admin__card').map((card) => card.attributes('id'))
 
 		expect(ids.indexOf('interests')).toBe(ids.indexOf('sections') + 1)
-		expect(wrapper.findAll('.social-admin__rail-link').map((link) => link.text())).toContain('My interests')
+		expect(wrapper.findAll('.social-admin__rail-link').map((link) => link.text())).toContain('For you')
 
 		const without = await mountPage({ ...STATE, interests: null })
 		expect(without.find('#interests').exists()).toBe(false)

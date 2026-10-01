@@ -9,7 +9,7 @@ import { toRaw } from 'vue'
 import axios from '@nextcloud/axios'
 import { showError } from '../../../src/services/toast.js'
 
-import { useTimelineStore } from '../../../src/store/timeline.js'
+import { isRanked, useTimelineStore } from '../../../src/store/timeline.js'
 import logger from '../../../src/services/logger.js'
 
 vi.mock('@nextcloud/axios', () => ({
@@ -366,6 +366,25 @@ describe('timeline store getters', () => {
 		store.timeline.push('ghost')
 
 		expect(store.getTimeline).toEqual([newer, older])
+	})
+
+	it.each([
+		['interests', {}],
+		['photos', { scope: 'interests' }],
+		['videos', { scope: 'interests' }],
+	])('keeps the order a ranking came in for %s %o', async (type, params) => {
+		await store.changeTimelineType({ type, params })
+		const older = makeStatus('1', { created_at: '2026-01-01T10:00:00.000Z' })
+		const newer = makeStatus('2', { created_at: '2026-01-02T10:00:00.000Z' })
+		store.addToTimeline([older, newer])
+
+		expect(isRanked(store)).toBe(true)
+		expect(store.getTimeline).toEqual([older, newer])
+	})
+
+	it('reads Photos at a circle of people as a timeline, not a ranking', () => {
+		expect(isRanked({ type: 'photos', params: { scope: 'timeline' } })).toBe(false)
+		expect(isRanked({ type: 'home', params: {} })).toBe(false)
 	})
 
 	it('getTimeline is the timeline, not a client-side search over it', () => {
@@ -1002,6 +1021,13 @@ describe('timeline store actions', () => {
 			// query, not the path: a URL inside a path segment has to survive
 			// two rounds of encoding and one web server's idea of a slash.
 			['link', { url: 'https://paper.example/piece' }, `${API}/timelines/link`, { limit: 15, url: 'https://paper.example/piece' }],
+			// For you, whole or narrowed to one kind; the server narrows it,
+			// so none of the attachment questions go out with it
+			['interests', {}, `${API}/timelines/interests`, { limit: 15 }],
+			['interests', { media: 'videos' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
+			['interests', { media: 'podcasts' }, `${API}/timelines/interests`, { limit: 15 }],
+			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'photos' }],
+			['videos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
 		])('requests the %s timeline from its endpoint and appends the result', async (type, params, url, query) => {
 			await store.changeTimelineType({ type, params })
 

@@ -352,7 +352,9 @@ const router = createRouter({
 			components: {
 				default: VideoReels,
 			},
-			props: { default: (route) => ({ scope: String(route.query.scope ?? 'home') }) },
+			// no scope asked for is '', which the view resolves: For you for a
+			// reader it has learned about, My Feed otherwise
+			props: { default: (route) => ({ scope: String(route.query.scope ?? '') }) },
 			name: 'reels',
 		},
 		{

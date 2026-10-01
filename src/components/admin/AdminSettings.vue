@@ -152,7 +152,7 @@ const NOTHING = {
 	reviewFirstPost: true,
 	autospam: true,
 	/**
-	 * My interests, or null where this instance does not offer it — the
+	 * For you, or null where this instance does not offer it — the
 	 * card and its section are drawn only when the server sends it
 	 * (`InterestService::adminSettings()`).
 	 *
@@ -294,7 +294,7 @@ export default {
 						...(this.state.sections ? [{ id: 'sections', title: t('social', 'Sections') }] : []),
 						// an administrator's decision, like the sections: a delegate is
 						// sent no settings for it
-						...(this.state.interests ? [{ id: 'interests', title: t('social', 'My interests') }] : []),
+						...(this.state.interests ? [{ id: 'interests', title: t('social', 'For you') }] : []),
 					],
 				},
 				{

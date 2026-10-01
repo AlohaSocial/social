@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * My interests: what a reader lingers on, turned into the hashtags their feed
+ * For you: what a reader lingers on, turned into the hashtags their feed
  * is made of.
  *
  * Everything that reads or writes a reader's interests goes through here — the
@@ -45,7 +45,12 @@ use Throwable;
 class InterestService {
 	/** What the web interface may report. */
 	public const KINDS = ['dwell', 'skip', 'open', 'media', 'link', 'mute'];
-	public const CONTEXTS = ['home', 'local', 'federated', 'tag', 'explore', 'detail', 'interests'];
+	public const CONTEXTS = ['home', 'local', 'federated', 'tag', 'explore', 'detail', 'interests', 'photos', 'videos', 'reels'];
+	/**
+	 * Where a dwell is time spent watching the video rather than time the post
+	 * was on screen: the Shorts stack, which reports what its player played.
+	 */
+	public const WATCH_CONTEXTS = ['reels'];
 	public const MAX_EVENTS = 100;
 	/** One look is worth at most this much, however long the tab stayed open. */
 	public const MAX_DWELL_MS = 30000;
@@ -176,10 +181,16 @@ class InterestService {
 		];
 	}
 
-	/** What the page is handed before it asks for anything. */
+	/**
+	 * What the page is handed before it asks for anything: the switches, and
+	 * `profile`, whether reading has taught the feed anything yet — the pace
+	 * it keeps is written the first time it does and cleared by a reset —
+	 * which is when the Shorts stack opens on For you rather than My Feed.
+	 */
 	public function pageState(string $userId): array {
 		$settings = $this->settingsFor($userId);
 		unset($settings['languages']);
+		$settings['profile'] = $this->userValue($userId, self::KEY_BASELINE) !== '';
 
 		return $settings;
 	}
@@ -287,6 +298,7 @@ class InterestService {
 				'nid' => $nid,
 				'kind' => $kind,
 				'ms' => max(0, min(self::MAX_DWELL_MS, (int)($event['ms'] ?? 0))),
+				'context' => (string)($event['context'] ?? ''),
 			];
 		}
 		if ($wanted === []) {
@@ -305,7 +317,15 @@ class InterestService {
 				continue;
 			}
 
-			if ($event['kind'] === 'dwell') {
+			$videoMs = ($event['kind'] === 'dwell' && in_array($event['context'], self::WATCH_CONTEXTS, true))
+				? $this->videoDurationMs($post)
+				: 0;
+			if ($videoMs > 0) {
+				// a video is watched rather than read: how long it runs is
+				// what it takes, and the reader's reading pace says nothing
+				// about it and is left alone
+				$signal = $scorer->classifyWatch($event['ms'], $scorer->expectedWatchMs($videoMs));
+			} elseif ($event['kind'] === 'dwell') {
 				[$signal, $baseline] = $scorer->classifyDwell(
 					$event['ms'],
 					$scorer->expectedDwellMs($this->visibleChars($post), count($post->getAttachments())),
@@ -539,15 +559,23 @@ class InterestService {
 	/** The hides the feed has to leave out. */
 	public function hiddenFor(Person $actor): array {
 		return $this->interestsRequest->getHiddenSince(
-			$actor->getId(), new DateTime('@' . ($this->now() - $this->windowDays() * 86400))
+			$actor->getId(), new DateTime('@' . ($this->now() - $this->hideDays() * 86400))
 		);
 	}
 
 	/** Forgets the hides older than the feed's window, for everybody. */
 	public function purgeHides(): int {
 		return $this->interestsRequest->purgeHidesBefore(
-			new DateTime('@' . ($this->now() - $this->windowDays() * 86400))
+			new DateTime('@' . ($this->now() - $this->hideDays() * 86400))
 		);
+	}
+
+	/**
+	 * How long a hide matters: as far back as the widest ranking looks, which
+	 * is a photo or video one, or a hidden picture would come back into it.
+	 */
+	private function hideDays(): int {
+		return $this->windowDays() * InterestFeedService::MEDIA_WINDOW_FACTOR;
 	}
 
 	/**
@@ -692,6 +720,26 @@ class InterestService {
 		}
 
 		return $post;
+	}
+
+	/**
+	 * How long a post's video runs, in milliseconds; 0 for a post that is not
+	 * one, or whose video never said. The first video with a running time is
+	 * the one a player starts with.
+	 */
+	private function videoDurationMs(Stream $post): int {
+		foreach ($post->getAttachments() as $attachment) {
+			if (!in_array($attachment->getType(), ['video', 'gifv'], true)) {
+				continue;
+			}
+			$meta = $attachment->getMeta();
+			$seconds = $meta?->getDuration() ?? $meta?->getOriginal()?->getDuration() ?? 0.0;
+			if ($seconds > 0) {
+				return (int)round($seconds * 1000.0);
+			}
+		}
+
+		return 0;
 	}
 
 	private function visibleChars(Stream $post): int {

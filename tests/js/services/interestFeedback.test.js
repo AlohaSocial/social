@@ -49,13 +49,13 @@ describe('less like this', () => {
 		undoLessLikeThis.mockResolvedValue(undefined)
 	})
 
-	it('keeps the server\'s ranking on My interests', () => {
+	it('keeps the server\'s ranking on For you', () => {
 		feed()
 
 		expect(store.getTimeline.map((one) => one.id)).toEqual(['3', '1', '2'])
 	})
 
-	it('takes the post out of My interests at once and offers an Undo', async () => {
+	it('takes the post out of For you at once and offers an Undo', async () => {
 		const [, second] = feed()
 
 		const done = lessLikeThisFromPost(second, 'interests')

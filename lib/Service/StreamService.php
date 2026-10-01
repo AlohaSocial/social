@@ -659,7 +659,7 @@ class StreamService {
 
 	/**
 	 * Posts named by nid, as the viewer may see them and dressed the way a
-	 * timeline page is — the page My interests ranks is decided before the
+	 * timeline page is — the page For you ranks is decided before the
 	 * posts are read, so it cannot come out of `getTimeline()`.
 	 *
 	 * @param string[] $nids

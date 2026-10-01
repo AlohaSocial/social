@@ -604,7 +604,7 @@ class PostService {
 
 	/**
 	 * A reply is the strongest thing a reader says about a post short of
-	 * writing one: its hashtags count for My interests. Read as the viewer,
+	 * writing one: its hashtags count for For you. Read as the viewer,
 	 * and never allowed to fail the post it is a side effect of.
 	 */
 	private function learnFromReply(Person $actor, string $replyTo): void {

@@ -347,7 +347,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private array $taggedPeople = [];
 
 	/**
-	 * Why My interests put this post in front of the reader: the hashtags it
+	 * Why For you put this post in front of the reader: the hashtags it
 	 * matched and whether they were learned, followed, related or trending.
 	 * Null everywhere else, which is every other timeline.
 	 *
@@ -1866,7 +1866,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			// who is in the picture. Pixelfed's `tagged_people`, and the same
 			// key, because its own app reads it
 			'tagged_people' => $this->getTaggedPeople(),
-			// what matched, on My interests only; the web interface draws the
+			// what matched, on For you only; the web interface draws the
 			// "why am I seeing this" line from it
 			'interest' => $this->getInterest(),
 			'content' => $this->getContent(),

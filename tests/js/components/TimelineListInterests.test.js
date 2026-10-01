@@ -67,7 +67,16 @@ function post(id, day) {
 let fake
 let store
 
-function mountList({ type = 'interests', timeline = [], interests = ON, route, responses = [[]] } = {}) {
+/** The grid Photos and Videos are drawn as: one link per post. */
+const ProfileMediaGridStub = {
+	name: 'ProfileMediaGrid',
+	props: ['posts', 'account', 'loading'],
+	template: `<ul><li v-for="p in posts" :key="p.id">
+		<a class="media-grid__link" :data-status-id="p.id" href="#"><img class="tile" alt=""></a>
+	</li></ul>`,
+}
+
+function mountList({ type = 'interests', timeline = [], interests = ON, route, responses = [[]], display = 'list', params = {} } = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
 	useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', interests })
@@ -81,24 +90,25 @@ function mountList({ type = 'interests', timeline = [], interests = ON, route, r
 	vi.spyOn(store, 'fetchTimeline').mockImplementation(dispatch)
 	store.$patch({
 		type,
+		params,
 		statuses: Object.fromEntries(timeline.map((entry) => [entry.id, entry])),
 		timeline: timeline.map((entry) => entry.id),
 	})
 
 	const wrapper = mount(TimelineList, {
 		attachTo: document.body,
-		props: { type },
+		props: { type, display },
 		global: {
 			plugins: [pinia],
 			mocks: { $route: route ?? { name: 'timeline', params: { type } } },
-			stubs: { TimelineEntry: TimelineEntryStub },
+			stubs: { TimelineEntry: TimelineEntryStub, ProfileMediaGrid: ProfileMediaGridStub },
 		},
 	})
 
 	return { wrapper, dispatch }
 }
 
-describe('TimelineList and My interests', () => {
+describe('TimelineList and For you', () => {
 	let wrapper
 
 	beforeEach(() => {
@@ -153,6 +163,17 @@ describe('TimelineList and My interests', () => {
 			expect(wrapper.find('.timeline-caughtup').exists()).toBe(false)
 		})
 
+		it('pages the For you scope of Photos from where it ended, as the feed itself', async () => {
+			let dispatch
+			({ wrapper, dispatch } = mountList({ type: 'photos', display: 'grid', params: { scope: 'interests' }, timeline: ranked }))
+			await flushPromises()
+			dispatch.mockClear()
+
+			await wrapper.vm.infiniteHandler()
+
+			expect(dispatch).toHaveBeenCalledWith({ max_id: '20' })
+		})
+
 		it('explains how the feed learns when it is empty, and where to teach it', async () => {
 			({ wrapper } = mountList())
 			await flushPromises()
@@ -175,6 +196,20 @@ describe('TimelineList and My interests', () => {
 			await flushPromises()
 
 			expect(createInterestTracker).toHaveBeenCalledWith(expect.objectContaining({ context }))
+		})
+
+		it.each(['photos', 'videos'])('counts only a tile opened on the %s grid, where every tile is on screen at once', async (type) => {
+			({ wrapper } = mountList({ type, display: 'grid', timeline: [post('1', '10'), post('2', '11')] }))
+			await flushPromises()
+
+			expect(createInterestTracker).toHaveBeenCalledWith(expect.objectContaining({ context: type }))
+			expect(fake.sync).not.toHaveBeenCalled()
+
+			const tile = wrapper.findAll('.media-grid__link')[1].element
+			tile.addEventListener('click', (event) => event.preventDefault())
+			wrapper.findAll('.tile')[1].element.click()
+
+			expect(fake.record.mock.calls.map(([status, kind]) => [status.id, kind])).toEqual([['1', 'media']])
 		})
 
 		it('counts a thread as the detail view', async () => {

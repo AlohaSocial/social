@@ -31,15 +31,15 @@
 					{{ t('social', 'Pause learning') }}
 				</NcCheckboxRadioSwitch>
 				<p class="interests-settings__hint">
-					{{ t('social', 'For a day of reading something unusual. My interests keeps working with what it knows, and nothing new is learned or forgotten until you switch this back.') }}
+					{{ t('social', 'For a day of reading something unusual. For you keeps working with what it knows, and nothing new is learned or forgotten until you switch this back.') }}
 				</p>
 			</div>
 
 			<NcNoteCard v-if="!settings.learning" type="info" class="interests-settings__note">
-				{{ t('social', 'Learning is off, so this list is frozen and My interests is hidden. You can still change it, and it is all here when you turn learning back on.') }}
+				{{ t('social', 'Learning is off, so this list is frozen and For you is hidden. You can still change it, and it is all here when you turn learning back on.') }}
 			</NcNoteCard>
 			<NcNoteCard v-else-if="thin" type="info" class="interests-settings__note">
-				{{ t('social', 'Still learning what you like. Until it knows more, My interests also shows hashtags you follow and what is trending here.') }}
+				{{ t('social', 'Still learning what you like. Until it knows more, For you also shows hashtags you follow and what is trending here.') }}
 			</NcNoteCard>
 
 			<InterestCloud
@@ -153,7 +153,7 @@
 				<NcSelect
 					:modelValue="chosenLanguages"
 					class="interests-settings__language-select"
-					:inputLabel="t('social', 'Languages for My interests')"
+					:inputLabel="t('social', 'Languages in For you')"
 					:options="languageOptions"
 					:multiple="true"
 					:keepOpen="true"

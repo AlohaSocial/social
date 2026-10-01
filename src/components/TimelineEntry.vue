@@ -81,17 +81,26 @@
 				{{ t('social', 'boosted') }}
 			</div>
 		</template>
-		<!-- why My interests put the post here, and the way to the tag that
+		<!-- why For you put the post here, and the way to the tag that
 		     did it. Above the post rather than inside it: it is the feed's
 		     remark about the post, not part of what the author wrote -->
 		<router-link
-			v-if="interest !== null"
+			v-if="interest !== null && interest.tag !== null"
 			class="interest-reason"
 			:to="{ name: 'tags', params: { tag: interest.tag } }"
 			:aria-label="interest.label">
 			<Pound :size="16" />
 			<span class="interest-reason__text">{{ interest.text }}</span>
 		</router-link>
+		<!-- a post no hashtag brought: there is no tag to go to -->
+		<span
+			v-else-if="interest !== null"
+			class="interest-reason interest-reason--popular"
+			role="note"
+			:aria-label="interest.label">
+			<TrendingUp :size="16" />
+			<span class="interest-reason__text">{{ interest.text }}</span>
+		</span>
 		<UserEntry v-if="isNotification && notificationIsAboutAnAccount" :displayFollowButton="false" :item="item.account" />
 		<template v-else>
 			<div v-if="entryContent" class="wrapper">
@@ -128,6 +137,7 @@ import Poll from 'vue-material-design-icons/Poll.vue'
 import MessageOutline from 'vue-material-design-icons/MessageOutline.vue'
 import MessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
 import Pound from 'vue-material-design-icons/Pound.vue'
+import TrendingUp from 'vue-material-design-icons/TrendingUp.vue'
 import { translate } from '@nextcloud/l10n'
 import TimelinePost from './TimelinePost.vue'
 import ActorAvatar from './ActorAvatar.vue'
@@ -176,6 +186,7 @@ export default {
 		MessageOutline,
 		MessagePlusOutline,
 		Pound,
+		TrendingUp,
 	},
 
 	props: {
@@ -317,10 +328,10 @@ export default {
 		},
 
 		/**
-		 * Why My interests shows this post, from the `interest` the feed puts
+		 * Why For you shows this post, from the `interest` the feed puts
 		 * on each of its posts; every other timeline sends null.
 		 *
-		 * @return {{tag: string, text: string, label: string}|null}
+		 * @return {{tag: string|null, text: string, label: string}|null}
 		 */
 		interest() {
 			if (this.isNotification) {
@@ -660,6 +671,11 @@ export default {
 	&:hover,
 	&:focus-visible {
 		color: var(--color-main-text);
+	}
+
+	// words, not a link: nothing to answer a pointer with
+	&--popular:hover {
+		color: var(--color-text-maxcontrast);
 	}
 
 	&__text {

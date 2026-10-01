@@ -242,7 +242,7 @@ class ActionServiceTest extends TestCase {
 	}
 
 	/**
-	 * A like, a boost and a bookmark teach My interests from here, where
+	 * A like, a boost and a bookmark teach For you from here, where
 	 * every one of them passes, so an app's count as much as the web's; taking
 	 * one back teaches nothing.
 	 */

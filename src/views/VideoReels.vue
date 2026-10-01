@@ -86,6 +86,10 @@
 					<p v-if="entry.text" class="reel__text">
 						{{ entry.text }}
 					</p>
+					<!-- why For you put it here, as the chip over a post says it -->
+					<p v-if="reasonOf(entry.status)" class="reel__reason" :aria-label="reasonOf(entry.status).label">
+						{{ reasonOf(entry.status).text }}
+					</p>
 					<router-link
 						class="reel__open"
 						:to="{ name: 'single-post', params: { account: entry.status.account.acct, id: entry.status.id } }">
@@ -110,6 +114,8 @@
 				playsinline
 				loop
 				preload="auto"
+				@timeupdate="reelSignals.progress(current.status, $event.target)"
+				@ended="reelSignals.ended(current.status)"
 				@click="onVideoTap(playing, $event)" />
 
 			<div v-if="reels.length === 0 && loading" class="reels__empty">
@@ -155,8 +161,8 @@
 				v-for="option in scopes"
 				:key="option.value"
 				class="reels__scope"
-				:class="{ 'reels__scope--current': option.value === scope }"
-				:aria-current="option.value === scope ? 'page' : undefined"
+				:class="{ 'reels__scope--current': option.value === watching }"
+				:aria-current="option.value === watching ? 'page' : undefined"
 				:to="{ name: 'reels', query: { scope: option.value } }">
 				{{ option.label }}
 			</router-link>
@@ -207,7 +213,10 @@ import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { useSettingsStore } from '../store/settings.js'
-import { useTimelineStore } from '../store/timeline.js'
+import { isRanked, useTimelineStore } from '../store/timeline.js'
+import { hasInterestsFeed, isTracking } from '../services/interests.js'
+import { createReelSignals } from '../services/reelSignals.js'
+import { interestReason } from '../utils/interestReason.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
@@ -252,11 +261,12 @@ export default {
 		 * Which circle of people: 'home' (the ones you follow), 'timeline'
 		 * (this instance) or 'federated' (everywhere) — the same three the
 		 * Videos page is read at, carried here so that leaving the grid for
-		 * the stack does not silently change what is in it.
+		 * the stack does not silently change what is in it — or 'interests',
+		 * For you narrowed to videos. '' is the default, see `watching`.
 		 */
 		scope: {
 			type: String,
-			default: 'home',
+			default: '',
 		},
 	},
 
@@ -285,6 +295,15 @@ export default {
 			lastTap: null,
 			/** the pause a single tap is waiting to do */
 			tapTimer: null,
+			/** what watching teaches For you (`reelSignals.js`) */
+			reelSignals: createReelSignals({
+				enabled: () => {
+					const serverData = useSettingsStore().getServerData
+
+					return !serverData?.public && isTracking(serverData?.interests)
+				},
+			}),
+
 			HEART_PATH,
 		}
 	},
@@ -305,8 +324,35 @@ export default {
 				{ value: 'timeline', label: t('social', 'Local') },
 				{ value: 'federated', label: t('social', 'Global') },
 			]
+			// For you, for a signed-in reader who has it: beside My Feed, as
+			// above the timeline
+			if (this.hasForYou) {
+				all.splice(1, 0, { value: 'interests', label: t('social', 'For you') })
+			}
 
 			return this.settingsStore.getServerData?.public ? all.slice(1) : all
+		},
+
+		/** @return {boolean} whether For you is on for this reader */
+		hasForYou() {
+			const serverData = this.settingsStore.getServerData
+
+			return !serverData?.public && hasInterestsFeed(serverData?.interests)
+		},
+
+		/**
+		 * The scope being watched: the one asked for when it is on offer, and
+		 * otherwise For you once reading has taught it something, My Feed
+		 * before that.
+		 *
+		 * @return {string}
+		 */
+		watching() {
+			if (this.scopes.some((option) => option.value === this.scope)) {
+				return this.scope
+			}
+
+			return this.hasForYou && this.settingsStore.getServerData?.interests?.profile === true ? 'interests' : 'home'
 		},
 
 		/**
@@ -346,7 +392,7 @@ export default {
 	watch: {
 		// the query is the prop, and the router reuses this view when only
 		// the query changes, so a new scope has to switch the feed here
-		scope() {
+		watching() {
 			this.open()
 		},
 	},
@@ -363,6 +409,7 @@ export default {
 	},
 
 	beforeUnmount() {
+		this.reelSignals.leave()
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
 		this.player()?.pause?.()
@@ -384,13 +431,22 @@ export default {
 
 		/** Points the store at the videos of this scope and fetches the first page. */
 		open() {
+			this.reelSignals.leave()
 			this.timelineStore.changeTimelineType({
 				type: 'videos',
-				params: { scope: this.scope },
+				params: { scope: this.watching },
 			})
 			this.allLoaded = false
 			this.playing = 0
 			this.load()
+		},
+
+		/**
+		 * @param {object} status a slide's post
+		 * @return {{text: string, label: string}|null} why For you showed it
+		 */
+		reasonOf(status) {
+			return interestReason(status?.interest)
 		},
 
 		setSlide(el, index) {
@@ -434,6 +490,7 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async play(index) {
+			this.reelSignals.enter(this.reels[index]?.status)
 			if (index >= this.reels.length - LOOK_AHEAD) {
 				this.load()
 			}
@@ -662,7 +719,8 @@ export default {
 			this.failed = false
 			const params = {}
 			const ids = this.timelineStore.getTimeline.map((status) => status.id)
-			const cursor = oldestId(ids)
+			// a ranking pages from where it ended, not from its oldest post
+			const cursor = isRanked(this.timelineStore) ? ids[ids.length - 1] : oldestId(ids)
 			if (cursor !== undefined) {
 				params.max_id = cursor
 			}
@@ -984,6 +1042,12 @@ export default {
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	&__reason {
+		margin: 0;
+		font-size: 90%;
+		opacity: 0.8;
 	}
 
 	&__open {

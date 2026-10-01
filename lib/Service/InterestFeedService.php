@@ -18,7 +18,7 @@ use OCP\ICache;
 use OCP\ICacheFactory;
 
 /**
- * The My interests feed: posts carrying the reader's hashtags, ranked.
+ * The For you feed: posts carrying the reader's hashtags, ranked.
  *
  * Built in three steps. The candidates are every post of the last few days
  * that carries one of the reader's interests and that they may see — the same
@@ -35,6 +35,15 @@ use OCP\ICacheFactory;
  * for an hour, and cut into pages; a client that pages with the last post's
  * id as `max_id`, as every Mastodon client does, gets the page after that
  * post in the ranking. Refreshing — a request with no cursor — ranks afresh.
+ *
+ * The same ranking also comes narrowed to one kind of post, for the Photos
+ * and Videos pages and the Shorts stack: `photos`, `videos`, or `media` for
+ * either. Each is a ranking of its own, kept under its own key, so paging
+ * one never lands in another. Pictures and videos carry fewer hashtags than
+ * text and are rarer, so those rankings look twice as far back, and where
+ * one is still shorter than `POPULAR_FILL` the rest is what is trending in
+ * the same kind — marked `popular`, so the line over the post says so rather
+ * than inventing a hashtag it matched.
  */
 class InterestFeedService {
 	/** How long a ranking is kept to be paged through; every read extends it. */
@@ -51,12 +60,22 @@ class InterestFeedService {
 	public const EXPLORE_EVERY = 10;
 	public const RELATED_TAGS = 5;
 
+	/** The kinds a ranking can be narrowed to; '' is every post. */
+	public const MEDIA = ['', 'photos', 'videos', 'media'];
+	/** How much further back a narrowed ranking looks. */
+	public const MEDIA_WINDOW_FACTOR = 2;
+	/** A narrowed ranking shorter than this is filled from what is trending. */
+	public const POPULAR_FILL = TrendService::MAX_LIMIT;
+	/** What `TrendService` is asked for, by kind. */
+	private const TREND_KIND = ['photos' => 'image', 'videos' => 'video', 'media' => ''];
+
 	private ?ICache $cache = null;
 
 	public function __construct(
 		private InterestService $interestService,
 		private StreamRequest $streamRequest,
 		private StreamService $streamService,
+		private TrendService $trendService,
 		private ICacheFactory $cacheFactory,
 		private ITimeFactory $timeFactory,
 	) {
@@ -67,12 +86,14 @@ class InterestFeedService {
 	 *
 	 * @param string $maxId the last post of the previous page, or '0'
 	 * @param int $offset the rank to start at, for clients that page by it
+	 * @param string $media one of `MEDIA`; anything else is every post
 	 *
 	 * @return Stream[] in rank order, each carrying why it is there
 	 */
-	public function page(Person $viewer, int $limit, string $maxId = '0', int $offset = 0): array {
+	public function page(Person $viewer, int $limit, string $maxId = '0', int $offset = 0, string $media = ''): array {
+		$media = self::media($media);
 		$this->streamService->setViewer($viewer);
-		$key = 'feed/' . md5($viewer->getId());
+		$key = self::snapshotKey($viewer->getId(), $media);
 		$snapshot = null;
 		if ($maxId !== '0' || $offset > 0) {
 			$snapshot = $this->cache()->get($key);
@@ -82,7 +103,7 @@ class InterestFeedService {
 			// instance with no memory cache at all. Ranked again, the cursor
 			// is usually still in it; where it is not, the page below is empty
 			// and refreshing starts over
-			$snapshot = $this->rank($viewer);
+			$snapshot = $this->rank($viewer, $media);
 		}
 		$this->cache()->set($key, $snapshot, self::SNAPSHOT_TTL);
 
@@ -110,11 +131,48 @@ class InterestFeedService {
 	}
 
 	/**
+	 * Where a reader's ranking of one kind is kept. The kind is part of it, so
+	 * the three rankings are three snapshots rather than one that each of
+	 * them overwrites and pages into.
+	 */
+	public static function snapshotKey(string $viewerId, string $media): string {
+		return 'feed/' . $media . '/' . md5($viewerId);
+	}
+
+	/** One of `MEDIA`: an unknown kind is every post, as the timelines read it. */
+	public static function media(string $media): string {
+		return in_array($media, self::MEDIA, true) ? $media : '';
+	}
+
+	/**
 	 * The whole ranking, as nids with the tags and the reason each is there.
+	 *
+	 * @param string $media one of `MEDIA`
 	 *
 	 * @return list<array{nid: string, tags: string[], reason: string}>
 	 */
-	public function rank(Person $viewer): array {
+	public function rank(Person $viewer, string $media = ''): array {
+		$media = self::media($media);
+		$hidden = $this->interestService->hiddenFor($viewer);
+		$ranking = $this->ranked($viewer, $media, $hidden);
+
+		if ($media !== '' && count($ranking) < self::POPULAR_FILL) {
+			$ranking = array_merge($ranking, $this->popular(
+				$viewer, $media, array_merge($hidden, array_column($ranking, 'nid')), self::POPULAR_FILL - count($ranking)
+			));
+		}
+
+		return $ranking;
+	}
+
+	/**
+	 * The ranking by the reader's hashtags alone.
+	 *
+	 * @param string[] $hidden the posts the reader hid
+	 *
+	 * @return list<array{nid: string, tags: string[], reason: string}>
+	 */
+	private function ranked(Person $viewer, string $media, array $hidden): array {
 		$profile = $this->interestService->feedProfile($viewer);
 		$positive = array_keys(array_filter($profile['weights'], static fn (float $w): bool => $w > 0));
 		if ($positive === []) {
@@ -122,15 +180,13 @@ class InterestFeedService {
 		}
 
 		$now = $this->timeFactory->getTime();
-		$since = Nid::fromPublishedTime(
-			max(0, $now - $this->interestService->windowDays() * 86400), 0, StreamRequest::NID_LIMIT
-		);
-		$hidden = $this->interestService->hiddenFor($viewer);
+		$days = $this->interestService->windowDays() * (($media === '') ? 1 : self::MEDIA_WINDOW_FACTOR);
+		$since = Nid::fromPublishedTime(max(0, $now - $days * 86400), 0, StreamRequest::NID_LIMIT);
 		$languages = $this->interestService->languagesFor($viewer->getUserId());
 
 		$this->streamRequest->setViewer($viewer);
 		$candidates = $this->group($this->streamRequest->interestCandidates(
-			array_map('strval', $positive), $since, self::CANDIDATE_ROWS, $hidden, $languages
+			array_map('strval', $positive), $since, self::CANDIDATE_ROWS, $hidden, $languages, $media
 		));
 		if ($candidates === []) {
 			return [];
@@ -169,7 +225,7 @@ class InterestFeedService {
 
 		usort($ranked, static fn (array $a, array $b): int => $b['rank'] <=> $a['rank']);
 
-		$related = $profile['thin'] ? [] : $this->related($viewer, $ranked, $profile, $since, $hidden, $languages);
+		$related = $profile['thin'] ? [] : $this->related($ranked, $profile, $since, $hidden, $languages, $media);
 
 		return array_map(
 			static fn (array $entry): array => ['nid' => $entry['nid'], 'tags' => $entry['tags'], 'reason' => $entry['reason']],
@@ -241,7 +297,7 @@ class InterestFeedService {
 	 *
 	 * @return list<array{nid: string, author: string, tags: string[], reason: string}>
 	 */
-	private function related(Person $viewer, array $ranked, array $profile, string $since, array $hidden, array $languages): array {
+	private function related(array $ranked, array $profile, string $since, array $hidden, array $languages, string $media): array {
 		$company = [];
 		foreach (array_slice($ranked, 0, 100) as $entry) {
 			foreach ($entry['all'] as $tag) {
@@ -259,7 +315,7 @@ class InterestFeedService {
 
 		$seen = array_merge($hidden, array_column($ranked, 'nid'));
 		$related = [];
-		foreach ($this->group($this->streamRequest->interestCandidates($tags, $since, 200, $seen, $languages)) as $nid => $candidate) {
+		foreach ($this->group($this->streamRequest->interestCandidates($tags, $since, 200, $seen, $languages, $media)) as $nid => $candidate) {
 			$related[] = [
 				'nid' => (string)$nid,
 				'author' => $candidate['author'],
@@ -269,6 +325,40 @@ class InterestFeedService {
 		}
 
 		return $related;
+	}
+
+	/**
+	 * What is trending in this kind, for a narrowed ranking too short to fill
+	 * a screen: a newcomer with no history yet, or interests that few pictures
+	 * carry. `TrendService` is what Discover's Pictures and Videos tabs read,
+	 * so these are the same posts, topped up on a young instance with its
+	 * newest media. None of the reader's own, none they hid, none already
+	 * ranked; the page reads each again as the reader may see it.
+	 *
+	 * @param string[] $seen the posts to leave out
+	 *
+	 * @return list<array{nid: string, tags: string[], reason: string}>
+	 */
+	private function popular(Person $viewer, string $media, array $seen, int $wanted): array {
+		$statuses = $this->trendService->trendingStatuses(
+			HashtagService::PERIOD_DEFAULT, TrendService::MAX_LIMIT, 0, true, self::TREND_KIND[$media] ?? ''
+		);
+
+		$seen = array_flip(array_map('strval', $seen));
+		$popular = [];
+		foreach ($statuses as $status) {
+			$nid = (string)$status->getNid();
+			if (count($popular) >= $wanted) {
+				break;
+			}
+			if ($nid === '' || $nid === '0' || isset($seen[$nid]) || $status->getAttributedTo() === $viewer->getId()) {
+				continue;
+			}
+			$seen[$nid] = true;
+			$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular'];
+		}
+
+		return $popular;
 	}
 
 	/**

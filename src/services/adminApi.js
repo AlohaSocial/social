@@ -52,7 +52,7 @@ export function sectionsUrl() {
 }
 
 /**
- * The My interests card's one endpoint.
+ * The For you card's one endpoint.
  *
  * @return {string} the whole URL
  */

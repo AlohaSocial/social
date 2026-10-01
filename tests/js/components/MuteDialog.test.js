@@ -162,7 +162,7 @@ describe('muting from a post', () => {
 		})
 	}
 
-	it('tells My interests, under the timeline the post was in', async () => {
+	it('tells For you, under the timeline the post was in', async () => {
 		await confirm(mountFromPost({ enabled: true, learning: true, paused: false }))
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/interests/signals`, {

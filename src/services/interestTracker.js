@@ -7,7 +7,7 @@ import { sendSignals } from './interests.js'
 import logger from './logger.js'
 
 /**
- * How reading is measured for My interests.
+ * How reading is measured for the For you feed.
  *
  * One module, so the home feed, a hashtag page and a thread all count a post
  * the same way. It reports time spent on a post, posts scrolled past, and the
@@ -55,6 +55,8 @@ const CONTEXTS = {
 	federated: 'federated',
 	tags: 'tag',
 	interests: 'interests',
+	photos: 'photos',
+	videos: 'videos',
 	'single-post': 'detail',
 }
 
@@ -74,7 +76,7 @@ export function contextFor(type) {
  * @param {(status: object) => boolean} isOwn whether the reader wrote it
  * @return {boolean}
  */
-function isTrackable(status, isOwn = () => false) {
+export function isTrackable(status, isOwn = () => false) {
 	if (!status?.id || !Array.isArray(status.tags) || status.tags.length === 0) {
 		return false
 	}
@@ -548,15 +550,17 @@ export function createInterestTracker({
  * @param {string} kind what happened
  * @param {string} context where
  * @param {(status: object) => boolean} [isOwn] whether the reader wrote it
+ * @param {{ms?: number}} [extra] how long, for a dwell
+ * @param {(events: object[]) => Promise<void>} [send] how it goes out
  * @return {Promise<void>}
  */
-export async function signalNow(status, kind, context, isOwn = () => false) {
+export async function signalNow(status, kind, context, isOwn = () => false, extra = {}, send = sendSignals) {
 	if (!isTrackable(status, isOwn)) {
 		return
 	}
 
 	try {
-		await sendSignals([{ status_id: status.id, kind, context }])
+		await send([{ status_id: status.id, kind, context, ...extra }])
 	} catch (error) {
 		logger.debug('Could not report a reading signal', { error })
 	}

@@ -104,6 +104,18 @@ function indexStatus(state, status) {
 }
 
 /**
+ * Whether the list is a ranking rather than a timeline: For you, whole or as
+ * the For you scope of Photos and Videos.
+ *
+ * @param {{type: string, params?: {scope?: string}}} state the store state, or anything with its type and params
+ * @return {boolean}
+ */
+export function isRanked(state) {
+	return state.type === 'interests'
+		|| (['photos', 'videos'].includes(state.type) && state.params?.scope === 'interests')
+}
+
+/**
  * @param {TimelineState} state the store state
  * @param {string[]} ids the ids of one of the two lists
  * @return {object[]} the statuses those ids name, newest first
@@ -225,9 +237,9 @@ export const useTimelineStore = defineStore('timeline', {
 		 * @return {object[]} the statuses
 		 */
 		getTimeline(state) {
-			// My interests is ranked, not chronological: the server's order is
+			// For you is ranked, not chronological: the server's order is
 			// the point of it, and sorting it by date would undo the ranking
-			if (state.type === 'interests') {
+			if (isRanked(state)) {
 				return state.timeline.map((statusId) => state.statuses[statusId]).filter(Boolean)
 			}
 
@@ -364,7 +376,7 @@ export const useTimelineStore = defineStore('timeline', {
 		 *
 		 * @param {import('../types/Mastodon.js').Status} status the status that could not be deleted
 		 * @param {number} [index] where in the list it was, for a list whose
-		 *                         order is not its dates (My interests)
+		 *                         order is not its dates (For you)
 		 */
 		restoreStatus(status, index = -1) {
 			indexStatus(this, status)
@@ -1060,13 +1072,27 @@ export const useTimelineStore = defineStore('timeline', {
 				case 'federated':
 					url = generateUrl('apps/social/api/v1/timelines/public')
 					break
+				case 'interests':
+					url = generateUrl('apps/social/api/v1/timelines/interests')
+					// narrowed to one kind, a ranking of its own on the server
+					if (this.params.media === 'photos' || this.params.media === 'videos') {
+						params.media = this.params.media
+					}
+					break
 				case 'photos':
 				case 'videos':
 				// a timeline with the text-only posts left out: what people
 				// showed rather than what they said. Which people is the scope
 				// the switcher sets — the ones you follow by default, this
 				// instance, or everywhere — so this is the same three feeds
-				// above, one predicate narrower.
+				// above, one predicate narrower. Or For you narrowed to the
+				// same kind, which is a ranking rather than a circle of people
+				// and asks nothing about attachments: the server narrows it.
+					if (this.params.scope === 'interests') {
+						url = generateUrl('apps/social/api/v1/timelines/interests')
+						params.media = this.type
+						break
+					}
 					if (this.params.scope === 'timeline' || this.params.scope === 'federated') {
 						url = generateUrl('apps/social/api/v1/timelines/public')
 						if (this.params.scope === 'timeline') {

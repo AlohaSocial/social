@@ -1298,7 +1298,7 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(self::ACTOR_ID, $published[0]->getAuthorId());
 	}
 
-	/** Replying teaches My interests the hashtags of the post replied to. */
+	/** Replying teaches For you the hashtags of the post replied to. */
 	public function testAReplyTeachesTheParentsTags(): void {
 		$parentId = 'https://remote.example/notes/parent';
 		$parent = new Note();

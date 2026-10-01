@@ -86,7 +86,7 @@ class ActorCascadeServiceTest extends TestCase {
 			'lists' => [ListsRequest::class, 'deleteRelatedId'],
 			'conversation state' => [ConversationsRequest::class, 'deleteRelatedId'],
 			'featured tags' => [FeaturedTagsRequest::class, 'deleteRelatedId'],
-			'what My interests learned, and the posts it hid' => [\OCA\Social\Db\InterestsRequest::class, 'deleteRelatedId'],
+			'what For you learned, and the posts it hid' => [\OCA\Social\Db\InterestsRequest::class, 'deleteRelatedId'],
 			'dismissed announcements' => [AnnouncementsRequest::class, 'deleteRelatedId'],
 			'scheduled statuses' => [ScheduledStatusesRequest::class, 'deleteRelatedId'],
 			'collections' => [CollectionsRequest::class, 'deleteRelatedId'],

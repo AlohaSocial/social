@@ -31,7 +31,7 @@ import { useSettingsStore } from '../store/settings.js'
  * @typedef {object} ServerData
  * @property {string} account - The account that the user wants to follow (Only in 'OStatus.vue')
  * @property {SetupChecks} [checks] - The setup checks, only for an administrator
- * @property {{enabled: boolean, learning: boolean, paused: boolean, noticeAcknowledged: boolean}} [interests] - My interests: whether the feature is on for this instance, whether this
+ * @property {{enabled: boolean, learning: boolean, paused: boolean, noticeAcknowledged: boolean, profile?: boolean}} [interests] - For you: whether the feature is on for this instance, whether this
  *   reader learns, and whether they have paused it (`InterestService::pageState()`)
  * @property {string} cliUrl - The URL the background jobs address this instance by
  * @property {string} cloudAddress - This instance's own address

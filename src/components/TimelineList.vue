@@ -124,7 +124,7 @@ import { scrollOffset, scroller } from '../utils/scroller.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
-import { useTimelineStore } from '../store/timeline.js'
+import { isRanked, useTimelineStore } from '../store/timeline.js'
 import { isTracking } from '../services/interests.js'
 import { contextFor, createInterestTracker } from '../services/interestTracker.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
@@ -415,7 +415,7 @@ export default {
 				interests: {
 					illustration: 'quiet-timeline',
 					title: t('social', 'Nothing here for you yet'),
-					description: t('social', 'My interests learns which hashtags you care about from how you read: the posts you spend time on, like, boost, reply to or open. Keep reading your other timelines, or tell it about a few hashtags yourself.'),
+					description: t('social', 'For you learns which hashtags you care about from how you read: the posts you spend time on, like, boost, reply to or open. Keep reading your other timelines, or tell it about a few hashtags yourself.'),
 					action: {
 						label: t('social', 'Manage interests'),
 						to: { name: 'settings', hash: '#interests' },
@@ -436,26 +436,27 @@ export default {
 		/**
 		 * Whether this list is in the order things were posted.
 		 *
-		 * My interests is ranked instead, so nothing that reasons about "newer
+		 * For you is ranked instead, so nothing that reasons about "newer
 		 * than" applies to it: there is no top to catch up on, no line where
 		 * the reader left off, and the cursor is where the page ended rather
-		 * than the oldest post on it.
+		 * than the oldest post on it. The same holds for the For you scope of
+		 * Photos and Videos.
 		 *
 		 * @return {boolean}
 		 */
 		chronological() {
-			return this.type !== 'interests'
+			return !isRanked({ type: this.type, params: this.timelineStore.params })
 		},
 
 		/**
-		 * What My interests hears this list's reading as, or null when it
+		 * What For you hears this list's reading as, or null when it
 		 * hears nothing: the feature is off, the reader opted out or paused,
 		 * nobody is signed in, or this is not a timeline that teaches it.
 		 *
 		 * @return {string|null}
 		 */
 		interestContext() {
-			if (this.serverData.public || !isTracking(this.serverData.interests) || this.display === 'grid') {
+			if (this.serverData.public || !isTracking(this.serverData.interests)) {
 				return null
 			}
 
@@ -1014,7 +1015,7 @@ export default {
 		},
 
 		/**
-		 * Starts measuring what is read in this list for My interests, or
+		 * Starts measuring what is read in this list for the For you feed, or
 		 * stops, when it should not be: the one tracker the list had is
 		 * always finished first, so its reading is sent under the context it
 		 * was read in.
@@ -1057,7 +1058,10 @@ export default {
 		/** Hands the tracker the entries on the page, each with its post. */
 		syncTracked() {
 			// what is held over from the list being left is not this list
-			if (!this.tracker || !this.$el || this.holding) {
+			// a grid is a wall of tiles, all of them on screen together, so
+			// time in view says nothing about any one: there, only opening a
+			// tile counts (`onTrackedClick`)
+			if (!this.tracker || !this.$el || this.holding || this.display === 'grid') {
 				return
 			}
 
@@ -1095,7 +1099,7 @@ export default {
 				return
 			}
 
-			if (/** @type {HTMLElement} */ (event.target).closest('.post-attachments')) {
+			if (/** @type {HTMLElement} */ (event.target).closest('.post-attachments, .media-grid__link')) {
 				this.tracker?.record(status, 'media')
 				return
 			}
