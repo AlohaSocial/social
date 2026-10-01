@@ -13,6 +13,7 @@ use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AvatarService;
+use OCA\Social\Service\MultipartBodyService;
 use OCP\IAvatar;
 use OCP\IAvatarManager;
 use OCP\IUser;
@@ -27,10 +28,9 @@ use RuntimeException;
 /**
  * The profile picture, which is the Nextcloud account's and not this app's.
  *
- * The upload path itself cannot be exercised from a test — `setFromTempFile()`
- * insists on `is_uploaded_file()`, which is only ever true inside a real
- * request — so what is asserted there is every refusal, and the bytes-to-avatar
- * path is reached through the archive restore, which shares `store()` with it.
+ * `setFromTempFile()` takes only a file the request uploaded, which
+ * `MultipartBodyService::isUpload()` decides; the double here vouches for the
+ * paths in `$uploaded` and nothing else.
  */
 #[AllowMockObjectsWithoutExpectations]
 class AvatarServiceTest extends TestCase {
@@ -50,6 +50,8 @@ class AvatarServiceTest extends TestCase {
 	private array $refreshed = [];
 	/** @var string[] files to clean up */
 	private array $files = [];
+	/** @var string[] the paths the request is taken to have uploaded */
+	private array $uploaded = [];
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -91,8 +93,12 @@ class AvatarServiceTest extends TestCase {
 	}
 
 	private function build(): AvatarService {
+		$multipartBodyService = $this->createStub(MultipartBodyService::class);
+		$multipartBodyService->method('isUpload')
+			->willReturnCallback(fn (string $path): bool => in_array($path, $this->uploaded, true));
+
 		return new AvatarService(
-			$this->avatarManager, $this->userManager, $this->accountService, new NullLogger()
+			$this->avatarManager, $this->userManager, $this->accountService, new NullLogger(), $multipartBodyService
 		);
 	}
 
@@ -148,6 +154,23 @@ class AvatarServiceTest extends TestCase {
 	public function testAnAccountThatIsNotThereIsRefused(): void {
 		$this->expectException(InvalidActionException::class);
 		$this->service->setFromTempFile('nobody', ['tmp_name' => $this->png()]);
+	}
+
+	public function testAnUploadedPictureBecomesTheAvatar(): void {
+		$path = $this->png();
+		$this->uploaded[] = $path;
+
+		$this->service->setFromTempFile(self::USER, ['tmp_name' => $path]);
+
+		$this->assertNotNull($this->stored);
+		$this->assertSame([self::USER], $this->refreshed);
+	}
+
+	/** A path the request did not upload is never read, whatever it holds. */
+	public function testAFileTheRequestDidNotUploadIsRefused(): void {
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('no avatar found');
+		$this->service->setFromTempFile(self::USER, ['tmp_name' => $this->png()]);
 	}
 
 	public function testARequestWithNoFileOnItIsRefused(): void {

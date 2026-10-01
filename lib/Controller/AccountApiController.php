@@ -31,6 +31,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\RelationshipService;
@@ -84,6 +85,7 @@ class AccountApiController extends MastodonApiController {
 		private SensitiveMediaService $sensitiveMediaService,
 		private IAppManager $appManager,
 		private NotificationService $notificationService,
+		private MultipartBodyService $multipartBodyService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -133,7 +135,21 @@ class AccountApiController extends MastodonApiController {
 			$this->initViewer(true);
 
 			$changed = false;
-			$input = $this->convertInput(file_get_contents('php://input'));
+			// clients send this route as multipart whenever a picture is in it,
+			// and PHP parses a multipart body by itself for a POST only
+			$multipart = $this->multipartBodyService->read($this->request);
+			$input = ($multipart === null)
+				? $this->convertInput(file_get_contents('php://input'))
+				: $multipart['fields'];
+			$files = ($multipart === null) ? $_FILES : $multipart['files'];
+
+			// a picture that was sent and did not arrive refuses the whole
+			// request, before anything else in it is written
+			$header = $files['header'] ?? [];
+			$avatar = $files['avatar'] ?? [];
+			$headerSent = $this->wasUploaded($header, 'header');
+			$avatarSent = $this->wasUploaded($avatar, 'avatar');
+
 			if (array_key_exists('locked', $input)) {
 				$this->accountService->setLocked($this->currentSession(), $this->formBool($input['locked']));
 				$changed = true;
@@ -182,14 +198,12 @@ class AccountApiController extends MastodonApiController {
 			// Nextcloud account's picture — the same one the whole server shows
 			// — so it is written there, and a backend that owns it raises
 			// rather than answering 200 over an unchanged picture.
-			$header = $_FILES['header'] ?? [];
-			if ($header !== [] && ($header['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+			if ($headerSent) {
 				$this->bannerService->setFromTempFile($this->currentSession(), $header['tmp_name']);
 				$changed = true;
 			}
 
-			$avatar = $_FILES['avatar'] ?? [];
-			if ($avatar !== [] && ($avatar['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+			if ($avatarSent) {
 				$this->avatarService->setFromTempFile($this->currentSession(), $avatar);
 				$changed = true;
 			}
@@ -211,6 +225,25 @@ class AccountApiController extends MastodonApiController {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * Whether a picture arrived in this `$_FILES`-shaped entry. A picture that
+	 * was sent and did not arrive is an error rather than nothing: skipping it
+	 * answered 200 over the old picture.
+	 *
+	 * @throws InvalidActionException
+	 * @throws Exception the upload failed on this side
+	 */
+	private function wasUploaded(array $upload, string $field): bool {
+		return match ($upload['error'] ?? UPLOAD_ERR_NO_FILE) {
+			UPLOAD_ERR_OK => true,
+			UPLOAD_ERR_NO_FILE => false,
+			UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE
+				=> throw new InvalidActionException('the ' . $field . ' is larger than this server accepts'),
+			UPLOAD_ERR_PARTIAL => throw new InvalidActionException('the ' . $field . ' upload did not finish'),
+			default => throw new Exception('the ' . $field . ' upload failed on the server, error ' . $upload['error']),
+		};
 	}
 
 	/**
