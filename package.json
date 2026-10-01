@@ -1,7 +1,7 @@
 {
 	"name": "social",
 	"description": "Nextcloud becomes part of the federated social networks!",
-	"version": "0.26.103",
+	"version": "0.26.104",
 	"authors": [
 		{
 			"name": "Benedikt Schächner",
