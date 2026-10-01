@@ -42,6 +42,7 @@ class AvatarService {
 		private IUserManager $userManager,
 		private AccountService $accountService,
 		private LoggerInterface $logger,
+		private MultipartBodyService $multipartBodyService,
 	) {
 	}
 
@@ -67,7 +68,7 @@ class AvatarService {
 		}
 
 		$tmpPath = $upload['tmp_name'] ?? '';
-		if (!is_string($tmpPath) || $tmpPath === '' || !is_uploaded_file($tmpPath)) {
+		if (!is_string($tmpPath) || $tmpPath === '' || !$this->multipartBodyService->isUpload($tmpPath)) {
 			throw new InvalidActionException('no avatar found in the request');
 		}
 

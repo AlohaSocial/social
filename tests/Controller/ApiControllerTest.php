@@ -64,6 +64,7 @@ use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MarkerService;
+use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PinService;
@@ -203,6 +204,7 @@ class ApiControllerTest extends TestCase {
 	private bool $registrationApp = false;
 	private BannerService|MockObject $bannerService;
 	private AvatarService|MockObject $avatarService;
+	private MultipartBodyService|MockObject $multipartBodyService;
 	private FilterService|Stub $filterService;
 	private IRootFolder|MockObject $rootFolder;
 	private ITempManager|Stub $tempManager;
@@ -324,6 +326,7 @@ class ApiControllerTest extends TestCase {
 		$this->accountRelationService->method('withoutExpiredMutes')->willReturnArgument(1);
 		$this->bannerService = $this->createMock(BannerService::class);
 		$this->avatarService = $this->createMock(AvatarService::class);
+		$this->multipartBodyService = $this->createMock(MultipartBodyService::class);
 		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('apply')->willReturnArgument(0);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
@@ -397,6 +400,7 @@ class ApiControllerTest extends TestCase {
 			'filterService' => $this->filterService,
 			'bannerService' => $this->bannerService,
 			'avatarService' => $this->avatarService,
+			'multipartBodyService' => $this->multipartBodyService,
 			'accountRelationService' => $this->accountRelationService,
 			'scheduledStatusService' => $this->scheduledStatusService,
 			'postReviewService' => $this->postReviewService,
@@ -3843,6 +3847,69 @@ class ApiControllerTest extends TestCase {
 		$this->bannerService->expects($this->never())->method('setFromTempFile');
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
+	}
+
+	/**
+	 * Mastodon clients send this route as multipart whenever a picture is in
+	 * it, and PHP parses a multipart body for a POST only: the fields and the
+	 * picture were never seen, and the client got a 200 over the old profile.
+	 */
+	public function testUpdateCredentialsAppliesAMultipartPatch(): void {
+		$this->loggedInAs();
+		$avatar = ['tmp_name' => '/tmp/parsed-avatar', 'error' => UPLOAD_ERR_OK, 'name' => 'me.png'];
+		$header = ['tmp_name' => '/tmp/parsed-header', 'error' => UPLOAD_ERR_OK, 'name' => 'banner.png'];
+		$this->multipartBodyService->method('read')->willReturn([
+			'fields' => ['display_name' => 'Changed', 'source' => ['privacy' => 'unlisted']],
+			'files' => ['avatar' => $avatar, 'header' => $header],
+		]);
+
+		$this->accountService->expects($this->once())->method('setDisplayName')->with('alice', 'Changed');
+		$this->accountService->expects($this->once())->method('setDefaultPrivacy')->with('alice', 'unlisted');
+		$this->avatarService->expects($this->once())->method('setFromTempFile')->with('alice', $avatar);
+		$this->bannerService->expects($this->once())->method('setFromTempFile')->with('alice', '/tmp/parsed-header');
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
+	}
+
+	/** A body that cannot be read is an error, not a 200 over the old profile. */
+	public function testUpdateCredentialsRefusesAMultipartBodyItCannotRead(): void {
+		$this->loggedInAs();
+		$this->multipartBodyService->method('read')
+			->willThrowException(new InvalidActionException('the multipart body could not be read'));
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+	}
+
+	/**
+	 * A picture that was sent and did not arrive refuses the request before
+	 * any of it is written, so the client never shows half a save as done.
+	 */
+	public function testUpdateCredentialsRefusesAPictureThatWasTooLargeAndWritesNothing(): void {
+		$this->loggedInAs();
+		$this->multipartBodyService->method('read')->willReturn([
+			'fields' => ['display_name' => 'Changed'],
+			'files' => ['avatar' => ['tmp_name' => '', 'error' => UPLOAD_ERR_INI_SIZE, 'name' => 'huge.png']],
+		]);
+		$this->accountService->expects($this->never())->method('setDisplayName');
+		$this->avatarService->expects($this->never())->method('setFromTempFile');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('larger than this server accepts', $response->getData()['error']);
+	}
+
+	public function testUpdateCredentialsRefusesAHeaderUploadThatStoppedHalfway(): void {
+		$this->loggedInAs();
+		$_FILES['header'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_PARTIAL];
+		$this->bannerService->expects($this->never())->method('setFromTempFile');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
 	}
 
 	// mediaFromFile()

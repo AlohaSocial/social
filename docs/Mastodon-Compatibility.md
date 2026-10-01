@@ -260,6 +260,14 @@ picture (LDAP, SAML, anything provisioned elsewhere) makes the request a **422**
 rather than a silent success — which is what this section asked for, applied to
 the fields that cannot be honoured rather than to the whole request.
 
+Fixed in #2437: clients send this route as a multipart **PATCH** whenever a
+picture is in it, and PHP parses a multipart body by itself for a POST only.
+The body reached the controller unread, so no client could set an avatar or a
+header, and a text-only multipart save changed nothing, all under a 200. The
+body is now read with `request_parse_body()` on PHP 8.4 and later and by the
+app's own parser on PHP 8.3. A body that cannot be read, and a picture that was
+sent and did not arrive, are a **422** with nothing written.
+
 ---
 
 ## 4. The peer test
