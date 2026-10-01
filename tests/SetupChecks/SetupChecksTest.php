@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
+use OCA\Social\Service\VideoTranscodeService;
 use OCA\Social\SetupChecks\ClientApiAtRoot;
 use OCA\Social\SetupChecks\CloudAddressMatches;
 use OCA\Social\SetupChecks\CronRanRecently;
@@ -24,6 +25,7 @@ use OCA\Social\SetupChecks\OutboundQueueNotStuck;
 use OCA\Social\SetupChecks\ProxyForwardsTheScheme;
 use OCA\Social\SetupChecks\ReachableByStrictPeers;
 use OCA\Social\SetupChecks\UploadLimitsAgree;
+use OCA\Social\SetupChecks\VideoConverter;
 use OCA\Social\SetupChecks\WebFingerReachable;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJob;
@@ -359,6 +361,7 @@ class SetupChecksTest extends TestCase {
 			CronRanRecently::DOC,
 			OutboundQueueNotStuck::DOC,
 			MemcacheConfigured::DOC,
+			VideoConverter::DOC,
 		] as $link) {
 			$this->assertStringStartsWith(Docs::ADMIN_GUIDE . '#', $link);
 			$anchor = substr($link, strlen(Docs::ADMIN_GUIDE) + 1);
@@ -385,6 +388,51 @@ class SetupChecksTest extends TestCase {
 				))),
 			$matches[1]
 		);
+	}
+
+	// Social: video conversion
+
+	private function videoCheck(bool $ffmpeg, bool $switchedOn, bool $ffprobe = true): VideoConverter {
+		$config = $this->createStub(ConfigService::class);
+		$config->method('getAppValueBool')->willReturn($switchedOn);
+		$transcode = $this->createStub(VideoTranscodeService::class);
+		$transcode->method('isAvailable')->willReturn($ffmpeg);
+		$transcode->method('canProbe')->willReturn($ffprobe);
+
+		return new VideoConverter($this->l10n, $config, $transcode);
+	}
+
+	/**
+	 * Without ffmpeg nothing says so: the upload works, the video plays in
+	 * Safari here, and it never arrives anywhere that matters.
+	 */
+	public function testNoFfmpegIsAWarningThatSaysWhatWillNotPlay(): void {
+		$result = $this->videoCheck(false, true)->run();
+
+		$this->assertSame(SetupResult::WARNING, $result->getSeverity());
+		$this->assertStringContainsString('iPhone .mov videos and HEVC videos will not play on other servers', $result->getDescription());
+		$this->assertStringContainsString('Chrome and Firefox', $result->getDescription());
+		$this->assertSame(VideoConverter::DOC, $result->getLinkToDoc());
+	}
+
+	/** Switched off with ffmpeg present is a decision, and said as one. */
+	public function testConversionSwitchedOffIsInformationNotAWarning(): void {
+		$result = $this->videoCheck(true, false)->run();
+
+		$this->assertSame(SetupResult::INFO, $result->getSeverity());
+		$this->assertStringContainsString('switched off', $result->getDescription());
+	}
+
+	public function testConversionThatWorksIsQuiet(): void {
+		$this->assertSame(SetupResult::SUCCESS, $this->videoCheck(true, true)->run()->getSeverity());
+	}
+
+	/** Without ffprobe an MP4's codec is unknown, which the success says. */
+	public function testConversionWithoutFfprobeSaysMp4sAreLeftAlone(): void {
+		$result = $this->videoCheck(true, true, false)->run();
+
+		$this->assertSame(SetupResult::SUCCESS, $result->getSeverity());
+		$this->assertStringContainsString('ffprobe was not found', $result->getDescription());
 	}
 
 	// Social: upload size

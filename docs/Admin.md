@@ -75,6 +75,14 @@ upload between the two is refused with **nothing in the log** — the request
 never reaches PHP — and the person is told nothing useful. Raise both PHP
 values, or lower the app's own in Administration → Social → Server.
 
+**Social: video conversion.** Whether the videos posted here will play
+anywhere else. A warning when **ffmpeg is missing**: iPhone `.mov` videos and
+HEVC videos are then stored and sent as they were uploaded, and will not play
+on other servers — Pixelfed refuses anything that is not an MP4 — or in Chrome
+and Firefox. Information, not a warning, when ffmpeg is there and
+`video_transcode` has been switched off, because that is a decision. See
+[Videos do not play elsewhere](#videos-do-not-play-elsewhere).
+
 **Social: reachable by other servers.** Whether the strict peers will talk to
 this instance at all. Federation does not fail all at once: a plain-HTTP
 instance, or one on a private address, federates happily with a permissive
@@ -328,6 +336,25 @@ app, some of what is lost is protection:
 
 APCu (`memcache.local = \OC\Memcache\APCu`) is enough for all of it on a
 single web server; Redis is what several need.
+
+### Videos do not play elsewhere
+
+An iPhone records `.mov`; Android phones, and iPhones exporting through some
+apps, write **HEVC** inside an `.mp4`. Pixelfed's default `media_types` accepts
+`video/mp4` and nothing else and drops the rest the moment it arrives, and
+Chrome and Firefox do not play HEVC. Social converts such videos to H.264 in an
+MP4 (`video_transcode`, on by default) — **but only where ffmpeg is installed**.
+Install it from the distribution's packages (`apt install ffmpeg`,
+`dnf install ffmpeg`, …); ffprobe comes with it, and is what tells an H.264
+MP4, which is never touched, from an HEVC one. Nextcloud looks for both on the
+`PATH` of the PHP process and in the directories `binary_search_paths` in
+`config.php` names, only where PHP's `exec` is not disabled, and remembers the
+answer for five minutes.
+
+Nothing needs restarting. Videos uploaded before ffmpeg was there are picked up
+by the background sweep, one every quarter of an hour, or all at once with
+`occ social:media:transcode`. Posts that already went out with the old file are
+not sent again.
 
 ---
 
@@ -711,7 +738,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `max_video_size` | `2048` | The largest video, in MB. 1–102400. A peer will refuse a great deal less than the ceiling. |
 | `image_max_edge` | `0` | The longest edge a **stored** picture may have, in pixels. `0` stores every upload exactly as it arrived — the default, and the only setting that loses nothing: this app strips metadata losslessly and re-encodes only a picture it has to rotate. Set it (480–16384) on an instance where storage costs money or whose people post from a 48-megapixel phone. A picture already inside the ceiling is not re-encoded, because shrinking nothing and losing a generation anyway is the worst of both. |
 | `image_quality` | `85` | What a re-encoded picture is stored at, 40–100. Only consulted when `image_max_edge` is set. |
-| `video_transcode` | `0` | Whether stored videos are re-encoded to H.264 in an MP4 by a background job. Off by default, because re-encoding is lossy and it is somebody's file — but there is a concrete reason to turn it on: **Pixelfed's default `media_types` accepts `video/mp4` and nothing else**, so every `video/quicktime` posted from here, which is every video straight off an iPhone, is dropped by its inbox without a word to anybody, and Safari will not play WebM. Needs ffmpeg; nothing happens without it. Never runs during an upload: converting a video is minutes rather than the seconds a poster frame takes, so the upload finishes as it always did and the video plays as it is until the job gets to it. One video every quarter of an hour, or `occ social:media:transcode` to work through a backlog now. |
+| `video_transcode` | `1` | Whether stored videos are re-encoded to H.264 in an MP4 by a background job. **On by default, and it does nothing where ffmpeg is not installed** — the *Social: video conversion* setup check says which it is. What it converts: `.mov`, WebM, Matroska and the other formats in `VideoTranscodeService::CONVERTIBLE`, and an MP4 whose video ffprobe does not report as H.264 (HEVC, which phones write and only Safari plays). An H.264 MP4 is never re-encoded; without ffprobe an MP4 is left as it is. Why: **Pixelfed's default `media_types` accepts `video/mp4` and nothing else**, so every `video/quicktime` posted from here, which is every video straight off an iPhone, is dropped by its inbox without a word to anybody, and Safari will not play WebM. **The converted file replaces the original, which is deleted** — re-encoding is lossy, so switch it off where the uploaded files must be kept exactly as they are. Never runs during an upload: converting a video is minutes rather than the seconds a poster frame takes, so the upload finishes as it always did. A **new post** carrying such a video is queued but **held back** while the video it carries is converted by a job of its own at the next cron run, and goes out naming the MP4 — for at most ten minutes (`VideoDeliveryHold::HOLD_SECONDS`), after which it is delivered as it is. Posts without such a video, and every post on a server without ffmpeg or with this off, are not held at all. Older videos are converted by a sweep, one every quarter of an hour, or `occ social:media:transcode` to work through a backlog now. An instance that never saved this key has it on after upgrading. |
 | `video_max_height` | `1080` | The tallest a converted video is written, 240–2160. Only smaller, never larger: a 480p video is left at 480p. Only consulted when `video_transcode` is on. |
 | `video_ladder` | `0` | Whether each stored MP4 is **also** written at a ladder of smaller sizes, as HLS, so a player can pick the one that fits the connection. A different question from `video_transcode`, which is about a video being playable at all elsewhere; this is about it being watchable on a phone on a train. Off by default, because it is several ffmpeg encodes per video on this server. Each rung is one file — `-hls_flags single_file` writes the rendition as a fragmented MP4 and the playlist addresses its segments as byte ranges — so a forty-minute video is three files rather than a thousand, which is also the shape PeerTube publishes. The original is kept and is what a player without HLS falls back to. Needs ffmpeg **and** ffprobe. One video every half-hour, or `occ social:media:ladder` to work through a backlog now. Built from `video/mp4` only: a `.mov` goes through the transcoder first. |
 | `video_ladder_heights` | `360,720,1080` | Which heights, comma-separated, 144–2160. Heights at or above a video's own are skipped rather than upscaled, and the video's own height is always a rung, so the best rung is never worse than the file beside it. A list with nothing usable in it is refused by the admin card rather than silently replaced with the default. Only consulted when `video_ladder` is on. |

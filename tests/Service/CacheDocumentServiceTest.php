@@ -46,6 +46,7 @@ class CacheDocumentServiceTest extends TestCase {
 	private BlurService|MockObject $blurService;
 	private ImageConversionService|Stub $imageConversionService;
 	private VideoThumbnailService|Stub $videoThumbnailService;
+	private \OCA\Social\Service\VideoTranscodeService|MockObject $videoTranscodeService;
 	private ITempManager|Stub $tempManager;
 	private MediaBlocksRequest|MockObject $mediaBlocksRequest;
 	private \OCA\Social\Service\RemoteMediaQuotaService|MockObject $domainQuota;
@@ -97,6 +98,7 @@ class CacheDocumentServiceTest extends TestCase {
 			}
 		);
 		$this->mediaBlocksRequest = $this->createMock(MediaBlocksRequest::class);
+		$this->videoTranscodeService = $this->createMock(\OCA\Social\Service\VideoTranscodeService::class);
 
 		$this->service = new CacheDocumentService(
 			$this->appData,
@@ -111,6 +113,7 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->unlimitedDomainQuota(),
 			$this->noExternalQuota(),
 			new NullLogger(),
+			$this->videoTranscodeService,
 		);
 	}
 
@@ -489,6 +492,53 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->assertCount(1, $written);
 			$this->assertSame($this->mp4Bytes(), reset($written)[$document->getLocalCopy()]);
 			$this->assertSame('', $document->getResizedCopy());
+		} finally {
+			unlink($tmp);
+		}
+	}
+
+	/**
+	 * An upload is the one moment the bytes are on disk here anyway: an MP4
+	 * found to be H.264 then is recorded as needing nothing, so the post it
+	 * goes out on does not wait for a conversion that would do nothing.
+	 */
+	public function testAnH264Mp4IsRecordedAsNeedingNothingWhenItIsUploaded(): void {
+		$document = $this->uploadVideo(enabled: true, needsConversion: false);
+
+		$this->assertSame(\OCA\Social\Service\VideoTranscodingWorker::NOT_NEEDED, $document->getTranscoded());
+	}
+
+	/** HEVC, or anything ffprobe cannot vouch for, is left for the transcoder. */
+	public function testAnMp4ThatNeedsConvertingIsLeftForTheTranscoder(): void {
+		$document = $this->uploadVideo(enabled: true, needsConversion: true);
+
+		$this->assertSame(\OCA\Social\Service\VideoTranscodingWorker::NOT_LOOKED, $document->getTranscoded());
+	}
+
+	/** With conversion off or impossible, nothing is probed at all. */
+	public function testNothingIsProbedWhereNothingWillBeConverted(): void {
+		$this->videoTranscodeService->expects($this->never())->method('needsConversion');
+
+		$document = $this->uploadVideo(enabled: false, needsConversion: false);
+
+		$this->assertSame(\OCA\Social\Service\VideoTranscodingWorker::NOT_LOOKED, $document->getTranscoded());
+	}
+
+	private function uploadVideo(bool $enabled, bool $needsConversion): Document {
+		$tmp = tempnam(sys_get_temp_dir(), 'social-test-');
+		file_put_contents($tmp, $this->mp4Bytes());
+		try {
+			$written = [];
+			$this->captureWrites($written);
+			$this->videoTranscodeService->method('isEnabled')->willReturn($enabled);
+			$this->videoTranscodeService->method('needsConversion')
+				->with('video/mp4', $tmp)
+				->willReturn($needsConversion);
+			$document = new Document();
+
+			$this->service->saveFromTempToCache($document, $tmp);
+
+			return $document;
 		} finally {
 			unlink($tmp);
 		}
@@ -1047,6 +1097,7 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->unlimitedDomainQuota(),
 			$quota,
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\VideoTranscodeService::class),
 		);
 
 		$bob = new Document();

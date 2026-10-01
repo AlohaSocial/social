@@ -17,13 +17,14 @@ use Throwable;
 /**
  * Turning a video into the one format the rest of the network will play.
  *
- * This app has never re-encoded anything, deliberately: a video is stored as
- * it was uploaded, which is the honest thing to do with somebody's file. The
- * cost of that is not theoretical. **Pixelfed's default `media_types` accepts
+ * A video used to be stored exactly as it was uploaded, which is the honest
+ * thing to do with somebody's file. The cost of that is not theoretical. **Pixelfed's default `media_types` accepts
  * `video/mp4` and nothing else**, so every `video/quicktime` posted from here —
  * which is to say every video straight off an iPhone — is dropped by its
  * `verifyAttachments()` without a word to anybody. Safari will not play WebM,
- * and a 4K `.mov` goes out at whatever the camera wrote.
+ * HEVC — which Android phones, and iPhones exporting through some apps, write
+ * into an `.mp4` — plays in Safari and nowhere else, and a 4K `.mov` goes out
+ * at whatever the camera wrote.
  *
  * So: H.264 in an MP4, AAC audio, bounded to a height an administrator sets,
  * with `+faststart` so the index is at the front and a browser can begin
@@ -31,9 +32,11 @@ use Throwable;
  *
  * Three things this is careful about.
  *
- * **It is off unless an administrator turns it on.** Re-encoding is lossy and
- * it is somebody's file; a server that silently replaced every upload with a
- * worse copy would be doing something nobody asked for.
+ * **It is on by default, and only where it can work.** Re-encoding is lossy
+ * and the converted file replaces the original, which is why an
+ * administrator can switch it off; left alone, a server with ffmpeg makes its
+ * videos travel and a server without it changes nothing at all. An H.264 MP4
+ * is never touched.
  *
  * **It never runs during a request.** Transcoding a video is minutes, not the
  * seconds a poster frame takes, so the upload finishes as it always did and a
@@ -76,6 +79,9 @@ class VideoTranscodeService {
 	 */
 	private const TIMEOUT_SECONDS = 900;
 
+	/** How long ffprobe gets to read a file's header. */
+	private const PROBE_TIMEOUT_SECONDS = 30;
+
 	/**
 	 * How fast to encode. `veryfast` is the knee of the curve for this kind of
 	 * material: several times quicker than `medium` for a file a few per cent
@@ -106,9 +112,80 @@ class VideoTranscodeService {
 			&& $this->isAvailable();
 	}
 
-	/** Whether a file of this type is worth converting. */
+	/** Whether a file of this type is worth converting, whatever is inside it. */
 	public function shouldConvert(string $mimeType): bool {
 		return in_array(strtolower($mimeType), self::CONVERTIBLE, true);
+	}
+
+	/**
+	 * Whether a file of this type might be worth converting, which for an MP4
+	 * only its codec can say.
+	 *
+	 * Answered from the type alone, without reading the file: this is what a
+	 * new post asks to decide whether its delivery waits for the job.
+	 */
+	public function mayNeedConversion(string $mimeType): bool {
+		if ($this->shouldConvert($mimeType)) {
+			return true;
+		}
+
+		return strtolower($mimeType) === self::TARGET_TYPE && $this->canProbe();
+	}
+
+	/**
+	 * Whether this file has to be converted before it plays everywhere.
+	 *
+	 * An MP4 is converted when its video is not H.264 — HEVC is what phones
+	 * write, and only Safari plays it — and also when ffprobe cannot say that
+	 * it is. Without ffprobe nothing can be said about an MP4 at all, and it is
+	 * left as it is rather than re-encoded on a guess.
+	 *
+	 * @param string $path a readable path to the video
+	 */
+	public function needsConversion(string $mimeType, string $path): bool {
+		if ($this->shouldConvert($mimeType)) {
+			return true;
+		}
+
+		if (strtolower($mimeType) !== self::TARGET_TYPE || !$this->canProbe()) {
+			return false;
+		}
+
+		return $this->videoCodec($path) !== 'h264';
+	}
+
+	/** Whether the codec inside an MP4 can be asked about. */
+	public function canProbe(): bool {
+		return $this->ffprobe() !== null;
+	}
+
+	/**
+	 * The codec of the first video stream, as ffprobe names it (`h264`,
+	 * `hevc`, …).
+	 *
+	 * @return string|null null when there is no ffprobe, or it could not read
+	 *                     the file, or the file has no video stream
+	 */
+	public function videoCodec(string $path): ?string {
+		$ffprobe = $this->ffprobe();
+		if ($ffprobe === null || !is_readable($path)) {
+			return null;
+		}
+
+		$output = '';
+		$ran = $this->run([
+			$ffprobe,
+			'-v', 'error',
+			'-protocol_whitelist', 'file',
+			'-select_streams', 'v:0',
+			'-show_entries', 'stream=codec_name',
+			'-of', 'default=noprint_wrappers=1:nokey=1',
+			$path,
+		], self::PROBE_TIMEOUT_SECONDS, $output);
+
+		$codec = strtolower(trim(strtok($output, "\n") ?: ''));
+
+		return ($ran && $codec !== '') ? $codec : null;
 	}
 
 	/** The tallest a converted video is written. */
@@ -169,7 +246,7 @@ class VideoTranscodeService {
 			// the whole file has arrived
 			'-movflags', '+faststart',
 			'-y', $target,
-		]);
+		], self::TIMEOUT_SECONDS);
 
 		if (!$ran || !is_file($target) || filesize($target) < 1) {
 			@unlink($target);
@@ -186,14 +263,23 @@ class VideoTranscodeService {
 		return ($path === false) ? null : $path;
 	}
 
+	private function ffprobe(): ?string {
+		$path = $this->binaryFinder->findBinaryPath('ffprobe');
+
+		return ($path === false) ? null : $path;
+	}
+
 	/**
-	 * Runs ffmpeg with a deadline.
+	 * Runs ffmpeg or ffprobe with a deadline.
 	 *
 	 * @param string[] $command
+	 * @param string $output what it wrote to stdout, which ffprobe answers on
 	 *
 	 * @return bool whether it ran to completion rather than being killed
 	 */
-	private function run(array $command): bool {
+	private function run(array $command, int $timeout, string &$output = ''): bool {
+		$output = '';
+
 		try {
 			$process = @proc_open(
 				array_map('strval', $command),
@@ -210,7 +296,7 @@ class VideoTranscodeService {
 			return false;
 		}
 
-		$deadline = time() + self::TIMEOUT_SECONDS;
+		$deadline = time() + $timeout;
 		foreach ($pipes as $pipe) {
 			stream_set_blocking($pipe, false);
 		}
@@ -225,9 +311,8 @@ class VideoTranscodeService {
 			// the pipes are drained as it goes: ffmpeg writes progress to
 			// stderr, and a full pipe is a process that stops rather than one
 			// that finishes
-			foreach ($pipes as $pipe) {
-				@stream_get_contents($pipe);
-			}
+			$output .= (string)@stream_get_contents($pipes[1]);
+			@stream_get_contents($pipes[2]);
 
 			usleep(200000);
 		} while (time() < $deadline);
@@ -236,8 +321,10 @@ class VideoTranscodeService {
 		if ($killed) {
 			proc_terminate($process, 9);
 			$this->logger->warning('a transcode timed out and was killed', [
-				'seconds' => self::TIMEOUT_SECONDS,
+				'seconds' => $timeout,
 			]);
+		} else {
+			$output .= (string)@stream_get_contents($pipes[1]);
 		}
 
 		foreach ($pipes as $pipe) {

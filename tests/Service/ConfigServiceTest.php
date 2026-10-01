@@ -72,6 +72,25 @@ class ConfigServiceTest extends TestCase {
 		$this->assertSame('0', $this->service->defaults[ConfigService::SOCIAL_PUBLISH_VIDEO]);
 	}
 
+	/**
+	 * Pixelfed takes `video/mp4` and nothing else, and drops a `.mov` on
+	 * arrival: an instance that never chose converts its videos, which does
+	 * nothing where there is no ffmpeg. The ladder is several encodes per
+	 * video and stays something an administrator asks for.
+	 */
+	public function testVideosAreConvertedUnlessAnAdministratorSaysOtherwiseButTheLadderIsNot(): void {
+		$this->withAppValues([]);
+
+		$this->assertTrue($this->service->getAppValueBool(ConfigService::SOCIAL_VIDEO_TRANSCODE));
+		$this->assertFalse($this->service->getAppValueBool(ConfigService::SOCIAL_VIDEO_LADDER));
+	}
+
+	public function testAnAdministratorWhoSwitchedConversionOffKeepsItOff(): void {
+		$this->withAppValues([ConfigService::SOCIAL_VIDEO_TRANSCODE => '0']);
+
+		$this->assertFalse($this->service->getAppValueBool(ConfigService::SOCIAL_VIDEO_TRANSCODE));
+	}
+
 	public function testGetAppValueHasAnEmptyDefaultForUnknownKey(): void {
 		// IAppConfig is typed, so a key with no default of its own asks for ''
 		// where the old untyped IConfig call passed null and could hand one back

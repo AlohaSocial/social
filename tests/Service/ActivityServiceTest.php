@@ -76,6 +76,7 @@ class ActivityServiceTest extends TestCase {
 	private AnnounceInterface|MockObject $announceInterface;
 	private ActivityService $service;
 	private HostBreakerRequest|MockObject $hostBreakerRequest;
+	private \OCA\Social\Db\StreamRequest|MockObject $streamRequest;
 	/** @var array<string, array{strikes: int, open_until: int, last_failure: int}> */
 	private array $breakerRows = [];
 
@@ -99,6 +100,7 @@ class ActivityServiceTest extends TestCase {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->relayRequest = $this->createStub(RelayRequest::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
+		$this->streamRequest = $this->createMock(\OCA\Social\Db\StreamRequest::class);
 
 		// the breaker's table, held in memory: a failure one pass records is
 		// what the next pass reads
@@ -126,7 +128,8 @@ class ActivityServiceTest extends TestCase {
 			$this->actorsRequest,
 			$this->relayRequest,
 			$this->hostBreakerRequest,
-			$this->logger
+			$this->logger,
+			$this->streamRequest
 		);
 	}
 
@@ -918,6 +921,169 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame(self::TOKEN, $this->service->request($note));
 	}
 
+	// holding a post back, and letting it go
+
+	/**
+	 * A post waiting for its video is queued, and nothing goes: not the inline
+	 * delivery, not the async drain. The cron delivers it once the time given
+	 * has passed, if nothing released it before.
+	 */
+	public function testAHeldPostIsQueuedWithItsTimeAndNothingIsSentYet(): void {
+		$until = time() + 600;
+		$this->requestQueueService->expects($this->once())->method('generateRequestQueue')
+			->with($this->isArray(), $this->isInstanceOf(Create::class), self::ALICE_ID, $until)
+			->willReturn(self::TOKEN);
+		$this->requestQueueService->expects($this->never())->method('getPriorityRequest');
+		$this->curlService->expects($this->never())->method('retrieveJson');
+		$this->curlService->expects($this->never())->method('asyncWithToken');
+
+		$this->assertSame(self::TOKEN, $this->service->createActivity($this->alice(), $this->note(), $activity, $until));
+	}
+
+	/** A post that is not held is queued with no time, and goes as it always did. */
+	public function testAPostThatIsNotHeldIsQueuedDue(): void {
+		$this->requestQueueService->expects($this->once())->method('generateRequestQueue')
+			->with($this->isArray(), $this->isInstanceOf(Create::class), self::ALICE_ID, 0)
+			->willReturn(self::TOKEN);
+		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([$this->queue()]);
+		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
+
+		$this->service->createActivity($this->alice(), $this->note());
+	}
+
+	private function heldRow(string $type, string $inbox = self::BOB_INBOX): RequestQueue {
+		$queue = new RequestQueue(
+			(string)json_encode(['type' => $type, 'object' => ['id' => self::NOTE_ID, 'attachment' => [
+				['type' => 'Document', 'mediaType' => 'video/quicktime', 'url' => 'https://social.example/media/old.quicktime'],
+			]]], JSON_UNESCAPED_SLASHES),
+			new InstancePath($inbox, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_LOW),
+			self::ALICE_ID
+		);
+		$queue->setToken(self::TOKEN);
+		$queue->setLast(time() + 600);
+
+		return $queue;
+	}
+
+	/** The post as the conversion left it: the attachment names the MP4. */
+	private function convertedNote(): Note {
+		$note = $this->note();
+		$note->setAttachments([
+			(new \OCA\Social\Model\Client\MediaAttachment())
+				->setId('5')
+				->setType('video')
+				->setMediaType('video/mp4')
+				->setUrl('https://social.example/media/new.mp4'),
+		]);
+
+		return $note;
+	}
+
+	/**
+	 * The release is the whole point: every held Create goes out rebuilt from
+	 * the post, so it names the converted file and `video/mp4` — Pixelfed
+	 * refuses the `.mov` on arrival and is never asked again.
+	 */
+	public function testReleasingAHeldPostSendsItWithTheConvertedFile(): void {
+		$rows = [$this->heldRow('Create'), $this->heldRow('Create', 'https://third.example/inbox')];
+		$this->requestQueueService->method('getHeld')->with(self::NOTE_ID)->willReturn($rows);
+		$this->streamRequest->method('getStreamById')->with(self::NOTE_ID)->willReturn($this->convertedNote());
+		$this->actorsRequest->method('getFromId')->with(self::ALICE_ID)->willReturn($this->alice());
+		// one signature for the one body every inbox shares
+		$this->signatureService->expects($this->once())->method('signObject');
+
+		$bodies = [];
+		$this->requestQueueService->expects($this->exactly(2))->method('releaseRequest')
+			->willReturnCallback(function (RequestQueue $queue, string $body) use (&$bodies): bool {
+				$bodies[] = $body;
+				$queue->setLast(0);
+
+				return true;
+			});
+		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
+
+		$this->assertSame(2, $this->service->releaseHeld(self::NOTE_ID));
+
+		$this->assertSame($bodies[0], $bodies[1]);
+		$sent = json_decode($bodies[0], true);
+		$this->assertSame('Create', $sent['type']);
+		$this->assertSame(self::NOTE_ID . '/activity', $sent['id']);
+		$this->assertSame('video/mp4', $sent['object']['attachment'][0]['mediaType']);
+		$this->assertSame('https://social.example/media/new.mp4', $sent['object']['attachment'][0]['url']);
+		$this->assertStringNotContainsString('quicktime', $bodies[0]);
+	}
+
+	/** An edit made while the post waited goes out rebuilt too, as an Update. */
+	public function testAHeldEditIsRebuiltAsAnUpdate(): void {
+		$this->requestQueueService->method('getHeld')->willReturn([$this->heldRow('Update')]);
+		$this->streamRequest->method('getStreamById')->willReturn($this->convertedNote());
+		$this->actorsRequest->method('getFromId')->willReturn($this->alice());
+
+		$body = '';
+		$this->requestQueueService->method('releaseRequest')->willReturnCallback(
+			function (RequestQueue $queue, string $sent) use (&$body): bool {
+				$body = $sent;
+
+				return true;
+			}
+		);
+
+		$this->service->releaseHeld(self::NOTE_ID);
+
+		$sent = json_decode($body, true);
+		$this->assertSame('Update', $sent['type']);
+		$this->assertSame('video/mp4', $sent['object']['attachment'][0]['mediaType']);
+	}
+
+	/** Deleted while it waited: sending it now would put it back everywhere. */
+	public function testAHeldPostDeletedMeanwhileIsNeverSent(): void {
+		$rows = [$this->heldRow('Create')];
+		$this->requestQueueService->method('getHeld')->willReturn($rows);
+		$this->streamRequest->method('getStreamById')
+			->willThrowException(new \OCA\Social\Exceptions\StreamNotFoundException());
+
+		$this->requestQueueService->expects($this->once())->method('deleteRequest')->with($this->identicalTo($rows[0]));
+		$this->requestQueueService->expects($this->never())->method('releaseRequest');
+		$this->curlService->expects($this->never())->method('asyncWithToken');
+
+		$this->assertSame(0, $this->service->releaseHeld(self::NOTE_ID));
+	}
+
+	/** A row a drain already took is not ours to change, and nothing is started for it. */
+	public function testARowThatIsNoLongerHeldIsLeftAlone(): void {
+		$this->requestQueueService->method('getHeld')->willReturn([$this->heldRow('Create')]);
+		$this->streamRequest->method('getStreamById')->willReturn($this->convertedNote());
+		$this->actorsRequest->method('getFromId')->willReturn($this->alice());
+		$this->requestQueueService->method('releaseRequest')->willReturn(false);
+		$this->curlService->expects($this->never())->method('asyncWithToken');
+
+		$this->assertSame(0, $this->service->releaseHeld(self::NOTE_ID));
+	}
+
+	public function testNothingHeldIsNothingToRelease(): void {
+		$this->requestQueueService->method('getHeld')->willReturn([]);
+		$this->streamRequest->expects($this->never())->method('getStreamById');
+
+		$this->assertSame(0, $this->service->releaseHeld(self::NOTE_ID));
+	}
+
+	/**
+	 * A Delete takes what has not gone yet with it. A held Create sent after
+	 * the Delete would put the post back on every server that got both.
+	 */
+	public function testADeleteDropsTheDeliveriesStillHeld(): void {
+		$held = $this->heldRow('Create');
+		$note = $this->note();
+		$note->setActorId(self::ALICE_ID);
+		$this->actorsRequest->method('getFromId')->willReturn($this->alice());
+		$this->requestQueueService->method('getHeld')->with(self::NOTE_ID)->willReturn([$held]);
+		$this->requestQueueService->expects($this->once())->method('deleteRequest')->with($this->identicalTo($held));
+		$this->expectQueuedWithoutInlineDelivery();
+
+		$this->service->deleteActivity($note);
+	}
+
 	// manageRequest()
 
 	public function testManageRequestPostsSignedActivityToInboxAndEndsRequestOnSuccess(): void {
@@ -1278,7 +1444,7 @@ class ActivityServiceTest extends TestCase {
 		$service = new ActivityService(
 			$this->followsRequest, $this->cacheActorsRequest,
 			$this->signatureService, $this->requestQueueService, $this->curlService, $this->configService,
-			$this->actorsRequest, $this->relayRequest, $broken = $this->createStub(HostBreakerRequest::class), $this->logger
+			$this->actorsRequest, $this->relayRequest, $broken = $this->createStub(HostBreakerRequest::class), $this->logger, $this->streamRequest
 		);
 		$broken->method('failingSince')->willThrowException(new \RuntimeException('no such table'));
 		$broken->method('open')->willThrowException(new \RuntimeException('no such table'));

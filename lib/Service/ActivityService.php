@@ -16,6 +16,7 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\HostBreakerRequest;
 use OCA\Social\Db\RelayRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\EmptyQueueException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -24,6 +25,7 @@ use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\NoHighPriorityRequestException;
 use OCA\Social\Exceptions\QueueStatusException;
 use OCA\Social\Exceptions\SocialAppConfigException;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Create;
@@ -99,6 +101,7 @@ class ActivityService {
 		private RelayRequest $relayRequest,
 		private HostBreakerRequest $hostBreakerRequest,
 		private LoggerInterface $logger,
+		private StreamRequest $streamRequest,
 	) {
 	}
 
@@ -106,15 +109,23 @@ class ActivityService {
 	 * @param Person $actor
 	 * @param ACore $item
 	 * @param ACore $activity
+	 * @param int $holdUntil when the delivery may start, 0 for now; see
+	 *                       `request()`
 	 *
 	 * @return string
 	 * @throws SocialAppConfigException
 	 */
-	public function createActivity(Person $actor, ACore $item, ?ACore &$activity = null): string {
+	public function createActivity(Person $actor, ACore $item, ?ACore &$activity = null, int $holdUntil = 0): string {
+		$activity = $this->buildCreate($actor, $item);
+
+		$this->saveActivity($activity);
+
+		return $this->request($activity, $holdUntil);
+	}
+
+	private function buildCreate(Person $actor, ACore $item): Create {
 		$activity = new Create();
 		$item->setParent($activity);
-
-		//		$this->activityStreamsService->initCore($activity);
 
 		$activity->setObject($item);
 		$activity->setId($item->getId() . '/activity');
@@ -124,19 +135,23 @@ class ActivityService {
 		$activity->setActor($actor);
 		$this->signatureService->signObject($actor, $activity);
 
-		$this->saveActivity($activity);
-
-		return $this->request($activity);
+		return $activity;
 	}
 
 	/**
 	 * @param Person $actor
 	 * @param ACore $item
+	 * @param int $holdUntil when the delivery may start, 0 for now; see
+	 *                       `request()`
 	 *
 	 * @return string
 	 * @throws SocialAppConfigException
 	 */
-	public function updateActivity(Person $actor, ACore $item): string {
+	public function updateActivity(Person $actor, ACore $item, int $holdUntil = 0): string {
+		return $this->request($this->buildUpdate($actor, $item), $holdUntil);
+	}
+
+	private function buildUpdate(Person $actor, ACore $item): Update {
 		$update = new Update();
 		$item->setParent($update);
 
@@ -148,7 +163,96 @@ class ActivityService {
 		$update->setActor($actor);
 		$this->signatureService->signObject($actor, $update);
 
-		return $this->request($update);
+		return $update;
+	}
+
+	/**
+	 * Sends a held post's deliveries, rebuilt from the post as it is now.
+	 *
+	 * A post carrying a video that is still being converted is queued with
+	 * its rows held back (`request()` with a `$holdUntil`). This is the other
+	 * end: the conversion has finished, or given up, and the stored post now
+	 * names whatever file there is to name. Each held `Create` and `Update` is
+	 * built again from it and signed again — the linked-data signature covers
+	 * the document, so the stored body cannot simply be patched — and the
+	 * rows are made due and drained at once.
+	 *
+	 * A post that was deleted while it waited has its held rows dropped:
+	 * delivering it now would put back on other servers what its author has
+	 * already taken down.
+	 *
+	 * @return int how many rows were released
+	 */
+	public function releaseHeld(string $objectId): int {
+		$held = $this->requestQueueService->getHeld($objectId);
+		if ($held === []) {
+			return 0;
+		}
+
+		try {
+			$post = $this->streamRequest->getStreamById($objectId);
+		} catch (StreamNotFoundException $e) {
+			foreach ($held as $queue) {
+				$this->requestQueueService->deleteRequest($queue);
+			}
+
+			return 0;
+		}
+
+		$bodies = [];
+		$tokens = [];
+		$released = 0;
+		foreach ($held as $queue) {
+			$body = $this->rebuiltBody($queue, $post, $bodies);
+			if ($this->requestQueueService->releaseRequest($queue, $body)) {
+				$tokens[$queue->getToken()] = true;
+				$released++;
+			}
+		}
+
+		foreach (array_keys($tokens) as $token) {
+			$this->curlService->asyncWithToken((string)$token);
+		}
+
+		return $released;
+	}
+
+	/**
+	 * What one held row goes out with: its `Create` or `Update` built again
+	 * from the post, or the body it was queued with for anything else.
+	 * Built once per type and author, however many inboxes share it.
+	 *
+	 * @param array<string, string> $built
+	 */
+	private function rebuiltBody(RequestQueue $queue, Stream $post, array &$built): string {
+		$decoded = json_decode($queue->getActivity(), true);
+		$type = is_array($decoded) ? (string)($decoded['type'] ?? '') : '';
+		$key = $type . ' ' . $queue->getAuthor();
+		if (array_key_exists($key, $built)) {
+			return $built[$key];
+		}
+
+		$activity = null;
+		try {
+			if ($type === Create::TYPE || $type === Update::TYPE) {
+				$actor = $this->actorsRequest->getFromId($queue->getAuthor());
+				$activity = ($type === Create::TYPE)
+					? $this->buildCreate($actor, clone $post)
+					: $this->buildUpdate($actor, clone $post);
+			}
+		} catch (Exception $e) {
+			// sent as it was queued rather than not at all: the video in it
+			// may not play everywhere, but the post itself does
+			$this->logger->warning('a held delivery could not be rebuilt and goes out as queued', [
+				'object' => $post->getId(), 'exception' => $e,
+			]);
+		}
+
+		$built[$key] = ($activity === null)
+			? $queue->getActivity()
+			: (string)json_encode($activity, JSON_UNESCAPED_SLASHES);
+
+		return $built[$key];
 	}
 
 	/**
@@ -189,6 +293,12 @@ class ActivityService {
 		// from the post, not from the Tombstone that replaces it: a Tombstone
 		// names nobody
 		$this->copyAudience($item, $delete);
+
+		// what has not gone yet never goes: a held Create delivered after this
+		// Delete would put the post back on every server that received both
+		foreach ($this->requestQueueService->getHeld($item->getId()) as $held) {
+			$this->requestQueueService->deleteRequest($held);
+		}
 
 		// A recipient may only pass an activity on (AP §7.1.2) if it carries the
 		// author's own signature over the document. Unsigned, a Delete of a
@@ -251,9 +361,18 @@ class ActivityService {
 	}
 
 	/**
+	 * Queues an activity for every inbox it is addressed to, and starts the
+	 * delivery.
+	 *
+	 * With a `$holdUntil` in the future the rows are written with that as
+	 * their `last`, which keeps every drain off them until then, and nothing
+	 * is delivered inline or handed to the async worker. `releaseHeld()` sends
+	 * them sooner; left alone, the cron delivers them as they are once the
+	 * time has passed.
+	 *
 	 * @throws SocialAppConfigException
 	 */
-	public function request(ACore $activity): string {
+	public function request(ACore $activity, int $holdUntil = 0): string {
 		$author = $this->getAuthorFromItem($activity);
 		$instancePaths = $this->generateInstancePaths($activity);
 		if ($activity instanceof Delete && isset($instancePaths[0])) {
@@ -276,10 +395,14 @@ class ActivityService {
 				),
 			]);
 		}
-		$token = $this->requestQueueService->generateRequestQueue($instancePaths, $activity, $author);
+		$token = $this->requestQueueService->generateRequestQueue($instancePaths, $activity, $author, $holdUntil);
 
 		if ($token === '') {
 			return '<request token not needed>';
+		}
+
+		if ($holdUntil > time()) {
+			return $token;
 		}
 
 		$this->manageInit();

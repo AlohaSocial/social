@@ -736,18 +736,28 @@ php occ social:media:transcode [--limit LIMIT]
 **Why it matters:** Pixelfed's default `media_types` accepts `video/mp4` and
 nothing else, so every `video/quicktime` posted from here — which is every video
 straight off an iPhone — is dropped by its inbox without a word to anybody.
-Safari will not play WebM either.
+Safari will not play WebM either, and only Safari plays the HEVC that phones
+write into an `.mp4`, so an MP4 whose video ffprobe does not report as H.264 is
+converted too. An H.264 MP4 is never re-encoded; without ffprobe an MP4 is left
+as it is.
 
-Off unless an administrator turned it on, because re-encoding is lossy and it is
-somebody's file: **Administration → Social → Server → Convert videos to MP4**, or
-`occ config:app:set social video_transcode --value=1`. The command exits 1 and
-changes nothing when it is off, or when the server has no ffmpeg.
+On by default, and nothing happens on a server without ffmpeg. An administrator
+can switch it off — re-encoding is lossy, and **the converted file replaces the
+original** — under **Administration → Social → Server → Convert videos to MP4
+in the background**, or with `occ config:app:set social video_transcode
+--value=0`. The command exits 1 and changes nothing when it is off, or when the
+server has no ffmpeg.
 
-The same work runs by itself in the background, one video every quarter of an
-hour, which is about a hundred a day — fast enough that a backlog clears and slow
-enough that a server converting one is never the reason its cron is late. This
-command is for an administrator who has just turned the setting on and would
-rather not wait a week.
+A new post does not wait for this command or the sweep: the video it carries is
+converted by a job of its own at the next cron run, and the post's delivery is
+held until then (at most ten minutes). The same work also runs by itself in the
+background for everything else, one video every quarter of an hour, which is
+about a hundred a day — fast enough that a backlog clears and slow enough that a
+server converting one is never the reason its cron is late. An MP4 found to be
+H.264 costs a copy and a probe rather than a conversion, and a run reads up to
+five of those. This command is for an administrator who has just installed
+ffmpeg and would rather not wait a week. Posts that went out before their video
+was converted are not sent again.
 
 ### `social:media:ladder`
 
@@ -786,9 +796,10 @@ background job does one video every half-hour.
 
 The converted file is written before the row is pointed at it and the original is
 deleted last, so a failure anywhere leaves a document pointing at a file that
-exists. A video ffmpeg cannot read is recorded as tried and left alone rather
-than retried for ever, and one that is already an MP4 is passed over without
-being re-encoded into a second generation of loss.
+exists, and the posts carrying the video are pointed at the new file before the
+original goes. A video ffmpeg cannot read is recorded as tried and left alone
+rather than retried for ever, and one that is already an H.264 MP4 is passed
+over without being re-encoded into a second generation of loss.
 
 ### `social:media:usage`
 

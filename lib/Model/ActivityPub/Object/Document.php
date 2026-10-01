@@ -72,6 +72,14 @@ class Document extends ACore implements JsonSerializable {
 	 * per attachment.
 	 */
 	private int $laddered = 0;
+
+	/**
+	 * Whether this video has been through the transcoder: the four states of
+	 * `social_cache_doc.transcoded` (`VideoTranscodingWorker::NOT_LOOKED` …).
+	 * Carried so that a new post can tell whether its delivery has a
+	 * conversion to wait for.
+	 */
+	private int $transcoded = 0;
 	private array $localCopySize = [0, 0];
 	private array $resizedCopySize = [0, 0];
 
@@ -411,6 +419,7 @@ class Document extends ACore implements JsonSerializable {
 		$this->setBlurHash($this->get('blurhash', $data, ''));
 		$this->setSizeBytes($this->getInt('size', $data, 0));
 		$this->setLaddered($this->getInt('laddered', $data, 0));
+		$this->setTranscoded($this->getInt('transcoded', $data, 0));
 		$this->setDescription($this->get('description', $data, ''));
 		$this->setMediaType($this->get('media_type', $data, ''));
 		$this->setMimeType($this->get('mime_type', $data, ''));
@@ -523,6 +532,16 @@ class Document extends ACore implements JsonSerializable {
 
 	public function setLaddered(int $laddered): self {
 		$this->laddered = $laddered;
+
+		return $this;
+	}
+
+	public function getTranscoded(): int {
+		return $this->transcoded;
+	}
+
+	public function setTranscoded(int $transcoded): self {
+		$this->transcoded = $transcoded;
 
 		return $this;
 	}

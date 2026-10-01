@@ -71,6 +71,7 @@ class CacheDocumentService {
 		private RemoteMediaQuotaService $remoteMediaQuotaService,
 		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
+		private VideoTranscodeService $videoTranscodeService,
 	) {
 	}
 
@@ -544,6 +545,16 @@ class CacheDocumentService {
 
 		if (!str_starts_with($mime, 'video/')) {
 			return;
+		}
+
+		// asked while the bytes are still on disk here: an MP4 that is already
+		// H.264 is recorded as needing nothing, so neither the post it goes out
+		// on nor the transcoder has to copy it back out of storage to find
+		// that out — and the post's delivery does not wait for a job that
+		// would do nothing
+		if ($this->videoTranscodeService->isEnabled()
+			&& !$this->videoTranscodeService->needsConversion($mime, $tmpPath)) {
+			$document->setTranscoded(VideoTranscodingWorker::NOT_NEEDED);
 		}
 
 		$poster = $this->videoThumbnailService->poster($tmpPath);

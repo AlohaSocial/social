@@ -33,6 +33,7 @@ class BackgroundJobsRegisteredTest extends TestCase {
 		'OCA\\Social\\Cron\\ActorCleanup',
 		'OCA\\Social\\Cron\\DomainPurge',
 		'OCA\\Social\\Cron\\ExternalPromoted',
+		'OCA\\Social\\Cron\\TranscodeBeforeDelivery',
 	];
 
 	/** @return list<string> the job classes info.xml registers */

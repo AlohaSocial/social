@@ -495,6 +495,63 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * Rebuilds the attachment copy of $document on every post of this
+	 * instance that carries it.
+	 *
+	 * An upload is not tied to its post by `parent_id` the way a fetched
+	 * attachment is — it is uploaded before the post exists — so the posts
+	 * are found by the copy itself, which is keyed by the document's nid. The
+	 * candidates are narrowed first by the indexed `media_kind` (a row the
+	 * backfill has not reached is NULL there, and counts), and only this
+	 * instance's own posts: a remote post names the origin's file, not ours.
+	 *
+	 * @return int how many posts were rewritten
+	 */
+	public function updateLocalAttachmentCopies(Document $document): int {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->select('id', 'attachments')
+			->from(self::TABLE_STREAM)
+			->where($expr->eq('local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->andWhere($expr->orX(
+				$expr->in('media_kind', $qb->createNamedParameter(
+					['video', Stream::MEDIA_KIND_MIXED], IQueryBuilder::PARAM_STR_ARRAY
+				)),
+				$expr->isNull('media_kind')
+			))
+			->andWhere($expr->like('attachments', $qb->createNamedParameter(
+				'%"id":"' . (string)$document->getNid() . '"%'
+			)));
+
+		$rows = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$rows[] = $data;
+		}
+		$cursor->closeCursor();
+
+		$rewritten = 0;
+		foreach ($rows as $data) {
+			$stored = json_decode((string)$data['attachments'], true);
+			if (!is_array($stored)) {
+				continue;
+			}
+
+			$new = $this->updateAttachmentInList($document, $stored);
+			if ($new === $stored) {
+				continue;
+			}
+
+			$this->setStoredAttachmentCopies(
+				(string)$data['id'], json_encode($new, JSON_UNESCAPED_SLASHES)
+			);
+			$rewritten++;
+		}
+
+		return $rewritten;
+	}
+
+	/**
 	 * The post's stored attachment copies with the one for $document rebuilt
 	 * from it.
 	 *

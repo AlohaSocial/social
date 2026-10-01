@@ -60,7 +60,14 @@ class QueueController extends Controller {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/async/request/{token}')]
 	public function asyncForRequest(string $token): Response {
-		$requests = $this->requestQueueService->getRequestFromToken($token, RequestQueue::STATUS_STANDBY);
+		// a row whose `last` is still ahead is held back on purpose — a video
+		// post waiting for its conversion, or a host the breaker has put off —
+		// and is the cron's to deliver once that time has come
+		$now = time();
+		$requests = array_values(array_filter(
+			$this->requestQueueService->getRequestFromToken($token, RequestQueue::STATUS_STANDBY),
+			static fn (RequestQueue $request): bool => $request->getLast() <= $now
+		));
 
 		if (empty($requests)) {
 			return new DataResponse([], Http::STATUS_OK);

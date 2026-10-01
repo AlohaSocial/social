@@ -116,6 +116,17 @@ class ServerSettingsServiceTest extends TestCase {
 		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_SELF_SIGNED]);
 	}
 
+	/** Switching video conversion off has to stick, now that on is the default. */
+	public function testTheVideoConversionSwitchIsWrittenBothWays(): void {
+		$this->save(['videoTranscode' => true]);
+		$this->assertSame('1', $this->stored[ConfigService::SOCIAL_VIDEO_TRANSCODE]);
+		$this->assertTrue($this->service->current()['video_transcode']);
+
+		$this->save(['videoTranscode' => false]);
+		$this->assertSame('0', $this->stored[ConfigService::SOCIAL_VIDEO_TRANSCODE]);
+		$this->assertFalse($this->service->current()['video_transcode']);
+	}
+
 	public function testAnEmptyContactAddressIsAllowed(): void {
 		$this->assertSame('', $this->save(['contactEmail' => ''])['contact_email']);
 	}

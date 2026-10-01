@@ -134,6 +134,7 @@ class SocialDeleteRoundTripTest extends TestCase {
 			$this->createStub(RelayRequest::class),
 			$this->createStub(HostBreakerRequest::class),
 			$this->createStub(LoggerInterface::class),
+			$this->createStub(\OCA\Social\Db\StreamRequest::class),
 		);
 
 		$post->setActorId($post->getAttributedTo());
