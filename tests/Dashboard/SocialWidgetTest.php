@@ -39,7 +39,7 @@ class SocialWidgetTest extends TestCase {
 	}
 
 	public function testTitleIsTranslated(): void {
-		$this->l10n->method('t')->with('Social notifications')->willReturn('Soziale Benachrichtigungen');
+		$this->l10n->method('t')->with('Aloha Social notifications')->willReturn('Soziale Benachrichtigungen');
 
 		$this->assertSame('Soziale Benachrichtigungen', $this->widget->getTitle());
 	}

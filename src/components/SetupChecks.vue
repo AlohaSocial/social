@@ -7,7 +7,7 @@
 		<template v-if="checks.wellknown === false">
 			<h3>{{ t('social', '.well-known/webfinger isn\'t properly set up!') }}</h3>
 			<p>
-				{{ t('social', 'Social needs the .well-known automatic discovery to be properly set up. If Nextcloud is not installed in the root of the domain, it is often the case that Nextcloud cannot configure this automatically. To use Social, the administrator of this Nextcloud instance needs to manually configure the .well-known redirects:') }}
+				{{ t('social', 'Aloha Social needs the .well-known automatic discovery to be properly set up. If Nextcloud is not installed in the root of the domain, it is often the case that Nextcloud cannot configure this automatically. To use Aloha Social, the administrator of this Nextcloud instance needs to manually configure the .well-known redirects:') }}
 				<a
 					class="external_link"
 					href="https://docs.nextcloud.com/server/latest/go.php?to=admin-setup-well-known-URL"
@@ -34,7 +34,7 @@
 				{{ clientApiFinding }}
 			</p>
 			<p>
-				{{ t('social', 'The web server has to map /api, /oauth and two /.well-known paths onto Social. It has to do that as an internal proxy and not as a redirect: Nextcloud routes on the address a request arrived at, so a plain rewrite answers 404, and many clients drop their authorization when they follow a redirect. Inside the Apache virtual host that serves Nextcloud:') }}
+				{{ t('social', 'The web server has to map /api, /oauth and two /.well-known paths onto Aloha Social. It has to do that as an internal proxy and not as a redirect: Nextcloud routes on the address a request arrived at, so a plain rewrite answers 404, and many clients drop their authorization when they follow a redirect. Inside the Apache virtual host that serves Nextcloud:') }}
 			</p>
 			<pre class="setup-checks__config"><code>{{ apacheRules }}</code></pre>
 			<p>
@@ -53,12 +53,12 @@
 		</template>
 
 		<template v-if="checks.cloudAddress === false">
-			<h3>{{ t('social', 'Social is set up for a different address than this server') }}</h3>
+			<h3>{{ t('social', 'Aloha Social is set up for a different address than this server') }}</h3>
 			<p>
 				{{ addressExplanation }}
 			</p>
 			<p>
-				{{ t('social', 'Changing it renames every account and post that already exists here, so Social will not do it on its own. Either point the server back at the address Social knows, or reset Social with "occ social:reset" — which deletes everything it holds.') }}
+				{{ t('social', 'Changing it renames every account and post that already exists here, so Aloha Social will not do it on its own. Either point the server back at the address Aloha Social knows, or reset Aloha Social with "occ social:reset" — which deletes everything it holds.') }}
 			</p>
 		</template>
 	</div>
@@ -166,7 +166,7 @@ export default {
 		addressExplanation() {
 			return translate(
 				'social',
-				'Social builds every account and post address from {configured}, but this server now reports that it lives at {expected}. Nobody looking for an account here under the address the server advertises will find it.',
+				'Aloha Social builds every account and post address from {configured}, but this server now reports that it lives at {expected}. Nobody looking for an account here under the address the server advertises will find it.',
 				{ configured: this.addresses.configured, expected: this.addresses.expected },
 			)
 		},

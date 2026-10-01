@@ -1,7 +1,7 @@
 OC.L10N.register(
     "social",
     {
-    "Social" : "Social",
+    "Aloha Social" : "Aloha Social",
     "Help" : "Ajuda",
     "Home" : "Domicili",
     "Direct messages" : "Messatges dirèctes",

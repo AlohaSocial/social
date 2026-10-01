@@ -78,7 +78,7 @@ class SocialReportsWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IConditionalWidget::class, $this->widget);
 		$this->assertSame('social_reports', $this->widget->getId());
-		$this->assertSame('Social reports', $this->widget->getTitle());
+		$this->assertSame('Aloha Social reports', $this->widget->getTitle());
 		$this->assertSame(20, $this->widget->getOrder());
 	}
 

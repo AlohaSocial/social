@@ -143,7 +143,7 @@ class ExternalUserService {
 	public function signupNotice(): string {
 		$notice = trim($this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_SIGNUP_NOTICE));
 
-		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Social on this server. Read the server rules and the linked privacy information before registering. Public posts may be delivered to other servers.');
+		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Aloha Social on this server. Read the server rules and the linked privacy information before registering. Public posts may be delivered to other servers.');
 	}
 
 	/** @return list<string> the handles the administrator reserved */

@@ -47,7 +47,7 @@ class SocialTrendingWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IAPIWidgetV2::class, $this->widget);
 		$this->assertSame('social_trending', $this->widget->getId());
-		$this->assertSame('Social trending hashtags', $this->widget->getTitle());
+		$this->assertSame('Aloha Social trending hashtags', $this->widget->getTitle());
 		$this->assertSame(16, $this->widget->getOrder());
 		$this->assertSame(900, $this->widget->getReloadInterval(), 'trends move in hours');
 	}

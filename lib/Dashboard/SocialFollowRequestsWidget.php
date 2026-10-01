@@ -59,7 +59,7 @@ class SocialFollowRequestsWidget implements IAPIWidgetV2, IIconWidget, IButtonWi
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social follow requests');
+		return $this->l10n->t('Aloha Social follow requests');
 	}
 
 	#[\Override]

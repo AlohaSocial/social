@@ -129,7 +129,7 @@ class ExternalSignupService {
 	private function signupNoticeText(): string {
 		$notice = $this->externalUserService->signupNotice();
 
-		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Social on this server. Review the server rules and linked privacy information before registering.');
+		return $notice !== '' ? $notice : $this->l10n->t('This account is limited to Aloha Social on this server. Review the server rules and linked privacy information before registering.');
 	}
 
 	/**

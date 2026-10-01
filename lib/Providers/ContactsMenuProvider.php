@@ -45,7 +45,7 @@ class ContactsMenuProvider implements IProvider {
 			$user = $this->getUserFromEntry($entry);
 			$actor = $this->accountService->getActorFromUserId($user->getUID());
 
-			$action = $this->l10n->t('Follow %s on Social', [$user->getDisplayName()]);
+			$action = $this->l10n->t('Follow %s on Aloha Social', [$user->getDisplayName()]);
 			$icon = $this->urlGenerator->getAbsoluteURL(
 				$this->urlGenerator->imagePath('social', 'social-dark.svg')
 			);

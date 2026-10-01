@@ -6,7 +6,7 @@
 	<div class="social-admin">
 		<header class="social-admin__header">
 			<h1 class="social-admin__heading">
-				{{ t('social', 'Social') }}
+				{{ t('social', 'Aloha Social') }}
 			</h1>
 			<p class="social-admin__lede">
 				{{ t('social', 'Everything this server decides for itself: what is moderated, what people are shown, what is kept, and who it federates with.') }}

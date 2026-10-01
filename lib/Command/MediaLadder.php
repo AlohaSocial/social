@@ -56,7 +56,7 @@ class MediaLadder extends SocialCommand {
 
 		if (!$this->videoLadderService->isEnabled()) {
 			$output->writeln(
-				'<comment>Building ladders is off. Turn it on under Administration → Social,'
+				'<comment>Building ladders is off. Turn it on under Administration → Aloha Social,'
 				. ' or with: occ config:app:set social video_ladder --value=1</comment>'
 			);
 

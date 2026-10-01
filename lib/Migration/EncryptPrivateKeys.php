@@ -45,7 +45,7 @@ class EncryptPrivateKeys implements IRepairStep {
 
 	#[\Override]
 	public function getName(): string {
-		return 'Encrypt the stored Social actor private keys';
+		return 'Encrypt the stored Aloha Social actor private keys';
 	}
 
 	#[\Override]
@@ -107,14 +107,14 @@ class EncryptPrivateKeys implements IRepairStep {
 		$output->finishProgress();
 
 		if ($encrypted > 0) {
-			$output->info('Encrypted the private key of ' . $encrypted . ' Social actor(s)');
+			$output->info('Encrypted the private key of ' . $encrypted . ' Aloha Social actor(s)');
 		}
 
 		if ($failed === []) {
 			$this->configService->setAppValue(self::MARKER, '1');
 		} else {
 			$output->warning(
-				'The private key of ' . count($failed) . ' Social actor(s) is still stored in '
+				'The private key of ' . count($failed) . ' Aloha Social actor(s) is still stored in '
 				. 'plaintext: ' . implode(', ', $failed) . '. They keep working; check that the '
 				. 'instance secret is readable, and the next upgrade will try again.'
 			);

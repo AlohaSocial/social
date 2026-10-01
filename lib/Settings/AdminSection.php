@@ -30,7 +30,7 @@ class AdminSection implements IIconSection {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social');
+		return $this->l10n->t('Aloha Social');
 	}
 
 	#[\Override]

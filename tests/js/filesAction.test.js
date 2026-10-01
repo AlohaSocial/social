@@ -27,11 +27,11 @@ function instanceSaying(maxMediaAttachments) {
 
 const file = (path, mime = 'image/jpeg', type = 'file') => ({ path, mime, type, basename: path.split('/').pop() })
 
-describe('Share to Social in the Files app', () => {
+describe('Share to Aloha Social in the Files app', () => {
 	it('registers itself once, under a stable id', () => {
 		expect(registered).toEqual([shareAction])
 		expect(shareAction.id).toBe('social-share')
-		expect(shareAction.displayName({ nodes: [] })).toBe('Share to Social')
+		expect(shareAction.displayName({ nodes: [] })).toBe('Share to Aloha Social')
 		expect(shareAction.iconSvgInline({ nodes: [] })).toMatch(/^<svg/)
 	})
 

@@ -86,7 +86,7 @@ class PeerTubeApiService {
 			'instance' => [
 				// the same name `InstanceService` reports, which is the one an
 				// administrator set in Theming rather than one of this app's
-				'name' => $this->appConfig->getValueString('theming', 'name', 'Nextcloud Social'),
+				'name' => $this->appConfig->getValueString('theming', 'name', 'Aloha Social'),
 				'shortDescription' => (string)$this->configService->getAppValue(
 					ConfigService::SOCIAL_EXTENDED_DESCRIPTION
 				),

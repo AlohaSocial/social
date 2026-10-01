@@ -184,7 +184,7 @@
 				:buttons="resetButtons"
 				@update:open="confirmingReset = $event">
 				<p class="interests-settings__hint">
-					{{ t('social', 'Everything Social has learned about what you like goes, with the hashtags you added and the order you gave them. It starts learning again from nothing. This cannot be undone.') }}
+					{{ t('social', 'Everything Aloha Social has learned about what you like goes, with the hashtags you added and the order you gave them. It starts learning again from nothing. This cannot be undone.') }}
 				</p>
 			</NcDialog>
 		</template>

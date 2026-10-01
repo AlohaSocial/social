@@ -71,7 +71,7 @@ class RetryMedia extends SocialCommand {
 
 		if ($document->getLocalCopy() === '') {
 			$output->writeln(
-				'<error>The retry did not produce a local copy. Check the Social log and media limits.</error>'
+				'<error>The retry did not produce a local copy. Check the Aloha Social log and media limits.</error>'
 			);
 
 			return 1;

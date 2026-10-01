@@ -8,10 +8,10 @@
 			{{ t('social', 'Everything you posted from here is deleted, your followers and the people you follow are let go, and every server that knew this account is told it is gone. It cannot be undone, and there is no way to get any of it back afterwards — take an archive from the Export button above first if you might want one.') }}
 		</p>
 		<p v-if="external" class="delete-account__what">
-			{{ t('social', 'Your account on this server was made for Social, so it is deleted too, and you are signed out. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go.') }}
+			{{ t('social', 'Your account on this server was made for Aloha Social, so it is deleted too, and you are signed out. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go.') }}
 		</p>
 		<p v-else class="delete-account__what">
-			{{ t('social', 'Your Nextcloud account is not touched: you stay signed in to everything else, and you can make a new Social account straight away. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go, so a new account needs a different one.') }}
+			{{ t('social', 'Your Nextcloud account is not touched: you stay signed in to everything else, and you can make a new Aloha Social account straight away. The handle you are deleting is held for an hour so that nobody else can take it the moment you let it go, so a new account needs a different one.') }}
 		</p>
 		<p class="delete-account__what">
 			{{ t('social', 'A post that already reached somebody else\'s server is deleted by asking that server to delete it. Almost all of them do; none of them can be made to.') }}
@@ -21,7 +21,7 @@
 			<template #icon>
 				<IconDeleteOutline :size="20" />
 			</template>
-			{{ t('social', 'Delete my Social account') }}
+			{{ t('social', 'Delete my Aloha Social account') }}
 		</NcButton>
 
 		<template v-else>

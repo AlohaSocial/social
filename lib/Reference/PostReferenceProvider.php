@@ -179,7 +179,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 
 		$reference = new Reference($referenceText);
 		$reference->setAccessible(true);
-		$reference->setTitle($this->l10n->t('%1$s (@%2$s) on Social', [$author->getDisplayName(), $author->getAccount()]));
+		$reference->setTitle($this->l10n->t('%1$s (@%2$s) on Aloha Social', [$author->getDisplayName(), $author->getAccount()]));
 		$reference->setDescription($this->textOf($post));
 		$reference->setImageUrl($this->pictureOf($post, $author));
 		$reference->setUrl($post->isLocal() && $post->getNid() > 0
@@ -203,7 +203,7 @@ class PostReferenceProvider implements IReferenceProvider, IPublicReferenceProvi
 
 		$reference = new Reference($referenceText);
 		$reference->setAccessible(true);
-		$reference->setTitle($this->l10n->t('%1$s (@%2$s) on Social', [$person->getDisplayName(), $person->getAccount()]));
+		$reference->setTitle($this->l10n->t('%1$s (@%2$s) on Aloha Social', [$person->getDisplayName(), $person->getAccount()]));
 		$reference->setDescription(self::excerpt($person->getDescription()));
 		$reference->setImageUrl($person->getAvatar() !== '' ? $person->getAvatar() : null);
 		$reference->setUrl($this->urlGenerator->linkToRouteAbsolute(

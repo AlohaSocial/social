@@ -105,7 +105,7 @@ class SocialTimelineWidgetTest extends TestCase {
 		$this->assertInstanceOf(IButtonWidget::class, $this->widget);
 		$this->assertInstanceOf(IReloadableWidget::class, $this->widget);
 		$this->assertSame('social_timeline', $this->widget->getId());
-		$this->assertSame('Social timeline', $this->widget->getTitle());
+		$this->assertSame('Aloha Social timeline', $this->widget->getTitle());
 		$this->assertSame(11, $this->widget->getOrder());
 		$this->assertSame('icon-social', $this->widget->getIconClass());
 		$this->assertSame(300, $this->widget->getReloadInterval());

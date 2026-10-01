@@ -202,7 +202,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	 */
 	#[\Override]
 	public function getDisplayName(): string {
-		return $this->l10n->t('Social');
+		return $this->l10n->t('Aloha Social');
 	}
 
 	/**
@@ -287,7 +287,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		try {
 			$actor = $this->accountService->getActorFromUserId($user->getUID());
 		} catch (Throwable $e) {
-			$output->writeln($user->getUID() . ' has no Social account, nothing to export…');
+			$output->writeln($user->getUID() . ' has no Aloha Social account, nothing to export…');
 
 			return;
 		}
@@ -337,7 +337,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		IExportDestination $exportDestination,
 		OutputInterface $output,
 	): void {
-		$output->writeln('Exporting the Social actor in ' . self::PATH_ACTOR . '…');
+		$output->writeln('Exporting the Aloha Social actor in ' . self::PATH_ACTOR . '…');
 
 		$avatarFile = $this->exportProfileImage($actor->getAvatar(), 'avatar', $exportDestination);
 		// `getHeader()` falls back to the avatar when there is no banner, which
@@ -563,7 +563,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		IExportDestination $exportDestination,
 		OutputInterface $output,
 	): void {
-		$output->writeln('Exporting the Social posts to ' . self::PATH_OUTBOX . '…');
+		$output->writeln('Exporting the Aloha Social posts to ' . self::PATH_OUTBOX . '…');
 
 		$path = $this->tempManager->getTemporaryFile();
 		$file = fopen($path, 'w+');
@@ -866,7 +866,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 			// user who never used this app: creating an account here would hand
 			// them a Fediverse identity, and publish it, on the strength of an
 			// empty folder
-			$output->writeln('No Social data in this archive, nothing to import…');
+			$output->writeln('No Aloha Social data in this archive, nothing to import…');
 
 			return;
 		}
@@ -881,8 +881,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 				'userId' => $userId, 'exception' => $e,
 			]);
 			$output->writeln(
-				$userId . ' has no Social account here and none could be created (' . $e->getMessage()
-				. '), skipping the Social import…'
+				$userId . ' has no Aloha Social account here and none could be created (' . $e->getMessage()
+				. '), skipping the Aloha Social import…'
 			);
 
 			return;
@@ -944,7 +944,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 			return;
 		}
 
-		$output->writeln('Importing the Social profile from ' . self::PATH_ACTOR . '…');
+		$output->writeln('Importing the Aloha Social profile from ' . self::PATH_ACTOR . '…');
 
 		try {
 			if (array_key_exists('locked', $data)) {
@@ -975,7 +975,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 			$this->logger->warning('could not restore a Social profile', [
 				'userId' => $userId, 'exception' => $e,
 			]);
-			$output->writeln('<error>Could not restore the Social profile: ' . $e->getMessage() . '</error>');
+			$output->writeln('<error>Could not restore the Aloha Social profile: ' . $e->getMessage() . '</error>');
 		}
 
 		$this->importProfileImages($userId, $data, $importSource, $output);

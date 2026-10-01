@@ -230,10 +230,10 @@ class TranslatableStringsTest extends TestCase {
 
 	public function testAccountDeletionFarewellHasGermanCatalogEntries(): void {
 		$messages = [
-			'Your Social account has been deleted',
-			'The Social account and the Nextcloud account created for it have been deleted. You are now signed out.',
-			'Social sent requests to remove your posts to the servers that received them. Those servers control copies they may already have stored.',
-			'Return to Social',
+			'Your Aloha Social account has been deleted',
+			'The Aloha Social account and the Nextcloud account created for it have been deleted. You are now signed out.',
+			'Aloha Social sent requests to remove your posts to the servers that received them. Those servers control copies they may already have stored.',
+			'Return to Aloha Social',
 			'Go to the sign-in page',
 		];
 		$missing = [];

@@ -74,7 +74,7 @@ class SocialFederationHealthWidgetTest extends TestCase {
 	public function testIdentity(): void {
 		$this->assertInstanceOf(IConditionalWidget::class, $this->widget);
 		$this->assertSame('social_federation_health', $this->widget->getId());
-		$this->assertSame('Social federation health', $this->widget->getTitle());
+		$this->assertSame('Aloha Social federation health', $this->widget->getTitle());
 		$this->assertSame(21, $this->widget->getOrder());
 	}
 

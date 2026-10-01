@@ -82,12 +82,12 @@ describe('the External users cards', () => {
 		expect(wrapper.emitted('changed')).toHaveLength(1)
 	})
 
-	it('warns when Social is restricted to groups that leave external users out', () => {
+	it('warns when Aloha Social is restricted to groups that leave external users out', () => {
 		const settings = { ...external().settings, restricted: true, restrictionIncludesExternals: false }
 		const wrapper = mount(ExternalUsersSection, { props: { external: external({ settings }) } })
 
 		expect(wrapper.text()).toContain('external users are not in them')
-		expect(button(wrapper, 'Let external users open Social')).toBeDefined()
+		expect(button(wrapper, 'Let external users open Aloha Social')).toBeDefined()
 	})
 
 	it('asks for the password before changing two-factor, and not at all when dismissed', async () => {

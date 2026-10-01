@@ -42,7 +42,7 @@
 					</template>
 				</NcSelect>
 				<p class="sections__hint">
-					{{ t('social', 'Everybody in one of these groups gets a list for it, holding the members who have a Social account. Nobody is followed by it and nothing leaves this server: a list is a view, not a relationship. Empty — the default — means no group becomes a list, because a group list tells everybody in the group who else is in it.') }}
+					{{ t('social', 'Everybody in one of these groups gets a list for it, holding the members who have a Aloha Social account. Nobody is followed by it and nothing leaves this server: a list is a view, not a relationship. Empty — the default — means no group becomes a list, because a group list tells everybody in the group who else is in it.') }}
 				</p>
 			</div>
 

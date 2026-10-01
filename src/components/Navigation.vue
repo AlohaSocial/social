@@ -1073,7 +1073,7 @@ export default {
 			if (entry.kind === 'list' && entry.list.nextcloud_group) {
 				return translate(
 					'social',
-					'Everyone in the Nextcloud group {group} who has a Social account',
+					'Everyone in the Nextcloud group {group} who has a Aloha Social account',
 					{ group: entry.list.title },
 				)
 			}

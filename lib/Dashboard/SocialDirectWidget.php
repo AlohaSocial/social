@@ -22,7 +22,7 @@ class SocialDirectWidget extends TimelineWidget {
 
 	#[\Override]
 	public function getTitle(): string {
-		return $this->l10n->t('Social direct messages');
+		return $this->l10n->t('Aloha Social direct messages');
 	}
 
 	#[\Override]

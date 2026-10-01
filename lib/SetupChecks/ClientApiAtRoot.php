@@ -44,7 +44,7 @@ class ClientApiAtRoot implements ISetupCheck {
 
 	#[\Override]
 	public function getName(): string {
-		return $this->l10n->t('Social: client API');
+		return $this->l10n->t('Aloha Social: client API');
 	}
 
 	#[\Override]

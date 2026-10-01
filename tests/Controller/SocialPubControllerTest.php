@@ -163,7 +163,7 @@ class SocialPubControllerTest extends TestCase {
 		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('main', $response->getTemplateName());
-		$this->assertSame('Alice - Social', $response->getParams()['application']);
+		$this->assertSame('Alice - Aloha Social', $response->getParams()['application']);
 		$this->assertSame(['public' => true], $this->states['serverData']);
 	}
 
@@ -172,7 +172,7 @@ class SocialPubControllerTest extends TestCase {
 
 		$response = $this->controller(null)->actor('alice');
 
-		$this->assertSame('alice - Social', $response->getParams()['application']);
+		$this->assertSame('alice - Aloha Social', $response->getParams()['application']);
 	}
 
 	/**
@@ -235,7 +235,7 @@ class SocialPubControllerTest extends TestCase {
 		$this->assertInstanceOf(PublicTemplateResponse::class, $response);
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('main', $response->getTemplateName());
-		$this->assertSame('nextcloud@mastodon.xyz - Social', $response->getParams()['application']);
+		$this->assertSame('nextcloud@mastodon.xyz - Aloha Social', $response->getParams()['application']);
 		$this->assertSame(['public' => true], $this->states['serverData']);
 	}
 
