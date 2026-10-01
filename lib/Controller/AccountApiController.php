@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use Exception;
-use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -354,28 +353,11 @@ class AccountApiController extends MastodonApiController {
 				continue;
 			}
 
-			$placeholder ??= $this->placeholderImage($account);
+			$placeholder ??= $account->placeholderImage($this->urlGenerator);
 			$data[$image] = $placeholder;
 		}
 
 		return $data;
-	}
-
-	/**
-	 * The picture shown for an account that has none cached yet: for a local
-	 * account Nextcloud's own avatar, which every user has (generated from the
-	 * initials when nothing was uploaded), the app icon otherwise.
-	 */
-	private function placeholderImage(Person $account): string {
-		if ($account->isLocal()) {
-			return $this->urlGenerator->linkToRouteAbsolute(
-				'core.avatar.getAvatar', ['userId' => $account->getPreferredUsername(), 'size' => 128]
-			);
-		}
-
-		return $this->urlGenerator->getAbsoluteURL(
-			$this->urlGenerator->imagePath(Application::APP_ID, 'social.svg')
-		);
 	}
 
 	/**

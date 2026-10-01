@@ -406,6 +406,56 @@ class PersonTest extends TestCase {
 		$this->assertSame('https://cloud.example.org/apps/social/media/abc123', $account['avatar_static']);
 	}
 
+	/** The router refuses an empty route parameter, as the real one does. */
+	private function routerThatRefusesAnEmptyUuid(): void {
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
+			function (string $route, array $parameters): string {
+				if (($parameters['uuid'] ?? null) === '') {
+					throw new \InvalidArgumentException('Parameter "uuid" for route "' . $route . '" must match');
+				}
+
+				return 'https://cloud.example.org/' . $route . '/' . implode('/', $parameters);
+			}
+		);
+		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social.svg');
+		$this->urlGenerator->method('getAbsoluteURL')
+			->willReturnCallback(fn (string $path): string => 'https://cloud.example.org' . $path);
+	}
+
+	/**
+	 * Removing or renaming an avatar leaves the account's icon without a local
+	 * copy until the cache job runs. Building its address with an empty uuid
+	 * threw, and the account answered 500 everywhere it appeared: its own
+	 * profile, sign-in, update_credentials after a name change, its posts.
+	 */
+	public function testALocalIconWithNoCopyYetShowsNextcloudsOwnAvatar(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$person = $this->localActor();
+		$person->setLocal(true);
+		$icon = new Image();
+		$icon->setUrl('https://cloud.example.org/index.php/avatar/alice/128');
+		$person->setIcon($icon);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame('https://cloud.example.org/core.avatar.getAvatar/alice/128', $account['avatar']);
+		$this->assertSame($account['avatar'], $account['avatar_static']);
+	}
+
+	/** The origin is not offered in its place: that hands the reader's address to another server. */
+	public function testARemoteIconWithNoCopyYetShowsTheAppIcon(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$person = new Person();
+		$person->setPreferredUsername('bob')->setAccount('bob@mastodon.social');
+		$icon = new Image();
+		$icon->setUrl('https://files.mastodon.social/avatars/bob.png');
+		$person->setIcon($icon);
+
+		$this->assertSame(
+			'https://cloud.example.org/apps/social/img/social.svg', $person->exportAsLocal()['avatar']
+		);
+	}
+
 	public function testImportFromLocalReadsAMastodonAccount(): void {
 		$person = new Person();
 

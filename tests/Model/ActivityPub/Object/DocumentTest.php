@@ -121,6 +121,17 @@ class DocumentTest extends TestCase {
 		$this->assertSame('https://cloud.example.org/social.MediaApi.mediaOpen/abc_s.png', $document->getResizedMediaUrl($this->urlGenerator, 'image/png'));
 	}
 
+	/**
+	 * A document with no copy here has no address here: an empty uuid made the
+	 * router throw, and with only an extension it named `/media/.jpeg`.
+	 */
+	public function testADocumentWithNoLocalCopyHasNoMediaUrl(): void {
+		$document = new Document();
+
+		$this->assertSame('', $document->getMediaUrl($this->urlGenerator));
+		$this->assertSame('', $document->getMediaUrl($this->urlGenerator, 'image/jpeg'));
+	}
+
 	public function testConvertToMediaAttachmentBuildsTheMastodonEntity(): void {
 		$document = new Document();
 		$document->setNid(8)
