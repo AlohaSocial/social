@@ -483,6 +483,11 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	 * The give-up threshold is shared, because a dead instance has no timeline
 	 * to read either.
 	 *
+	 * Only the actors somebody here follows. A synced timeline feeds the home
+	 * timelines of the followers, and nothing else reads it: an actor the
+	 * instance merely met — a like, a boost seen in passing — has no reader
+	 * for its outbox, and every cached actor was fetched on every rotation.
+	 *
 	 * @return Person[]
 	 * @throws Exception
 	 */
@@ -495,6 +500,19 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 				$qb->createNamedParameter(self::SYNC_MAX_FAILURES, IQueryBuilder::PARAM_INT)
 			)
 		);
+
+		// an accepted follow of the actor by a local account
+		$follow = $this->getQueryBuilder();
+		$follow->select($follow->createFunction('1'))
+			->from(self::TABLE_FOLLOWS, 'f')
+			->from(self::TABLE_CACHE_ACTORS, 'la')
+			->where('f.object_id_prim = ca.id_prim')
+			// quoted literals: boolean columns on PostgreSQL, ints elsewhere
+			->andWhere("f.accepted = '1'")
+			->andWhere('la.id_prim = f.actor_id_prim')
+			->andWhere("la.local = '1'");
+		$qb->andWhere('EXISTS (' . $follow->getSQL() . ')');
+
 		$qb->orderBy('ca.sync_attempt', 'asc');
 		$qb->addOrderBy('ca.nid', 'asc');
 		$qb->setMaxResults($limit);
