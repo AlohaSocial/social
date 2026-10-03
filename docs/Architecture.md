@@ -443,7 +443,12 @@ off since. `releaseHeld()` reads the post again, builds each held `Create` or
 `Update` afresh from it (re-signed: the linked-data signature covers the
 document, so the stored body cannot be patched), writes that body and
 `last = NULL` onto every row still on standby, and hands each token to the async
-drain; the activity then names the converted file and `video/mp4`. If the job
+drain; the activity then names the converted file and `video/mp4`. While the
+rows wait, the author's own `Status` carries `delivery: "held"`
+(`Stream::isDeliveryHeld()`, through `VideoDeliveryHold::isHeld()`): looked up
+for the reader's own local posts only, and the attachments are checked before
+the queue is asked, so a post without a video costs no query; the key is
+absent on everybody else's copy and once the post has gone out. If the job
 never gets that far the rows fall due at the deadline and `Cron\Queue` or
 `social:worker` sends them as they were queued. An **edit** made while a post
 waits is held the same way (the same job, found already queued) and rebuilt as

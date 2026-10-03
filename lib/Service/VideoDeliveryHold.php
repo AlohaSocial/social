@@ -45,7 +45,19 @@ class VideoDeliveryHold {
 		private CacheDocumentsRequest $cacheDocumentsRequest,
 		private VideoTranscodeService $videoTranscodeService,
 		private IJobList $jobList,
+		private RequestQueueService $requestQueueService,
 	) {
+	}
+
+	/**
+	 * Whether a post's deliveries are still waiting for its video.
+	 *
+	 * The attachments are looked at first, so a post without a video — nearly
+	 * every post — costs nothing; the queue is asked only when something is
+	 * still awaited, and then once.
+	 */
+	public function isHeld(Stream $post): bool {
+		return $this->awaited($post) !== [] && $this->requestQueueService->getHeld($post->getId()) !== [];
 	}
 
 	/**

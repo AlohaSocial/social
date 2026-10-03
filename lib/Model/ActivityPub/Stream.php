@@ -31,6 +31,7 @@ use OCA\Social\Model\Client\Place;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Model\StreamCard;
+use OCA\Social\Service\VideoDeliveryHold;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Model\Cache;
 use OCA\Social\Tools\Model\CacheItem;
@@ -379,6 +380,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private bool $filterDuplicate = false;
 	private bool $pinned = false;
 	private ?StreamCard $card = null;
+	/** null until asked; see isDeliveryHeld() */
+	private ?bool $deliveryHeld = null;
 
 	/**
 	 * The emoji reactions on this post, attached by ReactionService.
@@ -1043,6 +1046,44 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$this->card = $card;
 
 		return $this;
+	}
+
+	/**
+	 * Whether the post's deliveries are still waiting for its video to be
+	 * converted; the author's business and nobody else's. Set by a caller
+	 * that knows, or looked up once for the author's own local post.
+	 */
+	public function setDeliveryHeld(bool $held): Stream {
+		$this->deliveryHeld = $held;
+
+		return $this;
+	}
+
+	public function isDeliveryHeld(): bool {
+		if ($this->deliveryHeld === null) {
+			$this->deliveryHeld = $this->lookupDeliveryHeld();
+		}
+
+		return $this->deliveryHeld;
+	}
+
+	/**
+	 * Only for the reader's own local post, which is the one case the answer
+	 * is anybody's to see: `VideoDeliveryHold::isHeld()` looks at the
+	 * attachments before it asks the queue, so a post without a video costs
+	 * no query at all.
+	 */
+	private function lookupDeliveryHeld(): bool {
+		$author = $this->getAttributedTo();
+		if (!$this->isLocal() || $author === '' || $author !== self::currentViewerId()) {
+			return false;
+		}
+
+		try {
+			return Server::get(VideoDeliveryHold::class)->isHeld($this);
+		} catch (\Throwable $e) {
+			return false;
+		}
 	}
 
 	/**
@@ -1947,6 +1988,15 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			'edited_at' => $this->editedAt(),
 			'noindex' => false
 		];
+
+		// Aloha Social's own: `held` while the post's deliveries wait for its
+		// video to be converted, on the author's copy only. Absent everywhere
+		// else — including on the same post once it has gone out — because
+		// this is a transient state of one person's post, not a property of
+		// a status, and the one exception to the entity's no-missing-keys rule
+		if ($this->isDeliveryHeld()) {
+			$result['delivery'] = 'held';
+		}
 
 		if ($this->hasActor()) {
 			$actor = $this->getActor();
