@@ -422,7 +422,7 @@ instance needs, under systemd:
 
 ```ini
 [Unit]
-Description=Nextcloud Social delivery worker %i
+Description=Aloha Social delivery worker %i
 After=network.target
 
 [Service]
