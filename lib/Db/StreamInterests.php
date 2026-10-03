@@ -102,7 +102,8 @@ trait StreamInterests {
 			$qb->createNamedParameter(array_values($tags), IQueryBuilder::PARAM_STR_ARRAY)
 		));
 
-		$qb->limitToViewer('sd', 'f', true);
+		// `to`: the feed is a tag timeline, and an unlisted post stays off those
+		$qb->limitToViewer('sd', 'f', true, false, SocialCoreQueryBuilder::HIDDEN_TIMELINE, 'to');
 		$qb->andWhere($expr->neq(
 			's.attributed_to_prim', $qb->createNamedParameter($qb->prim($this->viewer->getId()))
 		));

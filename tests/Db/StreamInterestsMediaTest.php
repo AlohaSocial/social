@@ -29,6 +29,15 @@ class StreamInterestsMediaTest extends TestCase {
 		return preg_split('/\n\t\}\n/', $body, 2)[0] ?? '';
 	}
 
+	/** For you is built from tags, and an unlisted post is kept off the tag timelines. */
+	public function testTheCandidatesAreAddressedToThePublicCollection(): void {
+		$this->assertStringContainsString(
+			"limitToViewer('sd', 'f', true, false, SocialCoreQueryBuilder::HIDDEN_TIMELINE, 'to')",
+			$this->body(),
+			'the feed has to ask for the `to` recipient row, or unlisted posts are suggested'
+		);
+	}
+
 	public function testEachKindIsTheFilterItsTimelineUses(): void {
 		$body = $this->body();
 
