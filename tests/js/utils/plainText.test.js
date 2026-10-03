@@ -18,6 +18,10 @@ describe('htmlToPlainText', () => {
 	it('keeps explicit breaks inside a block', () => {
 		expect(htmlToPlainText('<p>one<br>two</p>')).toBe('one\ntwo')
 	})
+
+	it('decodes the entities the markup carries', () => {
+		expect(htmlToPlainText('<p>fish &amp; chips &lt;3 it&#39;s&nbsp;good</p>')).toBe('fish & chips <3 it\'s\u00a0good')
+	})
 })
 
 describe('editableToPlainText', () => {
@@ -43,6 +47,20 @@ describe('editableToPlainText', () => {
 
 	it('counts an emoji picture as its alt text', () => {
 		expect(editableToPlainText(box('hello <img class="emoji" alt="🎉" src="x.png"> there'))).toBe('hello 🎉 there')
+	})
+
+	it('decodes the entities the box holds', () => {
+		expect(editableToPlainText(box('fish &amp; chips &lt;3 it&#39;s&nbsp;good'))).toBe('fish & chips <3 it\'s\u00a0good')
+	})
+
+	it('keeps an entity the reader typed as the characters they typed', () => {
+		// typed as five characters, held by the browser as `&amp;amp;`; the
+		// text node already says `&amp;`, and decoding it a second time
+		// sent `&` instead
+		const element = document.createElement('div')
+		element.append(document.createTextNode('say &amp; not &'))
+
+		expect(editableToPlainText(element)).toBe('say &amp; not &')
 	})
 
 	it('reads a mention pill as the handle it shows', () => {

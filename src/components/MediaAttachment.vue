@@ -70,12 +70,17 @@
 				ref="canvas"
 				class="attachment__blurhash"
 				:class="{ 'attachment__blurhash--hidden': previewLoaded }" />
+			<!-- fetched as it comes into view and decoded off the main thread:
+			     a timeline is a long column of these, and the blurhash above
+			     holds the frame until each arrives -->
 			<img
 				v-if="hasPreview && !previewFailed"
 				class="attachment__preview attachment__preview--fading"
 				:class="{ 'attachment__preview--shown': previewLoaded }"
 				:src="attachment.preview_url"
 				:alt="attachment.description || ''"
+				loading="lazy"
+				decoding="async"
 				@load="previewLoaded = true"
 				@error="onPreviewError">
 			<!-- federated media that has gone away used to spin forever: no

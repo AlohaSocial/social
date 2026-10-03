@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import he from 'he'
-
 /**
  * A post's HTML as the words that were typed.
  *
@@ -36,8 +34,10 @@ export function htmlToPlainText(html) {
 /**
  * What the composer's editable box says, as the text the post is sent with.
  *
- * An emoji drawn as a picture counts as its alt text, and what the box holds
- * is decoded as the markup it was typed into.
+ * An emoji drawn as a picture counts as its alt text. Entities are the
+ * browser's to decode: the walk below reads text nodes, which hold the
+ * characters and not the markup, so an `&amp;` the reader typed stays the
+ * five characters they typed.
  *
  * @param {HTMLElement|null|undefined} element the editable element
  * @return {string} the text, trimmed
@@ -52,7 +52,7 @@ export function editableToPlainText(element) {
 		emoji.replaceWith(document.createTextNode(emoji.getAttribute('alt') ?? ''))
 	})
 
-	return he.decode(nodeToPlainText(copy).trim())
+	return nodeToPlainText(copy).trim()
 }
 
 /**
