@@ -275,7 +275,7 @@ class OAuthController extends Controller {
 			// what the person is being asked to agree to: the app, what it may
 			// do, and where the code is about to be sent
 			$this->initialState->provideInitialState('appName', $client->getAppName());
-			$this->initialState->provideInitialState('appWebsite', $client->getAppWebsite());
+			$this->initialState->provideInitialState('appWebsite', $this->websiteLink($client->getAppWebsite()));
 			// which account is about to be handed over: on a server where
 			// somebody holds more than one, the name of the application alone
 			// does not answer the question being asked
@@ -438,6 +438,15 @@ class OAuthController extends Controller {
 	}
 
 	/**
+	 * The application's website as the consent page may link it: an `http` or
+	 * `https` address, or nothing. The registration takes any string there,
+	 * and the page offers it as a link to click.
+	 */
+	private function websiteLink(string $website): string {
+		return preg_match('/^https?:\/\/[^\/]/i', $website) === 1 ? $website : '';
+	}
+
+	/**
 	 * RFC 6749 §3.1.2.3: the `redirect_uri` of a request has to be, exactly,
 	 * one the client registered. Compared as strings rather than by origin or
 	 * prefix -- a code sent to a path the client did not register is a code
@@ -467,9 +476,15 @@ class OAuthController extends Controller {
 	 *
 	 * A client left without one waits for a redirect that never comes. The
 	 * out-of-band flow has nowhere to send it, so that lands on the app.
+	 *
+	 * So does a redirect URI the registration would refuse today: this is a
+	 * link the person clicks, and a `javascript:` URI registered before the
+	 * scheme was checked would run in their session rather than send them
+	 * anywhere.
 	 */
 	private function denyUrl(string $redirectUri, string $state): string {
-		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB) {
+		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB
+			|| !ClientService::isAcceptableRedirectUri($redirectUri)) {
 			return $this->urlGenerator->linkToRoute('social.Navigation.navigate');
 		}
 

@@ -1046,6 +1046,51 @@ class OAuthControllerTest extends TestCase {
 		);
 	}
 
+	/** A native client's own scheme is a registered destination like any other. */
+	public function testDenyingConsentFollowsACustomSchemeBackToTheClient(): void {
+		$this->loggedIn();
+		$this->knownClient('client-1', 'Tusky', ['tusky://oauth']);
+		$states = $this->recordInitialState();
+
+		$this->controller->authorize('client-1', 'tusky://oauth', 'code', 'read', 's1');
+
+		$this->assertSame('tusky://oauth?error=access_denied&state=s1', $states['denyUrl']);
+	}
+
+	/**
+	 * A redirect URI registered before the scheme was checked may be a
+	 * `javascript:` one. The Deny button is a link the person clicks, so it
+	 * is not handed that; the refusal lands on the app instead.
+	 */
+	public function testDenyingConsentNeverLinksASchemeABrowserWouldRun(): void {
+		$this->loggedIn();
+		$this->urlGenerator->method('linkToRoute')->with('social.Navigation.navigate')
+			->willReturn('/apps/social/');
+
+		foreach (['javascript://%0aalert(1)', 'data://text/html,x', 'vbscript://x', 'file:///tmp/x'] as $uri) {
+			$this->setUp();
+			$this->loggedIn();
+			$this->urlGenerator->method('linkToRoute')->willReturn('/apps/social/');
+			$this->knownClient('client-1', 'Tusky', [$uri]);
+			$states = $this->recordInitialState();
+
+			$this->controller->authorize('client-1', $uri, 'code', 'read', 'xyz');
+
+			$this->assertSame('/apps/social/', $states['denyUrl'], $uri);
+		}
+	}
+
+	/** The website is a link to click, so only an address a browser follows is offered. */
+	public function testTheConsentPageDropsAWebsiteABrowserWouldRun(): void {
+		$this->loggedIn();
+		$this->knownClient()->setAppWebsite('javascript:alert(1)');
+		$states = $this->recordInitialState();
+
+		$this->controller->authorize('client-1', self::OOB, 'code', 'read');
+
+		$this->assertSame('', $states['appWebsite']);
+	}
+
 	public function testDenyingAnOutOfBandRequestFallsBackToTheApp(): void {
 		$this->loggedIn();
 		$this->knownClient();
