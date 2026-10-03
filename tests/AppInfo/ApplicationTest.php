@@ -241,4 +241,13 @@ class ApplicationTest extends TestCase {
 
 		$this->assertSame(['extended_authentication'], $types);
 	}
+
+	/** The top bar has room for one short word; the full name stays everywhere else. */
+	public function testTheTopBarEntryIsTheShortName(): void {
+		$info = simplexml_load_file(__DIR__ . '/../../appinfo/info.xml');
+		$this->assertNotFalse($info);
+
+		$this->assertSame('Aloha Social', (string)$info->name);
+		$this->assertSame('Aloha', (string)$info->navigations->navigation->name);
+	}
 }

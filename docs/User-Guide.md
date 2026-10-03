@@ -28,7 +28,7 @@ names are the English strings of the web client.
 ## Getting an account
 
 A Nextcloud account is the account: the first time you
-open **Aloha Social** from the app menu, a short screen asks whether you want a
+open **Aloha** from the app menu, a short screen asks whether you want a
 fediverse identity here, or would rather name the one you already have
 somewhere else. Nothing is created until you choose. You pick your handle on
 that screen — it starts out as a suggestion made from your Nextcloud user id,
