@@ -106,7 +106,10 @@ class VideoTranscodingWorker {
 			foreach ($documents as $document) {
 				$after = \OCA\Social\Tools\Nid::compare($after, $document->getNid()) > 0 ? $after : $document->getNid();
 
-				if (!$this->videoTranscodeService->mayNeedConversion($document->getMediaType())) {
+				// another server's video is not this instance's to re-encode;
+				// marked so the row never comes up again
+				if (!$document->isLocalUpload()
+					|| !$this->videoTranscodeService->mayNeedConversion($document->getMediaType())) {
 					$this->cacheDocumentsRequest->setTranscoded($document->getNid(), self::NOT_NEEDED);
 					continue;
 				}

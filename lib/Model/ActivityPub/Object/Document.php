@@ -100,6 +100,15 @@ class Document extends ACore implements JsonSerializable {
 	}
 
 	/**
+	 * Whether the file was uploaded here by a local account rather than cached
+	 * from another server. `account` is written by the upload paths only, so
+	 * it is the one thing on a row that says which of the two it is.
+	 */
+	public function isLocalUpload(): bool {
+		return $this->account !== '';
+	}
+
+	/**
 	 * @return string
 	 */
 	public function getMediaType(): string {
