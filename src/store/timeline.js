@@ -87,8 +87,12 @@ function rememberCelebrated() {
 /**
  * Indexes a status, and the status it boosts, by id.
  *
+ * A notification is indexed under its own id like anything else a list
+ * holds, and so is the post it is about: the card reads that post from the
+ * index, which is where a like or a boost on it lands.
+ *
  * @param {TimelineState} state the store state
- * @param {import('../types/Mastodon.js').Status} status the status to index
+ * @param {import('../types/Mastodon.js').Status|import('../types/Mastodon.js').Notification} status the status to index
  */
 function indexStatus(state, status) {
 	if (status === undefined || status === null || status.id === undefined) {
@@ -100,6 +104,9 @@ function indexStatus(state, status) {
 	state.statuses[status.id] = status
 	if (status.reblog !== undefined && status.reblog !== null) {
 		state.statuses[status.reblog.id] = status.reblog
+	}
+	if (status.type !== undefined) {
+		indexStatus(state, status.status)
 	}
 }
 

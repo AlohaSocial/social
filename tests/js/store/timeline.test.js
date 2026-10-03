@@ -109,6 +109,24 @@ describe('timeline store state changes', () => {
 		expect(store.parentsTimeline).toEqual([])
 	})
 
+	it('addToTimeline indexes the post a notification is about, and the post that one boosts', () => {
+		// the card reads the post from the index, so a like on it has to
+		// find the same copy the like changes
+		const liked = makeStatus('1')
+		const boosted = makeStatus('2')
+		const boost = makeStatus('3', { reblog: boosted, content: '' })
+		const favourite = { id: 'n1', type: 'favourite', created_at: '2026-01-02T10:00:00.000Z', account: { acct: 'bob' }, status: liked }
+		const reblog = { id: 'n2', type: 'reblog', created_at: '2026-01-02T11:00:00.000Z', account: { acct: 'bob' }, status: boost }
+		const follow = { id: 'n3', type: 'follow', created_at: '2026-01-02T12:00:00.000Z', account: { acct: 'bob' } }
+
+		store.addToTimeline([favourite, reblog, follow])
+
+		expect(store.timeline).toEqual(['n1', 'n2', 'n3'])
+		expect(Object.keys(store.statuses).sort()).toEqual(['1', '2', '3', 'n1', 'n2', 'n3'])
+		store.likeStatus({ status: liked })
+		expect(store.getStatus('1').favourited).toBe(true)
+	})
+
 	it('addToTimeline de-duplicates ids but refreshes the stored status', () => {
 		store.addToTimeline([makeStatus('1'), makeStatus('2')])
 		const edited = makeStatus('2', { content: '<p>edited</p>' })

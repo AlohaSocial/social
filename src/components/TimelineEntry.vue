@@ -318,7 +318,9 @@ export default {
 		 */
 		entryContent() {
 			if (this.isNotification) {
-				return this.notification.status
+				// the store's copy where there is one: the notification's own
+				// is a snapshot, and a like on the card lands in the store
+				return this.timelineStore.getStatus(this.notification.status?.id) ?? this.notification.status
 			} else if (this.isBoost) {
 				// We use the object stored in the store so that actions on it are reflected.
 				return this.timelineStore.getStatus(this.status.reblog.id)
