@@ -377,9 +377,13 @@ php occ social:stream:prune [-d|--days DAYS] [--dry-run]
 ```
 
 - Without `--days`, the `retention_days` app setting decides the period; `0`
-  (the default) disables retention and the command exits without touching
-  anything.
-- `--dry-run` only counts what would be deleted.
+  (the default) disables status retention and no status is touched.
+- Two sweeps run on every call whatever `retention_days` says: the queue rows
+  nothing will act on again (exhausted deliveries, finished cache items) are
+  purged, and in-app notification rows older than `notification_retention_days`
+  (default 90; `0` keeps them) are deleted. The notification count is printed
+  on its own line.
+- `--dry-run` only counts what would be deleted, including the notifications.
 - A status is kept when a local user liked, boosted, replied to or bookmarked
   it, when a local user follows its author, when a local status replies to it
   or boosts it, or when it is a direct message. Local content is never touched.

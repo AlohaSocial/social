@@ -35,6 +35,12 @@ use Psr\Log\LoggerInterface;
  *  - it is a direct message.
  *
  * Local content is never touched. Disabled by default (`retention_days` = 0).
+ *
+ * Two smaller sweeps run on every pass whatever `retention_days` says: the
+ * queue rows nothing will act on again, and the in-app notification rows
+ * older than `notification_retention_days` (default 90) — local rows about a
+ * local user's post that nothing reads once they have scrolled out of the
+ * notifications timeline.
  */
 class StreamPruneService {
 	public const CHUNK = 500;
@@ -53,21 +59,29 @@ class StreamPruneService {
 		return (int)$this->configService->getAppValue(ConfigService::SOCIAL_RETENTION_DAYS);
 	}
 
+	public function getNotificationRetentionDays(): int {
+		return (int)$this->configService->getAppValue(ConfigService::SOCIAL_NOTIFICATION_RETENTION_DAYS);
+	}
+
 	/**
-	 * @return array{streams: int, documents: int} what was (or would be) removed
+	 * @return array{streams: int, documents: int, notifications: int} what was (or would be) removed
 	 */
 	public function prune(?int $days = null, bool $dryRun = false, int $max = 0): array {
 		$days ??= $this->getRetentionDays();
+
+		if (!$dryRun) {
+			$this->pruneQueues();
+		}
+		$notifications = $this->pruneNotifications($dryRun, $max);
+
 		if ($days <= 0) {
-			return ['streams' => 0, 'documents' => 0];
+			return ['streams' => 0, 'documents' => 0, 'notifications' => $notifications];
 		}
 
 		$cutoff = new DateTime($days . ' days ago');
 		if ($dryRun) {
-			return ['streams' => $this->countPrunable($cutoff), 'documents' => 0];
+			return ['streams' => $this->countPrunable($cutoff), 'documents' => 0, 'notifications' => $notifications];
 		}
-
-		$this->pruneQueues();
 
 		$streams = 0;
 		$documents = 0;
@@ -88,7 +102,7 @@ class StreamPruneService {
 			$streams += count($prims);
 			// one cascade, defined next to the delete it belongs to
 			$documents += $this->streamRequest->deleteRelatedTo($prims);
-			$this->deleteStreams($prims);
+			$this->streamRequest->deleteByPrims($prims);
 		}
 
 		if ($streams > 0) {
@@ -97,7 +111,51 @@ class StreamPruneService {
 			]);
 		}
 
-		return ['streams' => $streams, 'documents' => $documents];
+		return ['streams' => $streams, 'documents' => $documents, 'notifications' => $notifications];
+	}
+
+	/**
+	 * Notification rows past `notification_retention_days`, in the same chunks
+	 * as the statuses and under the same ceiling; 0 keeps them all.
+	 *
+	 * @return int how many were (or would be) removed
+	 */
+	public function pruneNotifications(bool $dryRun = false, int $max = 0): int {
+		$days = $this->getNotificationRetentionDays();
+		if ($days <= 0) {
+			return 0;
+		}
+
+		$cutoff = new DateTime($days . ' days ago');
+		if ($dryRun) {
+			return $this->streamRequest->countNotificationsBefore($cutoff);
+		}
+
+		$pruned = 0;
+		while (true) {
+			$limit = self::CHUNK;
+			if ($max > 0) {
+				$limit = min($limit, $max - $pruned);
+				if ($limit <= 0) {
+					break;
+				}
+			}
+
+			$prims = $this->streamRequest->getNotificationPrimsBefore($cutoff, $limit);
+			if ($prims === []) {
+				break;
+			}
+
+			$pruned += count($prims);
+			$this->streamRequest->deleteRelatedTo($prims);
+			$this->streamRequest->deleteByPrims($prims);
+		}
+
+		if ($pruned > 0) {
+			$this->logger->info('notification retention pruned rows', ['days' => $days, 'notifications' => $pruned]);
+		}
+
+		return $pruned;
 	}
 
 	private function countPrunable(DateTime $cutoff): int {
@@ -201,15 +259,5 @@ class StreamPruneService {
 		}
 
 		return $pruned;
-	}
-
-	/**
-	 * @param string[] $prims
-	 */
-	private function deleteStreams(array $prims): void {
-		$qb = $this->connection->getQueryBuilder();
-		$qb->delete(CoreRequestBuilder::TABLE_STREAM)
-			->where($qb->expr()->in('id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)));
-		$qb->executeStatement();
 	}
 }

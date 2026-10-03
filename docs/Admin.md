@@ -766,6 +766,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `access_list` | `[]` | The instances on that list, as a JSON array of hostnames. An entry covers every subdomain of itself. Managed from the settings page and by `occ social:fediverse`. |
 | `silenced_list` | `[]` | Instances whose accounts are kept out of the public and global timelines but stay readable for whoever follows them. The middle tier a block does not have. |
 | `retention_days` | `0` | Remote statuses older than this that no local user interacted with, follows the author of, or replied below are deleted, with their cached attachments. `0` disables it. Local content is never touched. |
+| `notification_retention_days` | `90` | In-app notification rows older than this are deleted by the same prune, whether or not `retention_days` is set. `0` keeps them for good. |
 | `federate_blocks` | `1` | Whether a user's own blocks are federated to the blocked account's instance. `0` keeps them local. |
 | `publish_video_objects` | `0` | Whether a post that is a video is federated as an ActivityPub `Video` (PeerTube's shape) rather than a `Note` with an attachment. Off by default: Pixelfed's inbox handles only `Note`s and silently drops a `Video`, so with this on no video posted here reaches a Pixelfed follower. Mastodon draws both shapes; PeerTube draws only the `Video`. Turn it on for an instance whose audience is on PeerTube. |
 | `network_stats` | `1` | Whether the statistics page may ask [FediDB](https://fedidb.org) how big the fediverse is — servers, accounts, accounts that posted in the last month — to show beside the number of servers this one federates with. One request every six hours for the whole instance, carrying no account, no query and nothing about this instance; a survey that does not answer is left alone for half an hour. Set it to `0` and the section is absent rather than zeroed: an instance that makes no outbound request to draw a page is a legitimate thing to want. The same value governs the **growth** section below it, which asks [Fediverse Observer](https://fediverse.observer) for the last two years month by month — FediDB publishes a snapshot and no history, so the shape over time comes from a second survey, once a day. The two do not agree about the totals, because they crawl different servers and count dormant accounts differently, so the page keeps them apart and names each: a page that averaged them would produce a number neither survey would stand behind. |
@@ -912,7 +913,7 @@ administrator's choice.
 **Housekeeping**
 
 ```bash
-occ social:stream:prune             # apply retention and purge finished queue rows
+occ social:stream:prune             # apply retention, purge finished queue rows and old notifications
 occ social:cache:refresh            # re-fetch cached remote accounts
 occ social:domain:purge <instance>  # remove what a now-blocked instance sent
 ```

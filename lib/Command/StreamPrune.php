@@ -42,17 +42,13 @@ class StreamPrune extends SocialCommand {
 		$days = ($days === null) ? null : (int)$days;
 		$dryRun = (bool)$input->getOption('dry-run');
 
+		$result = $this->streamPruneService->prune($days, $dryRun);
+
 		if (($days ?? $this->streamPruneService->getRetentionDays()) <= 0) {
 			$output->writeln(
 				'retention is disabled: set the retention_days app setting or pass --days'
 			);
-
-			return 0;
-		}
-
-		$result = $this->streamPruneService->prune($days, $dryRun);
-
-		if ($dryRun) {
+		} elseif ($dryRun) {
 			$output->writeln(sprintf('%d statuses would be pruned', $result['streams']));
 		} else {
 			$output->writeln(sprintf(
@@ -60,6 +56,11 @@ class StreamPrune extends SocialCommand {
 				$result['streams'], $result['documents']
 			));
 		}
+
+		$output->writeln(sprintf(
+			$dryRun ? '%d notifications would be pruned' : '%d notifications pruned',
+			$result['notifications']
+		));
 
 		return 0;
 	}

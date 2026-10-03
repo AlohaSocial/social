@@ -1933,6 +1933,68 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The in-app notification rows (`SocialAppNotification`) created before a
+	 * cutoff, oldest first. A notification is a local row about a local user's
+	 * post; it is never federated, and nothing reads it again once it has
+	 * scrolled out of the notifications timeline.
+	 *
+	 * @return string[] id_prim
+	 */
+	public function getNotificationPrimsBefore(DateTime $cutoff, int $limit): array {
+		$qb = $this->notificationsBeforeQuery($cutoff);
+		$qb->select('s.id_prim')
+			->orderBy('s.creation', 'asc')
+			->setMaxResults($limit);
+
+		$cursor = $qb->executeQuery();
+		$prims = array_map(static fn (array $row): string => (string)$row['id_prim'], $cursor->fetchAll());
+		$cursor->closeCursor();
+
+		return $prims;
+	}
+
+	public function countNotificationsBefore(DateTime $cutoff): int {
+		$qb = $this->notificationsBeforeQuery($cutoff);
+		$qb->selectAlias($qb->createFunction('COUNT(*)'), 'count');
+
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return (int)($row['count'] ?? 0);
+	}
+
+	private function notificationsBeforeQuery(DateTime $cutoff): SocialQueryBuilder {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->from(self::TABLE_STREAM, 's')
+			->where($expr->eq('s.type', $qb->createNamedParameter(SocialAppNotification::TYPE)))
+			->andWhere($expr->eq('s.local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->andWhere($expr->lt('s.creation', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE)));
+
+		return $qb;
+	}
+
+	/**
+	 * Removes the stream rows themselves; what hangs off them is
+	 * `deleteRelatedTo()`'s business and goes first, because the cascade is
+	 * keyed on rows that are about to be gone.
+	 *
+	 * @param string[] $prims
+	 */
+	public function deleteByPrims(array $prims): void {
+		if ($prims === []) {
+			return;
+		}
+
+		$qb = $this->getStreamDeleteSql();
+		$qb->andWhere($qb->expr()->in(
+			'id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
+		));
+		$qb->executeStatement();
+	}
+
+	/**
 	 * Removes the rows and the cached files that belong to a set of posts,
 	 * addressed by their id_prim. The single place that knows what "related to
 	 * a post" means.
