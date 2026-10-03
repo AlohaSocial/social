@@ -871,6 +871,25 @@ export default {
 		},
 
 		/**
+		 * Which draft this box is writing: a reply to one post, a quote of
+		 * one, or a post of its own. A reply opened over a half-written post
+		 * used to take its place on disk, and sending either threw the
+		 * other away.
+		 *
+		 * @return {string} '' for a post of its own
+		 */
+		draftContext() {
+			if (this.replyTo !== null) {
+				return `reply.${this.replyTo.id}`
+			}
+			if (this.quoteOf !== null) {
+				return `quote.${this.quoteOf.id}`
+			}
+
+			return ''
+		},
+
+		/**
 		 * Whether the post being replied to is the one this composer is
 		 * anchored under. The header saying who is being replied to, with the
 		 * post quoted inside it, is then a copy of what is directly above the
@@ -1053,6 +1072,19 @@ export default {
 		visibility: 'rememberDraft',
 
 		/**
+		 * The words stay in the box when it is pointed at another post, or
+		 * back at none, so the draft on disk moves with them rather than
+		 * staying behind as a copy that would come back on the next visit.
+		 *
+		 * @param {string} _now the context being written now
+		 * @param {string} before the one just left
+		 */
+		draftContext(_now, before) {
+			clearDraft(before)
+			this.rememberDraft()
+		},
+
+		/**
 		 * `verify_credentials` can land after a composer is already on screen
 		 * — the timeline draws one as the page opens — and the account's
 		 * default audience only comes with it. A composer nobody has spoken
@@ -1184,7 +1216,7 @@ export default {
 			this.placing = false
 			this.place = null
 			this.asCard = false
-			clearDraft()
+			clearDraft(this.draftContext)
 			this.updateStatusContent()
 		},
 
@@ -1367,7 +1399,7 @@ export default {
 				// who it was being written as, so a reload does not quietly
 				// turn a team post back into a personal one
 				postAs: this.postAs,
-			})
+			}, this.draftContext)
 		},
 
 		/**
@@ -1375,7 +1407,7 @@ export default {
 		 * something else has already filled the composer (a reply mention).
 		 */
 		restoreDraft() {
-			const draft = loadDraft()
+			const draft = loadDraft(this.draftContext)
 			if (draft === null || this.inputElement() === undefined) {
 				return false
 			}

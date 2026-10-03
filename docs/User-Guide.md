@@ -117,7 +117,8 @@ people** makes an invitation link: it works once and for a week.
 composer; the composer also sits above most timelines. A post may be up to
 5,000 characters, content warning included. What you type is kept as a draft
 across a failed post, a reload or a navigation, so nothing is lost to a
-network hiccup.
+network hiccup. A reply keeps its own draft, under the post it answers, so
+starting one does not take the place of a post you were still writing.
 
 - **Visibility** is chosen with the globe menu next to the post button. The
   choice decides who receives the post on the fediverse, not only who sees it

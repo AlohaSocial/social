@@ -31,16 +31,24 @@ const NAME = 'social.composer.draft'
 const UNSCOPED_KEY = NAME
 
 /**
- * What the draft is kept under, for whoever is signed in.
+ * What the draft is kept under, for whoever is signed in and for what is
+ * being written.
  *
  * Read at each call rather than once: the module is evaluated when the page
  * loads, and the same page is not necessarily the same session by the time
  * somebody is typing in it.
  *
+ * A reply and a top-level post are two drafts, not one slot: with one, a
+ * half-written reply opened over a half-written post took its place, and
+ * sending either threw the other away. The context is what the composer is
+ * answering or quoting; '' is a post of its own, under the key drafts have
+ * always had.
+ *
+ * @param {string} context what the draft belongs to, '' for a post of its own
  * @return {string} the key
  */
-function key() {
-	return userKey(NAME)
+function key(context) {
+	return userKey(context === '' ? NAME : `${NAME}.${context}`)
 }
 
 /** a draft older than this is stale enough to be somebody else's day */
@@ -57,22 +65,23 @@ const MAX_AGE_MS = 7 * 24 * 3600 * 1000
  */
 
 /**
- * Remembers a draft, replacing any previous one.
+ * Remembers a draft, replacing any previous one in the same context.
  *
  * @param {object} draft the draft to keep
  * @param {string} draft.text what was typed
  * @param {string} [draft.spoilerText] the content warning
  * @param {string} [draft.visibility] who it is going to
  * @param {string} [draft.postAs] the team account it is being written as
+ * @param {string} [context] what it belongs to — see `key()`
  * @return {boolean} whether it could be stored
  */
-export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '' }) {
+export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '' }, context = '') {
 	if ((text ?? '').trim() === '' && spoilerText.trim() === '') {
-		return clearDraft()
+		return clearDraft(context)
 	}
 
 	try {
-		window.localStorage.setItem(key(), JSON.stringify({
+		window.localStorage.setItem(key(context), JSON.stringify({
 			text,
 			spoilerText,
 			visibility,
@@ -92,19 +101,20 @@ export function saveDraft({ text, spoilerText = '', visibility = '', postAs = ''
 }
 
 /**
+ * @param {string} [context] what the draft belongs to — see `key()`
  * @return {ComposerDraft|null} the kept draft, or null when there is none
  */
-export function loadDraft() {
+export function loadDraft(context = '') {
 	let raw
 	try {
-		// signed out there is nothing to separate, and the two keys are the
-		// same one — forgetting it there would delete what is about to be read
-		const scoped = key()
-		if (scoped !== UNSCOPED_KEY) {
+		// signed out there is nothing to separate, and the old key is the
+		// one a post of its own is kept under — forgetting it there would
+		// delete that draft, whichever context is being read
+		if (key('') !== UNSCOPED_KEY) {
 			forgetUnscoped(UNSCOPED_KEY)
 		}
 
-		raw = window.localStorage.getItem(scoped)
+		raw = window.localStorage.getItem(key(context))
 	} catch {
 		return null
 	}
@@ -117,17 +127,17 @@ export function loadDraft() {
 	try {
 		draft = JSON.parse(raw)
 	} catch {
-		clearDraft()
+		clearDraft(context)
 		return null
 	}
 
 	if (draft === null || typeof draft !== 'object' || typeof draft.text !== 'string') {
-		clearDraft()
+		clearDraft(context)
 		return null
 	}
 
 	if (typeof draft.savedAt === 'number' && Date.now() - draft.savedAt > MAX_AGE_MS) {
-		clearDraft()
+		clearDraft(context)
 		return null
 	}
 
@@ -143,11 +153,12 @@ export function loadDraft() {
 /**
  * Forgets the draft, which is what a post that actually went out means.
  *
+ * @param {string} [context] what the draft belongs to — see `key()`
  * @return {boolean} whether the store could be reached
  */
-export function clearDraft() {
+export function clearDraft(context = '') {
 	try {
-		window.localStorage.removeItem(key())
+		window.localStorage.removeItem(key(context))
 		return true
 	} catch {
 		return false
