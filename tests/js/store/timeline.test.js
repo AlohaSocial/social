@@ -747,6 +747,29 @@ describe('timeline store actions', () => {
 			expect(logger.error).toHaveBeenCalledWith('Failed to create a media', { error: expect.any(Error) })
 		})
 
+		it('repeats the server\'s reason when it refused the upload', async () => {
+			// too large, a kind it does not take: the refusal says which,
+			// and a fixed line hid it
+			axios.post.mockRejectedValue(Object.assign(new Error('Request failed with status code 413'), {
+				response: { status: 413, data: { error: 'The file is larger than the 10 MB this server takes' } },
+			}))
+
+			await expect(store.createMedia(new File(['x'], 'x.mp4'))).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith('The file is larger than the 10 MB this server takes')
+		})
+
+		it.each([
+			['a 5xx with a message', { status: 500, data: { error: 'Internal Server Error' } }],
+			['a 4xx without one', { status: 422, data: {} }],
+		])('keeps the generic line for %s', async (_, response) => {
+			axios.post.mockRejectedValue(Object.assign(new Error('failed'), { response }))
+
+			await store.createMedia(new File(['x'], 'x.txt'))
+
+			expect(showError).toHaveBeenCalledWith('Could not upload the attachment')
+		})
+
 		it('reports how far the upload has got, so the bar is real', async () => {
 			const file = new File(['png'], 'cat.png', { type: 'image/png' })
 			axios.post.mockResolvedValue({ data: { id: '42' } })

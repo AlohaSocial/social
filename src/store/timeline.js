@@ -817,7 +817,14 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info('Media created with id ' + data.id)
 				return data
 			} catch (error) {
-				showError(t('social', 'Could not upload the attachment'))
+				// a refusal says why — too large, a kind the server does not
+				// take — and the reason is worth more than a fixed line; a
+				// network failure or a 5xx has no reason worth repeating
+				const status = error.response?.status ?? 0
+				const reason = error.response?.data?.error
+				showError(status >= 400 && status < 500 && typeof reason === 'string' && reason !== ''
+					? reason
+					: t('social', 'Could not upload the attachment'))
 				logger.error('Failed to create a media', { error })
 			}
 		},

@@ -153,7 +153,10 @@ starting one does not take the place of a post you were still writing.
   in every browser, Safari and iPhone included. A photo larger than 4096 pixels
   on its longest side, or larger than the size your server takes, is made
   smaller before it is uploaded. Animated GIFs and WebPs are never changed, so
-  one that is too large is refused before it is sent.
+  one that is too large is refused before it is sent. A video has its own,
+  larger ceiling, and one over it is refused before it is sent too — the
+  message names the size your server takes. When the server itself refuses an
+  upload, its reason is what you are shown.
 - **The GIF button** opens a picker with 881 animated emoji in it, searchable by
   name — "party", "sad", "hedgehog" — plus whatever your administrator has added
   for this instance, which comes first. Nothing you type goes anywhere but your

@@ -661,17 +661,32 @@ export function useComposerAttachments({ expand, root }) {
 	 * What of a file is uploaded: the file itself, or a picture shrunk to
 	 * what the server and the canvas take, or nothing.
 	 *
-	 * The server holds every upload that is not a video to one size limit
-	 * and says so only after all of it has arrived; a picture is shrunk
-	 * before it goes (`prepareImage()`), and anything still over the limit
-	 * is refused here, where it costs nobody an upload. The file kept on the
-	 * attachment is the original, so a filter chosen later is drawn from it
-	 * rather than from a copy already compressed once.
+	 * The server holds every upload that is not a video to one size limit,
+	 * and a video to another, and says so only after all of it has arrived;
+	 * a picture is shrunk before it goes (`prepareImage()`), and anything
+	 * still over its limit is refused here, where it costs nobody an upload
+	 * — least of all a video, which cannot be shrunk and would otherwise
+	 * travel whole before being turned away. The file kept on the attachment
+	 * is the original, so a filter chosen later is drawn from it rather
+	 * than from a copy already compressed once.
 	 *
 	 * @param {File} file what was attached
 	 * @return {Promise<File|null>} what to upload, or null when it is too large
 	 */
 	async function fitForUpload(file) {
+		if ((file.type || '').startsWith('video/')) {
+			const limit = instanceStore.videoSizeLimit
+			if (limit > 0 && file.size > limit) {
+				showError(translate('social', 'This video is larger than the {size} MB this server takes', {
+					size: Math.floor(limit / 1048576),
+				}))
+
+				return null
+			}
+
+			return file
+		}
+
 		const limit = instanceStore.imageSizeLimit
 		const upload = await prepareImage(file, { sizeLimit: limit })
 		if ((upload.type || '').startsWith('video/') || limit <= 0 || upload.size <= limit) {

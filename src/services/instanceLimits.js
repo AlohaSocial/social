@@ -25,13 +25,15 @@ export const DEFAULT_LIMITS = Object.freeze({
 	maxAttachments: 10,
 	// `max_size`'s own default, 10 MB: what a picture upload is held to
 	imageSizeLimit: 10 * 1048576,
+	// `max_video_size`'s own default, 2 GB: what a video upload is held to
+	videoSizeLimit: 2048 * 1048576,
 	// off until the server says otherwise: a translate button that does
 	// nothing is worse than no button
 	translation: false,
 })
 
 /** the answer so far: the defaults until the server has said otherwise */
-/** @type {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, translation: boolean}} */
+/** @type {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, videoSizeLimit: number, translation: boolean}} */
 let known = DEFAULT_LIMITS
 /** the request in flight, or done; there is never more than one */
 let pending = null
@@ -50,8 +52,8 @@ function positive(value, fallback) {
 /**
  * The limits an instance entity carries.
  *
- * @param {{configuration?: {statuses?: {max_characters?: number, max_media_attachments?: number}, media_attachments?: {image_size_limit?: number}, polls?: object, translation?: {enabled?: boolean}}}|null} instance a `GET /api/v1/instance` answer
- * @return {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, translation: boolean}}
+ * @param {{configuration?: {statuses?: {max_characters?: number, max_media_attachments?: number}, media_attachments?: {image_size_limit?: number, video_size_limit?: number}, polls?: object, translation?: {enabled?: boolean}}}|null} instance a `GET /api/v1/instance` answer
+ * @return {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, videoSizeLimit: number, translation: boolean}}
  */
 export function limitsFrom(instance) {
 	const statuses = instance?.configuration?.statuses ?? {}
@@ -61,13 +63,15 @@ export function limitsFrom(instance) {
 		maxAttachments: positive(statuses.max_media_attachments, DEFAULT_LIMITS.maxAttachments),
 		// bytes; every upload that is not a video is held to it
 		imageSizeLimit: positive(instance?.configuration?.media_attachments?.image_size_limit, DEFAULT_LIMITS.imageSizeLimit),
+		// bytes; what a video is held to instead
+		videoSizeLimit: positive(instance?.configuration?.media_attachments?.video_size_limit, DEFAULT_LIMITS.videoSizeLimit),
 		// whether this Nextcloud has a translation provider at all
 		translation: instance?.configuration?.translation?.enabled === true,
 	}
 }
 
 /**
- * @return {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, translation: boolean}}
+ * @return {{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, videoSizeLimit: number, translation: boolean}}
  *         the best answer available right now, without waiting for one
  */
 export function knownLimits() {
@@ -81,7 +85,7 @@ export function knownLimits() {
  * way, and a composer that says 500 when the server takes 1000 is a smaller
  * wrong than one that never opens.
  *
- * @return {Promise<{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, translation: boolean}>}
+ * @return {Promise<{maxCharacters: number, maxAttachments: number, imageSizeLimit: number, videoSizeLimit: number, translation: boolean}>}
  */
 export function loadLimits() {
 	if (pending === null) {
