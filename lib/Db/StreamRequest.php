@@ -1422,6 +1422,13 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->setDefaultSelectAlias('s');
 		$qb->limitToStatusTypes();
 
+		// public posts only, through the same recipient join as the chart
+		// above: the profile is read by strangers, and a tag used only in
+		// followers-only posts is a fact about those posts
+		$qb->selectDestFollowing('sd', '');
+		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
+		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
+
 		$tags = [];
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {

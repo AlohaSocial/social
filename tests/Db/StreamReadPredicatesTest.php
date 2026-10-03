@@ -94,6 +94,30 @@ class StreamReadPredicatesTest extends TestCase {
 	}
 
 	/**
+	 * The profile highlights are drawn for whoever opens the profile. The
+	 * weekly chart reads public posts through the recipient join; the top
+	 * hashtags counted every post of the author, so a tag used only in
+	 * followers-only posts or direct messages was named on the public profile
+	 * with how often it was used.
+	 */
+	public function testTheProfilesTopHashtagsAreCountedOverPublicPostsOnly(): void {
+		$body = $this->methodBody(self::SOURCE, 'topHashtagsByAuthor');
+
+		$this->assertStringContainsString(
+			"\$qb->selectDestFollowing('sd', '');
+		\$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
+		\$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');",
+			$body,
+			'the hashtag count has to join the public recipient row the way publishedTimesByAuthor() does'
+		);
+		$this->assertStringContainsString(
+			"\$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');",
+			$this->methodBody(self::SOURCE, 'publishedTimesByAuthor'),
+			'the chart the count is drawn beside reads public posts only'
+		);
+	}
+
+	/**
 	 * A tag used only inside a private team thread was written into the trend
 	 * counters and surfaced in `/api/v1/trends/tags`, `tagHistory()` and search
 	 * with its usage count. `HashtagsRequest::related()` restricts to public
