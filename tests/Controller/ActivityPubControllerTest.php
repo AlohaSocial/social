@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Controller;
 use Exception;
 use OCA\Social\Controller\ActivityPubController;
 use OCA\Social\Controller\SocialPubController;
+use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\ActivityPubFormatException;
@@ -36,6 +37,7 @@ use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\OrderedCollectionPage;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Story as ClientStory;
+use OCA\Social\Model\QuoteGrant;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AuthorizedFetchService;
 use OCA\Social\Service\CacheActorService;
@@ -119,6 +121,8 @@ class ActivityPubControllerTest extends TestCase {
 	private $configService;
 	/** @var InboxLimiter&MockObject */
 	private $inboxLimiter;
+	/** @var QuoteGrantRequest&MockObject */
+	private $quoteGrantRequest;
 	/** @var LoggerInterface&MockObject */
 	private $logger;
 	private AsyncFreeActivityPubController $controller;
@@ -147,6 +151,7 @@ class ActivityPubControllerTest extends TestCase {
 		\OC::$server->register(IRequest::class, $this->request);
 
 		$this->storyService = $this->createMock(StoryService::class);
+		$this->quoteGrantRequest = $this->createMock(QuoteGrantRequest::class);
 
 		$this->authorizedFetchService = $this->createStub(AuthorizedFetchService::class);
 		$this->authorizedFetchService->method('reader')->willReturnCallback(
@@ -178,6 +183,7 @@ class ActivityPubControllerTest extends TestCase {
 			$this->authorizedFetchService,
 			$this->storyService,
 			$this->createStub(\OCA\Social\Service\FeedService::class),
+			$this->quoteGrantRequest,
 			$this->configService,
 			$this->logger
 		);
@@ -1362,6 +1368,51 @@ class ActivityPubControllerTest extends TestCase {
 	}
 
 	/**
+	 * The stamp is only the quoting post's id encoded, so anybody can mint
+	 * one. For a post whose author lets only followers quote it, the
+	 * approval exists where the author's server accepted that request --
+	 * `QuoteRequestInterface::accept()` wrote it down -- and nowhere else.
+	 */
+	public function testAFollowersOnlyQuotePolicyApprovesOnlyTheQuotesThatWereGranted(): void {
+		$post = $this->quotablePost();
+		$post->setQuotePolicy(Stream::QUOTE_POLICY_FOLLOWERS);
+		$granted = 'https://remote.example/users/bob/statuses/7';
+		$this->quoteGrantRequest->method('get')
+			->willReturnCallback(static fn (string $target, string $quoting): ?QuoteGrant
+				=> ($target === $post->getId() && $quoting === $granted) ? new QuoteGrant() : null);
+
+		$approved = $this->controller->displayQuoteAuthorization('alice', 'abc123', QuoteRequestInterface::stamp($granted));
+		$this->assertSame(Http::STATUS_OK, $approved->getStatus());
+		$this->assertSame($granted, $approved->getData()->getInteractingObject());
+
+		$minted = $this->controller->displayQuoteAuthorization(
+			'alice', 'abc123', QuoteRequestInterface::stamp('https://remote.example/users/mallory/statuses/9')
+		);
+		$this->assertFailure($minted, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+	}
+
+	/** A post nobody may quote approves nothing, whatever the stamp says. */
+	public function testANobodyQuotePolicyApprovesNoQuote(): void {
+		$post = $this->quotablePost();
+		$post->setQuotePolicy(Stream::QUOTE_POLICY_NOBODY);
+		$this->quoteGrantRequest->method('get')->willReturn(null);
+
+		$response = $this->controller->displayQuoteAuthorization('alice', 'abc123', QuoteRequestInterface::stamp('https://remote.example/1'));
+
+		$this->assertFailure($response, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+	}
+
+	/** A post open to everybody's quotes needs no grant row: the policy is the approval. */
+	public function testAPublicQuotePolicyApprovesWithoutAGrant(): void {
+		$this->quotablePost()->setQuotePolicy(Stream::QUOTE_POLICY_PUBLIC);
+		$this->quoteGrantRequest->expects($this->never())->method('get');
+
+		$response = $this->controller->displayQuoteAuthorization('alice', 'abc123', QuoteRequestInterface::stamp('https://remote.example/1'));
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	/**
 	 * A post narrowed after the approval was granted stops being quotable, and
 	 * the approval has to stop with it — a verifier that re-checks is how the
 	 * author's change of mind reaches the other server.
@@ -1369,6 +1420,7 @@ class ActivityPubControllerTest extends TestCase {
 	public function testQuoteAuthorizationIsWithdrawnOnceThePostIsNoLongerQuotable(): void {
 		$post = $this->quotablePost();
 		$post->setVisibility(Stream::TYPE_FOLLOWERS);
+		$this->quoteGrantRequest->method('get')->willReturn(null);
 
 		$response = $this->controller->displayQuoteAuthorization('alice', 'abc123', QuoteRequestInterface::stamp('https://remote.example/1'));
 
