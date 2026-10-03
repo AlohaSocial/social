@@ -1962,12 +1962,20 @@ mounted again on the way back out of a post. A reader four pages into a timeline
 came back to fifteen posts. `switchTimeline()` compares the list being asked for
 with the one being held (`getTimelineIdentity`: type, account and params, the
 same value that tells a page in flight it is no longer wanted) and clears only
-when they genuinely differ, and it keeps **one** list aside — `remembered`, the
-one just left — so that coming straight back to it finds it whole. One and not a
-cache of all of them: each entry holds a full status index, and keeping every
-timeline ever opened is the leak `resetTimeline()` was written to stop. A
-restored list also sets `restored`, which is how `TimelineList` knows not to ask
-for another page on top of the ones it already has.
+when they genuinely differ, and it keeps the last **four** lists aside —
+`remembered` — so that coming back to one of them finds it whole. Four and not a
+cache of all of them: keeping every timeline ever opened is the leak
+`resetTimeline()` was written to stop. What is held aside is the **ids** only.
+The statuses themselves live in the one `statuses` map every list reads, so a
+like, an edit or a delete done in one list is what every other list shows on
+return — a copy of the index per list showed the reader the post as it was when
+they left it. Coming back reads the ids against that map and drops the ones
+that have gone, and each switch prunes the map to what the kept lists still
+name, the boosted post and the notification's post included; a status taken
+off one list without being deleted — unliked out of the likes, unbookmarked out
+of the bookmarks, hidden from For you — stays in it for the lists that still
+show it. A restored list also sets `restored`, which is how `TimelineList`
+knows not to ask for another page on top of the ones it already has.
 
 Putting the reader back where they were then needs the page to exist first. Vue
 Router applies the offset Back remembers as soon as the route has changed, and at

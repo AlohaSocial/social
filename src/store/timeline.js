@@ -15,8 +15,8 @@ import { defineStore } from 'pinia'
  *
  * Four covers the switcher — My Feed, Local, Global — plus whatever the reader
  * came from, which is the round trip that used to cost a request and a
- * skeleton every time. Each entry holds that list's own status index, so this
- * is a memory number as much as a UX one.
+ * skeleton every time. The status index is pruned to what these lists still
+ * name, so this is a memory number as much as a UX one.
  */
 const REMEMBERED = 4
 
@@ -75,7 +75,7 @@ function rememberCelebrated() {
  * @property {Array|null} seededPage the first screenful the server rendered with the page
  * @property {{tag?: string, id?: string, account?: string, scope?: string, media?: string, filter?: string, url?: string, singlePost?: string}} params what the current list was asked for
  * @property {string} account whose timeline, where it is somebody's
- * @property {{identity: string, timeline: string[], parentsTimeline: string[], statuses: object, removedFrom: object}[]} remembered the lists lately visited
+ * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object}[]} remembered the lists lately visited
  * @property {boolean} restored whether the list was put back rather than loaded
  * @property {boolean} composerDisplayStatus whether the composer is open
  * @property {string} searchQuery what is being searched for
@@ -108,6 +108,51 @@ function indexStatus(state, status) {
 	if (status.type !== undefined) {
 		indexStatus(state, status.status)
 	}
+}
+
+/**
+ * Drops from the index every status that no kept list names.
+ *
+ * The index is one map shared by the list on screen and the remembered ones,
+ * so that a like, an edit or a delete reaches every list that shows the post
+ * rather than the copy of the list it happened in. What keeps that from being
+ * the leak `resetTimeline()` was written to stop is this: a status is kept
+ * while some list the reader can come back to names it, and goes when none
+ * does. The status a boost wraps and the post a notification is about are
+ * indexed under their own ids and read by them, so they are kept with their
+ * entry.
+ *
+ * @param {TimelineState} state the store state
+ */
+function pruneIndex(state) {
+	const keep = new Set()
+	const lists = [state.timeline, state.parentsTimeline]
+	for (const held of state.remembered) {
+		lists.push(held.timeline, held.parentsTimeline)
+	}
+	for (const list of lists) {
+		for (const id of list) {
+			keep.add(id)
+			const entry = state.statuses[id]
+			if (entry?.reblog) {
+				keep.add(entry.reblog.id)
+			}
+			if (entry?.status) {
+				keep.add(entry.status.id)
+				if (entry.status.reblog) {
+					keep.add(entry.status.reblog.id)
+				}
+			}
+		}
+	}
+
+	const statuses = {}
+	for (const id of keep) {
+		if (state.statuses[id] !== undefined) {
+			statuses[id] = state.statuses[id]
+		}
+	}
+	state.statuses = statuses
 }
 
 /**
@@ -196,10 +241,16 @@ export const useTimelineStore = defineStore('timeline', {
 		 * Global and back is four switches, and with a single slot three of
 		 * them threw the list away and asked the server again — 150 ms of
 		 * skeleton where content had been. All of them would be the leak
-		 * `resetTimeline()` was written to stop, because each holds a full
-		 * status index, so this is capped at `REMEMBERED` and the oldest goes.
+		 * `resetTimeline()` was written to stop, because the index keeps every
+		 * status they name, so this is capped at `REMEMBERED` and the oldest
+		 * goes.
 		 *
-		 * @type {{identity: string, timeline: string[], parentsTimeline: string[], statuses: object, removedFrom: object}[]}
+		 * Only the ids are held. The statuses themselves stay in the one
+		 * `statuses` map, so a like or an edit in one list is seen in every
+		 * list that shows the post; a copy per list showed the reader the post
+		 * as it was when they left.
+		 *
+		 * @type {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object}[]}
 		 */
 		remembered: [],
 		/**
@@ -363,7 +414,18 @@ export const useTimelineStore = defineStore('timeline', {
 				appendNew(this.parentsTimeline, data.ancestors)
 			}
 		},
-		removeStatus(status) {
+		/**
+		 * Takes a status off the list on screen.
+		 *
+		 * @param {import('../types/Mastodon.js').Status} status the status to take off
+		 * @param {boolean} [gone] whether the status itself is gone — deleted,
+		 *                         archived — and leaves the index too, so a
+		 *                         remembered list drops it on return. One that
+		 *                         is only off this list, unliked out of the
+		 *                         likes or unbookmarked out of the bookmarks,
+		 *                         stays known to the lists that still show it.
+		 */
+		removeStatus(status, gone = true) {
 			const timelineIndex = this.timeline.indexOf(status.id)
 			if (timelineIndex !== -1) {
 				this.timeline.splice(timelineIndex, 1)
@@ -374,7 +436,9 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 			// which list it came from, so a failed delete puts it back where it was
 			this.removedFrom = { ...this.removedFrom, [status.id]: parentsTimelineIndex !== -1 ? 'parents' : 'timeline' }
-			delete this.statuses[status.id]
+			if (gone) {
+				delete this.statuses[status.id]
+			}
 		},
 		/**
 		 * Puts a status back after a delete the server refused. `addToTimeline`
@@ -432,10 +496,11 @@ export const useTimelineStore = defineStore('timeline', {
 		resetTimeline() {
 			this.timeline = []
 			this.parentsTimeline = []
-			// the id lists used to be the only thing cleared, so `statuses` grew
-			// for the whole session: every page of every timeline ever opened
-			this.statuses = {}
 			this.removedFrom = {}
+			// the id lists used to be the only thing cleared, so `statuses` grew
+			// for the whole session: every page of every timeline ever opened.
+			// Pruned rather than emptied, because the remembered lists read it
+			pruneIndex(this)
 		},
 		setTimelineType(type) {
 			this.type = type
@@ -648,7 +713,6 @@ export const useTimelineStore = defineStore('timeline', {
 				identity: this.getTimelineIdentity,
 				timeline: this.timeline,
 				parentsTimeline: this.parentsTimeline,
-				statuses: this.statuses,
 				removedFrom: this.removedFrom,
 			}
 
@@ -672,13 +736,16 @@ export const useTimelineStore = defineStore('timeline', {
 				return
 			}
 
-			// the objects themselves, not copies: `resetTimeline()` replaces
-			// them rather than emptying them, so the ones put aside above are
-			// still the ones that were loaded
-			this.timeline = returning.timeline
-			this.parentsTimeline = returning.parentsTimeline
-			this.statuses = returning.statuses
+			// the ids, read back against the shared index: a post deleted
+			// while the reader was in another list has left it, and the list
+			// drops it rather than naming a post that is not there. The
+			// index is then pruned of whatever the list that fell off the
+			// shelf was the last to name
+			const stillKnown = (statusId) => this.statuses[statusId] !== undefined
+			this.timeline = returning.timeline.filter(stillKnown)
+			this.parentsTimeline = returning.parentsTimeline.filter(stillKnown)
 			this.removedFrom = returning.removedFrom
+			pruneIndex(this)
 		},
 		/**
 		 * Tells the server what an attachment shows, so it federates as alt text.
@@ -938,7 +1005,9 @@ export const useTimelineStore = defineStore('timeline', {
 		async postUnlike({ status }) {
 			try {
 				if (this.type === 'favourites') {
-					this.removeStatus(status)
+					// off this list, not gone: the home timeline behind it
+					// still shows the post
+					this.removeStatus(status, false)
 				}
 				this.unlikeStatus({ status })
 				const response = await axios.post(generateUrl(`apps/social/api/v1/statuses/${status.id}/unfavourite`))
@@ -995,7 +1064,8 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.info(bookmarked ? 'Post bookmarked' : 'Bookmark removed')
 				this.addToStatuses(response.data)
 				if (!bookmarked && this.type === 'bookmarks') {
-					this.removeStatus(status)
+					// off this list, not gone: the other lists still show it
+					this.removeStatus(status, false)
 					this.forgetRemoval(status)
 				}
 				return response
