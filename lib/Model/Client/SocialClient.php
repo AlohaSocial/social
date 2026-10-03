@@ -39,6 +39,7 @@ class SocialClient implements IQueryRow, JsonSerializable {
 	/** RFC 7636: the challenge this authorization was bound to, '' when none */
 	private string $authCodeChallenge = '';
 	private string $authCodeChallengeMethod = '';
+	private string $authRedirectUri = '';
 	private int $lastUpdate = -1;
 	private string $token = '';
 	private int $creation = -1;
@@ -293,24 +294,20 @@ class SocialClient implements IQueryRow, JsonSerializable {
 		return $this;
 	}
 
-	//
-	//	/**
-	//	 * @return string
-	//	 */
-	//	public function getAuthRedirectUri(): string {
-	//		return $this->authRedirectUri;
-	//	}
-	//
-	//	/**
-	//	 * @param string $authRedirectUri
-	//	 *
-	//	 * @return SocialClient
-	//	 */
-	//	public function setAuthRedirectUri(string $authRedirectUri): self {
-	//		$this->authRedirectUri = $authRedirectUri;
-	//
-	//		return $this;
-	//	}
+	/**
+	 * The `redirect_uri` the authorization code was issued for, '' on a row
+	 * written before it was recorded. RFC 6749 §4.1.3: the token exchange has
+	 * to present the same one.
+	 */
+	public function getAuthRedirectUri(): string {
+		return $this->authRedirectUri;
+	}
+
+	public function setAuthRedirectUri(string $authRedirectUri): self {
+		$this->authRedirectUri = $authRedirectUri;
+
+		return $this;
+	}
 
 	/**
 	 * @return int
@@ -421,6 +418,7 @@ class SocialClient implements IQueryRow, JsonSerializable {
 		$this->setAuthCode($this->get('auth_code', $data));
 		$this->setAuthCodeChallenge($this->get('auth_code_challenge', $data));
 		$this->setAuthCodeChallengeMethod($this->get('auth_code_challenge_method', $data));
+		$this->setAuthRedirectUri($this->get('auth_redirect_uri', $data));
 		$this->setToken($this->get('token', $data));
 		// the row in social_client_auth this came from, when it came from one:
 		// what revoking and touching a single authorization address

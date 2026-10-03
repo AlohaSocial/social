@@ -14,6 +14,7 @@ use OCA\Social\Db\ClientAuthRequest;
 use OCA\Social\Db\ClientRequest;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ClientService;
@@ -82,6 +83,57 @@ class ClientServiceTest extends TestCase {
 		$this->service->createApp($client);
 	}
 
+	/** @return array<string, array{string}> */
+	public static function acceptableRedirectUriProvider(): array {
+		return [
+			'out of band' => ['urn:ietf:wg:oauth:2.0:oob'],
+			'https' => ['https://app.example/callback'],
+			'http, for a client on localhost' => ['http://127.0.0.1:8080/cb'],
+			'with a query string' => ['https://elk.example/cb?instance=cloud.example'],
+			'a custom scheme' => ['tusky://oauth'],
+			'a scheme and nothing else' => ['icecubesapp://'],
+			'a reverse-domain scheme' => ['com.example.app://callback'],
+		];
+	}
+
+	#[DataProvider('acceptableRedirectUriProvider')]
+	public function testCreateAppAcceptsTheRedirectUrisAClientMayRegister(string $uri): void {
+		$client = $this->registeredClient();
+		$client->setAppRedirectUris([$uri]);
+		$this->clientRequest->expects($this->once())->method('saveApp');
+
+		$this->service->createApp($client);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function refusedRedirectUriProvider(): array {
+		return [
+			// a browser runs these in the account's session rather than
+			// navigating to them
+			'javascript' => ['javascript://%0aalert(1)'],
+			'data' => ['data://text/html,<script>alert(1)</script>'],
+			'vbscript' => ['vbscript://msgbox'],
+			'file' => ['file:///etc/passwd'],
+			'a scheme in upper case' => ['HTTPS://app.example/cb'],
+			'https with no host' => ['https:///cb'],
+			'a relative path' => ['/callback'],
+			'not a uri at all' => ['callback'],
+			'a urn that is not the out-of-band one' => ['urn:ietf:wg:oauth:2.0:oob:auto'],
+			'javascript without the slashes' => ['javascript:alert(1)'],
+		];
+	}
+
+	#[DataProvider('refusedRedirectUriProvider')]
+	public function testCreateAppRefusesARedirectUriABrowserWouldRunOrCannotFollow(string $uri): void {
+		$client = $this->registeredClient();
+		$client->setAppRedirectUris(['https://app.example/callback', $uri]);
+		$this->clientRequest->expects($this->never())->method('saveApp');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage('invalid redirect_uri');
+		$this->service->createApp($client);
+	}
+
 	/**
 	 * The app registration used to hold the authorization in its own row, so
 	 * the second person to sign in with a client signed the first one out.
@@ -107,6 +159,61 @@ class ClientServiceTest extends TestCase {
 		$this->assertSame(['read', 'write'], $recorded['scopes']);
 		$this->assertMatchesRegularExpression('/^[A-Za-z0-9]{60}$/', $client->getAuthCode());
 		$this->assertSame($client->getAuthCode(), $recorded['code']);
+	}
+
+	public function testAuthClientRecordsTheRedirectUriTheCodeIsSentTo(): void {
+		$client = $this->registeredClient();
+		$client->setId(7)->setAuthUserId('alice')->setAuthAccount('alice')
+			->setAuthRedirectUri('https://app.example/callback');
+
+		$recorded = null;
+		$this->clientAuthRequest->expects($this->once())->method('authorize')
+			->willReturnCallback(
+				function (
+					int $clientId, string $userId, string $account, array $scopes, string $code,
+					string $challenge = '', string $method = '', string $redirectUri = '',
+				) use (&$recorded): void {
+					$recorded = $redirectUri;
+				}
+			);
+
+		$this->service->authClient($client);
+
+		$this->assertSame('https://app.example/callback', $recorded);
+	}
+
+	/**
+	 * RFC 6749 §4.1.3: the exchange has to present the redirect_uri the code
+	 * was issued for. A code intercepted on its way to one registered URI is
+	 * of no use to a client that only knows another.
+	 */
+	public function testExchangingACodeNeedsTheRedirectUriItWasIssuedFor(): void {
+		$client = $this->registeredClient();
+		$client->setId(7);
+		$authorized = (new SocialClient())->setId(7)->setAuthUserId('alice')
+			->setAuthRedirectUri('https://app.example/callback');
+		$authorized->setLastUpdate(time() - 10);
+		$this->clientAuthRequest->method('getByCode')->willReturn($authorized);
+		$this->clientAuthRequest->method('exchange')
+			->willReturnCallback(fn (): SocialClient => $authorized->setToken('tok'));
+
+		$token = $this->service->exchangeCode($client, 'the-code', '', 'https://app.example/callback')->getToken();
+
+		$this->assertSame('tok', $token);
+	}
+
+	public function testExchangingACodeUnderAnotherRedirectUriIsAnInvalidGrant(): void {
+		$client = $this->registeredClient();
+		$client->setId(7);
+		$authorized = (new SocialClient())->setId(7)
+			->setAuthRedirectUri('https://app.example/callback');
+		$authorized->setLastUpdate(time() - 10);
+		$this->clientAuthRequest->method('getByCode')->willReturn($authorized);
+		$this->clientAuthRequest->expects($this->never())->method('exchange');
+
+		$this->expectException(InvalidGrantException::class);
+		// the out-of-band urn is registered too, and is still not where this code went
+		$this->service->exchangeCode($client, 'the-code', '', 'urn:ietf:wg:oauth:2.0:oob');
 	}
 
 	public function testExchangingACodeMintsATokenOnThatAuthorization(): void {
