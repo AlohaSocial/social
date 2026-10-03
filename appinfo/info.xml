@@ -171,7 +171,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 
 	<navigations>
 		<navigation>
-			<name>Aloha Social</name>
+			<name>Aloha</name>
 			<route>social.Navigation.navigate</route>
 			<order>6</order>
 		</navigation>
