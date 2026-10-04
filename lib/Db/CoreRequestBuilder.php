@@ -695,6 +695,7 @@ class CoreRequestBuilder {
 			'news_kind',
 			'cache',
 			'creation',
+			'counts_at',
 			'local',
 			'filter_duplicate',
 			'tags',

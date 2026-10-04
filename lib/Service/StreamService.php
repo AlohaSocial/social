@@ -1068,6 +1068,12 @@ class StreamService {
 					// Save the Note directly without going through NoteInterface
 					// (which would trigger attachment downloads)
 					$this->streamRequest->save($note);
+					// and so without NoteInterface::updateDetails(), which is the
+					// only thing that tells the post this one answered that it has
+					// one more reply. Saved here, a reply to a post already stored
+					// left the parent's count where it was — which, when the origin
+					// publishes no `replies.totalItems`, was "no replies at all"
+					$this->streamRequest->recountReplies($note->getInReplyTo());
 					$synced++;
 					$this->logger->debug('[syncRemoteTimeline] Saved post', ['id' => $note->getId()]);
 				} catch (Exception $e) {

@@ -1379,6 +1379,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$remoteReplies = self::statedCount($data, 'replies');
 		if ($remoteReplies !== null) {
 			$this->setDetailInt(Details::REPLIES, $remoteReplies);
+			// and the origin's own half of the pair, the way likes and shares
+			// keep theirs: `recountReplies()` adds this instance's replies to
+			// what the origin said, and with the origin's number never stored
+			// it added them to nothing — the total the origin had published
+			// was replaced by the count of the replies held here
+			$this->setDetailInt(Details::REMOTE_REPLIES, $remoteReplies);
 		}
 	}
 
@@ -1681,6 +1687,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 				$remoteReplies = self::statedCount($sourceData, 'replies');
 				if ($remoteReplies !== null) {
 					$this->setDetailInt(Details::REPLIES, $remoteReplies);
+					$this->setDetailInt(Details::REMOTE_REPLIES, $remoteReplies);
 				}
 			}
 		}

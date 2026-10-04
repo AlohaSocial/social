@@ -338,9 +338,21 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 	}
 
-	public function updateDetails(Stream $stream): void {
+	/**
+	 * @param ?DateTime $countsAt when this instance last heard the origin's
+	 *                            totals for the post, for a write that heard
+	 *                            them; null leaves the schedule where it is
+	 *
+	 * @see \OCA\Social\Service\RemoteCountService
+	 */
+	public function updateDetails(Stream $stream, ?DateTime $countsAt = null): void {
 		$qb = $this->getStreamUpdateSql();
 		$qb->set('details', $qb->createNamedParameter(json_encode($stream->getDetailsAll())));
+
+		if ($countsAt !== null) {
+			$qb->set('counts_at', $qb->createNamedParameter($countsAt, IQueryBuilder::PARAM_DATE));
+		}
+
 		$qb->limitToIdPrim($qb->prim($stream->getId()));
 		$qb->executeStatement();
 	}
@@ -370,6 +382,46 @@ class StreamRequest extends StreamRequestBuilder {
 			Details::REPLIES, $parent->getDetailInt(Details::REMOTE_REPLIES) + $this->countRepliesTo($inReplyTo)
 		);
 		$this->updateDetails($parent);
+	}
+
+	/**
+	 * The remote posts whose counts were last heard from their own server
+	 * long enough ago to be worth asking again — including every one never
+	 * asked, which has no `counts_at` at all.
+	 *
+	 * Oldest post first, so a pass that runs out of budget leaves the posts
+	 * that have waited longest at the front of the next one rather than
+	 * wherever they fell.
+	 *
+	 * @param DateTime $due not asked since
+	 * @param int $limit 0 is every post that is due
+	 *
+	 * @return Stream[]
+	 */
+	public function getRemoteStreamsDueForCounts(DateTime $due, int $limit = 0): array {
+		$qb = $this->getStreamSelectSql();
+		$qb->limitToLocal(false);
+		$qb->limitToDBFieldDateTime('counts_at', $due, true);
+		$qb->orderBy('s.published_time', 'asc');
+
+		if ($limit > 0) {
+			$qb->setMaxResults($limit);
+		}
+
+		return $this->getStreamsFromRequest($qb);
+	}
+
+	/**
+	 * Stamps a post as having been asked for its counts, leaving whatever
+	 * they are stored as alone. Written even when the answer did not come, so
+	 * that a host which is gone is asked once per interval rather than on
+	 * every pass.
+	 */
+	public function markCountsRefreshed(string $id, DateTime $when): void {
+		$qb = $this->getStreamUpdateSql();
+		$qb->set('counts_at', $qb->createNamedParameter($when, IQueryBuilder::PARAM_DATE));
+		$qb->limitToIdPrim($qb->prim($id));
+		$qb->executeStatement();
 	}
 
 	public function updateCache(Stream $stream, Cache $cache): void {
@@ -2257,6 +2309,7 @@ class StreamRequest extends StreamRequestBuilder {
 			->setValue('object_id', $qb->createNamedParameter($stream->getObjectId()))
 			->setValue('object_id_prim', $qb->createNamedParameter($qb->prim($stream->getObjectId())))
 			->setValue('details', $qb->createNamedParameter(json_encode($stream->getDetailsAll())))
+			->setValue('counts_at', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
 			->setValue('cache', $qb->createNamedParameter($cache))
 			->setValue(
 				'filter_duplicate',
