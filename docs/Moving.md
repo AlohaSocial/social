@@ -25,6 +25,11 @@ sends the move, and it serves your posts and the people you follow. An account
 on a server that is gone cannot be moved; only a follows file exported in time
 survives it.
 
+The same happens in the other direction when somebody *you* follow moves:
+their old server sends the move here, this server checks that the new account
+names the old one, follows the new account on your behalf, and shows the
+redirect on the old account's profile from then on.
+
 ## Moving to Aloha Social
 
 Three steps, two of them here.

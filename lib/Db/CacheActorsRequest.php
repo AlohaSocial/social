@@ -597,6 +597,32 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
+	 * Records on a cached actor that it moved to `$target`.
+	 *
+	 * A cache row has no column for `movedTo`: like `alsoKnownAs` it is read
+	 * off the stored source document, so that is where it is written. The
+	 * document is what the actor's server will serve once its own caches have
+	 * turned over — Mastodon keeps serving the pre-move one for minutes — and
+	 * a refresh that gets the new document says the same thing.
+	 *
+	 * @throws CacheActorDoesNotExistException
+	 */
+	public function markMoved(string $id, string $target): void {
+		$actor = $this->getFromId($id);
+		$source = json_decode($actor->getSource(), true);
+		if (!is_array($source)) {
+			$source = ['id' => $actor->getId()];
+		}
+		$source['movedTo'] = $target;
+
+		$qb = $this->getCacheActorsUpdateSql();
+		$qb->set('source', $qb->createNamedParameter(json_encode($source, JSON_UNESCAPED_SLASHES)));
+		$this->limitToIdPrimString($qb, $id);
+
+		$qb->executeStatement();
+	}
+
+	/**
 	 * The cached remote actors nothing here refers to any more, a page at a
 	 * time: not followed by and not following any account this instance
 	 * knows, no follow request or block/mute/endorsement either way, no post
