@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\FollowsRequest;
@@ -22,6 +23,7 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Model\InstancePath;
+use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -53,6 +55,15 @@ class MigrationService {
 	private const EXPORT_PAGE = 200;
 
 	/**
+	 * How long after a move the account may move again: Mastodon's thirty
+	 * days. A move tells every server that knows the account to re-point its
+	 * followers; two of them in an afternoon is a mistake being made twice.
+	 */
+	public const COOLDOWN_SECONDS = 30 * 24 * 3600;
+	/** The user setting that records when the account last moved. */
+	private const MOVED_AT = 'moved_at';
+
+	/**
 	 * The most rows one CSV export carries.
 	 *
 	 * A cap rather than a promise of everything: the whole file is built in
@@ -81,6 +92,7 @@ class MigrationService {
 		private ActorRelationRequest $actorRelationRequest,
 		private ListsRequest $listsRequest,
 		private RelationshipService $relationshipService,
+		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -143,11 +155,25 @@ class MigrationService {
 	 * this instance, who never receive the Move, are re-followed on their
 	 * behalf.
 	 *
+	 * @param bool $enforceCooldown whether a move within COOLDOWN_SECONDS of the
+	 *                              last is refused; the person's own button says
+	 *                              yes, an administrator's command may say no
+	 *
 	 * @return Person the target as fetched
-	 * @throws InvalidResourceException when the target does not list the actor, or is the actor
+	 * @throws InvalidResourceException when the target does not list the actor, or is the actor,
+	 *                                  or the account moved too recently
 	 */
-	public function move(string $userId, string $targetId): Person {
+	public function move(string $userId, string $targetId, bool $enforceCooldown = true): Person {
 		$actor = $this->accountService->getActorFromUserId($userId);
+		if ($enforceCooldown) {
+			$status = $this->moveStatus($userId);
+			if ($status['can_move_at'] > time()) {
+				throw new InvalidResourceException(
+					'this account moved on ' . gmdate('Y-m-d', (int)$status['moved_at'])
+					. ' and can move again on ' . gmdate('Y-m-d', $status['can_move_at'])
+				);
+			}
+		}
 		$target = $this->resolveActor($targetId);
 
 		if ($target->getId() === $actor->getId()) {
@@ -182,10 +208,41 @@ class MigrationService {
 		// only once the Move is on its way: an actor marked moved whose
 		// followers were never told is stuck
 		$this->accountService->setMovedTo($userId, $target->getId());
+		$this->config->setUserValue($userId, Application::APP_ID, self::MOVED_AT, (string)time());
 
 		$this->refollowLocalFollowers($actor, $target);
 
 		return $target;
+	}
+
+	/**
+	 * Takes the redirect off the account: `movedTo` is cleared, so the actor
+	 * document and the account entity stop saying it moved and it may post
+	 * and follow again.
+	 *
+	 * The followers do not come back by themselves: their servers acted on
+	 * the Move when it arrived, and nothing in ActivityPub takes a Move back.
+	 * The cooldown stays, because the move did happen.
+	 */
+	public function undoMove(string $userId): void {
+		$this->accountService->setMovedTo($userId, '');
+	}
+
+	/**
+	 * Where the account stands: whether it moved, where, when, and when it may
+	 * move (again).
+	 *
+	 * @return array{moved_to: string, moved_at: int|null, can_move_at: int}
+	 */
+	public function moveStatus(string $userId): array {
+		$actor = $this->accountService->getActorFromUserId($userId);
+		$movedAt = (int)$this->config->getUserValue($userId, Application::APP_ID, self::MOVED_AT, '0');
+
+		return [
+			'moved_to' => $actor->getMovedTo(),
+			'moved_at' => ($movedAt > 0) ? $movedAt : null,
+			'can_move_at' => ($movedAt > 0) ? $movedAt + self::COOLDOWN_SECONDS : 0,
+		];
 	}
 
 	/**

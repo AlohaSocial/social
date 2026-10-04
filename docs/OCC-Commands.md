@@ -112,6 +112,12 @@ Move a local account to one on another server, the way Mastodon's account
 migration works: the new account has to list this one in its `alsoKnownAs`, every
 follower is sent a `Move`, and the account here is marked as moved.
 
+Since 0.26.113 a person can do this themselves, in **Settings → Migration → Move
+your account away** (`POST /api/v1/migration/move`), behind their password, their
+own handle typed back and a thirty-day cooldown between moves. This command stays
+for an administrator acting on somebody else's account, and it **skips the
+cooldown**. Undoing a move (clearing `movedTo`) is on the same page.
+
 ```
 php occ social:account:move [-f|--force] <userId> <target>
 ```

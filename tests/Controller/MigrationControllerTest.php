@@ -299,6 +299,88 @@ class MigrationControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
 	}
 
+	// moving away, from the page
+
+	private function alice(): Person {
+		$alice = new Person();
+		$alice->setId('https://cloud.example/@alice')->setAccount('alice@cloud.example')->setLocal(true);
+
+		return $alice;
+	}
+
+	public function testTheMoveStatusIsTheCallersOwn(): void {
+		$this->migrationService->method('moveStatus')->with('alice')
+			->willReturn(['moved_to' => '', 'moved_at' => null, 'can_move_at' => 0]);
+
+		$response = $this->controller()->moveStatus();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('', $response->getData()['moved_to']);
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller(null)->moveStatus()->getStatus());
+	}
+
+	/** The typed handle is one of the three things in front of the move; the password is the attribute's. */
+	public function testMovingAwayNeedsTheOwnHandleTypedBack(): void {
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->migrationService->expects($this->never())->method('move');
+
+		$response = $this->controller()->moveOut('@alice@new.example', 'alice@elsewhere.example');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('alice@cloud.example', $response->getData()['error']);
+	}
+
+	public function testMovingAwayWithTheHandleConfirmedMovesAndAnswersTheStatus(): void {
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$target = new Person();
+		$target->setId('https://new.example/users/alice')->setAccount('alice@new.example')->setUrl('https://new.example/@alice');
+		$this->migrationService->expects($this->once())->method('move')->with('alice', '@alice@new.example')->willReturn($target);
+		$this->migrationService->method('moveStatus')
+			->willReturn(['moved_to' => 'https://new.example/users/alice', 'moved_at' => 1000, 'can_move_at' => 1000 + 30 * 86400]);
+
+		// the handle with or without its @, whatever the case
+		$response = $this->controller()->moveOut('@alice@new.example', '@Alice@cloud.example');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('https://new.example/users/alice', $response->getData()['moved_to']);
+		$this->assertSame('alice@new.example', $response->getData()['target']['acct']);
+	}
+
+	public function testAMoveTheServiceRefusesIsRefusedWithItsReason(): void {
+		$this->accountService = $this->createStub(AccountService::class);
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->migrationService->method('move')
+			->willThrowException(new \OCA\Social\Exceptions\InvalidResourceException('this account moved on 2026-10-01 and can move again on 2026-10-31'));
+
+		$response = $this->controller()->moveOut('@alice@new.example', 'alice@cloud.example');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('can move again', $response->getData()['error']);
+	}
+
+	public function testUndoingTheMoveAnswersTheStatusAfterwards(): void {
+		$this->migrationService->expects($this->once())->method('undoMove')->with('alice');
+		$this->migrationService->method('moveStatus')->willReturn(['moved_to' => '', 'moved_at' => 1000, 'can_move_at' => 1000 + 30 * 86400]);
+
+		$response = $this->controller()->undoMove();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('', $response->getData()['moved_to']);
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller(null)->undoMove()->getStatus());
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller(null)->moveOut('x', 'y')->getStatus());
+	}
+
+	/** The irreversible routes are behind Nextcloud's password confirmation. */
+	public function testTheMoveAndItsUndoRequireAFreshPassword(): void {
+		foreach (['moveOut', 'undoMove'] as $method) {
+			$attributes = (new \ReflectionMethod(MigrationController::class, $method))
+				->getAttributes(\OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired::class);
+			$this->assertCount(1, $attributes, $method . ' is not behind a password confirmation');
+		}
+	}
+
 	// moving in from the old handle
 
 	public function testInspectingTheOldAccountAnswersWhatItsServerLetsUsRead(): void {

@@ -75,7 +75,9 @@ class AccountMove extends SocialCommand {
 
 		try {
 			$output->write('checking that ' . $target . ' lists this account... ');
-			$moved = $this->migrationService->move($userId, $target);
+			// an administrator's command is not held to the thirty-day cooldown
+			// the person's own button is: they are the one who can judge why
+			$moved = $this->migrationService->move($userId, $target, false);
 		} catch (Exception $e) {
 			$output->writeln('');
 			$output->writeln('<error>' . $e->getMessage() . '</error>');

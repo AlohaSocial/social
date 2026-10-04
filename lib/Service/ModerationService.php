@@ -13,9 +13,11 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Model\Strike;
 use Psr\Log\LoggerInterface;
@@ -112,6 +114,22 @@ class ModerationService {
 	public function assertNotSuspended(string $actorId): void {
 		if ($this->isSuspended($actorId)) {
 			throw new InvalidActionException('this account is suspended');
+		}
+	}
+
+	/**
+	 * A local account that moved away may not post or follow from here: its
+	 * followers were told to follow the new account, so anything written here
+	 * reaches nobody, and Mastodon locks a moved account the same way. Undoing
+	 * the move (Settings → Migration) lifts it.
+	 *
+	 * @throws AccountMovedException
+	 */
+	public function assertNotMoved(Person $actor): void {
+		if ($actor->isLocal() && $actor->getMovedTo() !== '') {
+			throw new AccountMovedException(
+				'this account has moved to ' . $actor->getMovedTo() . '; undo the move to post or follow from here again'
+			);
 		}
 	}
 

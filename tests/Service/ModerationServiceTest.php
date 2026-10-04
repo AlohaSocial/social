@@ -13,6 +13,7 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Db\StreamDestRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\StreamNotFoundException;
@@ -90,6 +91,23 @@ class ModerationServiceTest extends TestCase {
 			$this->actorCascadeService,
 			$this->auditService
 		);
+	}
+
+	/** A local account that moved away may not post or follow from here; a remote one's redirect is its own server's business. */
+	public function testAMovedLocalAccountIsRefusedAndEverybodyElseIsNot(): void {
+		$moved = new Person();
+		$moved->setId(self::LOCAL_ACTOR)->setLocal(true)->setMovedTo('https://new.example/users/alice');
+		$stayed = new Person();
+		$stayed->setId(self::LOCAL_ACTOR)->setLocal(true);
+		$remote = new Person();
+		$remote->setId(self::SPAMMER)->setLocal(false)->setMovedTo('https://elsewhere.example/users/spammer');
+
+		$this->service->assertNotMoved($stayed);
+		$this->service->assertNotMoved($remote);
+
+		$this->expectException(AccountMovedException::class);
+		$this->expectExceptionMessageMatches('/moved to https:\/\/new\.example\/users\/alice/');
+		$this->service->assertNotMoved($moved);
 	}
 
 	public function testSilencingRecordsTheDecisionAndDeletesNothing(): void {

@@ -102,6 +102,7 @@ class PostService {
 	 */
 	public function createPost(Post $post, string &$token = ''): ?ACore {
 		$this->moderationService->assertNotSuspended($post->getActor()->getId());
+		$this->moderationService->assertNotMoved($post->getActor());
 		$this->assertWithinLength($post->getContent(), $post->getSpoilerText());
 		$this->fixRecipientAndHashtags($post);
 
@@ -266,6 +267,7 @@ class PostService {
 		?string $language = null, array $mediaAttributes = [],
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
+		$this->moderationService->assertNotMoved($actor);
 		$stream = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 
 		if ($stream->getAttributedTo() !== $actor->getId()) {

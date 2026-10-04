@@ -22,6 +22,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
@@ -220,6 +221,87 @@ class MigrationController extends Controller {
 		}
 
 		return new DataResponse(['import' => $job], Http::STATUS_ACCEPTED);
+	}
+
+	/**
+	 * Where this account stands: whether it moved, where, when, and when it
+	 * may move (again).
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/move')]
+	public function moveStatus(): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		try {
+			return new DataResponse($this->migrationService->moveStatus($this->userId), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * Moves this account away: every follower's server is told to follow the
+	 * new account instead, and this one is marked as moved.
+	 *
+	 * The half that cannot be taken back, so three things stand in front of
+	 * it: Nextcloud's own password confirmation (the attribute), the handle
+	 * typed back as `confirm`, and the new account already naming this one in
+	 * its `alsoKnownAs`, which `MigrationService::move()` checks. Thirty days
+	 * between moves, as Mastodon keeps. Until now this was
+	 * `occ social:account:move`, and on a hosted Nextcloud a support ticket.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[UserRateLimit(limit: 5, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move')]
+	public function moveOut(string $target = '', string $confirm = ''): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		try {
+			$handle = $this->accountService->getActorFromUserId($this->userId)->getAccount();
+			if ($handle === '' || strcasecmp(ltrim(trim($confirm), '@'), $handle) !== 0) {
+				return new DataResponse(
+					['error' => 'type your own handle, ' . $handle . ', to confirm the move'],
+					Http::STATUS_UNPROCESSABLE_ENTITY
+				);
+			}
+
+			$moved = $this->migrationService->move($this->userId, $target);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(
+			$this->migrationService->moveStatus($this->userId)
+				+ ['target' => ['acct' => $moved->getAccount(), 'url' => $moved->getUrl() !== '' ? $moved->getUrl() : $moved->getId()]],
+			Http::STATUS_OK
+		);
+	}
+
+	/**
+	 * Takes the redirect off again. The followers do not come back by
+	 * themselves, and the page says so; what this restores is the right to
+	 * post and follow from here.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/migration/move')]
+	public function undoMove(): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		try {
+			$this->migrationService->undoMove($this->userId);
+
+			return new DataResponse($this->migrationService->moveStatus($this->userId), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	/** A form's yes: anything but an explicit no. */

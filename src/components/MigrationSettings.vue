@@ -382,11 +382,64 @@
 			<p class="migration__note">
 				{{ t('social', 'The handle as you would give it to somebody — or, if you have it, the address its server publishes, like https://pixelfed.social/users/you.') }}
 			</p>
+		</section>
 
-			<h5>{{ t('social', 'Moving your whole account') }}</h5>
-			<p>
-				{{ t('social', 'With the alias above in place, your old server can send your followers here. That is the half that cannot be taken back: it federates to every server that knows you, so it stays an administrator action — ask for occ social:account:move on the old server.') }}
-			</p>
+		<!-- away -->
+		<section class="migration__card migration__card--move-out">
+			<h4>
+				<IconAccountArrowRight :size="20" />
+				{{ t('social', 'Move your account away') }}
+			</h4>
+			<template v-if="moveStatus && moveStatus.moved_to">
+				<p>
+					{{ t('social', 'This account moved to {target} on {date}. Its followers were told to follow the new account; nothing is posted from here while it stays moved.', { target: moveStatus.moved_to, date: dateOf(moveStatus.moved_at) }) }}
+				</p>
+				<p class="migration__note">
+					{{ t('social', 'Undoing the move lets you post and follow from here again. Your followers do not come back by themselves: their servers acted on the move when it arrived.') }}
+				</p>
+				<NcButton :disabled="moveOutBusy" @click="undoMove">
+					<template v-if="moveOutBusy" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Undo the move') }}
+				</NcButton>
+			</template>
+			<template v-else>
+				<p>
+					{{ t('social', 'Tell every server that knows you to follow your new account instead of this one. First, on the new account, name this one as an account you also answer to — on Mastodon that is Preferences → Account → Moving from a different account — and then type it here. Your posts stay where they are: a move carries the followers, never the content.') }}
+				</p>
+				<p v-if="moveStatus && moveStatus.can_move_at * 1000 > Date.now()" class="migration__note">
+					{{ t('social', 'This account moved on {date} and can move again on {next}.', { date: dateOf(moveStatus.moved_at), next: dateOf(moveStatus.can_move_at) }) }}
+				</p>
+				<template v-else>
+					<div class="migration__move-out-form">
+						<NcTextField
+							v-model="moveTarget"
+							class="migration__move-out-field"
+							:label="t('social', 'Your new account')"
+							placeholder="@you@new.example"
+							:disabled="moveOutBusy" />
+						<NcTextField
+							v-model="moveConfirm"
+							class="migration__move-out-field"
+							:label="t('social', 'Type your handle here to confirm')"
+							:placeholder="ownHandle || '@you@this.server'"
+							:disabled="moveOutBusy" />
+					</div>
+					<p class="migration__note">
+						{{ t('social', 'This cannot be taken back: it federates to every server that knows you. You will be asked for your password.') }}
+					</p>
+					<NcButton
+						variant="error"
+						:disabled="moveOutBusy || moveTarget.trim() === '' || moveConfirm.trim() === ''"
+						@click="moveOut">
+						<template v-if="moveOutBusy" #icon>
+							<NcLoadingIcon :size="20" />
+						</template>
+						{{ t('social', 'Move my followers to the new account') }}
+					</NcButton>
+				</template>
+			</template>
 		</section>
 	</div>
 </template>
@@ -395,6 +448,7 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess } from '../services/toast.js'
+import { confirmPassword } from '../services/externalApi.js'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -461,6 +515,11 @@ export default {
 			moveStarting: false,
 			/** @type {string} this account's handle, for the last step on the old server */
 			ownHandle: '',
+			/** @type {object|null} whether this account moved, where and when, and when it may move */
+			moveStatus: null,
+			moveTarget: '',
+			moveConfirm: '',
+			moveOutBusy: false,
 			/** @type {Array<object>} the imports this account asked for, newest first, as the server lists them */
 			imports: [],
 			/** @type {number|null} the timer behind the next poll of the imports, while one runs */
@@ -501,6 +560,8 @@ export default {
 	mounted() {
 		this.loadAliases()
 		this.loadImports()
+		this.loadMoveStatus()
+		this.loadOwnHandle()
 	},
 
 	beforeUnmount() {
@@ -571,6 +632,79 @@ export default {
 			} finally {
 				this.moveStarting = false
 			}
+		},
+
+		/**
+		 * Whether this account moved, where and when, and when it may move.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadMoveStatus() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/move'))
+				this.moveStatus = data
+			} catch (error) {
+				logger.error('Failed to load the move status', { error })
+			}
+		},
+
+		/**
+		 * Moves the account away, after the password and the typed handle.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async moveOut() {
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.moveOutBusy = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move'), {
+					target: this.moveTarget.trim(),
+					confirm: this.moveConfirm.trim(),
+				})
+				this.moveStatus = data
+				this.moveTarget = ''
+				this.moveConfirm = ''
+				showSuccess(t('social', 'Your followers are being told to follow {target}', { target: data?.target?.acct ?? data?.moved_to ?? '' }))
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not move the account'))
+			} finally {
+				this.moveOutBusy = false
+			}
+		},
+
+		/**
+		 * Takes the redirect off again.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async undoMove() {
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.moveOutBusy = true
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/migration/move'))
+				this.moveStatus = data
+				showSuccess(t('social', 'This account is no longer marked as moved'))
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not undo the move'))
+			} finally {
+				this.moveOutBusy = false
+			}
+		},
+
+		/**
+		 * @param {number|null} timestamp seconds since the epoch
+		 * @return {string} the day, in the reader's locale
+		 */
+		dateOf(timestamp) {
+			return timestamp ? new Date(timestamp * 1000).toLocaleDateString() : ''
 		},
 
 		/**
@@ -862,9 +996,6 @@ export default {
 			} catch (error) {
 				logger.error('Failed to load the imports', { error })
 			}
-			if (this.finishedMoveIn && this.ownHandle === '') {
-				this.loadOwnHandle()
-			}
 			if (this.imports.some((job) => job.status === 'queued' || job.status === 'running')) {
 				this.schedulePoll()
 			}
@@ -1128,6 +1259,17 @@ export default {
 	padding: 8px 12px;
 	border-inline-start: 3px solid var(--color-primary-element);
 	background: var(--color-primary-element-light);
+}
+
+.migration__move-out-form {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.migration__move-out-field {
+	flex: 1;
+	min-width: 220px;
 }
 
 .migration__imports {

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use DateTime;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -836,6 +837,23 @@ class PostServiceTest extends TestCase {
 		$this->expectException(InvalidActionException::class);
 
 		$this->service->createPost($this->post('still here'));
+	}
+
+	/** A moved account posts to nobody: its followers were sent to the new one. */
+	public function testAMovedAccountCannotPostOrEdit(): void {
+		$this->moderationService->method('assertNotMoved')
+			->willThrowException(new AccountMovedException('this account has moved'));
+		$this->activityService->expects($this->never())->method('createActivity');
+		$this->activityService->expects($this->never())->method('updateActivity');
+
+		try {
+			$this->service->createPost($this->post('to nobody'));
+			$this->fail('a moved account posted');
+		} catch (AccountMovedException $e) {
+		}
+
+		$this->expectException(AccountMovedException::class);
+		$this->service->editPost(7, $this->actor(), 'new');
 	}
 
 	public function testASuspendedAccountCannotEditWhatItPosted(): void {

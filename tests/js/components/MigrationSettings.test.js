@@ -9,11 +9,13 @@ import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '../../../src/services/toast.js'
 
 import Migration from '../../../src/components/MigrationSettings.vue'
+import { confirmPassword } from '../../../src/services/externalApi.js'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
+vi.mock('../../../src/services/externalApi.js', () => ({ confirmPassword: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -23,6 +25,8 @@ const API = '/index.php/apps/social/api/v1'
 function mountPage() {
 	return mount(Migration, { attachTo: document.body })
 }
+
+const buttonNamed = (wrapper, text) => wrapper.findAll('button').find((b) => b.text() === text)
 
 /** An import as the server lists it. */
 function job(kind, status, counts = {}, report = {}) {
@@ -166,6 +170,94 @@ describe('Migration', () => {
 
 	// follows from another network
 
+	// moving away
+
+	/** The page's reads, with the move status as given. */
+	function serverSays(status) {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/move')) {
+				return Promise.resolve({ data: status })
+			}
+			if (url.endsWith('/migration/announcement')) {
+				return Promise.resolve({ data: { handle: '@alice@cloud.example' } })
+			}
+			return Promise.resolve({ data: { aliases: [], imports: [] } })
+		})
+	}
+
+	it('moves the account away after the password and the typed handle, and shows where it went', async () => {
+		serverSays({ moved_to: '', moved_at: null, can_move_at: 0 })
+		axios.post.mockResolvedValue({ data: { moved_to: 'https://new.example/users/alice', moved_at: 1700000000, can_move_at: 1702592000, target: { acct: 'alice@new.example' } } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const fields = wrapper.findAll('.migration__move-out-field input')
+		await fields[0].setValue('@alice@new.example')
+		await fields[1].setValue('alice@cloud.example')
+		await buttonNamed(wrapper, 'Move my followers to the new account').trigger('click')
+		await flushPromises()
+
+		expect(confirmPassword).toHaveBeenCalled()
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move`, { target: '@alice@new.example', confirm: 'alice@cloud.example' })
+		expect(wrapper.text()).toContain('This account moved to https://new.example/users/alice')
+		expect(buttonNamed(wrapper, 'Undo the move')).toBeTruthy()
+	})
+
+	it('does nothing when the password dialog is dismissed', async () => {
+		serverSays({ moved_to: '', moved_at: null, can_move_at: 0 })
+		confirmPassword.mockRejectedValueOnce(new Error('dismissed'))
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const fields = wrapper.findAll('.migration__move-out-field input')
+		await fields[0].setValue('@alice@new.example')
+		await fields[1].setValue('alice@cloud.example')
+		await buttonNamed(wrapper, 'Move my followers to the new account').trigger('click')
+		await flushPromises()
+
+		expect(axios.post).not.toHaveBeenCalledWith(`${API}/migration/move`, expect.anything())
+	})
+
+	it('shows the reason the server refuses a move', async () => {
+		serverSays({ moved_to: '', moved_at: null, can_move_at: 0 })
+		axios.post.mockRejectedValue({ response: { data: { error: 'type your own handle, alice@cloud.example, to confirm the move' } } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const fields = wrapper.findAll('.migration__move-out-field input')
+		await fields[0].setValue('@alice@new.example')
+		await fields[1].setValue('somebody@else.example')
+		await buttonNamed(wrapper, 'Move my followers to the new account').trigger('click')
+		await flushPromises()
+
+		expect(showError).toHaveBeenCalledWith('type your own handle, alice@cloud.example, to confirm the move')
+	})
+
+	it('offers to undo a move, and says the followers do not come back', async () => {
+		serverSays({ moved_to: 'https://new.example/users/alice', moved_at: 1700000000, can_move_at: 1702592000 })
+		axios.delete.mockResolvedValue({ data: { moved_to: '', moved_at: 1700000000, can_move_at: 1702592000 } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		expect(wrapper.text()).toContain('do not come back by themselves')
+		await buttonNamed(wrapper, 'Undo the move').trigger('click')
+		await flushPromises()
+
+		expect(confirmPassword).toHaveBeenCalled()
+		expect(axios.delete).toHaveBeenCalledWith(`${API}/migration/move`)
+		expect(buttonNamed(wrapper, 'Undo the move')).toBeUndefined()
+	})
+
+	it('says when the account may move again, instead of offering the form', async () => {
+		serverSays({ moved_to: '', moved_at: 1700000000, can_move_at: Math.floor(Date.now() / 1000) + 86400 })
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		expect(wrapper.text()).toContain('can move again on')
+		expect(wrapper.find('.migration__move-out-field').exists()).toBe(false)
+	})
+
 	// moving in, from the old handle
 
 	const oldAccount = (following, posts) => ({
@@ -177,8 +269,6 @@ describe('Migration', () => {
 		following,
 		posts,
 	})
-	const buttonNamed = (wrapper, text) => wrapper.findAll('button').find((b) => b.text() === text)
-
 	it('looks the old account up and says what its server lets us read', async () => {
 		axios.post.mockResolvedValue({ data: { account: oldAccount({ total: 120, readable: true }, { total: 900, readable: false }) } })
 
@@ -377,11 +467,12 @@ describe('Migration', () => {
 	 * Naming the old account federates nothing and is the person's own to do;
 	 * moving the followers cannot be taken back, and stays an administrator's.
 	 */
-	it('offers the alias but sends the move to an administrator', () => {
+	it('offers the alias and the move itself, with no occ command to ask for', () => {
 		const text = mountPage().text()
 
 		expect(text).toContain('Accounts you also answer to')
-		expect(text).toContain('social:account:move')
+		expect(text).toContain('Move your account away')
+		expect(text).not.toContain('social:account:move')
 		expect(text).not.toContain('social:account:alias')
 	})
 
