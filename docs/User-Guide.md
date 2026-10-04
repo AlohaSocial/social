@@ -143,7 +143,10 @@ starting one does not take the place of a post you were still writing.
   sensitive. Warnings written on other servers are honoured here the same way.
 - **Attachments.** Up to ten per post: pictures (JPEG, PNG, GIF, WebP, AVIF,
   and HEIC/HEIF from a phone, converted on the way in), video (MP4, WebM,
-  QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). Drag them in, use
+  QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). A video other
+  servers cannot play as it is gets converted before the post leaves: it is
+  on this server straight away, and your own copy says *Converting video —
+  reaches other servers when done* until it has. Drag them in, use
   **Add attachment**, or **Add from Files** to attach something already in
   your Nextcloud without uploading it again — the Files app's own menu also
   has **Share to Aloha Social** for the same thing. Every picture has its Exif

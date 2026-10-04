@@ -171,6 +171,7 @@ OC.L10N.register(
     "Your lists" : "Deine Listen",
     "Open this post, written {time}" : "Diesen Beitrag öffnen, geschrieben am {time}",
     "Pinned post" : "Angehefteter Beitrag",
+    "Converting video — reaches other servers when done" : "Video wird umgewandelt — erreicht andere Server, sobald es fertig ist",
     "Pinned" : "Angeheftet",
     "Posts from {place}" : "Beiträge aus {place}",
     "With" : "Mit",

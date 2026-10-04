@@ -1225,6 +1225,15 @@ describe('TimelinePost', () => {
 			expect(mountPost({ item: makeItem({ pinned: true }) }).wrapper.find('.post-pinned').text()).toBe('Pinned')
 		})
 
+		it('says a video is still being converted while the server holds the post back', () => {
+			// `delivery` only ever arrives on the author's own copy, so the
+			// line needs no other guard
+			expect(mountPost().wrapper.find('.post-held').exists()).toBe(false)
+			expect(mountPost({ item: makeItem({ delivery: 'held' }) }).wrapper.find('.post-held').text())
+				.toBe('Converting video — reaches other servers when done')
+			expect(mountPost({ item: makeItem({ delivery: 'sent' }) }).wrapper.find('.post-held').exists()).toBe(false)
+		})
+
 		it('asks before deleting, and only then deletes', async () => {
 			const { wrapper, item, store } = mountPost()
 

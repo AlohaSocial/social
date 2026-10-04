@@ -157,6 +157,7 @@
  * @property {?object} [quote_approval] - who may quote it; only on this server's own posts
  * @property {?object} [video] - PeerTube's metadata for a video post, null for anything else
  * @property {string} [type] - set when a timeline entry is a notification about the post rather than the post itself
+ * @property {string} [delivery] - `held` while a video is being converted before the post goes to other servers; only ever on the author's own copy
  */
 
 /**
