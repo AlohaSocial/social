@@ -117,18 +117,26 @@ class OrderedCollection extends ACore implements JsonSerializable {
 		return $this;
 	}
 
+	/**
+	 * `totalItems` is always stated, 0 included: an empty collection says it
+	 * holds nothing, where one that leaves the count out says nothing. PeerTube
+	 * reads a missing count on a video's `likes` as undefined, and its write of
+	 * that undefined crashed the whole server.
+	 */
 	#[\Override]
 	public function jsonSerialize(): array {
-		return array_filter(
+		$data = array_filter(
 			array_merge(
 				parent::jsonSerialize(),
 				[
-					'totalItems' => $this->getTotalItems(),
 					'first' => $this->getFirst(),
 					'last' => $this->getLast(),
 					'orderedItems' => $this->getOrderedItems()
 				]
 			)
 		);
+		$data['totalItems'] = $this->getTotalItems();
+
+		return $data;
 	}
 }

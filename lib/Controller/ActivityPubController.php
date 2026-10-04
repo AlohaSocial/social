@@ -1003,6 +1003,58 @@ class ActivityPubController extends Controller {
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/@{username}/{token}/replies')]
 	public function replies(string $username, string $token, string $page = '', string $min_id = ''): Response {
+		$post = $this->openLocalPost($username, $token);
+		if ($post instanceof Response) {
+			return $post;
+		}
+
+		$requested = OrderedCollectionPage::requestedPage($page);
+		if ($requested > 0 || $min_id !== '') {
+			return $this->activityPubSuccess($this->streamService->getRepliesPage($post, max(1, $requested), $min_id));
+		}
+
+		return $this->activityPubSuccess($this->streamService->getRepliesCollection($post));
+	}
+
+	/**
+	 * How many likes a post has had, which PeerTube fetches for every video it
+	 * takes in. The count and not the accounts, as Mastodon and PeerTube
+	 * publish it.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/@{username}/{token}/likes')]
+	public function likes(string $username, string $token): Response {
+		$post = $this->openLocalPost($username, $token);
+		if ($post instanceof Response) {
+			return $post;
+		}
+
+		return $this->activityPubSuccess($this->streamService->getRatesCollection($post, Stream::LIKES_PATH));
+	}
+
+	/** The other of PeerTube's two counts; see likes(). */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/@{username}/{token}/dislikes')]
+	public function dislikes(string $username, string $token): Response {
+		$post = $this->openLocalPost($username, $token);
+		if ($post instanceof Response) {
+			return $post;
+		}
+
+		return $this->activityPubSuccess($this->streamService->getRatesCollection($post, Stream::DISLIKES_PATH));
+	}
+
+	/**
+	 * The post a collection of it is asked for, or the answer that refuses it.
+	 *
+	 * A post this instance does not hold has its collections somewhere else,
+	 * under an id this instance does not own; and a post addressed to its
+	 * followers or to named people is not confirmed to exist to anybody else,
+	 * which is what displayPost() answers them too.
+	 */
+	private function openLocalPost(string $username, string $token): Stream|Response {
 		$postId = $this->configService->getSocialUrl() . '@' . $username . '/' . $token;
 
 		try {
@@ -1017,24 +1069,15 @@ class ActivityPubController extends Controller {
 			return $this->fail($e, ['stream' => $postId], Http::STATUS_NOT_FOUND);
 		}
 
-		// a post this instance does not hold has its replies somewhere else,
-		// under an id this instance does not own; and a post addressed to its
-		// followers or to named people is not confirmed to exist to anybody
-		// else, which is what displayPost() answers them too
 		if (!$post->isLocal() || !$this->isOpenToAnybody($post)) {
 			return $this->fail(
-				new ItemUnknownException('no such replies collection'),
+				new ItemUnknownException('no such collection'),
 				['stream' => $postId],
 				Http::STATUS_NOT_FOUND
 			);
 		}
 
-		$requested = OrderedCollectionPage::requestedPage($page);
-		if ($requested > 0 || $min_id !== '') {
-			return $this->activityPubSuccess($this->streamService->getRepliesPage($post, max(1, $requested), $min_id));
-		}
-
-		return $this->activityPubSuccess($this->streamService->getRepliesCollection($post));
+		return $post;
 	}
 
 	/**

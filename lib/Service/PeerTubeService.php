@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\Interfaces\Object\DocumentInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaDim;
 use OCA\Social\Model\Client\MediaAttachment;
@@ -826,6 +827,13 @@ class PeerTubeService {
 		// PeerTube states it on every video and its clients read it; this app
 		// has replies on every post and no way to turn them off
 		$note['commentsEnabled'] = true;
+
+		// PeerTube fetches both counts for every video it takes in, and writes
+		// whatever it got: without them it wrote an undefined count and the
+		// unhandled failure took the whole server down
+		$id = (string)($note['id'] ?? '');
+		$note['likes'] = $id . Stream::LIKES_PATH;
+		$note['dislikes'] = $id . Stream::DISLIKES_PATH;
 
 		return $note;
 	}

@@ -26,6 +26,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
@@ -214,6 +215,22 @@ class StreamServiceTest extends TestCase {
 		$this->service->addChannelFollowers($note);
 
 		$this->assertSame([], $this->followersPaths($note));
+	}
+
+	/** The count and nothing else, read off the post, and 0 stated as 0. */
+	public function testTheRatesCollectionsCarryThePostsCounts(): void {
+		$note = new Note();
+		$note->setId(self::GENERATED_ID);
+		$note->setDetailInt(Details::LIKES, 3);
+
+		$likes = $this->service->getRatesCollection($note, Stream::LIKES_PATH)->jsonSerialize();
+		$this->assertSame(self::GENERATED_ID . '/likes', $likes['id']);
+		$this->assertSame(3, $likes['totalItems']);
+		$this->assertArrayNotHasKey('orderedItems', $likes);
+
+		$dislikes = $this->service->getRatesCollection($note, Stream::DISLIKES_PATH)->jsonSerialize();
+		$this->assertSame(self::GENERATED_ID . '/dislikes', $dislikes['id']);
+		$this->assertSame(0, $dislikes['totalItems']);
 	}
 
 	private function actor(): Person {

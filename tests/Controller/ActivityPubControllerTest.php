@@ -1322,6 +1322,44 @@ class ActivityPubControllerTest extends TestCase {
 		$this->assertSame(self::SOCIAL_URL . '@alice/missing', $response->getData()['stream']);
 	}
 
+	// likes() and dislikes()
+
+	/** PeerTube fetches both counts for every video it takes in. */
+	public function testTheLikesAndDislikesOfAPostAreServed(): void {
+		$post = $this->quotablePost();
+		$likes = new OrderedCollection();
+		$dislikes = new OrderedCollection();
+		$this->streamService->method('getRatesCollection')->willReturnCallback(
+			fn (Stream $of, string $path): OrderedCollection => ($of === $post && $path === Stream::LIKES_PATH) ? $likes : $dislikes
+		);
+
+		$response = $this->controller->likes('alice', 'abc123');
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(self::LD_JSON, $response->getHeaders()['Content-Type']);
+		$this->assertSame($likes, $response->getData());
+
+		$this->assertSame($dislikes, $this->controller->dislikes('alice', 'abc123')->getData());
+	}
+
+	/** The same post that has no public replies collection has no public counts. */
+	public function testTheCountsOfAPostNotAddressedToThePublicAreA404(): void {
+		foreach ([Stream::TYPE_FOLLOWERS, Stream::TYPE_DIRECT] as $visibility) {
+			$this->setUp();
+			$post = $this->quotablePost();
+			$post->setVisibility($visibility);
+			$this->streamService->expects($this->never())->method('getRatesCollection');
+
+			$this->assertFailure($this->controller->likes('alice', 'abc123'), ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+			$this->assertFailure($this->controller->dislikes('alice', 'abc123'), ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	public function testTheCountsOfARemotePostAreA404(): void {
+		$this->quotablePost()->setLocal(false);
+
+		$this->assertFailure($this->controller->likes('alice', 'abc123'), ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+	}
+
 	// displayQuoteAuthorization()
 
 	private function quotablePost(string $token = 'abc123'): Note {

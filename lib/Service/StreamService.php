@@ -909,6 +909,23 @@ class StreamService {
 	 * replies. Mastodon publishes one on every note and walks one on every note
 	 * it fetches.
 	 */
+	/**
+	 * How many likes, or dislikes, a post has had, as the collection a peer
+	 * reads the number from. The count alone: who liked a post is not
+	 * published, which is also what Mastodon and PeerTube do.
+	 *
+	 * @param string $path Stream::LIKES_PATH or Stream::DISLIKES_PATH
+	 */
+	public function getRatesCollection(Stream $post, string $path): OrderedCollection {
+		$collection = new OrderedCollection();
+		$collection->setId($post->getId() . $path);
+		$collection->setTotalItems(max(0, $post->getDetailInt(
+			($path === Stream::DISLIKES_PATH) ? Details::DISLIKES : Details::LIKES
+		)));
+
+		return $collection;
+	}
+
 	public function getRepliesCollection(Stream $post): OrderedCollection {
 		$id = $post->getId() . Stream::REPLIES_PATH;
 

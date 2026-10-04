@@ -208,6 +208,18 @@ class PeerTubePublishTest extends TestCase {
 		$this->assertSame('https://cloud.example.org/media/movie.mp4', $files[0]['href']);
 	}
 
+	/**
+	 * PeerTube fetches `likes` and `dislikes` for every video it takes in
+	 * and writes what it finds; a video without them crashed it.
+	 */
+	public function testAVideoNamesItsLikesAndDislikes(): void {
+		$note = $this->note();
+		$video = PeerTubeService::asVideo($note, $this->attachment(), self::WATCH, self::attribution());
+
+		$this->assertSame($note['id'] . '/likes', $video['likes']);
+		$this->assertSame($note['id'] . '/dislikes', $video['dislikes']);
+	}
+
 	/** A video with no ladder publishes no playlist rather than an empty one. */
 	public function testAVideoWithNoLadderPublishesNoPlaylist(): void {
 		$video = PeerTubeService::asVideo(
