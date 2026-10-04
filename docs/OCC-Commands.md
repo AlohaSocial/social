@@ -606,6 +606,43 @@ Rotation is the only step that is opt-in, and it is the only way to rotate a key
 pair: nothing else calls `AccountService::blindKeyRotation()`, and the cron never
 does.
 
+### `social:counts:refresh`
+
+Ask each remote server what the counts of the posts it owns are right now, and
+store what it says.
+
+```
+php occ social:counts:refresh [-f|--force] [-l|--limit LIMIT]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `-f`, `--force` | none | Ask about every remote post rather than only those not asked about in the last `RemoteCountService::TTL` (7200) seconds |
+| `-l`, `--limit` | required | Stop after this many posts. `0`, the default, means all that are due, which is what a backfill wants |
+
+A post's counts were a snapshot of the moment it was imported and nothing ever
+looked again, so a status sitting at two likes an hour ago still reads as two.
+This asks each post's origin server for the `likes` and `shares` totals of its
+own document and replaces the stored figure with what comes back — the answer
+is only taken if the document's `id` is the one that was asked for, and a post
+that answers with nothing keeps the count it had and is asked about again at
+the next window rather than every pass.
+
+The stated total is split as `stated - local` before it is stored, so what is
+displayed stays the origin's number while the likes, boosts and replies made
+here keep counting on top of it. Without `--force` only the posts past the
+window are asked about; with it the whole timeline is, which is the backfill
+after a version that never refreshed counts at all.
+
+Reply counts are the limit of this: ActivityPub documents publish
+`replies.totalItems` on almost no server, so the reply figure is what this
+instance holds and not a number the origin supplies.
+
+The cron (`OCA\Social\Cron\Cache`) runs the same work on its own schedule for
+at most a minute per pass, `RemoteCountService::BATCH` posts at a time, so this
+command is for the other moments. It prints `N post(s) asked, M answered with a
+count`.
+
 ### `social:media:retry`
 
 Retry one remote attachment which was previously rejected by the media cache.

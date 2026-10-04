@@ -23,6 +23,7 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\ProfileLinkVerifier;
+use OCA\Social\Service\RemoteCountService;
 use OCA\Social\Service\StreamPruneService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -61,6 +62,16 @@ class Cache extends TimedJob {
 	public const SWEEP_BATCH = 500;
 
 	/**
+	 * How long one pass may spend asking remote servers what a post's counts
+	 * are now, in seconds, inside the pass's own budget.
+	 *
+	 * Like the two steps above, it takes round after round of posts until this
+	 * runs out rather than one batch: twenty posts in parallel, sixty seconds
+	 * of them, and the posts still due are the next run's to start with.
+	 */
+	public const COUNTS_SECONDS = 60;
+
+	/**
 	 * How often the disk is added up, in seconds.
 	 *
 	 * Once a day: it is a `stat` per stored file, and a number about disk does
@@ -86,6 +97,7 @@ class Cache extends TimedJob {
 		private ?MediaUsageService $mediaUsageService = null,
 		private ?DurableCache $durableCache = null,
 		private ?FediverseDirectoryService $fediverseDirectoryService = null,
+		private ?RemoteCountService $remoteCountService = null,
 	) {
 		parent::__construct($time);
 		$this->setInterval(12 * 60);
@@ -138,6 +150,16 @@ class Cache extends TimedJob {
 			},
 			'syncRemoteTimelines' => function () use ($deadline): void {
 				$this->syncRemoteTimelines($deadline);
+			},
+			'refreshRemoteCounts' => function () use ($deadline): void {
+				// what a remote post's likes, boosts and replies are now, asked
+				// of the server that holds it: the counts stored with a post
+				// were what its document said the moment it arrived, and
+				// nothing has asked again since
+				$this->remoteCountService?->refresh(
+					false, RemoteCountService::BATCH,
+					min($deadline, $this->time->getTime() + self::COUNTS_SECONDS)
+				);
 			},
 			'verifyProfileLinks' => function () use ($deadline): void {
 				// this instance's own accounts; remote ones are checked with their
