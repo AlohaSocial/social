@@ -34,7 +34,7 @@
 			v-else
 			name="list"
 			tag="ul"
-			:class="{ 'timeline-list--settling': holding }">
+			:class="{ 'timeline-list--settling': holding, 'timeline-list--swapping': swapping }">
 			<template v-for="(entry, index) in entries" :key="entry.id">
 				<!-- the two headings only appear when there is a boundary to
 				     mark: a page that is all new, or all seen, is one run -->
@@ -61,6 +61,7 @@
 					:item="entry"
 					:type="type"
 					:index="index"
+					:immediate="swapping"
 					:depth="depths[entry.id] ?? 0"
 					:continues="hasReplies[entry.id] === true"
 					:unread="isUnread(entry)" />
@@ -115,6 +116,12 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import ProfileMediaGrid from './ProfileMediaGrid.vue'
 import TimelineEntry from './TimelineEntry.vue'
 import TimelineSkeleton from './TimelineSkeleton.vue'
+
+/**
+ * How long a list counts as swapping after a held-over list is replaced, in
+ * milliseconds: a little longer than an entry takes to rise in.
+ */
+const SWAP_SETTLE = 320
 import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import eventBus, { NOTIFICATIONS_READ } from '../services/eventBus.js'
@@ -268,6 +275,15 @@ export default {
 			 * @type {string[]}
 			 */
 			heldOver: [],
+			/**
+			 * Whether the held-over list is being replaced by the one that was
+			 * asked for. For that moment the old entries go without their
+			 * leave transition and the new ones rise together: a switch is
+			 * one list becoming another, not a page arriving from nothing.
+			 */
+			swapping: false,
+			/** @type {ReturnType<typeof setTimeout>|null} */
+			swapTimer: null,
 			infoHidden: false,
 			state: [],
 			intervalId: -1,
@@ -822,7 +838,12 @@ export default {
 
 		// something new to look at restarts the dwell: what arrived while the
 		// reader was here is read on the same terms as what was already there
-		timeline(entries) {
+		timeline(entries, previous) {
+			// the held-over list is on screen when the new one lands: that
+			// render swaps them, so it is drawn as a swap
+			if (entries.length > 0 && previous.length === 0 && this.heldOver.length > 0) {
+				this.startSwap()
+			}
 			// the last list that had anything is what a switch shows while the
 			// next one is on its way. Taken here rather than when the switch is
 			// noticed, because by then the store has already emptied it; ids
@@ -895,6 +916,10 @@ export default {
 	},
 
 	unmounted() {
+		if (this.swapTimer !== null) {
+			clearTimeout(this.swapTimer)
+			this.swapTimer = null
+		}
 		this.stopTracking()
 		this.rememberPlace()
 		offTimelinePush(this.onPushed)
@@ -1003,6 +1028,23 @@ export default {
 			}
 			this.composerObserver = new ResizeObserver(measure)
 			this.composerObserver.observe(sibling)
+		},
+
+		/**
+		 * Marks the next render as a swap, for as long as the entering
+		 * entries take to rise: long enough for the leave to be skipped and
+		 * the stagger to be read as off, short enough that a post removed
+		 * afterwards fades as usual.
+		 */
+		startSwap() {
+			this.swapping = true
+			if (this.swapTimer !== null) {
+				clearTimeout(this.swapTimer)
+			}
+			this.swapTimer = setTimeout(() => {
+				this.swapping = false
+				this.swapTimer = null
+			}, SWAP_SETTLE)
 		},
 
 		/** Stops watching it, and forgets what it measured. */
@@ -1501,6 +1543,10 @@ export default {
 	ul {
 		margin: 0;
 		padding: 0;
+		/* a leaving entry is taken out of the flow and sized to its nearest
+		   positioned ancestor; without this that is the whole content area,
+		   and the entry is drawn at the width of the page while it fades */
+		position: relative;
 	}
 
 	.icon-loading {
@@ -1683,6 +1729,12 @@ export default {
 .list-leave-to {
 	opacity: 0;
 	transform: translateY(-4px);
+}
+
+/* a swap replaces every entry at once: the old ones are not worth a fade
+   each, and twenty of them fading on top of twenty rising is a slow page */
+.timeline-list--swapping .list-leave-active {
+	display: none;
 }
 
 .list-move {
