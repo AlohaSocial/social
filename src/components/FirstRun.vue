@@ -124,7 +124,29 @@
 					{{ t('social', 'Already somewhere else?') }}
 				</h2>
 				<p class="first-run__lead">
-					{{ t('social', 'If you have an account on Mastodon or another server, bring the people you follow. Mastodon and servers like it export them as following_accounts.csv, Pixelfed as pixelfed-following.json — upload that file and each one is followed from here.') }}
+					{{ t('social', 'If you have an account on Mastodon or another server, type its handle. Everyone it follows is followed from here and its public posts are brought along, in the background. Moving your followers over as well is the last step, done on your old server; Settings → Migration tells you how.') }}
+				</p>
+				<div class="first-run__move">
+					<NcTextField
+						v-model="oldHandle"
+						class="first-run__move-field"
+						:label="t('social', 'Your old account')"
+						placeholder="@you@mastodon.example"
+						:disabled="moveBusy"
+						@keydown.enter="moveIn" />
+					<NcButton variant="primary" :disabled="moveBusy || oldHandle.trim() === ''" @click="moveIn">
+						<template #icon>
+							<NcLoadingIcon v-if="moveBusy" :size="20" />
+							<IconAccountArrowRight v-else :size="20" />
+						</template>
+						{{ moveBusy ? t('social', 'Moving …') : t('social', 'Move here') }}
+					</NcButton>
+				</div>
+				<p v-if="moveResult" class="first-run__result" role="status">
+					{{ moveResult }}
+				</p>
+				<p class="first-run__hint">
+					{{ t('social', 'Or upload the file your old server exports: Mastodon and servers like it write following_accounts.csv, Pixelfed pixelfed-following.json; each account in it is followed from here.') }}
 				</p>
 				<!-- opened by the button below, which is the control a keyboard
 				     and a screen reader reach; the input stays out of both -->
@@ -210,7 +232,9 @@ import { generateUrl } from '@nextcloud/router'
 import { mapStores } from 'pinia'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import IconAccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
+import IconAccountArrowRight from 'vue-material-design-icons/AccountArrowRight.vue'
 import IconAccountPlus from 'vue-material-design-icons/AccountPlus.vue'
 import IconArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import IconArrowRight from 'vue-material-design-icons/ArrowRight.vue'
@@ -233,6 +257,7 @@ export default {
 	name: 'FirstRun',
 	components: {
 		ActorAvatar,
+		IconAccountArrowRight,
 		IconAccountMultiplePlus,
 		IconAccountPlus,
 		IconArrowLeft,
@@ -244,6 +269,7 @@ export default {
 		IconUpload,
 		NcButton,
 		NcLoadingIcon,
+		NcTextField,
 	},
 
 	emits: ['done'],
@@ -278,6 +304,10 @@ export default {
 			copyTimer: null,
 			followsBusy: false,
 			followsResult: '',
+			/** @type {string} the old account, as typed */
+			oldHandle: '',
+			moveBusy: false,
+			moveResult: '',
 			reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false,
 		}
 	},
@@ -286,7 +316,7 @@ export default {
 		...mapStores(useAccountStore),
 
 		followedAnything() {
-			return this.followed.length > 0 || this.followedPacks.length > 0 || this.followsResult !== ''
+			return this.followed.length > 0 || this.followedPacks.length > 0 || this.followsResult !== '' || this.moveResult !== ''
 		},
 	},
 
@@ -435,6 +465,46 @@ export default {
 		},
 
 		/**
+		 * Moves here from the old handle: the alias is set, and following who
+		 * it follows and bringing its posts over run in the background.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async moveIn() {
+			const handle = this.oldHandle.trim()
+			if (handle === '' || this.moveBusy) {
+				return
+			}
+			this.moveBusy = true
+			this.moveResult = ''
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in'), {
+					handle,
+					follows: '1',
+					posts: '1',
+					fetch_media: '1',
+				})
+				const job = await this.awaitImport(data?.import?.id)
+				if (job === null) {
+					this.moveResult = t('social', 'Your move is running in the background; Settings → Migration shows where it gets to, and names the last step on your old server.')
+				} else if (job.status === 'failed') {
+					showError(job.report?.error || t('social', 'Could not move that account here'))
+				} else {
+					this.moveResult = t(
+						'social',
+						'{followed} accounts followed and {imported} posts brought over. The last step is on your old server; Settings → Migration names it.',
+						{ followed: job.report?.followed ?? 0, imported: job.report?.imported ?? 0 },
+					)
+				}
+			} catch (error) {
+				logger.error('Moving in failed', { error })
+				showError(error?.response?.data?.error || t('social', 'Could not move that account here'))
+			} finally {
+				this.moveBusy = false
+			}
+		},
+
+		/**
 		 * Polls the imports until the one named is finished, for as long as a
 		 * person will wait on an introduction screen.
 		 *
@@ -474,6 +544,19 @@ export default {
 </script>
 
 <style scoped lang="scss">
+.first-run__move {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+
+.first-run__move-field {
+	flex: 1;
+	min-width: 200px;
+}
+
 /*
  * A card in the column, the width of the timeline. Quiet: a hairline, the
  * app's background, one accent — the step dots and the primary button — so

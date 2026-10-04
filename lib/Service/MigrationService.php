@@ -842,7 +842,7 @@ class MigrationService {
 	 *
 	 * @throws InvalidResourceException when it is neither, or nobody answers
 	 */
-	private function resolveActor(string $reference): Person {
+	public function resolveActor(string $reference): Person {
 		$reference = trim($reference);
 		if (self::isActorUrl($reference)) {
 			return $this->cacheActorService->getFromId($reference, true);

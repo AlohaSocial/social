@@ -166,6 +166,77 @@ describe('Migration', () => {
 
 	// follows from another network
 
+	// moving in, from the old handle
+
+	const oldAccount = (following, posts) => ({
+		id: 'https://old.example/users/alice',
+		acct: 'alice@old.example',
+		name: 'Alice',
+		url: 'https://old.example/@alice',
+		avatar: '',
+		following,
+		posts,
+	})
+	const buttonNamed = (wrapper, text) => wrapper.findAll('button').find((b) => b.text() === text)
+
+	it('looks the old account up and says what its server lets us read', async () => {
+		axios.post.mockResolvedValue({ data: { account: oldAccount({ total: 120, readable: true }, { total: 900, readable: false }) } })
+
+		const wrapper = mountPage()
+		await wrapper.find('.migration__move-in-field input').setValue('@alice@old.example')
+		await buttonNamed(wrapper, 'Look it up').trigger('click')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in/inspect`, { handle: '@alice@old.example' })
+		expect(wrapper.text()).toContain('Alice')
+		expect(wrapper.text()).toContain('It follows 120 accounts.')
+		expect(wrapper.text()).toContain('Its posts cannot be read from here')
+	})
+
+	it('starts the move with what can be read, and names the last step once it has run', async () => {
+		let moved = false
+		axios.post.mockImplementation((url) => {
+			if (url.endsWith('/move-in/inspect')) {
+				return Promise.resolve({ data: { account: oldAccount({ total: 3, readable: true }, { total: 2, readable: true }) } })
+			}
+			moved = true
+			return Promise.resolve({ data: { import: job('move_in', 'queued') } })
+		})
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: moved ? [job('move_in', 'done', { done: 5 }, { followed: 3, imported: 2 })] : [] } })
+			}
+			if (url.endsWith('/migration/announcement')) {
+				return Promise.resolve({ data: { handle: '@alice@cloud.example' } })
+			}
+			return Promise.resolve({ data: { aliases: [] } })
+		})
+
+		const wrapper = mountPage()
+		await wrapper.find('.migration__move-in-field input').setValue('@alice@old.example')
+		await buttonNamed(wrapper, 'Look it up').trigger('click')
+		await flushPromises()
+		await buttonNamed(wrapper, 'Move here').trigger('click')
+		await flushPromises()
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in`, { handle: '@alice@old.example', follows: '1', posts: '1', fetch_media: '1' })
+		expect(wrapper.text()).toContain('3 accounts followed and 2 posts brought over')
+		expect(wrapper.find('.migration__move-in-finish').text()).toContain('@alice@cloud.example')
+	})
+
+	it('shows the reason when the old account cannot be found', async () => {
+		axios.post.mockRejectedValue({ response: { data: { error: 'no account answers to alice@gone.example' } } })
+
+		const wrapper = mountPage()
+		await wrapper.find('.migration__move-in-field input').setValue('alice@gone.example')
+		await buttonNamed(wrapper, 'Look it up').trigger('click')
+		await flushPromises()
+
+		expect(showError).toHaveBeenCalledWith('no account answers to alice@gone.example')
+	})
+
 	it('queues a follows CSV and shows what the import came to', async () => {
 		serverQueues('follows', job('follows', 'done', { done: 12, skipped: 1, failed: 1 }))
 

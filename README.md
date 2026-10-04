@@ -478,7 +478,10 @@ it that would do nothing on an instance whose accounts come from LDAP.
 Below it: your **lists**, your **scheduled posts** with a way to cancel one, your
 **blocked and muted accounts** with unblock and unmute inline, and **migration**.
 
-**Migration takes your account with you.** Export writes your profile, follows,
+**Migration takes your account with you.** Moving in starts from your old handle:
+the page looks the account up, shows what its server lets us read, and then follows
+everyone it follows and brings its public posts over in the background; the one step
+left is the move on the old server, and the page names the menu. Export writes your profile, follows,
 followers, blocks, mutes, bookmarks, likes and every post you have written to a zip —
 and **the pictures and videos come with it**, copied into the archive in the layout
 Mastodon's own export uses, with each attachment pointing at the copy rather than at

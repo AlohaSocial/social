@@ -59,6 +59,7 @@ class ImportQueueService {
 		private ITempManager $tempManager,
 		private MigrationService $migrationService,
 		private PostImportService $postImportService,
+		private MoveInService $moveInService,
 		private AccountService $accountService,
 		private LoggerInterface $logger,
 	) {
@@ -190,6 +191,15 @@ class ImportQueueService {
 					->setSkipped($tally['skipped'] + $tally['already'])
 					->setFailed($tally['failed'])
 					->setReport($tally);
+				break;
+
+			case ImportJob::KIND_MOVE_IN:
+				$actor = $this->accountService->getActorFromUserId($userId);
+				$report = $this->moveInService->run($actor, $job->getOptions(), $progress);
+				$job->setDone($report['followed'] + $report['imported'])
+					->setSkipped($report['skipped'] + $report['already'] + $report['posts_skipped'])
+					->setFailed($report['failed'] + $report['posts_failed'])
+					->setReport($report);
 				break;
 
 			default:

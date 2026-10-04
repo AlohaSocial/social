@@ -775,6 +775,20 @@ hand, it is picked up as one.
   as skipped rather than followed by a button that says lists. A list you
   already have is filled rather than made a second time, and a list that
   follows a Nextcloud group is left alone — its members are the group's.
+- **Moving in from another server.** The quickest way in is the first thing
+  on **Settings → Migration**: type the handle of your old account
+  (`@you@mastodon.example`) and press **Look it up**. You are shown who that
+  is, how many accounts it follows and how many posts it has, and whether its
+  server lets those be read — Mastodon hides them if you turned on *Hide your
+  social graph*, and Pixelfed always does; the file imports below are for
+  that case. Press **Move here** and this account is marked as also being
+  that one, and in the background everyone the old account follows is followed
+  from here and its public posts are written here as yours, dated when you
+  wrote them. The list at the top of the page shows where it has got to.
+  Nothing is sent to anybody; your followers stay where they are until the
+  last step, which is done on the old server and which the page tells you
+  about when the run is done: on Mastodon, *Preferences → Account → Move to a
+  different account*, and enter your handle here.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Settings → Migration →
   Accounts you also answer to** is where you say it: type the old account's

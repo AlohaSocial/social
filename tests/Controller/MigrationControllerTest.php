@@ -17,6 +17,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationArchiveService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\SwitchService;
 use OCP\AppFramework\Http;
@@ -42,6 +43,7 @@ class MigrationControllerTest extends TestCase {
 	private MigrationService|MockObject $migrationService;
 	private PostImportService|MockObject $postImportService;
 	private ImportQueueService|MockObject $importQueueService;
+	private MoveInService|MockObject $moveInService;
 	private AccountService|Stub $accountService;
 	private SwitchService|Stub $switchService;
 
@@ -56,6 +58,7 @@ class MigrationControllerTest extends TestCase {
 
 		$this->postImportService = $this->createMock(PostImportService::class);
 		$this->importQueueService = $this->createMock(ImportQueueService::class);
+		$this->moveInService = $this->createMock(MoveInService::class);
 		$this->accountService = $this->createStub(AccountService::class);
 		$this->switchService = $this->createStub(SwitchService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn(new Person());
@@ -85,6 +88,7 @@ class MigrationControllerTest extends TestCase {
 			$this->migrationService,
 			$this->postImportService,
 			$this->importQueueService,
+			$this->moveInService,
 			$this->accountService,
 			$this->switchService,
 			new NullLogger(),
@@ -293,6 +297,59 @@ class MigrationControllerTest extends TestCase {
 		$response = $this->controller()->importFollows();
 
 		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+	}
+
+	// moving in from the old handle
+
+	public function testInspectingTheOldAccountAnswersWhatItsServerLetsUsRead(): void {
+		$this->moveInService->method('inspect')->with('@alice@old.example')->willReturn([
+			'id' => 'https://old.example/users/alice', 'acct' => 'alice@old.example', 'name' => 'Alice',
+			'url' => 'https://old.example/@alice', 'avatar' => '',
+			'following' => ['total' => 120, 'readable' => true], 'posts' => ['total' => 900, 'readable' => false],
+		]);
+
+		$response = $this->controller()->moveInInspect('@alice@old.example');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(120, $response->getData()['account']['following']['total']);
+		$this->assertFalse($response->getData()['account']['posts']['readable']);
+	}
+
+	public function testInspectingNobodyIsRefusedWithTheReason(): void {
+		$this->moveInService->method('inspect')
+			->willThrowException(new \OCA\Social\Exceptions\InvalidResourceException('no account answers to alice@gone.example'));
+
+		$response = $this->controller()->moveInInspect('alice@gone.example');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame('no account answers to alice@gone.example', $response->getData()['error']);
+	}
+
+	/** The alias is set in the request; the follows and the posts are the queued run's. */
+	public function testMovingInSetsTheAliasAndQueuesTheRun(): void {
+		$this->importQueueService->method('hasActive')->with('alice', ImportJob::KIND_MOVE_IN)->willReturn(false);
+		$options = ['source' => 'https://old.example/users/alice', 'acct' => 'alice@old.example', 'follows' => true, 'posts' => false, 'fetch_media' => true];
+		$this->moveInService->expects($this->once())->method('prepare')
+			->with('alice', '@alice@old.example', true, false, true)->willReturn($options);
+		$this->importQueueService->expects($this->once())->method('queue')
+			->with('alice', ImportJob::KIND_MOVE_IN, null, $options)->willReturn($this->queued(ImportJob::KIND_MOVE_IN));
+
+		$response = $this->controller()->moveIn('@alice@old.example', '1', '0', 'yes');
+
+		$this->assertSame(Http::STATUS_ACCEPTED, $response->getStatus());
+		$this->assertSame(ImportJob::KIND_MOVE_IN, $response->getData()['import']->getKind());
+	}
+
+	public function testASecondMoveInWhileOneRunsIsRefused(): void {
+		$this->importQueueService->method('hasActive')->willReturn(true);
+		$this->moveInService->expects($this->never())->method('prepare');
+
+		$this->assertSame(Http::STATUS_CONFLICT, $this->controller()->moveIn('@alice@old.example')->getStatus());
+	}
+
+	public function testMovingInWithoutAnAccountIsUnauthorized(): void {
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller(null)->moveIn('@alice@old.example')->getStatus());
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller(null)->moveInInspect('@alice@old.example')->getStatus());
 	}
 
 	public function testTheImportsAreListedForTheirOwner(): void {

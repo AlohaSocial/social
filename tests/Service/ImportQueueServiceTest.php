@@ -17,6 +17,7 @@ use OCA\Social\Model\ImportJob;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\IAppData;
@@ -40,6 +41,7 @@ class ImportQueueServiceTest extends TestCase {
 	private ITempManager|MockObject $tempManager;
 	private MigrationService|MockObject $migrationService;
 	private PostImportService|MockObject $postImportService;
+	private MoveInService|MockObject $moveInService;
 	private AccountService|MockObject $accountService;
 	private ImportQueueService $service;
 
@@ -59,6 +61,7 @@ class ImportQueueServiceTest extends TestCase {
 		$this->tempManager = $this->createMock(ITempManager::class);
 		$this->migrationService = $this->createMock(MigrationService::class);
 		$this->postImportService = $this->createMock(PostImportService::class);
+		$this->moveInService = $this->createMock(MoveInService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 
 		$this->appData->method('getFolder')->willReturn($this->folder);
@@ -82,6 +85,7 @@ class ImportQueueServiceTest extends TestCase {
 			$this->tempManager,
 			$this->migrationService,
 			$this->postImportService,
+			$this->moveInService,
 			$this->accountService,
 			new NullLogger(),
 		);
@@ -248,6 +252,28 @@ class ImportQueueServiceTest extends TestCase {
 		// running + two batches of ten + done: not twenty-six writes
 		$this->assertLessThanOrEqual(5, count($this->writes));
 		$this->assertSame(25, $job->getTotal());
+	}
+
+	/** A move-in has no file: the run reads the old server, and the report is the two tallies in one. */
+	public function testRunHandsAMoveInToItsServiceAndSumsTheTwoTallies(): void {
+		$job = $this->queuedRow(ImportJob::KIND_MOVE_IN, '', ['source' => 'https://old.example/users/alice', 'follows' => true, 'posts' => true]);
+		$this->accountService->method('getActorFromUserId')->with('alice')->willReturn(new Person());
+		$this->moveInService->expects($this->once())->method('run')
+			->with($this->isInstanceOf(Person::class), $job->getOptions(), $this->isCallable())
+			->willReturn([
+				'followed' => 40, 'skipped' => 2, 'failed' => 1, 'failures' => ['x' => 'gone'],
+				'imported' => 300, 'already' => 10, 'posts_skipped' => 5, 'posts_failed' => 2, 'media' => 120,
+				'following_readable' => true, 'posts_readable' => true,
+			]);
+
+		$this->service->run(42);
+
+		$this->assertSame(ImportJob::STATUS_DONE, $job->getStatus());
+		$this->assertSame(340, $job->getDone());
+		$this->assertSame(17, $job->getSkipped());
+		$this->assertSame(3, $job->getFailed());
+		$this->assertSame(120, $job->getReport()['media']);
+		$this->assertSame([], $this->deleted, 'nothing was kept, so nothing is deleted');
 	}
 
 	// dismiss()

@@ -15,6 +15,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationArchiveService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\SwitchService;
 use OCP\AppFramework\Controller;
@@ -56,6 +57,7 @@ class MigrationController extends Controller {
 		private MigrationService $migrationService,
 		private PostImportService $postImportService,
 		private ImportQueueService $importQueueService,
+		private MoveInService $moveInService,
 		private AccountService $accountService,
 		private SwitchService $switchService,
 		private LoggerInterface $logger,
@@ -166,6 +168,63 @@ class MigrationController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/follows')]
 	public function importFollows(): DataResponse {
 		return $this->queueUpload(ImportJob::KIND_FOLLOWS);
+	}
+
+	/**
+	 * The old account, by handle, and what its server lets this one read off
+	 * it — so the person sees who they are about to copy before anything
+	 * happens, and is told when the follows or the posts are hidden and the
+	 * file is the way instead.
+	 */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in/inspect')]
+	public function moveInInspect(string $handle = ''): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		try {
+			return new DataResponse(['account' => $this->moveInService->inspect($handle)], Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * Moving here from the old account, from nothing but its handle: the
+	 * alias is set now, and following who it follows and bringing its public
+	 * posts over is queued. The followers themselves are the old server's
+	 * `Move`, which the page points at once this has run.
+	 */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 10, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in')]
+	public function moveIn(string $handle = '', string $follows = '1', string $posts = '1', string $fetch_media = '1'): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+		if ($this->importQueueService->hasActive($this->userId, ImportJob::KIND_MOVE_IN)) {
+			return new DataResponse(
+				['error' => 'a move is already running; wait for it to finish'], Http::STATUS_CONFLICT
+			);
+		}
+
+		try {
+			$options = $this->moveInService->prepare(
+				$this->userId, $handle, self::flag($follows), self::flag($posts), self::flag($fetch_media)
+			);
+			$job = $this->importQueueService->queue($this->userId, ImportJob::KIND_MOVE_IN, null, $options);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['import' => $job], Http::STATUS_ACCEPTED);
+	}
+
+	/** A form's yes: anything but an explicit no. */
+	private static function flag(string $value): bool {
+		return !in_array(strtolower(trim($value)), ['0', 'false', 'no', 'off'], true);
 	}
 
 	/**

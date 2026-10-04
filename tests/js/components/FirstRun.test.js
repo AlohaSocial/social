@@ -188,6 +188,25 @@ describe('FirstRun', () => {
 		expect(showError).not.toHaveBeenCalled()
 	})
 
+	it('moves in from the old handle and waits for the run', async () => {
+		serverHas()
+		axios.post.mockResolvedValue({ data: { import: { id: 9, kind: 'move_in', status: 'queued' } } })
+		finishedImports = [{ id: 9, kind: 'move_in', status: 'done', done: 15, report: { followed: 12, imported: 3 } }]
+		const wrapper = await mountFirstRun()
+		await next(wrapper)
+		await next(wrapper)
+
+		await wrapper.find('.first-run__move input').setValue('@alice@old.example')
+		await button(wrapper, 'Move here').trigger('click')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(
+			'/index.php/apps/social/api/v1/migration/move-in',
+			{ handle: '@alice@old.example', follows: '1', posts: '1', fetch_media: '1' },
+		)
+		expect(wrapper.find('.first-run__result').text()).toContain('12 accounts followed and 3 posts brought over')
+	})
+
 	it('uploads a following_accounts.csv to the same import the Settings page uses, and waits for it', async () => {
 		serverHas()
 		// queued by the upload, finished by the time the list is asked

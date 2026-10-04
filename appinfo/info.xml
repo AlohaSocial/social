@@ -60,7 +60,7 @@ What it does:
 - 🚪 Delete your Aloha Social account from Settings and keep your Nextcloud one: the posts, the follows, and a Delete to every server that knew you
 - 🔕 Filtered notifications: the senders your notification policy is holding, one row each, with Show these and Dismiss — and a way to hide a whole server rather than its accounts one at a time
 - 📜 Edit history: the "Edited" line under a post opens every version of it
-- 🧳 Migration in both directions: the blocks, mutes and lists another network exported, read here; and your follows, followers, blocks, mutes and lists written back out one CSV at a time, the way Mastodon writes them
+- 🧳 Migration in both directions: move in from another server from nothing but your old handle (it is followed over and your posts are brought along, in the background); the blocks, mutes and lists another network exported, read here; and your follows, followers, blocks, mutes and lists written back out one CSV at a time, the way Mastodon writes them
 - 📅 Your year, as a report — Mastodon's #Wrapstodon, through the API (the web client has no page for it yet): twelve months of what you posted and who arrived, the hashtags you used, the three posts that travelled furthest
 - 🛡️ For moderators: what may trend (a hashtag, a link or a post kept out of Explore), the instance's custom emoji and its rules, all from the administration page rather than from occ
 

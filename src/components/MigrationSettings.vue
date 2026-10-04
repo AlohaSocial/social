@@ -105,6 +105,77 @@
 			</ul>
 		</section>
 
+		<!-- from another server, starting from the old handle -->
+		<section class="migration__card migration__card--move-in">
+			<h4>
+				<IconAccountArrowLeft :size="20" />
+				{{ t('social', 'Move here from another server') }}
+			</h4>
+			<p>
+				{{ t('social', 'Type the handle of your old account. This account is marked as also being that one, everyone it follows is followed from here, and its public posts are written here as yours, dated when you wrote them — all in the background. Your followers stay where they are until the last step, which is done on the old server.') }}
+			</p>
+			<div class="migration__move-in-form">
+				<NcTextField
+					v-model="moveHandle"
+					class="migration__move-in-field"
+					:label="t('social', 'Your old account')"
+					placeholder="@you@mastodon.example"
+					:disabled="moveInspecting || moveStarting"
+					@keydown.enter="inspectMoveIn" />
+				<NcButton :disabled="moveInspecting || moveHandle.trim() === ''" @click="inspectMoveIn">
+					<template v-if="moveInspecting" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Look it up') }}
+				</NcButton>
+			</div>
+			<div v-if="moveAccount" class="migration__move-in-account">
+				<img
+					v-if="moveAccount.avatar"
+					:src="moveAccount.avatar"
+					alt=""
+					class="migration__move-in-avatar">
+				<div class="migration__move-in-who">
+					<strong>{{ moveAccount.name }}</strong>
+					<span class="migration__move-in-acct">@{{ moveAccount.acct }}</span>
+					<p class="migration__note">
+						{{ moveAccount.following.readable
+							? n('social', 'It follows %n account.', 'It follows %n accounts.', moveAccount.following.total)
+							: t('social', 'Its follows are hidden by its server; bring them with the file below.') }}
+						{{ moveAccount.posts.readable
+							? n('social', '%n public post can be brought over.', '%n public posts can be brought over.', moveAccount.posts.total)
+							: t('social', 'Its posts cannot be read from here; bring them with the export below.') }}
+					</p>
+				</div>
+			</div>
+			<template v-if="moveAccount">
+				<NcCheckboxRadioSwitch
+					v-model="moveFollows"
+					class="migration__move-in-switch"
+					:disabled="!moveAccount.following.readable || moveStarting">
+					{{ t('social', 'Follow everyone it follows') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch
+					v-model="movePosts"
+					class="migration__move-in-switch"
+					:disabled="!moveAccount.posts.readable || moveStarting">
+					{{ t('social', 'Bring its public posts over, with their pictures') }}
+				</NcCheckboxRadioSwitch>
+				<NcButton
+					variant="primary"
+					:disabled="moveStarting || (!moveFollows && !movePosts)"
+					@click="startMoveIn">
+					<template v-if="moveStarting" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Move here') }}
+				</NcButton>
+			</template>
+			<p v-if="finishedMoveIn" class="migration__move-in-finish">
+				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
+			</p>
+		</section>
+
 		<!-- from elsewhere -->
 		<section class="migration__card">
 			<h4>
@@ -328,6 +399,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import IconAccountArrowLeft from 'vue-material-design-icons/AccountArrowLeft.vue'
 import IconAccountArrowRight from 'vue-material-design-icons/AccountArrowRight.vue'
 import IconAccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
@@ -337,7 +409,7 @@ import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted
 import IconPostOutline from 'vue-material-design-icons/PostOutline.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import { t } from '@nextcloud/l10n'
+import { n, t } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
 
 /**
@@ -349,6 +421,7 @@ export default {
 	name: 'MigrationSettings',
 
 	components: {
+		IconAccountArrowLeft,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,
 		IconCancel,
@@ -378,6 +451,16 @@ export default {
 			csvBusy: '',
 			/** @type {string} which CSV is being read in */
 			csvImport: '',
+			/** @type {string} the old account, as typed */
+			moveHandle: '',
+			moveInspecting: false,
+			/** @type {object|null} the old account as the server described it */
+			moveAccount: null,
+			moveFollows: true,
+			movePosts: true,
+			moveStarting: false,
+			/** @type {string} this account's handle, for the last step on the old server */
+			ownHandle: '',
 			/** @type {Array<object>} the imports this account asked for, newest first, as the server lists them */
 			imports: [],
 			/** @type {number|null} the timer behind the next poll of the imports, while one runs */
@@ -391,6 +474,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {object|undefined} a move here that has run */
+		finishedMoveIn() {
+			return this.imports.find((job) => job.kind === 'move_in' && job.status === 'done')
+		},
+
 		/**
 		 * The lists of accounts that can be downloaded one at a time.
 		 *
@@ -426,6 +514,78 @@ export default {
 		},
 
 		t,
+
+		n,
+
+		/**
+		 * Who the old account is, and what its server lets this one read.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async inspectMoveIn() {
+			const handle = this.moveHandle.trim()
+			if (handle === '' || this.moveInspecting) {
+				return
+			}
+			this.moveInspecting = true
+			this.moveAccount = null
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in/inspect'), { handle })
+				this.moveAccount = data.account
+				this.moveFollows = Boolean(data.account?.following?.readable)
+				this.movePosts = Boolean(data.account?.posts?.readable)
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not find that account'))
+			} finally {
+				this.moveInspecting = false
+			}
+		},
+
+		/**
+		 * Sets the alias and queues the follows and the posts.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async startMoveIn() {
+			if (!this.moveAccount || this.moveStarting) {
+				return
+			}
+			this.moveStarting = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in'), {
+					handle: this.moveHandle.trim(),
+					follows: this.moveFollows ? '1' : '0',
+					posts: this.movePosts ? '1' : '0',
+					fetch_media: this.fetchMedia ? '1' : '0',
+				})
+				if (data?.import) {
+					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
+				}
+				this.moveAccount = null
+				this.moveHandle = ''
+				this.loadAliases()
+				showSuccess(t('social', 'Moving — it runs in the background, and this page shows where it gets to'))
+				this.schedulePoll()
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not start the move'))
+			} finally {
+				this.moveStarting = false
+			}
+		},
+
+		/**
+		 * This account's handle, for the sentence that names the last step.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadOwnHandle() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/announcement'))
+				this.ownHandle = data?.handle ?? ''
+			} catch (error) {
+				logger.debug('No announcement for the own handle', { error })
+			}
+		},
 
 		/**
 		 * The accounts this one also answers to.
@@ -702,6 +862,9 @@ export default {
 			} catch (error) {
 				logger.error('Failed to load the imports', { error })
 			}
+			if (this.finishedMoveIn && this.ownHandle === '') {
+				this.loadOwnHandle()
+			}
 			if (this.imports.some((job) => job.status === 'queued' || job.status === 'running')) {
 				this.schedulePoll()
 			}
@@ -737,6 +900,7 @@ export default {
 				mutes: t('social', 'Mutes'),
 				lists: t('social', 'Lists'),
 				posts: t('social', 'Posts'),
+				move_in: t('social', 'Move here'),
 			}[kind] ?? kind
 		},
 
@@ -757,6 +921,18 @@ export default {
 			}
 			if (job.status === 'failed') {
 				return t('social', 'Failed: {reason}', { reason: job.report?.error ?? t('social', 'unknown reason') })
+			}
+			if (job.kind === 'move_in') {
+				return t(
+					'social',
+					'{followed} accounts followed and {imported} posts brought over; {skipped} were already here or not for bringing, {failed} could not be done',
+					{
+						followed: job.report?.followed ?? 0,
+						imported: job.report?.imported ?? 0,
+						skipped: job.skipped,
+						failed: job.failed,
+					},
+				)
 			}
 			if (job.kind === 'posts') {
 				return t(
@@ -911,6 +1087,47 @@ export default {
 
 .migration__media-switch {
 	margin: 4px 0 2px;
+}
+
+.migration__move-in-form {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.migration__move-in-field {
+	flex: 1;
+	min-width: 220px;
+}
+
+.migration__move-in-account {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.migration__move-in-avatar {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.migration__move-in-who strong {
+	display: block;
+}
+
+.migration__move-in-acct {
+	color: var(--color-text-maxcontrast);
+}
+
+.migration__move-in-finish {
+	margin-top: 12px;
+	padding: 8px 12px;
+	border-inline-start: 3px solid var(--color-primary-element);
+	background: var(--color-primary-element-light);
 }
 
 .migration__imports {
