@@ -28,12 +28,14 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCA\Social\Tools\Exceptions\RequestResultNotJsonException;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
+use OCA\Social\Tools\Http\FetchedResponse;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TPathTools;
 use OCP\AppFramework\Http;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -468,8 +470,8 @@ class CurlService {
 
 		foreach ($promises as $url => $promise) {
 			try {
-				$response = $promise->wait();
-				$answers[$url] = ($response instanceof IResponse)
+				$response = $this->settledResponse($promise->wait());
+				$answers[$url] = ($response !== null)
 					? $this->decodeOrFollow($url, $response, $this->mergeOptions($options, $perUrl[$url] ?? []))
 					: null;
 			} catch (Throwable $e) {
@@ -478,6 +480,26 @@ class CurlService {
 		}
 
 		return $answers;
+	}
+
+	/**
+	 * What `IPromise::wait()` settles with, in the shape everything below
+	 * reads.
+	 *
+	 * A promise's `wait()` gives the response as Guzzle produced it, which is
+	 * not the `IResponse` its `then()` wraps for its handlers — so the check
+	 * every batch made failed on real traffic and threw each answer away. A
+	 * test double, with no Guzzle behind it, gives an `IResponse` directly;
+	 * both arrive here.
+	 *
+	 * @see \OCA\Social\Tools\Http\FetchedResponse
+	 */
+	private function settledResponse(mixed $value): ?IResponse {
+		if ($value instanceof IResponse) {
+			return $value;
+		}
+
+		return ($value instanceof ResponseInterface) ? new FetchedResponse($value) : null;
 	}
 
 	/**
@@ -523,7 +545,7 @@ class CurlService {
 		foreach ($promises as $key => $promise) {
 			$url = $requests[$key]['url'];
 			try {
-				$response = $promise->wait();
+				$response = $this->settledResponse($promise->wait());
 			} catch (Throwable $e) {
 				$outcomes[$key] = new RequestNetworkException($e->getMessage() . ' - ' . $url, (int)$e->getCode());
 
