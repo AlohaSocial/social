@@ -9,15 +9,31 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use DateTime;
+use DateTimeImmutable;
+use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Follow;
+use OCA\Social\Model\ActivityPub\Object\Like;
+use OCA\Social\Model\ActivityPub\Object\Mention;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\MarkerService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Config\IUserConfig;
+use OCP\IURLGenerator;
+use OCP\Notification\IManager as INotificationManager;
+use OCP\Notification\INotification;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * The delivery setting's storage and the bookkeeping around a mode switch.
@@ -30,15 +46,32 @@ use PHPUnit\Framework\TestCase;
 class NotificationDeliveryServiceTest extends TestCase {
 	private const NOW = 1773230400; // 2026-03-11 12:00:00 UTC
 	private const ALICE = 'alice';
+	private const ALICE_ID = 'https://cloud.example/users/alice';
 
 	private ConfigService|Stub $configService;
 	private IUserConfig|Stub $userConfig;
+	private StreamRequest|Stub $streamRequest;
+	private MarkerService|Stub $markerService;
+	private INotificationManager|Stub $notificationManager;
 	private NotificationDeliveryService $service;
 
 	/** @var array<string, array<string, string>> user => key => value, this app's user values */
 	private array $stored = [];
 	/** @var array<string, string> user => the zone Nextcloud's own settings hold */
 	private array $zones = [];
+	/** @var array<string, int> what the database answers, by sub-type */
+	private array $unread = [];
+	/** @var array<int, array{string, int, int}> [marker, since, until] of every count asked for */
+	private array $counted = [];
+	/** @var string[] users with no account */
+	private array $accountless = [];
+	private string $marker = '0';
+	/** @var array<int, array> every notification raised */
+	private array $raised = [];
+	/** @var array<int, array> every notification taken down */
+	private array $withdrawn = [];
+	/** @var array<string, array> what each notification double was told */
+	private array $fields = [];
 
 	protected function setUp(): void {
 		$this->configService = $this->createStub(ConfigService::class);
@@ -70,7 +103,98 @@ class NotificationDeliveryServiceTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
-		$this->service = new NotificationDeliveryService($this->configService, $this->userConfig, $time);
+		$actorsRequest = $this->createStub(ActorsRequest::class);
+		$actorsRequest->method('getFromUserId')->willReturnCallback(function (string $userId): Person {
+			if (in_array($userId, $this->accountless, true)) {
+				throw new ActorDoesNotExistException('Actor not found');
+			}
+			$actor = new Person();
+			$actor->setId('https://cloud.example/users/' . $userId);
+			$actor->setUserId($userId);
+
+			return $actor;
+		});
+
+		$this->streamRequest = $this->createStub(StreamRequest::class);
+		$this->streamRequest->method('countNotificationsBySubType')->willReturnCallback(
+			function (Person $actor, int|string $afterNid, DateTime $since, DateTime $until): array {
+				$this->counted[] = [(string)$afterNid, $since->getTimestamp(), $until->getTimestamp()];
+
+				return $this->unread;
+			}
+		);
+
+		$this->markerService = $this->createStub(MarkerService::class);
+		$this->markerService->method('lastReadId')->willReturnCallback(fn (): string => $this->marker);
+
+		$this->notificationManager = $this->createStub(INotificationManager::class);
+		$this->notificationManager->method('createNotification')
+			->willReturnCallback(fn (): INotification => $this->notification());
+		$this->notificationManager->method('notify')->willReturnCallback(function (INotification $n): void {
+			$this->raised[] = $this->fields[spl_object_hash($n)];
+		});
+		$this->notificationManager->method('markProcessed')->willReturnCallback(function (INotification $n): void {
+			$this->withdrawn[] = $this->fields[spl_object_hash($n)];
+		});
+
+		$urlGenerator = $this->createStub(IURLGenerator::class);
+		$urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/apps/social/');
+
+		$this->service = new NotificationDeliveryService(
+			$this->configService,
+			$this->userConfig,
+			$time,
+			$actorsRequest,
+			$this->streamRequest,
+			$this->markerService,
+			$this->notificationManager,
+			$urlGenerator,
+			new NullLogger()
+		);
+	}
+
+	private function notification(): INotification {
+		$notification = $this->createStub(INotification::class);
+		$key = spl_object_hash($notification);
+		$this->fields[$key] = [];
+
+		foreach (['setApp' => 'app', 'setUser' => 'user'] as $method => $field) {
+			$notification->method($method)->willReturnCallback(
+				function (string $value) use ($notification, $key, $field): INotification {
+					$this->fields[$key][$field] = $value;
+
+					return $notification;
+				}
+			);
+		}
+		$notification->method('setDateTime')->willReturnCallback(
+			function (\DateTime $at) use ($notification, $key): INotification {
+				$this->fields[$key]['at'] = $at->getTimestamp();
+
+				return $notification;
+			}
+		);
+		$notification->method('setObject')->willReturnCallback(
+			function (string $type, string $id) use ($notification, $key): INotification {
+				$this->fields[$key]['object'] = [$type, $id];
+
+				return $notification;
+			}
+		);
+		$notification->method('setSubject')->willReturnCallback(
+			function (string $subject, array $parameters = []) use ($notification, $key): INotification {
+				$this->fields[$key]['subject'] = $subject;
+				$this->fields[$key]['parameters'] = $parameters;
+
+				return $notification;
+			}
+		);
+
+		return $notification;
+	}
+
+	private function until(int $timestamp): DateTimeImmutable {
+		return new DateTimeImmutable('@' . $timestamp);
 	}
 
 	private function value(string $key): ?string {
@@ -170,7 +294,8 @@ class NotificationDeliveryServiceTest extends TestCase {
 		$this->service->save(self::ALICE, ['mode' => 'instant']);
 
 		$this->assertSame('1', $this->value(NotificationDeliveryService::SCHEDULED_KEY));
-		$this->assertSame(self::NOW - 7200, $this->service->lastDigestAt(self::ALICE));
+		// the final digest covered up to now, and the quiet hours carry on from there
+		$this->assertSame(self::NOW, $this->service->lastDigestAt(self::ALICE));
 	}
 
 	// -- holds ----------------------------------------------------------------
@@ -195,6 +320,115 @@ class NotificationDeliveryServiceTest extends TestCase {
 
 		$this->zones[self::ALICE] = 'America/New_York';
 		$this->assertFalse($this->service->holds(self::ALICE, 'favourite', false));
+	}
+
+	// -- the digest -------------------------------------------------------------
+
+	public function testADigestCountsTheUnreadRowsPerSubjectInTheSubjectsOrder(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Follow::TYPE => 1, Like::TYPE => 6, Mention::TYPE => 2, Announce::TYPE => 4];
+
+		$digest = $this->service->digestFor(self::ALICE, $this->until(self::NOW + 3600));
+
+		$this->assertSame(['mention' => 2, 'favourite' => 6, 'reblog' => 4, 'follow' => 1], $digest['counts']);
+		$this->assertSame(13, $digest['total']);
+		$this->assertSame('https://cloud.example/apps/social/timeline/notifications', $digest['link']);
+
+		$this->assertCount(1, $this->raised);
+		$this->assertSame('social', $this->raised[0]['app']);
+		$this->assertSame('alice', $this->raised[0]['user']);
+		$this->assertSame('digest', $this->raised[0]['subject']);
+		$this->assertSame(['notification', 'digest-' . (self::NOW + 3600)], $this->raised[0]['object']);
+		$this->assertSame(self::NOW + 3600, $this->raised[0]['at']);
+		$this->assertSame($digest, $this->raised[0]['parameters']);
+	}
+
+	public function testADigestAsksForTheRowsPastTheMarkerAndInsideTheWindow(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->service->setLastDigestAt(self::ALICE, self::NOW - 7200);
+		$this->marker = '123456789012345678';
+
+		$this->service->digestFor(self::ALICE, $this->until(self::NOW));
+
+		$this->assertSame([['123456789012345678', self::NOW - 7200, self::NOW]], $this->counted);
+	}
+
+	public function testADigestMovesTheClockToItsCut(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Like::TYPE => 1];
+
+		$this->service->digestFor(self::ALICE, $this->until(self::NOW + 600));
+
+		$this->assertSame(self::NOW + 600, $this->service->lastDigestAt(self::ALICE));
+	}
+
+	public function testNothingUnreadMeansNoDigestButTheClockStillMoves(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+
+		$this->assertNull($this->service->digestFor(self::ALICE, $this->until(self::NOW + 600)));
+		$this->assertSame([], $this->raised);
+		$this->assertSame([], $this->withdrawn);
+		$this->assertSame(self::NOW + 600, $this->service->lastDigestAt(self::ALICE));
+	}
+
+	public function testASubTypeWithoutASubjectIsNotCounted(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Stream::SUBTYPE_WARNING => 3];
+
+		$this->assertNull($this->service->digestFor(self::ALICE, $this->until(self::NOW)));
+	}
+
+	public function testOnlyOneDigestSitsOnTheBell(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Like::TYPE => 1];
+
+		$this->service->digestFor(self::ALICE, $this->until(self::NOW));
+
+		$this->assertCount(1, $this->withdrawn);
+		$this->assertSame('social', $this->withdrawn[0]['app']);
+		$this->assertSame('alice', $this->withdrawn[0]['user']);
+		$this->assertSame('digest', $this->withdrawn[0]['subject']);
+		// the template names no object: it is every digest of this user's
+		$this->assertArrayNotHasKey('object', $this->withdrawn[0]);
+	}
+
+	public function testAUserWithoutAnAccountGetsNoDigest(): void {
+		$this->accountless[] = self::ALICE;
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+
+		$this->assertNull($this->service->digestFor(self::ALICE, $this->until(self::NOW)));
+		$this->assertSame([], $this->counted);
+	}
+
+	public function testSwitchingAwayFromADigestRaisesWhatItWasHolding(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->service->setLastDigestAt(self::ALICE, self::NOW - 7200);
+		$this->unread = [Mention::TYPE => 2];
+
+		$this->service->save(self::ALICE, ['mode' => 'instant']);
+
+		$this->assertCount(1, $this->raised);
+		$this->assertSame(['mention' => 2], $this->raised[0]['parameters']['counts']);
+		$this->assertSame([['0', self::NOW - 7200, self::NOW]], $this->counted);
+		// and then forgets the clock, since nothing is scheduled any more
+		$this->assertSame(0, $this->service->lastDigestAt(self::ALICE));
+	}
+
+	public function testSwitchingAwayFromADigestWithNothingUnreadRaisesNothing(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+
+		$this->service->save(self::ALICE, ['mode' => 'instant']);
+
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testChangingTheTimesOfADigestRaisesNoDigest(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Like::TYPE => 5];
+
+		$this->service->save(self::ALICE, ['times' => ['06:00']]);
+
+		$this->assertSame([], $this->raised);
 	}
 
 	// -- the zone -------------------------------------------------------------

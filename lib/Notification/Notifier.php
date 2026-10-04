@@ -153,6 +153,10 @@ class Notifier implements INotifier {
 				);
 				break;
 
+			case 'digest':
+				$this->digest($notification, $params, $l10n);
+				break;
+
 			case 'moderation_warning':
 				// the account was told nothing before this: a decision it was
 				// not told about is one it can only discover by noticing that
@@ -248,6 +252,66 @@ class Notifier implements INotifier {
 			->setPrimary(false)
 			->setLink($this->url->linkToRouteAbsolute('social.AccountApi.followRequestReject', ['id' => $nid]), 'POST');
 		$notification->addAction($decline);
+	}
+
+	/**
+	 * The counts of what a reader was not told about one by one, read out in
+	 * the order `NotificationService::SUBJECTS` declares them. Kinds the
+	 * digest has no words for are left out of the sentence and stay in the
+	 * total, so the headline never says less than the list behind the link.
+	 *
+	 * @param array<string, mixed> $params `counts`, `total`, `link`
+	 */
+	private function digest(INotification $notification, array $params, IL10N $l10n): void {
+		$total = max(0, (int)($params['total'] ?? 0));
+		$counts = is_array($params['counts'] ?? null) ? $params['counts'] : [];
+
+		$notification->setParsedSubject(
+			$l10n->n('%n new notification in Aloha Social', '%n new notifications in Aloha Social', $total)
+		);
+
+		$parts = [];
+		foreach ($this->digestWords($l10n) as $subject => [$one, $many]) {
+			$count = (int)($counts[$subject] ?? 0);
+			if ($count > 0) {
+				$parts[] = $l10n->n($one, $many, $count);
+			}
+		}
+		if ($parts !== []) {
+			$notification->setParsedMessage(implode(', ', $parts));
+		}
+
+		$link = (string)($params['link'] ?? '');
+		if ($this->isWebUrl($link)) {
+			$notification->setLink($link);
+			$notification->setRichSubject(
+				$l10n->n('%n new notification in {app}', '%n new notifications in {app}', $total),
+				['app' => [
+					'type' => 'highlight',
+					'id' => Application::APP_ID,
+					'name' => $l10n->t('Aloha Social'),
+					'link' => $link,
+				]]
+			);
+		}
+	}
+
+	/**
+	 * What each kind of notification is called when counted.
+	 *
+	 * @return array<string, array{string, string}> subject => [singular, plural], both with `%n`
+	 */
+	private function digestWords(IL10N $l10n): array {
+		return [
+			'mention' => ['%n mention', '%n mentions'],
+			'favourite' => ['%n favourite', '%n favourites'],
+			'reblog' => ['%n boost', '%n boosts'],
+			'follow' => ['%n new follower', '%n new followers'],
+			'follow_request' => ['%n follow request', '%n follow requests'],
+			'update' => ['%n edited post you boosted', '%n edited posts you boosted'],
+			'poll' => ['%n poll that ended', '%n polls that ended'],
+			'status' => ['%n post from an account you follow', '%n posts from accounts you follow'],
+		];
 	}
 
 	private function isWebUrl(string $url): bool {

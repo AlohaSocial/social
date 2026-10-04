@@ -2038,6 +2038,55 @@ class StreamRequest extends StreamRequestBuilder {
 		return (int)($row['count'] ?? 0);
 	}
 
+	/**
+	 * How many unread notifications of each sub-type a local account received
+	 * in a window: the rows the notifications page would list, with a nid past
+	 * the account's read marker and a creation inside `($since, $until]`.
+	 *
+	 * The page is chosen exactly as the badge's query chooses it, projected to
+	 * the nid and the sub-type, and grouped by the database: what comes back
+	 * is a handful of numbers, however busy the account was.
+	 *
+	 * @param int|string $afterNid the notifications read marker; `0` for none
+	 *
+	 * @return array<string, int> sub-type => rows
+	 */
+	public function countNotificationsBySubType(Person $actor, int|string $afterNid, DateTime $since, DateTime $until): array {
+		$page = $this->getQueryBuilder();
+		$page->selectDistinct('s.nid')
+			->addSelect('s.subtype')
+			->from(self::TABLE_STREAM, 's');
+		$page->setDefaultSelectAlias('s');
+		$page->setViewer($actor);
+		$page->limitToType(SocialAppNotification::TYPE);
+		$page->selectDestFollowing('sd', '');
+		$page->limitToDest($actor->getId(), 'notif', '', 'sd');
+		$page->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_NOTIFICATIONS);
+
+		$expr = $page->expr();
+		$page->andWhere($expr->gt('s.creation', $page->createNamedParameter($since, IQueryBuilder::PARAM_DATE)));
+		$page->andWhere($expr->lte('s.creation', $page->createNamedParameter($until, IQueryBuilder::PARAM_DATE)));
+		if (Nid::compare($afterNid, '0') > 0) {
+			$page->andWhere($expr->gt('s.nid', $page->createNamedParameter(Nid::normalize($afterNid))));
+		}
+
+		$qb = $this->getQueryBuilder();
+		$qb->select('subtype')
+			->selectAlias($qb->func()->count('*'), 'count')
+			->from($qb->createFunction('(' . $page->getSQL() . ')'), 'unread_page')
+			->groupBy('subtype');
+		$qb->setParameters($page->getParameters(), $page->getParameterTypes());
+
+		$counts = [];
+		$cursor = $qb->executeQuery();
+		while (($row = $cursor->fetch()) !== false) {
+			$counts[(string)$row['subtype']] = (int)$row['count'];
+		}
+		$cursor->closeCursor();
+
+		return $counts;
+	}
+
 	private function notificationsBeforeQuery(DateTime $cutoff): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();

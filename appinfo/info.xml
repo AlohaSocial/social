@@ -96,6 +96,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<job>OCA\Social\Cron\Index</job>
 		<job>OCA\Social\Cron\Queue</job>
 		<job>OCA\Social\Cron\ScheduledPosts</job>
+		<job>OCA\Social\Cron\NotificationDigests</job>
 		<job>OCA\Social\Cron\ExpiredStories</job>
 		<job>OCA\Social\Cron\InterestHides</job>
 		<job>OCA\Social\Cron\Transcode</job>
