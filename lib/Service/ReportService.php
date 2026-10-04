@@ -11,7 +11,9 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\Db\ReportsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ReportNotFoundException;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Flag;
 use OCA\Social\Model\Report;
@@ -30,6 +32,7 @@ class ReportService {
 		private ModeratorService $moderatorService,
 		private INotificationManager $notificationManager,
 		private ReportForwardService $reportForwardService,
+		private StreamRequest $streamRequest,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -91,14 +94,20 @@ class ReportService {
 	 * A report received from a remote instance as a Flag activity. Mastodon
 	 * sends `object` as a list mixing the reported account and status ids; the
 	 * first id that resolves to a local account is stored as the target, the
-	 * remaining ids as the reported statuses.
+	 * remaining ids as the reported statuses. A Flag that names no local
+	 * account but a local post is a report about that post's author.
 	 *
 	 * Resolved against the cache alone, in one query: a local account is
 	 * always there, and a lookup that fetched every id it missed made this
 	 * instance send a request to each URL a sender cared to list, inside the
-	 * inbox request.
+	 * inbox request. The posts are looked up by id in the local table only.
+	 *
+	 * A Flag naming nothing of this instance is dropped, and null is returned:
+	 * there is nothing here for a moderator to act on, and storing it put a
+	 * row and a notification in front of every moderator for any URL a sender
+	 * cared to list.
 	 */
-	public function reportFromFlag(Flag $flag): Report {
+	public function reportFromFlag(Flag $flag): ?Report {
 		$cached = $this->cacheActorService->getCachedFromIds($flag->getObjectIds());
 		$accountId = '';
 		$statusIds = [];
@@ -112,10 +121,16 @@ class ReportService {
 		}
 
 		if ($accountId === '') {
-			// nothing in the report resolves to one of our accounts; keep the
-			// first id as target so the report is still visible to the admin
-			$accountId = $flag->getObjectIds()[0] ?? '';
-			$statusIds = array_slice($flag->getObjectIds(), 1);
+			$accountId = $this->localAuthorOf($statusIds);
+		}
+
+		if ($accountId === '') {
+			$this->logger->notice(
+				'incoming Flag names no account or post of this instance, dropped',
+				['actor' => $flag->getActorId(), 'objects' => $flag->getObjectIds()]
+			);
+
+			return null;
 		}
 
 		$report = new Report();
@@ -130,6 +145,28 @@ class ReportService {
 		$this->notifyAdmins($report);
 
 		return $report;
+	}
+
+	/**
+	 * The author of the first id that is a post of this instance, or '' when
+	 * none is.
+	 *
+	 * @param string[] $ids
+	 */
+	private function localAuthorOf(array $ids): string {
+		foreach ($ids as $id) {
+			try {
+				$post = $this->streamRequest->getStreamById($id);
+			} catch (StreamNotFoundException $e) {
+				continue;
+			}
+
+			if ($post->isLocal() && $post->getAttributedTo() !== '') {
+				return $post->getAttributedTo();
+			}
+		}
+
+		return '';
 	}
 
 	/**

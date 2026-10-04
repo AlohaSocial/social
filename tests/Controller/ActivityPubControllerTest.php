@@ -1285,6 +1285,34 @@ class ActivityPubControllerTest extends TestCase {
 		$this->assertFailure($response, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
 	}
 
+	/**
+	 * A followers-only or direct post is not confirmed to exist to a reader it
+	 * was not addressed to -- displayPost() answers them a 404 -- and its
+	 * replies collection is a list of ids that are enough to go and fetch
+	 * the replies, so it answers the same.
+	 */
+	public function testRepliesOfAPostNotAddressedToThePublicIsA404(): void {
+		foreach ([Stream::TYPE_FOLLOWERS, Stream::TYPE_DIRECT] as $visibility) {
+			$this->setUp();
+			$post = $this->quotablePost();
+			$post->setVisibility($visibility);
+			$this->streamService->expects($this->never())->method('getRepliesCollection');
+
+			$response = $this->controller->replies('alice', 'abc123');
+
+			$this->assertFailure($response, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	/** Unlisted names the public collection in `cc`; anybody may read it, so anybody may read its replies. */
+	public function testRepliesOfAnUnlistedPostAreServed(): void {
+		$post = $this->quotablePost();
+		$post->setVisibility(Stream::TYPE_UNLISTED);
+		$this->streamService->method('getRepliesCollection')->willReturn(new OrderedCollection());
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->replies('alice', 'abc123')->getStatus());
+	}
+
 	public function testRepliesOfAnUnknownPostIsA404(): void {
 		$this->streamService->method('getStreamById')->willThrowException(new StreamNotFoundException());
 

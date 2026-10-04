@@ -99,7 +99,18 @@ class RelationshipService {
 		$this->severFollows($viewer, $target);
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
 
-		if (!$target->isLocal() && $this->configService->isBlockFederationEnabled()) {
+		if ($target->isLocal()) {
+			// what BlockInterface records when the block arrives from another
+			// instance: the blocked account's own reads -- notifications,
+			// suggestions, follow requests -- are filtered on this row, and a
+			// block between two accounts of this instance never arrives
+			$this->actorRelationRequest->save($target->getId(), $viewer->getId(), ActorRelation::TYPE_BLOCKED_BY);
+			$this->timelineRevisionService->bumpForActor($target->getId());
+
+			return;
+		}
+
+		if ($this->configService->isBlockFederationEnabled()) {
 			/** @var Block $block */
 			$block = AP::instance()->getItemFromType(Block::TYPE);
 			$block->generateUniqueIdFromActor($viewer->getId(), 'block');
@@ -113,7 +124,14 @@ class RelationshipService {
 		$this->actorRelationRequest->delete($viewer->getId(), $target->getId(), ActorRelation::TYPE_BLOCK);
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
 
-		if (!$target->isLocal() && $this->configService->isBlockFederationEnabled()) {
+		if ($target->isLocal()) {
+			$this->actorRelationRequest->delete($target->getId(), $viewer->getId(), ActorRelation::TYPE_BLOCKED_BY);
+			$this->timelineRevisionService->bumpForActor($target->getId());
+
+			return;
+		}
+
+		if ($this->configService->isBlockFederationEnabled()) {
 			/** @var Block $block */
 			$block = AP::instance()->getItemFromType(Block::TYPE);
 			$block->generateUniqueIdFromActor($viewer->getId(), 'block');

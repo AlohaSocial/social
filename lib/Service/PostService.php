@@ -105,6 +105,13 @@ class PostService {
 		$this->assertWithinLength($post->getContent(), $post->getSpoilerText());
 		$this->fixRecipientAndHashtags($post);
 
+		// before the recipients are assigned: the parent decides how wide a
+		// reply may be, and a reply to a direct message is a direct message
+		$parent = $this->replyParent($post);
+		if ($parent !== null) {
+			$post->setType(self::visibilityOfReply($post->getType(), $parent));
+		}
+
 		$note = new Note();
 		if ($post->hasPoll()) {
 			$poll = $post->getPoll();
@@ -147,7 +154,7 @@ class PostService {
 		$note->setPlaceId($post->getPlaceId());
 
 		$this->ensureChannelForVideo($post);
-		$this->streamService->replyTo($note, $post->getReplyTo());
+		$this->streamService->replyTo($note, $post->getReplyTo(), $parent);
 		// who may quote this one, before it is stored: the column is written by
 		// the same insert as everything else on the post
 		$note->setQuotePolicy($post->getQuotePolicy());
@@ -214,6 +221,33 @@ class PostService {
 		$this->eventDispatcher->dispatchTyped(new PostPublishedEvent($note));
 
 		return $activity;
+	}
+
+	/**
+	 * The visibility a reply is published with: what was asked for, unless
+	 * the post it answers is a direct message -- then it is one too, as on
+	 * Mastodon. The conversation was addressed to named people, and an answer
+	 * that widened it would hand their words to readers they never addressed.
+	 */
+	public static function visibilityOfReply(string $requested, Stream $parent): string {
+		if ($parent->getVisibility() === Stream::TYPE_DIRECT) {
+			return Stream::TYPE_DIRECT;
+		}
+
+		return $requested;
+	}
+
+	/**
+	 * The post a reply answers, null for a post that answers none.
+	 *
+	 * @throws StreamNotFoundException
+	 */
+	private function replyParent(Post $post): ?Stream {
+		if ($post->getReplyTo() === '') {
+			return null;
+		}
+
+		return $this->streamService->getStreamById($post->getReplyTo());
 	}
 
 	/**

@@ -634,7 +634,7 @@ An activity whose type this app does not implement is logged at `notice` with it
 
 `Tombstone` has no interface either, and deliberately so: it names a deleted object rather than being one. `DeleteInterface` handles it by id — when an embedded object has no handler it looks the id up as a note, then as an actor, the same path a `Delete` carrying a bare id string takes. This is how a deletion from Mastodon, which sends `Delete` with an embedded `Tombstone`, is applied. Aloha Social sends the same shape. The note row is removed under a guard on its type, which is `Question` for a poll and `Note` for everything else a post is stored as.
 
-An incoming `Block` targeting a local user is remembered as a `blocked_by` relation and severs the follow relationship in both directions; `Undo{Block}` lifts it. A `Follow` from an actor the target has blocked is answered with a `Reject`.
+An incoming `Block` targeting a local user is remembered as a `blocked_by` relation and severs the follow relationship in both directions; `Undo{Block}` lifts it. A block between two accounts of this instance never arrives as an activity, so `RelationshipService::block()` writes the same `blocked_by` row for a local target itself and `unblock()` removes it. A `Follow` from an actor the target has blocked is answered with a `Reject`.
 
 ### PeerTube and federated video
 

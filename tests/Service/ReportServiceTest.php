@@ -10,9 +10,12 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Db\ReportsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ReportNotFoundException;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Flag;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ModeratorService;
@@ -37,6 +40,7 @@ class ReportServiceTest extends TestCase {
 	private ModeratorService|Stub $moderatorService;
 	private INotificationManager|MockObject $notificationManager;
 	private ReportForwardService|MockObject $reportForwardService;
+	private StreamRequest|MockObject $streamRequest;
 	private ReportService $service;
 
 	protected function setUp(): void {
@@ -45,6 +49,8 @@ class ReportServiceTest extends TestCase {
 		$this->moderatorService = $this->createStub(ModeratorService::class);
 		$this->notificationManager = $this->createMock(INotificationManager::class);
 		$this->reportForwardService = $this->createMock(ReportForwardService::class);
+		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 
 		$this->service = new ReportService(
 			$this->reportsRequest,
@@ -52,6 +58,7 @@ class ReportServiceTest extends TestCase {
 			$this->moderatorService,
 			$this->notificationManager,
 			$this->reportForwardService,
+			$this->streamRequest,
 			new NullLogger()
 		);
 	}
@@ -223,10 +230,17 @@ class ReportServiceTest extends TestCase {
 		$this->assertFalse($report->isLocal());
 	}
 
-	public function testReportFromFlagKeepsTheFirstIdWhenNothingResolves(): void {
-		$this->withAdmin();
+	/**
+	 * A Flag naming nothing of this instance has nothing here for a moderator
+	 * to act on. It used to be filed against the first id it named, so any
+	 * sender could put a row and a notification in front of every moderator
+	 * for any URL at all.
+	 */
+	public function testReportFromFlagNamingNothingOfThisInstanceIsDropped(): void {
+		$this->moderatorService->method('moderators')->willReturn(['admin']);
 		$this->cacheActorService->method('getCachedFromIds')->willReturn([]);
-		$this->reportsRequest->method('save')->willReturn(4);
+		$this->reportsRequest->expects($this->never())->method('save');
+		$this->notificationManager->expects($this->never())->method('notify');
 
 		$flag = new Flag();
 		$flag->import([
@@ -235,10 +249,64 @@ class ReportServiceTest extends TestCase {
 			'object' => ['https://gone.example/@x', 'https://gone.example/@x/1'],
 		]);
 
+		$this->assertNull($this->service->reportFromFlag($flag));
+	}
+
+	/** Mastodon may list only the status; the report is then about its author. */
+	public function testReportFromFlagAboutALocalPostIsFiledAgainstItsAuthor(): void {
+		$this->withAdmin();
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([]);
+		$post = new Note();
+		$post->setId(self::ALICE . '/status/1');
+		$post->setAttributedTo(self::ALICE);
+		$post->setLocal(true);
+		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest->method('getStreamById')
+			->willReturnCallback(function (string $id) use ($post): Note {
+				if ($id === $post->getId()) {
+					return $post;
+				}
+
+				throw new StreamNotFoundException();
+			});
+		$this->service = new ReportService(
+			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
+			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
+		);
+		$this->reportsRequest->expects($this->once())->method('save')->willReturn(7);
+
+		$flag = new Flag();
+		$flag->import([
+			'type' => 'Flag',
+			'actor' => self::REMOTE_ACTOR,
+			'object' => ['https://gone.example/@x/9', self::ALICE . '/status/1'],
+		]);
+
 		$report = $this->service->reportFromFlag($flag);
 
-		$this->assertSame('https://gone.example/@x', $report->getAccountId());
-		$this->assertSame(['https://gone.example/@x/1'], $report->getStatusIds());
+		$this->assertSame(self::ALICE, $report->getAccountId());
+		$this->assertSame(['https://gone.example/@x/9', self::ALICE . '/status/1'], $report->getStatusIds());
+	}
+
+	/** A cached copy of somebody else's post is not a post of this instance. */
+	public function testReportFromFlagAboutARemotePostHeldHereIsStillDropped(): void {
+		$this->cacheActorService->method('getCachedFromIds')->willReturn([]);
+		$post = new Note();
+		$post->setId('https://remote.example/notes/5');
+		$post->setAttributedTo(self::REMOTE_ACTOR);
+		$post->setLocal(false);
+		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamRequest->method('getStreamById')->willReturn($post);
+		$this->service = new ReportService(
+			$this->reportsRequest, $this->cacheActorService, $this->moderatorService,
+			$this->notificationManager, $this->reportForwardService, $this->streamRequest, new NullLogger()
+		);
+		$this->reportsRequest->expects($this->never())->method('save');
+
+		$flag = new Flag();
+		$flag->import(['type' => 'Flag', 'actor' => self::REMOTE_ACTOR, 'object' => [$post->getId()]]);
+
+		$this->assertNull($this->service->reportFromFlag($flag));
 	}
 
 	/**
@@ -255,14 +323,13 @@ class ReportServiceTest extends TestCase {
 			->method('getCachedFromIds')->with($ids)->willReturn([]);
 		$this->cacheActorService->expects($this->never())->method('getFromId');
 		$this->cacheActorService->expects($this->never())->method('getFromAccount');
-		$this->reportsRequest->method('save')->willReturn(5);
+		$this->reportsRequest->expects($this->never())->method('save');
 
 		$flag = new Flag();
 		$flag->import(['type' => 'Flag', 'actor' => self::REMOTE_ACTOR, 'object' => $ids]);
 
-		$report = $this->service->reportFromFlag($flag);
-
-		$this->assertSame($ids[0], $report->getAccountId());
+		// the posts are looked up in the local table only, and none is here
+		$this->assertNull($this->service->reportFromFlag($flag));
 	}
 
 	public function testReportFromFlagDoesNotTakeACachedRemoteAccountAsTheTarget(): void {

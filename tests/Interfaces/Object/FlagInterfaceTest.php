@@ -58,6 +58,16 @@ class FlagInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($flag);
 	}
 
+	/** The service answers null for a Flag naming nothing of this instance; that is not a failure of the inbox. */
+	public function testAFlagNamingNothingOfThisInstanceIsDroppedQuietly(): void {
+		$flag = $this->incomingFlag();
+		$this->reportService->method('reportFromFlag')->willReturn(null);
+
+		$this->handler->processIncomingRequest($flag);
+
+		$this->addToAssertionCount(1);
+	}
+
 	public function testAFlagNotSignedByTheReportersServerIsRefused(): void {
 		$this->reportService->expects($this->never())->method('reportFromFlag');
 

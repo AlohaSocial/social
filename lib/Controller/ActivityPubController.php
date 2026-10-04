@@ -948,6 +948,15 @@ class ActivityPubController extends Controller {
 	}
 
 	/**
+	 * Whether a post was addressed to the public collection -- `public` or
+	 * `unlisted` -- which is what lets an anonymous reader be told about it.
+	 */
+	private function isOpenToAnybody(Stream $post): bool {
+		return $post->isPublic()
+			|| in_array($post->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
+	}
+
+	/**
 	 * Whether a quote of `$quoted` by `$quoting` is approved: by the post's
 	 * policy, when that lets anybody quote it, or by the grant recorded when
 	 * the author's server accepted that particular `QuoteRequest`.
@@ -1009,8 +1018,10 @@ class ActivityPubController extends Controller {
 		}
 
 		// a post this instance does not hold has its replies somewhere else,
-		// under an id this instance does not own
-		if (!$post->isLocal()) {
+		// under an id this instance does not own; and a post addressed to its
+		// followers or to named people is not confirmed to exist to anybody
+		// else, which is what displayPost() answers them too
+		if (!$post->isLocal() || !$this->isOpenToAnybody($post)) {
 			return $this->fail(
 				new ItemUnknownException('no such replies collection'),
 				['stream' => $postId],

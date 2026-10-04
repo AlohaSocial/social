@@ -1331,6 +1331,40 @@ class ApiControllerTest extends TestCase {
 
 	// statusNew / statusUpdate
 
+	/**
+	 * Decided in the controller as well as in PostService, because the
+	 * attachments are scoped to the post's visibility here, before the
+	 * service runs: a reply to a direct message asked for as `public` would
+	 * otherwise have made its pictures world-readable on the way.
+	 */
+	public function testStatusNewMakesAReplyToADirectMessageDirectBeforeScopingItsMedia(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn([
+			'status' => 'between us',
+			'visibility' => 'public',
+			'in_reply_to_id' => 7,
+		]);
+		$parent = $this->createStub(Stream::class);
+		$parent->method('getId')->willReturn('https://remote.example/notes/7');
+		$parent->method('getVisibility')->willReturn(Stream::TYPE_DIRECT);
+		$this->streamService->method('getStreamByNid')->with(7)->willReturn($parent);
+
+		$activity = $this->createMock(ACore::class);
+		$activity->method('getObjectId')->willReturn('https://cloud.example/apps/social/@alice/n1');
+		$created = null;
+		$this->postService->method('createPost')
+			->willReturnCallback(function (Post $post) use (&$created, $activity): ACore {
+				$created = $post;
+
+				return $activity;
+			});
+		$this->streamService->method('getStreamById')->willReturn($this->createStub(Stream::class));
+
+		$this->controller()->statusNew();
+
+		$this->assertSame(Stream::TYPE_DIRECT, $created->getType());
+	}
+
 	public function testStatusNewCreatesAPostFromTheFormParameters(): void {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn([

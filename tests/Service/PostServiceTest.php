@@ -492,6 +492,44 @@ class PostServiceTest extends TestCase {
 		$this->service->createPost($this->post('for my followers', Stream::TYPE_FOLLOWERS));
 	}
 
+	/**
+	 * Mastodon's rule: a reply to a direct message is a direct message,
+	 * whatever visibility the client asked for. The conversation was
+	 * addressed to named people, and an answer that widened it would hand
+	 * their words to a public they never addressed.
+	 */
+	public function testAReplyToADirectMessageIsADirectMessage(): void {
+		$parentId = 'https://remote.example/notes/dm';
+		$parent = new Note();
+		$parent->setId($parentId);
+		$parent->setAttributedTo(self::BOB_ID);
+		$parent->setVisibility(Stream::TYPE_DIRECT);
+		$this->streamRequest->method('getStreamById')->with($parentId)->willReturn($parent);
+		$this->cacheActorService->method('getFromId')->with(self::BOB_ID)->willReturn($this->bob());
+		$this->expectCreateActivity($note);
+
+		$post = $this->post('between us', Stream::TYPE_PUBLIC);
+		$post->setReplyTo($parentId);
+		$this->service->createPost($post);
+
+		$this->assertSame(Stream::TYPE_DIRECT, $post->getType());
+		$this->assertSame(Stream::TYPE_DIRECT, $note->getVisibility());
+		$this->assertFalse($note->addressesPublic(), 'the reply must not name the public collection');
+		$this->assertNotContains(self::ACTOR_FOLLOWERS, $note->getCcArray());
+	}
+
+	/** Only a direct parent narrows the reply; any other parent leaves the asked-for visibility alone. */
+	public function testAReplyToAnyOtherPostKeepsTheVisibilityItAskedFor(): void {
+		foreach ([Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED, Stream::TYPE_FOLLOWERS] as $parentVisibility) {
+			$parent = new Note();
+			$parent->setVisibility($parentVisibility);
+
+			$this->assertSame(
+				Stream::TYPE_FOLLOWERS, PostService::visibilityOfReply(Stream::TYPE_FOLLOWERS, $parent), $parentVisibility
+			);
+		}
+	}
+
 	public function testCreatePostToUnknownReplyTargetFailsBeforeAnythingIsSent(): void {
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 		$this->activityService->expects($this->never())->method('createActivity');
