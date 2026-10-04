@@ -48,6 +48,9 @@
 					:placeholder="t('social', 'name@domain of your federation account')">
 				<input type="submit" class="primary" :value="t('social', 'Continue')">
 			</form>
+			<p v-if="linkFailed" class="ostatus__error" role="alert">
+				{{ t('social', 'Could not find your server from that address. Check the name@domain and try again.') }}
+			</p>
 			<p>{{ t('social', 'This step is needed as the user is probably not registered on the same server as you are. We will redirect you to your homeserver to follow this account.') }}</p>
 		</div>
 	</div>
@@ -65,6 +68,24 @@ import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { useServerData } from '../composables/useServerData.js'
+
+/**
+ * Whether an address is one a browser may be sent to.
+ *
+ * The remote server names where to continue, and the reader is sent there
+ * wholesale: anything but a web address — `javascript:`, `data:` — would run
+ * or render here instead of taking them anywhere.
+ *
+ * @param {unknown} value what the server answered
+ * @return {boolean}
+ */
+function isWebAddress(value) {
+	try {
+		return ['http:', 'https:'].includes(new URL(String(value)).protocol)
+	} catch {
+		return false
+	}
+}
 
 export default {
 	name: 'OStatus',
@@ -93,6 +114,8 @@ export default {
 			 * @type {{uid?: string, displayName?: string}}
 			 */
 			currentUser: {},
+			/** whether the last attempt to find the reader's server came to nothing */
+			linkFailed: false,
 		}
 	},
 
@@ -156,8 +179,16 @@ export default {
 		},
 
 		followRemote() {
+			this.linkFailed = false
 			axios.get(generateUrl(`/apps/social/api/v1/ostatus/link/${this.serverData.local}/` + encodeURI(this.remote))).then((a) => {
-				window.location = a.data.result.url
+				const url = a.data?.result?.url
+				if (!isWebAddress(url)) {
+					this.linkFailed = true
+					return
+				}
+				window.location = url
+			}).catch(() => {
+				this.linkFailed = true
 			})
 		},
 
@@ -175,6 +206,10 @@ export default {
 
 	p .icon {
 		display: inline-block;
+	}
+
+	.ostatus__error {
+		color: var(--color-error-text);
 	}
 
 	.avatardiv {
