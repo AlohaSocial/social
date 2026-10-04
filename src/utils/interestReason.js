@@ -13,8 +13,8 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
  * than the post it sits over. The accessible name always gives the reason, so
  * a screen reader hears why rather than a list of tags.
  *
- * A `popular` post matched none of the reader's hashtags: it filled a photo or
- * video ranking that was too short, from what is trending in the same kind.
+ * A `popular` post matched none of the reader's hashtags: it filled a ranking
+ * that was too short, from what is trending in the same kind.
  * Its chip says exactly that and links nowhere, since no tag put it there.
  *
  * @param {{tags?: string[], reason?: string}|null|undefined} interest the post's `interest` field

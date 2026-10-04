@@ -77,6 +77,7 @@ function rememberCelebrated() {
  * @property {string} account whose timeline, where it is somebody's
  * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object}[]} remembered the lists lately visited
  * @property {boolean} restored whether the list was put back rather than loaded
+ * @property {Object<string, true>} filled the lists that have shown a post this session, by identity
  * @property {boolean} composerDisplayStatus whether the composer is open
  * @property {string} searchQuery what is being searched for
  * @property {boolean} firstPostCelebration whether the celebration is on screen
@@ -267,6 +268,17 @@ export const useTimelineStore = defineStore('timeline', {
 		 * one on top of them.
 		 */
 		restored: false,
+		/**
+		 * The lists that have shown at least one post this session, by
+		 * identity. A switch holds the list being left on screen only while
+		 * the next one is known to have something to replace it with; a feed
+		 * opened for the first time, or one that was empty last time, shows
+		 * its own loading state rather than somebody else's posts that then
+		 * vanish.
+		 *
+		 * @type {Object<string, true>}
+		 */
+		filled: {},
 		composerDisplayStatus: false,
 		searchQuery: '',
 		/** whether the one-time first-post celebration is on screen right now */
@@ -284,6 +296,13 @@ export const useTimelineStore = defineStore('timeline', {
 	}),
 
 	getters: {
+		/**
+		 * @param {TimelineState} state the store state
+		 * @return {(identity: string) => boolean} whether that list has had a post this session
+		 */
+		wasFilled(state) {
+			return (identity) => state.filled[identity] === true
+		},
 		/**
 		 * @param {TimelineState} state the store state
 		 * @return {boolean} whether the composer is open
@@ -378,6 +397,17 @@ export const useTimelineStore = defineStore('timeline', {
 	actions: {
 		addToStatuses(status) {
 			indexStatus(this, status)
+		},
+
+		/**
+		 * Records that the list named has shown a post.
+		 *
+		 * @param {string} identity the list, as `getTimelineIdentity` names it
+		 */
+		markFilled(identity) {
+			if (!this.filled[identity]) {
+				this.filled = { ...this.filled, [identity]: true }
+			}
 		},
 
 		/**

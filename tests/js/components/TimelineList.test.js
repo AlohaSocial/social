@@ -1344,7 +1344,7 @@ describe('TimelineList', () => {
 			await nextTick()
 
 			expect(wrapper.findAll('.timeline-entry-stub').length).toBe(2)
-			expect(wrapper.find('.timeline-skeleton-stub').exists()).toBe(false)
+			expect(wrapper.findComponent(TimelineSkeleton).exists()).toBe(false)
 			// and it is plainly not the list you asked for, nor clickable
 			expect(wrapper.find('.timeline-list--settling').exists()).toBe(true)
 
@@ -1368,6 +1368,50 @@ describe('TimelineList', () => {
 
 			expect(wrapper.findAll('.timeline-entry-stub').length).toBe(1)
 			expect(wrapper.find('.timeline-list--settling').exists()).toBe(false)
+		})
+
+		it('does not hold the posts over for a feed opened for the first time', async () => {
+			// For you may well be empty for a new reader: the posts of My Feed
+			// appearing and then vanishing into an empty state read as the
+			// feed throwing its content away. A first visit shows its own
+			// loading state instead.
+			const next = pending()
+			const { wrapper, store } = mountList({
+				timeline: [status('1'), status('2')],
+				responses: [[], next.promise],
+			})
+			await flushPromises()
+
+			store.$patch({ ...showing('["interests","",{}]'), timeline: [], statuses: {}, restored: false })
+			await nextTick()
+			await nextTick()
+
+			expect(wrapper.findAll('.timeline-entry-stub').length).toBe(0)
+			expect(wrapper.find('.timeline-list--settling').exists()).toBe(false)
+			expect(wrapper.findComponent(TimelineSkeleton).exists()).toBe(true)
+
+			next.land([])
+			await flushPromises()
+		})
+
+		it('holds them over for a feed that has shown a post before', async () => {
+			const next = pending()
+			const { wrapper, store } = mountList({
+				timeline: [status('1'), status('2')],
+				responses: [[], next.promise],
+			})
+			await flushPromises()
+			store.markFilled('["interests","",{}]')
+
+			store.$patch({ ...showing('["interests","",{}]'), timeline: [], statuses: {}, restored: false })
+			await nextTick()
+			await nextTick()
+
+			expect(wrapper.findAll('.timeline-entry-stub').length).toBe(2)
+			expect(wrapper.find('.timeline-list--settling').exists()).toBe(true)
+
+			next.land([])
+			await flushPromises()
 		})
 
 		it('draws the replacement as a swap: no leave transition, no stagger', async () => {
