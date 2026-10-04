@@ -160,14 +160,12 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 			return;
 		}
 
+		// one Announce row per booster: a second boost of the same post is a
+		// row of its own, attributed to whoever made it, so that an Undo can
+		// name it and the timelines can say who boosted. The same booster
+		// announcing again changes nothing.
 		try {
-			$knownItem = $this->streamRequest->getStreamByObjectId($item->getObjectId(), Announce::TYPE);
-
-			$knownItem->setAttributedTo($actor->getId());
-			if (!$knownItem->hasCc($actor->getFollowers())) {
-				$knownItem->addCc($actor->getFollowers());
-				$this->streamRequest->update($knownItem, true);
-			}
+			$this->streamRequest->getAnnounceBy($item->getObjectId(), $actor->getId());
 		} catch (StreamNotFoundException $e) {
 			$objectId = $item->getObjectId();
 			$item->addCacheItem($objectId);
@@ -208,22 +206,16 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 	#[\Override]
 	public function delete(ACore $item): void {
 		try {
-			$knownItem
-				= $this->streamRequest->getStreamByObjectId($item->getObjectId(), Announce::TYPE);
-
 			if ($item->hasActor()) {
 				$actor = $item->getActor();
 			} else {
 				$actor = $this->cacheActorService->getFromId($item->getActorId());
 			}
 
-			$knownItem->removeCc($actor->getFollowers());
-
-			if (empty($knownItem->getCcArray())) {
-				$this->streamRequest->deleteById($knownItem->getId(), Announce::TYPE);
-			} else {
-				$this->streamRequest->update($knownItem, true);
-			}
+			// this booster's row and nobody else's; a row stored before boosts
+			// had one row each, attributed to another booster, is left as it is
+			$knownItem = $this->streamRequest->getAnnounceBy($item->getObjectId(), $actor->getId());
+			$this->streamRequest->deleteById($knownItem->getId(), Announce::TYPE);
 		} catch (StreamNotFoundException|ItemUnknownException|SocialAppConfigException $e) {
 		}
 

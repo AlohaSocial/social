@@ -932,6 +932,28 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * One account's Announce of one post.
+	 *
+	 * A boost is a row per (post, booster): the lookup by object and type
+	 * alone answers with whichever booster's row comes first, which is the
+	 * wrong row for everybody but one of them.
+	 *
+	 * @throws StreamNotFoundException when this account has not boosted the post
+	 */
+	public function getAnnounceBy(string $objectId, string $actorId): Stream {
+		if ($objectId === '' || $actorId === '') {
+			throw new StreamNotFoundException('missing objectId or actorId');
+		}
+
+		$qb = $this->getStreamSelectSql();
+		$qb->limitToObjectId($objectId);
+		$qb->limitToType(Announce::TYPE);
+		$qb->limitToAttributedTo($actorId, true);
+
+		return $this->getStreamFromRequest($qb);
+	}
+
+	/**
 	 * The public replies to a post, oldest first, for the `replies` collection
 	 * a peer walks to discover a thread.
 	 *
