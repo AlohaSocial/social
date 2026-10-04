@@ -880,6 +880,7 @@ occ social:reset
   everything still between this app and a full replacement, in tiers, with what
   each item actually fixes and whether it is done.
 - [docs/User-Guide.md](docs/User-Guide.md)
+- [docs/Moving.md](docs/Moving.md) — moving to Aloha Social from another server, and away again, in the order it happens
   is the guide for the people using the app: getting an account, following,
   posting, reading, managing the account, keyboard shortcuts.
 - [docs/For-You.md](docs/For-You.md)

@@ -751,7 +751,8 @@ hand, it is picked up as one.
   in again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
   having the app.
-- **Export and migration.** **Settings → Migration** has three sections.
+- **Export and migration.** The whole move, in order, is one page:
+  [Moving.md](Moving.md). **Settings → Migration** has these sections.
   **Export** downloads a zip of your profile, follows, followers, blocks,
   mutes, bookmarks, likes and every post you wrote — your private key is
   deliberately not in it. **Import** reads such an archive (or a Nextcloud
