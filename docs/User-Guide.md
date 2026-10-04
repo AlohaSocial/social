@@ -117,7 +117,8 @@ people** makes an invitation link: it works once and for a week.
 composer; the composer also sits above most timelines. A post may be up to
 5,000 characters, content warning included. What you type is kept as a draft
 across a failed post, a reload or a navigation, so nothing is lost to a
-network hiccup.
+network hiccup. A reply keeps its own draft, under the post it answers, so
+starting one does not take the place of a post you were still writing.
 
 - **Visibility** is chosen with the globe menu next to the post button. The
   choice decides who receives the post on the fediverse, not only who sees it
@@ -142,7 +143,10 @@ network hiccup.
   sensitive. Warnings written on other servers are honoured here the same way.
 - **Attachments.** Up to ten per post: pictures (JPEG, PNG, GIF, WebP, AVIF,
   and HEIC/HEIF from a phone, converted on the way in), video (MP4, WebM,
-  QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). Drag them in, use
+  QuickTime) and audio (MP3, AAC, OGG/Opus, WAV, FLAC). A video other
+  servers cannot play as it is gets converted before the post leaves: it is
+  on this server straight away, and your own copy says *Converting video —
+  reaches other servers when done* until it has. Drag them in, use
   **Add attachment**, or **Add from Files** to attach something already in
   your Nextcloud without uploading it again — the Files app's own menu also
   has **Share to Aloha Social** for the same thing. Every picture has its Exif
@@ -152,7 +156,10 @@ network hiccup.
   in every browser, Safari and iPhone included. A photo larger than 4096 pixels
   on its longest side, or larger than the size your server takes, is made
   smaller before it is uploaded. Animated GIFs and WebPs are never changed, so
-  one that is too large is refused before it is sent.
+  one that is too large is refused before it is sent. A video has its own,
+  larger ceiling, and one over it is refused before it is sent too — the
+  message names the size your server takes. When the server itself refuses an
+  upload, its reason is what you are shown.
 - **The GIF button** opens a picker with 881 animated emoji in it, searchable by
   name — "party", "sad", "hedgehog" — plus whatever your administrator has added
   for this instance, which comes first. Nothing you type goes anywhere but your

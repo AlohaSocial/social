@@ -34,7 +34,7 @@ export async function login(page, user = USER, password = PASSWORD) {
  *
  * The setup screen comes first and there is no app behind it: an account is
  * made when somebody asks for one, so a Nextcloud user who has never opened
- * Social has no actor and no sidebar. Taking the handle it offers is what a
+ * Aloha Social has no actor and no sidebar. Taking the handle it offers is what a
  * person does, and doing it here means the run exercises that path rather
  * than working around it.
  *

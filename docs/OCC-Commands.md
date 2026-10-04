@@ -377,9 +377,13 @@ php occ social:stream:prune [-d|--days DAYS] [--dry-run]
 ```
 
 - Without `--days`, the `retention_days` app setting decides the period; `0`
-  (the default) disables retention and the command exits without touching
-  anything.
-- `--dry-run` only counts what would be deleted.
+  (the default) disables status retention and no status is touched.
+- Two sweeps run on every call whatever `retention_days` says: the queue rows
+  nothing will act on again (exhausted deliveries, finished cache items) are
+  purged, and in-app notification rows older than `notification_retention_days`
+  (default 90; `0` keeps them) are deleted. The notification count is printed
+  on its own line.
+- `--dry-run` only counts what would be deleted, including the notifications.
 - A status is kept when a local user liked, boosted, replied to or bookmarked
   it, when a local user follows its author, when a local status replies to it
   or boosts it, or when it is a direct message. Local content is never touched.
@@ -422,7 +426,7 @@ instance needs, under systemd:
 
 ```ini
 [Unit]
-Description=Nextcloud Social delivery worker %i
+Description=Aloha Social delivery worker %i
 After=network.target
 
 [Service]
@@ -1251,7 +1255,7 @@ the last three are queued on demand instead:
 
 | Job | Class | Description |
 |-----|-------|-------------|
-| Cache maintenance | `OCA\Social\Cron\Cache` | Every 12 minutes, with a 300-second budget. Same steps as `social:cache:refresh` (deleted actors, local actor cache, remote actors and their details, documents, hashtags), and additionally closes polls, prunes remote statuses past retention, evicts cached remote accounts nobody here refers to, syncs the timelines of cached remote actors, verifies profile links, reconciles group lists, finds out which servers the Discover page may ask and deletes the expired rows of the durable cache. A run that spends its budget logs which steps it skipped, and the next run starts with the first of them, so the steps at the end of the list are not the ones that never run. No key rotation is performed. |
+| Cache maintenance | `OCA\Social\Cron\Cache` | Every 12 minutes, with a 300-second budget. Same steps as `social:cache:refresh` (deleted actors, local actor cache, remote actors and their details, documents, hashtags), and additionally closes polls, prunes remote statuses past retention, evicts cached remote accounts nobody here refers to, syncs the timelines of the cached remote actors somebody here follows, verifies profile links, reconciles group lists, finds out which servers the Discover page may ask and deletes the expired rows of the durable cache. A run that spends its budget logs which steps it skipped, and the next run starts with the first of them, so the steps at the end of the list are not the ones that never run. No key rotation is performed. |
 | Queue processing | `OCA\Social\Cron\Queue` | Every 12 minutes. Processes the outbound request queue **and** the stream queue, like `social:queue:process`. |
 | Expired stories | `OCA\Social\Cron\ExpiredStories` | Hourly. Deletes the stories whose day is up, at most 500 per run. The second of the two guards on a story's expiry: every read already filters on `expires_at`, so an instance whose cron has stopped shows nothing it should not — but without this the rows and their pictures would pile up for ever, and "it disappears after a day" would be true of what people can see and false of what is stored. |
 | Scheduled posts | `OCA\Social\Cron\ScheduledPosts` | Every 5 minutes. Publishes the posts whose `scheduled_at` has passed, at most 50 per run. Shorter than the other two on purpose: a scheduled post may be published up to one cron period late, and a longer period would promise a precision the five-minute minimum on `scheduled_at` implies but the app could not keep. |

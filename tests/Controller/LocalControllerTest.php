@@ -667,6 +667,29 @@ class LocalControllerTest extends TestCase {
 		$this->assertFalse($created, 'reading a profile asked for the account to be created');
 	}
 
+	/**
+	 * `source` -- the default privacy, the pending follow requests -- is the
+	 * account's own and is built by the two credentials routes alone. This
+	 * route is public and answers about anybody, so the local export it
+	 * hands out must never grow it back.
+	 */
+	public function testGlobalAccountInfoOfSomebodyElseCarriesNoSourceBlock(): void {
+		$bob = new Person();
+		$bob->setId('https://cloud.example/apps/social/@bob');
+		$bob->setPreferredUsername('bob');
+		$bob->setLocal(true);
+		$this->accountService->method('getCachedLocalActor')->with('bob')->willReturn($bob);
+
+		$response = $this->controller('alice')->globalAccountInfo('@bob');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$data = json_decode((string)json_encode($response->getData()), true);
+		$this->assertSame('bob', $data['username']);
+		$this->assertArrayNotHasKey('source', $data);
+		$this->assertArrayNotHasKey('follow_requests_count', $data);
+		$this->assertArrayNotHasKey('privacy', $data);
+	}
+
 	public function testGlobalAccountInfoNeverCreatesAnActorForOtherVisitors(): void {
 		// the route is public: creating here would let anonymous visitors force a
 		// Fediverse identity onto any Nextcloud user, and probe which users exist

@@ -46,7 +46,8 @@ export async function lessLikeThisFromPost(status, type) {
 	const entry = entryId === undefined ? null : (store.statuses[entryId] ?? null)
 	const index = entryId === undefined ? -1 : store.timeline.indexOf(entryId)
 	if (entry !== null) {
-		store.removeStatus(entry)
+		// off For you, not gone: the other lists still show it
+		store.removeStatus(entry, false)
 	}
 
 	// an Undo pressed after the reader moved on to another timeline must not

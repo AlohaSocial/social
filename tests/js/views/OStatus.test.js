@@ -150,9 +150,51 @@ describe('OStatus', () => {
 
 				expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/ostatus/link/carol/dave@other.example')
 				expect(navigate).toHaveBeenCalledWith('https://other.example/authorize_interaction?uri=carol@cloud.example.org')
+				expect(wrapper.find('.ostatus__error').exists()).toBe(false)
 			} finally {
 				Object.defineProperty(window, 'location', descriptor)
 			}
+		})
+
+		/**
+		 * The remote server names where to continue and the reader is sent
+		 * there wholesale; anything but a web address would run here instead.
+		 */
+		it.each([
+			['a script', 'javascript:alert(1)'],
+			['a data address', 'data:text/html,<script>alert(1)</script>'],
+			['no address at all', undefined],
+		])('does not follow %s, and says so instead', async (_, url) => {
+			vi.spyOn(axios, 'get').mockResolvedValue({ data: { result: { url } } })
+			const descriptor = Object.getOwnPropertyDescriptor(window, 'location')
+			const location = window.location
+			const navigate = vi.fn()
+			Object.defineProperty(window, 'location', { get: () => location, set: navigate, configurable: true })
+			try {
+				const wrapper = mountView()
+				await wrapper.find('input[type="text"]').setValue('dave@other.example')
+				await wrapper.find('form').trigger('submit')
+				await flushPromises()
+
+				expect(navigate).not.toHaveBeenCalled()
+				expect(wrapper.find('.ostatus__error').text()).toBe('Could not find your server from that address. Check the name@domain and try again.')
+			} finally {
+				Object.defineProperty(window, 'location', descriptor)
+			}
+		})
+
+		it('says so when the link cannot be resolved, and clears it on the next try', async () => {
+			const get = vi.spyOn(axios, 'get').mockRejectedValueOnce(new Error('404'))
+			const wrapper = mountView()
+			await wrapper.find('input[type="text"]').setValue('nobody@nowhere.example')
+			await wrapper.find('form').trigger('submit')
+			await flushPromises()
+			expect(wrapper.find('.ostatus__error').exists()).toBe(true)
+
+			// the next attempt starts clean; it never resolves here
+			get.mockReturnValueOnce(new Promise(() => {}))
+			await wrapper.find('form').trigger('submit')
+			expect(wrapper.find('.ostatus__error').exists()).toBe(false)
 		})
 	})
 

@@ -27,6 +27,12 @@ export const useInstanceStore = defineStore('instance', {
 		 */
 		imageSizeLimit: DEFAULT_LIMITS.imageSizeLimit,
 		/**
+		 * The most bytes a video may have.
+		 *
+		 * @type {number}
+		 */
+		videoSizeLimit: DEFAULT_LIMITS.videoSizeLimit,
+		/**
 		 * Whether this Nextcloud can translate a post at all.
 		 *
 		 * Typed rather than inferred: `DEFAULT_LIMITS` is frozen, so the
@@ -61,6 +67,7 @@ export const useInstanceStore = defineStore('instance', {
 				this.maxCharacters = limits.maxCharacters
 				this.maxAttachments = limits.maxAttachments
 				this.imageSizeLimit = limits.imageSizeLimit
+				this.videoSizeLimit = limits.videoSizeLimit
 				this.translation = limits.translation
 			})
 		},

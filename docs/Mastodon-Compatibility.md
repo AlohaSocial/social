@@ -238,6 +238,12 @@ Two remain:
   when the actor has no cached icon, and that is the stored value, which may be
   empty. Mastodon declares the field a URL, and a client that decodes it as one
   fails on the whole account.
+One deliberate extension to note: a `Status` carries `delivery: "held"` on
+the author's own copy while its deliveries wait for a video to be converted
+(§ *Held for a video* in Architecture.md), and the key is absent otherwise. A
+Mastodon client ignores an unknown key; the app's own web client draws the
+"still converting" hint from it rather than guessing from the attachment type.
+
 `showing_reblogs` is no longer among them either: `POST /accounts/{id}/follow`
 takes `reblogs` as well as `notify`, a "no" is stored as a row in
 `social_actor_relation`, and the home and list timelines drop that account's

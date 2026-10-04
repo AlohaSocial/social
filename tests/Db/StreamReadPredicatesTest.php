@@ -94,6 +94,59 @@ class StreamReadPredicatesTest extends TestCase {
 	}
 
 	/**
+	 * An unlisted post is addressed to the author's followers with the public
+	 * collection in `cc`: anybody may read it, and its author chose to keep it
+	 * off the tag timelines. Both tag reads matched the public recipient row
+	 * whatever its subtype, so an unlisted post surfaced on the hashtag page
+	 * and in the home timeline of everybody following one of its tags.
+	 */
+	public function testTheTagTimelinesListOnlyPostsAddressedToThePublicCollection(): void {
+		$this->assertStringContainsString(
+			"limitToViewer('sd', 'f', true, false, SocialCoreQueryBuilder::HIDDEN_TIMELINE, 'to')",
+			$this->methodBody(self::SOURCE, 'hashtagTimelineNids'),
+			'the hashtag timeline has to ask for the `to` recipient row, or unlisted posts are listed'
+		);
+		$this->assertStringContainsString(
+			"limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', 'to', 'ft_sd')",
+			$this->methodBody(self::SOURCE, 'followedTagNids'),
+			'the followed-tags half of home has to ask for the `to` recipient row too'
+		);
+	}
+
+	/** The profile and the home timeline are not tag timelines: unlisted posts stay in them. */
+	public function testTheOtherTimelinesStillReadEveryPublicRecipientRow(): void {
+		foreach (['accountTimelineNids', 'homeTimelineNids'] as $method) {
+			$this->assertStringNotContainsString(
+				"'to')", $this->methodBody(self::SOURCE, $method), $method . '() must not narrow to `to`'
+			);
+		}
+	}
+
+	/**
+	 * The profile highlights are drawn for whoever opens the profile. The
+	 * weekly chart reads public posts through the recipient join; the top
+	 * hashtags counted every post of the author, so a tag used only in
+	 * followers-only posts or direct messages was named on the public profile
+	 * with how often it was used.
+	 */
+	public function testTheProfilesTopHashtagsAreCountedOverPublicPostsOnly(): void {
+		$body = $this->methodBody(self::SOURCE, 'topHashtagsByAuthor');
+
+		$this->assertStringContainsString(
+			"\$qb->selectDestFollowing('sd', '');
+		\$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
+		\$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');",
+			$body,
+			'the hashtag count has to join the public recipient row the way publishedTimesByAuthor() does'
+		);
+		$this->assertStringContainsString(
+			"\$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');",
+			$this->methodBody(self::SOURCE, 'publishedTimesByAuthor'),
+			'the chart the count is drawn beside reads public posts only'
+		);
+	}
+
+	/**
 	 * A tag used only inside a private team thread was written into the trend
 	 * counters and surfaced in `/api/v1/trends/tags`, `tagHistory()` and search
 	 * with its usage count. `HashtagsRequest::related()` restricts to public

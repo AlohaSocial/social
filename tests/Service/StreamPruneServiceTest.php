@@ -45,6 +45,8 @@ class StreamPruneServiceTest extends TestCase {
 
 	/** the `retention_days` app value */
 	private string $retention = '0';
+	/** the `notification_retention_days` app value */
+	private string $notificationRetention = '0';
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -57,8 +59,11 @@ class StreamPruneServiceTest extends TestCase {
 
 		$this->configService = $this->createStub(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturnCallback(
-			fn (string $key): string
-				=> ($key === ConfigService::SOCIAL_RETENTION_DAYS) ? $this->retention : ''
+			fn (string $key): string => match ($key) {
+				ConfigService::SOCIAL_RETENTION_DAYS => $this->retention,
+				ConfigService::SOCIAL_NOTIFICATION_RETENTION_DAYS => $this->notificationRetention,
+				default => '',
+			}
 		);
 
 		$this->streamRequest = $this->createMock(StreamRequest::class);
@@ -92,11 +97,11 @@ class StreamPruneServiceTest extends TestCase {
 	public function testNothingIsDeletedWhileRetentionIsOff(): void {
 		$this->streamRequest->expects($this->never())->method('deleteRelatedTo');
 
-		$this->assertSame(['streams' => 0, 'documents' => 0], $this->service->prune());
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 0], $this->service->prune());
 	}
 
 	public function testANegativeNumberOfDaysIsAlsoOff(): void {
-		$this->assertSame(['streams' => 0, 'documents' => 0], $this->service->prune(-1));
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 0], $this->service->prune(-1));
 	}
 
 	/**
@@ -106,7 +111,84 @@ class StreamPruneServiceTest extends TestCase {
 	public function testAskingForZeroDaysDeletesNothingRatherThanEverything(): void {
 		$this->retention = '30';
 
-		$this->assertSame(['streams' => 0, 'documents' => 0], $this->service->prune(0));
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 0], $this->service->prune(0));
+	}
+
+	/**
+	 * The queue sweep is not retention: exhausted deliveries and finished
+	 * cache items are rows nothing will ever act on again, on every instance,
+	 * and the only thing that removes them is this pass.
+	 */
+	public function testTheQueuesArePurgedEvenWhileRetentionIsOff(): void {
+		$this->requestQueueRequest->expects($this->once())->method('abandonExhausted');
+		$this->requestQueueRequest->expects($this->once())->method('deleteFinished');
+
+		$this->service->prune();
+	}
+
+	public function testADryRunLeavesTheQueuesAlone(): void {
+		$this->retention = '30';
+		$this->requestQueueRequest->expects($this->never())->method('abandonExhausted');
+		$this->requestQueueRequest->expects($this->never())->method('deleteFinished');
+		// the prunable count is built on the connection, which this suite
+		// cannot double; the sweeps are decided before it is reached
+		$this->streamRequest->method('countNotificationsBefore')->willReturn(2);
+
+		try {
+			$this->service->prune(null, true);
+		} catch (RuntimeException) {
+		}
+	}
+
+	/**
+	 * Notifications have a retention of their own, applied whether or not
+	 * remote statuses are kept: they are local rows about a local user's
+	 * post, read once from the bell and never again.
+	 */
+	public function testNotificationsPastTheirOwnRetentionGoWhileRetentionIsOff(): void {
+		$this->notificationRetention = '90';
+		$cutoff = null;
+		$pages = [['n1', 'n2'], []];
+		$this->streamRequest->method('getNotificationPrimsBefore')
+			->willReturnCallback(function (\DateTime $before, int $limit) use (&$cutoff, &$pages): array {
+				$cutoff = $before;
+				$this->assertSame(StreamPruneService::CHUNK, $limit);
+
+				return array_shift($pages) ?? [];
+			});
+		$this->streamRequest->expects($this->once())->method('deleteRelatedTo')->with(['n1', 'n2']);
+		$this->streamRequest->expects($this->once())->method('deleteByPrims')->with(['n1', 'n2']);
+
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 2], $this->service->prune());
+		$this->assertEqualsWithDelta(
+			(new \DateTime('90 days ago'))->getTimestamp(), $cutoff->getTimestamp(), 5
+		);
+	}
+
+	public function testNotificationRetentionCanBeTurnedOff(): void {
+		$this->notificationRetention = '0';
+		$this->streamRequest->expects($this->never())->method('getNotificationPrimsBefore');
+		$this->streamRequest->expects($this->never())->method('deleteByPrims');
+
+		$this->assertSame(0, $this->service->pruneNotifications());
+	}
+
+	public function testTheNotificationCeilingIsRespected(): void {
+		$this->notificationRetention = '90';
+		$this->streamRequest->method('getNotificationPrimsBefore')
+			->willReturnCallback(static fn (\DateTime $before, int $limit): array
+				=> array_map(static fn (int $i): string => 'n' . $i, range(1, $limit)));
+
+		// 1200 asked for: two full chunks and one of 200, then stop
+		$this->assertSame(1200, $this->service->pruneNotifications(false, 1200));
+	}
+
+	public function testADryRunCountsTheNotificationsAndDeletesNone(): void {
+		$this->notificationRetention = '90';
+		$this->streamRequest->method('countNotificationsBefore')->willReturn(7);
+		$this->streamRequest->expects($this->never())->method('deleteByPrims');
+
+		$this->assertSame(7, $this->service->pruneNotifications(true));
 	}
 
 	/**

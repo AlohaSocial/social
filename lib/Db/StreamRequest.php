@@ -932,6 +932,28 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * One account's Announce of one post.
+	 *
+	 * A boost is a row per (post, booster): the lookup by object and type
+	 * alone answers with whichever booster's row comes first, which is the
+	 * wrong row for everybody but one of them.
+	 *
+	 * @throws StreamNotFoundException when this account has not boosted the post
+	 */
+	public function getAnnounceBy(string $objectId, string $actorId): Stream {
+		if ($objectId === '' || $actorId === '') {
+			throw new StreamNotFoundException('missing objectId or actorId');
+		}
+
+		$qb = $this->getStreamSelectSql();
+		$qb->limitToObjectId($objectId);
+		$qb->limitToType(Announce::TYPE);
+		$qb->limitToAttributedTo($actorId, true);
+
+		return $this->getStreamFromRequest($qb);
+	}
+
+	/**
 	 * The public replies to a post, oldest first, for the `replies` collection
 	 * a peer walks to discover a thread.
 	 *
@@ -1421,6 +1443,13 @@ class StreamRequest extends StreamRequestBuilder {
 
 		$qb->setDefaultSelectAlias('s');
 		$qb->limitToStatusTypes();
+
+		// public posts only, through the same recipient join as the chart
+		// above: the profile is read by strangers, and a tag used only in
+		// followers-only posts is a fact about those posts
+		$qb->selectDestFollowing('sd', '');
+		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
+		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
 
 		$tags = [];
 		$cursor = $qb->executeQuery();
@@ -1923,6 +1952,68 @@ class StreamRequest extends StreamRequestBuilder {
 		$cursor->closeCursor();
 
 		return $prims;
+	}
+
+	/**
+	 * The in-app notification rows (`SocialAppNotification`) created before a
+	 * cutoff, oldest first. A notification is a local row about a local user's
+	 * post; it is never federated, and nothing reads it again once it has
+	 * scrolled out of the notifications timeline.
+	 *
+	 * @return string[] id_prim
+	 */
+	public function getNotificationPrimsBefore(DateTime $cutoff, int $limit): array {
+		$qb = $this->notificationsBeforeQuery($cutoff);
+		$qb->select('s.id_prim')
+			->orderBy('s.creation', 'asc')
+			->setMaxResults($limit);
+
+		$cursor = $qb->executeQuery();
+		$prims = array_map(static fn (array $row): string => (string)$row['id_prim'], $cursor->fetchAll());
+		$cursor->closeCursor();
+
+		return $prims;
+	}
+
+	public function countNotificationsBefore(DateTime $cutoff): int {
+		$qb = $this->notificationsBeforeQuery($cutoff);
+		$qb->selectAlias($qb->createFunction('COUNT(*)'), 'count');
+
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return (int)($row['count'] ?? 0);
+	}
+
+	private function notificationsBeforeQuery(DateTime $cutoff): SocialQueryBuilder {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->from(self::TABLE_STREAM, 's')
+			->where($expr->eq('s.type', $qb->createNamedParameter(SocialAppNotification::TYPE)))
+			->andWhere($expr->eq('s.local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->andWhere($expr->lt('s.creation', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE)));
+
+		return $qb;
+	}
+
+	/**
+	 * Removes the stream rows themselves; what hangs off them is
+	 * `deleteRelatedTo()`'s business and goes first, because the cascade is
+	 * keyed on rows that are about to be gone.
+	 *
+	 * @param string[] $prims
+	 */
+	public function deleteByPrims(array $prims): void {
+		if ($prims === []) {
+			return;
+		}
+
+		$qb = $this->getStreamDeleteSql();
+		$qb->andWhere($qb->expr()->in(
+			'id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
+		));
+		$qb->executeStatement();
 	}
 
 	/**

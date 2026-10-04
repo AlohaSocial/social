@@ -45,6 +45,11 @@ class FlagInterface extends AbstractActivityPubInterface implements IActivityPub
 		}
 
 		$report = $this->reportService->reportFromFlag($flag);
+		if ($report === null) {
+			// nothing of this instance is named; the service has said so
+			return;
+		}
+
 		$this->logger->info(
 			'incoming report stored',
 			['report' => $report->getId(), 'from' => $flag->getActorId()]

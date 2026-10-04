@@ -670,9 +670,11 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 	 *
 	 * Narrowed to the ones with bytes here to convert: a streamed document's
 	 * `local_copy` is the marker rather than a uuid, and a video on another
-	 * server is not this instance's to re-encode. Ordered and paged by `nid`
-	 * so that a job which converts one file per run works through them without
-	 * ever reading the same page twice.
+	 * server is not this instance's to re-encode — `account` names the local
+	 * uploader and is empty on every row cached from a peer, which is also how
+	 * the quota queries tell the two apart. Ordered and paged by `nid` so that
+	 * a job which converts one file per run works through them without ever
+	 * reading the same page twice.
 	 *
 	 * @return Document[]
 	 */
@@ -682,6 +684,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		$expr = $qb->expr();
 
 		$qb->andWhere($expr->like($alias . '.media_type', $qb->createNamedParameter('video/%')));
+		$qb->andWhere($expr->neq($alias . '.account', $qb->createNamedParameter('')));
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter('')));
 		$qb->andWhere($expr->neq($alias . '.local_copy', $qb->createNamedParameter(Document::COPY_STREAMED)));
 		// a row written before this column existed is 0, which is the right

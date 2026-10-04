@@ -219,38 +219,13 @@ class BoostService {
 	}
 
 	/**
-	 * This actor's own Announce of a post.
-	 *
-	 * `getStreamByObjectId()` filters on the boosted object and the type and
-	 * nothing else, so with two local accounts boosting the same post it
-	 * answers with whichever row it finds first. Undoing one boost then
-	 * deleted the other account's row and federated an `Undo` naming an
-	 * Announce its signer never made: peers refuse it for the actor mismatch,
-	 * and locally the wrong boost is gone.
+	 * This actor's own Announce of a post: one row per (post, booster), so
+	 * somebody else's boost of the same post is never the one found, and the
+	 * `Undo` names an Announce its signer made.
 	 *
 	 * @throws StreamNotFoundException when this actor has not boosted the post
 	 */
 	private function findAnnounce(Person $actor, string $postId): Stream {
-		$announce = $this->streamRequest->getStreamByObjectId($postId, Announce::TYPE);
-		if (strcasecmp($announce->getAttributedTo(), $actor->getId()) === 0) {
-			return $announce;
-		}
-
-		// somebody else's boost came back: theirs is not ours to touch, and
-		// this actor may still have one of their own
-		foreach ($this->streamRequest->getAnnouncesAndRepliesTo($postId) as $stream) {
-			if ($stream->getType() === Announce::TYPE
-				&& strcasecmp($stream->getAttributedTo(), $actor->getId()) === 0) {
-				return $stream;
-			}
-		}
-
-		$this->logger->notice('the stored boost of this post belongs to another account', [
-			'postId' => $postId,
-			'actor' => $actor->getId(),
-			'attributedTo' => $announce->getAttributedTo(),
-		]);
-
-		throw new StreamNotFoundException('no boost of this post by this account');
+		return $this->streamRequest->getAnnounceBy($postId, $actor->getId());
 	}
 }

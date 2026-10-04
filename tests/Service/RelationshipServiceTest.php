@@ -339,13 +339,48 @@ class RelationshipServiceTest extends TestCase {
 				return $actorId === self::ALICE_ID ? $outgoing : $incoming;
 			});
 
-		$this->actorRelationRequest->expects($this->once())
+		$saved = [];
+		$this->actorRelationRequest->expects($this->exactly(2))
 			->method('save')
-			->with(self::ALICE_ID, self::CAROL_ID, ActorRelation::TYPE_BLOCK);
+			->willReturnCallback(function (string $actorId, string $targetId, string $type) use (&$saved): void {
+				$saved[] = [$actorId, $targetId, $type];
+			});
 		$this->followsRequest->expects($this->exactly(2))->method('delete');
 		$this->activityService->expects($this->never())->method('request');
 
 		$this->service->block($this->alice(), $carol);
+
+		// what BlockInterface records when a Block arrives from another
+		// instance; between two accounts here nothing arrives, so it is
+		// written at once -- carol's own reads filter on this row
+		$this->assertSame([
+			[self::ALICE_ID, self::CAROL_ID, ActorRelation::TYPE_BLOCK],
+			[self::CAROL_ID, self::ALICE_ID, ActorRelation::TYPE_BLOCKED_BY],
+		], $saved);
+	}
+
+	public function testBlockOfALocalAccountMovesBothTimelineRevisions(): void {
+		$this->configService->method('isBlockFederationEnabled')->willReturn(true);
+		$this->followsRequest->method('getByPersons')->willThrowException(new FollowNotFoundException());
+		$bumped = [];
+		$this->timelineRevisionService->method('bumpForActor')
+			->willReturnCallback(function (string $actorId) use (&$bumped): void {
+				$bumped[] = $actorId;
+			});
+
+		$this->service->block($this->alice(), $this->person(self::CAROL_ID, true));
+
+		$this->assertSame([self::ALICE_ID, self::CAROL_ID], $bumped);
+	}
+
+	/** A remote target gets its `blocked_by` row from the Block activity its server receives, not from here. */
+	public function testBlockOfARemoteAccountWritesNoBlockedByRow(): void {
+		$this->configService->method('isBlockFederationEnabled')->willReturn(false);
+		$this->followsRequest->method('getByPersons')->willThrowException(new FollowNotFoundException());
+		$this->actorRelationRequest->expects($this->once())->method('save')
+			->with(self::ALICE_ID, self::BOB_ID, ActorRelation::TYPE_BLOCK);
+
+		$this->service->block($this->alice(), $this->bob());
 	}
 
 	public function testBlockWithoutAnyFollowRelationStillSavesAndFederatesTheBlock(): void {
@@ -427,6 +462,22 @@ class RelationshipServiceTest extends TestCase {
 		$this->activityService->expects($this->never())->method('request');
 
 		$this->service->unblock($this->alice(), $this->person(self::CAROL_ID, true));
+	}
+
+	public function testUnblockOfALocalAccountRemovesBothRows(): void {
+		$deleted = [];
+		$this->actorRelationRequest->expects($this->exactly(2))
+			->method('delete')
+			->willReturnCallback(function (string $actorId, string $targetId, string $type) use (&$deleted): void {
+				$deleted[] = [$actorId, $targetId, $type];
+			});
+
+		$this->service->unblock($this->alice(), $this->person(self::CAROL_ID, true));
+
+		$this->assertSame([
+			[self::ALICE_ID, self::CAROL_ID, ActorRelation::TYPE_BLOCK],
+			[self::CAROL_ID, self::ALICE_ID, ActorRelation::TYPE_BLOCKED_BY],
+		], $deleted);
 	}
 
 	// getRelated()

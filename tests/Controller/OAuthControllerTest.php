@@ -16,6 +16,7 @@ use OCA\Social\Db\ClientRequest;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
+use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Model\Instance;
@@ -125,9 +126,12 @@ class OAuthControllerTest extends TestCase {
 		return $states;
 	}
 
-	private function knownClient(string $clientId = 'client-1', string $appName = 'Tusky'): SocialClient {
+	/** @param string[] $redirectUris what the client registered; a request may name only one of these */
+	private function knownClient(
+		string $clientId = 'client-1', string $appName = 'Tusky', array $redirectUris = [self::OOB],
+	): SocialClient {
 		$client = new SocialClient();
-		$client->setAppClientId($clientId)->setAppName($appName);
+		$client->setAppClientId($clientId)->setAppName($appName)->setAppRedirectUris($redirectUris);
 		$this->clientService->method('getFromClientId')->with($clientId)->willReturn($client);
 
 		return $client;
@@ -249,6 +253,23 @@ class OAuthControllerTest extends TestCase {
 			->with($this->callback(fn (SocialClient $c): bool => $c->getAppRedirectUris() === ['https://a/cb', 'https://b/cb']));
 
 		$this->controller->apps('App', ['https://a/cb', 'https://b/cb']);
+	}
+
+	/**
+	 * A redirect URI with a scheme a browser runs rather than follows is a
+	 * link on the consent page that would run in the account's session.
+	 * `ClientService::createApp()` refuses it, and the refusal is the 422
+	 * Mastodon answers a registration that fails validation with -- not the
+	 * Nextcloud error page an uncaught exception produced.
+	 */
+	public function testAppsAnswersARefusedRegistrationWith422(): void {
+		$this->clientService->method('createApp')
+			->willThrowException(new ClientException('invalid redirect_uri: javascript:alert(1)'));
+
+		$response = $this->controller->apps('App', 'javascript:alert(1)');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(['error' => 'invalid redirect_uri: javascript:alert(1)'], $response->getData());
 	}
 
 	public function testAppsDefaultsToReadScope(): void {
@@ -374,7 +395,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testTheConsentPageLetsTheFormReachTheClientsRedirectUri(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/callback']);
 
 		$response = $this->controller->authorize(
 			'client-1', 'https://app.example/callback', 'code', 'read'
@@ -395,7 +416,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testACustomSchemeBecomesASchemeSource(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['tusky://oauth']);
 
 		$policy = $this->controller->authorize('client-1', 'tusky://oauth', 'code', 'read')
 			->getContentSecurityPolicy()->buildPolicy();
@@ -412,7 +433,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testASchemeWithNothingAfterItIsStillRead(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['icecubesapp://']);
 
 		$policy = $this->controller->authorize('client-1', 'icecubesapp://', 'code', 'read')
 			->getContentSecurityPolicy()->buildPolicy();
@@ -427,7 +448,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testAnHttpsUriBecomesItsOrigin(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example:8443/callback?x=1']);
 
 		$policy = $this->controller->authorize(
 			'client-1', 'https://app.example:8443/callback?x=1', 'code', 'read'
@@ -484,22 +505,38 @@ class OAuthControllerTest extends TestCase {
 		$this->assertSame(['error' => 'unknown'], $response->getData());
 	}
 
+	/**
+	 * RFC 6749 §3.1.2.3: the redirect_uri has to be, exactly, one the client
+	 * registered -- compared before the consent page is prepared, so a forged
+	 * link steers nothing. The answer is Mastodon's `invalid_request` shape,
+	 * and never a redirect, since the one parameter that is wrong is where the
+	 * redirect would go.
+	 */
 	public function testAuthorizeRejectsARedirectUriTheClientDidNotRegister(): void {
-		// The consent GET now confirms the redirect_uri against the client's registered
-		// URIs before rendering, so a code can never be steered to a forged link. A
-		// rejected redirect_uri is refused before the consent page is prepared.
 		$this->loggedIn();
-		$client = $this->knownClient();
-		$this->clientService->expects($this->once())->method('confirmData')
-			->with($client, $this->callback(fn (array $data): bool => $data['redirect_uri'] === 'https://evil.example/steal'))
-			->willThrowException(new ClientException('unknown redirect_uri'));
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
+		$this->clientService->expects($this->never())->method('confirmData');
 		$this->initialState->expects($this->never())->method('provideInitialState');
 
 		$response = $this->controller->authorize('client-1', 'https://evil.example/steal', 'code', 'read');
 
 		$this->assertInstanceOf(DataResponse::class, $response);
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		$this->assertSame(['error' => 'unknown redirect_uri'], $response->getData());
+		$this->assertSame('invalid_request', $response->getData()['error']);
+		$this->assertArrayHasKey('error_description', $response->getData());
+	}
+
+	/** A prefix, another path, or another port of a registered URI is not the registered URI. */
+	public function testAuthorizeComparesTheRedirectUriExactly(): void {
+		$this->loggedIn();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
+
+		foreach (['https://app.example/cb/../steal', 'https://app.example/cb?x=1', 'https://app.example:8443/cb', 'http://app.example/cb'] as $uri) {
+			$response = $this->controller->authorize('client-1', $uri, 'code', 'read');
+
+			$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus(), $uri);
+			$this->assertSame('invalid_request', $response->getData()['error'], $uri);
+		}
 	}
 
 	// authorizing()
@@ -558,7 +595,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testAuthorizingRedirectsWithTheCodeAndTheState(): void {
 		$this->loggedIn('alice');
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://elk.example/oauth/callback']);
 		$this->clientService->method('authClient')
 			->willReturnCallback(static fn (SocialClient $c) => $c->setAuthCode('auth-code-1'));
 
@@ -575,7 +612,7 @@ class OAuthControllerTest extends TestCase {
 
 	public function testARedirectUriThatAlreadyHasAQueryStringStaysValid(): void {
 		$this->loggedIn('alice');
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://elk.example/cb?instance=cloud.example']);
 		$this->clientService->method('authClient')
 			->willReturnCallback(static fn (SocialClient $c) => $c->setAuthCode('c1'));
 
@@ -593,7 +630,7 @@ class OAuthControllerTest extends TestCase {
 
 	public function testAFragmentOnTheRedirectUriStaysAtTheEnd(): void {
 		$this->loggedIn('alice');
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://elk.example/cb#/done']);
 		$this->clientService->method('authClient')
 			->willReturnCallback(static fn (SocialClient $c) => $c->setAuthCode('c1'));
 
@@ -622,6 +659,39 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		$this->assertSame(['error' => 'unknown client'], $response->getData());
+	}
+
+	/**
+	 * The POST is what issues the code, so it has to apply the same rule as
+	 * the GET: a consent form whose redirect_uri field was edited in the
+	 * browser issues nothing.
+	 */
+	public function testAuthorizingRejectsARedirectUriTheClientDidNotRegister(): void {
+		$this->loggedIn();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
+		$this->clientService->expects($this->never())->method('authClient');
+
+		$response = $this->controller->authorizing('client-1', 'https://evil.example/steal', 'code', 'read');
+
+		$this->assertInstanceOf(DataResponse::class, $response);
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_request', $response->getData()['error']);
+	}
+
+	/** RFC 6749 §4.1.3: the token exchange has to present the URI the code was sent to. */
+	public function testAuthorizingRecordsTheRedirectUriOnTheAuthorization(): void {
+		$this->loggedIn('alice');
+		$this->knownClient('client-1', 'Tusky', [self::OOB, 'https://app.example/cb']);
+		$bound = null;
+		$this->clientService->method('authClient')
+			->willReturnCallback(function (SocialClient $c) use (&$bound): void {
+				$bound = $c->getAuthRedirectUri();
+				$c->setAuthCode('c1');
+			});
+
+		$this->controller->authorizing('client-1', 'https://app.example/cb', 'code', 'read');
+
+		$this->assertSame('https://app.example/cb', $bound);
 	}
 
 	public function testAuthorizingRejectsMismatchingClientData(): void {
@@ -672,6 +742,44 @@ class OAuthControllerTest extends TestCase {
 			['client_secret' => 'secret', 'redirect_uri' => self::OOB],
 		], $confirmations);
 		$this->assertSame(['auth-code-1'], $exchanged);
+	}
+
+	public function testTokenHandsTheRedirectUriToTheExchange(): void {
+		$client = $this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
+		$client->setAuthScopes(['read']);
+		$this->clientService->method('confirmData');
+		$presented = [];
+		$this->clientService->method('exchangeCode')
+			->willReturnCallback(
+				function (SocialClient $c, string $code, string $verifier, string $redirectUri) use (&$presented): SocialClient {
+					$presented[] = $redirectUri;
+
+					return $c->setToken('bearer-token');
+				}
+			);
+
+		$this->controller->token('https://app.example/cb', 'authorization_code', 'client-1', 'secret', 'auth-code-1');
+
+		$this->assertSame(['https://app.example/cb'], $presented);
+	}
+
+	/**
+	 * RFC 6749 §5.2: a code presented under another redirect_uri than the one
+	 * it was issued for is `invalid_grant`, a 400 -- and a guess at somebody
+	 * else's code, so it is throttled like a wrong secret.
+	 */
+	public function testTokenAnswersInvalidGrantWhenTheRedirectUriIsNotTheOneTheCodeWasIssuedFor(): void {
+		$this->knownClient('client-1', 'Tusky', [self::OOB, 'https://app.example/cb']);
+		$this->clientService->method('confirmData');
+		$this->clientService->method('exchangeCode')
+			->willThrowException(new InvalidGrantException('redirect_uri does not match the authorization request'));
+
+		$response = $this->controller->token('https://app.example/cb', 'authorization_code', 'client-1', 'secret', 'auth-code-1');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		$this->assertSame('invalid_grant', $response->getData()['error']);
+		$this->assertArrayHasKey('error_description', $response->getData());
+		$this->assertTrue($response->isThrottled());
 	}
 
 	/**
@@ -804,7 +912,8 @@ class OAuthControllerTest extends TestCase {
 		$clientRequest->method('getFromClientId')->with('client-1')->willReturn($appRow);
 
 		$granted = (new SocialClient())->setId(3)->setAuthUserId('alice')
-			->setAuthScopes(['read', 'write'])->setLastUpdate(time());
+			->setAuthScopes(['read', 'write'])->setLastUpdate(time())
+			->setAuthRedirectUri(self::OOB);
 		$clientAuthRequest->method('getByCode')->willReturn($granted);
 		$clientAuthRequest->method('exchange')
 			->willReturnCallback(fn (): SocialClient => $granted->setToken('bearer-token'));
@@ -911,7 +1020,7 @@ class OAuthControllerTest extends TestCase {
 
 	public function testAuthorizeShowsTheScopesAndWhereTheCodeIsGoing(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb']);
 		$states = $this->recordInitialState();
 
 		$this->controller->authorize('client-1', 'https://app.example/cb', 'code', 'read write:statuses', 'xyz');
@@ -927,7 +1036,7 @@ class OAuthControllerTest extends TestCase {
 	 */
 	public function testDenyingConsentSendsAccessDeniedBackToTheClient(): void {
 		$this->loggedIn();
-		$this->knownClient();
+		$this->knownClient('client-1', 'Tusky', ['https://app.example/cb?v=2']);
 		$states = $this->recordInitialState();
 
 		$this->controller->authorize('client-1', 'https://app.example/cb?v=2', 'code', 'read', 'xyz789');
@@ -935,6 +1044,51 @@ class OAuthControllerTest extends TestCase {
 		$this->assertSame(
 			'https://app.example/cb?v=2&error=access_denied&state=xyz789', $states['denyUrl']
 		);
+	}
+
+	/** A native client's own scheme is a registered destination like any other. */
+	public function testDenyingConsentFollowsACustomSchemeBackToTheClient(): void {
+		$this->loggedIn();
+		$this->knownClient('client-1', 'Tusky', ['tusky://oauth']);
+		$states = $this->recordInitialState();
+
+		$this->controller->authorize('client-1', 'tusky://oauth', 'code', 'read', 's1');
+
+		$this->assertSame('tusky://oauth?error=access_denied&state=s1', $states['denyUrl']);
+	}
+
+	/**
+	 * A redirect URI registered before the scheme was checked may be a
+	 * `javascript:` one. The Deny button is a link the person clicks, so it
+	 * is not handed that; the refusal lands on the app instead.
+	 */
+	public function testDenyingConsentNeverLinksASchemeABrowserWouldRun(): void {
+		$this->loggedIn();
+		$this->urlGenerator->method('linkToRoute')->with('social.Navigation.navigate')
+			->willReturn('/apps/social/');
+
+		foreach (['javascript://%0aalert(1)', 'data://text/html,x', 'vbscript://x', 'file:///tmp/x'] as $uri) {
+			$this->setUp();
+			$this->loggedIn();
+			$this->urlGenerator->method('linkToRoute')->willReturn('/apps/social/');
+			$this->knownClient('client-1', 'Tusky', [$uri]);
+			$states = $this->recordInitialState();
+
+			$this->controller->authorize('client-1', $uri, 'code', 'read', 'xyz');
+
+			$this->assertSame('/apps/social/', $states['denyUrl'], $uri);
+		}
+	}
+
+	/** The website is a link to click, so only an address a browser follows is offered. */
+	public function testTheConsentPageDropsAWebsiteABrowserWouldRun(): void {
+		$this->loggedIn();
+		$this->knownClient()->setAppWebsite('javascript:alert(1)');
+		$states = $this->recordInitialState();
+
+		$this->controller->authorize('client-1', self::OOB, 'code', 'read');
+
+		$this->assertSame('', $states['appWebsite']);
 	}
 
 	public function testDenyingAnOutOfBandRequestFallsBackToTheApp(): void {

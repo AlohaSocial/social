@@ -72,6 +72,23 @@ class CollectionService {
 	}
 
 	/**
+	 * Who the posts of a collection are then read for.
+	 *
+	 * Every read path comes through `readable()` or `forProfile()` with the
+	 * reader in hand, and the items are filtered by the same reader: a
+	 * follower sees the followers-only posts the owner put in, a visitor the
+	 * public ones. The request is a service and keeps its viewer between
+	 * reads, so a visitor is set explicitly rather than inherited.
+	 */
+	private function readAs(?Person $viewer): void {
+		if ($viewer === null) {
+			$this->collectionsRequest->resetViewer();
+		} else {
+			$this->collectionsRequest->setViewer($viewer);
+		}
+	}
+
+	/**
 	 * A collection as a reader may see it.
 	 *
 	 * A followers-only collection is shown to its owner and to the accounts
@@ -82,6 +99,7 @@ class CollectionService {
 	 * @throws ItemNotFoundException when it does not exist or may not be seen
 	 */
 	public function readable(?Person $viewer, int $id): Collection {
+		$this->readAs($viewer);
 		$collection = $this->collectionsRequest->getById($id);
 
 		if ($collection->isPublic()) {
@@ -110,6 +128,7 @@ class CollectionService {
 	 * @return Collection[]
 	 */
 	public function forProfile(?Person $viewer, Person $owner): array {
+		$this->readAs($viewer);
 		$isOwner = $viewer !== null && $viewer->getId() === $owner->getId();
 		if ($isOwner) {
 			return $this->collectionsRequest->getByActor($owner->getId());

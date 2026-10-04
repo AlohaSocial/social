@@ -54,6 +54,12 @@
 				<Pin :size="14" />
 				{{ t('social', 'Pinned') }}
 			</span>
+			<!-- only ever on the author's own copy: the server says `held`
+			     while a video is converted into what other servers take, and
+			     the post is on this one in the meantime -->
+			<span v-if="item.delivery === 'held'" class="post-held">
+				{{ t('social', 'Converting video — reaches other servers when done') }}
+			</span>
 			<!-- the byline is 12px text; a 22px globe beside it read as the
 			     loudest thing in the row, and it is the least important -->
 			<VisibilityIcon
@@ -1723,7 +1729,8 @@ export default {
 			align-self: center;
 		}
 
-		.post-pinned {
+		.post-pinned,
+		.post-held {
 			display: inline-flex;
 			align-items: center;
 			align-self: center;

@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use Exception;
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\ActivityPubFormatException;
@@ -113,6 +114,7 @@ class ActivityPubController extends Controller {
 		private AuthorizedFetchService $authorizedFetchService,
 		private StoryService $storyService,
 		private FeedService $feedService,
+		private QuoteGrantRequest $quoteGrantRequest,
 		ConfigService $configService,
 		LoggerInterface $logger,
 	) {
@@ -893,15 +895,23 @@ class ActivityPubController extends Controller {
 	 * A peer that received an `Accept` from us holds only the URI of the
 	 * approval; Mastodon fetches it and will not render the quote inline unless
 	 * what comes back names the same two posts and is attributed to the quoted
-	 * author. Nothing was stored when the `Accept` was sent, and nothing needs
-	 * to be: the stamp carries the quoting post's id, and the question the
-	 * document answers — may this be quoted? — is answered by the post's own
-	 * policy, which is where `QuoteRequestInterface` read it from too.
+	 * author. The stamp carries the quoting post's id, and the question the
+	 * document answers — may this be quoted? — is answered the way
+	 * `QuoteRequestInterface` answered the request: a post whose policy lets
+	 * anybody quote it approves every quote, and a post whose policy is
+	 * narrower approves exactly the quotes its author's server accepted,
+	 * which `QuoteRequestInterface::accept()` wrote down as a grant.
+	 *
+	 * The stamp alone is not an approval. Anyone can mint one, since it is
+	 * only the quoting post's id encoded, so answering from the stamp and the
+	 * post being quotable at all served a followers-only approval to a quote
+	 * nobody had asked about.
 	 *
 	 * Asking now rather than remembering the old answer is deliberate. A post
-	 * that has since been narrowed stops being quotable, this endpoint stops
+	 * that has since been narrowed stops approving strangers' quotes, and a
+	 * grant that was taken back is gone from the table; this endpoint stops
 	 * answering, and a peer that re-checks sees the approval withdrawn — which
-	 * is the behaviour the author asked for when they narrowed it.
+	 * is the behaviour the author asked for.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -920,7 +930,7 @@ class ActivityPubController extends Controller {
 		// no viewer is set, so this is the anonymous view of the post: an
 		// approval is a public statement, and one for a post the asker cannot
 		// even read would be a way of confirming it exists
-		if ($quoting === '' || !$quoted->isLocal() || !$quoted->isQuotable()) {
+		if ($quoting === '' || !$quoted->isLocal() || !$this->quoteIsApproved($quoted, $quoting)) {
 			return $this->fail(
 				new ItemUnknownException('no such quote authorization'),
 				['stream' => $quotedId],
@@ -935,6 +945,28 @@ class ActivityPubController extends Controller {
 		$authorization->setInteractionTarget($quotedId);
 
 		return $this->activityPubSuccess($authorization);
+	}
+
+	/**
+	 * Whether a post was addressed to the public collection -- `public` or
+	 * `unlisted` -- which is what lets an anonymous reader be told about it.
+	 */
+	private function isOpenToAnybody(Stream $post): bool {
+		return $post->isPublic()
+			|| in_array($post->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
+	}
+
+	/**
+	 * Whether a quote of `$quoted` by `$quoting` is approved: by the post's
+	 * policy, when that lets anybody quote it, or by the grant recorded when
+	 * the author's server accepted that particular `QuoteRequest`.
+	 */
+	private function quoteIsApproved(Stream $quoted, string $quoting): bool {
+		if ($quoted->isQuotable() && $quoted->effectiveQuotePolicy() === Stream::QUOTE_POLICY_PUBLIC) {
+			return true;
+		}
+
+		return $this->quoteGrantRequest->get($quoted->getId(), $quoting) !== null;
 	}
 
 	/**
@@ -986,8 +1018,10 @@ class ActivityPubController extends Controller {
 		}
 
 		// a post this instance does not hold has its replies somewhere else,
-		// under an id this instance does not own
-		if (!$post->isLocal()) {
+		// under an id this instance does not own; and a post addressed to its
+		// followers or to named people is not confirmed to exist to anybody
+		// else, which is what displayPost() answers them too
+		if (!$post->isLocal() || !$this->isOpenToAnybody($post)) {
 			return $this->fail(
 				new ItemUnknownException('no such replies collection'),
 				['stream' => $postId],

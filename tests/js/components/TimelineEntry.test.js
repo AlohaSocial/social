@@ -264,7 +264,7 @@ describe('TimelineEntry', () => {
 		it('renders the post concerned without an avatar and links to it', () => {
 			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
 
-			expect(wrapper.findComponent(TimelinePostStub).props()).toEqual({ item: post, type: 'notifications' })
+			expect(wrapper.findComponent(TimelinePostStub).props()).toEqual({ item: storedPost, type: 'notifications' })
 			expect(wrapper.findComponent(TimelineAvatarStub).exists()).toBe(false)
 			expect(wrapper.findComponent(UserEntryStub).exists()).toBe(false)
 
@@ -272,6 +272,24 @@ describe('TimelineEntry', () => {
 			// the profile part of the link is the actor handle, not their display name
 			expect(link.props('to')).toMatchObject({ name: 'single-post', params: { account: 'bob@remote.example', id: 'p1', type: 'single-post' } })
 			expect(link.attributes('data-timestamp')).toBe('2026-09-03T10:00:00Z')
+		})
+
+		it('renders the post from the store, so a like on the card is seen on the card', async () => {
+			// the notification carries its own copy of the post; the like
+			// lands in the store, which is where the card has to read from
+			const { wrapper, timelineStore } = mountEntry(notification('favourite'), { type: 'notifications' })
+
+			timelineStore.likeStatus({ status: post })
+			await wrapper.vm.$nextTick()
+
+			expect(wrapper.findComponent(TimelinePostStub).props('item')).toMatchObject({ id: 'p1', favourited: true, favourites_count: 1 })
+		})
+
+		it('falls back to its own copy of a post the store does not hold', () => {
+			const elsewhere = { ...post, id: 'p9', content: '<p>Only on the card</p>' }
+			const { wrapper } = mountEntry(notification('favourite', { status: elsewhere }), { type: 'notifications' })
+
+			expect(wrapper.findComponent(TimelinePostStub).props('item')).toEqual(elsewhere)
 		})
 
 		it('renders a post notification whose status has gone without crashing and without a link', () => {
@@ -313,7 +331,7 @@ describe('TimelineEntry', () => {
 			expect(header.findComponent(ActorAvatar).props('actor')).toEqual(bob)
 			expect(header.find('.material-design-icon').exists()).toBe(false)
 			expect(header.find('.notification__summary').text()).toBe('')
-			expect(wrapper.findComponent(TimelinePostStub).props('item')).toEqual(post)
+			expect(wrapper.findComponent(TimelinePostStub).props('item')).toEqual(storedPost)
 		})
 	})
 

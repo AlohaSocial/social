@@ -114,12 +114,13 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		return $post;
 	}
 
-	/** The Announce stream already stored for the post, carrying the followers of earlier boosters. */
-	private function knownAnnounce(string ...$ccFollowers): Announce {
+	/** An Announce stream already stored for the post: carol's unless told otherwise. */
+	private function knownAnnounce(?Person $booster = null, string ...$ccFollowers): Announce {
+		$booster ??= $this->carol;
 		$known = new Announce();
 		$known->setId(self::REMOTE_URL . '/announces/0');
-		$known->setAttributedTo($this->carol->getId());
-		$known->setCcArray($ccFollowers);
+		$known->setAttributedTo($booster->getId());
+		$known->setCcArray($ccFollowers === [] ? [$booster->getFollowers()] : $ccFollowers);
 
 		return $known;
 	}
@@ -134,7 +135,11 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		return $notification;
 	}
 
-	/** getStreamByObjectId() answers by requested stream type; a type not listed is "not found". */
+	/**
+	 * getStreamByObjectId() answers by requested stream type; a type not listed
+	 * is "not found". getAnnounceBy() answers with the listed Announce only to
+	 * the booster it is attributed to.
+	 */
 	private function storedStreamsByType(array $byType): void {
 		$this->streamRequest->method('getStreamByObjectId')
 			->willReturnCallback(function (string $objectId, string $type) use ($byType): Stream {
@@ -143,6 +148,15 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 				}
 
 				return $byType[$type];
+			});
+		$this->streamRequest->method('getAnnounceBy')
+			->willReturnCallback(function (string $objectId, string $actorId) use ($byType): Stream {
+				$known = $byType[Announce::TYPE] ?? null;
+				if ($known === null || strcasecmp($known->getAttributedTo(), $actorId) !== 0) {
+					throw new StreamNotFoundException();
+				}
+
+				return $known;
 			});
 	}
 
@@ -182,25 +196,33 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($announce);
 	}
 
-	public function testBoostOfAnAlreadyBoostedObjectAddsTheBoostersFollowersAsRecipients(): void {
-		$known = $this->knownAnnounce($this->carol->getFollowers());
+	/**
+	 * One Announce row per booster. Before, a second booster was folded into
+	 * the first one's row — re-attributed to the newcomer, with their followers
+	 * added to `cc` — so the row said the wrong person boosted, and an Undo
+	 * from either of them had one row to aim at.
+	 */
+	public function testASecondBoosterOfAnObjectGetsARowOfTheirOwn(): void {
+		$known = $this->knownAnnounce($this->carol);
 		$this->storedStreamsByType([Announce::TYPE => $known]);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$announce = $this->incomingAnnounce();
 
-		$this->streamRequest->expects($this->never())->method('save');
-		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($known), true);
+		$saved = null;
+		$this->capture($this->streamRequest, 'save', $saved);
+		$this->streamRequest->expects($this->never())->method('update');
 
-		$this->handler->processIncomingRequest($this->incomingAnnounce());
+		$this->handler->processIncomingRequest($announce);
 
-		$this->assertEqualsCanonicalizing(
-			[$this->carol->getFollowers(), $this->bob->getFollowers()],
-			$known->getCcArray()
-		);
-		$this->assertSame($this->bob->getId(), $known->getAttributedTo());
+		$this->assertSame($announce, $saved);
+		$this->assertSame($this->bob->getId(), $announce->getAttributedTo());
+		// carol's row is hers and says so still
+		$this->assertSame($this->carol->getId(), $known->getAttributedTo());
+		$this->assertSame([$this->carol->getFollowers()], $known->getCcArray());
 	}
 
-	public function testBoostAlreadyReachingTheBoostersFollowersIsNotRewritten(): void {
-		$known = $this->knownAnnounce($this->bob->getFollowers());
+	public function testTheSameBoosterAnnouncingAgainIsNotStoredTwice(): void {
+		$known = $this->knownAnnounce($this->bob);
 		$this->storedStreamsByType([Announce::TYPE => $known]);
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 
@@ -308,8 +330,8 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($this->incomingAnnounce());
 	}
 
-	public function testAnotherBoosterOfAFollowersOnlyPostIsNotAddedToAStoredBoost(): void {
-		$known = $this->knownAnnounce($this->carol->getFollowers());
+	public function testAnotherBoosterOfAFollowersOnlyPostIsNotStored(): void {
+		$known = $this->knownAnnounce($this->carol);
 		$this->storedStreamsByType([Announce::TYPE => $known]);
 		$this->streamRequest->method('getStreamById')->willReturn($this->followersOnlyPost());
 
@@ -321,10 +343,10 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->assertSame([$this->carol->getFollowers()], array_values($known->getCcArray()));
 	}
 
-	public function testUndoDropsTheAnnounceWhenTheLastBoosterLeaves(): void {
+	public function testUndoDropsTheBoostersOwnAnnounce(): void {
 		$announce = $this->incomingAnnounce();
 		$undo = $this->incoming(Undo::TYPE, self::REMOTE_URL . '/undo/1', $this->bob->getId(), $announce);
-		$known = $this->knownAnnounce($this->bob->getFollowers());
+		$known = $this->knownAnnounce($this->bob);
 		$notification = $this->boostNotification('bob@remote.example');
 		$this->storedStreamsByType([Announce::TYPE => $known, SocialAppNotification::TYPE => $notification]);
 		$this->actionsRequest->method('getActionFromItem')->willReturn($announce);
@@ -339,23 +361,33 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->handler->activity($undo, $announce);
 	}
 
-	public function testUndoKeepsTheAnnounceWhileOtherBoostersRemain(): void {
+	/**
+	 * Another booster's row is theirs: an Undo from bob leaves carol's row —
+	 * including a row stored before boosts had one row each, which carries
+	 * bob's followers in `cc` under carol's name — exactly as it is. The
+	 * action and the notification are still taken back.
+	 */
+	public function testUndoLeavesAnotherBoostersAnnounceAlone(): void {
 		$announce = $this->incomingAnnounce();
 		$undo = $this->incoming(Undo::TYPE, self::REMOTE_URL . '/undo/1', $this->bob->getId(), $announce);
-		$known = $this->knownAnnounce($this->bob->getFollowers(), $this->carol->getFollowers());
+		$known = $this->knownAnnounce($this->carol, $this->carol->getFollowers(), $this->bob->getFollowers());
 		$notification = $this->boostNotification('bob@remote.example', 'carol@other.example');
 		$this->storedStreamsByType([Announce::TYPE => $known, SocialAppNotification::TYPE => $notification]);
-		$this->noStoredAction();
+		$this->actionsRequest->method('getActionFromItem')->willReturn($announce);
 		$this->streamRequest->method('getStreamById')->willReturn($this->post());
 
 		$this->streamRequest->expects($this->never())->method('deleteById');
-		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($known), true);
+		$this->streamRequest->expects($this->never())->method('update');
+		$this->actionsRequest->expects($this->once())->method('delete')->with($this->identicalTo($announce));
 		$this->notificationInterface->expects($this->never())->method('delete');
 		$this->notificationInterface->expects($this->once())->method('update')->with($this->identicalTo($notification));
 
 		$this->handler->activity($undo, $announce);
 
-		$this->assertSame([$this->carol->getFollowers()], array_values($known->getCcArray()));
+		$this->assertSame($this->carol->getId(), $known->getAttributedTo());
+		$this->assertSame(
+			[$this->carol->getFollowers(), $this->bob->getFollowers()], array_values($known->getCcArray())
+		);
 		$this->assertSame(['carol@other.example'], array_values($notification->getDetails('accounts')));
 	}
 

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { expect, test } from '@playwright/test'
 import { APP, PASSWORD, login, openApp } from './helpers.mjs'
 
-test('Guests accounts can enter Social only when the Guests allowlist permits it', async ({ page }) => {
+test('Guests accounts can enter Aloha Social only when the Guests allowlist permits it', async ({ page }) => {
 	test.skip(process.env.E2E_GUEST !== 'guest', 'the Guests app is installed in the Nextcloud 35 compatibility job')
 
 	await login(page, 'guest', PASSWORD)

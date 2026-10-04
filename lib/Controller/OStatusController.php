@@ -139,6 +139,12 @@ class OStatusController extends Controller {
 			$template = $this->get('template', $link, '');
 			$url = str_replace('{uri}', $following->getAccount(), $template);
 
+			// the template is the remote server's to write, and the browser is
+			// sent to the result: only a web address is one to send it to
+			if (preg_match('/^https?:\/\//i', $url) !== 1) {
+				throw new RetrieveAccountFormatException();
+			}
+
 			return $this->success(['url' => $url]);
 		} catch (Exception $e) {
 			return $this->failFor($e);

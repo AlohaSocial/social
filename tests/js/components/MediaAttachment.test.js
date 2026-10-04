@@ -124,6 +124,16 @@ describe('MediaAttachment', () => {
 		expect(wrapper.find('img.attachment__preview').attributes('src')).toBe(attachment.preview_url)
 	})
 
+	it('fetches the preview as it comes into view and decodes it off the main thread', () => {
+		// a timeline is a long column of these; the blurhash holds the
+		// frame until each one arrives
+		const wrapper = mount(MediaAttachment, { props: { attachment } })
+		const image = wrapper.find('img.attachment__preview')
+
+		expect(image.attributes('loading')).toBe('lazy')
+		expect(image.attributes('decoding')).toBe('async')
+	})
+
 	it('paints the blurhash placeholder at the small preview dimensions', () => {
 		mount(MediaAttachment, { props: { attachment } })
 

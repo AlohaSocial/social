@@ -109,6 +109,24 @@ describe('timeline store state changes', () => {
 		expect(store.parentsTimeline).toEqual([])
 	})
 
+	it('addToTimeline indexes the post a notification is about, and the post that one boosts', () => {
+		// the card reads the post from the index, so a like on it has to
+		// find the same copy the like changes
+		const liked = makeStatus('1')
+		const boosted = makeStatus('2')
+		const boost = makeStatus('3', { reblog: boosted, content: '' })
+		const favourite = { id: 'n1', type: 'favourite', created_at: '2026-01-02T10:00:00.000Z', account: { acct: 'bob' }, status: liked }
+		const reblog = { id: 'n2', type: 'reblog', created_at: '2026-01-02T11:00:00.000Z', account: { acct: 'bob' }, status: boost }
+		const follow = { id: 'n3', type: 'follow', created_at: '2026-01-02T12:00:00.000Z', account: { acct: 'bob' } }
+
+		store.addToTimeline([favourite, reblog, follow])
+
+		expect(store.timeline).toEqual(['n1', 'n2', 'n3'])
+		expect(Object.keys(store.statuses).sort()).toEqual(['1', '2', '3', 'n1', 'n2', 'n3'])
+		store.likeStatus({ status: liked })
+		expect(store.getStatus('1').favourited).toBe(true)
+	})
+
 	it('addToTimeline de-duplicates ids but refreshes the stored status', () => {
 		store.addToTimeline([makeStatus('1'), makeStatus('2')])
 		const edited = makeStatus('2', { content: '<p>edited</p>' })
@@ -269,6 +287,17 @@ describe('timeline store state changes', () => {
 		// every timeline ever opened stayed in memory for the session
 		expect(store.statuses).toEqual({})
 		expect(store.type).toBe('tags')
+	})
+
+	it('removeStatus keeps a status that is only off this list in the index', () => {
+		const kept = makeStatus('1')
+		store.addToTimeline([kept, makeStatus('2')])
+
+		store.removeStatus(kept, false)
+
+		expect(store.timeline).toEqual(['2'])
+		expect(toRaw(store.statuses['1'])).toBe(kept)
+		expect(store.removedFrom['1']).toBe('timeline')
 	})
 
 	it('setters replace their field', () => {
@@ -466,7 +495,8 @@ describe('timeline store actions', () => {
 			params: { tag: 'nextcloud' },
 			account: '',
 		})
-		expect(tl().statuses).toEqual({})
+		// the list just left is remembered, and the index keeps what it names
+		expect(Object.keys(tl().statuses).sort()).toEqual(['1', '2'])
 	})
 
 	it('changeTimelineTypeAccount switches to the statuses of one account', async () => {
@@ -512,7 +542,7 @@ describe('timeline store actions', () => {
 		await store.changeTimelineType({ type: 'federated', params: {} })
 
 		expect(tl().timeline).toEqual([])
-		expect(tl().statuses).toEqual({})
+		expect(store.getTimeline).toEqual([])
 		expect(tl().restored).toBe(false)
 	})
 
@@ -540,8 +570,8 @@ describe('timeline store actions', () => {
 	})
 
 	it('changeTimelineType forgets the oldest rather than every timeline ever opened', async () => {
-		// each held list carries its own status index, so the number of them
-		// is a memory ceiling and not only a convenience
+		// the index keeps every status a held list names, so the number of
+		// them is a memory ceiling and not only a convenience
 		// six visits means five departures, so the first list has fallen off a
 		// shelf that holds four
 		const visited = ['home', 'federated', 'timeline', 'direct', 'notifications', 'liked']
@@ -556,6 +586,102 @@ describe('timeline store actions', () => {
 
 		await store.changeTimelineType({ type: 'direct', params: {} })
 		expect(tl().timeline).toEqual(['3'])
+	})
+
+	/**
+	 * The remembered lists used to be snapshots: each held its own copy of
+	 * the status index, and a like, an edit or a delete changed only the copy
+	 * of the list it happened in. Coming back to another list showed the post
+	 * as it was when the reader left it. The index is one map now, shared
+	 * by every kept list, and only the ids are held aside.
+	 */
+	describe('what happens to a post while the reader is in another list', () => {
+		const shared = makeStatus('1')
+
+		beforeEach(async () => {
+			await store.changeTimelineType({ type: 'home', params: {} })
+			store.addToTimeline([shared, makeStatus('2')])
+			await store.changeTimelineType({ type: 'federated', params: {} })
+			store.addToTimeline([shared, makeStatus('3')])
+		})
+
+		it('a like in one list is seen in the other on return', async () => {
+			store.likeStatus({ status: shared })
+
+			await store.changeTimelineType({ type: 'home', params: {} })
+
+			expect(store.getStatus('1')).toMatchObject({ favourited: true, favourites_count: 1 })
+			expect(store.getTimeline.map((status) => status.favourited)).toEqual([true, false])
+		})
+
+		it('an edit in one list is what the other shows on return', async () => {
+			store.updateStatus(makeStatus('1', { content: '<p>edited</p>' }))
+
+			await store.changeTimelineType({ type: 'home', params: {} })
+
+			expect(store.getTimeline.find((status) => status.id === '1').content).toBe('<p>edited</p>')
+		})
+
+		it('a post deleted in one list is gone from the other on return', async () => {
+			store.removeStatus(shared)
+
+			await store.changeTimelineType({ type: 'home', params: {} })
+
+			expect(tl().timeline).toEqual(['2'])
+			expect(store.getStatus('1')).toBeUndefined()
+			expect(tl().restored).toBe(true)
+		})
+
+		it('a post taken off one list alone is still shown by the other', async () => {
+			// unliked out of the likes, unbookmarked out of the bookmarks,
+			// hidden from For you: off that list, not deleted
+			store.removeStatus(shared, false)
+			expect(tl().timeline).toEqual(['3'])
+
+			await store.changeTimelineType({ type: 'home', params: {} })
+
+			expect(tl().timeline).toEqual(['1', '2'])
+			expect(toRaw(store.getStatus('1'))).toBe(shared)
+		})
+
+		it('keeps in the index what a kept list names, and drops what none does', async () => {
+			// a third list, then a fourth: the index holds the statuses of
+			// all of them, and nothing of a list that fell off the shelf
+			await store.changeTimelineType({ type: 'timeline', params: {} })
+			expect(Object.keys(tl().statuses).sort()).toEqual(['1', '2', '3'])
+
+			store.addToTimeline([makeStatus('4')])
+			await store.changeTimelineType({ type: 'direct', params: {} })
+			store.addToTimeline([makeStatus('5')])
+			await store.changeTimelineType({ type: 'notifications', params: {} })
+			expect(Object.keys(tl().statuses).sort()).toEqual(['1', '2', '3', '4', '5'])
+
+			// six lists have been opened and four departures are held, so
+			// home — the first — is gone, and with it the status only it named
+			await store.changeTimelineType({ type: 'liked', params: {} })
+
+			expect(Object.keys(tl().statuses).sort()).toEqual(['1', '3', '4', '5'])
+		})
+
+		it('keeps the status a kept boost wraps and the post a kept notification is about', async () => {
+			const boosted = makeStatus('6')
+			const favourite = { id: 'n1', type: 'favourite', created_at: '2026-01-02T10:00:00.000Z', account: { acct: 'bob' }, status: makeStatus('7') }
+			store.addToTimeline([makeStatus('8', { reblog: boosted, content: '' }), favourite])
+
+			await store.changeTimelineType({ type: 'timeline', params: {} })
+
+			expect(toRaw(store.getStatus('6'))).toBe(boosted)
+			expect(store.getStatus('7')).toMatchObject({ id: '7' })
+		})
+
+		it('does not drop a post the list on screen has only just loaded', async () => {
+			// a single post is indexed by itself, in no list, before its
+			// context arrives; the explicit reset is what prunes, not time
+			await store.changeTimelineType({ type: 'single-post', params: { id: '9', singlePost: '9' } })
+			store.addToStatuses(makeStatus('9'))
+
+			expect(toRaw(store.getSinglePost)).toMatchObject({ id: '9' })
+		})
 	})
 
 	it('changeTimelineTypeAccount tells a profile from a tab of the same profile', async () => {
@@ -619,6 +745,29 @@ describe('timeline store actions', () => {
 
 			expect(showError).toHaveBeenCalledWith('Could not upload the attachment')
 			expect(logger.error).toHaveBeenCalledWith('Failed to create a media', { error: expect.any(Error) })
+		})
+
+		it('repeats the server\'s reason when it refused the upload', async () => {
+			// too large, a kind it does not take: the refusal says which,
+			// and a fixed line hid it
+			axios.post.mockRejectedValue(Object.assign(new Error('Request failed with status code 413'), {
+				response: { status: 413, data: { error: 'The file is larger than the 10 MB this server takes' } },
+			}))
+
+			await expect(store.createMedia(new File(['x'], 'x.mp4'))).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith('The file is larger than the 10 MB this server takes')
+		})
+
+		it.each([
+			['a 5xx with a message', { status: 500, data: { error: 'Internal Server Error' } }],
+			['a 4xx without one', { status: 422, data: {} }],
+		])('keeps the generic line for %s', async (_, response) => {
+			axios.post.mockRejectedValue(Object.assign(new Error('failed'), { response }))
+
+			await store.createMedia(new File(['x'], 'x.txt'))
+
+			expect(showError).toHaveBeenCalledWith('Could not upload the attachment')
 		})
 
 		it('reports how far the upload has got, so the bar is real', async () => {

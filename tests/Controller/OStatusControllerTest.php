@@ -184,6 +184,31 @@ class OStatusControllerTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The template is the remote server's to write and the browser is sent
+	 * to the result, so a result that is not a web address is refused the way
+	 * a missing template is.
+	 */
+	public function testGetLinkRefusesATemplateWhoseResultIsNotAWebAddress(): void {
+		$this->accountService->method('getActor')->willReturn($this->actorWithAccount('alice@cloud.example'));
+
+		foreach (['javascript:alert(1)//{uri}', 'data:text/html,{uri}', 'ftp://remote.example/{uri}', '//remote.example/{uri}'] as $template) {
+			$this->curlService = $this->createStub(CurlService::class);
+			$this->curlService->method('webfingerAccount')->willReturn([
+				'links' => [['rel' => 'http://ostatus.org/schema/1.0/subscribe', 'template' => $template]],
+			]);
+			$controller = new OStatusController(
+				$this->createStub(IRequest::class), $this->initialState, $this->cacheActorService,
+				$this->accountService, $this->curlService, $this->createStub(MiscService::class), $this->userSession
+			);
+
+			$this->assertFailure(
+				$controller->getLink('alice', 'bob@remote.example'), RetrieveAccountFormatException::class,
+				Http::STATUS_UNPROCESSABLE_ENTITY
+			);
+		}
+	}
+
 	public function testGetLinkFailsWhenWebfingerFails(): void {
 		$this->accountService->method('getActor')->willReturn($this->actorWithAccount('alice@cloud.example'));
 		$this->curlService->method('webfingerAccount')->willThrowException(new \RuntimeException('unreachable'));

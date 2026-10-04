@@ -82,6 +82,12 @@ class ConfigService {
 	public const SOCIAL_RETENTION_DAYS = 'retention_days';
 
 	/**
+	 * Days to keep an in-app notification row before the prune deletes it;
+	 * applied whether or not `retention_days` is set. 0 disables.
+	 */
+	public const SOCIAL_NOTIFICATION_RETENTION_DAYS = 'notification_retention_days';
+
+	/**
 	 * Days to keep a cached remote actor nobody here refers to any more —
 	 * not followed, not following, no post stored, no relation pending — before
 	 * the cache cron evicts it with its avatar; 0 disables the sweep.
@@ -450,6 +456,7 @@ class ConfigService {
 		self::SOCIAL_FOLLOW_LIMIT => '100',
 		self::SOCIAL_DOMAIN_MEDIA_QUOTA => '0',
 		self::SOCIAL_RETENTION_DAYS => '0',
+		self::SOCIAL_NOTIFICATION_RETENTION_DAYS => '90',
 		self::SOCIAL_CACHE_ACTOR_DAYS => '180',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',

@@ -58,7 +58,8 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	 *
 	 * The PKCE challenge is stored as the client sent it: it is a digest
 	 * already, and `exchangeCode()` compares the digest of the presented
-	 * verifier against it.
+	 * verifier against it. The `redirect_uri` the code was issued for is
+	 * stored beside it, so the exchange can require the same one.
 	 */
 	public function authorize(
 		int $clientId,
@@ -68,6 +69,7 @@ class ClientAuthRequest extends ClientRequestBuilder {
 		string $code,
 		string $codeChallenge = '',
 		string $codeChallengeMethod = '',
+		string $redirectUri = '',
 	): void {
 		$this->forget($clientId, $userId);
 
@@ -80,6 +82,7 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			->setValue('code', $qb->createNamedParameter($this->secretHasher->hash($code)))
 			->setValue('code_challenge', $qb->createNamedParameter($codeChallenge))
 			->setValue('code_challenge_method', $qb->createNamedParameter($codeChallengeMethod))
+			->setValue('redirect_uri', $qb->createNamedParameter($redirectUri))
 			->setValue('token', $qb->createNamedParameter(''))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
 			->setValue('last_update', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
@@ -260,6 +263,7 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			->selectAlias('a.code', 'auth_code')
 			->selectAlias('a.code_challenge', 'auth_code_challenge')
 			->selectAlias('a.code_challenge_method', 'auth_code_challenge_method')
+			->selectAlias('a.redirect_uri', 'auth_redirect_uri')
 			->selectAlias('a.token', 'token')
 			->selectAlias('a.last_update', 'last_update')
 			// the authorization's own date, beside the app registration's: the

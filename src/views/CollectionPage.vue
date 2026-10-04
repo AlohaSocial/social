@@ -83,7 +83,9 @@
 						v-if="thumbOf(post)"
 						class="collection__manage-image"
 						:src="thumbOf(post)"
-						:alt="post.media_attachments[0].description || ''">
+						:alt="post.media_attachments[0].description || ''"
+						loading="lazy"
+						decoding="async">
 					<NcButton
 						class="collection__manage-remove"
 						variant="error"

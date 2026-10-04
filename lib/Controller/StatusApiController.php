@@ -196,6 +196,19 @@ class StatusApiController extends MastodonApiController {
 				)?->getId() ?? 0
 			);
 
+			// before the media is scoped: a reply to a direct message is a
+			// direct message whatever `visibility` says, and its attachments
+			// must not be made world-readable on the strength of the request
+			if ($status->getInReplyToId() > 0) {
+				try {
+					$replyTo = $this->streamService->getStreamByNid($status->getInReplyToId());
+					$post->setReplyTo($replyTo->getId());
+					$post->setType(PostService::visibilityOfReply($post->getType(), $replyTo));
+				} catch (StreamNotFoundException $e) {
+					$this->logger->debug('reply to post not found');
+				}
+			}
+
 			if (!empty($status->getMediaIds())) {
 				// the uploader's own media, not the team's: an upload belongs
 				// to the person who made it whatever account the post ends up
@@ -214,15 +227,6 @@ class StatusApiController extends MastodonApiController {
 						);
 					}, $documents)
 				);
-			}
-
-			if ($status->getInReplyToId() > 0) {
-				try {
-					$replyTo = $this->streamService->getStreamByNid($status->getInReplyToId());
-					$post->setReplyTo($replyTo->getId());
-				} catch (StreamNotFoundException $e) {
-					$this->logger->debug('reply to post not found');
-				}
 			}
 
 			$post->setQuotedId($status->getQuotedId());

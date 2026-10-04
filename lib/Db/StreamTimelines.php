@@ -594,7 +594,9 @@ trait StreamTimelines {
 	 * there: public posts carrying one of them.
 	 *
 	 * Public only — a followed hashtag is not a relationship with the author,
-	 * so it may not reach past what any stranger can read. Every other filter
+	 * so it may not reach past what any stranger can read, and not even every
+	 * post a stranger can read: an unlisted post is kept off the tag timelines,
+	 * as on Mastodon. Every other filter
 	 * the follows half applies holds here too: notifications are not posts,
 	 * the viewer's own boosts are not shown back to them, blocked and muted
 	 * accounts stay hidden, and a silenced account is out of the public square
@@ -611,7 +613,10 @@ trait StreamTimelines {
 		$page->limitToFollowedTags('ft_st', 'ft');
 		$page->selectDestFollowing('ft_sd', '');
 		$page->innerJoinStreamDest('recipient', 'id_prim', 'ft_sd', 's');
-		$page->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'ft_sd');
+		// addressed *to* the public collection: an unlisted post carries the
+		// tag and is readable, and is still kept off every tag timeline, as
+		// its author asked
+		$page->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', 'to', 'ft_sd');
 		$page->filterHiddenActors();
 		$page->filterDuplicate();
 		$this->filterSilencedActors($page);
@@ -933,7 +938,9 @@ trait StreamTimelines {
 			'st.hashtag', $page->createNamedParameter(FollowedTagsRequest::normalise($options->getArgument()))
 		));
 
-		$page->limitToViewer('sd', 'f', true);
+		// `to`: an unlisted post names the public collection only in `cc`, and
+		// its author chose to keep it off the tag timelines (Mastodon's rule)
+		$page->limitToViewer('sd', 'f', true, false, SocialCoreQueryBuilder::HIDDEN_TIMELINE, 'to');
 		$page->andWhere($page->expr()->eq('s.attributed_to_prim', 'ca.id_prim'));
 		// a hashtag timeline is part of the public square a silenced account loses
 		$this->filterSilencedActors($page);

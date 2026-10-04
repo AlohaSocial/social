@@ -15,6 +15,8 @@ use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\RequestQueue;
+use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\VideoDeliveryHold;
 use OCA\Social\Service\VideoTranscodeService;
 use OCA\Social\Service\VideoTranscodingWorker;
@@ -37,6 +39,7 @@ class VideoDeliveryHoldTest extends TestCase {
 	private CacheDocumentsRequest|MockObject $cacheDocumentsRequest;
 	private VideoTranscodeService|MockObject $videoTranscodeService;
 	private IJobList|MockObject $jobList;
+	private RequestQueueService|MockObject $requestQueueService;
 	private VideoDeliveryHold $hold;
 
 	/** @var array<string, Document> */
@@ -57,11 +60,13 @@ class VideoDeliveryHoldTest extends TestCase {
 			static fn (string $type): bool => in_array($type, ['video/quicktime', 'video/mp4'], true)
 		);
 		$this->jobList = $this->createMock(IJobList::class);
+		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 
 		$this->hold = new VideoDeliveryHold(
 			$this->cacheDocumentsRequest,
 			$this->videoTranscodeService,
 			$this->jobList,
+			$this->requestQueueService,
 		);
 	}
 
@@ -99,6 +104,34 @@ class VideoDeliveryHoldTest extends TestCase {
 	}
 
 	/** Most posts: nothing is looked up, not even whether ffmpeg exists. */
+	/**
+	 * What the author's own status reports as `delivery: held`: the video is
+	 * still awaited and the queue still has rows on standby for the post.
+	 */
+	public function testAPostWhoseVideoIsAwaitedAndWhoseRowsAreOnStandbyIsHeld(): void {
+		$this->videoTranscodeService->method('isEnabled')->willReturn(true);
+		$this->stored(1, 'video/quicktime');
+		$this->requestQueueService->expects($this->once())->method('getHeld')
+			->with(self::POST)->willReturn([new RequestQueue()]);
+
+		$this->assertTrue($this->hold->isHeld($this->post('video')));
+	}
+
+	public function testAPostWhoseHeldRowsHaveGoneOutIsNoLongerHeld(): void {
+		$this->videoTranscodeService->method('isEnabled')->willReturn(true);
+		$this->stored(1, 'video/quicktime');
+		$this->requestQueueService->method('getHeld')->willReturn([]);
+
+		$this->assertFalse($this->hold->isHeld($this->post('video')));
+	}
+
+	/** The attachments decide first, so the queue is not asked about a post with no video. */
+	public function testAPostWithoutAVideoIsNotHeldWithoutAskingTheQueue(): void {
+		$this->requestQueueService->expects($this->never())->method('getHeld');
+
+		$this->assertFalse($this->hold->isHeld($this->post('image')));
+	}
+
 	public function testAPostWithoutAVideoIsNotHeldAndCostsNothing(): void {
 		$this->videoTranscodeService->expects($this->never())->method('isEnabled');
 		$this->cacheDocumentsRequest->expects($this->never())->method('getByNid');

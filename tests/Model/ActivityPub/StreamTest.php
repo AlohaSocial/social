@@ -464,6 +464,20 @@ class StreamTest extends TestCase {
 		$this->assertSame('Alice', $status['account']['display_name']);
 	}
 
+	/**
+	 * `delivery` is the one key of the entity that is absent rather than
+	 * null: a transient state of the author's own post, not a property every
+	 * status has. Set by whoever knows; a model exported outside a request
+	 * — as here — has no reader to be the author of anything.
+	 */
+	public function testAHeldPostSaysSoToItsAuthorAndNobodyElseSeesTheKey(): void {
+		$held = (new Note())->setDeliveryHeld(true)->exportAsLocal();
+		$this->assertSame('held', $held['delivery']);
+
+		$this->assertArrayNotHasKey('delivery', (new Note())->setDeliveryHeld(false)->exportAsLocal());
+		$this->assertArrayNotHasKey('delivery', (new Note())->exportAsLocal());
+	}
+
 	public function testExportAsLocalWithoutActorHasNoAccount(): void {
 		$status = (new Note())->exportAsLocal();
 

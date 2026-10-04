@@ -159,6 +159,49 @@ class CollectionServiceTest extends TestCase {
 	}
 
 	/** A stranger reading a profile sees only the public albums. */
+	/**
+	 * `getItems()` filters the posts with `limitToViewer()`, which answers
+	 * with the public ones for nobody in particular: unless the reader is
+	 * handed to the request first, a follower opening a collection saw none
+	 * of the followers-only posts the owner put in it.
+	 */
+	public function testTheItemsOfACollectionAreReadAsTheReader(): void {
+		$this->collectionsRequest->method('getById')->willReturn($this->collection(self::ALICE));
+		$this->collectionsRequest->expects($this->once())->method('setViewer')
+			->with($this->callback(static fn (Person $viewer): bool => $viewer->getId() === self::BOB));
+		$this->collectionsRequest->expects($this->never())->method('resetViewer');
+
+		$this->service->readable($this->person(self::BOB), 1);
+	}
+
+	/**
+	 * The request keeps its viewer between reads, so a visitor has to be set
+	 * as nobody rather than left with whoever read before them.
+	 */
+	public function testAVisitorReadsTheItemsAsNobody(): void {
+		$this->collectionsRequest->method('getById')->willReturn($this->collection(self::ALICE));
+		$this->collectionsRequest->expects($this->once())->method('resetViewer');
+		$this->collectionsRequest->expects($this->never())->method('setViewer');
+
+		$this->service->readable(null, 1);
+	}
+
+	public function testAProfileIsReadAsTheReaderToo(): void {
+		$this->followService->method('getLinksBetweenPersons')->willReturn(['following' => false]);
+		$this->collectionsRequest->method('getByActor')->willReturn([]);
+		$this->collectionsRequest->expects($this->once())->method('setViewer')
+			->with($this->callback(static fn (Person $viewer): bool => $viewer->getId() === self::BOB));
+
+		$this->service->forProfile($this->person(self::BOB), $this->person(self::ALICE));
+	}
+
+	public function testAProfileOpenedByAVisitorIsReadAsNobody(): void {
+		$this->collectionsRequest->method('getByActor')->willReturn([]);
+		$this->collectionsRequest->expects($this->once())->method('resetViewer');
+
+		$this->service->forProfile(null, $this->person(self::ALICE));
+	}
+
 	public function testAProfileShowsAStrangerOnlyThePublicCollections(): void {
 		$this->followService->method('getLinksBetweenPersons')
 			->willReturn(['follower' => false, 'following' => false]);

@@ -1003,6 +1003,76 @@ describe('Composer', () => {
 			getItem.mockRestore()
 			setItem.mockRestore()
 		})
+
+		// one slot meant a reply opened over a half-written post took its
+		// place on disk, and sending either threw the other away
+		describe('of a reply', () => {
+			const storedReply = () => JSON.parse(localStorage.getItem('social.composer.draft.reply.42::alice') ?? 'null')
+
+			it('is kept under the post it answers, apart from a post of its own', async () => {
+				const reply = mountComposer({ inReplyTo: replyTo() })
+				await setContent(reply.wrapper, 'an answer')
+				reply.wrapper.unmount()
+
+				expect(storedReply()).toMatchObject({ text: 'an answer' })
+				expect(stored()).toBeNull()
+
+				// a composer for a post of its own neither shows the reply
+				// nor overwrites it
+				const own = mountComposer()
+				await flushPromises()
+				expect(typed(own.wrapper)).toBe('')
+				await setContent(own.wrapper, 'a post of my own')
+				own.wrapper.unmount()
+
+				expect(stored()).toMatchObject({ text: 'a post of my own' })
+				expect(storedReply()).toMatchObject({ text: 'an answer' })
+
+				const { wrapper } = mountComposer({ inReplyTo: replyTo() })
+				await flushPromises()
+				expect(typed(wrapper)).toBe('an answer')
+			})
+
+			it('is forgotten when the reply is away, and the post of its own is not', async () => {
+				localStorage.setItem('social.composer.draft::alice', JSON.stringify({ text: 'a post of my own', savedAt: Date.now() }))
+				const { wrapper } = mountComposer({ inReplyTo: replyTo() })
+				await setContent(wrapper, 'an answer')
+
+				await submitButton(wrapper).trigger('click')
+				await flushPromises()
+
+				expect(storedReply()).toBeNull()
+				expect(stored()).toMatchObject({ text: 'a post of my own' })
+			})
+
+			it('moves with the words when the box is pointed at a post, and back', async () => {
+				const { wrapper } = mountComposer()
+				await setContent(wrapper, 'half a thought')
+
+				// the words stay in the box when reply is pressed, so the
+				// draft follows them rather than lingering as a copy
+				eventBus.emit('composer-reply', replyTo(bob))
+				await flushPromises()
+				expect(typed(wrapper)).toBe('half a thought')
+				expect(storedReply()).toMatchObject({ text: 'half a thought' })
+				expect(stored()).toBeNull()
+
+				await wrapper.find('.reply-to button[aria-label="Close reply"]').trigger('click')
+				await flushPromises()
+				expect(stored()).toMatchObject({ text: 'half a thought' })
+				expect(storedReply()).toBeNull()
+			})
+
+			it('keeps a quote under the post it quotes', async () => {
+				const { wrapper } = mountComposer()
+				eventBus.emit('composer-quote', quoteOf())
+				await flushPromises()
+				await setContent(wrapper, 'about this one')
+
+				expect(JSON.parse(localStorage.getItem('social.composer.draft.quote.77::alice'))).toMatchObject({ text: 'about this one' })
+				expect(stored()).toBeNull()
+			})
+		})
 	})
 
 	describe('attachments', () => {

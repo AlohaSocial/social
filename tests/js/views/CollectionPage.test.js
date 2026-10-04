@@ -129,6 +129,8 @@ describe('CollectionPage', () => {
 
 		await wrapper.findAll('.collection__actions button')[1].trigger('click')
 		expect(wrapper.findAll('.collection__manage-cell')).toHaveLength(2)
+		// a grid of squares, fetched as they scroll into view
+		expect(wrapper.find('.collection__manage-image').attributes()).toMatchObject({ loading: 'lazy', decoding: 'async' })
 
 		await wrapper.find('.collection__manage-remove').trigger('click')
 		await flushPromises()

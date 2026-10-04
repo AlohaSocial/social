@@ -14,6 +14,7 @@ use OCA\Social\Db\ClientAuthRequest;
 use OCA\Social\Db\ClientRequest;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -46,6 +47,19 @@ class ClientService {
 	// RFC 7636 §4.1: the verifier is 43 to 128 unreserved characters
 	private const CODE_VERIFIER_PATTERN = '/^[A-Za-z0-9\-._~]{43,128}$/';
 
+	/** RFC 6749 §4.1.1 / RFC 8252: the out-of-band redirect, shown rather than sent */
+	public const REDIRECT_URI_OOB = 'urn:ietf:wg:oauth:2.0:oob';
+
+	/** `scheme://`, lower case: a web origin or a native application's own scheme */
+	private const REDIRECT_URI_SCHEME_PATTERN = '/^([a-z][a-z0-9+.\-]*):\/\//';
+
+	/**
+	 * Schemes a browser executes rather than navigates to. A redirect URI with
+	 * one of these is a link on the consent page that runs in the account's
+	 * session, not an address a code can be sent to.
+	 */
+	private const REDIRECT_URI_FORBIDDEN_SCHEMES = ['javascript', 'data', 'vbscript', 'file'];
+
 	use TStringTools;
 
 	private ClientRequest $clientRequest;
@@ -75,10 +89,42 @@ class ClientService {
 			throw new ClientException('missing redirect_uris');
 		}
 
+		foreach ($client->getAppRedirectUris() as $uri) {
+			if (!self::isAcceptableRedirectUri((string)$uri)) {
+				throw new ClientException('invalid redirect_uri: ' . $uri);
+			}
+		}
+
 		$client->setAppClientId($this->token(40));
 		$client->setAppClientSecret($this->token(40));
 
 		$this->clientRequest->saveApp($client);
+	}
+
+	/**
+	 * Whether a URI may be registered as a redirect URI (RFC 6749 §3.1.2):
+	 * the out-of-band urn, an `http`/`https` address with a host, or a native
+	 * application's custom scheme — anything but a scheme a browser would run.
+	 */
+	public static function isAcceptableRedirectUri(string $uri): bool {
+		if ($uri === self::REDIRECT_URI_OOB) {
+			return true;
+		}
+
+		if (preg_match(self::REDIRECT_URI_SCHEME_PATTERN, $uri, $matches) !== 1) {
+			return false;
+		}
+
+		$scheme = $matches[1];
+		if (in_array($scheme, self::REDIRECT_URI_FORBIDDEN_SCHEMES, true)) {
+			return false;
+		}
+
+		if (in_array($scheme, ['http', 'https'], true)) {
+			return (string)parse_url($uri, PHP_URL_HOST) !== '';
+		}
+
+		return true;
 	}
 
 	/**
@@ -106,7 +152,7 @@ class ClientService {
 			->setAppWebsite('https://joinpeertube.org')
 			// the out-of-band urn, which is what a client with no callback of
 			// its own uses and what `OAuthController` already understands
-			->setAppRedirectUris(['urn:ietf:wg:oauth:2.0:oob'])
+			->setAppRedirectUris([self::REDIRECT_URI_OOB])
 			->setAppScopes(['read', 'write', 'follow']);
 
 		$this->createApp($client);
@@ -133,7 +179,8 @@ class ClientService {
 			$client->getAuthScopes(),
 			$client->getAuthCode(),
 			$client->getAuthCodeChallenge(),
-			$client->getAuthCodeChallengeMethod()
+			$client->getAuthCodeChallengeMethod(),
+			$client->getAuthRedirectUri()
 		);
 	}
 
@@ -148,17 +195,29 @@ class ClientService {
 	 * the redirect — a custom scheme another app can claim, a proxy reading
 	 * the query string — is of no use on its own.
 	 *
+	 * RFC 6749 §4.1.3: the `redirect_uri` presented here has to be the one
+	 * the code was issued for. A client holding a code that was sent to
+	 * another of the app's registered URIs is not the client it was sent to.
+	 *
 	 * @throws ClientNotFoundException the code names no live authorization
+	 * @throws InvalidGrantException the redirect_uri is not the one the code
+	 *                               was issued for
 	 * @throws ClientException it names one that has expired, or the verifier
 	 *                         does not match the challenge it was bound to
 	 */
-	public function exchangeCode(SocialClient $client, string $code, string $codeVerifier = ''): SocialClient {
+	public function exchangeCode(
+		SocialClient $client, string $code, string $codeVerifier = '', string $redirectUri = '',
+	): SocialClient {
 		$authorized = $this->clientAuthRequest->getByCode($client->getId(), $code);
 
 		// authorize() stamps last_update at the authorization moment
 		if ($authorized->getLastUpdate() > 0
 			&& $authorized->getLastUpdate() + self::TIME_CODE_TTL < time()) {
 			throw new ClientException('code expired');
+		}
+
+		if ($authorized->getAuthRedirectUri() !== $redirectUri) {
+			throw new InvalidGrantException('redirect_uri does not match the authorization request');
 		}
 
 		$this->confirmCodeVerifier($authorized, $codeVerifier);

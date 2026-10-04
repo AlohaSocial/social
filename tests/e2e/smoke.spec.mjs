@@ -12,7 +12,7 @@ import { login, navEntry, openApp } from './helpers.mjs'
  * integration suites cannot see a page that stays empty because a bundle
  * did not load or a route returned the wrong shape; this can.
  */
-test.describe('Social, in a browser', () => {
+test.describe('Aloha Social, in a browser', () => {
 	test.beforeEach(async ({ page }) => {
 		await login(page)
 	})
@@ -201,7 +201,7 @@ test.describe('Social, in a browser', () => {
 		await expect(headings.first()).toBeVisible()
 
 		expect((await headings.allInnerTexts()).slice(-2))
-			.toEqual(['Keyboard shortcuts', 'Delete your Social account'])
+			.toEqual(['Keyboard shortcuts', 'Delete your Aloha Social account'])
 	})
 
 	test('Discover has its sections', async ({ page }) => {

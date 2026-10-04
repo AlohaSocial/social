@@ -182,6 +182,7 @@ class VideoLadderService {
 		$ran = $this->run([
 			$ffprobe,
 			'-v', 'error',
+			'-protocol_whitelist', 'file',
 			'-select_streams', 'v:0',
 			'-show_entries', 'stream=height',
 			'-of', 'csv=p=0',

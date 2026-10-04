@@ -74,12 +74,13 @@ class VideoTranscodingWorkerTest extends TestCase {
 		parent::tearDown();
 	}
 
-	private function document(int $nid, string $type, string $copy = 'stored-uuid'): Document {
+	private function document(int $nid, string $type, string $copy = 'stored-uuid', string $account = 'alice'): Document {
 		$document = new Document();
 		$document->setNid($nid);
 		$document->setId('https://cloud.example/media/' . $nid);
 		$document->setMediaType($type);
 		$document->setLocalCopy($copy);
+		$document->setAccount($account);
 
 		return $document;
 	}
@@ -152,6 +153,25 @@ class VideoTranscodingWorkerTest extends TestCase {
 			static fn (int $limit, int $after = 0): array => ($after === 0) ? $page : []
 		);
 		$this->doesNotProbe();
+
+		$this->cacheDocumentsRequest->expects($this->once())->method('setTranscoded')
+			->with(1, VideoTranscodingWorker::NOT_NEEDED);
+
+		$this->assertFalse($this->worker->convertNext());
+	}
+
+	/**
+	 * A video cached from another server is that server's to encode. The
+	 * selection leaves such rows out; one that reaches the worker anyway is
+	 * marked rather than converted, so it is not read again on the next run.
+	 */
+	public function testAVideoCachedFromAnotherServerIsMarkedAndNeverConverted(): void {
+		$remote = $this->document(1, 'video/quicktime', 'stored-uuid', '');
+		$this->cacheDocumentsRequest->method('getVideosToTranscode')->willReturnCallback(
+			static fn (int $limit, int $after = 0): array => ($after === 0) ? [$remote] : []
+		);
+		$this->probesMp4s();
+		$this->videoTranscodeService->expects($this->never())->method('convert');
 
 		$this->cacheDocumentsRequest->expects($this->once())->method('setTranscoded')
 			->with(1, VideoTranscodingWorker::NOT_NEEDED);

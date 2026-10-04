@@ -436,10 +436,14 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 	 * @param string $aliasFollowing
 	 * @param bool $allowPublic
 	 * @param bool $allowDirect
+	 * @param string $publicSubType which recipient row counts as public: '' for
+	 *                              any, `to` for a post addressed *to* the public
+	 *                              collection -- which leaves out an unlisted
+	 *                              post, where the public collection is only in `cc`
 	 */
 	public function limitToViewer(
 		string $aliasDest = 'sd', string $aliasFollowing = 'f', bool $allowPublic = false,
-		bool $allowDirect = false, string $hiddenLevel = self::HIDDEN_TIMELINE,
+		bool $allowDirect = false, string $hiddenLevel = self::HIDDEN_TIMELINE, string $publicSubType = '',
 	) {
 		if (!$this->hasViewer()) {
 			// No viewer means no follows are consulted, so the follows table
@@ -449,7 +453,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 			// '' suppresses it, exactly as the viewer branch below does.
 			$this->selectDestFollowing($aliasDest, '');
 			$this->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
-			$this->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', $aliasDest);
+			$this->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', $publicSubType, $aliasDest);
 
 			return;
 		}
@@ -466,7 +470,7 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 		];
 
 		if ($allowPublic) {
-			$conditions[] = $this->exprLimitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', $aliasDest);
+			$conditions[] = $this->exprLimitToDest(ACore::CONTEXT_PUBLIC, 'recipient', $publicSubType, $aliasDest);
 		}
 
 		if ($allowDirect) {

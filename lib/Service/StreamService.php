@@ -412,12 +412,12 @@ class StreamService {
 	 * @throws StreamNotFoundException
 	 * @throws UnauthorizedFediverseException
 	 */
-	public function replyTo(Note $note, string $replyTo) {
+	public function replyTo(Note $note, string $replyTo, ?Stream $parent = null) {
 		if ($replyTo === '') {
 			return;
 		}
 
-		$parent = $this->streamRequest->getStreamById($replyTo);
+		$parent ??= $this->streamRequest->getStreamById($replyTo);
 
 		// what the author said may be done with their post. Sending a reply
 		// their server states it will not take means telling the person who

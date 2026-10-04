@@ -12,6 +12,8 @@ import { useInstanceStore } from '../../../src/store/instance.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import { prepareImage } from '../../../src/utils/imageFilters.js'
 
+import { showError } from '../../../src/services/toast.js'
+
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn() }))
 
 // the real one needs a canvas; what is tested here is when it is asked, and
@@ -235,14 +237,37 @@ describe('useComposerAttachments', () => {
 
 		it('leaves a video to its own, larger ceiling', async () => {
 			useInstanceStore().imageSizeLimit = 10
+			useInstanceStore().videoSizeLimit = 100
+			const store = useTimelineStore()
+			store.createMedia = vi.fn(async () => ({ id: '1' }))
+			vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:https://cloud.example/clip')
+			const { attachments } = mountAttachments()
+			const clip = new File([new Uint8Array(50)], 'clip.mp4', { type: 'video/mp4' })
+
+			await attachments.attachFiles([clip])
+
+			expect(store.createMedia).toHaveBeenCalledWith(expect.objectContaining({ file: clip }))
+			// never through the picture path: there is nothing to shrink
+			expect(prepareImage).not.toHaveBeenCalled()
+		})
+
+		/**
+		 * A video cannot be shrunk, and the server only says no once all of
+		 * it has arrived — a two-gigabyte upload for a refusal. The message
+		 * names the ceiling, so the reader knows what would get through.
+		 */
+		it('refuses a video over the video ceiling before it is sent, naming the ceiling', async () => {
+			useInstanceStore().videoSizeLimit = 3 * 1048576
 			const store = useTimelineStore()
 			store.createMedia = vi.fn(async () => ({ id: '1' }))
 			vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:https://cloud.example/clip')
 			const { attachments } = mountAttachments()
 
-			await attachments.attachFiles([new File([new Uint8Array(50)], 'clip.mp4', { type: 'video/mp4' })])
+			await attachments.attachFiles([new File([new Uint8Array(4 * 1048576)], 'clip.mp4', { type: 'video/mp4' })])
 
-			expect(store.createMedia).toHaveBeenCalledTimes(1)
+			expect(store.createMedia).not.toHaveBeenCalled()
+			expect(attachments.attachments.value['blob:https://cloud.example/clip'].failed).toBe(true)
+			expect(showError).toHaveBeenCalledWith('This video is larger than the 3 MB this server takes')
 		})
 	})
 })

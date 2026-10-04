@@ -14,6 +14,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
+use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
@@ -150,9 +151,11 @@ class OAuthController extends Controller {
 	/**
 	 * @AnonRateThrottle(limit=15, period=300)
 	 *
-	 * @param array|string $redirect_uris
+	 * A registration the service refuses -- no name, no redirect URI, or one
+	 * with a scheme a browser would run rather than follow -- is a 422, which
+	 * is how Mastodon answers a registration that fails validation.
 	 *
-	 * @throws ClientException
+	 * @param array|string $redirect_uris
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -190,7 +193,11 @@ class OAuthController extends Controller {
 		$client->setAppScopes($client->getScopesFromString($scopes));
 		$client->setAppName($client_name);
 
-		$this->clientService->createApp($client);
+		try {
+			$this->clientService->createApp($client);
+		} catch (ClientException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 
 		return new DataResponse(
 			[
@@ -259,18 +266,16 @@ class OAuthController extends Controller {
 			$client = $this->clientService->getFromClientId($client_id);
 			// A code must only ever travel to a URI the client registered; checked before
 			// the consent page exists, so there is nothing to confirm on a forged link.
-			$this->clientService->confirmData(
-				$client,
-				[
-					'app_scopes' => $scope,
-					'redirect_uri' => $redirect_uri
-				]
-			);
+			if (!$this->isRegisteredRedirectUri($client, $redirect_uri)) {
+				return $this->invalidRequest('redirect_uri is not registered for this client');
+			}
+
+			$this->clientService->confirmData($client, ['app_scopes' => $scope]);
 
 			// what the person is being asked to agree to: the app, what it may
 			// do, and where the code is about to be sent
 			$this->initialState->provideInitialState('appName', $client->getAppName());
-			$this->initialState->provideInitialState('appWebsite', $client->getAppWebsite());
+			$this->initialState->provideInitialState('appWebsite', $this->websiteLink($client->getAppWebsite()));
 			// which account is about to be handed over: on a server where
 			// somebody holds more than one, the name of the application alone
 			// does not answer the question being asked
@@ -380,7 +385,7 @@ class OAuthController extends Controller {
 	 * which was checked before this page was drawn.
 	 */
 	private function formActionSource(string $redirectUri): string {
-		if ($redirectUri === '' || $redirectUri === 'urn:ietf:wg:oauth:2.0:oob') {
+		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB) {
 			// answered by a page on this server; 'self' already covers it
 			return '';
 		}
@@ -433,14 +438,53 @@ class OAuthController extends Controller {
 	}
 
 	/**
+	 * The application's website as the consent page may link it: an `http` or
+	 * `https` address, or nothing. The registration takes any string there,
+	 * and the page offers it as a link to click.
+	 */
+	private function websiteLink(string $website): string {
+		return preg_match('/^https?:\/\/[^\/]/i', $website) === 1 ? $website : '';
+	}
+
+	/**
+	 * RFC 6749 §3.1.2.3: the `redirect_uri` of a request has to be, exactly,
+	 * one the client registered. Compared as strings rather than by origin or
+	 * prefix -- a code sent to a path the client did not register is a code
+	 * sent to whoever controls that path.
+	 */
+	private function isRegisteredRedirectUri(SocialClient $client, string $redirectUri): bool {
+		return in_array($redirectUri, $client->getAppRedirectUris(), true);
+	}
+
+	/**
+	 * RFC 6749 §4.1.2.1 `invalid_request`, in the shape Mastodon answers it.
+	 * Never a redirect: the one parameter that is wrong is where the redirect
+	 * would go.
+	 */
+	private function invalidRequest(string $description): DataResponse {
+		$this->logger->notice('OAuth invalid_request: ' . $description);
+
+		return new DataResponse(
+			['error' => 'invalid_request', 'error_description' => $description],
+			Http::STATUS_BAD_REQUEST
+		);
+	}
+
+	/**
 	 * Where refusing consent sends the browser: back to the client with
 	 * `error=access_denied`, which is the answer RFC 6749 §4.1.2.1 owes it.
 	 *
 	 * A client left without one waits for a redirect that never comes. The
 	 * out-of-band flow has nowhere to send it, so that lands on the app.
+	 *
+	 * So does a redirect URI the registration would refuse today: this is a
+	 * link the person clicks, and a `javascript:` URI registered before the
+	 * scheme was checked would run in their session rather than send them
+	 * anywhere.
 	 */
 	private function denyUrl(string $redirectUri, string $state): string {
-		if ($redirectUri === '' || $redirectUri === 'urn:ietf:wg:oauth:2.0:oob') {
+		if ($redirectUri === '' || $redirectUri === ClientService::REDIRECT_URI_OOB
+			|| !ClientService::isAcceptableRedirectUri($redirectUri)) {
 			return $this->urlGenerator->linkToRoute('social.Navigation.navigate');
 		}
 
@@ -474,24 +518,24 @@ class OAuthController extends Controller {
 			$code_challenge_method = $this->challengeMethod($code_challenge, $code_challenge_method);
 
 			$client = $this->clientService->getFromClientId($client_id);
-			$this->clientService->confirmData(
-				$client,
-				[
-					'app_scopes' => $scope,
-					'redirect_uri' => $redirect_uri
-				]
-			);
+			if (!$this->isRegisteredRedirectUri($client, $redirect_uri)) {
+				return $this->invalidRequest('redirect_uri is not registered for this client');
+			}
+
+			$this->clientService->confirmData($client, ['app_scopes' => $scope]);
 
 			$client->setAuthScopes($client->getScopesFromString($scope));
 			$client->setAuthAccount($account->getPreferredUsername());
 			$client->setAuthUserId($user->getUID());
 			$client->setAuthCodeChallenge($code_challenge);
 			$client->setAuthCodeChallengeMethod($code_challenge_method);
+			// the token exchange has to name this same URI (RFC 6749 §4.1.3)
+			$client->setAuthRedirectUri($redirect_uri);
 
 			$this->clientService->authClient($client);
 			$code = $client->getAuthCode();
 
-			if ($redirect_uri !== 'urn:ietf:wg:oauth:2.0:oob') {
+			if ($redirect_uri !== ClientService::REDIRECT_URI_OOB) {
 				return new RedirectResponse($this->redirectWithCode($redirect_uri, $code, $state));
 			}
 
@@ -599,8 +643,8 @@ class OAuthController extends Controller {
 
 				// the code names the authorization, so what comes back is the
 				// account that granted it rather than whatever the app row
-				// last held
-				$client = $this->clientService->exchangeCode($client, $code, $code_verifier);
+				// last held -- and only against the redirect_uri it was sent to
+				$client = $this->clientService->exchangeCode($client, $code, $code_verifier, $redirect_uri);
 			} elseif ($grant_type === 'client_credentials') {
 				// There is no app-only identity here for such a token to act
 				// as; every route this API has reads or writes somebody's
@@ -639,6 +683,16 @@ class OAuthController extends Controller {
 			// A wrong client id / secret / code is a credential guess; throttle it so
 			// the public token endpoint cannot be brute-forced.
 			$response = new DataResponse(['error' => 'unknown client_id'], Http::STATUS_UNAUTHORIZED);
+			$response->throttle(['action' => 'socialOauthToken']);
+
+			return $response;
+		} catch (InvalidGrantException $e) {
+			// RFC 6749 §5.2: a code presented under another redirect_uri than
+			// the one it was issued for is a 400, and a guess at somebody's code
+			$response = new DataResponse(
+				['error' => 'invalid_grant', 'error_description' => $e->getMessage()],
+				Http::STATUS_BAD_REQUEST
+			);
 			$response->throttle(['action' => 'socialOauthToken']);
 
 			return $response;

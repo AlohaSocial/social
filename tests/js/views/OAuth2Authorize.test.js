@@ -135,6 +135,20 @@ describe('OAuth2Authorize', () => {
 		expect(deny.attributes('href')).toBe('/index.php/apps/social/')
 	})
 
+	/**
+	 * Where refusing sends the browser is the server's decision: it hands over
+	 * the client's registered URI with `error=access_denied`, or its own page
+	 * for a URI it will not link. The view follows it as it is, which is why
+	 * the filtering has to happen before it gets here.
+	 */
+	it('sends a refusal where the server said to', () => {
+		setState('denyUrl', 'tusky://oauth?error=access_denied&state=s1')
+		const deny = mount(OAuth2Authorize).find('form .button-row a')
+
+		expect(deny.text()).toBe('Deny')
+		expect(deny.attributes('href')).toBe('tusky://oauth?error=access_denied&state=s1')
+	})
+
 	it('picks up a different app name from the initial state', () => {
 		setState('appName', 'Ivory')
 		expect(mount(OAuth2Authorize).find('p').text()).toContain('Ivory would like permission')

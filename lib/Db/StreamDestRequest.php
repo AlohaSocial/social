@@ -9,12 +9,11 @@ declare(strict_types=1);
 
 namespace OCA\Social\Db;
 
-use Exception;
+use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamDest;
-use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -36,7 +35,7 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		IDBConnection $connection,
 		LoggerInterface $logger,
 		IURLGenerator $urlGenerator,
-		private CacheActorService $cacheActorService,
+		private CacheActorsRequest $cacheActorsRequest,
 		ConfigService $configService,
 		MiscService $miscService,
 	) {
@@ -160,10 +159,28 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		}
 	}
 
+	/**
+	 * The author is read from the cache and never fetched: this runs inside
+	 * the transaction that stores the post, and an HTTP request there holds
+	 * the row locks for as long as the peer takes to answer. An author that is
+	 * not cached — every save path caches it first — leaves the post addressed
+	 * as a home-timeline post, which is what an unknown followers collection
+	 * amounted to before as well.
+	 */
 	private function generateStreamDirect(Stream $stream): bool {
+		$authorId = $stream->getAttributedTo();
+		$anchor = strpos($authorId, '#');
+		if ($anchor !== false) {
+			$authorId = substr($authorId, 0, $anchor);
+		}
+
 		try {
-			$author = $this->cacheActorService->getFromId($stream->getAttributedTo());
-		} catch (Exception $e) {
+			$author = $this->cacheActorsRequest->getFromId($authorId);
+		} catch (CacheActorDoesNotExistException $e) {
+			$this->logger->debug('author not cached while addressing a stream; treated as not direct', [
+				'stream' => $stream->getId(), 'author' => $authorId,
+			]);
+
 			return false;
 		}
 

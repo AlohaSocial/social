@@ -68,6 +68,15 @@ class ConfigServiceTest extends TestCase {
 	 * therefore something an administrator turns on knowing who reads it,
 	 * not something every instance does to every follower.
 	 */
+	/**
+	 * A notification is read once from the bell; ninety days keeps a quarter
+	 * of history for a user who was away and lets the table stop growing
+	 * everywhere else, with or without status retention.
+	 */
+	public function testNotificationsAreKeptForNinetyDaysByDefault(): void {
+		$this->assertSame('90', $this->service->defaults[ConfigService::SOCIAL_NOTIFICATION_RETENTION_DAYS]);
+	}
+
 	public function testVideosGoOutAsNotesUnlessAnAdministratorDecidesOtherwise(): void {
 		$this->assertSame('0', $this->service->defaults[ConfigService::SOCIAL_PUBLISH_VIDEO]);
 	}

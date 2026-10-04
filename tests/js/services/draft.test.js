@@ -123,6 +123,56 @@ describe('the composer draft', () => {
 		expect(loadDraft()).toBeNull()
 	})
 
+	// A reply and a post of its own are two drafts: with one slot, a reply
+	// opened over a half-written post took its place, and sending either
+	// threw the other away.
+	describe('and what it belongs to', () => {
+		it('keeps a reply apart from the post being written', () => {
+			saveDraft({ text: 'a post of my own' })
+			saveDraft({ text: 'an answer' }, 'reply.42')
+
+			expect(loadDraft()).toMatchObject({ text: 'a post of my own' })
+			expect(loadDraft('reply.42')).toMatchObject({ text: 'an answer' })
+			expect(loadDraft('reply.43')).toBeNull()
+		})
+
+		it('forgets only the draft that went out', () => {
+			saveDraft({ text: 'a post of my own' })
+			saveDraft({ text: 'an answer' }, 'reply.42')
+
+			clearDraft('reply.42')
+
+			expect(loadDraft('reply.42')).toBeNull()
+			expect(loadDraft()).toMatchObject({ text: 'a post of my own' })
+		})
+
+		it('treats an emptied reply as nothing to keep', () => {
+			saveDraft({ text: 'an answer' }, 'reply.42')
+			saveDraft({ text: '' }, 'reply.42')
+
+			expect(loadDraft('reply.42')).toBeNull()
+		})
+
+		it('drops a reply nobody came back for in a week', () => {
+			localStorage.setItem(`${KEY}.reply.42`, JSON.stringify({
+				text: 'last month',
+				savedAt: Date.now() - 8 * 24 * 3600 * 1000,
+			}))
+
+			expect(loadDraft('reply.42')).toBeNull()
+			expect(localStorage.getItem(`${KEY}.reply.42`)).toBeNull()
+		})
+
+		it('still throws away the draft from before drafts were scoped when a reply is read', () => {
+			localStorage.setItem(KEY, JSON.stringify({ text: 'from before', savedAt: Date.now() }))
+			signedInAs('alice')
+
+			loadDraft('reply.42')
+
+			expect(localStorage.getItem(KEY)).toBeNull()
+		})
+	})
+
 	// `localStorage` belongs to the origin, not to the session: it survives a
 	// logout, and every account signing in to this Nextcloud in this browser
 	// profile reads the same keys. An unsent draft is somebody's words.
