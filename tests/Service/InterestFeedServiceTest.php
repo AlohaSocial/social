@@ -35,6 +35,9 @@ class InterestFeedServiceTest extends TestCase {
 	private array $trending = [];
 	/** @var string[] the kind every trending question asked for */
 	private array $trendKinds = [];
+	/** @var list<array{nid: string, author: string}> */
+	private array $newest = [];
+	private ?array $askedNewest = null;
 	/** @var string[] posts that are gone by the time they are read */
 	private array $gone = [];
 	private array $cache = [];
@@ -134,6 +137,19 @@ class InterestFeedServiceTest extends TestCase {
 
 					return $note;
 				}, array_slice($this->trending, 0, $limit));
+			}
+		);
+		$trends->method('newestPublic')->willReturnCallback(
+			function (int $limit, array $excluding): array {
+				$this->askedNewest = ['limit' => $limit, 'excluding' => $excluding];
+
+				return array_map(static function (array $post): Note {
+					$note = new Note();
+					$note->setNid($post['nid']);
+					$note->setAttributedTo($post['author']);
+
+					return $note;
+				}, array_slice($this->newest, 0, $limit));
 			}
 		);
 
@@ -357,6 +373,42 @@ class InterestFeedServiceTest extends TestCase {
 	}
 
 	/**
+	 * The plain feed is filled the same way: what is trending first, and on
+	 * an instance where nothing is, the newest public posts — so a newcomer's
+	 * For you is never an empty page while the instance has anything.
+	 */
+	public function testAShortPlainRankingIsFilledWithWhatIsPopularThenTheNewest(): void {
+		$this->weights(['cats' => 1.0]);
+		$matched = $this->given(60, ['cats'], 'b');
+		$trending = $this->nid(120, 2);
+		$newest = $this->nid(30, 3);
+		$this->trending = [['nid' => $trending, 'author' => 'c']];
+		$this->newest = [
+			['nid' => $trending, 'author' => 'c'],
+			['nid' => $this->nid(90, 4), 'author' => $this->viewer()->getId()],
+			['nid' => $newest, 'author' => 'd'],
+		];
+
+		$ranked = $this->service()->rank($this->viewer());
+
+		$this->assertSame([$matched, $trending, $newest], array_column($ranked, 'nid'));
+		$this->assertSame(['interest', 'popular', 'popular'], array_column($ranked, 'reason'));
+		$this->assertSame([''], $this->trendKinds, 'the plain feed asks for trending of every kind');
+		$this->assertContains($matched, $this->askedNewest['excluding']);
+		$this->assertContains($trending, $this->askedNewest['excluding']);
+	}
+
+	/** A narrowed ranking never asks for the newest posts: its trending is already topped up with media. */
+	public function testANarrowedRankingDoesNotAskForTheNewestPosts(): void {
+		$this->weights(['cats' => 1.0]);
+		$this->trending = [['nid' => $this->nid(120, 2), 'author' => 'c']];
+
+		$this->service()->rank($this->viewer(), 'photos');
+
+		$this->assertNull($this->askedNewest);
+	}
+
+	/**
 	 * Short of a screenful, a photo ranking is topped up with what is trending
 	 * in photos — each marked popular, none twice, none the reader's own.
 	 */
@@ -387,11 +439,17 @@ class InterestFeedServiceTest extends TestCase {
 		$this->assertSame([], $this->queries, 'no interests to ask the database about');
 	}
 
-	public function testTheWholeFeedIsNeverFilledWithWhatIsPopular(): void {
-		$this->trending = [['nid' => $this->nid(60, 1), 'author' => 'c']];
+	/**
+	 * A reader with no interests yet used to get an empty plain feed; it is
+	 * filled with what is popular, like a narrowed one, so the page is never
+	 * blank while the instance has anything to show.
+	 */
+	public function testAnEmptyPlainFeedIsFilledWithWhatIsPopular(): void {
+		$popular = $this->nid(60, 1);
+		$this->trending = [['nid' => $popular, 'author' => 'c']];
 
-		$this->assertSame([], $this->service()->rank($this->viewer()));
-		$this->assertSame([], $this->trendKinds);
+		$this->assertSame([['nid' => $popular, 'tags' => [], 'reason' => 'popular']], $this->service()->rank($this->viewer()));
+		$this->assertSame([''], $this->trendKinds);
 	}
 
 	public function testAFullMediaRankingIsLeftAlone(): void {

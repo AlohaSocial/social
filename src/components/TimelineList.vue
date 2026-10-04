@@ -122,6 +122,13 @@ import TimelineSkeleton from './TimelineSkeleton.vue'
  * milliseconds: a little longer than an entry takes to rise in.
  */
 const SWAP_SETTLE = 320
+
+/**
+ * The lists a switch holds the previous one over for even on a first visit:
+ * the three scopes of the switcher, which are the same kind of list and
+ * practically never empty, so the posts being left are a fair stand-in.
+ */
+const HELD_SCOPES = ['home', 'timeline', 'federated']
 import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import eventBus, { NOTIFICATIONS_READ } from '../services/eventBus.js'
@@ -774,7 +781,18 @@ export default {
 		 * it rather than somebody else's posts.
 		 */
 		holding() {
-			return this.loading && this.timeline.length === 0 && this.heldOver.length > 0
+			return this.loading && this.timeline.length === 0 && this.heldOver.length > 0 && this.holdable
+		},
+
+		/**
+		 * Whether the list being loaded is one worth holding the last one
+		 * over for: a scope of the switcher, or any list that has shown a
+		 * post before this session. A ranked feed opened for the first time
+		 * may well be empty, and posts that appear only to vanish are worse
+		 * than a moment of skeleton.
+		 */
+		holdable() {
+			return HELD_SCOPES.includes(this.timelineStore.type) || this.timelineStore.wasFilled(this.timelineStore.getTimelineIdentity)
 		},
 
 		/**
@@ -839,9 +857,12 @@ export default {
 		// something new to look at restarts the dwell: what arrived while the
 		// reader was here is read on the same terms as what was already there
 		timeline(entries, previous) {
+			if (entries.length > 0) {
+				this.timelineStore.markFilled(this.timelineStore.getTimelineIdentity)
+			}
 			// the held-over list is on screen when the new one lands: that
 			// render swaps them, so it is drawn as a swap
-			if (entries.length > 0 && previous.length === 0 && this.heldOver.length > 0) {
+			if (entries.length > 0 && previous.length === 0 && this.heldOver.length > 0 && this.holdable) {
 				this.startSwap()
 			}
 			// the last list that had anything is what a switch shows while the

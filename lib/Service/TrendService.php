@@ -94,6 +94,25 @@ class TrendService {
 	}
 
 	/**
+	 * The newest public posts, for a For you feed that is short of a screen
+	 * on an instance where nothing is trending yet. Not a trend and never
+	 * shown as one: the trending pages say what people are talking about,
+	 * and these are only what was said last.
+	 *
+	 * @param string[] $excluding nids already on the page
+	 *
+	 * @return Stream[]
+	 */
+	public function newestPublic(int $limit, array $excluding = []): array {
+		$nids = $this->trendsRequest->recentPublicNids($this->limit($limit), $excluding);
+
+		return array_values(array_filter(
+			$this->trendsRequest->statusesByNids($nids),
+			fn (Stream $status): bool => !$this->trendReviewService->statusIsRejected($status->getId())
+		));
+	}
+
+	/**
 	 * The public posts carrying one link, newest first.
 	 *
 	 * Mastodon's link timeline: what a reader gets by tapping a trending link

@@ -379,6 +379,22 @@ describe('timeline store state changes', () => {
 	})
 })
 
+describe('the lists that have shown a post', () => {
+	beforeEach(() => {
+		setActivePinia(createPinia())
+	})
+
+	it('remembers a list once it is marked, and no other', () => {
+		const store = useTimelineStore()
+		expect(store.wasFilled('["interests","",{}]')).toBe(false)
+
+		store.markFilled('["interests","",{}]')
+
+		expect(store.wasFilled('["interests","",{}]')).toBe(true)
+		expect(store.wasFilled('["home","",{}]')).toBe(false)
+	})
+})
+
 describe('timeline store getters', () => {
 	let store
 

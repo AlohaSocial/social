@@ -156,6 +156,18 @@ class TrendsRequestTest extends TestCase {
 		$this->assertSame([], $this->trends->recentMediaNids(0));
 	}
 
+	public function testRecentPublicIsNewestFirstAndSkipsWhatIsAlreadyShownOrNotPublic(): void {
+		$older = $this->note('older', true, false, 120);
+		$this->note('private', false);
+		$newer = $this->note('newer');
+
+		$this->assertSame(['newer', 'older'], $this->ours($this->trends->recentPublicNids(40)));
+		$this->assertSame(['older'], $this->ours($this->trends->recentPublicNids(40, [$newer])));
+		$this->assertSame(['newer'], $this->ours($this->trends->recentPublicNids(1)));
+		$this->assertSame([], $this->trends->recentPublicNids(0));
+		$this->assertNotSame('', $older);
+	}
+
 	public function testStatusesComeBackInTheOrderAsked(): void {
 		$author = new Person();
 		$author->setId(self::AUTHOR)->setPreferredUsername('trends-author');
