@@ -91,6 +91,7 @@ import IconIntroduction from 'vue-material-design-icons/HandWaveOutline.vue'
 import IconInvite from 'vue-material-design-icons/EmailPlusOutline.vue'
 import IconKeyboard from 'vue-material-design-icons/KeyboardOutline.vue'
 import IconLists from 'vue-material-design-icons/FormatListBulleted.vue'
+import IconNotifications from 'vue-material-design-icons/BellOutline.vue'
 import IconPortfolio from 'vue-material-design-icons/ImageMultipleOutline.vue'
 import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
@@ -118,6 +119,9 @@ const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkNa
 const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InterestsSettings.vue'))
 // and again: two switches and a button, only ever drawn on this page
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
+// and again: a radio pair, a few switches and some time fields, only ever
+// drawn on this page
+const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
 // and again: a bar and a line for a self-registered external user, and the
 // invitation links, only ever drawn on this page
 const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
@@ -160,6 +164,7 @@ export default {
 		IconInvite,
 		IconKeyboard,
 		IconLists,
+		IconNotifications,
 		IconPortfolio,
 		IconRecap,
 		IconReview,
@@ -168,6 +173,7 @@ export default {
 		IconStorage,
 		IconTags,
 		ListsSettings,
+		NotificationDeliverySettings,
 		PortfolioSettings,
 		RecapSettings,
 		SensesSettings,
@@ -289,6 +295,13 @@ export default {
 					component: 'SensesSettings',
 					title: t('social', 'Sound and touch'),
 					lede: t('social', 'Small confirmations you hear or feel. They are kept on this device only, so a laptop at work can stay quiet while your phone taps back.'),
+				},
+				{
+					id: 'notifications',
+					icon: 'IconNotifications',
+					component: 'NotificationDeliverySettings',
+					title: t('social', 'Notifications'),
+					lede: t('social', 'When Aloha Social is allowed to interrupt you. Everything still lands in your notifications here; this is only about the bell, the phone and the mail.'),
 				},
 				{
 					id: 'apps',
