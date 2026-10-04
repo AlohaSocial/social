@@ -40,10 +40,10 @@ use OCP\ICacheFactory;
  * and Videos pages and the Shorts stack: `photos`, `videos`, or `media` for
  * either. Each is a ranking of its own, kept under its own key, so paging
  * one never lands in another. Pictures and videos carry fewer hashtags than
- * text and are rarer, so those rankings look twice as far back, and where
- * one is still shorter than `POPULAR_FILL` the rest is what is trending in
- * the same kind — marked `popular`, so the line over the post says so rather
- * than inventing a hashtag it matched.
+ * text and are rarer, so those rankings look twice as far back. Where a
+ * ranking of any kind is still shorter than `POPULAR_FILL` the rest is what
+ * is trending in that kind — marked `popular`, so the line over the post says
+ * so rather than inventing a hashtag it matched.
  */
 class InterestFeedService {
 	/** How long a ranking is kept to be paged through; every read extends it. */
@@ -64,7 +64,7 @@ class InterestFeedService {
 	public const MEDIA = ['', 'photos', 'videos', 'media'];
 	/** How much further back a narrowed ranking looks. */
 	public const MEDIA_WINDOW_FACTOR = 2;
-	/** A narrowed ranking shorter than this is filled from what is trending. */
+	/** A ranking shorter than this is filled from what is trending. */
 	public const POPULAR_FILL = TrendService::MAX_LIMIT;
 	/** What `TrendService` is asked for, by kind. */
 	private const TREND_KIND = ['photos' => 'image', 'videos' => 'video', 'media' => ''];
@@ -156,7 +156,7 @@ class InterestFeedService {
 		$hidden = $this->interestService->hiddenFor($viewer);
 		$ranking = $this->ranked($viewer, $media, $hidden);
 
-		if ($media !== '' && count($ranking) < self::POPULAR_FILL) {
+		if (count($ranking) < self::POPULAR_FILL) {
 			$ranking = array_merge($ranking, $this->popular(
 				$viewer, $media, array_merge($hidden, array_column($ranking, 'nid')), self::POPULAR_FILL - count($ranking)
 			));
@@ -328,12 +328,12 @@ class InterestFeedService {
 	}
 
 	/**
-	 * What is trending in this kind, for a narrowed ranking too short to fill
-	 * a screen: a newcomer with no history yet, or interests that few pictures
-	 * carry. `TrendService` is what Discover's Pictures and Videos tabs read,
-	 * so these are the same posts, topped up on a young instance with its
-	 * newest media. None of the reader's own, none they hid, none already
-	 * ranked; the page reads each again as the reader may see it.
+	 * What is trending in this kind, for a ranking too short to fill a
+	 * screen: a newcomer with no history yet, or interests that few posts
+	 * carry. `TrendService` is what Discover reads, so these are the same
+	 * posts, topped up on a young instance with its newest ones. None of the
+	 * reader's own, none they hid, none already ranked; the page reads each
+	 * again as the reader may see it.
 	 *
 	 * @param string[] $seen the posts to leave out
 	 *
@@ -341,7 +341,7 @@ class InterestFeedService {
 	 */
 	private function popular(Person $viewer, string $media, array $seen, int $wanted): array {
 		$statuses = $this->trendService->trendingStatuses(
-			HashtagService::PERIOD_DEFAULT, TrendService::MAX_LIMIT, 0, true, self::TREND_KIND[$media] ?? ''
+			HashtagService::PERIOD_DEFAULT, TrendService::MAX_LIMIT, 0, $media !== '', self::TREND_KIND[$media] ?? ''
 		);
 
 		$seen = array_flip(array_map('strval', $seen));
@@ -356,6 +356,20 @@ class InterestFeedService {
 			}
 			$seen[$nid] = true;
 			$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular'];
+		}
+
+		// a narrowed ranking's trending is already topped up with the newest
+		// media; the plain one asks for the newest posts itself, because the
+		// trending pages are not padded
+		if ($media === '' && count($popular) < $wanted) {
+			foreach ($this->trendService->newestPublic($wanted - count($popular), array_map('strval', array_keys($seen))) as $status) {
+				$nid = (string)$status->getNid();
+				if ($nid === '' || $nid === '0' || isset($seen[$nid]) || $status->getAttributedTo() === $viewer->getId()) {
+					continue;
+				}
+				$seen[$nid] = true;
+				$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular'];
+			}
 		}
 
 		return $popular;

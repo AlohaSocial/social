@@ -40,6 +40,8 @@ class TrendServiceTest extends TestCase {
 	private array $nids = [];
 	/** @var int[] the newest media this instance holds */
 	private array $recent = [];
+	private array $recentPublic = [];
+	private ?array $askedRecentPublic = null;
 	/** @var array{limit: int, media: string, excluding: int[]}|null what the top-up asked for */
 	private ?array $askedRecent = null;
 	/** @var array<array{url: string, shares: int}> the counted links */
@@ -77,6 +79,11 @@ class TrendServiceTest extends TestCase {
 				return array_slice($this->recent, 0, $limit);
 			});
 
+		$this->trendsRequest->method('recentPublicNids')
+			->willReturnCallback(function (int $limit, array $excluding): array {
+				$this->askedRecentPublic = ['limit' => $limit, 'excluding' => $excluding];
+				return array_slice($this->recentPublic, 0, $limit);
+			});
 		$this->trendsRequest->method('trendingLinks')
 			->willReturnCallback(function (int $since, int $limit, int $offset): array {
 				$this->askedLinks = ['since' => $since, 'limit' => $limit, 'offset' => $offset];
@@ -259,6 +266,29 @@ class TrendServiceTest extends TestCase {
 	 * talking about, and padding it with the newest posts would say they are
 	 * trending when they are not.
 	 */
+	/**
+	 * The For you feed asks for the newest posts by name: they are not a
+	 * trend and never come back from the trending pages.
+	 */
+	public function testTheNewestPublicPostsAreAskedForByNameAndSkipWhatIsShown(): void {
+		$this->recentPublic = [9, 8, 7];
+
+		$statuses = $this->service->newestPublic(2, [42]);
+
+		$this->assertSame([9, 8], array_map(static fn (Stream $status): int => $status->getNid(), $statuses));
+		$this->assertSame(['limit' => 2, 'excluding' => [42]], $this->askedRecentPublic);
+	}
+
+	public function testTheNewestPublicPostsLeaveOutWhatAModeratorRejected(): void {
+		$this->recentPublic = [9, 8];
+		$review = $this->createStub(TrendReviewService::class);
+		$review->method('statusIsRejected')->willReturn(true);
+
+		$statuses = (new TrendService($review, $this->trendsRequest))->newestPublic(5);
+
+		$this->assertSame([], $statuses, 'a rejected post never reaches the feed through the top-up');
+	}
+
 	public function testTheTextTrendsAreNotPadded(): void {
 		$this->nids = [];
 		$this->recent = [9, 8];

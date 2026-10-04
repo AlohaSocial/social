@@ -52,7 +52,7 @@ Non-goals (v1)
 | Remove | Resets the score to zero; the tag can be learned again |
 | Followed hashtags | Kept as a separate list; followed tags seed interests |
 | Settings controls | Pause learning, reset all, include in data export |
-| Cold start | Followed tags, featured tags and local trending, with a "still learning" hint |
+| Cold start | Followed tags, featured tags and local trending, topped up with what is popular here, with a "still learning" hint |
 | Placement | Timeline switcher, second after My Feed; the web interface only — no Mastodon API for it |
 | Safety | Mutes, blocks, domain blocks and filters respected; language filter |
 | Admin | Enable/disable the feature; default for users; tuning parameters |
@@ -76,7 +76,8 @@ Non-goals (v1)
 - While learning is thin (see 6.5), a dismissible banner at the top says:
   "Still learning what you like. Showing posts from hashtags you follow and
   what's trending here. [Manage interests]".
-- Empty state (no interests, nothing trending): explains how the feed learns
+- Empty state (no interests, nothing trending, and no public post on the
+  instance to fill with): explains how the feed learns
   and links to Settings → Interests.
 
 ### 4.2 First-use notice
@@ -394,10 +395,11 @@ parameters ignore an unknown kind.
 - Pictures and videos carry fewer hashtags and are rarer, so a narrowed
   ranking looks back twice the window; hides are kept that long too.
 - **Popular fill.** A newcomer has no reading yet, and few pictures carry the
-  tags someone reads. Where a narrowed ranking holds fewer than 40 posts, the
-  rest is what is trending in the same kind (`TrendService`, which feeds
-  Explore's Pictures and Videos tabs and tops itself up with the newest media
-  on a young instance), less the reader's own, hidden and already ranked
+  tags someone reads. Where a ranking — the plain feed as much as a narrowed
+  one — holds fewer than 40 posts, the rest is what is trending in the same
+  kind (`TrendService`, which feeds Explore; on a young instance the media
+  rankings are topped up with the newest media and the plain feed with the
+  newest public posts), less the reader's own, hidden and already ranked
   posts. Those carry `reason` `popular` and no tags, and the chip says
   *Popular right now*, links nowhere and names no hashtag. The whole feed is
   never filled this way.

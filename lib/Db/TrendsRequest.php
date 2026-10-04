@@ -154,6 +154,42 @@ class TrendsRequest extends TrendsRequestBuilder {
 
 		return $nids;
 	}
+	/**
+	 * The newest public posts, for a For you feed too short to fill a screen:
+	 * a reader with no history yet on an instance where nothing is trending.
+	 * The same audience rule as trending — public statuses only.
+	 *
+	 * @param string[] $excluding nids already on the page, so a top-up does not repeat one
+	 *
+	 * @return string[]
+	 */
+	public function recentPublicNids(int $limit, array $excluding = []): array {
+		if ($limit < 1) {
+			return [];
+		}
+
+		$qb = $this->getTrendingStatusNidsSelectSql();
+		$expr = $qb->expr();
+		$qb->andWhere($expr->eq('s.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)));
+		$qb->andWhere($expr->eq('s.type', $qb->createNamedParameter(Note::TYPE)));
+		if ($excluding !== []) {
+			$qb->andWhere($expr->notIn(
+				's.nid',
+				$qb->createNamedParameter($excluding, IQueryBuilder::PARAM_STR_ARRAY)
+			));
+		}
+		$qb->orderBy('s.nid', 'desc');
+		$qb->setMaxResults($limit);
+
+		$nids = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$nids[] = (string)$data['nid'];
+		}
+		$cursor->closeCursor();
+
+		return $nids;
+	}
 
 	/**
 	 * The statuses of a page that has already been decided, in its order.
