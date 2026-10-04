@@ -48,14 +48,25 @@ here is any the wiser. Reading its validator told us what it wants; only this
 tells us whether we send it. Its own log is printed when the job fails, because
 that is where the refusal is.
 
+## What it found
+
+Its first runs that got as far as delivering anything found five defects, all
+silent on this side:
+
+- every delivery through the parallel queue was read as "no response", sent
+  again, and its host put behind the circuit breaker for a minute;
+- a video never reached the followers of its channel, which is what a PeerTube
+  follows;
+- an edit federated the client-format object, so Mastodon dropped every one;
+- PeerTube refused every `Video` on its version-5 `uuid`;
+- a `Video` with no `likes`/`dislikes` crashed PeerTube outright.
+
 ## What it cannot prove
 
-It runs against **one** version of each, over **plain HTTP**, on **one host**.
-So it says nothing about behaviour behind TLS, about instances running
-`AUTHORIZED_FETCH`, or about Mastodon versions other than the one the workflow
-pins. Each of those is a separate decision and none of them is free: a public
-name and a certificate in CI is the part of this that is a decision rather than
-a task.
+It runs against **one** version of each, on **one host**, with a certificate
+authority made for the job. So it says nothing about instances running
+`AUTHORIZED_FETCH`, about Mastodon or PeerTube versions other than the ones the
+workflow pins, or about what a public certificate chain would change.
 
 ## Running it
 
@@ -64,7 +75,7 @@ Every test **skips with a reason** when `MASTODON_BASE_URL` and
 that says so rather than a failure.
 
 ```
-MASTODON_BASE_URL=http://localhost:3000 MASTODON_TOKEN=... \
+MASTODON_BASE_URL=https://mastodon.test MASTODON_TOKEN=... \
 PEERTUBE_BASE_URL=http://localhost:9000 \
 PEERTUBE_USER=interop PEERTUBE_PASSWORD=... \
 composer run test:interop
@@ -75,16 +86,27 @@ tests and skips the PeerTube ones, and the other way round.
 
 It needs the same real Nextcloud the integration suite does — the app inside a
 server checkout, installed, with `cloud_url` and `social_url` set — and that
-Nextcloud has to be **reachable from the Mastodon**, because Mastodon fetches
-our actor and our posts over HTTP. `allow_local_remote_servers` on our side and
-`ALLOWED_PRIVATE_ADDRESSES` on Mastodon's are what make two instances on one
-host able to see each other.
+Nextcloud has to be **reachable from the Mastodon and the PeerTube over
+https under a host name**. Both fetch another server's webfinger and actor
+over https only, and Mastodon in production redirects every plain-http request
+to https, its own API included. `allow_local_remote_servers` on our side,
+`ALLOWED_PRIVATE_ADDRESSES` on Mastodon's and `PEERTUBE_FEDERATION_PREVENT_SSRF`
+off on PeerTube's are what make servers on one host able to see each other.
 
 ## In CI
 
 `.github/workflows/interop.yml` stands the whole thing up: Postgres, Redis,
 Mastodon's web and Sidekiq containers, a PeerTube, a Nextcloud, and an account
-on each side.
+on each side. Nextcloud is `https://nextcloud.test` and Mastodon
+`https://mastodon.test`, both behind one Caddy proxy with a certificate from a
+CA made in the job and trusted by the runner, by Nextcloud, by Mastodon and by
+PeerTube; the proxy also does what Nextcloud's `.htaccess` does for
+`/.well-known`, since PHP's built-in server serves files only. When a run
+fails, the last step prints what each side saw: our notices, our delivery
+queue and circuit breaker, every delivery through the proxy, what Mastodon
+holds from us, the last `Update` run through Mastodon's own processing, the
+last `Create` sent to PeerTube, and PeerTube's validator refusals, which it
+logs only at debug level.
 
 It is deliberately **not** on `pull_request`. It depends on a third-party image
 whose startup this repository does not control, so a bad day for that image

@@ -9,19 +9,18 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interop;
 
-use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
-use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Post;
+use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\RequestQueueService;
-use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamService;
 use OCP\IUserManager;
 use OCP\Server;
@@ -73,6 +72,16 @@ class PeerTubeDeliveryTest extends TestCase {
 
 		$this->peertube->resolveAccount($this->channelHandle);
 		$this->peertube->follow($this->channelHandle);
+
+		// PeerTube sends the Follow from a job queue, a moment after the API
+		// call returns; a video written before it lands has no PeerTube among
+		// the channel's followers and goes to nobody there
+		$followsRequest = Server::get(FollowsRequest::class);
+		$channelId = $channel->getActorId();
+		$arrived = $this->peertube->await(
+			static fn (): ?bool => ($followsRequest->countFollowers($channelId) > 0) ? true : null
+		);
+		$this->assertTrue($arrived, 'PeerTube never managed to follow the channel');
 		$this->drainQueue();
 	}
 
@@ -168,7 +177,11 @@ class PeerTubeDeliveryTest extends TestCase {
 		$post->setMedias([$this->videoAttachment()]);
 
 		$token = '';
-		$note = Server::get(PostService::class)->createPost($post, $token);
+		// the Create activity comes back; the note is read back the way the
+		// status API reads it, which also gives it its nid
+		$activity = Server::get(PostService::class)->createPost($post, $token);
+		$this->assertNotNull($activity, 'the post was not written');
+		$note = Server::get(StreamService::class)->getStreamById($activity->getObjectId());
 		$this->assertInstanceOf(Stream::class, $note, 'the post was not written');
 
 		$this->written[] = $note->getId();
@@ -183,12 +196,15 @@ class PeerTubeDeliveryTest extends TestCase {
 		$meta->setOriginal(new \OCA\Social\Model\Client\AttachmentMetaDim([640, 360]));
 		$meta->setSmall(new \OCA\Social\Model\Client\AttachmentMetaDim([320, 180]));
 
+		// a file name of its own per video: PeerTube keys a remote file on
+		// the last part of its URL, unique across every video it holds
+		$name = 'interop-' . bin2hex(random_bytes(6));
 		$media = new MediaAttachment();
 		$media->setId('1')
 			->setType('video')
 			->setMediaType('video/mp4')
-			->setUrl($this->cloudUrl() . '/apps/social/media/interop.mp4')
-			->setPreviewUrl($this->cloudUrl() . '/apps/social/media/interop.jpeg')
+			->setUrl($this->cloudUrl() . '/apps/social/media/' . $name . '.mp4')
+			->setPreviewUrl($this->cloudUrl() . '/apps/social/media/' . $name . '.jpg')
 			->setDescription('an interop test video')
 			->setSizeBytes(1_048_576);
 
@@ -213,24 +229,14 @@ class PeerTubeDeliveryTest extends TestCase {
 			$this->markTestSkipped('no account on this instance to post as');
 		}
 
-		$userId = (string)array_key_first($users);
-		$actorsRequest = Server::get(ActorsRequest::class);
-
-		try {
-			return $actorsRequest->getFromUserId($userId);
-		} catch (ActorDoesNotExistException $e) {
-			$actor = new Person();
-			$actor->setPreferredUsername($userId);
-			$actor->setUserId($userId);
-			Server::get(SignatureService::class)->generateKeys($actor);
-			$actorsRequest->create($actor);
-
-			return $actorsRequest->getFromUserId($userId);
-		}
+		// the way the app makes an account, so the actor is cached too:
+		// webfinger and the actor document are answered from the cache
+		return Server::get(AccountService::class)->getActorFromUserId((string)array_key_first($users), true);
 	}
 
+	/** `host[:port]`, as a handle has to name a server on a non-default port. */
 	private function cloudHost(): string {
-		return Server::get(ConfigService::class)->getCloudHost();
+		return Server::get(ConfigService::class)->getCloudAuthority();
 	}
 
 	private function cloudUrl(): string {

@@ -63,7 +63,8 @@ class DevDependenciesTest extends TestCase {
 
 		$noDev = strpos($workflow, 'composer i --no-dev');
 		$enable = strpos($workflow, 'app:enable --force social');
-		$tests = strpos($workflow, 'composer run test:interop');
+		// the suites run one at a time, each through the interop config
+		$tests = strpos($workflow, '-c tests/Interop/phpunit.xml');
 
 		$this->assertNotFalse($noDev, 'the interop job installs the dev dependencies before the server starts');
 		$this->assertNotFalse($enable);

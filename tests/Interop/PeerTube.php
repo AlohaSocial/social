@@ -191,7 +191,10 @@ class PeerTube {
 			return $this->token;
 		}
 
-		$client = $this->request('GET', $this->baseUrl . '/api/v1/oauth-clients/local');
+		// unauthenticated: request() asks for this very token
+		$client = $this->send('GET', $this->baseUrl . '/api/v1/oauth-clients/local', null, [
+			'Accept: application/json',
+		]);
 		$answer = $this->form('/api/v1/users/token', [
 			'client_id' => (string)($client['client_id'] ?? ''),
 			'client_secret' => (string)($client['client_secret'] ?? ''),
