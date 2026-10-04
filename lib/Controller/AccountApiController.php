@@ -22,6 +22,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\AvatarService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
@@ -85,6 +86,7 @@ class AccountApiController extends MastodonApiController {
 		private IAppManager $appManager,
 		private NotificationService $notificationService,
 		private MultipartBodyService $multipartBodyService,
+		private AdminApiService $adminApiService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -342,6 +344,8 @@ class AccountApiController extends MastodonApiController {
 				$this->currentSession()
 			);
 		}
+
+		$data['role'] = $this->adminApiService->credentialRole($this->currentSession());
 
 		if (($data['last_status_at'] ?? null) === '') {
 			$data['last_status_at'] = null;

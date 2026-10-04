@@ -233,6 +233,9 @@ class AdminApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus(), $method . ' must refuse a non-admin');
 		$this->assertArrayHasKey('error', $response->getData());
+		// PHP turns a response carrying WWW-Authenticate into a 401, which a
+		// client reads as a dead token
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	#[DataProvider('routes')]
@@ -310,6 +313,7 @@ class AdminApiControllerTest extends TestCase {
 		$response = $this->controller()->accounts();
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	public function testAReadTokenCannotWrite(): void {

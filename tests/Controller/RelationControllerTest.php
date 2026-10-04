@@ -460,9 +460,7 @@ class RelationControllerTest extends TestCase {
 		$response = $this->controller('Bearer t')->domainBlocks();
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
-		$this->assertStringContainsString(
-			'insufficient_scope', $response->getHeaders()['WWW-Authenticate'] ?? ''
-		);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	public function testATokenThatMayOnlyReadMayNotWrite(): void {

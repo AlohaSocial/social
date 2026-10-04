@@ -337,9 +337,7 @@ class AnnouncementControllerTest extends TestCase {
 		$response = $this->controller('Bearer t')->dismiss($announcement->getId());
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
-		$this->assertSame(
-			'Bearer error="insufficient_scope"', $response->getHeaders()['WWW-Authenticate']
-		);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 		$this->assertSame([], $this->dismissals);
 	}
 
