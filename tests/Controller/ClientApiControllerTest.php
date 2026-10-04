@@ -93,7 +93,7 @@ class ClientApiControllerTest extends TestCase {
 
 		$this->assertSame($status, $response->getStatus());
 		if ($status === Http::STATUS_FORBIDDEN) {
-			$this->assertSame('Bearer error="insufficient_scope"', $response->getHeaders()['WWW-Authenticate']);
+			$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 		}
 	}
 

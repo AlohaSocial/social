@@ -503,11 +503,9 @@ abstract class MastodonApiController extends Controller {
 	 */
 	protected function error(Throwable $e): DataResponse {
 		if ($e instanceof InsufficientScopeException) {
-			return new DataResponse(
-				['error' => $e->getMessage()],
-				Http::STATUS_FORBIDDEN,
-				['WWW-Authenticate' => 'Bearer error="insufficient_scope"']
-			);
+			// no WWW-Authenticate: PHP turns any response carrying it into a 401,
+			// and a 401 tells a client its token is dead and to sign in again
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 
 		foreach (self::ERROR_STATUS as [$class, $status]) {

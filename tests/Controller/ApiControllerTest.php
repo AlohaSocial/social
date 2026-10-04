@@ -46,6 +46,7 @@ use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActionService;
+use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\AnnualReportService;
 use OCA\Social\Service\AvatarService;
 use OCA\Social\Service\BannerService;
@@ -205,6 +206,7 @@ class ApiControllerTest extends TestCase {
 	private BannerService|MockObject $bannerService;
 	private AvatarService|MockObject $avatarService;
 	private MultipartBodyService|MockObject $multipartBodyService;
+	private AdminApiService|MockObject $adminApiService;
 	private FilterService|Stub $filterService;
 	private IRootFolder|MockObject $rootFolder;
 	private ITempManager|Stub $tempManager;
@@ -327,6 +329,7 @@ class ApiControllerTest extends TestCase {
 		$this->bannerService = $this->createMock(BannerService::class);
 		$this->avatarService = $this->createMock(AvatarService::class);
 		$this->multipartBodyService = $this->createMock(MultipartBodyService::class);
+		$this->adminApiService = $this->createMock(AdminApiService::class);
 		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('apply')->willReturnArgument(0);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
@@ -401,6 +404,7 @@ class ApiControllerTest extends TestCase {
 			'bannerService' => $this->bannerService,
 			'avatarService' => $this->avatarService,
 			'multipartBodyService' => $this->multipartBodyService,
+			'adminApiService' => $this->adminApiService,
 			'accountRelationService' => $this->accountRelationService,
 			'scheduledStatusService' => $this->scheduledStatusService,
 			'postReviewService' => $this->postReviewService,
@@ -479,10 +483,7 @@ class ApiControllerTest extends TestCase {
 	private function assertInsufficientScope(DataResponse $response, string $error): void {
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 		$this->assertSame(['error' => $error], $response->getData());
-		$this->assertSame(
-			'Bearer error="insufficient_scope"',
-			$response->getHeaders()['WWW-Authenticate'] ?? null
-		);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	private function assertNotFound(DataResponse $response, string $error): void {
@@ -1092,6 +1093,35 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($target, $response->getData());
+	}
+
+	/**
+	 * A client decides whether to offer moderation from `role`, before it asks
+	 * for an admin scope, so the CredentialAccount carries the viewer's role.
+	 */
+	public function testVerifyCredentialsCarriesTheViewersRole(): void {
+		$this->loggedInAs();
+		$role = ['id' => '3', 'name' => 'Admin', 'color' => '', 'permissions' => '8388607', 'highlighted' => true];
+		$this->adminApiService->expects($this->once())->method('credentialRole')
+			->with('alice')->willReturn($role);
+
+		$response = $this->controller()->verifyCredentials();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame($role, $response->getData()['role']);
+	}
+
+	/** update_credentials answers a CredentialAccount too, role included. */
+	public function testUpdateCredentialsCarriesTheViewersRole(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['locked' => 'true']);
+		$role = ['id' => '-99', 'name' => '', 'color' => '', 'permissions' => '65536', 'highlighted' => false];
+		$this->adminApiService->method('credentialRole')->with('alice')->willReturn($role);
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame($role, $response->getData()['role']);
 	}
 
 	public function testVerifyCredentialsIsUnauthorizedForAnonymous(): void {

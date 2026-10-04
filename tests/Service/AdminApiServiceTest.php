@@ -343,6 +343,57 @@ class AdminApiServiceTest extends TestCase {
 		$this->assertFalse($service->isAdministrator(''));
 	}
 
+	/**
+	 * The role a client reads off verify_credentials to decide whether to offer
+	 * moderation: Mastodon's shape, from the same checks as the admin API gate.
+	 */
+	public function testTheCredentialRoleFollowsWhoMayModerate(): void {
+		$this->groupManager->method('isAdmin')
+			->willReturnCallback(static fn (string $userId): bool => $userId === 'root');
+		$this->delegatedTo = ['mod'];
+		$this->knownUsers = ['root', 'mod', 'alice'];
+
+		$service = $this->service();
+
+		$this->assertSame([
+			'id' => '3',
+			'name' => 'Admin',
+			'color' => '',
+			'permissions' => '8388607',
+			'highlighted' => true,
+		], $service->credentialRole('root'));
+		$this->assertSame([
+			'id' => '1',
+			'name' => 'Moderator',
+			'color' => '',
+			'permissions' => '591288',
+			'highlighted' => true,
+		], $service->credentialRole('mod'));
+		$this->assertSame([
+			'id' => '-99',
+			'name' => '',
+			'color' => '',
+			'permissions' => '65536',
+			'highlighted' => false,
+		], $service->credentialRole('alice'));
+		$this->assertSame('-99', $service->credentialRole('')['id']);
+	}
+
+	/**
+	 * A client checks `permissions & 1` for an administrator, and a single flag
+	 * for one screen; the administrator role has to satisfy both.
+	 */
+	public function testTheRolePermissionsAreMastodonsFlags(): void {
+		$this->assertSame(1, AdminApiService::PERMISSIONS_ALL & AdminApiService::PERMISSION_ADMINISTRATOR);
+		$this->assertSame(0, AdminApiService::PERMISSIONS_MODERATOR & AdminApiService::PERMISSION_ADMINISTRATOR);
+		$this->assertSame(
+			AdminApiService::PERMISSIONS_MODERATOR,
+			AdminApiService::PERMISSIONS_ALL & AdminApiService::PERMISSIONS_MODERATOR
+		);
+		$this->assertSame(1 << 4, AdminApiService::PERMISSION_MANAGE_REPORTS);
+		$this->assertSame(1 << 16, AdminApiService::PERMISSIONS_EVERYONE);
+	}
+
 	public function testThePageCarriesTheDecisionStandingAgainstEachAccount(): void {
 		$this->accountRows = [
 			$this->accountRow(self::REMOTE, 9, false, Moderation::SILENCE),

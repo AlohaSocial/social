@@ -82,6 +82,36 @@ class AdminApiService {
 	public const ACTION_SILENCE = 'silence';
 	public const ACTION_SUSPEND = 'suspend';
 
+	/**
+	 * Mastodon's role permission flags, the bits of `role.permissions`.
+	 * Only the ones a role here can carry are named.
+	 */
+	public const PERMISSION_ADMINISTRATOR = 1 << 0;
+	public const PERMISSION_VIEW_DASHBOARD = 1 << 3;
+	public const PERMISSION_MANAGE_REPORTS = 1 << 4;
+	public const PERMISSION_MANAGE_FEDERATION = 1 << 5;
+	public const PERMISSION_MANAGE_BLOCKS = 1 << 7;
+	public const PERMISSION_MANAGE_TAXONOMIES = 1 << 8;
+	public const PERMISSION_MANAGE_USERS = 1 << 10;
+	public const PERMISSION_INVITE_USERS = 1 << 16;
+	public const PERMISSION_DELETE_USER_DATA = 1 << 19;
+
+	/** Every flag Mastodon defines, which is what it reports for an administrator. */
+	public const PERMISSIONS_ALL = (1 << 23) - 1;
+
+	/** What Mastodon's default role grants every account. */
+	public const PERMISSIONS_EVERYONE = self::PERMISSION_INVITE_USERS;
+
+	/** What this app's admin API lets a moderator do: no more, so a client hides nothing they can use. */
+	public const PERMISSIONS_MODERATOR = self::PERMISSIONS_EVERYONE
+		| self::PERMISSION_VIEW_DASHBOARD
+		| self::PERMISSION_MANAGE_REPORTS
+		| self::PERMISSION_MANAGE_FEDERATION
+		| self::PERMISSION_MANAGE_BLOCKS
+		| self::PERMISSION_MANAGE_TAXONOMIES
+		| self::PERMISSION_MANAGE_USERS
+		| self::PERMISSION_DELETE_USER_DATA;
+
 	public function __construct(
 		private IDBConnection $dbConnection,
 		private IGroupManager $groupManager,
@@ -128,6 +158,42 @@ class AdminApiService {
 		return $this->settingsManager->getAllowedAdminSettings(
 			AdminSection::SECTION_ID, $user
 		) !== [];
+	}
+
+	/**
+	 * The `role` of Mastodon's CredentialAccount: what a client reads to decide
+	 * whether to offer moderation at all, before it asks for an admin scope.
+	 *
+	 * A Nextcloud administrator is Mastodon's administrator, a user the Social
+	 * section is delegated to is a moderator with exactly what the admin API
+	 * lets them do, and everybody else has Mastodon's default role. It is
+	 * worked out on every call, so a change of group shows on the next one.
+	 *
+	 * @return array{id: string, name: string, color: string, permissions: string, highlighted: bool}
+	 */
+	public function credentialRole(string $userId): array {
+		if ($userId !== '' && $this->groupManager->isAdmin($userId)) {
+			return $this->role('3', 'Admin', self::PERMISSIONS_ALL, true);
+		}
+
+		if ($this->isAdministrator($userId)) {
+			return $this->role('1', 'Moderator', self::PERMISSIONS_MODERATOR, true);
+		}
+
+		return $this->role('-99', '', self::PERMISSIONS_EVERYONE, false);
+	}
+
+	/**
+	 * @return array{id: string, name: string, color: string, permissions: string, highlighted: bool}
+	 */
+	private function role(string $id, string $name, int $permissions, bool $highlighted): array {
+		return [
+			'id' => $id,
+			'name' => $name,
+			'color' => '',
+			'permissions' => (string)$permissions,
+			'highlighted' => $highlighted,
+		];
 	}
 
 	/**

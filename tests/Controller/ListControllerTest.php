@@ -823,9 +823,7 @@ class ListControllerTest extends TestCase {
 		$response = $this->controller('Bearer t')->index();
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
-		$this->assertStringContainsString(
-			'insufficient_scope', $response->getHeaders()['WWW-Authenticate'] ?? ''
-		);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	public function testATokenThatMayOnlyReadMayNotWrite(): void {

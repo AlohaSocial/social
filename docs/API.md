@@ -149,7 +149,7 @@ sentence in the wrong row), and `support_link` is `''` unless the value is an
 
 | Method | Route | Auth | Parameters | Description |
 |--------|-------|------|------------|-------------|
-| GET | `/api/v1/accounts/verify_credentials` | public, no-csrf | — | The viewer's `Person` actor serialised in local format. 401 `{"error": ...}` when unauthenticated. |
+| GET | `/api/v1/accounts/verify_credentials` | public, no-csrf | — | The viewer's `Person` actor serialised in local format, with `source` and Mastodon's `role` (see [Admin API](#admin-api-mastodon) for what the role says). 401 `{"error": ...}` when unauthenticated. |
 | PATCH | `/api/v1/accounts/update_credentials` | public, no-csrf (viewer required, `write` scope) | JSON, form or multipart body; `display_name`, `note`, `locked`, `discoverable`, `indexable`, `bot`, `source[privacy]`, `fields_attributes`, and `avatar` / `header` (multipart) | Sets the display name, the bio (`note`, at most 500 characters, stored as plain text and rendered to HTML on the way out — an absent `note` leaves the stored one alone rather than clearing it), the profile picture and banner, whether new followers need manual approval (`manuallyApprovesFollowers`), whether the account may be listed in directories and indexed for search, whether it is automated (`bot`, which also decides whether the actor document says `Service` or `Person`), the default audience for new posts, and the profile metadata fields (at most four name/value pairs, both halves required; a list or an object keyed by index — a fifth pair, and a pair with an empty half, are dropped without an error, and `[]` clears the table). Every field is optional and only what was sent is written, so a client that edits one thing leaves the rest alone. **`display_name`, `avatar` and `bot` used to be accepted and dropped**, which meant a profile editor — which sends the whole form in one PATCH — got a 200 and showed the old name and picture. The name and picture belong to the Nextcloud account, so they are written there and the actor cache is refreshed; a backend that owns either (LDAP, SAML, anything provisioned elsewhere) makes the request a **422** rather than a silent success. A multipart PATCH — which is how clients send this route whenever a picture is in it — is read like a multipart POST (`MultipartBodyService`); it used to reach the controller unread, so every field and the picture were missed under a 200. A multipart body that cannot be read, and a picture that was sent and did not arrive (larger than the server takes, or cut off), are a **422**, and nothing else in the request is written. Other Mastodon profile fields are still ignored. Returns the refreshed account entity, which is the one place besides `verify_credentials` that carries `source`. |
 | DELETE | `/api/v1/profile/avatar` | public, no-csrf (viewer required, `write` scope) | — | Removes the account's picture, leaving Nextcloud's generated initials, and answers the refreshed account entity. Until the next cache run has copied the new picture, every Account entity for it — this answer, `verify_credentials`, lookups, its posts — names Nextcloud's own avatar route instead (for a remote account whose picture is not cached yet, the app icon); they used to answer **500** for up to twelve minutes, because the address of an uncached picture was built with an empty uuid. The same applies after a display-name change, which changes the generated picture. `update_credentials` can only replace one picture with another — multipart has no way to send "none" — so without this a client can offer "change picture" and not "remove picture". The avatar is the Nextcloud account's, so a backend that owns it (LDAP, SAML) makes this a **422** rather than a silent success. Removing a picture that was never set is not an error. |
 | DELETE | `/api/v1/profile/header` | public, no-csrf (viewer required, `write` scope) | — | Removes the banner and federates the actor `Update`, so the profile does not keep its banner on every other server. Answers the refreshed account entity. The cached picture is left for the document sweep rather than deleted under readers who are mid-request on its URL. |
@@ -675,13 +675,30 @@ the `read`/`write` every timeline client holds satisfies neither. An
 administrator's own browser session (with its CSRF token) needs no scope,
 having no token to carry one.
 
+A client finds out whether to offer moderation at all from the `role` of the
+CredentialAccount — `verify_credentials`, `update_credentials` and the two
+`/api/v1/profile/*` deletions — so it can ask for `admin:read admin:write` only
+from somebody who can use them. `AdminApiService::credentialRole()` works it out
+on every request, from the same checks as the gate above:
+
+| Who | `id` | `name` | `permissions` | `highlighted` |
+|-----|------|--------|---------------|---------------|
+| A Nextcloud administrator | `"3"` | `Admin` | every Mastodon flag (`"8388607"`), as Mastodon reports a role with the administrator bit | `true` |
+| A user the section is delegated to | `"1"` | `Moderator` | `"591288"`: invite users, view dashboard, manage reports, federation, blocks, taxonomies and users, delete user data — what the admin API lets them do | `true` |
+| Anyone else | `"-99"` | `""` | `"65536"`, Mastodon's default role | `false` |
+
+`color` is always `""`. A non-moderator is refused with **403** and no
+`WWW-Authenticate` header — see [Client API status codes](#client-api-status-codes)
+for why the header would turn it into a 401.
+
 Entities carry every key Mastodon documents. Where this app has nothing behind
 one it is sent as the empty value of its type rather than omitted, because a
 client that declares a field non-optional cannot decode the entity otherwise:
 on `Admin::Account` that is `email` (`""` — the address belongs to the
 Nextcloud account and is not republished here), `ip` (`null`), `ips` (`[]`),
-`locale` (`""`), `invite_request` (`null`), `role` (`null` — this app has no
-roles, and Mastodon also sends `null` for an account it holds no user of),
+`locale` (`""`), `invite_request` (`null`), `role` (`null` — the role is reported to the
+signed-in user on their own CredentialAccount, and Mastodon also sends `null`
+for an account it holds no user of),
 `disabled` and `sensitized` (always `false`, no state here corresponds to
 either), `created_by_application_id` and `invited_by_account_id` (`null`).
 `confirmed` and `approved` are `true` for a local account and `false` for a
@@ -1211,7 +1228,7 @@ on failure (`fail()`) — the exception class and message go to the log, never i
 {"error": "the access_token was revoked"}
 ```
 
-from the private `error()` helper of each, which maps the failure to a status a client can act on — see the table below. `TagController` maps the same four cases it can raise: 403 for a token whose scope is too narrow (with `WWW-Authenticate: Bearer error="insufficient_scope"`), 401 for no or stale credentials (`Bearer error="invalid_token"`), 422 for something that is not a hashtag, and 500 for anything else — with the message withheld, since these are public routes. Failures raised with no message of their own get a wording that fits the status (`the access_token is invalid`, `not found`, `the request could not be processed`, `request failed`) rather than `{"error": ""}`. `mediaOpen()` is the one route that does not go through it: a missing or non-public document is a 404, any other failure a 400.
+from the private `error()` helper of each, which maps the failure to a status a client can act on — see the table below. `TagController` maps the same four cases it can raise: 403 for a token whose scope is too narrow, 401 for no or stale credentials (`Bearer error="invalid_token"`), 422 for something that is not a hashtag, and 500 for anything else — with the message withheld, since these are public routes. Failures raised with no message of their own get a wording that fits the status (`the access_token is invalid`, `not found`, `the request could not be processed`, `request failed`) rather than `{"error": ""}`. `mediaOpen()` is the one route that does not go through it: a missing or non-public document is a 404, any other failure a 400.
 
 Every handler catches `Throwable`, not `Exception`. A `TypeError` — an empty or truncated JSON body was the way to raise one, on seven public endpoints — used to escape as a Nextcloud HTML error page, with a stack trace where debug is on, to a client that can only read JSON.
 
@@ -1224,7 +1241,7 @@ Every handler catches `Throwable`, not `Exception`. A `TypeError` — an empty o
 | Status | When |
 |--------|------|
 | 401 | No credential, or one that is no longer valid (`ClientNotFoundException`, `AccountDoesNotExistException`). Carries `WWW-Authenticate: Bearer error="invalid_token"`. |
-| 403 | A valid token whose grant does not cover the route (`InsufficientScopeException`, tested ahead of the list because it extends `ClientException`). Carries `WWW-Authenticate: Bearer error="insufficient_scope"`. Also a fediverse access rule (`UnauthorizedFediverseException`). |
+| 403 | A valid token whose grant does not cover the route (`InsufficientScopeException`, tested ahead of the list because it extends `ClientException`). Sent **without** `WWW-Authenticate`: PHP rewrites the status of any response carrying that header to 401, so `Bearer error="insufficient_scope"` made every scope refusal arrive as a 401, which a client reads as a dead token and answers by signing the user out. Also a fediverse access rule (`UnauthorizedFediverseException`). |
 | 404 | The thing asked for is not here: `StreamNotFoundException`, `CacheActorDoesNotExistException`, `ActorDoesNotExistException`, `ItemNotFoundException`, `CacheDocumentDoesNotExistException`, `HashtagDoesNotExistException`, `ReportNotFoundException`, `FollowNotFoundException`, `InstanceDoesNotExistException`, `OCP\Files\NotFoundException`, and a remote that answered with nothing (`RequestContentException`). |
 | 422 | The request was understood and refused, and retrying it unchanged cannot help: `InvalidActionException` (which now also covers a body that claims to be JSON and is not, and a `visibility` this app does not know), `UnknownProbeException`, `InvalidResourceException`, `InvalidResourceEntryException`, `InvalidHandleException`, `ItemUnknownException`, `CacheContentMimeTypeException`, `ClientException`. |
 | 429 | `TooManyRequestsException`, and the `#[AnonRateLimit]` / `#[UserRateLimit]` limits on the write, search, account and timeline routes. |

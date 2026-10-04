@@ -432,9 +432,7 @@ class DiscoveryControllerTest extends TestCase {
 		$response = $this->controller()->suggestions();
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
-		$this->assertSame(
-			'Bearer error="insufficient_scope"', $response->getHeaders()['WWW-Authenticate']
-		);
+		$this->assertArrayNotHasKey('WWW-Authenticate', $response->getHeaders());
 	}
 
 	public function testTheTrendsAnswerAnAnonymousCaller(): void {
