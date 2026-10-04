@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   xml-linters:
-    runs-on: ubuntu-latest-low
+    runs-on: ubuntu-latest
 
     name: info.xml lint
     steps:

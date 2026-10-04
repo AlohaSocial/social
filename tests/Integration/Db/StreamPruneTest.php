@@ -231,8 +231,8 @@ class StreamPruneTest extends TestCase {
 	public function testDisabledRetentionPrunesNothing(): void {
 		$this->note('stale');
 
-		$this->assertSame(['streams' => 0, 'documents' => 0], $this->service->prune(0));
-		$this->assertSame(['streams' => 0, 'documents' => 0], $this->service->prune());
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 0], $this->service->prune(0));
+		$this->assertSame(['streams' => 0, 'documents' => 0, 'notifications' => 0], $this->service->prune());
 		$this->assertTrue($this->exists('stale'));
 	}
 }
