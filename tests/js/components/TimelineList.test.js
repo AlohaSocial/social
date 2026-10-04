@@ -61,7 +61,7 @@ function status(id) {
 
 const TimelineEntryStub = {
 	name: 'TimelineEntry',
-	props: ['item', 'type', 'depth', 'unread'],
+	props: ['item', 'type', 'depth', 'unread', 'immediate'],
 	// carries the real component's class and tabindex, because the list finds
 	// entries by that class and sends focus to them
 	template: '<li class="timeline-entry timeline-entry-stub" tabindex="-1" :data-id="item.id" :data-depth="depth" :data-unread="unread ? \'yes\' : \'no\'" />',
@@ -1368,6 +1368,39 @@ describe('TimelineList', () => {
 
 			expect(wrapper.findAll('.timeline-entry-stub').length).toBe(1)
 			expect(wrapper.find('.timeline-list--settling').exists()).toBe(false)
+		})
+
+		it('draws the replacement as a swap: no leave transition, no stagger', async () => {
+			// twenty old entries fading out on top of twenty new ones rising in
+			// one after another is the slow, wide flash people see on a
+			// Local → Global switch; the swap draws both in one go
+			const next = pending()
+			const { wrapper, store } = mountList({
+				timeline: [status('1'), status('2')],
+				responses: [[], next.promise],
+			})
+			await flushPromises()
+
+			store.$patch({ ...showing('["timeline","",{}]'), timeline: [], statuses: {}, restored: false })
+			await nextTick()
+			store.$patch({ statuses: { 9: status('9') }, timeline: ['9'] })
+			next.land([status('9')])
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-list--swapping').exists()).toBe(true)
+			expect(wrapper.findComponent(TimelineEntryStub).props('immediate')).toBe(true)
+
+			// and a post removed later still fades on its own
+			await new Promise((resolve) => setTimeout(resolve, 400))
+			expect(wrapper.find('.timeline-list--swapping').exists()).toBe(false)
+		})
+
+		it('does not call a list that was simply there a swap', async () => {
+			const { wrapper } = mountList({ timeline: [status('1')] })
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-list--swapping').exists()).toBe(false)
+			expect(wrapper.findComponent(TimelineEntryStub).props('immediate')).toBe(false)
 		})
 
 		it('shows an empty list rather than the old one once the answer is in', async () => {
