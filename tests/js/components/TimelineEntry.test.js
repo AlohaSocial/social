@@ -404,3 +404,19 @@ describe('why For you shows a post', () => {
 		expect(mountEntry(boost).wrapper.attributes('data-status-id')).toBe('p1')
 	})
 })
+
+describe('the stagger on the way in', () => {
+	it('delays the first few entries by their place in the list', () => {
+		expect(mountEntry(storedPost, { index: 2 }).wrapper.attributes('style')).toContain('--stagger-delay: 90ms')
+	})
+
+	it('is skipped for an entry that replaces one already on screen', () => {
+		expect(mountEntry(storedPost, { index: 2, immediate: true }).wrapper.attributes('style') ?? '').not.toContain('--stagger-delay')
+	})
+
+	it('is read once: the delay is not put back on a rising entry', async () => {
+		const { wrapper } = mountEntry(storedPost, { index: 2, immediate: true })
+		await wrapper.setProps({ immediate: false })
+		expect(wrapper.attributes('style') ?? '').not.toContain('--stagger-delay')
+	})
+})

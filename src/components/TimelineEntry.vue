@@ -221,6 +221,16 @@ export default {
 		},
 
 		/**
+		 * Whether to rise without the stagger: set for the entries of a list
+		 * that replaces one already on screen, read once at mount so a delay
+		 * is never put back on an entry that is already rising.
+		 */
+		immediate: {
+			type: Boolean,
+			default: false,
+		},
+
+		/**
 		 * How deep this entry sits in a conversation: 0 for a reply to the post
 		 * being read, 1 for a reply to that, and so on. Indented accordingly,
 		 * up to MAX_INDENT levels — deeper than that the column would run out.
@@ -270,6 +280,8 @@ export default {
 
 	data() {
 		return {
+			/** whether this entry takes its place in the stagger */
+			staggered: !this.immediate,
 			/**
 			 * On a phone the avatar column beside the card would take a
 			 * quarter of the width, so the face moves inside the card and
@@ -305,7 +317,7 @@ export default {
 				style['--thread-depth'] = Math.min(this.depth, MAX_INDENT)
 			}
 
-			if (this.index < STAGGER_DEPTH) {
+			if (this.staggered && this.index < STAGGER_DEPTH) {
 				style['--stagger-delay'] = `${this.index * STAGGER_STEP}ms`
 			}
 
