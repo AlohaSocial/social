@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Controller;
 use OCA\Social\Controller\NotificationController;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\ClientNotFoundException;
+use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
@@ -20,6 +21,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Client\SocialClient;
+use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
@@ -27,6 +29,7 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationGroupService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
@@ -59,6 +62,7 @@ class NotificationControllerTest extends TestCase {
 	private ClientService|Stub $clientService;
 	private NotificationService|Stub $notificationService;
 	private NotificationPolicyService|MockObject $notificationPolicyService;
+	private NotificationDeliveryService|MockObject $notificationDeliveryService;
 	private FilterService|Stub $filterService;
 	private CacheActorService|Stub $cacheActorService;
 	private IUserSession|Stub $userSession;
@@ -131,6 +135,8 @@ class NotificationControllerTest extends TestCase {
 		$this->notificationPolicyService->method('of')->willReturn(new NotificationPolicy());
 		$this->notificationPolicyService->method('decisionsAbout')
 			->willReturn(['accepted' => [], 'dismissed' => []]);
+		$this->notificationDeliveryService = $this->createMock(NotificationDeliveryService::class);
+		$this->notificationDeliveryService->method('of')->willReturn(new NotificationDelivery());
 		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
 		$this->cacheActorService = $this->createStub(CacheActorService::class);
@@ -158,6 +164,7 @@ class NotificationControllerTest extends TestCase {
 			$this->notificationService,
 			new NotificationGroupService(),
 			$this->notificationPolicyService,
+			$this->notificationDeliveryService,
 			$this->filterService,
 			$this->cacheActorService
 		);
@@ -384,6 +391,89 @@ class NotificationControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->groupDismiss('favourite-10')->getStatus());
 		$this->assertSame([['dismiss', 2], ['dismiss', 1]], $this->writes);
+	}
+
+	// -- notification delivery ------------------------------------------------
+
+	/** @param array<string, mixed> $body */
+	private function requestWithBody(array $body): void {
+		$this->request = $this->createStub(IRequest::class);
+		$this->request->method('getId')->willReturn('test');
+		$this->request->method('getHeader')
+			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
+		$this->request->method('passesCSRFCheck')->willReturn(true);
+		$this->request->method('getParam')->willReturn('');
+		$this->request->method('getParams')->willReturn($body);
+	}
+
+	public function testTheDeliverySettingIsAnsweredWholeWithItsDefaults(): void {
+		$response = $this->controller()->delivery();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([
+			'mode' => 'instant',
+			'times' => ['08:00', '18:00'],
+			'passthrough' => ['direct' => true, 'mentions_from_followed' => true],
+			'quiet' => ['from' => '', 'to' => ''],
+		], $response->getData()->jsonSerialize());
+	}
+
+	public function testTheDeliverySettingIsReadForTheNextcloudUser(): void {
+		$this->notificationDeliveryService->expects($this->once())
+			->method('of')->with('alice')->willReturn(new NotificationDelivery());
+
+		$this->controller()->delivery();
+	}
+
+	public function testReadingTheDeliverySettingNeedsTheReadScope(): void {
+		$this->withToken(['write:notifications']);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->delivery()->getStatus());
+	}
+
+	public function testReadingTheDeliverySettingNeedsAViewer(): void {
+		$this->withoutCredentials();
+
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller()->delivery()->getStatus());
+	}
+
+	public function testChangingTheDeliverySettingWritesTheBodyAndAnswersTheWhole(): void {
+		$body = ['mode' => 'digest', 'times' => ['20:00', '09:00']];
+		$saved = (new NotificationDelivery())->apply($body);
+		$this->notificationDeliveryService->expects($this->once())
+			->method('save')->with('alice', $body)->willReturn($saved);
+		$this->requestWithBody($body);
+
+		$response = $this->controller()->deliveryUpdate();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('digest', $response->getData()->jsonSerialize()['mode']);
+		$this->assertSame(['09:00', '20:00'], $response->getData()->jsonSerialize()['times']);
+	}
+
+	public function testAnInvalidDeliverySettingIs422WithTheReason(): void {
+		$this->notificationDeliveryService->method('save')
+			->willThrowException(new InvalidResourceException('mode must be "instant" or "digest"'));
+		$this->requestWithBody(['mode' => 'weekly']);
+
+		$response = $this->controller()->deliveryUpdate();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(['error' => 'mode must be "instant" or "digest"'], $response->getData());
+	}
+
+	public function testChangingTheDeliverySettingNeedsTheWriteScope(): void {
+		$this->withToken(['read:notifications']);
+		$this->notificationDeliveryService->expects($this->never())->method('save');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->deliveryUpdate()->getStatus());
+	}
+
+	public function testChangingTheDeliverySettingNeedsAViewer(): void {
+		$this->withoutCredentials();
+		$this->notificationDeliveryService->expects($this->never())->method('save');
+
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller()->deliveryUpdate()->getStatus());
 	}
 
 	public function testThePolicyIsAnsweredWithItsSummary(): void {

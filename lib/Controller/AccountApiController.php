@@ -32,6 +32,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MultipartBodyService;
+use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\RelationshipService;
@@ -85,6 +86,7 @@ class AccountApiController extends MastodonApiController {
 		private SensitiveMediaService $sensitiveMediaService,
 		private IAppManager $appManager,
 		private NotificationService $notificationService,
+		private NotificationDeliveryService $notificationDeliveryService,
 		private MultipartBodyService $multipartBodyService,
 		private AdminApiService $adminApiService,
 	) {
@@ -450,6 +452,11 @@ class AccountApiController extends MastodonApiController {
 				// thing from sensitive media and this app keeps no preference
 				// about it
 				'reading:expand:spoilers' => false,
+				// this app's own: when the bell rings, read-only here and
+				// written at `PATCH /api/v1/social/notification_delivery`
+				'notifications:delivery' => $this->notificationDeliveryService->of(
+					$this->currentSession()
+				)->toArray(),
 			], Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
