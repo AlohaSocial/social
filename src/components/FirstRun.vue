@@ -390,6 +390,14 @@ export default {
 		 *
 		 * @param {Event} event the file input's change
 		 */
+		/**
+		 * Queues the follows file, then watches the import until it is done:
+		 * the server keeps the file and follows each account in the background,
+		 * where a long list outlives no request.
+		 *
+		 * @param {Event} event the file input's change
+		 * @return {Promise<void>}
+		 */
 		async importFollows(event) {
 			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
 			const file = input?.files?.[0]
@@ -403,12 +411,18 @@ export default {
 				const form = new FormData()
 				form.append('file', file)
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/follows'), form)
-				const failed = Object.keys(data?.failed ?? {}).length
-				this.followsResult = t(
-					'social',
-					'{followed} followed, {skipped} skipped, {failed} could not be reached',
-					{ followed: data?.followed ?? 0, skipped: data?.skipped ?? 0, failed },
-				)
+				const job = await this.awaitImport(data?.import?.id)
+				if (job === null) {
+					this.followsResult = t('social', 'Your follows are being imported in the background; Settings → Migration shows where it gets to.')
+				} else if (job.status === 'failed') {
+					showError(job.report?.error || t('social', 'Could not import those follows'))
+				} else {
+					this.followsResult = t(
+						'social',
+						'{followed} followed, {skipped} skipped, {failed} could not be reached',
+						{ followed: job.done ?? 0, skipped: job.skipped ?? 0, failed: job.failed ?? 0 },
+					)
+				}
 			} catch (error) {
 				logger.error('Importing follows failed', { error })
 				showError(error?.response?.data?.error || t('social', 'Could not import those follows'))
@@ -418,6 +432,28 @@ export default {
 					input.value = ''
 				}
 			}
+		},
+
+		/**
+		 * Polls the imports until the one named is finished, for as long as a
+		 * person will wait on an introduction screen.
+		 *
+		 * @param {number|undefined} id the queued import
+		 * @return {Promise<object|null>} the finished import, or null when it is still running
+		 */
+		async awaitImport(id) {
+			if (!id) {
+				return null
+			}
+			for (let attempt = 0; attempt < 20; attempt++) {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/imports'))
+				const job = (Array.isArray(data?.imports) ? data.imports : []).find((candidate) => candidate.id === id)
+				if (job && (job.status === 'done' || job.status === 'failed')) {
+					return job
+				}
+				await new Promise((resolve) => window.setTimeout(resolve, 3000))
+			}
+			return null
 		},
 
 		/**

@@ -194,14 +194,21 @@ class MigrationService {
 	 * account at a time through the ordinary follow path. One that fails does
 	 * not stop the rest.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{followed: int, skipped: int, failed: array<string, string>}
 	 *                                                                           `failed` maps a handle to the reason
 	 */
-	public function importFollows(string $userId, string $csv): array {
+	public function importFollows(string $userId, string $csv, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['followed' => 0, 'skipped' => 0, 'failed' => []];
 
-		foreach (self::parseFollows($csv) as $handle) {
+		$handles = self::parseFollows($csv);
+		$total = count($handles);
+		$handled = 0;
+		foreach ($handles as $handle) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
 			if (strcasecmp($handle, $actor->getAccount()) === 0 || strcasecmp($handle, $actor->getId()) === 0) {
 				$result['skipped']++;
 				continue;
@@ -228,6 +235,10 @@ class MigrationService {
 			}
 		}
 
+		if ($progress !== null) {
+			$progress($handled, $total);
+		}
+
 		return $result;
 	}
 
@@ -241,13 +252,14 @@ class MigrationService {
 	 * rather than dropped, because a block that silently did not happen is the
 	 * failure that matters in this file.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{blocked: int, skipped: int, failed: array<string, string>}
 	 *                                                                          `failed` maps a handle to the reason
 	 */
-	public function importBlocks(string $userId, string $csv): array {
+	public function importBlocks(string $userId, string $csv, ?callable $progress = null): array {
 		$result = $this->relate($userId, $csv, function (Person $actor, Person $target): void {
 			$this->relationshipService->block($actor, $target);
-		});
+		}, $progress);
 
 		return ['blocked' => $result['done'], 'skipped' => $result['skipped'], 'failed' => $result['failed']];
 	}
@@ -257,17 +269,18 @@ class MigrationService {
 	 * which carries `Hide notifications` beside each handle and is the one
 	 * thing a mute stores besides its target.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{muted: int, skipped: int, failed: array<string, string>}
 	 *                                                                        `failed` maps a handle to the reason
 	 */
-	public function importMutes(string $userId, string $csv): array {
+	public function importMutes(string $userId, string $csv, ?callable $progress = null): array {
 		$hidden = self::parseMuteNotifications($csv);
 
 		$result = $this->relate($userId, $csv, function (Person $actor, Person $target, string $handle) use ($hidden): void {
 			// the column says whether notifications are *hidden*; the relation
 			// stores whether they are shown, so it is read the other way round
 			$this->relationshipService->mute($actor, $target, !($hidden[strtolower($handle)] ?? false));
-		});
+		}, $progress);
 
 		return ['muted' => $result['done'], 'skipped' => $result['skipped'], 'failed' => $result['failed']];
 	}
@@ -287,10 +300,11 @@ class MigrationService {
 	 * that follows a Nextcloud group is left alone: its members are the
 	 * group's.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{lists: int, added: int, skipped: int, failed: array<string, string>}
 	 *                                                                                    `failed` maps `list/handle` to the reason
 	 */
-	public function importLists(string $userId, string $csv): array {
+	public function importLists(string $userId, string $csv, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['lists' => 0, 'added' => 0, 'skipped' => 0, 'failed' => []];
 
@@ -299,7 +313,10 @@ class MigrationService {
 			$existing[mb_strtolower($list->getTitle())] = $list;
 		}
 
-		foreach (self::parseListsCsv($csv) as $title => $handles) {
+		$parsed = self::parseListsCsv($csv);
+		$total = array_sum(array_map('count', $parsed));
+		$handled = 0;
+		foreach ($parsed as $title => $handles) {
 			$list = $existing[mb_strtolower($title)] ?? null;
 			if ($list === null) {
 				$list = new MastodonList();
@@ -315,6 +332,9 @@ class MigrationService {
 			}
 
 			foreach ($handles as $handle) {
+				if ($progress !== null) {
+					$progress($handled++, $total);
+				}
 				try {
 					$target = $this->resolveEntry($handle);
 					if ($target->getId() !== $actor->getId() && !$this->follows($actor, $target)) {
@@ -331,6 +351,10 @@ class MigrationService {
 					]);
 				}
 			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
 		}
 
 		return $result;
@@ -382,13 +406,20 @@ class MigrationService {
 	 *
 	 * @param callable(Person, Person, string): void $apply
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{done: int, skipped: int, failed: array<string, string>}
 	 */
-	private function relate(string $userId, string $csv, callable $apply): array {
+	private function relate(string $userId, string $csv, callable $apply, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['done' => 0, 'skipped' => 0, 'failed' => []];
 
-		foreach (self::parseFollows($csv) as $handle) {
+		$handles = self::parseFollows($csv);
+		$total = count($handles);
+		$handled = 0;
+		foreach ($handles as $handle) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
 			if (strcasecmp($handle, $actor->getAccount()) === 0 || strcasecmp($handle, $actor->getId()) === 0) {
 				$result['skipped']++;
 				continue;
@@ -403,6 +434,10 @@ class MigrationService {
 					'actor' => $actor->getId(), 'handle' => $handle, 'exception' => $e,
 				]);
 			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
 		}
 
 		return $result;

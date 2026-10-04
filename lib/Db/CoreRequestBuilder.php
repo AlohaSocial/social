@@ -98,6 +98,7 @@ class CoreRequestBuilder {
 	public const TABLE_EXTERNAL_USERS = 'social_ext_user';
 	public const TABLE_EXTERNAL_SIGNUPS = 'social_ext_signup';
 	public const TABLE_EXTERNAL_INVITES = 'social_ext_invite';
+	public const TABLE_IMPORTS = 'social_import';
 
 	public static array $tables = [
 		self::TABLE_ACTIONS => [
@@ -438,6 +439,21 @@ class CoreRequestBuilder {
 			'description',
 			'is_default',
 			'creation'
+		],
+		self::TABLE_IMPORTS => [
+			'id',
+			'user_id',
+			'kind',
+			'status',
+			'total',
+			'done',
+			'skipped',
+			'failed',
+			'report',
+			'options',
+			'file',
+			'creation',
+			'updated'
 		],
 		self::TABLE_QUOTE_GRANTS => [
 			'id',

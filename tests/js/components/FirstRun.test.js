@@ -40,9 +40,15 @@ function serverHas({ suggestions = [], packs = [] } = {}) {
 		if (url.endsWith('/api/v1/starter_packs')) {
 			return Promise.resolve({ data: packs })
 		}
+		if (url.endsWith('/api/v1/migration/imports')) {
+			return Promise.resolve({ data: { imports: finishedImports } })
+		}
 		return Promise.reject(new Error(`unexpected ${url}`))
 	})
 }
+
+/** What the imports list answers once the follows upload has run. */
+let finishedImports = []
 
 let accountStore
 
@@ -182,9 +188,11 @@ describe('FirstRun', () => {
 		expect(showError).not.toHaveBeenCalled()
 	})
 
-	it('uploads a following_accounts.csv to the same import the Settings page uses', async () => {
+	it('uploads a following_accounts.csv to the same import the Settings page uses, and waits for it', async () => {
 		serverHas()
-		axios.post.mockResolvedValue({ data: { followed: 12, skipped: 1, failed: { 'x@y': 'gone' } } })
+		// queued by the upload, finished by the time the list is asked
+		axios.post.mockResolvedValue({ data: { import: { id: 7, kind: 'follows', status: 'queued' } } })
+		finishedImports = [{ id: 7, kind: 'follows', status: 'done', done: 12, skipped: 1, failed: 1 }]
 		const wrapper = await mountFirstRun()
 		await next(wrapper)
 		await next(wrapper)

@@ -10,7 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Model\ImportJob;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationArchiveService;
 use OCA\Social\Service\MigrationService;
 use OCA\Social\Service\PostImportService;
@@ -53,6 +55,7 @@ class MigrationController extends Controller {
 		private MigrationArchiveService $archiveService,
 		private MigrationService $migrationService,
 		private PostImportService $postImportService,
+		private ImportQueueService $importQueueService,
 		private AccountService $accountService,
 		private SwitchService $switchService,
 		private LoggerInterface $logger,
@@ -152,15 +155,48 @@ class MigrationController extends Controller {
 	 * the only part of an account that cannot be carried in a file: a follow
 	 * is a relationship two servers have to agree on, so each one is requested
 	 * again from here.
+	 *
+	 * Queued, like every import below: each row is a WebFinger lookup and a
+	 * delivery, and a few hundred of them outlive a web request. The answer
+	 * is the import as queued; `GET /api/v1/migration/imports` is where it
+	 * gets to.
 	 */
 	#[NoAdminRequired]
-	#[UserRateLimit(limit: 4, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/follows')]
 	public function importFollows(): DataResponse {
-		return $this->fromUpload(
-			fn (string $userId, string $csv): array => $this->migrationService->importFollows($userId, $csv),
-			'importing follows failed'
-		);
+		return $this->queueUpload(ImportJob::KIND_FOLLOWS);
+	}
+
+	/**
+	 * The imports this account asked for, newest first, with where each one
+	 * got to: the list the Migration page polls while one runs.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/imports')]
+	public function imports(): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		return new DataResponse(['imports' => $this->importQueueService->listFor($this->userId)], Http::STATUS_OK);
+	}
+
+	/** Takes a finished import off the list; one still running stays, and says so. */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/migration/imports/{id}', requirements: ['id' => '\\d+'])]
+	public function dismissImport(int $id): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		if (!$this->importQueueService->dismiss($this->userId, $id)) {
+			return new DataResponse(
+				['error' => 'no finished import of yours has that id'], Http::STATUS_NOT_FOUND
+			);
+		}
+
+		return new DataResponse(['imports' => $this->importQueueService->listFor($this->userId)], Http::STATUS_OK);
 	}
 
 	/**
@@ -242,24 +278,18 @@ class MigrationController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	#[UserRateLimit(limit: 4, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/blocks')]
 	public function importBlocks(): DataResponse {
-		return $this->fromUpload(
-			fn (string $userId, string $csv): array => $this->migrationService->importBlocks($userId, $csv),
-			'importing blocks failed'
-		);
+		return $this->queueUpload(ImportJob::KIND_BLOCKS);
 	}
 
 	/** The accounts an export mutes — Mastodon's `muted_accounts.csv`. */
 	#[NoAdminRequired]
-	#[UserRateLimit(limit: 4, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/mutes')]
 	public function importMutes(): DataResponse {
-		return $this->fromUpload(
-			fn (string $userId, string $csv): array => $this->migrationService->importMutes($userId, $csv),
-			'importing mutes failed'
-		);
+		return $this->queueUpload(ImportJob::KIND_MUTES);
 	}
 
 	/**
@@ -270,13 +300,10 @@ class MigrationController extends Controller {
 	 * rather than followed on the quiet by a button that says "lists".
 	 */
 	#[NoAdminRequired]
-	#[UserRateLimit(limit: 4, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/lists')]
 	public function importLists(): DataResponse {
-		return $this->fromUpload(
-			fn (string $userId, string $csv): array => $this->migrationService->importLists($userId, $csv),
-			'importing lists failed'
-		);
+		return $this->queueUpload(ImportJob::KIND_LISTS);
 	}
 
 	/**
@@ -320,9 +347,51 @@ class MigrationController extends Controller {
 	}
 
 	/**
-	 * The three CSV imports differ by the one call they make: an uploaded
-	 * file, read, handed to the service, and whatever it counted answered
-	 * back. A file that could not be read is the client's problem and says so;
+	 * Keeps the uploaded file and queues the import of it, answering the
+	 * import as queued (**202**). One import of a kind at a time per account:
+	 * a second press while the first runs is a **409**, not a second run of
+	 * the same file.
+	 *
+	 * @param array<string, mixed> $options what the run should know
+	 */
+	private function queueUpload(string $kind, array $options = []): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		$file = $_FILES['file'] ?? [];
+		if ($file === [] || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+			return new DataResponse(['error' => 'no file was uploaded'], Http::STATUS_BAD_REQUEST);
+		}
+		if (($file['size'] ?? 0) > self::IMPORT_MAX_SIZE) {
+			return new DataResponse(
+				['error' => 'this file is larger than ' . (self::IMPORT_MAX_SIZE / 1024 / 1024) . ' MB'],
+				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
+			);
+		}
+		if ($this->importQueueService->hasActive($this->userId, $kind)) {
+			return new DataResponse(
+				['error' => 'an import of this kind is already running; wait for it to finish'],
+				Http::STATUS_CONFLICT
+			);
+		}
+
+		try {
+			$job = $this->importQueueService->queue($this->userId, $kind, $file['tmp_name'], $options);
+		} catch (Throwable $e) {
+			$this->logger->warning('queueing an import failed', ['userId' => $this->userId, 'kind' => $kind, 'exception' => $e]);
+
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+
+		return new DataResponse(['import' => $job], Http::STATUS_ACCEPTED);
+	}
+
+	/**
+	 * The one upload still read inside the request — the Instagram archive
+	 * the switch wizard mines for names — differs by the one call it makes:
+	 * an uploaded file, read, handed to the service, and whatever it counted
+	 * answered back. A file that could not be read is the client's problem and says so;
 	 * anything the service throws is reported with its own message, which is
 	 * the whole of the help there is.
 	 *
@@ -401,54 +470,26 @@ class MigrationController extends Controller {
 	/**
 	 * Brings an account's own posts over from the server it wrote them on.
 	 *
-	 * Rate-limited hard — twice an hour — because one call reads an archive,
-	 * writes up to two thousand posts and may fetch a picture for each of
-	 * them. Nothing it writes is federated; see `PostImportService`.
+	 * Queued: the run reads an archive, writes every post in it and may fetch
+	 * a picture for each, which is hours for a long history and no business
+	 * of a web request. Nothing it writes is federated; see
+	 * `PostImportService`.
 	 */
 	#[NoAdminRequired]
-	#[UserRateLimit(limit: 2, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/posts')]
 	public function importPosts(): DataResponse {
-		if ($this->userId === null) {
-			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
-		}
-
-		$file = $_FILES['file'] ?? [];
-		if ($file === [] || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-			return new DataResponse(['error' => 'no export was uploaded'], Http::STATUS_BAD_REQUEST);
-		}
-
-		if (($file['size'] ?? 0) > self::IMPORT_MAX_SIZE) {
-			return new DataResponse(
-				['error' => 'this export is larger than ' . (self::IMPORT_MAX_SIZE / 1024 / 1024) . ' MB'],
-				Http::STATUS_REQUEST_ENTITY_TOO_LARGE
-			);
-		}
-
 		// the pictures are fetched from the old server unless the person says
 		// not to: it is their own archive and their own old account, but it is
 		// a request that server can see, so it is a decision rather than a
 		// default nobody was told about
 		$fetchMedia = !in_array(
-			strtolower(trim((string)($this->request->getParam('fetch_media', '1')))),
+			strtolower(trim((string)$this->request->getParam('fetch_media', '1'))),
 			['0', 'false', 'no'],
 			true
 		);
 
-		try {
-			$actor = $this->accountService->getActorFromUserId($this->userId);
-
-			return new DataResponse(
-				$this->postImportService->import($actor, $file['tmp_name'], $fetchMedia),
-				Http::STATUS_OK
-			);
-		} catch (Throwable $e) {
-			$this->logger->warning('importing posts failed', [
-				'userId' => $this->userId, 'exception' => $e,
-			]);
-
-			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
-		}
+		return $this->queueUpload(ImportJob::KIND_POSTS, ['fetch_media' => $fetchMedia]);
 	}
 
 	/**

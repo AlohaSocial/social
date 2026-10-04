@@ -11,7 +11,7 @@ import { showError, showSuccess } from '../../../src/services/toast.js'
 import Migration from '../../../src/components/MigrationSettings.vue'
 
 vi.mock('@nextcloud/axios', () => ({
-	default: { get: vi.fn(), post: vi.fn() },
+	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -22,6 +22,25 @@ const API = '/index.php/apps/social/api/v1'
 
 function mountPage() {
 	return mount(Migration, { attachTo: document.body })
+}
+
+/** An import as the server lists it. */
+function job(kind, status, counts = {}, report = {}) {
+	return { id: 7, kind, status, total: 0, done: 0, skipped: 0, failed: 0, report, options: {}, ...counts }
+}
+
+/**
+ * The server queues an upload and answers the import; the list is what says
+ * what came of it. `done` is what the poll answers.
+ */
+function serverQueues(kind, done) {
+	axios.post.mockResolvedValue({ data: { import: job(kind, 'queued') } })
+	axios.get.mockImplementation((url) => {
+		if (url.endsWith('/migration/imports')) {
+			return Promise.resolve({ data: { imports: done ? [done] : [] } })
+		}
+		return Promise.resolve({ data: { aliases: [] } })
+	})
 }
 
 /** A file input cannot be filled by hand, so the change is dispatched with one. */
@@ -38,10 +57,14 @@ async function choose(wrapper, ref, name = 'social-alice.zip') {
 describe('Migration', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.useFakeTimers()
 		document.body.innerHTML = ''
+		// the page asks for the aliases and the imports when it opens
+		axios.get.mockResolvedValue({ data: { aliases: [], imports: [] } })
 	})
 
 	afterEach(() => {
+		vi.useRealTimers()
 		vi.restoreAllMocks()
 	})
 
@@ -143,23 +166,65 @@ describe('Migration', () => {
 
 	// follows from another network
 
-	it('uploads a follows CSV and counts what came of it', async () => {
-		axios.post.mockResolvedValue({ data: { followed: 12, skipped: 1, failed: { 'gone@dead.example': 'unknown host' } } })
+	it('queues a follows CSV and shows what the import came to', async () => {
+		serverQueues('follows', job('follows', 'done', { done: 12, skipped: 1, failed: 1 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'follows', 'following_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/follows`, expect.any(FormData))
+		expect(showSuccess).toHaveBeenCalled()
+		expect(wrapper.find('.migration__result').text()).toBe('12 followed, 1 skipped, 1 could not be reached')
+	})
+
+	it('shows where a running import has got to, and asks again while it runs', async () => {
+		serverQueues('follows', job('follows', 'running', { total: 500, done: 120 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'follows', 'following_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(wrapper.find('.migration__result').text()).toBe('120 of 500 …')
+		const polls = axios.get.mock.calls.filter(([url]) => url.endsWith('/migration/imports')).length
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+		expect(axios.get.mock.calls.filter(([url]) => url.endsWith('/migration/imports')).length).toBeGreaterThan(polls)
+	})
+
+	it('refuses to queue the same kind twice and says so', async () => {
+		axios.post.mockRejectedValue({ response: { status: 409, data: { error: 'an import of this kind is already running; wait for it to finish' } } })
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'follows', 'following_accounts.csv')
 
-		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/follows`, expect.any(FormData))
-		expect(wrapper.find('.migration__result').text()).toContain('12')
-		expect(wrapper.find('.migration__result').text()).toContain('1')
+		expect(showError).toHaveBeenCalledWith('an import of this kind is already running; wait for it to finish')
+	})
+
+	it('dismisses a finished import through its own route', async () => {
+		serverQueues('follows', job('follows', 'done', { done: 2 }))
+		axios.delete.mockResolvedValue({ data: { imports: [] } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		expect(wrapper.find('.migration__import').exists()).toBe(true)
+		await wrapper.find('.migration__import button').trigger('click')
+		await flushPromises()
+
+		expect(axios.delete).toHaveBeenCalledWith(`${API}/migration/imports/7`)
+		expect(wrapper.find('.migration__import').exists()).toBe(false)
 	})
 
 	it('takes Pixelfed\'s JSON export too, since that is the only follows file Pixelfed writes', async () => {
-		axios.post.mockResolvedValue({ data: { followed: 3, skipped: 0, failed: {} } })
+		serverQueues('follows', job('follows', 'done', { done: 3 }))
 
 		const wrapper = mountPage()
 		expect(wrapper.find('input[ref="follows"], input[accept*="json"]').exists()).toBe(true)
 		await choose(wrapper, 'follows', 'pixelfed-following.json')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/follows`, expect.any(FormData))
 		expect(wrapper.find('.migration__result').text()).toContain('3')
@@ -168,11 +233,13 @@ describe('Migration', () => {
 
 	// the posts themselves, which is what moving has never carried
 
-	it('uploads an export, says it may fetch the pictures, and counts what came of it', async () => {
-		axios.post.mockResolvedValue({ data: { imported: 240, media: 96, already: 0, skipped: 12, failed: 1, capped: false } })
+	it('queues an export, says it may fetch the pictures, and shows what the import came to', async () => {
+		serverQueues('posts', job('posts', 'done', { done: 240, skipped: 12, failed: 1 }, { media: 96 }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'posts', 'outbox.json')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/posts`, expect.any(FormData))
 		const form = axios.post.mock.calls[0][1]
@@ -184,7 +251,7 @@ describe('Migration', () => {
 	})
 
 	it('sends the fetch off when the reader turns it off', async () => {
-		axios.post.mockResolvedValue({ data: { imported: 3, media: 0, already: 0, skipped: 0, failed: 0 } })
+		serverQueues('posts', null)
 
 		const wrapper = mountPage()
 		await wrapper.find('.migration__media-switch input').setValue(false)
@@ -193,13 +260,15 @@ describe('Migration', () => {
 		expect(axios.post.mock.calls[0][1].get('fetch_media')).toBe('0')
 	})
 
-	it('says when the run stopped at its limit, so the reader knows to go again', async () => {
-		axios.post.mockResolvedValue({ data: { imported: 2000, media: 500, already: 0, skipped: 0, failed: 0, capped: true } })
+	it('shows the reason when a run failed', async () => {
+		serverQueues('posts', job('posts', 'failed', {}, { error: 'this archive has no outbox.json' }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'posts', 'outbox.json')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
-		expect(wrapper.findAll('.migration__result').at(-1).text()).toContain('again')
+		expect(wrapper.findAll('.migration__result').at(-1).text()).toContain('this archive has no outbox.json')
 	})
 
 	it('says so when the export cannot be read', async () => {
@@ -274,22 +343,26 @@ describe('Migration', () => {
 
 	// the other three lists, in and out
 
-	it('reads a blocks CSV through its own route and reports what it came to', async () => {
-		axios.post.mockResolvedValue({ data: { blocked: 3, skipped: 1, failed: { 'dave@x.example': 'gone' } } })
+	it('queues a blocks CSV through its own route and reports what it came to', async () => {
+		serverQueues('blocks', job('blocks', 'done', { done: 3, skipped: 1, failed: 1 }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'blocks', 'blocked_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/blocks`, expect.any(FormData))
 		expect(wrapper.text()).toContain('3 applied, 1 skipped, 1 could not be reached')
 		expect(showSuccess).toHaveBeenCalled()
 	})
 
-	it('reads a mutes CSV through the mutes route', async () => {
-		axios.post.mockResolvedValue({ data: { muted: 2, skipped: 0, failed: {} } })
+	it('queues a mutes CSV through the mutes route', async () => {
+		serverQueues('mutes', job('mutes', 'done', { done: 2 }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'mutes', 'muted_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/mutes`, expect.any(FormData))
 		expect(wrapper.text()).toContain('2 applied, 0 skipped, 0 could not be reached')
@@ -301,10 +374,12 @@ describe('Migration', () => {
 	 * like a failure nobody can act on.
 	 */
 	it('says why the accounts left out of a list were left out', async () => {
-		axios.post.mockResolvedValue({ data: { lists: 2, added: 5, skipped: 4, failed: {} } })
+		serverQueues('lists', job('lists', 'done', { done: 5, skipped: 4 }, { lists: 2 }))
 
 		const wrapper = mountPage()
 		await choose(wrapper, 'lists', 'lists.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
 
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/lists`, expect.any(FormData))
 		expect(wrapper.text()).toContain('2 lists made, 5 accounts added, 4 skipped because you do not follow them')

@@ -115,6 +115,27 @@
 				{{ t('social', 'The fediverse is one network with many doors. Mastodon, Pixelfed, GoToSocial, Akkoma, Misskey and this app all speak ActivityPub, so an account here can follow and be followed by any of them — and what you bring with you is mostly the list of people you had found.') }}
 			</p>
 
+			<ul v-if="imports.length > 0" class="migration__imports" aria-live="polite">
+				<li
+					v-for="job in imports"
+					:key="job.id"
+					class="migration__import"
+					:class="'migration__import--' + job.status">
+					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
+					<span class="migration__result">{{ importSummary(job) }}</span>
+					<NcButton
+						v-if="job.status === 'done' || job.status === 'failed'"
+						variant="tertiary"
+						:aria-label="t('social', 'Dismiss')"
+						:title="t('social', 'Dismiss')"
+						@click="dismissImport(job.id)">
+						<template #icon>
+							<IconClose :size="20" />
+						</template>
+					</NcButton>
+				</li>
+			</ul>
+
 			<h5>{{ t('social', 'Bring your follows with you') }}</h5>
 			<p>
 				{{ t('social', 'Every one of those servers exports the people you follow — most as a following_accounts.csv, Pixelfed as pixelfed-following.json. Upload that file and each account is followed again from here. A follow is an agreement between two servers, so it has to be asked for again — it cannot be copied out of a file.') }}
@@ -134,9 +155,6 @@
 				</template>
 				{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
 			</NcButton>
-			<p v-if="followsResult" class="migration__result">
-				{{ followsResult }}
-			</p>
 
 			<h5>{{ t('social', 'Bring your blocks, mutes and lists') }}</h5>
 			<p>
@@ -192,9 +210,6 @@
 					{{ t('social', 'Import lists') }}
 				</NcButton>
 			</div>
-			<p v-if="csvResult" class="migration__result">
-				{{ csvResult }}
-			</p>
 
 			<h5>{{ t('social', 'Bring your posts with you') }}</h5>
 			<p>
@@ -224,9 +239,6 @@
 				</template>
 				{{ postsBusy ? t('social', 'Writing your posts …') : t('social', 'Import posts from an export') }}
 			</NcButton>
-			<p v-if="postsResult" class="migration__result">
-				{{ postsResult }}
-			</p>
 			<p class="migration__note">
 				{{ t('social', 'At most 2000 posts at a time; run it again to carry on. An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
 			</p>
@@ -360,18 +372,16 @@ export default {
 			postsBusy: false,
 			/** whether a picture named only by its address may be fetched from the old server */
 			fetchMedia: true,
-			/** @type {string} what the last post import came to */
-			postsResult: '',
 			/** @type {string[]} what the last import reported */
 			importLog: [],
-			/** @type {string} what the last CSV import came to */
-			followsResult: '',
 			/** @type {string} which single-file export is being prepared */
 			csvBusy: '',
 			/** @type {string} which CSV is being read in */
 			csvImport: '',
-			/** @type {string} what the last blocks, mutes or lists import came to */
-			csvResult: '',
+			/** @type {Array<object>} the imports this account asked for, newest first, as the server lists them */
+			imports: [],
+			/** @type {number|null} the timer behind the next poll of the imports, while one runs */
+			pollTimer: null,
 			/** @type {string[]} the accounts this one also answers to */
 			aliases: [],
 			/** @type {string} the address being added */
@@ -402,6 +412,11 @@ export default {
 
 	mounted() {
 		this.loadAliases()
+		this.loadImports()
+	},
+
+	beforeUnmount() {
+		window.clearTimeout(this.pollTimer)
 	},
 
 	methods: {
@@ -554,55 +569,20 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		/**
-		 * Reads an export and writes the posts in it as this account's own.
-		 *
-		 * The heavy one: the server reads the file, writes up to two thousand
-		 * posts and may fetch a picture for each, so the button says what it
-		 * is doing for as long as it takes.
+		 * Queues the export: the server keeps the file and writes the posts in
+		 * the background, where a long history is hours of work rather than a
+		 * request against the web server's timeout. The list above shows where
+		 * it has got to.
 		 *
 		 * @param {Event} event the file input's change
 		 * @return {Promise<void>}
 		 */
 		async importPosts(event) {
-			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
-			const file = input?.files?.[0]
-			if (!file) {
-				return
-			}
-
 			this.postsBusy = true
-			this.postsResult = ''
 			try {
-				const form = new FormData()
-				form.append('file', file)
-				form.append('fetch_media', this.fetchMedia ? '1' : '0')
-				const { data } = await axios.post(
-					generateUrl('apps/social/api/v1/migration/posts'),
-					form,
-				)
-				this.postsResult = t(
-					'social',
-					'{imported} posts written with {media} of their pictures; {already} were already here, {skipped} were not posts to bring over, {failed} could not be written.',
-					{
-						imported: data?.imported ?? 0,
-						media: data?.media ?? 0,
-						already: data?.already ?? 0,
-						skipped: data?.skipped ?? 0,
-						failed: data?.failed ?? 0,
-					},
-				)
-				if (data?.capped) {
-					this.postsResult += ' ' + t('social', 'The run stopped at its limit — import the same file again to carry on.')
-				}
-				showSuccess(t('social', 'Your posts have been imported'))
-			} catch (error) {
-				logger.error('Importing posts failed', { error })
-				showError(error?.response?.data?.error || t('social', 'Could not import those posts'))
+				await this.queueUpload(event, 'posts', { fetch_media: this.fetchMedia ? '1' : '0' })
 			} finally {
 				this.postsBusy = false
-				if (input) {
-					input.value = ''
-				}
 			}
 		},
 
@@ -641,35 +621,68 @@ export default {
 		},
 
 		/**
-		 * Reads a blocks, mutes or lists CSV back in.
+		 * Queues a blocks, mutes or lists CSV.
 		 *
 		 * @param {Event} event the file input's change
 		 * @param {string} kind blocks, mutes or lists
 		 * @return {Promise<void>}
 		 */
 		async importCsv(event, kind) {
+			this.csvImport = kind
+			try {
+				await this.queueUpload(event, kind)
+			} finally {
+				this.csvImport = ''
+			}
+		},
+
+		/**
+		 * @param {Event} event the file input's change
+		 * @return {Promise<void>}
+		 */
+		async importFollows(event) {
+			this.followsBusy = true
+			try {
+				await this.queueUpload(event, 'follows')
+			} finally {
+				this.followsBusy = false
+			}
+		},
+
+		/**
+		 * Hands an upload to the server to queue, and starts watching the list.
+		 *
+		 * @param {Event} event the file input's change
+		 * @param {string} kind follows, blocks, mutes, lists or posts: the route and the import's kind
+		 * @param {Object<string, string>} fields anything to send beside the file
+		 * @return {Promise<void>}
+		 */
+		async queueUpload(event, kind, fields = {}) {
 			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
 			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
-
-			this.csvImport = kind
-			this.csvResult = ''
 			try {
 				const form = new FormData()
 				form.append('file', file)
+				for (const [name, value] of Object.entries(fields)) {
+					form.append(name, value)
+				}
 				const { data } = await axios.post(
 					generateUrl('apps/social/api/v1/migration/{kind}', { kind }),
 					form,
 				)
-				this.csvResult = this.csvSummary(kind, data)
-				showSuccess(t('social', 'That file has been read'))
+				if (data?.import) {
+					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
+				}
+				showSuccess(t('social', 'Queued — it runs in the background, and this page shows where it gets to'))
+				this.schedulePoll()
 			} catch (error) {
-				logger.error('Importing a CSV failed', { error, kind })
-				showError(error?.response?.data?.error || t('social', 'Could not read that file'))
+				logger.error('Queueing an import failed', { error, kind })
+				showError(error?.response?.data?.error || t('social', 'Could not start that import'))
 			} finally {
-				this.csvImport = ''
+				// cleared, or choosing the same file twice fires no change
 				if (input) {
 					input.value = ''
 				}
@@ -677,65 +690,102 @@ export default {
 		},
 
 		/**
-		 * @param {string} kind blocks, mutes or lists
-		 * @param {object} data what the server counted
-		 * @return {string} what to tell the person who pressed the button
+		 * The imports this account asked for, and where each has got to.
+		 * Polled while any is still queued or running.
+		 *
+		 * @return {Promise<void>}
 		 */
-		csvSummary(kind, data) {
-			const failed = Object.keys(data?.failed ?? {}).length
-			if (kind === 'lists') {
+		async loadImports() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/imports'))
+				this.imports = Array.isArray(data?.imports) ? data.imports : []
+			} catch (error) {
+				logger.error('Failed to load the imports', { error })
+			}
+			if (this.imports.some((job) => job.status === 'queued' || job.status === 'running')) {
+				this.schedulePoll()
+			}
+		},
+
+		/** Asks again in a few seconds; one timer at a time. */
+		schedulePoll() {
+			window.clearTimeout(this.pollTimer)
+			this.pollTimer = window.setTimeout(() => this.loadImports(), 3000)
+		},
+
+		/**
+		 * @param {number} id the import to take off the list
+		 * @return {Promise<void>}
+		 */
+		async dismissImport(id) {
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/migration/imports/{id}', { id }))
+				this.imports = Array.isArray(data?.imports) ? data.imports : this.imports.filter((job) => job.id !== id)
+			} catch {
+				showError(t('social', 'Could not dismiss that import'))
+			}
+		},
+
+		/**
+		 * @param {string} kind an import's kind
+		 * @return {string} what to call it
+		 */
+		kindLabel(kind) {
+			return {
+				follows: t('social', 'Follows'),
+				blocks: t('social', 'Blocks'),
+				mutes: t('social', 'Mutes'),
+				lists: t('social', 'Lists'),
+				posts: t('social', 'Posts'),
+			}[kind] ?? kind
+		},
+
+		/**
+		 * Where an import has got to, or what it came to, in one sentence.
+		 *
+		 * @param {object} job the import as the server lists it
+		 * @return {string}
+		 */
+		importSummary(job) {
+			if (job.status === 'queued') {
+				return t('social', 'Waiting to start — it runs in the background on the next cron run.')
+			}
+			if (job.status === 'running') {
+				return job.total > 0
+					? t('social', '{done} of {total} …', { done: job.done, total: job.total })
+					: t('social', 'Starting …')
+			}
+			if (job.status === 'failed') {
+				return t('social', 'Failed: {reason}', { reason: job.report?.error ?? t('social', 'unknown reason') })
+			}
+			if (job.kind === 'posts') {
+				return t(
+					'social',
+					'{imported} posts written with {media} of their pictures; {skipped} were already here or not posts to bring over, {failed} could not be written',
+					{ imported: job.done, media: job.report?.media ?? 0, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'lists') {
 				return t(
 					'social',
 					'{lists} lists made, {added} accounts added, {skipped} skipped because you do not follow them, {failed} could not be reached',
-					{
-						lists: data?.lists ?? 0,
-						added: data?.added ?? 0,
-						skipped: data?.skipped ?? 0,
-						failed,
-					},
+					{ lists: job.report?.lists ?? 0, added: job.done, skipped: job.skipped, failed: job.failed },
 				)
 			}
-
+			if (job.kind === 'follows') {
+				return t(
+					'social',
+					'{followed} followed, {skipped} skipped, {failed} could not be reached',
+					{ followed: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
 			return t(
 				'social',
 				'{done} applied, {skipped} skipped, {failed} could not be reached',
-				{ done: data?.blocked ?? data?.muted ?? 0, skipped: data?.skipped ?? 0, failed },
+				{ done: job.done, skipped: job.skipped, failed: job.failed },
 			)
 		},
 
-		async importFollows(event) {
-			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
-			const file = input?.files?.[0]
-			if (!file) {
-				return
-			}
-
-			this.followsBusy = true
-			this.followsResult = ''
-			try {
-				const form = new FormData()
-				form.append('file', file)
-				const { data } = await axios.post(
-					generateUrl('apps/social/api/v1/migration/follows'),
-					form,
-				)
-				const failed = Object.keys(data?.failed ?? {}).length
-				this.followsResult = t(
-					'social',
-					'{followed} followed, {skipped} skipped, {failed} could not be reached',
-					{ followed: data?.followed ?? 0, skipped: data?.skipped ?? 0, failed },
-				)
-				showSuccess(t('social', 'Your follows have been imported'))
-			} catch (error) {
-				logger.error('Importing follows failed', { error })
-				showError(error?.response?.data?.error || t('social', 'Could not import those follows'))
-			} finally {
-				this.followsBusy = false
-				if (input) {
-					input.value = ''
-				}
-			}
-		},
 	},
 }
 </script>
@@ -861,6 +911,38 @@ export default {
 
 .migration__media-switch {
 	margin: 4px 0 2px;
+}
+
+.migration__imports {
+	list-style: none;
+	margin: 0 0 12px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.migration__import {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--border-radius-element, 8px);
+	background: var(--color-background-hover);
+}
+
+.migration__import-kind {
+	font-weight: bold;
+	min-width: 5em;
+}
+
+.migration__import .migration__result {
+	flex: 1;
+	margin: 0;
+}
+
+.migration__import--failed .migration__result {
+	color: var(--color-error-text, var(--color-error));
 }
 
 .migration__result {

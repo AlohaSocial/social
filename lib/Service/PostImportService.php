@@ -381,8 +381,12 @@ class PostImportService {
 	 *                 the writers, which psalm cannot follow back to its shape
 	 * @throws InvalidResourceException when the file is not an export this can read
 	 */
-	public function import(Person $actor, string $path, bool $fetchMedia = true, int $limit = self::MAX_POSTS): array {
-		$limit = max(1, min(self::MAX_POSTS, $limit));
+	public function import(
+		Person $actor, string $path, bool $fetchMedia = true, int $limit = self::MAX_POSTS, ?callable $progress = null,
+	): array {
+		// 0 is no cap at all, for a run with no request to keep within a time
+		// limit; anything else stays within MAX_POSTS
+		$limit = ($limit <= 0) ? PHP_INT_MAX : max(1, min(self::MAX_POSTS, $limit));
 		$zip = $this->openArchive($path);
 
 		try {
@@ -428,7 +432,11 @@ class PostImportService {
 				$actor->getId(), array_column($parsed, 'source')
 			);
 
+			$handled = 0;
 			foreach ($parsed as $post) {
+				if ($progress !== null) {
+					$progress($handled++, count($parsed));
+				}
 				if (isset($known[$post['source']])) {
 					$tally['already']++;
 					continue;
@@ -454,6 +462,9 @@ class PostImportService {
 				$tally['imported']++;
 			}
 
+			if ($progress !== null) {
+				$progress($handled, count($parsed));
+			}
 			if ($tally['imported'] > 0) {
 				$this->accountService->cacheLocalActorDetailCount($actor);
 			}

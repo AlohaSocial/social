@@ -485,7 +485,9 @@ Mastodon's own export uses, with each attachment pointing at the copy rather tha
 the server you are leaving. Import reads one back, including an archive from
 `occ user:export`. A third section brings your follows over from Mastodon, Pixelfed,
 GoToSocial or Akkoma via their `following_accounts.csv` or `pixelfed-following.json`.
-Your private key is deliberately not in the archive. Naming the account you are
+Every import runs in the background and the page shows where it has got to, so a
+long follow list or a decade of posts is one upload rather than a race against the
+web server's timeout. Your private key is deliberately not in the archive. Naming the account you are
 moving from — the `alsoKnownAs` the old server insists on before it will hand over
 your followers — is a field in the same page rather than an `occ` command, because
 it federates nothing and is yours to set.
