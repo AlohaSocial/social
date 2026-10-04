@@ -936,7 +936,11 @@ peers filled the whole pass. It now delivers **several servers at a time**:
 `ActivityService::manageRequests()` sends a batch in waves of up to `PARALLEL`
 (20) rows, one per host, through `CurlService::sendMany()` (the HTTP client's
 async calls, which Guzzle runs on one curl multi handle), and settles every row
-exactly as a single delivery is settled. A wave costs about as long as its
+exactly as a single delivery is settled. A settled promise answers Guzzle's
+PSR-7 response rather than the `IResponse` a synchronous call returns, and
+`CurlService::settledResponse()` reads it as one; taking only an `IResponse` made
+every parallel delivery a "no response", so each was sent again and every
+peer was put behind the breaker. A wave costs about as long as its
 slowest peer, so a dead peer costs its timeout once, beside nineteen
 deliveries, instead of in front of all of them — and then the breaker below
 holds its other rows back without a timeout at all. When a batch is done and
