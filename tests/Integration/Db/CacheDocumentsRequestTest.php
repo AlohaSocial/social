@@ -193,9 +193,10 @@ class CacheDocumentsRequestTest extends TestCase {
 	}
 
 	public function testTheVideoPipelinesEachSeeTheirOwnWork(): void {
-		$mp4 = $this->document('mp4', ['mediaType' => 'video/mp4', 'localCopy' => 'uuid-mp4']);
-		$this->document('webm', ['mediaType' => 'video/webm', 'localCopy' => 'uuid-webm']);
-		$this->document('poster', ['mediaType' => 'video/mp4', 'localCopy' => 'uuid-poster', 'resizedCopy' => 'uuid-poster-img']);
+		// uploaded here, so they have an account: only those are transcoded
+		$mp4 = $this->document('mp4', ['account' => self::ACCOUNT, 'mediaType' => 'video/mp4', 'localCopy' => 'uuid-mp4']);
+		$this->document('webm', ['account' => self::ACCOUNT, 'mediaType' => 'video/webm', 'localCopy' => 'uuid-webm']);
+		$this->document('poster', ['account' => self::ACCOUNT, 'mediaType' => 'video/mp4', 'localCopy' => 'uuid-poster', 'resizedCopy' => 'uuid-poster-img']);
 		$after = (string)((int)$mp4->getNid() - 1);
 
 		$this->assertSame(['mp4', 'webm'], $this->ours($this->documents->getVideosWithoutPoster(100, $after)));
