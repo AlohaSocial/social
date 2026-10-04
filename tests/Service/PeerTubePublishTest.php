@@ -99,6 +99,32 @@ class PeerTubePublishTest extends TestCase {
 
 	// which posts are videos at all
 
+	/**
+	 * PeerTube's `isUUIDValid()` is validator.js `isUUID(value, 4)`: a
+	 * version-5 uuid, which is what a hash of a name really is, made PeerTube
+	 * refuse every `Video` sent from here on that one field.
+	 */
+	public function testTheVideoUuidIsOnePeerTubeAccepts(): void {
+		$uuid = PeerTubeService::uuidFor('https://cloud.example.org/@alice/123');
+
+		$this->assertMatchesRegularExpression(
+			'/^[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/i',
+			$uuid
+		);
+	}
+
+	/** The same post is the same video however often it is delivered. */
+	public function testTheVideoUuidIsStableAndDiffersPerPost(): void {
+		$this->assertSame(
+			PeerTubeService::uuidFor('https://cloud.example.org/@alice/123'),
+			PeerTubeService::uuidFor('https://cloud.example.org/@alice/123')
+		);
+		$this->assertNotSame(
+			PeerTubeService::uuidFor('https://cloud.example.org/@alice/123'),
+			PeerTubeService::uuidFor('https://cloud.example.org/@alice/124')
+		);
+	}
+
 	public function testOneVideoAttachmentMakesItAVideo(): void {
 		$this->assertNotNull(PeerTubeService::soleVideo([$this->attachment()]));
 	}
@@ -180,6 +206,18 @@ class PeerTubePublishTest extends TestCase {
 
 		$this->assertCount(1, $files);
 		$this->assertSame('https://cloud.example.org/media/movie.mp4', $files[0]['href']);
+	}
+
+	/**
+	 * PeerTube fetches `likes` and `dislikes` for every video it takes in
+	 * and writes what it finds; a video without them crashed it.
+	 */
+	public function testAVideoNamesItsLikesAndDislikes(): void {
+		$note = $this->note();
+		$video = PeerTubeService::asVideo($note, $this->attachment(), self::WATCH, self::attribution());
+
+		$this->assertSame($note['id'] . '/likes', $video['likes']);
+		$this->assertSame($note['id'] . '/dislikes', $video['dislikes']);
 	}
 
 	/** A video with no ladder publishes no playlist rather than an empty one. */

@@ -163,6 +163,7 @@ class PostService {
 		}
 		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId());
 		$this->streamService->addRecipients($note, $post->getType(), $post->getTo());
+		$this->streamService->addChannelFollowers($note);
 		$this->streamService->addHashtags($note, $post->getHashtags());
 		$this->streamService->addCustomEmojis(
 			$note, $post->getContent(), $post->getSpoilerText()
@@ -331,6 +332,7 @@ class PostService {
 				)
 			);
 		}
+		$this->streamService->addChannelFollowers($updated);
 
 		// Local subscribers must learn about the edit even when the remote
 		// request cannot be queued. The saved revision and source are already

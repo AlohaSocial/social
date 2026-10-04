@@ -34,12 +34,17 @@ class OrderedCollectionTest extends TestCase {
 		$this->assertSame('https://mastodon.social/users/alice/followers?page=13', $collection->getLast());
 	}
 
-	public function testJsonSerializeDropsEmptyCollectionFields(): void {
+	/**
+	 * Empty fields are left out, but not the count: an empty collection
+	 * holds 0 items and says so. PeerTube crashed on a video whose `likes`
+	 * left the count out.
+	 */
+	public function testJsonSerializeDropsEmptyFieldsButStatesAZeroCount(): void {
 		$collection = new OrderedCollection();
 		$collection->setId('https://mastodon.social/users/alice/followers');
 
 		$json = $collection->jsonSerialize();
-		$this->assertArrayNotHasKey('totalItems', $json);
+		$this->assertSame(0, $json['totalItems']);
 		$this->assertArrayNotHasKey('first', $json);
 		$this->assertArrayNotHasKey('last', $json);
 

@@ -38,6 +38,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -852,20 +854,55 @@ class CurlServiceTest extends TestCase {
 	}
 
 	/**
-	 * A promise double: the batch waits on each in turn, and what `wait()`
-	 * answers with is what the client would have handed over.
+	 * A promise double: the batch waits on each in turn, and `wait()` answers
+	 * with what Nextcloud's client really hands over, Guzzle's PSR-7 response
+	 * rather than an `IResponse`. The double used to return the `IResponse`,
+	 * which is why no test noticed that every real answer was read as none.
 	 */
 	private function promiseOf(IResponse|\Throwable $answer): \OCP\Http\Client\IPromise {
 		$promise = $this->createMock(\OCP\Http\Client\IPromise::class);
-		$promise->method('wait')->willReturnCallback(static function () use ($answer) {
-			if ($answer instanceof \Throwable) {
-				throw $answer;
+		$settled = ($answer instanceof IResponse) ? $this->psrResponseOf($answer) : $answer;
+		$promise->method('wait')->willReturnCallback(static function () use ($settled) {
+			if ($settled instanceof \Throwable) {
+				throw $settled;
 			}
 
-			return $answer;
+			return $settled;
 		});
 
 		return $promise;
+	}
+
+	/** The same answer as Guzzle hands it to `IPromise::wait()`. */
+	private function psrResponseOf(IResponse $answer): ResponseInterface {
+		$stream = $this->createMock(StreamInterface::class);
+		$stream->method('detach')->willReturnCallback(static fn () => $answer->getBody());
+
+		$response = $this->createMock(ResponseInterface::class);
+		$response->method('getStatusCode')->willReturn($answer->getStatusCode());
+		$response->method('getHeader')->willReturnCallback(static function (string $key) use ($answer): array {
+			$value = $answer->getHeader($key);
+
+			return ($value === '') ? [] : [$value];
+		});
+		$response->method('getHeaders')->willReturn([]);
+		$response->method('getBody')->willReturn($stream);
+
+		return $response;
+	}
+
+	/**
+	 * Mastodon answers a delivery 202 with an empty body. Read through the
+	 * promise as Nextcloud hands it over, that is a delivered post; it used to
+	 * be "no response", so every delivery was retried and every host put
+	 * behind the circuit breaker.
+	 */
+	public function testAnAcceptedDeliveryIsDeliveredAndNotRetried(): void {
+		$this->client->method('postAsync')->willReturn($this->promiseOf($this->answer('', 202, 'text/html')));
+
+		$outcomes = $this->service()->sendMany(['a' => $this->delivery('/inbox')]);
+
+		$this->assertNull($outcomes['a']);
 	}
 
 	/**

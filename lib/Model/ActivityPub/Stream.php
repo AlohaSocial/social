@@ -112,6 +112,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const REPLIES_PATH = '/replies';
 
 	/**
+	 * What is appended to a post's id to name the counts PeerTube keeps on a
+	 * video. It fetches both for every remote video it takes in, and a video
+	 * without them crashed it.
+	 */
+	public const LIKES_PATH = '/likes';
+	public const DISLIKES_PATH = '/dislikes';
+
+	/**
 	 * The states Mastodon's Quote entity can be in. A quote is `accepted` once
 	 * the quoted author's server has approved it — and, here, once the quoted
 	 * post is one this instance holds and the reader may see; `pending` while

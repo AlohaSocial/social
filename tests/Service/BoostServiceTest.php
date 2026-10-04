@@ -28,6 +28,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\BoostService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\EmojiService;
@@ -104,7 +105,8 @@ class BoostServiceTest extends TestCase {
 			$this->createStub(PlaceService::class),
 			$this->createStub(ReactionSummaryService::class),
 			$this->createStub(MediaTagsRequest::class),
-			$this->createStub(AccountService::class)
+			$this->createStub(AccountService::class),
+			$this->createStub(ChannelService::class)
 		);
 
 		$this->service = new BoostService(

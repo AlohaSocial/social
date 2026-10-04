@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.110
+**App version:** 0.26.111
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -483,7 +483,7 @@ ignores a slow response when the dialog has switched to another post.
 
 A delivery is retried when the peer's answer says it might accept the activity later — 408, 429 and any 5xx — and the row is dropped only on an answer that says it never will, or once `MAX_TRIES` is reached. A host that has just answered with a transient status is added to the run's failing set, so the rest of the run does not ask it once per queued activity.
 
-**Activities the app emits:** Create, Update, Delete, Follow, Accept, Reject, Like, Announce, Block, Undo. Every `Undo` embeds the activity it takes back rather than naming it by id — PeerTube decides what is undone by `object.type` and ignores a bare id; an `Undo{Announce}` carries a fresh `Announce` with the id, actor, object and audience of the stored one (`BoostService::undoneAnnounce()`), not the stored row's export. An `Update` is `<object id>#updates/<n>`, `n` being the post's `updated` as a Unix time (the time in milliseconds for an object without one), so two edits are two activities and a redelivery of one version keeps its id.
+**Activities the app emits:** Create, Update, Delete, Follow, Accept, Reject, Like, Announce, Block, Undo. Every `Undo` embeds the activity it takes back rather than naming it by id — PeerTube decides what is undone by `object.type` and ignores a bare id; an `Undo{Announce}` carries a fresh `Announce` with the id, actor, object and audience of the stored one (`BoostService::undoneAnnounce()`), not the stored row's export. An `Update` is `<object id>#updates/<n>`, `n` being the post's `updated` as a Unix time (the time in milliseconds for an object without one), so two edits are two activities and a redelivery of one version keeps its id. Its object is always the ActivityPub document: an edit is read back from the database in the client format, whose `id` is the nid and which carries no `type` or `updated`, and wrapped as it was, the Update named no post any peer held, so Mastodon took every edit in with a 202 and dropped it. `updateActivity()` serialises the object as ActivityPub and hands the caller its post back in the format it came in.
 
 Reject goes out when a follow request is refused (`FollowInterface::rejectFollowRequest()`, also used to answer a `Follow` from a blocked actor) and when an accepted follow is severed by a block. Block and `Undo{Block}` go out from `RelationshipService`, unless the `federate_blocks` app setting is `0`.
 
@@ -936,7 +936,11 @@ peers filled the whole pass. It now delivers **several servers at a time**:
 `ActivityService::manageRequests()` sends a batch in waves of up to `PARALLEL`
 (20) rows, one per host, through `CurlService::sendMany()` (the HTTP client's
 async calls, which Guzzle runs on one curl multi handle), and settles every row
-exactly as a single delivery is settled. A wave costs about as long as its
+exactly as a single delivery is settled. A settled promise answers Guzzle's
+PSR-7 response rather than the `IResponse` a synchronous call returns, and
+`CurlService::settledResponse()` reads it as one; taking only an `IResponse` made
+every parallel delivery a "no response", so each was sent again and every
+peer was put behind the breaker. A wave costs about as long as its
 slowest peer, so a dead peer costs its timeout once, beside nineteen
 deliveries, instead of in front of all of them — and then the breaker below
 holds its other rows back without a timeout at all. When a batch is done and

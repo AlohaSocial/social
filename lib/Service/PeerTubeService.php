@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\Interfaces\Object\DocumentInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaDim;
 use OCA\Social\Model\Client\MediaAttachment;
@@ -827,6 +828,13 @@ class PeerTubeService {
 		// has replies on every post and no way to turn them off
 		$note['commentsEnabled'] = true;
 
+		// PeerTube fetches both counts for every video it takes in, and writes
+		// whatever it got: without them it wrote an undefined count and the
+		// unhandled failure took the whole server down
+		$id = (string)($note['id'] ?? '');
+		$note['likes'] = $id . Stream::LIKES_PATH;
+		$note['dislikes'] = $id . Stream::DISLIKES_PATH;
+
 		return $note;
 	}
 
@@ -866,10 +874,12 @@ class PeerTubeService {
 	 * same UUID out, every time, which is what makes a redelivered video the
 	 * same video rather than a second one.
 	 *
-	 * Shaped as a version-5 UUID (the name-based one) because that is exactly
-	 * what it is: a hash of a name in a namespace. The two nibbles that carry
-	 * the version and the variant are set by hand, since what matters is that
-	 * `isUUIDValid` accepts it and that it is stable.
+	 * Shaped as a version-4 UUID although it is a hash of a name, because
+	 * PeerTube's `isUUIDValid()` accepts version 4 and nothing else. It used
+	 * to say version 5, which is what it is, and PeerTube refused every
+	 * `Video` this app sent on that one field. The two nibbles that carry the
+	 * version and the variant are set by hand; the rest is the hash, so it
+	 * stays as stable as it was.
 	 *
 	 * Public because `PeerTubeApiService` needs the **same** answer: a video
 	 * seen through the PeerTube client API and the same video seen over
@@ -879,7 +889,7 @@ class PeerTubeService {
 		$hash = sha1('social:video:' . $id);
 
 		return sprintf(
-			'%s-%s-5%s-%x%s-%s',
+			'%s-%s-4%s-%x%s-%s',
 			substr($hash, 0, 8),
 			substr($hash, 8, 4),
 			substr($hash, 13, 3),

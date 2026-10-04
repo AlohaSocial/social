@@ -25,6 +25,7 @@ use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\EmojiService;
@@ -89,7 +90,8 @@ class PostServiceQuoteTest extends TestCase {
 			$this->createStub(PlaceService::class),
 			$this->createStub(ReactionSummaryService::class),
 			$this->createStub(MediaTagsRequest::class),
-			$this->createStub(AccountService::class)
+			$this->createStub(AccountService::class),
+			$this->createStub(ChannelService::class)
 		);
 
 		$l10nFactory = $this->createStub(IFactory::class);
@@ -105,7 +107,7 @@ class PostServiceQuoteTest extends TestCase {
 			$this->createStub(StatusRevisionService::class),
 			$this->createStub(\OCA\Social\Service\NotificationService::class),
 			new \OCA\Social\Service\LinkifyService(),
-			$this->createStub(\OCA\Social\Service\ChannelService::class),
+			$this->createStub(ChannelService::class),
 			$this->createStub(\OCA\Social\Service\ConfigService::class),
 			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
 			new NullLogger(),

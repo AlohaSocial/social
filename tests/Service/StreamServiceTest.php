@@ -19,15 +19,19 @@ use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Actor\Group;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\EmojiService;
@@ -51,6 +55,7 @@ class StreamServiceTest extends TestCase {
 	private const ACTOR_ID = 'https://social.example/@alice';
 	private const ACTOR_FOLLOWERS = 'https://social.example/@alice/followers';
 	private const GENERATED_ID = 'https://social.example/@alice/1234567890';
+	private const CHANNEL_ID = 'https://social.example/@alice_channel';
 
 	private StreamRequest|MockObject $streamRequest;
 	private ActivityService|MockObject $activityService;
@@ -66,6 +71,8 @@ class StreamServiceTest extends TestCase {
 	/** The text the emoji service was asked to find shortcodes in. */
 	private string $emojiScanned = '';
 	private IURLGenerator|MockObject $urlGenerator;
+	private ChannelService|MockObject $channelService;
+	private bool $publishVideo = true;
 	private StreamService $service;
 
 	protected function setUp(): void {
@@ -84,6 +91,16 @@ class StreamServiceTest extends TestCase {
 
 		$this->configService->method('generateId')->willReturn(self::GENERATED_ID);
 		$this->configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
+		$this->configService->method('getAppValueBool')->willReturnCallback(
+			fn (string $key): bool => ($key === ConfigService::SOCIAL_PUBLISH_VIDEO) && $this->publishVideo
+		);
+		$this->channelService = $this->createMock(ChannelService::class);
+		$this->channelService->method('attributionOf')->willReturnCallback(
+			static fn (string $authorId): array => ($authorId === self::ACTOR_ID) ? [
+				['type' => Group::TYPE, 'id' => self::CHANNEL_ID],
+				['type' => Person::TYPE, 'id' => self::ACTOR_ID],
+			] : []
+		);
 
 		$this->emojiService = $this->createStub(EmojiService::class);
 		$this->emojiService->method('tagsFor')->willReturnCallback(
@@ -111,7 +128,8 @@ class StreamServiceTest extends TestCase {
 			$this->createStub(PlaceService::class),
 			$this->createStub(ReactionSummaryService::class),
 			$this->createStub(MediaTagsRequest::class),
-			$this->accountService
+			$this->accountService,
+			$this->channelService
 		);
 
 		// `Note::fillMentions()` asks the registry for the Person interface, so
@@ -128,6 +146,91 @@ class StreamServiceTest extends TestCase {
 		AP::set(null);
 
 		parent::tearDown();
+	}
+
+	/** A post by alice, with a video attached or a picture. */
+	private function videoPost(string $visibility, string $mediaType = 'video'): Note {
+		$note = new Note();
+		$note->setAttributedTo(self::ACTOR_ID);
+		$note->setVisibility($visibility);
+		$note->setAttachments([(new MediaAttachment())->setId('1')->setType($mediaType)]);
+
+		return $note;
+	}
+
+	/** @return string[] the followers collections an activity about $note is delivered to */
+	private function followersPaths(Note $note): array {
+		return array_values(array_map(
+			static fn (InstancePath $path): string => $path->getUri(),
+			array_filter(
+				$note->getInstancePaths(),
+				static fn (InstancePath $path): bool => $path->getType() === InstancePath::TYPE_FOLLOWERS
+			)
+		));
+	}
+
+	/**
+	 * A PeerTube follows the channel a video is filed under, not the person
+	 * behind it, so a video delivered to the author's followers alone never
+	 * reached it.
+	 */
+	public function testAPublicVideoReachesTheFollowersOfItsChannel(): void {
+		$note = $this->videoPost(Stream::TYPE_PUBLIC);
+
+		$this->service->addChannelFollowers($note);
+
+		$this->assertSame([self::CHANNEL_ID], $this->followersPaths($note));
+	}
+
+	public function testAnUnlistedVideoReachesTheFollowersOfItsChannel(): void {
+		$note = $this->videoPost(Stream::TYPE_UNLISTED);
+
+		$this->service->addChannelFollowers($note);
+
+		$this->assertSame([self::CHANNEL_ID], $this->followersPaths($note));
+	}
+
+	/** Following a channel is not following the author's followers-only posts. */
+	public function testAFollowersOnlyVideoNeverReachesTheChannelsFollowers(): void {
+		$note = $this->videoPost(Stream::TYPE_FOLLOWERS);
+
+		$this->service->addChannelFollowers($note);
+
+		$this->assertSame([], $this->followersPaths($note));
+	}
+
+	public function testAPostWithoutAVideoNeverReachesTheChannelsFollowers(): void {
+		$note = $this->videoPost(Stream::TYPE_PUBLIC, 'image');
+
+		$this->service->addChannelFollowers($note);
+
+		$this->assertSame([], $this->followersPaths($note));
+	}
+
+	/** With video publishing off a video goes out as a Note, which a channel's follower has no use for. */
+	public function testNoChannelIsAddressedWhileVideosArePublishedAsNotes(): void {
+		$this->publishVideo = false;
+		$note = $this->videoPost(Stream::TYPE_PUBLIC);
+
+		$this->service->addChannelFollowers($note);
+
+		$this->assertSame([], $this->followersPaths($note));
+	}
+
+	/** The count and nothing else, read off the post, and 0 stated as 0. */
+	public function testTheRatesCollectionsCarryThePostsCounts(): void {
+		$note = new Note();
+		$note->setId(self::GENERATED_ID);
+		$note->setDetailInt(Details::LIKES, 3);
+
+		$likes = $this->service->getRatesCollection($note, Stream::LIKES_PATH)->jsonSerialize();
+		$this->assertSame(self::GENERATED_ID . '/likes', $likes['id']);
+		$this->assertSame(3, $likes['totalItems']);
+		$this->assertArrayNotHasKey('orderedItems', $likes);
+
+		$dislikes = $this->service->getRatesCollection($note, Stream::DISLIKES_PATH)->jsonSerialize();
+		$this->assertSame(self::GENERATED_ID . '/dislikes', $dislikes['id']);
+		$this->assertSame(0, $dislikes['totalItems']);
 	}
 
 	private function actor(): Person {
@@ -587,7 +690,8 @@ class StreamServiceTest extends TestCase {
 			$this->createStub(PlaceService::class),
 			$this->createStub(ReactionSummaryService::class),
 			$this->createStub(MediaTagsRequest::class),
-			$this->createStub(AccountService::class)
+			$this->createStub(AccountService::class),
+			$this->createStub(ChannelService::class)
 		);
 
 		$note = new Note();
