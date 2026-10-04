@@ -149,6 +149,7 @@ class MigrationServiceTest extends TestCase {
 	public function testAddAliasRefusesWhatIsNotAnActorId(string $alias): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->accountService->expects($this->never())->method('setAlsoKnownAs');
+		$this->cacheActorService->method('getFromAccount')->willThrowException(new \Exception('nobody there'));
 
 		$this->expectException(InvalidResourceException::class);
 		$this->service->addAlias('alice', $alias);
@@ -156,12 +157,48 @@ class MigrationServiceTest extends TestCase {
 
 	public static function notAnActorIdProvider(): array {
 		return [
-			'a handle' => ['alice@old.example'],
+			'a handle nobody answers to' => ['alice@gone.example'],
+			'a word' => ['alice'],
 			'empty' => [''],
 			'no host' => ['https:///users/alice'],
 			'not http' => ['ftp://old.example/users/alice'],
 			'itself' => [self::ALICE],
 		];
+	}
+
+	/**
+	 * A handle is what every other server's form asks for, so it is what
+	 * people type; the alias stored is the actor id it resolves to.
+	 */
+	public function testAddAliasResolvesAHandleToTheActorId(): void {
+		$alice = $this->alice();
+		$this->accountService->method('getActorFromUserId')->willReturn($alice);
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')
+			->with('alice@old.example')->willReturn($this->person('https://old.example/users/alice', 'alice@old.example'));
+		$this->accountService->expects($this->once())->method('setAlsoKnownAs')
+			->with('alice', ['https://old.example/users/alice']);
+
+		$this->assertSame(['https://old.example/users/alice'], $this->service->addAlias('alice', '@alice@old.example'));
+	}
+
+	public function testMoveAcceptsTheTargetAsAHandle(): void {
+		$alice = $this->alice();
+		$this->accountService->method('getActorFromUserId')->willReturn($alice);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')
+			->with('alice@new.example')->willReturn($this->newAlice());
+		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
+		$this->activityService->method('request')->willReturn('token');
+
+		$this->assertSame(self::NEW_ALICE, $this->service->move('alice', '@alice@new.example')->getId());
+	}
+
+	public function testMoveRefusesATargetThatIsNeitherAHandleNorAnAddress(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->expectException(InvalidResourceException::class);
+		$this->service->move('alice', 'new.example');
 	}
 
 	public function testRemoveAliasDropsItFromTheList(): void {

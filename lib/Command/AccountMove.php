@@ -36,7 +36,7 @@ class AccountMove extends SocialCommand {
 			->addArgument('userId', InputArgument::REQUIRED, 'Nextcloud user whose actor moves away')
 			->addArgument(
 				'target', InputArgument::REQUIRED,
-				'actor id of the new account (https://… address), which must list this one in alsoKnownAs'
+				'the new account, as @you@new.example or its https://… address; it must list this one in alsoKnownAs'
 			)
 			->addOption(
 				'force', 'f', InputOption::VALUE_NONE,

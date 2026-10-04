@@ -777,9 +777,8 @@ hand, it is picked up as one.
   follows a Nextcloud group is left alone — its members are the group's.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Settings → Migration →
-  Accounts you also answer to** is where you say it: paste the old account's
-  own address (`https://pixelfed.social/users/you`, not the handle) and press
-  Add. Nothing is sent to anybody — it is a note this server keeps about an
+  Accounts you also answer to** is where you say it: type the old account's
+  handle (`@you@pixelfed.social`) and press Add. Nothing is sent to anybody — it is a note this server keeps about an
   account it owns — and you can take it off again whenever you like. Moving
   the followers themselves is the half that cannot be undone, and stays with
   an administrator (`occ social:account:move` on the old server).

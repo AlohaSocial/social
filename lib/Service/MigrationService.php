@@ -148,7 +148,7 @@ class MigrationService {
 	 */
 	public function move(string $userId, string $targetId): Person {
 		$actor = $this->accountService->getActorFromUserId($userId);
-		$target = $this->cacheActorService->getFromId($targetId, true);
+		$target = $this->resolveActor($targetId);
 
 		if ($target->getId() === $actor->getId()) {
 			throw new InvalidResourceException('an account cannot be moved onto itself');
@@ -782,18 +782,16 @@ class MigrationService {
 	}
 
 	/**
+	 * The actor id an alias names: the id itself, or the one a handle resolves
+	 * to. A handle is what every other server's form asks for, so it is what
+	 * people type; the id is what the wire carries.
+	 *
 	 * @throws InvalidResourceException
 	 */
 	private function actorIdOrThrow(string $alias, Person $actor): string {
 		$alias = trim($alias);
-		$parts = parse_url($alias);
-		if ($parts === false
-			|| !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
-			|| ($parts['host'] ?? '') === '') {
-			throw new InvalidResourceException(
-				'"' . $alias . '" is not an actor id: expected the https:// address of the account,'
-				. ' not its handle'
-			);
+		if (!self::isActorUrl($alias)) {
+			$alias = $this->resolveActor($alias)->getId();
 		}
 
 		if ($alias === $actor->getId()) {
@@ -801,6 +799,35 @@ class MigrationService {
 		}
 
 		return $alias;
+	}
+
+	/**
+	 * The account a person named, fetched fresh from its server: by its
+	 * `@user@host` handle through WebFinger, or by its actor id.
+	 *
+	 * @throws InvalidResourceException when it is neither, or nobody answers
+	 */
+	private function resolveActor(string $reference): Person {
+		$reference = trim($reference);
+		if (self::isActorUrl($reference)) {
+			return $this->cacheActorService->getFromId($reference, true);
+		}
+
+		$handle = ltrim($reference, '@');
+		if (preg_match('/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/', $handle) !== 1) {
+			throw new InvalidResourceException(
+				'"' . $reference . '" is neither a handle like @you@old.example'
+				. ' nor the https:// address of an account'
+			);
+		}
+
+		try {
+			return $this->cacheActorService->getFromAccount($handle);
+		} catch (Throwable $e) {
+			throw new InvalidResourceException(
+				'no account answers to ' . $handle . ': ' . $e->getMessage(), 0, $e
+			);
+		}
 	}
 
 	/**

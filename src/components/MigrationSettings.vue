@@ -285,8 +285,8 @@
 				<NcTextField
 					v-model="aliasInput"
 					class="migration__alias-field"
-					:label="t('social', 'The old account\'s address')"
-					placeholder="https://pixelfed.social/users/you"
+					:label="t('social', 'The old account')"
+					placeholder="@you@pixelfed.social"
 					:disabled="aliasBusy"
 					@keydown.enter="addAlias" />
 				<NcButton :disabled="aliasBusy || aliasInput.trim() === ''" @click="addAlias">
@@ -297,7 +297,7 @@
 				</NcButton>
 			</div>
 			<p class="migration__note">
-				{{ t('social', 'It is the address of the account itself — the one its own server publishes, like https://pixelfed.social/users/you — and not the handle.') }}
+				{{ t('social', 'The handle as you would give it to somebody — or, if you have it, the address its server publishes, like https://pixelfed.social/users/you.') }}
 			</p>
 
 			<h5>{{ t('social', 'Moving your whole account') }}</h5>
