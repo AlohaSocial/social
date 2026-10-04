@@ -327,6 +327,36 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame($alice, $queued->getActor());
 	}
 
+	/**
+	 * An edited post is read back in the client format, whose `id` is the nid.
+	 * The Update has to carry the ActivityPub object, or no peer can tell
+	 * which post it is about.
+	 */
+	public function testAnUpdateCarriesTheActivityPubObjectWhateverFormatThePostWasReadIn(): void {
+		$note = $this->note();
+		$note->setNid('1791109680485581174');
+		$note->setUpdated('2026-10-04T10:00:00Z');
+		$note->setExportFormat(ACore::FORMAT_LOCAL);
+
+		$body = '';
+		$this->requestQueueService->method('generateRequestQueue')
+			->willReturnCallback(function (array $paths, ACore $item) use (&$body): string {
+				$body = json_encode($item);
+
+				return self::TOKEN;
+			});
+		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+
+		$this->service->updateActivity($this->alice(), $note);
+
+		$object = json_decode($body, true)['object'] ?? [];
+		$this->assertSame(self::NOTE_ID, $object['id'] ?? null);
+		$this->assertSame('Note', $object['type'] ?? null);
+		$this->assertSame('2026-10-04T10:00:00Z', $object['updated'] ?? null);
+		$this->assertSame(ACore::FORMAT_LOCAL, $note->getExportFormat(), 'the caller keeps its post as it was');
+	}
+
 	// deleteActivity()
 
 	public function testDeleteActivitySendsTombstoneOnBehalfOfItemAuthor(): void {

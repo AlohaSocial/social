@@ -148,7 +148,17 @@ class ActivityService {
 	 * @throws SocialAppConfigException
 	 */
 	public function updateActivity(Person $actor, ACore $item, int $holdUntil = 0): string {
-		return $this->request($this->buildUpdate($actor, $item), $holdUntil);
+		// An edit is read back from the database in the client format, whose
+		// `id` is the nid and which has no `type` and no `updated`. Wrapped as
+		// it was, the Update named no post a peer had, and every edit was
+		// dropped on arrival. The caller gets its post back as it handed it in.
+		$format = $item->getExportFormat();
+		$item->setExportFormat(ACore::FORMAT_ACTIVITYPUB);
+		try {
+			return $this->request($this->buildUpdate($actor, $item), $holdUntil);
+		} finally {
+			$item->setExportFormat($format);
+		}
 	}
 
 	private function buildUpdate(Person $actor, ACore $item): Update {
