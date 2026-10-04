@@ -20,6 +20,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\CurlService;
@@ -108,6 +109,7 @@ class ConversationViewerTest extends TestCase {
 				$this->createStub(ReactionSummaryService::class),
 				$this->createStub(MediaTagsRequest::class),
 				$this->createStub(AccountService::class),
+				$this->createStub(ChannelService::class)
 			),
 			$this->createStub(CacheActorService::class),
 			$request,

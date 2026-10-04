@@ -22,6 +22,7 @@ use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Actor\Group;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -82,6 +83,7 @@ class StreamService {
 		private ReactionSummaryService $reactionSummaryService,
 		private MediaTagsRequest $mediaTagsRequest,
 		private AccountService $accountService,
+		private ChannelService $channelService,
 	) {
 	}
 
@@ -234,6 +236,48 @@ class StreamService {
 		return ($followers !== '' && in_array($followers, $recipients, true))
 			? Stream::TYPE_FOLLOWERS
 			: Stream::TYPE_DIRECT;
+	}
+
+	/**
+	 * Addresses an activity about a video post to the followers of the
+	 * channel it is filed under, as well as to the author's.
+	 *
+	 * A PeerTube follows a channel, not the person behind it, so a video
+	 * delivered to the author's followers alone never reached it. Only a
+	 * public or unlisted post, and only one published as a `Video`: somebody
+	 * who follows a channel has not asked for the author's followers-only
+	 * posts, nor for posts that are not videos.
+	 */
+	public function addChannelFollowers(Stream $stream): void {
+		$visibility = $stream->getVisibility();
+		if ($visibility === '') {
+			$visibility = $this->visibilityOf($stream);
+		}
+
+		if (!in_array($visibility, [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true)
+			|| !$this->configService->getAppValueBool(ConfigService::SOCIAL_PUBLISH_VIDEO)) {
+			return;
+		}
+
+		$hasVideo = false;
+		foreach ($stream->getAttachments() as $attachment) {
+			if ($attachment->getType() === 'video') {
+				$hasVideo = true;
+				break;
+			}
+		}
+
+		if (!$hasVideo) {
+			return;
+		}
+
+		foreach ($this->channelService->attributionOf($stream->getAttributedTo()) as $attribution) {
+			if ($attribution['type'] === Group::TYPE) {
+				$stream->addInstancePath(
+					new InstancePath($attribution['id'], InstancePath::TYPE_FOLLOWERS, InstancePath::PRIORITY_LOW)
+				);
+			}
+		}
 	}
 
 	/**
@@ -490,6 +534,8 @@ class StreamService {
 			}
 		} catch (\Exception $e) {
 		}
+		// a channel's follower that took the video in has to be told it is gone
+		$this->addChannelFollowers($item);
 		$this->addressBoostersAndRepliers($item);
 		$this->activityService->deleteActivity($item);
 		$this->streamRequest->deleteById($item->getId(), $type);
