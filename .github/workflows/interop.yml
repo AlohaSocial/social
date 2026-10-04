@@ -64,13 +64,13 @@ jobs:
       # told otherwise, and Nextcloud's HTTP client refuses localhost unless it
       # is told otherwise; each gets exactly that one permission and nothing
       # else, because it is a throwaway runner and not a real deployment.
-      MASTODON_HOST: localhost:3000
-      MASTODON_BASE_URL: http://localhost:3000
+      MASTODON_HOST: mastodon.test
+      MASTODON_BASE_URL: https://mastodon.test
       PEERTUBE_HOST: localhost:9000
       PEERTUBE_BASE_URL: http://localhost:9000
       PEERTUBE_USER: interop
       PEERTUBE_PASSWORD: Interop-Test-2026!
-      NEXTCLOUD_URL: http://localhost:8080
+      NEXTCLOUD_URL: https://nextcloud.test
 
     steps:
       - name: Checkout server
@@ -101,6 +101,26 @@ jobs:
         # carries (symfony/console) is served in place of the server's own
         run: composer i --no-dev
 
+      - name: Give Nextcloud a name and a certificate
+        # Mastodon and PeerTube fetch another server's webfinger and actor over
+        # https only, so the Nextcloud they federate with needs a host name and
+        # a certificate they trust. A CA made here, trusted by the runner and
+        # handed to both containers, and thrown away with the job.
+        run: |
+          set -euo pipefail
+          echo '127.0.0.1 nextcloud.test mastodon.test' | sudo tee -a /etc/hosts
+          mkdir -p /tmp/tls && cd /tmp/tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=Interop CA' \
+            -keyout ca.key -out ca.crt \
+            -addext 'basicConstraints=critical,CA:true' -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -newkey rsa:2048 -nodes -subj '/CN=nextcloud.test' -keyout nc.key -out nc.csr
+          printf 'subjectAltName=DNS:nextcloud.test,DNS:mastodon.test\nextendedKeyUsage=serverAuth\n' > nc.ext
+          openssl x509 -req -in nc.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 \
+            -extfile nc.ext -out nc.crt
+          chmod 644 nc.key
+          sudo cp ca.crt /usr/local/share/ca-certificates/interop-ca.crt
+          sudo update-ca-certificates
+
       - name: Set up Nextcloud
         run: |
           mkdir data
@@ -108,17 +128,60 @@ jobs:
             --admin-user admin --admin-pass admin
           ./occ app:enable --force social
           ./occ config:system:set trusted_domains 1 --value localhost:8080
+          ./occ config:system:set trusted_domains 2 --value nextcloud.test
+          ./occ config:system:set overwriteprotocol --value https
+          ./occ config:system:set overwritehost --value nextcloud.test
+          # Nextcloud's own HTTP client keeps its own CA bundle
+          ./occ security:certificates:import /tmp/tls/ca.crt
           ./occ config:system:set overwrite.cli.url --value "$NEXTCLOUD_URL"
           ./occ config:app:set social cloud_url --value "$NEXTCLOUD_URL"
           ./occ config:app:set social social_url --value "$NEXTCLOUD_URL/index.php/apps/social/"
           # the two instances are on the same host, so both HTTP clients have to
           # be willing to talk to a private address
           ./occ config:system:set allow_local_remote_servers --value true --type boolean
+          # info, not warning: a delivery that fails or is held back is a notice
+          ./occ log:manage --level=info
 
       - name: Run Nextcloud
         # several workers: rendering or fetching anything makes the server ask
         # itself over HTTP, and a single-worker built-in server deadlocks on that
-        run: PHP_CLI_SERVER_WORKERS=8 php -S localhost:8080 &
+        # behind a TLS proxy at https://nextcloud.test, which is the address
+        # the other two servers are given
+        run: |
+          PHP_CLI_SERVER_WORKERS=8 php -S localhost:8080 &
+          cat > /tmp/tls/Caddyfile <<'CADDY'
+          {
+            admin off
+            auto_https disable_redirects
+          }
+          nextcloud.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            # what Nextcloud's .htaccess does under Apache: the built-in
+            # server only serves files, and webfinger, nodeinfo and host-meta
+            # are routes of index.php
+            @wellknown path /.well-known/*
+            rewrite @wellknown /index.php{path}
+            reverse_proxy localhost:8080
+          }
+          # Mastodon in production redirects anything that is not https, its
+          # API included, so it sits behind the same proxy
+          mastodon.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            reverse_proxy localhost:3000
+          }
+          CADDY
+          docker run -d --name proxy --network host -v /tmp/tls:/tls:ro caddy:2 \
+            caddy run --config /tls/Caddyfile --adapter caddyfile
+          for attempt in $(seq 1 30); do
+            # nodeinfo proves the /.well-known rewrite as well as the proxy
+            curl -sf https://nextcloud.test/status.php \
+              && curl -sf https://nextcloud.test/.well-known/nodeinfo && exit 0
+            sleep 2
+          done
+          docker logs proxy
+          exit 1
 
       - name: Start Mastodon
         run: |
@@ -134,7 +197,7 @@ jobs:
 
           cat > /tmp/mastodon.env <<ENV
           LOCAL_DOMAIN=${MASTODON_HOST}
-          LOCAL_HTTPS=false
+          LOCAL_HTTPS=true
           SECRET_KEY_BASE=${SECRET_KEY_BASE}
           OTP_SECRET=${OTP_SECRET}
           $(echo "$AR_KEYS" | tr ',' '\n')
@@ -148,6 +211,7 @@ jobs:
           RAILS_ENV=production
           EMAIL_DOMAIN_ALLOWLIST=example.com
           RAILS_SERVE_STATIC_FILES=true
+          SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
           # the whole point: Mastodon has to be allowed to fetch from, and
           # deliver to, the Nextcloud on this same runner
           ALLOWED_PRIVATE_ADDRESSES=127.0.0.1,::1,172.17.0.1
@@ -155,15 +219,18 @@ jobs:
 
           docker network create interop || true
           docker run -d --name mastodon-setup --network host --env-file /tmp/mastodon.env \
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
             ghcr.io/mastodon/mastodon:v4.3 \
             bundle exec rails db:setup
           docker wait mastodon-setup
           docker logs mastodon-setup | tail -20
 
           docker run -d --name mastodon-web --network host --env-file /tmp/mastodon.env \
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
             ghcr.io/mastodon/mastodon:v4.3 \
             bundle exec puma -C config/puma.rb
           docker run -d --name mastodon-sidekiq --network host --env-file /tmp/mastodon.env \
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
             ghcr.io/mastodon/mastodon:v4.3 \
             bundle exec sidekiq
 
@@ -184,7 +251,7 @@ jobs:
         run: |
           set -euo pipefail
           docker exec mastodon-web bin/tootctl accounts create interop \
-            --email interop@example.com --confirmed --role Owner > /tmp/account.txt
+            --email interop@example.com --confirmed --approve --role Owner > /tmp/account.txt
           cat /tmp/account.txt
           # an application with the scopes the suite needs, and a token for it
           TOKEN=$(docker exec mastodon-web bin/rails runner '
@@ -226,13 +293,17 @@ jobs:
           PEERTUBE_SECRET=$(openssl rand -hex 32)
           # the same permission Mastodon needs, for the same reason: the
           # Nextcloud it has to fetch our actor and our video from is on this
-          # very runner
-          PEERTUBE_FEDERATION_SIGN_FETCHES_ENABLED=false
+          # very runner, at a private address
+          PEERTUBE_FEDERATION_PREVENT_SSRF=false
           NODE_ENV=production
+          # its validators say which field they refused only at debug level
+          PEERTUBE_LOG_LEVEL=debug
+          NODE_EXTRA_CA_CERTS=/tls/ca.crt
           ENV
 
           docker run -d --name peertube --network host --env-file /tmp/peertube.env \
-            chocobozzz/peertube:production-bookworm
+            -v /tmp/tls:/tls:ro \
+            chocobozzz/peertube:v8.3.1
 
       - name: Wait for PeerTube
         run: |
@@ -277,20 +348,104 @@ jobs:
         working-directory: apps/social
         # the suite needs phpunit; installed only now, once the server is up
         # and the app enabled with what ships
+        # one suite at a time, so each prints its own failures even if the
+        # other hangs or the runner is lost
         run: |
           composer i
-          composer run test:interop
+          # memory and the biggest processes every five seconds, so a runner
+          # that is lost mid-test leaves a trail; and a PHP limit, so a runaway
+          # test dies with a stack trace instead of taking the runner with it
+          (while sleep 5; do
+            echo "[mem] $(free -m | awk '/Mem:/ {print $3 " MB used, " $7 " MB available"}')" \
+              "| $(ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "%s %d MB, ", $2, $1/1024}')"
+          done) &
+          status=0
+          timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MastodonDeliveryTest || status=1
+          # what each side makes of our account, asked directly, so a failure
+          # above can be told apart from a failure to reach us at all
+          WF="https://nextcloud.test/.well-known/webfinger?resource=acct:admin@nextcloud.test"
+          echo "--- webfinger from the runner"
+          curl -s -w '\n%{http_code}\n' "$WF" | head -c 800; echo
+          echo "--- webfinger and resolve from inside Mastodon"
+          docker exec mastodon-web bin/rails runner '
+            begin
+              r = Webfinger.new("acct:admin@nextcloud.test").perform
+              puts "webfinger: #{r.subject} -> #{r.self_link_href}"
+            rescue => e
+              puts "webfinger: #{e.class}: #{e.message}"
+            end
+            begin
+              a = ResolveAccountService.new.call("admin@nextcloud.test")
+              puts "resolve: #{a.inspect}"
+            rescue => e
+              puts "resolve: #{e.class}: #{e.message}"
+            end
+          ' 2>&1 | tail -20 || true
+          timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PeerTubeDeliveryTest || status=1
+          exit $status
 
       - name: What each side saw, when it went wrong
         if: failure()
         run: |
-          echo '--- Nextcloud ---'
-          tail -100 ../../data/nextcloud.log || true
-          echo '--- Mastodon web ---'
-          docker logs mastodon-web 2>&1 | tail -100 || true
-          echo '--- Mastodon sidekiq ---'
-          docker logs mastodon-sidekiq 2>&1 | tail -100 || true
+          echo '--- Nextcloud log, notices and worse ---'
+          python3 -c 'import json,sys
+          for l in open("data/nextcloud.log"):
+              try: d=json.loads(l)
+              except Exception: continue
+              m=d.get("message","")
+              if d.get("level",0)>=1 and "headers already sent" not in m: print(d.get("time"),d.get("level"),d.get("app"),m[:300])' | tail -120 || true
+          echo '--- hosts the circuit breaker held back ---'
+          sqlite3 -header data/nextcloud.db "select * from oc_social_host_breaker" 2>&1 || true
+          echo '--- our delivery queue ---'
+          sqlite3 -header data/nextcloud.db \
+            "select id, token, status, tries, priority, substr(instance,1,90) as instance, substr(activity,1,80) as activity from oc_social_req_queue order by id" 2>&1 \
+            || sqlite3 data/nextcloud.db ".tables" | tr ' ' '\n' | grep -i queue
+          echo '--- every delivery through the proxy (Mastodon side; PeerTube is reached directly) ---'
+          docker logs proxy 2>&1 | python3 -c 'import json,sys,datetime
+          for l in sys.stdin:
+              try: d=json.loads(l)
+              except Exception: continue
+              r=d.get("request")
+              if not r or r["method"]=="GET" and "webfinger" not in r["uri"]: continue
+              print(datetime.datetime.utcfromtimestamp(d["ts"]).strftime("%H:%M:%S"), d.get("status"), r["method"], r["host"], r["uri"][:80], (r.get("headers",{}).get("User-Agent") or [""])[0][:20])' || true
+          echo '--- what Mastodon holds from us ---'
+          docker exec mastodon-web bin/rails runner '
+            a = Account.find_by(username: "admin", domain: "nextcloud.test")
+            puts "account: #{a&.id} followers here: #{a&.followers&.count}"
+            Status.where(account: a).order(:id).each { |s| puts [s.id, s.uri, s.spoiler_text, s.edited_at, s.reblog_of_id, s.deleted_at].inspect } if a
+          ' 2>&1 | tail -30 || true
+          echo '--- the last Update we queued, and what Mastodon makes of it ---'
+          sqlite3 data/nextcloud.db \
+            "select activity from oc_social_req_queue where json_extract(activity, '$.type') = 'Update' order by id desc limit 1" \
+            > /tmp/update.json || true
+          python3 -c 'import json; d=json.load(open("/tmp/update.json")); o=d.get("object",{}); print({k: d.get(k) for k in ("id","type","actor")}); print({k: o.get(k) for k in ("id","type","published","updated","content")})' || true
+          if [ -s /tmp/update.json ]; then
+            docker cp /tmp/update.json mastodon-web:/tmp/update.json
+            docker exec mastodon-web bin/rails runner '
+              json = JSON.parse(File.read("/tmp/update.json"))
+              account = Account.find_by(username: "admin", domain: "nextcloud.test")
+              status = Status.find_by(uri: json["object"]["id"])
+              puts "before: #{status&.text.inspect} edited_at=#{status&.edited_at.inspect} created_at=#{status&.created_at.inspect}"
+              parser = ActivityPub::Parser::StatusParser.new(json)
+              puts "parser edited_at=#{parser.edited_at.inspect}"
+              ActivityPub::Activity.factory(json, account).perform
+              status&.reload
+              puts "after: #{status&.text.inspect} edited_at=#{status&.edited_at.inspect}"
+            ' 2>&1 | tail -10 || true
+          fi
+          echo '--- the last Create we sent PeerTube ---'
+          sqlite3 data/nextcloud.db \
+            "select activity from oc_social_req_queue where instance like '%localhost:9000%' and json_extract(activity, '$.type') = 'Create' order by id desc limit 1" \
+            | python3 -c 'import json,sys
+          raw=sys.stdin.read().strip()
+          if not raw: print("none"); sys.exit()
+          o=json.loads(raw).get("object",{})
+          print(json.dumps({k: o.get(k) for k in ("type","id","uuid","name","duration","attributedTo","icon","url","state","mediaType","to","cc")}, indent=1)[:3000])' || true
+          echo '--- Mastodon sidekiq, without the mailer noise ---'
+          docker logs mastodon-sidekiq 2>&1 | grep -v -E "action_mailer|actionmailer|mail-2|SMTP|^/usr/local/bundle" \
+            | grep -i -E "fail|error|warn|reject|ActivityPub" | tail -60 || true
           echo '--- PeerTube ---'
           # the one that matters: PeerTube refuses a video in its own log and
           # answers the delivery 204, so this is where a silent drop is visible
-          docker logs peertube 2>&1 | tail -150 || true
+          docker logs peertube 2>&1 | grep -i -E "not valid|invalid|refus|Receiving inbox|error|cannot" \
+            | grep -v -E "SMTP|GET /api/v1/(video-channels|search)" | cut -c1-600 | tail -60 || true

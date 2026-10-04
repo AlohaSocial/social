@@ -9,10 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interop;
 
-use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
-use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Post;
@@ -23,7 +21,6 @@ use OCA\Social\Service\BoostService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\RequestQueueService;
-use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StreamService;
 use OCP\IUserManager;
 use OCP\Server;
@@ -220,7 +217,11 @@ class MastodonDeliveryTest extends TestCase {
 		}
 
 		$token = '';
-		$note = Server::get(PostService::class)->createPost($post, $token);
+		// the Create activity comes back; the note is read back the way the
+		// status API reads it, which also gives it its nid
+		$activity = Server::get(PostService::class)->createPost($post, $token);
+		$this->assertNotNull($activity, 'the post was not written');
+		$note = Server::get(StreamService::class)->getStreamById($activity->getObjectId());
 		$this->assertInstanceOf(Stream::class, $note, 'the post was not written');
 
 		$this->written[] = $note->getId();
@@ -274,23 +275,13 @@ class MastodonDeliveryTest extends TestCase {
 			$this->markTestSkipped('no account on this instance to post as');
 		}
 
-		$userId = (string)array_key_first($users);
-		$actorsRequest = Server::get(ActorsRequest::class);
-
-		try {
-			return $actorsRequest->getFromUserId($userId);
-		} catch (ActorDoesNotExistException $e) {
-			$actor = new Person();
-			$actor->setPreferredUsername($userId);
-			$actor->setUserId($userId);
-			Server::get(SignatureService::class)->generateKeys($actor);
-			$actorsRequest->create($actor);
-
-			return $actorsRequest->getFromUserId($userId);
-		}
+		// the way the app makes an account, so the actor is cached too:
+		// webfinger and the actor document are answered from the cache
+		return Server::get(AccountService::class)->getActorFromUserId((string)array_key_first($users), true);
 	}
 
+	/** `host[:port]`, as a handle has to name a server on a non-default port. */
 	private function cloudHost(): string {
-		return Server::get(ConfigService::class)->getCloudHost();
+		return Server::get(ConfigService::class)->getCloudAuthority();
 	}
 }
