@@ -18,6 +18,8 @@ use OCA\Social\Model\Atproto\AtprotoAccount;
 class AtprotoEngagementService {
 	private const COLLECTION = 'app.bsky.feed.like';
 	private const FOLLOW_COLLECTION = 'app.bsky.graph.follow';
+	/** @var array<string, list<array<string, mixed>>> */
+	private array $recordsCache = [];
 
 	public function __construct(
 		private AtprotoClient $client,
@@ -91,6 +93,7 @@ class AtprotoEngagementService {
 					'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z'),
 				],
 			], $account, $account->getPds());
+			unset($this->recordsCache[$this->cacheKey($account, self::FOLLOW_COLLECTION)]);
 			return;
 		}
 
@@ -104,6 +107,7 @@ class AtprotoEngagementService {
 				], $account, $account->getPds());
 			}
 		}
+		unset($this->recordsCache[$this->cacheKey($account, self::FOLLOW_COLLECTION)]);
 	}
 
 	/** @throws AtprotoException */
@@ -138,6 +142,7 @@ class AtprotoEngagementService {
 					'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z'),
 				],
 			], $account, $account->getPds());
+			unset($this->recordsCache[$this->cacheKey($account, $collection)]);
 			return;
 		}
 
@@ -152,20 +157,24 @@ class AtprotoEngagementService {
 				'rkey' => $rkey,
 			], $account, $account->getPds());
 		}
+		unset($this->recordsCache[$this->cacheKey($account, $collection)]);
 	}
 
 	/** @return list<array<string, mixed>> */
 	private function records(AtprotoAccount $account, string $collection, string $uri): array {
-		$answer = $this->client->authedGet('com.atproto.repo.listRecords', [
-			'repo' => $account->getDid(),
-			'collection' => $collection,
-			'limit' => 100,
-		], $account, $account->getPds());
+		$key = $this->cacheKey($account, $collection);
+		if (!isset($this->recordsCache[$key])) {
+			$answer = $this->client->authedGet('com.atproto.repo.listRecords', [
+				'repo' => $account->getDid(),
+				'collection' => $collection,
+				'limit' => 100,
+			], $account, $account->getPds());
+			$this->recordsCache[$key] = array_values(array_filter(
+				(array)($answer['records'] ?? []), static fn (mixed $record): bool => is_array($record)
+			));
+		}
 		$records = [];
-		foreach ((array)($answer['records'] ?? []) as $record) {
-			if (!is_array($record)) {
-				continue;
-			}
+		foreach ($this->recordsCache[$key] as $record) {
 			$value = is_array($record['value'] ?? null) ? $record['value'] : [];
 			$subject = $value['subject'] ?? '';
 			$subjectUri = is_array($subject) ? (string)($subject['uri'] ?? '') : (string)$subject;
@@ -179,5 +188,9 @@ class AtprotoEngagementService {
 		}
 
 		return $records;
+	}
+
+	private function cacheKey(AtprotoAccount $account, string $collection): string {
+		return $account->getDid() . '|' . $collection;
 	}
 }
