@@ -107,6 +107,12 @@
 					</template>
 					{{ t('social', 'Edit profile') }}
 				</NcButton>
+				<a
+					v-if="isOwnProfile && atprotoAccount?.handle"
+					class="user-profile__protocol-link"
+					:href="atprotoProfileUrl">
+					{{ t('social', 'Open Bluesky profile') }}
+				</a>
 				<NcActions v-if="canModerate" forceMenu>
 					<NcActionButton
 						v-if="!relationship.blocking"
@@ -609,6 +615,8 @@ export default {
 			/** the note as the relationship last reported it */
 			noteStored: '',
 			savingNote: false,
+			/** linked native protocol identity used by the profile switcher */
+			atprotoAccount: null,
 		}
 	},
 
@@ -822,6 +830,12 @@ export default {
 		bannerStyle() {
 			return this.bannerUrl || bannerOf(this.accountInfo)
 		},
+
+		atprotoProfileUrl() {
+			return this.atprotoAccount?.handle
+				? generateUrl('/apps/social/@' + encodeURIComponent(this.atprotoAccount.handle))
+				: ''
+		},
 	},
 
 	watch: {
@@ -849,6 +863,18 @@ export default {
 			handler(url) {
 				this.applyBanner(url)
 				this.readAccent(url)
+			},
+
+			immediate: true,
+		},
+
+		isOwnProfile: {
+			handler(own) {
+				if (own) {
+					this.loadAtprotoAccount()
+				} else {
+					this.atprotoAccount = null
+				}
 			},
 
 			immediate: true,
@@ -893,6 +919,18 @@ export default {
 				this.familiar = Array.isArray(entry?.accounts) ? entry.accounts.slice(0, 3) : []
 			} catch {
 				this.familiar = []
+			}
+		},
+
+		async loadAtprotoAccount() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
+				this.atprotoAccount = data?.account ?? null
+			} catch (error) {
+				// The protocol is optional; a failed status request must never
+				// hide or delay the Fediverse profile.
+				this.atprotoAccount = null
+				logger.debug('Could not read the linked Bluesky profile', { error })
 			}
 		},
 
