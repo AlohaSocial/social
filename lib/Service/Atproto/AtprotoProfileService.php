@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service\Atproto;
 
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 
 /** Resolves a Bluesky handle and imports its author feed into shared rows. */
@@ -48,7 +49,9 @@ class AtprotoProfileService {
 				continue;
 			}
 			try {
-				$statuses[] = $this->ingress->fetch($this->localId($uri), 0);
+				$status = $this->ingress->fetch($this->localId($uri), 0);
+				$status->setExportFormat(ACore::FORMAT_LOCAL);
+				$statuses[] = $status;
 			} catch (\Throwable) {
 				// One deleted or malformed record must not hide the rest of a profile.
 			}
