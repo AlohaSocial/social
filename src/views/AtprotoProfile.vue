@@ -23,6 +23,20 @@
 			<p v-if="profile.description" class="atproto-profile__description">
 				{{ profile.description }}
 			</p>
+			<dl v-if="profile.followersCount !== undefined || profile.followsCount !== undefined || profile.postsCount !== undefined" class="atproto-profile__stats">
+				<div>
+					<dt>{{ t('social', 'Posts') }}</dt>
+					<dd>{{ profile.postsCount || 0 }}</dd>
+				</div>
+				<div>
+					<dt>{{ t('social', 'Followers') }}</dt>
+					<dd>{{ profile.followersCount || 0 }}</dd>
+				</div>
+				<div>
+					<dt>{{ t('social', 'Following') }}</dt>
+					<dd>{{ profile.followsCount || 0 }}</dd>
+				</div>
+			</dl>
 			<form v-if="viewerCanEdit" class="atproto-profile__editor" @submit.prevent="saveProfile">
 				<NcTextField
 					v-model="editProfile.displayName"
@@ -185,6 +199,25 @@ export default {
 
 .atproto-profile__description {
 	white-space: pre-wrap;
+}
+
+.atproto-profile__stats {
+	display: flex;
+	gap: 1.25rem;
+	margin: 0.75rem 0;
+}
+
+.atproto-profile__stats div {
+	display: flex;
+	gap: 0.35rem;
+}
+
+.atproto-profile__stats dt {
+	font-weight: 600;
+}
+
+.atproto-profile__stats dd {
+	margin: 0;
 }
 
 .atproto-profile__error {
