@@ -36,6 +36,7 @@
 			     hand-rolled one has to win an argument with them in every
 			     state, and loses the pressed one. -->
 			<NcButton
+				v-if="!currentAccount?.moved"
 				class="navigation__compose"
 				variant="primary"
 				wide
@@ -46,6 +47,11 @@
 				</template>
 				{{ t('social', 'New post') }}
 			</NcButton>
+			<!-- a moved account posts to nobody: its followers were sent to the
+			     new one, and the server refuses the post anyway -->
+			<p v-else class="navigation__moved">
+				{{ t('social', 'This account has moved to {acct}.', { acct: '@' + currentAccount.moved.acct }) }}
+			</p>
 
 			<NcAppNavigationItem
 				v-if="hasErrors"
@@ -1794,6 +1800,15 @@ export default {
  * leaves the winner to source order — and the order of this component's styles
  * against the library's is not something this file gets to decide. Everything
  * that would otherwise be a silent tie lives in here. */
+.navigation__moved {
+	margin: 0 8px 8px;
+	padding: 8px 12px;
+	border-radius: var(--border-radius-element, 8px);
+	background: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text, var(--color-main-text));
+	font-size: var(--font-size-small, 13px);
+}
+
 .navigation__compose.navigation__compose {
 	position: relative;
 	margin: 2px 4px 8px;

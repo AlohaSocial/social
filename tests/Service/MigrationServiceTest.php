@@ -31,6 +31,7 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MigrationService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\SignatureService;
+use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -56,7 +57,10 @@ class MigrationServiceTest extends TestCase {
 	private ActorRelationRequest|Stub $actorRelationRequest;
 	private ListsRequest|MockObject $listsRequest;
 	private RelationshipService|MockObject $relationshipService;
+	private IConfig|MockObject $config;
 	private MigrationService $service;
+	/** @var array<string, string> the user values written, by key */
+	private array $userValues = [];
 
 	protected function setUp(): void {
 		$this->accountService = $this->createMock(AccountService::class);
@@ -69,6 +73,13 @@ class MigrationServiceTest extends TestCase {
 		$this->actorRelationRequest = $this->createStub(ActorRelationRequest::class);
 		$this->listsRequest = $this->createMock(ListsRequest::class);
 		$this->relationshipService = $this->createMock(RelationshipService::class);
+		$this->config = $this->createMock(IConfig::class);
+		$this->config->method('getUserValue')->willReturnCallback(
+			fn (string $userId, string $app, string $key, string $default = ''): string => $this->userValues[$key] ?? $default
+		);
+		$this->config->method('setUserValue')->willReturnCallback(function (string $userId, string $app, string $key, string $value): void {
+			$this->userValues[$key] = $value;
+		});
 
 		$this->service = new MigrationService(
 			$this->accountService,
@@ -81,6 +92,7 @@ class MigrationServiceTest extends TestCase {
 			$this->actorRelationRequest,
 			$this->listsRequest,
 			$this->relationshipService,
+			$this->config,
 			new NullLogger(),
 		);
 	}
@@ -149,6 +161,7 @@ class MigrationServiceTest extends TestCase {
 	public function testAddAliasRefusesWhatIsNotAnActorId(string $alias): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->accountService->expects($this->never())->method('setAlsoKnownAs');
+		$this->cacheActorService->method('getFromAccount')->willThrowException(new \Exception('nobody there'));
 
 		$this->expectException(InvalidResourceException::class);
 		$this->service->addAlias('alice', $alias);
@@ -156,12 +169,48 @@ class MigrationServiceTest extends TestCase {
 
 	public static function notAnActorIdProvider(): array {
 		return [
-			'a handle' => ['alice@old.example'],
+			'a handle nobody answers to' => ['alice@gone.example'],
+			'a word' => ['alice'],
 			'empty' => [''],
 			'no host' => ['https:///users/alice'],
 			'not http' => ['ftp://old.example/users/alice'],
 			'itself' => [self::ALICE],
 		];
+	}
+
+	/**
+	 * A handle is what every other server's form asks for, so it is what
+	 * people type; the alias stored is the actor id it resolves to.
+	 */
+	public function testAddAliasResolvesAHandleToTheActorId(): void {
+		$alice = $this->alice();
+		$this->accountService->method('getActorFromUserId')->willReturn($alice);
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')
+			->with('alice@old.example')->willReturn($this->person('https://old.example/users/alice', 'alice@old.example'));
+		$this->accountService->expects($this->once())->method('setAlsoKnownAs')
+			->with('alice', ['https://old.example/users/alice']);
+
+		$this->assertSame(['https://old.example/users/alice'], $this->service->addAlias('alice', '@alice@old.example'));
+	}
+
+	public function testMoveAcceptsTheTargetAsAHandle(): void {
+		$alice = $this->alice();
+		$this->accountService->method('getActorFromUserId')->willReturn($alice);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')
+			->with('alice@new.example')->willReturn($this->newAlice());
+		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
+		$this->activityService->method('request')->willReturn('token');
+
+		$this->assertSame(self::NEW_ALICE, $this->service->move('alice', '@alice@new.example')->getId());
+	}
+
+	public function testMoveRefusesATargetThatIsNeitherAHandleNorAnAddress(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->expectException(InvalidResourceException::class);
+		$this->service->move('alice', 'new.example');
 	}
 
 	public function testRemoveAliasDropsItFromTheList(): void {
@@ -230,6 +279,70 @@ class MigrationServiceTest extends TestCase {
 		);
 		$this->assertContains([self::ALICE, InstancePath::TYPE_FOLLOWERS], $paths, 'fanned out to every follower inbox');
 		$this->assertContains([self::NEW_ALICE . '/inbox', InstancePath::TYPE_INBOX], $paths, 'and told to the new home');
+	}
+
+	/** Mastodon's thirty days between moves: a second one in an afternoon is a mistake made twice. */
+	public function testASecondMoveWithinTheCooldownIsRefused(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->userValues['moved_at'] = (string)(time() - 86400);
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->expectException(InvalidResourceException::class);
+		$this->expectExceptionMessageMatches('/can move again on/');
+		$this->service->move('alice', self::NEW_ALICE);
+	}
+
+	/** An administrator's command may skip the cooldown; the person's button may not. */
+	public function testAnAdministratorMaySkipTheCooldown(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromId')->willReturn($this->newAlice());
+		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
+		$this->activityService->method('request')->willReturn('token');
+		$this->userValues['moved_at'] = (string)(time() - 86400);
+
+		$this->assertSame(self::NEW_ALICE, $this->service->move('alice', self::NEW_ALICE, false)->getId());
+	}
+
+	public function testAMoveRecordsWhenItHappened(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromId')->willReturn($this->newAlice());
+		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
+		$this->activityService->method('request')->willReturn('token');
+
+		$this->service->move('alice', self::NEW_ALICE);
+
+		$this->assertEqualsWithDelta(time(), (int)$this->userValues['moved_at'], 5);
+	}
+
+	public function testTheStatusSaysWhereTheAccountStands(): void {
+		$alice = $this->alice();
+		$alice->setMovedTo(self::NEW_ALICE);
+		$this->accountService->method('getActorFromUserId')->willReturn($alice);
+		$this->userValues['moved_at'] = '1000';
+
+		$status = $this->service->moveStatus('alice');
+
+		$this->assertSame(self::NEW_ALICE, $status['moved_to']);
+		$this->assertSame(1000, $status['moved_at']);
+		$this->assertSame(1000 + MigrationService::COOLDOWN_SECONDS, $status['can_move_at']);
+	}
+
+	public function testAnAccountThatNeverMovedMayMoveNow(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+
+		$status = $this->service->moveStatus('alice');
+
+		$this->assertSame(['moved_to' => '', 'moved_at' => null, 'can_move_at' => 0], $status);
+	}
+
+	/** Undoing clears the redirect and nothing else: the cooldown stands, because the move did happen. */
+	public function testUndoClearsTheRedirectAndKeepsTheCooldown(): void {
+		$this->userValues['moved_at'] = '1000';
+		$this->accountService->expects($this->once())->method('setMovedTo')->with('alice', '');
+
+		$this->service->undoMove('alice');
+
+		$this->assertSame('1000', $this->userValues['moved_at']);
 	}
 
 	public function testMoveRefusesATargetThatDoesNotListTheActor(): void {

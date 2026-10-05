@@ -185,6 +185,23 @@ describe('ProfileInfo', () => {
 		expect(mountProfile('nobody@remote.example').find('.user-profile').exists()).toBe(false)
 	})
 
+	/** The redirect every other server shows for a moved account. */
+	it('says where a moved account went, and links to it', () => {
+		accountStore.addAccount({
+			actorId: 'https://remote.example/users/gone',
+			data: { ...bob, acct: 'gone@remote.example', url: 'https://remote.example/users/gone', moved: { acct: 'bob@new.example', url: 'https://new.example/@bob' } },
+		})
+
+		const wrapper = mountProfile('gone@remote.example')
+
+		expect(wrapper.find('.user-profile__moved').text()).toContain('This account has moved to @bob@new.example.')
+		expect(wrapper.find('.user-profile__moved a, .user-profile__moved [to]').exists() || wrapper.findComponent(RouterLinkStub).exists()).toBe(true)
+	})
+
+	it('shows no redirect for an account that stayed', () => {
+		expect(mountProfile('bob@remote.example').find('.user-profile__moved').exists()).toBe(false)
+	})
+
 	it('shows the name, the delivered avatar and the counters of a remote account', () => {
 		const wrapper = mountProfile('bob@remote.example')
 		expect(wrapper.find('h2').text()).toBe('Bob')

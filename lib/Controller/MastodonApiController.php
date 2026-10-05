@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
+use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
@@ -468,6 +469,10 @@ abstract class MastodonApiController extends Controller {
 		[InvalidHandleException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		[ItemUnknownException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		[CacheContentMimeTypeException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
+		// the account moved away; its followers were sent elsewhere, and a post
+		// or a follow from it would reach nobody. Ahead of ClientException,
+		// which it extends and which answers 422
+		[AccountMovedException::class, Http::STATUS_FORBIDDEN],
 		[ClientException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		// the credentials, not the request
 		[ClientNotFoundException::class, Http::STATUS_UNAUTHORIZED],

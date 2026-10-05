@@ -77,6 +77,11 @@ class MoveInterface extends AbstractActivityPubInterface implements IActivityPub
 		}
 
 		$this->moveAccount($old, $new);
+
+		// The redirect a profile here shows is the cached actor's `movedTo`.
+		// Written from the Move, as Mastodon does, rather than fetched: the
+		// old server may serve the pre-move document for minutes yet.
+		$this->cacheActorsRequest->markMoved($old->getId(), $new->getId());
 	}
 
 	public function moveAccount(Person $actor, Person $target): void {

@@ -478,14 +478,19 @@ it that would do nothing on an instance whose accounts come from LDAP.
 Below it: your **lists**, your **scheduled posts** with a way to cancel one, your
 **blocked and muted accounts** with unblock and unmute inline, and **migration**.
 
-**Migration takes your account with you.** Export writes your profile, follows,
+**Migration takes your account with you.** Moving in starts from your old handle:
+the page looks the account up, shows what its server lets us read, and then follows
+everyone it follows and brings its public posts over in the background; the one step
+left is the move on the old server, and the page names the menu. Export writes your profile, follows,
 followers, blocks, mutes, bookmarks, likes and every post you have written to a zip —
 and **the pictures and videos come with it**, copied into the archive in the layout
 Mastodon's own export uses, with each attachment pointing at the copy rather than at
 the server you are leaving. Import reads one back, including an archive from
 `occ user:export`. A third section brings your follows over from Mastodon, Pixelfed,
 GoToSocial or Akkoma via their `following_accounts.csv` or `pixelfed-following.json`.
-Your private key is deliberately not in the archive. Naming the account you are
+Every import runs in the background and the page shows where it has got to, so a
+long follow list or a decade of posts is one upload rather than a race against the
+web server's timeout. Your private key is deliberately not in the archive. Naming the account you are
 moving from — the `alsoKnownAs` the old server insists on before it will hand over
 your followers — is a field in the same page rather than an `occ` command, because
 it federates nothing and is yours to set.
@@ -875,6 +880,7 @@ occ social:reset
   everything still between this app and a full replacement, in tiers, with what
   each item actually fixes and whether it is done.
 - [docs/User-Guide.md](docs/User-Guide.md)
+- [docs/Moving.md](docs/Moving.md) — moving to Aloha Social from another server, and away again, in the order it happens
   is the guide for the people using the app: getting an account, following,
   posting, reading, managing the account, keyboard shortcuts.
 - [docs/For-You.md](docs/For-You.md)

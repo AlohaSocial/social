@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\AP;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FollowLimitException;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -363,6 +364,19 @@ class FollowServiceTest extends TestCase {
 		$this->activityService->expects($this->never())->method('request');
 
 		$this->expectException(InvalidActionException::class);
+
+		$this->service->followAccount($this->alice(), 'bob@remote.example');
+	}
+
+	/** A moved account follows nobody from here: the follow would belong to the new account. */
+	public function testAMovedAccountCannotFollow(): void {
+		$this->moderationService->expects($this->once())->method('assertNotMoved')
+			->with($this->callback(fn (Person $actor): bool => $actor->getId() === self::ALICE_ID))
+			->willThrowException(new AccountMovedException('this account has moved'));
+		$this->followsRequest->expects($this->never())->method('save');
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->expectException(AccountMovedException::class);
 
 		$this->service->followAccount($this->alice(), 'bob@remote.example');
 	}

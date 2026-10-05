@@ -36,7 +36,7 @@ class AccountMove extends SocialCommand {
 			->addArgument('userId', InputArgument::REQUIRED, 'Nextcloud user whose actor moves away')
 			->addArgument(
 				'target', InputArgument::REQUIRED,
-				'actor id of the new account (https://… address), which must list this one in alsoKnownAs'
+				'the new account, as @you@new.example or its https://… address; it must list this one in alsoKnownAs'
 			)
 			->addOption(
 				'force', 'f', InputOption::VALUE_NONE,
@@ -75,7 +75,9 @@ class AccountMove extends SocialCommand {
 
 		try {
 			$output->write('checking that ' . $target . ' lists this account... ');
-			$moved = $this->migrationService->move($userId, $target);
+			// an administrator's command is not held to the thirty-day cooldown
+			// the person's own button is: they are the one who can judge why
+			$moved = $this->migrationService->move($userId, $target, false);
 		} catch (Exception $e) {
 			$output->writeln('');
 			$output->writeln('<error>' . $e->getMessage() . '</error>');

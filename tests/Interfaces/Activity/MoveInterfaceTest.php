@@ -221,9 +221,25 @@ class MoveInterfaceTest extends ActivityPubTestCase {
 		$this->cacheActorService->method('getFromId')
 			->with($this->new->getId(), true)->willReturn($this->new);
 		$this->streamDestRequest->method('getRelatedToActor')->willReturn([]);
-
 		$this->followsRequest->expects($this->once())
 			->method('moveAccountFollowers')->with($this->old->getId(), $this->identicalTo($this->new));
+
+		$this->handler->processIncomingRequest($this->move());
+	}
+
+	/**
+	 * The follows were re-pointed and the account that moved still looked like
+	 * one that had stayed: its `movedTo` is read off its cached document and
+	 * nothing wrote it there. The interop suite found it — and found that
+	 * fetching the document again does not help, since Mastodon serves the
+	 * pre-move one for minutes.
+	 */
+	public function testIncomingMoveRecordsOnTheMovedAccountWhereItWent(): void {
+		$this->cacheActorsRequest->method('getFromId')->willReturn($this->old);
+		$this->cacheActorService->method('getFromId')->willReturn($this->new);
+		$this->streamDestRequest->method('getRelatedToActor')->willReturn([]);
+		$this->cacheActorsRequest->expects($this->once())
+			->method('markMoved')->with($this->old->getId(), $this->new->getId());
 
 		$this->handler->processIncomingRequest($this->move());
 	}

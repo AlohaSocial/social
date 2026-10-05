@@ -928,6 +928,21 @@ describe('Navigation', () => {
 	 * the route needs a handle, and somebody who has not finished the setup
 	 * screen has none.
 	 */
+	/** A moved account posts to nobody, and the server refuses the post anyway. */
+	it('takes the New post button away from an account that has moved', () => {
+		const accountStore = useAccountStore()
+		accountStore.addAccount({
+			actorId: 'https://cloud.example/apps/social/@alice',
+			data: { acct: 'alice@cloud.example', url: 'https://cloud.example/apps/social/@alice', moved: { acct: 'alice@new.example' } },
+		})
+		accountStore.setCurrentAccount('alice@cloud.example')
+
+		const wrapper = mountNavigation()
+
+		expect(wrapper.find('.navigation__compose').exists()).toBe(false)
+		expect(wrapper.find('.navigation__moved').text()).toContain('@alice@new.example')
+	})
+
 	it('offers no profile until there is an account with one', () => {
 		expect(moreNames(mountNavigation())).not.toContain('My profile')
 	})

@@ -108,6 +108,7 @@
  * @property {string} last_status_at - Ex: "2019-12-10T08:14:44.811Z"
  * @property {CustomEmoji[]} emojis - Ex: []
  * @property {Field[]} fields - Ex: []
+ * @property {Account} [moved] - the account this one moved to, when it has
  */
 
 /**

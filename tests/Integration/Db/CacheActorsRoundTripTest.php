@@ -104,6 +104,24 @@ class CacheActorsRoundTripTest extends TestCase {
 		$this->assertSame('https://remote.example/catest/header.jpg', $read->getHeader());
 	}
 
+	public function testAMoveRecordedOnACachedActorIsReadBackAndKeepsTheRestOfItsDocument(): void {
+		$this->request->save($this->erin());
+
+		$this->request->markMoved(self::ACTOR, self::OTHER);
+		$read = $this->request->getFromId(self::ACTOR);
+
+		$this->assertSame(self::OTHER, $read->getMovedTo());
+		$this->assertSame(['https://old.example/catest/users/erin'], $read->getAlsoKnownAs());
+	}
+
+	public function testAMoveIsRecordedOnACachedActorThatHasNoDocument(): void {
+		$this->actor(self::ACTOR, 'https://remote.example/inbox');
+
+		$this->request->markMoved(self::ACTOR, self::OTHER);
+
+		$this->assertSame(self::OTHER, $this->request->getFromId(self::ACTOR)->getMovedTo());
+	}
+
 	public function testARefreshCorrectsTheStoredHandle(): void {
 		$this->request->save($this->erin());
 

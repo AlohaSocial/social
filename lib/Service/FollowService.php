@@ -256,6 +256,7 @@ class FollowService {
 	 */
 	public function followActor(Person $actor, Person $remoteActor): bool {
 		$this->moderationService->assertNotSuspended($actor->getId());
+		$this->moderationService->assertNotMoved($actor);
 		$this->assertWithinFollowLimit($actor);
 
 		if ($remoteActor->getId() === $actor->getId()) {

@@ -381,8 +381,12 @@ class PostImportService {
 	 *                 the writers, which psalm cannot follow back to its shape
 	 * @throws InvalidResourceException when the file is not an export this can read
 	 */
-	public function import(Person $actor, string $path, bool $fetchMedia = true, int $limit = self::MAX_POSTS): array {
-		$limit = max(1, min(self::MAX_POSTS, $limit));
+	public function import(
+		Person $actor, string $path, bool $fetchMedia = true, int $limit = self::MAX_POSTS, ?callable $progress = null,
+	): array {
+		// 0 is no cap at all, for a run with no request to keep within a time
+		// limit; anything else stays within MAX_POSTS
+		$limit = ($limit <= 0) ? PHP_INT_MAX : max(1, min(self::MAX_POSTS, $limit));
 		$zip = $this->openArchive($path);
 
 		try {
@@ -417,52 +421,104 @@ class PostImportService {
 					$tally['skipped']++;
 					continue;
 				}
+
 				$parsed[] = $post;
 			}
 
-			// oldest first, so a reply is written after the post it answers and
-			// can be hung off it
-			usort($parsed, static fn (array $a, array $b): int => $a['published'] <=> $b['published']);
-
-			$known = $this->importedPostsRequest->knownAmong(
-				$actor->getId(), array_column($parsed, 'source')
-			);
-
-			foreach ($parsed as $post) {
-				if (isset($known[$post['source']])) {
-					$tally['already']++;
-					continue;
-				}
-
-				if ($tally['imported'] >= $limit) {
-					$tally['capped'] = true;
-					break;
-				}
-
-				try {
-					$written = $this->write($actor, $post, $known, $zip, $fetchMedia, $tally);
-				} catch (Throwable $e) {
-					$this->logger->warning('could not import a post', [
-						'actor' => $actor->getId(), 'source' => $post['source'], 'exception' => $e,
-					]);
-					$tally['failed']++;
-					continue;
-				}
-
-				$known[$post['source']] = md5($written->getId());
-				$this->importedPostsRequest->remember($actor->getId(), $post['source'], $written->getId());
-				$tally['imported']++;
-			}
-
-			if ($tally['imported'] > 0) {
-				$this->accountService->cacheLocalActorDetailCount($actor);
-			}
-
-			/** @psalm-suppress InvalidReturnStatement the shape is the one declared above */
-			return $tally;
+			return $this->writeParsed($actor, $parsed, $zip, $fetchMedia, $limit, $progress, $tally);
 		} finally {
 			$zip?->close();
 		}
+	}
+
+	/**
+	 * Writes the posts of an ActivityPub collection already in hand: the pages
+	 * of an account's outbox, fetched from the server it is still on, rather
+	 * than an archive it exported. The same parsing and the same writes as
+	 * `import()`, so what is brought over and what is left out is one rule.
+	 * Uncapped, because what calls this is a background run.
+	 *
+	 * @param array<int, mixed> $items the activities or objects, as the collection lists them
+	 * @param callable(int, int): void|null $progress
+	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, total: int, capped: bool}
+	 * @psalm-suppress InvalidReturnType the tally is built by reference through the writers
+	 */
+	public function importItems(Person $actor, array $items, bool $fetchMedia = true, ?callable $progress = null): array {
+		$tally = [
+			'imported' => 0, 'skipped' => 0, 'already' => 0,
+			'media' => 0, 'failed' => 0, 'total' => count($items), 'capped' => false,
+		];
+		$parsed = [];
+		foreach ($items as $item) {
+			$post = is_array($item) ? $this->parse($item) : null;
+			if ($post === null) {
+				$tally['skipped']++;
+				continue;
+			}
+			$parsed[] = $post;
+		}
+
+		/** @psalm-suppress InvalidReturnStatement the shape is the one declared above */
+		return $this->writeParsed($actor, $parsed, null, $fetchMedia, PHP_INT_MAX, $progress, $tally);
+	}
+
+	/**
+	 * Writes the parsed posts, oldest first, skipping what is here already.
+	 *
+	 * @param array<int, array<string, mixed>> $parsed
+	 * @param callable(int, int): void|null $progress
+	 * @param array<string, mixed> $tally
+	 * @return array<string, mixed> the tally, filled in
+	 */
+	private function writeParsed(
+		Person $actor, array $parsed, ?ZipArchive $zip, bool $fetchMedia, int $limit, ?callable $progress, array $tally,
+	): array {
+		// oldest first, so a reply is written after the post it answers and
+		// can be hung off it
+		usort($parsed, static fn (array $a, array $b): int => $a['published'] <=> $b['published']);
+
+		$known = $this->importedPostsRequest->knownAmong(
+			$actor->getId(), array_column($parsed, 'source')
+		);
+
+		$handled = 0;
+		foreach ($parsed as $post) {
+			if ($progress !== null) {
+				$progress($handled++, count($parsed));
+			}
+			if (isset($known[$post['source']])) {
+				$tally['already']++;
+				continue;
+			}
+
+			if ($tally['imported'] >= $limit) {
+				$tally['capped'] = true;
+				break;
+			}
+
+			try {
+				$written = $this->write($actor, $post, $known, $zip, $fetchMedia, $tally);
+			} catch (Throwable $e) {
+				$this->logger->warning('could not import a post', [
+					'actor' => $actor->getId(), 'source' => $post['source'], 'exception' => $e,
+				]);
+				$tally['failed']++;
+				continue;
+			}
+
+			$known[$post['source']] = md5($written->getId());
+			$this->importedPostsRequest->remember($actor->getId(), $post['source'], $written->getId());
+			$tally['imported']++;
+		}
+
+		if ($progress !== null) {
+			$progress($handled, count($parsed));
+		}
+		if ($tally['imported'] > 0) {
+			$this->accountService->cacheLocalActorDetailCount($actor);
+		}
+
+		return $tally;
 	}
 
 	/**

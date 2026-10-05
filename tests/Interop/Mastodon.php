@@ -83,6 +83,29 @@ class Mastodon {
 		$this->post('/api/v1/accounts/' . $accountId . '/follow');
 	}
 
+	/** Mastodon's id for one of its own accounts, by username. */
+	public function accountId(string $username): string {
+		$account = $this->get('/api/v1/accounts/lookup', ['acct' => $username]);
+		$id = (string)($account['id'] ?? '');
+		if ($id === '') {
+			throw new RuntimeException('Mastodon has no account ' . $username . ': ' . json_encode($account));
+		}
+
+		return $id;
+	}
+
+	/**
+	 * How the token's account stands to another: Mastodon's Relationship
+	 * entity, which is what a `Move` changes.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function relationship(string $accountId): array {
+		$relationships = $this->get('/api/v1/accounts/relationships', ['id[]' => $accountId]);
+
+		return (is_array($relationships) ? ($relationships[0] ?? []) : []) + ['following' => false];
+	}
+
 	/**
 	 * The statuses Mastodon holds for one account.
 	 *
@@ -132,8 +155,8 @@ class Mastodon {
 	 * @param callable(): ?T $probe
 	 * @return ?T
 	 */
-	public function await(callable $probe) {
-		$until = time() + self::WAIT_SECONDS;
+	public function await(callable $probe, int $seconds = self::WAIT_SECONDS) {
+		$until = time() + $seconds;
 		do {
 			$answer = $probe();
 			if ($answer !== null) {

@@ -126,6 +126,7 @@ OC.L10N.register(
     "No recent posts" : "Keine aktuellen Beiträge",
     "Could not load timeline" : "Zeitleiste konnte nicht geladen werden",
     "New post" : "Neuer Post",
+    "This account has moved to {acct}." : "Dieses Konto ist zu {acct} umgezogen.",
     "Errors" : "Fehler",
     "Settings" : "Einstellungen",
     "Migration" : "Kontoumzug",

@@ -127,6 +127,9 @@ jobs:
           ./occ maintenance:install --verbose --database=sqlite --database-name=nextcloud \
             --admin-user admin --admin-pass admin
           ./occ app:enable --force social
+          # two more accounts for the Move tests: one moves away, one is moved to
+          OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env mover
+          OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env arrival
           ./occ config:system:set trusted_domains 1 --value localhost:8080
           ./occ config:system:set trusted_domains 2 --value nextcloud.test
           ./occ config:system:set overwriteprotocol --value https
@@ -267,6 +270,17 @@ jobs:
             puts token.token
           ' | tail -1)
           echo "MASTODON_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          # the two accounts of the Move tests: `landing` is where our `mover`
+          # moves to, and names it the way Mastodon's own form would; `leaver`
+          # moves to our `arrival`, later, once this side has named it back
+          docker exec mastodon-web bin/tootctl accounts create landing \
+            --email landing@example.com --confirmed --approve > /dev/null
+          docker exec mastodon-web bin/tootctl accounts create leaver \
+            --email leaver@example.com --confirmed --approve > /dev/null
+          docker exec mastodon-web bin/rails runner '
+            Account.find_local("landing").update!(also_known_as: ["https://nextcloud.test/index.php/apps/social/@mover"])
+            puts "landing also known as: #{Account.find_local("landing").also_known_as.inspect}"
+          ' | tail -1
 
       - name: Start PeerTube
         run: |
@@ -381,6 +395,23 @@ jobs:
               puts "resolve: #{e.class}: #{e.message}"
             end
           ' 2>&1 | tail -20 || true
+          # the Move, both ways. Ours first; then this side names Mastodon's
+          # leaver and follows it, Mastodon delivers the Move signed by the
+          # leaver, and the last suite reads what this side did with it
+          timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveOutboundTest || status=1
+          timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveInboundPrepareTest || status=1
+          docker exec mastodon-web bin/rails runner '
+            leaver = Account.find_local("leaver")
+            target = ResolveAccountService.new.call("arrival@nextcloud.test")
+            raise "arrival could not be resolved" if target.nil?
+            raise "arrival does not list leaver: #{target.also_known_as.inspect}" unless target.also_known_as.include?(ActivityPub::TagManager.instance.uri_for(leaver))
+            leaver.update!(moved_to_account: target)
+            uri = ActivityPub::TagManager.instance.uri_for(leaver)
+            json = Oj.dump({ "@context" => "https://www.w3.org/ns/activitystreams", "id" => "#{uri}#moves/#{Time.now.to_i}", "type" => "Move", "actor" => uri, "object" => uri, "target" => target.uri })
+            ActivityPub::DeliveryWorker.new.perform(json, leaver.id, "https://nextcloud.test/index.php/apps/social/@admin/inbox")
+            puts "Move delivered: #{uri} -> #{target.uri}"
+          ' 2>&1 | tail -3 || status=1
+          timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveInboundTest || status=1
           timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PeerTubeDeliveryTest || status=1
           exit $status
 

@@ -50,6 +50,15 @@
 				     still federates as one -->
 				<span v-if="pronouns" class="user-profile__pronouns">{{ pronouns }}</span>
 			</h2>
+			<!-- the redirect every other server shows for a moved account; a
+			     local account that moved is the reader's own, and Settings →
+			     Migration is where it is undone -->
+			<p v-if="accountInfo.moved" class="user-profile__moved">
+				{{ t('social', 'This account has moved to {acct}.', { acct: '@' + accountInfo.moved.acct }) }}
+				<router-link :to="{ name: 'profile', params: { account: accountInfo.moved.acct } }">
+					{{ t('social', 'Open the new account') }}
+				</router-link>
+			</p>
 			<span v-if="relationship && relationship.blocking" class="user-profile__blocked-hint">
 				{{ t('social', 'Blocked') }}
 			</span>
@@ -1451,6 +1460,20 @@ export default {
 		gap: 6px;
 		margin-block-start: 8px;
 		text-decoration: none;
+	}
+
+	&__moved {
+		margin: 4px 0 8px;
+		padding: 8px 12px;
+		border-radius: var(--border-radius-element, 8px);
+		background: var(--color-primary-element-light);
+		color: var(--color-primary-element-light-text, var(--color-main-text));
+
+		a {
+			margin-inline-start: 4px;
+			font-weight: bold;
+			text-decoration: underline;
+		}
 	}
 
 	&__blocked-hint {

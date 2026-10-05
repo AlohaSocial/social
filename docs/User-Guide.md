@@ -751,7 +751,8 @@ hand, it is picked up as one.
   in again the next time you open it. It is the page to open after losing a
   phone, and the only page where signing an app out does not depend on still
   having the app.
-- **Export and migration.** **Settings → Migration** has three sections.
+- **Export and migration.** The whole move, in order, is one page:
+  [Moving.md](Moving.md). **Settings → Migration** has these sections.
   **Export** downloads a zip of your profile, follows, followers, blocks,
   mutes, bookmarks, likes and every post you wrote — your private key is
   deliberately not in it. **Import** reads such an archive (or a Nextcloud
@@ -775,14 +776,38 @@ hand, it is picked up as one.
   as skipped rather than followed by a button that says lists. A list you
   already have is filled rather than made a second time, and a list that
   follows a Nextcloud group is left alone — its members are the group's.
+- **Moving in from another server.** The quickest way in is the first thing
+  on **Settings → Migration**: type the handle of your old account
+  (`@you@mastodon.example`) and press **Look it up**. You are shown who that
+  is, how many accounts it follows and how many posts it has, and whether its
+  server lets those be read — Mastodon hides them if you turned on *Hide your
+  social graph*, and Pixelfed always does; the file imports below are for
+  that case. Press **Move here** and this account is marked as also being
+  that one, and in the background everyone the old account follows is followed
+  from here and its public posts are written here as yours, dated when you
+  wrote them. The list at the top of the page shows where it has got to.
+  Nothing is sent to anybody; your followers stay where they are until the
+  last step, which is done on the old server and which the page tells you
+  about when the run is done: on Mastodon, *Preferences → Account → Move to a
+  different account*, and enter your handle here.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Settings → Migration →
-  Accounts you also answer to** is where you say it: paste the old account's
-  own address (`https://pixelfed.social/users/you`, not the handle) and press
-  Add. Nothing is sent to anybody — it is a note this server keeps about an
-  account it owns — and you can take it off again whenever you like. Moving
-  the followers themselves is the half that cannot be undone, and stays with
-  an administrator (`occ social:account:move` on the old server).
+  Accounts you also answer to** is where you say it: type the old account's
+  handle (`@you@pixelfed.social`) and press Add. Nothing is sent to anybody — it is a note this server keeps about an
+  account it owns — and you can take it off again whenever you like. The
+  wizard above sets it for you.
+- **Moving away.** The last section of **Settings → Migration** moves this
+  account to another server. First, on the new account, name this one as an
+  account you also answer to — on Mastodon, *Preferences → Account → Moving
+  from a different account* — then type the new account's handle here, type
+  your own handle to confirm, and give your password when asked. Every server
+  that knows you is told to follow the new account instead, and this one is
+  marked as moved: it shows where you went, you cannot post or follow from it
+  while it stays moved, and your posts stay where they are, because a move
+  carries the followers and never the content. You can move again after
+  thirty days. **Undo the move** takes the redirect off and lets you post and
+  follow from here again; your followers do not come back by themselves,
+  because their servers acted on the move when it arrived.
 - **Bringing your posts.** The fourth section of **Settings → Migration** reads
   the export from your old server — this app's own archive, Mastodon's or
   GoToSocial's `outbox.json`, or Pixelfed's `pixelfed-statuses.json` — and

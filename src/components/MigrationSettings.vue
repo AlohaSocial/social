@@ -105,6 +105,77 @@
 			</ul>
 		</section>
 
+		<!-- from another server, starting from the old handle -->
+		<section class="migration__card migration__card--move-in">
+			<h4>
+				<IconAccountArrowLeft :size="20" />
+				{{ t('social', 'Move here from another server') }}
+			</h4>
+			<p>
+				{{ t('social', 'Type the handle of your old account. This account is marked as also being that one, everyone it follows is followed from here, and its public posts are written here as yours, dated when you wrote them — all in the background. Your followers stay where they are until the last step, which is done on the old server.') }}
+			</p>
+			<div class="migration__move-in-form">
+				<NcTextField
+					v-model="moveHandle"
+					class="migration__move-in-field"
+					:label="t('social', 'Your old account')"
+					placeholder="@you@mastodon.example"
+					:disabled="moveInspecting || moveStarting"
+					@keydown.enter="inspectMoveIn" />
+				<NcButton :disabled="moveInspecting || moveHandle.trim() === ''" @click="inspectMoveIn">
+					<template v-if="moveInspecting" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Look it up') }}
+				</NcButton>
+			</div>
+			<div v-if="moveAccount" class="migration__move-in-account">
+				<img
+					v-if="moveAccount.avatar"
+					:src="moveAccount.avatar"
+					alt=""
+					class="migration__move-in-avatar">
+				<div class="migration__move-in-who">
+					<strong>{{ moveAccount.name }}</strong>
+					<span class="migration__move-in-acct">@{{ moveAccount.acct }}</span>
+					<p class="migration__note">
+						{{ moveAccount.following.readable
+							? n('social', 'It follows %n account.', 'It follows %n accounts.', moveAccount.following.total)
+							: t('social', 'Its follows are hidden by its server; bring them with the file below.') }}
+						{{ moveAccount.posts.readable
+							? n('social', '%n public post can be brought over.', '%n public posts can be brought over.', moveAccount.posts.total)
+							: t('social', 'Its posts cannot be read from here; bring them with the export below.') }}
+					</p>
+				</div>
+			</div>
+			<template v-if="moveAccount">
+				<NcCheckboxRadioSwitch
+					v-model="moveFollows"
+					class="migration__move-in-switch"
+					:disabled="!moveAccount.following.readable || moveStarting">
+					{{ t('social', 'Follow everyone it follows') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch
+					v-model="movePosts"
+					class="migration__move-in-switch"
+					:disabled="!moveAccount.posts.readable || moveStarting">
+					{{ t('social', 'Bring its public posts over, with their pictures') }}
+				</NcCheckboxRadioSwitch>
+				<NcButton
+					variant="primary"
+					:disabled="moveStarting || (!moveFollows && !movePosts)"
+					@click="startMoveIn">
+					<template v-if="moveStarting" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Move here') }}
+				</NcButton>
+			</template>
+			<p v-if="finishedMoveIn" class="migration__move-in-finish">
+				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
+			</p>
+		</section>
+
 		<!-- from elsewhere -->
 		<section class="migration__card">
 			<h4>
@@ -114,6 +185,27 @@
 			<p>
 				{{ t('social', 'The fediverse is one network with many doors. Mastodon, Pixelfed, GoToSocial, Akkoma, Misskey and this app all speak ActivityPub, so an account here can follow and be followed by any of them — and what you bring with you is mostly the list of people you had found.') }}
 			</p>
+
+			<ul v-if="imports.length > 0" class="migration__imports" aria-live="polite">
+				<li
+					v-for="job in imports"
+					:key="job.id"
+					class="migration__import"
+					:class="'migration__import--' + job.status">
+					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
+					<span class="migration__result">{{ importSummary(job) }}</span>
+					<NcButton
+						v-if="job.status === 'done' || job.status === 'failed'"
+						variant="tertiary"
+						:aria-label="t('social', 'Dismiss')"
+						:title="t('social', 'Dismiss')"
+						@click="dismissImport(job.id)">
+						<template #icon>
+							<IconClose :size="20" />
+						</template>
+					</NcButton>
+				</li>
+			</ul>
 
 			<h5>{{ t('social', 'Bring your follows with you') }}</h5>
 			<p>
@@ -134,9 +226,6 @@
 				</template>
 				{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
 			</NcButton>
-			<p v-if="followsResult" class="migration__result">
-				{{ followsResult }}
-			</p>
 
 			<h5>{{ t('social', 'Bring your blocks, mutes and lists') }}</h5>
 			<p>
@@ -192,9 +281,6 @@
 					{{ t('social', 'Import lists') }}
 				</NcButton>
 			</div>
-			<p v-if="csvResult" class="migration__result">
-				{{ csvResult }}
-			</p>
 
 			<h5>{{ t('social', 'Bring your posts with you') }}</h5>
 			<p>
@@ -224,9 +310,6 @@
 				</template>
 				{{ postsBusy ? t('social', 'Writing your posts …') : t('social', 'Import posts from an export') }}
 			</NcButton>
-			<p v-if="postsResult" class="migration__result">
-				{{ postsResult }}
-			</p>
 			<p class="migration__note">
 				{{ t('social', 'At most 2000 posts at a time; run it again to carry on. An archive too large for a browser to upload can be imported by an administrator with occ social:account:import-posts.') }}
 			</p>
@@ -285,8 +368,8 @@
 				<NcTextField
 					v-model="aliasInput"
 					class="migration__alias-field"
-					:label="t('social', 'The old account\'s address')"
-					placeholder="https://pixelfed.social/users/you"
+					:label="t('social', 'The old account')"
+					placeholder="@you@pixelfed.social"
 					:disabled="aliasBusy"
 					@keydown.enter="addAlias" />
 				<NcButton :disabled="aliasBusy || aliasInput.trim() === ''" @click="addAlias">
@@ -297,13 +380,66 @@
 				</NcButton>
 			</div>
 			<p class="migration__note">
-				{{ t('social', 'It is the address of the account itself — the one its own server publishes, like https://pixelfed.social/users/you — and not the handle.') }}
+				{{ t('social', 'The handle as you would give it to somebody — or, if you have it, the address its server publishes, like https://pixelfed.social/users/you.') }}
 			</p>
+		</section>
 
-			<h5>{{ t('social', 'Moving your whole account') }}</h5>
-			<p>
-				{{ t('social', 'With the alias above in place, your old server can send your followers here. That is the half that cannot be taken back: it federates to every server that knows you, so it stays an administrator action — ask for occ social:account:move on the old server.') }}
-			</p>
+		<!-- away -->
+		<section class="migration__card migration__card--move-out">
+			<h4>
+				<IconAccountArrowRight :size="20" />
+				{{ t('social', 'Move your account away') }}
+			</h4>
+			<template v-if="moveStatus && moveStatus.moved_to">
+				<p>
+					{{ t('social', 'This account moved to {target} on {date}. Its followers were told to follow the new account; nothing is posted from here while it stays moved.', { target: moveStatus.moved_to, date: dateOf(moveStatus.moved_at) }) }}
+				</p>
+				<p class="migration__note">
+					{{ t('social', 'Undoing the move lets you post and follow from here again. Your followers do not come back by themselves: their servers acted on the move when it arrived.') }}
+				</p>
+				<NcButton :disabled="moveOutBusy" @click="undoMove">
+					<template v-if="moveOutBusy" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Undo the move') }}
+				</NcButton>
+			</template>
+			<template v-else>
+				<p>
+					{{ t('social', 'Tell every server that knows you to follow your new account instead of this one. First, on the new account, name this one as an account you also answer to — on Mastodon that is Preferences → Account → Moving from a different account — and then type it here. Your posts stay where they are: a move carries the followers, never the content.') }}
+				</p>
+				<p v-if="moveStatus && moveStatus.can_move_at * 1000 > Date.now()" class="migration__note">
+					{{ t('social', 'This account moved on {date} and can move again on {next}.', { date: dateOf(moveStatus.moved_at), next: dateOf(moveStatus.can_move_at) }) }}
+				</p>
+				<template v-else>
+					<div class="migration__move-out-form">
+						<NcTextField
+							v-model="moveTarget"
+							class="migration__move-out-field"
+							:label="t('social', 'Your new account')"
+							placeholder="@you@new.example"
+							:disabled="moveOutBusy" />
+						<NcTextField
+							v-model="moveConfirm"
+							class="migration__move-out-field"
+							:label="t('social', 'Type your handle here to confirm')"
+							:placeholder="ownHandle || '@you@this.server'"
+							:disabled="moveOutBusy" />
+					</div>
+					<p class="migration__note">
+						{{ t('social', 'This cannot be taken back: it federates to every server that knows you. You will be asked for your password.') }}
+					</p>
+					<NcButton
+						variant="error"
+						:disabled="moveOutBusy || moveTarget.trim() === '' || moveConfirm.trim() === ''"
+						@click="moveOut">
+						<template v-if="moveOutBusy" #icon>
+							<NcLoadingIcon :size="20" />
+						</template>
+						{{ t('social', 'Move my followers to the new account') }}
+					</NcButton>
+				</template>
+			</template>
 		</section>
 	</div>
 </template>
@@ -312,10 +448,12 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess } from '../services/toast.js'
+import { confirmPassword } from '../services/externalApi.js'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import IconAccountArrowLeft from 'vue-material-design-icons/AccountArrowLeft.vue'
 import IconAccountArrowRight from 'vue-material-design-icons/AccountArrowRight.vue'
 import IconAccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
@@ -325,7 +463,7 @@ import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted
 import IconPostOutline from 'vue-material-design-icons/PostOutline.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import { t } from '@nextcloud/l10n'
+import { n, t } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
 
 /**
@@ -337,6 +475,7 @@ export default {
 	name: 'MigrationSettings',
 
 	components: {
+		IconAccountArrowLeft,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,
 		IconCancel,
@@ -360,18 +499,31 @@ export default {
 			postsBusy: false,
 			/** whether a picture named only by its address may be fetched from the old server */
 			fetchMedia: true,
-			/** @type {string} what the last post import came to */
-			postsResult: '',
 			/** @type {string[]} what the last import reported */
 			importLog: [],
-			/** @type {string} what the last CSV import came to */
-			followsResult: '',
 			/** @type {string} which single-file export is being prepared */
 			csvBusy: '',
 			/** @type {string} which CSV is being read in */
 			csvImport: '',
-			/** @type {string} what the last blocks, mutes or lists import came to */
-			csvResult: '',
+			/** @type {string} the old account, as typed */
+			moveHandle: '',
+			moveInspecting: false,
+			/** @type {object|null} the old account as the server described it */
+			moveAccount: null,
+			moveFollows: true,
+			movePosts: true,
+			moveStarting: false,
+			/** @type {string} this account's handle, for the last step on the old server */
+			ownHandle: '',
+			/** @type {object|null} whether this account moved, where and when, and when it may move */
+			moveStatus: null,
+			moveTarget: '',
+			moveConfirm: '',
+			moveOutBusy: false,
+			/** @type {Array<object>} the imports this account asked for, newest first, as the server lists them */
+			imports: [],
+			/** @type {number|null} the timer behind the next poll of the imports, while one runs */
+			pollTimer: null,
 			/** @type {string[]} the accounts this one also answers to */
 			aliases: [],
 			/** @type {string} the address being added */
@@ -381,6 +533,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {object|undefined} a move here that has run */
+		finishedMoveIn() {
+			return this.imports.find((job) => job.kind === 'move_in' && job.status === 'done')
+		},
+
 		/**
 		 * The lists of accounts that can be downloaded one at a time.
 		 *
@@ -402,6 +559,13 @@ export default {
 
 	mounted() {
 		this.loadAliases()
+		this.loadImports()
+		this.loadMoveStatus()
+		this.loadOwnHandle()
+	},
+
+	beforeUnmount() {
+		window.clearTimeout(this.pollTimer)
 	},
 
 	methods: {
@@ -411,6 +575,151 @@ export default {
 		},
 
 		t,
+
+		n,
+
+		/**
+		 * Who the old account is, and what its server lets this one read.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async inspectMoveIn() {
+			const handle = this.moveHandle.trim()
+			if (handle === '' || this.moveInspecting) {
+				return
+			}
+			this.moveInspecting = true
+			this.moveAccount = null
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in/inspect'), { handle })
+				this.moveAccount = data.account
+				this.moveFollows = Boolean(data.account?.following?.readable)
+				this.movePosts = Boolean(data.account?.posts?.readable)
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not find that account'))
+			} finally {
+				this.moveInspecting = false
+			}
+		},
+
+		/**
+		 * Sets the alias and queues the follows and the posts.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async startMoveIn() {
+			if (!this.moveAccount || this.moveStarting) {
+				return
+			}
+			this.moveStarting = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in'), {
+					handle: this.moveHandle.trim(),
+					follows: this.moveFollows ? '1' : '0',
+					posts: this.movePosts ? '1' : '0',
+					fetch_media: this.fetchMedia ? '1' : '0',
+				})
+				if (data?.import) {
+					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
+				}
+				this.moveAccount = null
+				this.moveHandle = ''
+				this.loadAliases()
+				showSuccess(t('social', 'Moving — it runs in the background, and this page shows where it gets to'))
+				this.schedulePoll()
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not start the move'))
+			} finally {
+				this.moveStarting = false
+			}
+		},
+
+		/**
+		 * Whether this account moved, where and when, and when it may move.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadMoveStatus() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/move'))
+				this.moveStatus = data
+			} catch (error) {
+				logger.error('Failed to load the move status', { error })
+			}
+		},
+
+		/**
+		 * Moves the account away, after the password and the typed handle.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async moveOut() {
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.moveOutBusy = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move'), {
+					target: this.moveTarget.trim(),
+					confirm: this.moveConfirm.trim(),
+				})
+				this.moveStatus = data
+				this.moveTarget = ''
+				this.moveConfirm = ''
+				showSuccess(t('social', 'Your followers are being told to follow {target}', { target: data?.target?.acct ?? data?.moved_to ?? '' }))
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not move the account'))
+			} finally {
+				this.moveOutBusy = false
+			}
+		},
+
+		/**
+		 * Takes the redirect off again.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async undoMove() {
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.moveOutBusy = true
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/migration/move'))
+				this.moveStatus = data
+				showSuccess(t('social', 'This account is no longer marked as moved'))
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not undo the move'))
+			} finally {
+				this.moveOutBusy = false
+			}
+		},
+
+		/**
+		 * @param {number|null} timestamp seconds since the epoch
+		 * @return {string} the day, in the reader's locale
+		 */
+		dateOf(timestamp) {
+			return timestamp ? new Date(timestamp * 1000).toLocaleDateString() : ''
+		},
+
+		/**
+		 * This account's handle, for the sentence that names the last step.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadOwnHandle() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/announcement'))
+				this.ownHandle = data?.handle ?? ''
+			} catch (error) {
+				logger.debug('No announcement for the own handle', { error })
+			}
+		},
 
 		/**
 		 * The accounts this one also answers to.
@@ -554,55 +863,20 @@ export default {
 		 * @param {Event} event the file input's change
 		 */
 		/**
-		 * Reads an export and writes the posts in it as this account's own.
-		 *
-		 * The heavy one: the server reads the file, writes up to two thousand
-		 * posts and may fetch a picture for each, so the button says what it
-		 * is doing for as long as it takes.
+		 * Queues the export: the server keeps the file and writes the posts in
+		 * the background, where a long history is hours of work rather than a
+		 * request against the web server's timeout. The list above shows where
+		 * it has got to.
 		 *
 		 * @param {Event} event the file input's change
 		 * @return {Promise<void>}
 		 */
 		async importPosts(event) {
-			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
-			const file = input?.files?.[0]
-			if (!file) {
-				return
-			}
-
 			this.postsBusy = true
-			this.postsResult = ''
 			try {
-				const form = new FormData()
-				form.append('file', file)
-				form.append('fetch_media', this.fetchMedia ? '1' : '0')
-				const { data } = await axios.post(
-					generateUrl('apps/social/api/v1/migration/posts'),
-					form,
-				)
-				this.postsResult = t(
-					'social',
-					'{imported} posts written with {media} of their pictures; {already} were already here, {skipped} were not posts to bring over, {failed} could not be written.',
-					{
-						imported: data?.imported ?? 0,
-						media: data?.media ?? 0,
-						already: data?.already ?? 0,
-						skipped: data?.skipped ?? 0,
-						failed: data?.failed ?? 0,
-					},
-				)
-				if (data?.capped) {
-					this.postsResult += ' ' + t('social', 'The run stopped at its limit — import the same file again to carry on.')
-				}
-				showSuccess(t('social', 'Your posts have been imported'))
-			} catch (error) {
-				logger.error('Importing posts failed', { error })
-				showError(error?.response?.data?.error || t('social', 'Could not import those posts'))
+				await this.queueUpload(event, 'posts', { fetch_media: this.fetchMedia ? '1' : '0' })
 			} finally {
 				this.postsBusy = false
-				if (input) {
-					input.value = ''
-				}
 			}
 		},
 
@@ -641,35 +915,68 @@ export default {
 		},
 
 		/**
-		 * Reads a blocks, mutes or lists CSV back in.
+		 * Queues a blocks, mutes or lists CSV.
 		 *
 		 * @param {Event} event the file input's change
 		 * @param {string} kind blocks, mutes or lists
 		 * @return {Promise<void>}
 		 */
 		async importCsv(event, kind) {
+			this.csvImport = kind
+			try {
+				await this.queueUpload(event, kind)
+			} finally {
+				this.csvImport = ''
+			}
+		},
+
+		/**
+		 * @param {Event} event the file input's change
+		 * @return {Promise<void>}
+		 */
+		async importFollows(event) {
+			this.followsBusy = true
+			try {
+				await this.queueUpload(event, 'follows')
+			} finally {
+				this.followsBusy = false
+			}
+		},
+
+		/**
+		 * Hands an upload to the server to queue, and starts watching the list.
+		 *
+		 * @param {Event} event the file input's change
+		 * @param {string} kind follows, blocks, mutes, lists or posts: the route and the import's kind
+		 * @param {Object<string, string>} fields anything to send beside the file
+		 * @return {Promise<void>}
+		 */
+		async queueUpload(event, kind, fields = {}) {
 			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
 			const file = input?.files?.[0]
 			if (!file) {
 				return
 			}
-
-			this.csvImport = kind
-			this.csvResult = ''
 			try {
 				const form = new FormData()
 				form.append('file', file)
+				for (const [name, value] of Object.entries(fields)) {
+					form.append(name, value)
+				}
 				const { data } = await axios.post(
 					generateUrl('apps/social/api/v1/migration/{kind}', { kind }),
 					form,
 				)
-				this.csvResult = this.csvSummary(kind, data)
-				showSuccess(t('social', 'That file has been read'))
+				if (data?.import) {
+					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
+				}
+				showSuccess(t('social', 'Queued — it runs in the background, and this page shows where it gets to'))
+				this.schedulePoll()
 			} catch (error) {
-				logger.error('Importing a CSV failed', { error, kind })
-				showError(error?.response?.data?.error || t('social', 'Could not read that file'))
+				logger.error('Queueing an import failed', { error, kind })
+				showError(error?.response?.data?.error || t('social', 'Could not start that import'))
 			} finally {
-				this.csvImport = ''
+				// cleared, or choosing the same file twice fires no change
 				if (input) {
 					input.value = ''
 				}
@@ -677,65 +984,115 @@ export default {
 		},
 
 		/**
-		 * @param {string} kind blocks, mutes or lists
-		 * @param {object} data what the server counted
-		 * @return {string} what to tell the person who pressed the button
+		 * The imports this account asked for, and where each has got to.
+		 * Polled while any is still queued or running.
+		 *
+		 * @return {Promise<void>}
 		 */
-		csvSummary(kind, data) {
-			const failed = Object.keys(data?.failed ?? {}).length
-			if (kind === 'lists') {
+		async loadImports() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/imports'))
+				this.imports = Array.isArray(data?.imports) ? data.imports : []
+			} catch (error) {
+				logger.error('Failed to load the imports', { error })
+			}
+			if (this.imports.some((job) => job.status === 'queued' || job.status === 'running')) {
+				this.schedulePoll()
+			}
+		},
+
+		/** Asks again in a few seconds; one timer at a time. */
+		schedulePoll() {
+			window.clearTimeout(this.pollTimer)
+			this.pollTimer = window.setTimeout(() => this.loadImports(), 3000)
+		},
+
+		/**
+		 * @param {number} id the import to take off the list
+		 * @return {Promise<void>}
+		 */
+		async dismissImport(id) {
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/migration/imports/{id}', { id }))
+				this.imports = Array.isArray(data?.imports) ? data.imports : this.imports.filter((job) => job.id !== id)
+			} catch {
+				showError(t('social', 'Could not dismiss that import'))
+			}
+		},
+
+		/**
+		 * @param {string} kind an import's kind
+		 * @return {string} what to call it
+		 */
+		kindLabel(kind) {
+			return {
+				follows: t('social', 'Follows'),
+				blocks: t('social', 'Blocks'),
+				mutes: t('social', 'Mutes'),
+				lists: t('social', 'Lists'),
+				posts: t('social', 'Posts'),
+				move_in: t('social', 'Move here'),
+			}[kind] ?? kind
+		},
+
+		/**
+		 * Where an import has got to, or what it came to, in one sentence.
+		 *
+		 * @param {object} job the import as the server lists it
+		 * @return {string}
+		 */
+		importSummary(job) {
+			if (job.status === 'queued') {
+				return t('social', 'Waiting to start — it runs in the background on the next cron run.')
+			}
+			if (job.status === 'running') {
+				return job.total > 0
+					? t('social', '{done} of {total} …', { done: job.done, total: job.total })
+					: t('social', 'Starting …')
+			}
+			if (job.status === 'failed') {
+				return t('social', 'Failed: {reason}', { reason: job.report?.error ?? t('social', 'unknown reason') })
+			}
+			if (job.kind === 'move_in') {
 				return t(
 					'social',
-					'{lists} lists made, {added} accounts added, {skipped} skipped because you do not follow them, {failed} could not be reached',
+					'{followed} accounts followed and {imported} posts brought over; {skipped} were already here or not for bringing, {failed} could not be done',
 					{
-						lists: data?.lists ?? 0,
-						added: data?.added ?? 0,
-						skipped: data?.skipped ?? 0,
-						failed,
+						followed: job.report?.followed ?? 0,
+						imported: job.report?.imported ?? 0,
+						skipped: job.skipped,
+						failed: job.failed,
 					},
 				)
 			}
-
+			if (job.kind === 'posts') {
+				return t(
+					'social',
+					'{imported} posts written with {media} of their pictures; {skipped} were already here or not posts to bring over, {failed} could not be written',
+					{ imported: job.done, media: job.report?.media ?? 0, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'lists') {
+				return t(
+					'social',
+					'{lists} lists made, {added} accounts added, {skipped} skipped because you do not follow them, {failed} could not be reached',
+					{ lists: job.report?.lists ?? 0, added: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'follows') {
+				return t(
+					'social',
+					'{followed} followed, {skipped} skipped, {failed} could not be reached',
+					{ followed: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
 			return t(
 				'social',
 				'{done} applied, {skipped} skipped, {failed} could not be reached',
-				{ done: data?.blocked ?? data?.muted ?? 0, skipped: data?.skipped ?? 0, failed },
+				{ done: job.done, skipped: job.skipped, failed: job.failed },
 			)
 		},
 
-		async importFollows(event) {
-			const input = /** @type {HTMLInputElement|null} */ (event?.target ?? null)
-			const file = input?.files?.[0]
-			if (!file) {
-				return
-			}
-
-			this.followsBusy = true
-			this.followsResult = ''
-			try {
-				const form = new FormData()
-				form.append('file', file)
-				const { data } = await axios.post(
-					generateUrl('apps/social/api/v1/migration/follows'),
-					form,
-				)
-				const failed = Object.keys(data?.failed ?? {}).length
-				this.followsResult = t(
-					'social',
-					'{followed} followed, {skipped} skipped, {failed} could not be reached',
-					{ followed: data?.followed ?? 0, skipped: data?.skipped ?? 0, failed },
-				)
-				showSuccess(t('social', 'Your follows have been imported'))
-			} catch (error) {
-				logger.error('Importing follows failed', { error })
-				showError(error?.response?.data?.error || t('social', 'Could not import those follows'))
-			} finally {
-				this.followsBusy = false
-				if (input) {
-					input.value = ''
-				}
-			}
-		},
 	},
 }
 </script>
@@ -861,6 +1218,90 @@ export default {
 
 .migration__media-switch {
 	margin: 4px 0 2px;
+}
+
+.migration__move-in-form {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.migration__move-in-field {
+	flex: 1;
+	min-width: 220px;
+}
+
+.migration__move-in-account {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	margin: 12px 0;
+}
+
+.migration__move-in-avatar {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.migration__move-in-who strong {
+	display: block;
+}
+
+.migration__move-in-acct {
+	color: var(--color-text-maxcontrast);
+}
+
+.migration__move-in-finish {
+	margin-top: 12px;
+	padding: 8px 12px;
+	border-inline-start: 3px solid var(--color-primary-element);
+	background: var(--color-primary-element-light);
+}
+
+.migration__move-out-form {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.migration__move-out-field {
+	flex: 1;
+	min-width: 220px;
+}
+
+.migration__imports {
+	list-style: none;
+	margin: 0 0 12px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.migration__import {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--border-radius-element, 8px);
+	background: var(--color-background-hover);
+}
+
+.migration__import-kind {
+	font-weight: bold;
+	min-width: 5em;
+}
+
+.migration__import .migration__result {
+	flex: 1;
+	margin: 0;
+}
+
+.migration__import--failed .migration__result {
+	color: var(--color-error-text, var(--color-error));
 }
 
 .migration__result {

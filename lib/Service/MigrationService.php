@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\FollowsRequest;
@@ -22,6 +23,7 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Model\InstancePath;
+use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -53,6 +55,15 @@ class MigrationService {
 	private const EXPORT_PAGE = 200;
 
 	/**
+	 * How long after a move the account may move again: Mastodon's thirty
+	 * days. A move tells every server that knows the account to re-point its
+	 * followers; two of them in an afternoon is a mistake being made twice.
+	 */
+	public const COOLDOWN_SECONDS = 30 * 24 * 3600;
+	/** The user setting that records when the account last moved. */
+	private const MOVED_AT = 'moved_at';
+
+	/**
 	 * The most rows one CSV export carries.
 	 *
 	 * A cap rather than a promise of everything: the whole file is built in
@@ -81,6 +92,7 @@ class MigrationService {
 		private ActorRelationRequest $actorRelationRequest,
 		private ListsRequest $listsRequest,
 		private RelationshipService $relationshipService,
+		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -143,12 +155,26 @@ class MigrationService {
 	 * this instance, who never receive the Move, are re-followed on their
 	 * behalf.
 	 *
+	 * @param bool $enforceCooldown whether a move within COOLDOWN_SECONDS of the
+	 *                              last is refused; the person's own button says
+	 *                              yes, an administrator's command may say no
+	 *
 	 * @return Person the target as fetched
-	 * @throws InvalidResourceException when the target does not list the actor, or is the actor
+	 * @throws InvalidResourceException when the target does not list the actor, or is the actor,
+	 *                                  or the account moved too recently
 	 */
-	public function move(string $userId, string $targetId): Person {
+	public function move(string $userId, string $targetId, bool $enforceCooldown = true): Person {
 		$actor = $this->accountService->getActorFromUserId($userId);
-		$target = $this->cacheActorService->getFromId($targetId, true);
+		if ($enforceCooldown) {
+			$status = $this->moveStatus($userId);
+			if ($status['can_move_at'] > time()) {
+				throw new InvalidResourceException(
+					'this account moved on ' . gmdate('Y-m-d', (int)$status['moved_at'])
+					. ' and can move again on ' . gmdate('Y-m-d', $status['can_move_at'])
+				);
+			}
+		}
+		$target = $this->resolveActor($targetId);
 
 		if ($target->getId() === $actor->getId()) {
 			throw new InvalidResourceException('an account cannot be moved onto itself');
@@ -182,10 +208,41 @@ class MigrationService {
 		// only once the Move is on its way: an actor marked moved whose
 		// followers were never told is stuck
 		$this->accountService->setMovedTo($userId, $target->getId());
+		$this->config->setUserValue($userId, Application::APP_ID, self::MOVED_AT, (string)time());
 
 		$this->refollowLocalFollowers($actor, $target);
 
 		return $target;
+	}
+
+	/**
+	 * Takes the redirect off the account: `movedTo` is cleared, so the actor
+	 * document and the account entity stop saying it moved and it may post
+	 * and follow again.
+	 *
+	 * The followers do not come back by themselves: their servers acted on
+	 * the Move when it arrived, and nothing in ActivityPub takes a Move back.
+	 * The cooldown stays, because the move did happen.
+	 */
+	public function undoMove(string $userId): void {
+		$this->accountService->setMovedTo($userId, '');
+	}
+
+	/**
+	 * Where the account stands: whether it moved, where, when, and when it may
+	 * move (again).
+	 *
+	 * @return array{moved_to: string, moved_at: int|null, can_move_at: int}
+	 */
+	public function moveStatus(string $userId): array {
+		$actor = $this->accountService->getActorFromUserId($userId);
+		$movedAt = (int)$this->config->getUserValue($userId, Application::APP_ID, self::MOVED_AT, '0');
+
+		return [
+			'moved_to' => $actor->getMovedTo(),
+			'moved_at' => ($movedAt > 0) ? $movedAt : null,
+			'can_move_at' => ($movedAt > 0) ? $movedAt + self::COOLDOWN_SECONDS : 0,
+		];
 	}
 
 	/**
@@ -194,14 +251,21 @@ class MigrationService {
 	 * account at a time through the ordinary follow path. One that fails does
 	 * not stop the rest.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{followed: int, skipped: int, failed: array<string, string>}
 	 *                                                                           `failed` maps a handle to the reason
 	 */
-	public function importFollows(string $userId, string $csv): array {
+	public function importFollows(string $userId, string $csv, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['followed' => 0, 'skipped' => 0, 'failed' => []];
 
-		foreach (self::parseFollows($csv) as $handle) {
+		$handles = self::parseFollows($csv);
+		$total = count($handles);
+		$handled = 0;
+		foreach ($handles as $handle) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
 			if (strcasecmp($handle, $actor->getAccount()) === 0 || strcasecmp($handle, $actor->getId()) === 0) {
 				$result['skipped']++;
 				continue;
@@ -228,6 +292,10 @@ class MigrationService {
 			}
 		}
 
+		if ($progress !== null) {
+			$progress($handled, $total);
+		}
+
 		return $result;
 	}
 
@@ -241,13 +309,14 @@ class MigrationService {
 	 * rather than dropped, because a block that silently did not happen is the
 	 * failure that matters in this file.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{blocked: int, skipped: int, failed: array<string, string>}
 	 *                                                                          `failed` maps a handle to the reason
 	 */
-	public function importBlocks(string $userId, string $csv): array {
+	public function importBlocks(string $userId, string $csv, ?callable $progress = null): array {
 		$result = $this->relate($userId, $csv, function (Person $actor, Person $target): void {
 			$this->relationshipService->block($actor, $target);
-		});
+		}, $progress);
 
 		return ['blocked' => $result['done'], 'skipped' => $result['skipped'], 'failed' => $result['failed']];
 	}
@@ -257,17 +326,18 @@ class MigrationService {
 	 * which carries `Hide notifications` beside each handle and is the one
 	 * thing a mute stores besides its target.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{muted: int, skipped: int, failed: array<string, string>}
 	 *                                                                        `failed` maps a handle to the reason
 	 */
-	public function importMutes(string $userId, string $csv): array {
+	public function importMutes(string $userId, string $csv, ?callable $progress = null): array {
 		$hidden = self::parseMuteNotifications($csv);
 
 		$result = $this->relate($userId, $csv, function (Person $actor, Person $target, string $handle) use ($hidden): void {
 			// the column says whether notifications are *hidden*; the relation
 			// stores whether they are shown, so it is read the other way round
 			$this->relationshipService->mute($actor, $target, !($hidden[strtolower($handle)] ?? false));
-		});
+		}, $progress);
 
 		return ['muted' => $result['done'], 'skipped' => $result['skipped'], 'failed' => $result['failed']];
 	}
@@ -287,10 +357,11 @@ class MigrationService {
 	 * that follows a Nextcloud group is left alone: its members are the
 	 * group's.
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{lists: int, added: int, skipped: int, failed: array<string, string>}
 	 *                                                                                    `failed` maps `list/handle` to the reason
 	 */
-	public function importLists(string $userId, string $csv): array {
+	public function importLists(string $userId, string $csv, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['lists' => 0, 'added' => 0, 'skipped' => 0, 'failed' => []];
 
@@ -299,7 +370,10 @@ class MigrationService {
 			$existing[mb_strtolower($list->getTitle())] = $list;
 		}
 
-		foreach (self::parseListsCsv($csv) as $title => $handles) {
+		$parsed = self::parseListsCsv($csv);
+		$total = array_sum(array_map('count', $parsed));
+		$handled = 0;
+		foreach ($parsed as $title => $handles) {
 			$list = $existing[mb_strtolower($title)] ?? null;
 			if ($list === null) {
 				$list = new MastodonList();
@@ -315,6 +389,9 @@ class MigrationService {
 			}
 
 			foreach ($handles as $handle) {
+				if ($progress !== null) {
+					$progress($handled++, $total);
+				}
 				try {
 					$target = $this->resolveEntry($handle);
 					if ($target->getId() !== $actor->getId() && !$this->follows($actor, $target)) {
@@ -331,6 +408,10 @@ class MigrationService {
 					]);
 				}
 			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
 		}
 
 		return $result;
@@ -382,13 +463,20 @@ class MigrationService {
 	 *
 	 * @param callable(Person, Person, string): void $apply
 	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
 	 * @return array{done: int, skipped: int, failed: array<string, string>}
 	 */
-	private function relate(string $userId, string $csv, callable $apply): array {
+	private function relate(string $userId, string $csv, callable $apply, ?callable $progress = null): array {
 		$actor = $this->accountService->getActorFromUserId($userId);
 		$result = ['done' => 0, 'skipped' => 0, 'failed' => []];
 
-		foreach (self::parseFollows($csv) as $handle) {
+		$handles = self::parseFollows($csv);
+		$total = count($handles);
+		$handled = 0;
+		foreach ($handles as $handle) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
 			if (strcasecmp($handle, $actor->getAccount()) === 0 || strcasecmp($handle, $actor->getId()) === 0) {
 				$result['skipped']++;
 				continue;
@@ -403,6 +491,10 @@ class MigrationService {
 					'actor' => $actor->getId(), 'handle' => $handle, 'exception' => $e,
 				]);
 			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
 		}
 
 		return $result;
@@ -782,18 +874,16 @@ class MigrationService {
 	}
 
 	/**
+	 * The actor id an alias names: the id itself, or the one a handle resolves
+	 * to. A handle is what every other server's form asks for, so it is what
+	 * people type; the id is what the wire carries.
+	 *
 	 * @throws InvalidResourceException
 	 */
 	private function actorIdOrThrow(string $alias, Person $actor): string {
 		$alias = trim($alias);
-		$parts = parse_url($alias);
-		if ($parts === false
-			|| !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
-			|| ($parts['host'] ?? '') === '') {
-			throw new InvalidResourceException(
-				'"' . $alias . '" is not an actor id: expected the https:// address of the account,'
-				. ' not its handle'
-			);
+		if (!self::isActorUrl($alias)) {
+			$alias = $this->resolveActor($alias)->getId();
 		}
 
 		if ($alias === $actor->getId()) {
@@ -801,6 +891,35 @@ class MigrationService {
 		}
 
 		return $alias;
+	}
+
+	/**
+	 * The account a person named, fetched fresh from its server: by its
+	 * `@user@host` handle through WebFinger, or by its actor id.
+	 *
+	 * @throws InvalidResourceException when it is neither, or nobody answers
+	 */
+	public function resolveActor(string $reference): Person {
+		$reference = trim($reference);
+		if (self::isActorUrl($reference)) {
+			return $this->cacheActorService->getFromId($reference, true);
+		}
+
+		$handle = ltrim($reference, '@');
+		if (preg_match('/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/', $handle) !== 1) {
+			throw new InvalidResourceException(
+				'"' . $reference . '" is neither a handle like @you@old.example'
+				. ' nor the https:// address of an account'
+			);
+		}
+
+		try {
+			return $this->cacheActorService->getFromAccount($handle);
+		} catch (Throwable $e) {
+			throw new InvalidResourceException(
+				'no account answers to ' . $handle . ': ' . $e->getMessage(), 0, $e
+			);
+		}
 	}
 
 	/**

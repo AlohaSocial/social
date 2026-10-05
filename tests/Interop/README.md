@@ -38,6 +38,18 @@ content warning — `summary` is the field most likely to be quietly dropped),
 `Update` (an edit has to carry `updated`, or the other side takes the edit in
 and goes on showing the words that were replaced), `Delete`, and `Announce`.
 
+Covered for **moving**, both ways. Our `mover` moves to Mastodon's `landing`
+(which the workflow made name `mover` in its `alsoKnownAs`, as Mastodon's own
+form would): Mastodon's follower of `mover` is asked afterwards, through
+Mastodon's relationships API, whether it now follows `landing` and no longer
+`mover`. And Mastodon's `leaver` moves to our `arrival`: this side first names
+`leaver` as an alias (through the same handle-resolving service the page uses)
+and follows it from `admin`; the workflow then has Mastodon deliver a `Move`
+signed by `leaver` to that inbox, and the last test reads whether the follow was
+re-pointed at `arrival` and `leaver` is recorded as moved. The inbound half is
+three steps in the workflow rather than one test, because the `Move` has to be
+sent by Mastodon between what this side prepares and what it asserts.
+
 Covered against **PeerTube**: a video published here, arriving as a `Video`,
 filed under the right channel, with a duration and a file link that survived —
 and a `Delete` that takes it away again. This is the one that had never been

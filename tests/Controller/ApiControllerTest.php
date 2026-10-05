@@ -1354,6 +1354,18 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame($item, $this->controller()->statusAction(12, 'translate')->getData());
 	}
 
+	/** A moved account is told so with a 403, not a 422: the request was fine, the account may not. */
+	public function testAPostFromAMovedAccountIsForbidden(): void {
+		$this->loggedInAs();
+		$this->postService->method('createPost')
+			->willThrowException(new \OCA\Social\Exceptions\AccountMovedException('this account has moved to https://new.example/users/alice'));
+
+		$response = $this->controller()->statusNew('hello');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertStringContainsString('has moved', $response->getData()['error']);
+	}
+
 	public function testStatusActionRejectsUnknownActions(): void {
 		$this->loggedInAs();
 		$this->accountService->method('getActor')->willReturn($this->createStub(Person::class));
