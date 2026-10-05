@@ -10,9 +10,26 @@
 		     timeline is. Somebody else's is a page you read -->
 		<Composer v-if="isOwnProfile" />
 
-		<router-view v-if="accountLoaded && accountInfo" name="details" />
-		<section
+		<nav
 			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle"
+			class="social__profile-network-switch"
+			:aria-label="t('social', 'Profile network')">
+			<button
+				type="button"
+				:class="{ 'social__profile-network-switch--active': profileNetwork === 'fediverse' }"
+				@click="profileNetwork = 'fediverse'">
+				{{ t('social', 'Fediverse') }}
+			</button>
+			<button
+				type="button"
+				:class="{ 'social__profile-network-switch--active': profileNetwork === 'atproto' }"
+				@click="profileNetwork = 'atproto'">
+				{{ t('social', 'Bluesky') }}
+			</button>
+		</nav>
+		<router-view v-if="accountLoaded && accountInfo && profileNetwork === 'fediverse'" name="details" />
+		<section
+			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle && profileNetwork === 'atproto'"
 			class="social__atproto-profile"
 			aria-labelledby="social-atproto-profile-heading">
 			<h2 id="social-atproto-profile-heading">{{ t('social', 'Bluesky profile') }}</h2>
@@ -72,6 +89,7 @@ export default {
 	data() {
 		return {
 			state: [],
+			profileNetwork: 'fediverse',
 			atprotoHandle: '',
 			atprotoLoading: false,
 			/** whether a lookup for the handle on screen has come back, either way */
@@ -157,6 +175,7 @@ export default {
 	methods: {
 		async fetchProfileData() {
 			this.uid = this.$route.params.account || this.serverData.account
+			this.profileNetwork = 'fediverse'
 			this.lookupFinished = false
 
 			if (!this.uid) {
@@ -224,5 +243,27 @@ export default {
 	margin-block-start: calc(var(--default-grid-baseline) * 4);
 	padding-block-start: calc(var(--default-grid-baseline) * 2);
 	border-block-start: 1px solid var(--color-border);
+}
+
+.social__profile-network-switch {
+	display: flex;
+	gap: calc(var(--default-grid-baseline) / 2);
+	margin-block: calc(var(--default-grid-baseline) * 2);
+	border-block-end: 1px solid var(--color-border);
+}
+
+.social__profile-network-switch button {
+	padding: calc(var(--default-grid-baseline) * 1.5) calc(var(--default-grid-baseline) * 2);
+	border: 0;
+	border-block-end: 2px solid transparent;
+	background: transparent;
+	color: var(--color-text-maxcontrast);
+	cursor: pointer;
+}
+
+.social__profile-network-switch button:hover,
+.social__profile-network-switch--active {
+	color: var(--color-main-text);
+	border-block-end-color: var(--color-primary-element);
 }
 </style>
