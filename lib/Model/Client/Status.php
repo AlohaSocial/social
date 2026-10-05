@@ -21,6 +21,8 @@ class Status implements \JsonSerializable {
 	private array $mediaIds = [];
 	private ?array $poll = null;
 	private int $inReplyToId = 0;
+	/** Numeric Mastodon id or a local ATProto status URI. */
+	private string $inReplyToReference = '';
 	/**
 	 * The post this one quotes, as the client named it: the numeric status id
 	 * a Mastodon client sends, or an ActivityPub URI. Kept as a string for
@@ -116,14 +118,19 @@ class Status implements \JsonSerializable {
 		return $this->mediaIds;
 	}
 
-	public function setInReplyToId(int $inReplyToId): self {
-		$this->inReplyToId = $inReplyToId;
+	public function setInReplyToId(int|string $inReplyToId): self {
+		$this->inReplyToReference = is_int($inReplyToId) ? (string)$inReplyToId : trim($inReplyToId);
+		$this->inReplyToId = ctype_digit($this->inReplyToReference) ? (int)$this->inReplyToReference : 0;
 
 		return $this;
 	}
 
 	public function getInReplyToId(): int {
 		return $this->inReplyToId;
+	}
+
+	public function getInReplyToReference(): string {
+		return $this->inReplyToReference;
 	}
 
 	public function setQuotedId(string $quotedId): self {
@@ -218,7 +225,8 @@ class Status implements \JsonSerializable {
 		$this->setVisibility($this->get('visibility', $data));
 		$this->setSpoilerText($this->get('spoiler_text', $data));
 		$this->setMediaIds($this->getArray('media_ids', $data));
-		$this->setInReplyToId($this->getInt('in_reply_to_id', $data));
+		$reply = $data['in_reply_to_id'] ?? '';
+		$this->setInReplyToId(is_scalar($reply) ? (string)$reply : '');
 		// `quote_id` is what a Mastodon 4.5 client sends to quote a post; a
 		// client that sends something that is not a scalar quotes nothing
 		$quotedId = $data['quote_id'] ?? '';

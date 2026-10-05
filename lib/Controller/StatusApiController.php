@@ -205,9 +205,12 @@ class StatusApiController extends MastodonApiController {
 			// before the media is scoped: a reply to a direct message is a
 			// direct message whatever `visibility` says, and its attachments
 			// must not be made world-readable on the strength of the request
-			if ($status->getInReplyToId() > 0) {
+			$replyReference = $status->getInReplyToReference();
+			if ($replyReference !== '') {
 				try {
-					$replyTo = $this->streamService->getStreamByNid($status->getInReplyToId());
+					$replyTo = ctype_digit($replyReference)
+						? $this->streamService->getStreamByNid((int)$replyReference)
+						: $this->streamService->getStreamById($replyReference, true);
 					$post->setReplyTo($replyTo->getId());
 					$post->setType(PostService::visibilityOfReply($post->getType(), $replyTo));
 				} catch (StreamNotFoundException $e) {

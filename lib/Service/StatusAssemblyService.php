@@ -66,8 +66,8 @@ class StatusAssemblyService {
 			// and this array is echoed back verbatim
 			'media_ids' => array_map('strval', $status->getMediaIds()),
 			'poll' => $status->getPoll(),
-			'in_reply_to_id' => ($status->getInReplyToId() > 0)
-				? (string)$status->getInReplyToId() : null,
+			'in_reply_to_id' => ($status->getInReplyToReference() !== '')
+				? $status->getInReplyToReference() : null,
 			'quoted_status_id' => ($status->getQuotedId() !== '') ? $status->getQuotedId() : null,
 			'sensitive' => $status->isSensitive(),
 			'spoiler_text' => $status->getSpoilerText(),
@@ -105,16 +105,22 @@ class StatusAssemblyService {
 			);
 		}
 
-		$replyTo = (int)$params->paramString('in_reply_to_id');
-		if ($replyTo > 0) {
+		$replyTo = $params->paramString('in_reply_to_id');
+		if (ctype_digit($replyTo) && (int)$replyTo > 0) {
 			try {
-				$post->setReplyTo($this->streamService->getStreamByNid($replyTo)->getId());
+				$post->setReplyTo($this->streamService->getStreamByNid((int)$replyTo)->getId());
 			} catch (Throwable $e) {
 				// The post being replied to was deleted while this one waited,
 				// which is likelier here than on an immediate post. The reply
 				// still goes out, as a post of its own, rather than being lost
 				// with it.
 				$this->logger->debug('[StatusAssemblyService] the post ' . $replyTo . ' replied to is gone');
+			}
+		} elseif (str_contains($replyTo, '/ap/bluesky/')) {
+			try {
+				$post->setReplyTo($this->streamService->getStreamById($replyTo, true)->getId());
+			} catch (Throwable $e) {
+				$this->logger->debug('[StatusAssemblyService] the ATProto post ' . $replyTo . ' replied to is gone');
 			}
 		}
 
