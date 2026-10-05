@@ -1295,6 +1295,20 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * Hydrate native ATProto viewer state into the same action flags used by
+	 * ActivityPub. This keeps the shared profile/status components protocol
+	 * agnostic while the write side remains native to the linked PDS.
+	 */
+	public function setViewerEngagement(bool $liked, bool $reposted): Stream {
+		$action = $this->action ?? new StreamAction();
+		$action->updateValueBool(StreamAction::LIKED, $liked);
+		$action->updateValueBool(StreamAction::BOOSTED, $reposted);
+		$this->action = $action;
+
+		return $this;
+	}
+
+	/**
 	 * @return bool
 	 */
 	public function hasAction(): bool {

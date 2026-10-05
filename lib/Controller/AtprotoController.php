@@ -200,8 +200,8 @@ class AtprotoController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profiles/{handle}')]
 	public function publicProfile(string $handle): DataResponse {
 		try {
-			$data = $this->profileService->read($handle);
 			$userId = $this->currentUserId();
+			$data = $this->profileService->read($handle, 20, $userId);
 			$data['following'] = false;
 			$data['viewerCanFollow'] = false;
 			$data['viewerCanEdit'] = false;

@@ -20,11 +20,12 @@ class AtprotoProfileService {
 		private AtprotoClient $client,
 		private AtprotoIdentity $identity,
 		private AtprotoIngress $ingress,
+		private AtprotoEngagementService $engagement,
 	) {
 	}
 
 	/** @return array{profile: array<string, mixed>, account: array<string, mixed>, statuses: list<Stream>} */
-	public function read(string $handle, int $limit = 20): array {
+	public function read(string $handle, int $limit = 20, ?string $viewerId = null): array {
 		$resolved = $this->identity->resolve($handle);
 		$profile = [
 			'did' => $resolved['did'],
@@ -54,6 +55,14 @@ class AtprotoProfileService {
 			try {
 				$status = $this->ingress->fetch($this->localId($uri), 0);
 				$this->applyCounts($status, $post);
+				if ($viewerId !== null) {
+					try {
+						$state = $this->engagement->viewerState($viewerId, $status);
+						$status->setViewerEngagement($state['liked'], $state['reposted']);
+					} catch (AtprotoException) {
+						// A temporary PDS failure must not hide a public profile.
+					}
+				}
 				$status->setExportFormat(ACore::FORMAT_LOCAL);
 				$statuses[] = $status;
 			} catch (\Throwable) {

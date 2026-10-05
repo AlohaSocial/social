@@ -39,6 +39,27 @@ class AtprotoEngagementService {
 		return $this->atprotoRequest->getAccount($userId) !== null;
 	}
 
+	/**
+	 * Read the linked viewer's native like/repost state for one imported post.
+	 * The result is deliberately shaped like the shared status action flags;
+	 * callers do not need to know which protocol supplied it.
+	 *
+	 * @return array{liked: bool, reposted: bool}
+	 * @throws AtprotoException
+	 */
+	public function viewerState(string $userId, Stream $post): array {
+		$link = $this->atprotoRequest->getLinkByLocalId($post->getId());
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($link === null || $account === null || $link->getAtUri() === '') {
+			return ['liked' => false, 'reposted' => false];
+		}
+
+		return [
+			'liked' => $this->records($account, self::COLLECTION, $link->getAtUri()) !== [],
+			'reposted' => $this->records($account, 'app.bsky.feed.repost', $link->getAtUri()) !== [],
+		];
+	}
+
 	/** @throws AtprotoException */
 	public function setReposted(string $userId, Stream $post, bool $reposted): void {
 		$this->setRecordFlag($userId, $post, 'app.bsky.feed.repost', $reposted);
