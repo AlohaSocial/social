@@ -518,6 +518,20 @@ describe('Migration', () => {
 		expect(showSuccess).toHaveBeenCalled()
 	})
 
+	it('names what could not be done, with the reason, under the summary', async () => {
+		serverQueues('blocks', job('blocks', 'done', { done: 1, failed: 7 }, { failed: { 'gone@dead.example': 'no such server', 'two@x.example': 'b', 'three@x.example': 'c', 'four@x.example': 'd', 'five@x.example': 'e', 'six@x.example': 'f', 'seven@x.example': 'g' } }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'blocks', 'blocked_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const named = wrapper.find('.migration__failures')
+		expect(named.text()).toContain('gone@dead.example — no such server')
+		expect(named.findAll('li')).toHaveLength(6)
+		expect(named.text()).toContain('and 2 more')
+	})
+
 	it('queues a mutes CSV through the mutes route', async () => {
 		serverQueues('mutes', job('mutes', 'done', { done: 2 }))
 

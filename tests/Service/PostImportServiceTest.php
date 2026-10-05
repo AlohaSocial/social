@@ -406,6 +406,28 @@ class PostImportServiceTest extends TestCase {
 		$this->assertSame(1, $tally['failed']);
 	}
 
+	/** A number says something went wrong; the post and the reason say what to do about it. */
+	public function testAFailureIsKeptByThePostItConcernsWithItsReason(): void {
+		$path = tempnam(sys_get_temp_dir(), 'pixelfed') . '.json';
+		$this->temps[] = $path;
+		file_put_contents($path, json_encode([[
+			'id' => '712000000000000033',
+			'url' => 'https://pixelfed.social/p/alice/712000000000000033',
+			'created_at' => '2025-06-01T12:00:00Z',
+			'content' => '<p>a pier</p>',
+			'visibility' => 'public',
+			'media_attachments' => [['url' => 'https://pixelfed.social/storage/m/full.jpg', 'description' => 'a pier']],
+		]]));
+		$this->cacheDocumentService->method('retrieveContent')->willReturn('the bytes');
+		$this->documentService->method('storeLocalAttachment')->willThrowException(new \RuntimeException('disk full'));
+
+		$tally = $this->service->import($this->alice(), $path, true);
+
+		$this->assertSame(1, $tally['failed']);
+		// named by the export's own id of the post, which for a Pixelfed file is the id
+		$this->assertSame(['712000000000000033' => 'disk full'], $tally['failures']);
+	}
+
 	public function testAFileThatIsNotAnExportSaysSo(): void {
 		$path = tempnam(sys_get_temp_dir(), 'junk');
 		$this->temps[] = $path;

@@ -97,6 +97,11 @@ use ZipArchive;
 class PostImportService {
 	/** How many posts one run writes at most. */
 	public const MAX_POSTS = 2000;
+	/**
+	 * How many failures are kept by name in a tally. A number says something
+	 * went wrong; the name of the post and the reason say what to do about it.
+	 */
+	public const REPORT_FAILURES = 20;
 
 	/** The two kinds of export, which are parsed by two different readers. */
 	private const FORMAT_ACTIVITYPUB = 'activitypub';
@@ -247,7 +252,7 @@ class PostImportService {
 
 		$tally = [
 			'imported' => 0, 'skipped' => 0, 'already' => 0,
-			'media' => 0, 'failed' => 0, 'total' => 1, 'capped' => false,
+			'media' => 0, 'failed' => 0, 'failures' => [], 'total' => 1, 'capped' => false,
 		];
 
 		$known = $this->importedPostsRequest->knownAmong($actor->getId(), [$post['source']]);
@@ -376,7 +381,7 @@ class PostImportService {
 	 *
 	 * @param bool $fetchMedia whether a picture named only by a URL may be
 	 *                         fetched from the server it is still on
-	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, total: int, capped: bool}
+	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, failures: array<string, string>, total: int, capped: bool}
 	 * @psalm-suppress InvalidReturnType the tally is built by reference through
 	 *                 the writers, which psalm cannot follow back to its shape
 	 * @throws InvalidResourceException when the file is not an export this can read
@@ -394,7 +399,7 @@ class PostImportService {
 			$items = $read['items'];
 			$tally = [
 				'imported' => 0, 'skipped' => 0, 'already' => 0,
-				'media' => 0, 'failed' => 0, 'total' => count($items), 'capped' => false,
+				'media' => 0, 'failed' => 0, 'failures' => [], 'total' => count($items), 'capped' => false,
 			];
 
 			// an Instagram post carries no audience, so one is decided once, for
@@ -440,13 +445,13 @@ class PostImportService {
 	 *
 	 * @param array<int, mixed> $items the activities or objects, as the collection lists them
 	 * @param callable(int, int): void|null $progress
-	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, total: int, capped: bool}
+	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, failures: array<string, string>, total: int, capped: bool}
 	 * @psalm-suppress InvalidReturnType the tally is built by reference through the writers
 	 */
 	public function importItems(Person $actor, array $items, bool $fetchMedia = true, ?callable $progress = null): array {
 		$tally = [
 			'imported' => 0, 'skipped' => 0, 'already' => 0,
-			'media' => 0, 'failed' => 0, 'total' => count($items), 'capped' => false,
+			'media' => 0, 'failed' => 0, 'failures' => [], 'total' => count($items), 'capped' => false,
 		];
 		$parsed = [];
 		foreach ($items as $item) {
@@ -503,6 +508,7 @@ class PostImportService {
 					'actor' => $actor->getId(), 'source' => $post['source'], 'exception' => $e,
 				]);
 				$tally['failed']++;
+				self::noteFailure($tally, $post['source'], $e->getMessage());
 				continue;
 			}
 
@@ -1420,6 +1426,7 @@ class PostImportService {
 				// the reader declined to fetch was simply not fetched
 				if ($this->wanted($attachment['url'], $zip, $fetchMedia)) {
 					$tally['failed']++;
+					self::noteFailure($tally, $post['source'], 'could not fetch ' . $attachment['url']);
 				}
 				continue;
 			}
@@ -1435,6 +1442,7 @@ class PostImportService {
 					'url' => $attachment['url'], 'exception' => $e,
 				]);
 				$tally['failed']++;
+				self::noteFailure($tally, $post['source'], $e->getMessage());
 			} finally {
 				@unlink($temp);
 			}
@@ -1452,6 +1460,17 @@ class PostImportService {
 	 * for that: it means telling the old server that the import is happening,
 	 * and it only works while that server is still up.
 	 */
+	/**
+	 * Keeps a failure by the post it concerns, up to REPORT_FAILURES of them.
+	 *
+	 * @param array<string, mixed> $tally
+	 */
+	private static function noteFailure(array &$tally, string $source, string $reason): void {
+		if (count($tally['failures']) < self::REPORT_FAILURES && !isset($tally['failures'][$source])) {
+			$tally['failures'][$source] = $reason;
+		}
+	}
+
 	/** Whether fetch() was going to try at all for this attachment. */
 	private function wanted(string $url, ?ZipArchive $zip, bool $fetchMedia): bool {
 		$isRemote = str_starts_with($url, 'http://') || str_starts_with($url, 'https://');

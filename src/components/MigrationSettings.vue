@@ -194,6 +194,14 @@
 					:class="'migration__import--' + job.status">
 					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
 					<span class="migration__result">{{ importSummary(job) }}</span>
+					<ul v-if="failuresOf(job).length > 0" class="migration__failures">
+						<li v-for="[what, why] in failuresOf(job)" :key="what">
+							<span class="migration__failure-what">{{ what }}</span> — {{ why }}
+						</li>
+						<li v-if="job.failed > failuresOf(job).length">
+							{{ n('social', 'and %n more', 'and %n more', job.failed - failuresOf(job).length) }}
+						</li>
+					</ul>
 					<NcButton
 						v-if="job.status === 'done' || job.status === 'failed'"
 						variant="tertiary"
@@ -1036,6 +1044,25 @@ export default {
 		},
 
 		/**
+		 * What could not be done, by name, with the reason — the first few.
+		 *
+		 * The server keeps them under three keys, one per importer: `failed`
+		 * for the account lists, `failures` for the follows of a move-in and
+		 * `post_failures` for its posts.
+		 *
+		 * @param {object} job the import as the server lists it
+		 * @return {Array<[string, string]>} what, and why
+		 */
+		failuresOf(job) {
+			if (job.status !== 'done' || !job.report) {
+				return []
+			}
+			const named = { ...(job.report.failed ?? {}), ...(job.report.failures ?? {}), ...(job.report.post_failures ?? {}) }
+
+			return Object.entries(named).slice(0, 5)
+		},
+
+		/**
 		 * Where an import has got to, or what it came to, in one sentence.
 		 *
 		 * @param {object} job the import as the server lists it
@@ -1302,6 +1329,22 @@ export default {
 
 .migration__import--failed .migration__result {
 	color: var(--color-error-text, var(--color-error));
+}
+
+.migration__failures {
+	flex-basis: 100%;
+	margin: 0 0 4px 0;
+	padding-inline-start: 20px;
+	font-size: var(--font-size-small, 13px);
+	color: var(--color-text-maxcontrast);
+
+	li {
+		overflow-wrap: anywhere;
+	}
+}
+
+.migration__failure-what {
+	font-family: var(--font-face-mono, monospace);
 }
 
 .migration__result {
