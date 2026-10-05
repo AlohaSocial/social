@@ -19,6 +19,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
+use OCP\IUserSession;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -33,7 +34,7 @@ use Psr\Log\LoggerInterface;
 class AtprotoController extends Controller {
 	public function __construct(
 		IRequest $request,
-		private ?string $userId,
+		private IUserSession $userSession,
 		private AtprotoAccountService $accountService,
 		private LoggerInterface $logger,
 	) {
@@ -121,7 +122,7 @@ class AtprotoController extends Controller {
 	 * rather than let the settings service be asked about no one.
 	 */
 	private function currentUserId(): ?string {
-		return ($this->userId === null || $this->userId === '') ? null : $this->userId;
+		return $this->userSession->getUser()?->getUID();
 	}
 
 	private function signedOut(): DataResponse {

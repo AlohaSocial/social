@@ -27,6 +27,7 @@ use OCA\Social\External\ExternalGroupBackend;
 use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\External\SignupLoginProvider;
 use OCA\Social\Listeners\ExternalAddressBookListener;
+use OCA\Social\Listeners\AtprotoPostListener;
 use OCA\Social\Listeners\ExternalDavListener;
 use OCA\Social\Listeners\ExternalFirstLoginListener;
 use OCA\Social\Listeners\ExternalNavigationListener;
@@ -37,6 +38,8 @@ use OCA\Social\Listeners\GroupListListener;
 use OCA\Social\Listeners\ProfileSectionListener;
 use OCA\Social\Listeners\UserAccountListener;
 use OCA\Social\Listeners\UserDeletedListener;
+use OCA\Social\Events\PostDeletedEvent;
+use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Middleware\AccessBlockMiddleware;
 use OCA\Social\Middleware\ApiRateLimitMiddleware;
 use OCA\Social\Middleware\ExternalScopeMiddleware;
@@ -105,6 +108,11 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(BeforeTemplateRenderedEvent::class, ProfileSectionListener::class);
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		// AT-Proto is a second protocol adapter. Its failures are contained by
+		// the listener, so neither local posting nor ActivityPub delivery relies
+		// on a Bluesky PDS being available.
+		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);
+		$context->registerEventListener(PostDeletedEvent::class, AtprotoPostListener::class);
 		// the class is the Files app's, not OCP's; the name is a string here and
 		// the listener is only ever built when Files dispatches the event
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesScriptsListener::class);

@@ -55,7 +55,10 @@ class AtprotoAccountService {
 		return [
 			'enabled' => $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1',
 			'account' => $account === null ? null : $this->describe($account),
-			'watches' => array_map([$this, 'describeWatch'], $this->atprotoRequest->getWatches()),
+			// Watch rows are shared, deduplicated work for the instance. They are
+			// not a profile's public following list, so never disclose everybody
+			// else's follows through an account-settings response.
+			'watches' => [],
 		];
 	}
 

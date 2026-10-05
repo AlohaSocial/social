@@ -10,12 +10,14 @@ declare(strict_types=1);
 namespace OCA\Social\Service\Atproto;
 
 use OCA\Social\AP;
+use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoWatch;
+use OCA\Social\Model\Atproto\AtprotoLink;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Service\SignatureService;
@@ -58,6 +60,7 @@ class AtprotoIngress {
 		private RecordMapper $mapper,
 		private ImportService $importService,
 		private StreamRequest $streamRequest,
+		private AtprotoRequest $atprotoRequest,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -251,7 +254,24 @@ class AtprotoIngress {
 			return null;
 		}
 
-		return $this->stored($id);
+		$stored = $this->stored($id);
+		if ($stored !== null) {
+			$this->atprotoRequest->saveLink(
+				(new AtprotoLink())
+					->setLocalId($stored->getId())
+					->setAtUri((string)($entry['uri'] ?? ''))
+					->setCid((string)($entry['cid'] ?? ''))
+					->setDid($did)
+					->setCollection(self::COLLECTION)
+					->setRkey($rkey)
+					// The repository entry has no canonical handle. A future profile
+					// refresh may fill it; identity and writes use the DID, never this
+					// display value.
+					->setHandle('')
+			);
+		}
+
+		return $stored;
 	}
 
 	/**
