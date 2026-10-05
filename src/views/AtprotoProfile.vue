@@ -86,6 +86,9 @@
 				@updated="statuses = statuses.map((entry) => entry.id === $event.id ? $event : entry)"
 				@reply="replyTo = $event" />
 		</ul>
+		<p v-if="loadMoreError" class="atproto-profile__error" role="alert">
+			{{ loadMoreError }}
+		</p>
 		<NcButton
 			v-if="nextCursor"
 			class="atproto-profile__load-more"
@@ -113,7 +116,7 @@ export default {
 	name: 'AtprotoProfile',
 	components: { AtprotoFollowButton, Composer, NcButton, NcTextArea, NcTextField, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
+	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
 	computed: {
 		fediverseProfileUrl() {
 			const uid = getCurrentUser()?.uid ?? window.OC?.getCurrentUser?.()?.uid ?? ''
@@ -157,13 +160,14 @@ export default {
 				return
 			}
 			this.loadingMore = true
+			this.loadMoreError = ''
 			try {
 				const { data } = await axios.get(generateUrl(`apps/social/api/v1/atproto/profiles/${encodeURIComponent(this.handle)}`), { params: { cursor: this.nextCursor } })
 				const known = new Set(this.statuses.map((status) => status.id))
 				this.statuses = this.statuses.concat((data.statuses ?? []).filter((status) => !known.has(status.id)))
 				this.nextCursor = data.nextCursor ?? ''
 			} catch (error) {
-				this.error = error?.response?.data?.message ?? t('social', 'Could not load more Bluesky posts')
+				this.loadMoreError = error?.response?.data?.message ?? t('social', 'Could not load more Bluesky posts')
 			} finally {
 				this.loadingMore = false
 			}
