@@ -14,6 +14,9 @@
 			<p class="atproto-settings__connected">
 				{{ t('social', 'Connected to @{handle}', { handle: status.account.handle }) }}
 			</p>
+			<p>
+				<a :href="profileUrl()">{{ t('social', 'Open my Bluesky profile') }}</a>
+			</p>
 			<p class="atproto-settings__hint">
 				{{ t('social', 'Public posts can be mirrored to Bluesky when this server enables mirroring. Direct, followers-only and unlisted posts never leave Aloha Social.') }}
 			</p>
@@ -87,6 +90,10 @@ export default {
 
 	methods: {
 		t,
+		profileUrl() {
+			return generateUrl('apps/social/@' + encodeURIComponent(this.status.account?.handle ?? ''))
+		},
+
 		url(path = '') {
 			return generateUrl('apps/social/api/v1/atproto' + path)
 		},
