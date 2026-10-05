@@ -24,6 +24,7 @@ use OCA\Social\Dashboard\SocialTrendingWidget;
 use OCA\Social\Dashboard\SocialWidget;
 use OCA\Social\Events\PostDeletedEvent;
 use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Events\PostUpdatedEvent;
 use OCA\Social\External\ExternalDavGuard;
 use OCA\Social\External\ExternalGroupBackend;
 use OCA\Social\External\ExternalUserBackend;
@@ -112,6 +113,7 @@ class Application extends App implements IBootstrap {
 		// the listener, so neither local posting nor ActivityPub delivery relies
 		// on a Bluesky PDS being available.
 		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);
+		$context->registerEventListener(PostUpdatedEvent::class, AtprotoPostListener::class);
 		$context->registerEventListener(PostDeletedEvent::class, AtprotoPostListener::class);
 		// the class is the Files app's, not OCP's; the name is a string here and
 		// the listener is only ever built when Files dispatches the event

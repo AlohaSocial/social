@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Events\PostUpdatedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidOriginException;
@@ -341,6 +342,10 @@ class PostService {
 		// durable at this point, so tell the API client that retrying the edit
 		// itself is unnecessary and expose the federation failure as 503.
 		$this->notificationService->onStatusEdited($updated);
+		// The change is durable before an ActivityPub delivery is attempted.
+		// A protocol adapter must see that durable state even when a remote
+		// inbox is temporarily unavailable; its listener contains failures.
+		$this->eventDispatcher->dispatchTyped(new PostUpdatedEvent($updated));
 
 		try {
 			// an edit to a post whose video is still being converted waits

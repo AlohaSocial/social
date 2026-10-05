@@ -11,6 +11,7 @@ namespace OCA\Social\Listeners;
 
 use OCA\Social\Events\PostDeletedEvent;
 use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Events\PostUpdatedEvent;
 use OCA\Social\Service\Atproto\AtprotoEgress;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -36,6 +37,8 @@ class AtprotoPostListener implements IEventListener {
 		try {
 			if ($event instanceof PostPublishedEvent) {
 				$this->egress->publish($event->getPost());
+			} elseif ($event instanceof PostUpdatedEvent) {
+				$this->egress->update($event->getPost());
 			} elseif ($event instanceof PostDeletedEvent) {
 				$this->egress->delete($event->getPost());
 			}

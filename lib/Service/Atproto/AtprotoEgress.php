@@ -64,6 +64,38 @@ class AtprotoEgress {
 		// newest writes together, which is what lets the ingress stop at the
 		// first already-known page instead of repeatedly scanning a repository.
 		$rkey = $this->tid();
+		$record = $this->record($post);
+		$answer = $this->put($account, $rkey, $record);
+		$this->saveLink($post, $account, $rkey, $answer);
+	}
+
+	/**
+	 * Replaces the existing native record after a local post edit. An edit of a
+	 * post that never mirrored remains local — links make that distinction
+	 * explicit and prevent an edit from unexpectedly publishing old content.
+	 *
+	 * @throws AtprotoException for the listener to record and contain
+	 */
+	public function update(Stream $post): void {
+		if (!$this->shouldMirror($post)) {
+			return;
+		}
+
+		$link = $this->atprotoRequest->getLinkByLocalId($post->getId());
+		if ($link === null || $link->getCollection() !== AtprotoIngress::COLLECTION) {
+			return;
+		}
+		$account = $this->accountFor($post);
+		if ($account === null || $link->getDid() !== $account->getDid()) {
+			return;
+		}
+
+		$answer = $this->put($account, $link->getRkey(), $this->record($post));
+		$this->saveLink($post, $account, $link->getRkey(), $answer);
+	}
+
+	/** @return array<string, mixed> */
+	private function record(Stream $post): array {
 		$record = [
 			'$type' => 'app.bsky.feed.post',
 			'text' => $this->text($post->getContent()),
@@ -83,12 +115,21 @@ class AtprotoEgress {
 			];
 		}
 
-		$answer = $this->client->authedPost('com.atproto.repo.putRecord', [
+		return $record;
+	}
+
+	/** @return array<string, mixed> */
+	private function put(\OCA\Social\Model\Atproto\AtprotoAccount $account, string $rkey, array $record): array {
+		return $this->client->authedPost('com.atproto.repo.putRecord', [
 			'repo' => $account->getDid(),
 			'collection' => AtprotoIngress::COLLECTION,
 			'rkey' => $rkey,
 			'record' => $record,
 		], $account, $account->getPds());
+	}
+
+	/** @param array<string, mixed> $answer */
+	private function saveLink(Stream $post, \OCA\Social\Model\Atproto\AtprotoAccount $account, string $rkey, array $answer): void {
 		$uri = (string)($answer['uri'] ?? '');
 		$cid = (string)($answer['cid'] ?? '');
 		if (!str_starts_with($uri, 'at://' . $account->getDid() . '/')) {

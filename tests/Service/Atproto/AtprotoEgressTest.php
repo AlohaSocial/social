@@ -145,4 +145,46 @@ class AtprotoEgressTest extends TestCase {
 
 		$this->egress->delete($post);
 	}
+
+	public function testEditReplacesTheMappedRecordWithoutCreatingANewPost(): void {
+		$post = $this->post();
+		$post->setContent('<p>Edited<br>Bluesky</p>');
+		$account = $this->account();
+		$link = (new AtprotoLink())
+			->setLocalId(self::POST)
+			->setAtUri('at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3mtestrecord')
+			->setCid('bafyold')
+			->setDid(self::DID)
+			->setCollection(AtprotoIngress::COLLECTION)
+			->setRkey('3mtestrecord');
+		$this->atprotoRequest->expects($this->once())->method('getLinkByLocalId')
+			->with(self::POST)->willReturn($link);
+		$this->actorsRequest->expects($this->once())->method('getFromId')
+			->with(self::AUTHOR)->willReturn($this->localAuthor());
+		$this->atprotoRequest->expects($this->once())->method('getAccount')
+			->with('alice')->willReturn($account);
+		$this->client->expects($this->once())->method('authedPost')
+			->with(
+				'com.atproto.repo.putRecord',
+				$this->callback(function (array $request): bool {
+					$this->assertSame('3mtestrecord', $request['rkey']);
+					$this->assertSame('Edited' . chr(10) . 'Bluesky', $request['record']['text']);
+
+					return true;
+				}),
+				$account,
+				'https://pds.example',
+			)->willReturn([
+				'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3mtestrecord',
+				'cid' => 'bafynew',
+			]);
+		$this->atprotoRequest->expects($this->once())->method('saveLink')
+			->with($this->callback(function (AtprotoLink $saved): bool {
+				return $saved->getLocalId() === self::POST
+					&& $saved->getRkey() === '3mtestrecord'
+					&& $saved->getCid() === 'bafynew';
+			}));
+
+		$this->egress->update($post);
+	}
 }
