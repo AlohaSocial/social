@@ -110,8 +110,22 @@ class AtprotoEgress {
 		if ($facets !== []) {
 			$record['facets'] = $facets;
 		}
-		$card = $post->getCard();
-		if ($card !== null && $card->getUrl() !== '') {
+		$quoted = null;
+		if ($post->getQuote() !== '') {
+			$quoted = $this->atprotoRequest->getLinkByLocalId($post->getQuote());
+		}
+		if ($quoted !== null && $quoted->getAtUri() !== '' && $quoted->getCid() !== '') {
+			// ATProto permits one embed. A native record quote is more useful
+			// than a secondary external card and keeps the quoted post inside
+			// the same repository graph.
+			$record['embed'] = [
+				'$type' => 'app.bsky.embed.record',
+				'record' => [
+					'uri' => $quoted->getAtUri(),
+					'cid' => $quoted->getCid(),
+				],
+			];
+		} elseif (($card = $post->getCard()) !== null && $card->getUrl() !== '') {
 			$record['embed'] = [
 				'$type' => 'app.bsky.embed.external',
 				'external' => [

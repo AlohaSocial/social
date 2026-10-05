@@ -154,6 +154,37 @@ class AtprotoEgressTest extends TestCase {
 		$this->egress->publish($post);
 	}
 
+	public function testNativeQuoteUsesTheQuotedRecordReference(): void {
+		$post = $this->post();
+		$quotedId = self::POST . '/quoted';
+		$post->setQuote($quotedId);
+		$quoted = (new AtprotoLink())
+			->setLocalId($quotedId)
+			->setAtUri('at://did:plc:other/app.bsky.feed.post/3quoted')
+			->setCid('bafy-quoted');
+		$account = $this->account();
+		$this->atprotoRequest->method('getLinkByLocalId')->willReturnCallback(
+			static fn (string $id): ?AtprotoLink => $id === $quotedId ? $quoted : null
+		);
+		$this->actorsRequest->method('getFromId')->willReturn($this->localAuthor());
+		$this->atprotoRequest->method('getAccount')->willReturn($account);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.putRecord',
+			$this->callback(static fn (array $request): bool => ($request['record']['embed'] ?? []) === [
+				'$type' => 'app.bsky.embed.record',
+				'record' => ['uri' => 'at://did:plc:other/app.bsky.feed.post/3quoted', 'cid' => 'bafy-quoted'],
+			]),
+			$account,
+			'https://pds.example',
+		)->willReturn([
+			'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3quote',
+			'cid' => 'bafy-quote',
+		]);
+		$this->atprotoRequest->expects($this->once())->method('saveLink');
+
+		$this->egress->publish($post);
+	}
+
 	public function testFediverseOnlyPostNeverLeavesForBluesky(): void {
 		$post = $this->post();
 		$post->setDetail(Details::PUBLICATION_TARGET, 'fediverse');
