@@ -17,6 +17,11 @@ const ProfileStatusCardStub = {
 	props: ['status', 'canDelete', 'nativeDelete', 'canEdit', 'nativeEdit'],
 	template: '<li class="profile-status-card-stub" />',
 }
+const ComposerStub = {
+	name: 'Composer',
+	props: ['inReplyTo', 'startExpanded'],
+	template: '<div class="composer-reply-stub" />',
+}
 const TimelineSwitcherStub = {
 	props: ['options', 'value', 'label'],
 	emits: ['update:value'],
@@ -38,7 +43,7 @@ let get
 function mountSection(userId) {
 	return mount(ProfilePageIntegration, {
 		props: { userId },
-		global: { stubs: { ProfileStatusCard: ProfileStatusCardStub, TimelineSwitcher: TimelineSwitcherStub, NcButton: true } },
+		global: { stubs: { Composer: ComposerStub, ProfileStatusCard: ProfileStatusCardStub, TimelineSwitcher: TimelineSwitcherStub, NcButton: true } },
 	})
 }
 
@@ -111,6 +116,17 @@ describe('ProfilePageIntegration', () => {
 		expect(card.props('nativeDelete')).toBe(true)
 		expect(card.props('canEdit')).toBe(true)
 		expect(card.props('nativeEdit')).toBe(true)
+	})
+
+	it('opens the shared composer with the selected native parent', async () => {
+		const wrapper = mountSection('alice')
+		await flushPromises()
+		await wrapper.findComponent(ProfileStatusCardStub).vm.$emit('reply', statuses[0])
+		await flushPromises()
+		const composer = wrapper.findComponent(ComposerStub)
+		expect(composer.exists()).toBe(true)
+		expect(composer.props('inReplyTo')).toEqual(statuses[0])
+		expect(composer.props('startExpanded')).toBe(true)
 	})
 
 	it('loads local and global public timelines from their Aloha Social API scopes', async () => {
