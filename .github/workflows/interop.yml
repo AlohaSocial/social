@@ -130,6 +130,7 @@ jobs:
           # two more accounts for the Move tests: one moves away, one is moved to
           OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env mover
           OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env arrival
+          OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env puller
           ./occ config:system:set trusted_domains 1 --value localhost:8080
           ./occ config:system:set trusted_domains 2 --value nextcloud.test
           ./occ config:system:set overwriteprotocol --value https
@@ -412,6 +413,8 @@ jobs:
             puts "Move delivered: #{uri} -> #{target.uri}"
           ' 2>&1 | tail -3 || status=1
           timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveInboundTest || status=1
+          # the wizard's half: the old account read from the new side
+          timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveInFromMastodonTest || status=1
           timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PeerTubeDeliveryTest || status=1
           exit $status
 
