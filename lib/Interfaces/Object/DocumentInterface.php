@@ -193,5 +193,11 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 		if ($item->getResizedCopy() === '') {
 			$item->setResizedCopy($known->getResizedCopy());
 		}
+
+		// provenance is only ever read off the bytes, and the wire carries
+		// none: whatever the row learnt when the copy was made stands
+		if ($item->getAiSource() === Document::AI_SOURCE_NONE) {
+			$item->setAiSource($known->getAiSource());
+		}
 	}
 }

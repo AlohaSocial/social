@@ -10,7 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ConfigService;
 use PHPUnit\Framework\MockObject\Stub;
@@ -148,6 +150,17 @@ class AiContentServiceTest extends TestCase {
 		$this->assertFalse($this->service->isLabelled(['id' => '1']));
 	}
 
+	public function testAnAttachmentObjectIsAskedDirectly(): void {
+		$labelled = (new Document())->setAiSource(Document::AI_SOURCE_TRAINED);
+		$plain = new Document();
+
+		$this->assertTrue($this->service->isLabelled(['media_attachments' => [$plain, $labelled]]));
+		$this->assertFalse($this->service->isLabelled(['media_attachments' => [$plain]]));
+
+		$this->assertTrue($this->service->isLabelled(['media_attachments' => [(new MediaAttachment())->setAiGenerated(true)]]));
+		$this->assertFalse($this->service->isLabelled(['media_attachments' => [new MediaAttachment()]]));
+	}
+
 	// labelsPost, on the model
 
 	public function testANoteIsLabelledByItsHashtags(): void {
@@ -156,6 +169,13 @@ class AiContentServiceTest extends TestCase {
 		$this->assertTrue($this->service->labelsPost($note));
 		$this->assertFalse($this->service->labelsPost((new Note())->setHashtags(['cats'])));
 		$this->assertFalse($this->service->labelsPost(new Note()));
+	}
+
+	public function testANoteIsLabelledByAPictureThatStatesProvenance(): void {
+		$note = (new Note())->setHashtags(['cats']);
+		$note->setAttachments([new MediaAttachment(), (new MediaAttachment())->setAiGenerated(true)]);
+
+		$this->assertTrue($this->service->labelsPost($note));
 	}
 
 	public function testABoostIsLabelledByTheNoteItBoosts(): void {

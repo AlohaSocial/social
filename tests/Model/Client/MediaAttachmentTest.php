@@ -365,4 +365,11 @@ class MediaAttachmentTest extends TestCase {
 			$media->asDocument()['url']
 		);
 	}
+
+	public function testTheProvenanceFlagIsReadBackOffAStoredEntity(): void {
+		$this->assertFalse((new MediaAttachment())->import($this->mastodonAttachment())->isAiGenerated());
+		$this->assertTrue(
+			(new MediaAttachment())->import(array_merge($this->mastodonAttachment(), ['ai_generated' => true]))->isAiGenerated()
+		);
+	}
 }

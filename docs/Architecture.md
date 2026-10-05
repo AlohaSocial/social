@@ -162,7 +162,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_action` | Like/Announce actions as ActivityPub objects (actor → object, with type) |
 | `social_actor` | Local user actors (tied to NC accounts, holds the RSA key pair) |
 | `social_cache_actor` | Cached remote federated actors (inbox/outbox URLs, public keys, counts), the refresh bookkeeping `sync_attempt`/`sync_failures`, and `account_lower`, the handle lowercased and indexed (`social_ca_al`) for the account search and the lookup by handle |
-| `social_cache_doc` | Cached remote and local media attachments |
+| `social_cache_doc` | Cached remote and local media attachments. `ai_source` (SMALLINT, default 0) is the machine-generation provenance the picture's metadata stated when it was stored — `1` IPTC's `trainedAlgorithmicMedia`, `2` its `compositeWithTrainedAlgorithmicMedia` — read by `ImageMetadataService::digitalSourceType()` *before* the metadata is stripped, because the stored bytes no longer say it; rows from before the column read as 0 |
 | `social_client` | OAuth 2.0 client registrations |
 | `social_follow` | Follow relationships (actor → object, with accepted flag) |
 | `social_hashtag` | Hashtag trend data: a JSON `trend` blob per hashtag, plus one sortable integer column per window (`trend_1h` … `trend_10d`) |
@@ -243,6 +243,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 `Version1000Date20260927000001` drops `social_feed` and `social_feed_item`, the tables of the feed subscriptions that shipped in 0.26.60 and were removed in 0.26.95; both steps are guarded, so an instance that never had them is left alone.
 
 `Version1000Date20260925000020` adds `social_interest` and `social_interest_hide` — For you. A step of its own rather than a paragraph of the squash, because the squash is recorded as run on every instance that existed when it was made: a table added to it would reach fresh installs and nobody else. `SquashedSchemaTest` holds only the steps older than the squash to "move data or go into the squash". No index beyond the unique pairs: every read of `social_interest` is one reader's whole set — a few hundred rows at most, because `InterestService` forgets the faintest once there are more — and every read of `social_interest_hide` is one reader's recent hides or the daily purge by `creation`.
+
+`Version1000Date20261005000001` adds `social_cache_doc.ai_source`, the provenance a cached picture stated about itself (see the schema table). A column rather than a flag inside `meta`: `meta` is a JSON blob nothing queries, and this one is read on every attachment of every status a client is handed.
 
 Two of those deserve a warning.
 

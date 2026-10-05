@@ -21,6 +21,7 @@ use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ImageConversionService;
+use OCA\Social\Service\ImageMetadataService;
 use OCA\Social\Service\VideoThumbnailService;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
@@ -114,6 +115,7 @@ class CacheDocumentServiceTest extends TestCase {
 			$this->noExternalQuota(),
 			new NullLogger(),
 			$this->videoTranscodeService,
+			new ImageMetadataService(),
 		);
 	}
 
@@ -142,6 +144,86 @@ class CacheDocumentServiceTest extends TestCase {
 		imagepng($image);
 
 		return ob_get_clean();
+	}
+
+	/**
+	 * The PNG above with an XMP packet in an `iTXt` chunk after its header,
+	 * stating the given IPTC digital source type — what a generator that
+	 * labels its output writes.
+	 */
+	private function pngStating(string $digitalSourceType): string {
+		$xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+			. '<rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" '
+			. 'Iptc4xmpExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/' . $digitalSourceType . '"/>'
+			. '</rdf:RDF></x:xmpmeta>';
+		$data = "XML:com.adobe.xmp\x00\x00\x00\x00\x00" . $xmp;
+		$chunk = pack('N', strlen($data)) . 'iTXt' . $data . pack('N', crc32('iTXt' . $data));
+
+		$png = $this->pngBytes(12, 12);
+		// the signature and the 25-byte IHDR chunk come first, by the format
+		return substr($png, 0, 33) . $chunk . substr($png, 33);
+	}
+
+	/**
+	 * The provenance is read off the bytes before the conversion touches
+	 * them — here the conversion is the identity, so what is being asserted
+	 * is that the read happens at all and lands on the row.
+	 */
+	public function testAnUploadedPictureThatStatesItWasGeneratedIsRecordedAsSuch(): void {
+		$tmp = $this->tempFile($this->pngStating('trainedAlgorithmicMedia'));
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+		$document->setLocal(true);
+		$document->setAccount('alice');
+
+		$this->quietly(fn () => $this->service->saveFromTempToCache($document, $tmp));
+
+		$this->assertSame(Document::AI_SOURCE_TRAINED, $document->getAiSource());
+		$this->assertTrue($document->isAiGenerated());
+		$this->assertSame('image/png', $document->getMediaType(), 'the chunk did not change what the picture is');
+	}
+
+	public function testACompositeIsRecordedAsTheOtherKind(): void {
+		$tmp = $this->tempFile($this->pngStating('compositeWithTrainedAlgorithmicMedia'));
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+
+		$this->quietly(fn () => $this->service->saveFromTempToCache($document, $tmp));
+
+		$this->assertSame(Document::AI_SOURCE_COMPOSITE, $document->getAiSource());
+	}
+
+	public function testAPictureThatStatesNothingIsRecordedAsStatingNothing(): void {
+		$tmp = $this->tempFile($this->pngBytes(12, 12));
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+		// a stale value on the object is not evidence: the bytes decide
+		$document->setAiSource(Document::AI_SOURCE_TRAINED);
+
+		$this->quietly(fn () => $this->service->saveFromTempToCache($document, $tmp));
+
+		$this->assertSame(Document::AI_SOURCE_NONE, $document->getAiSource());
+		$this->assertFalse($document->isAiGenerated());
+	}
+
+	public function testAFetchedPictureThatStatesItWasGeneratedIsRecordedToo(): void {
+		$this->origin($this->pngStating('trainedAlgorithmicMedia'));
+		$written = [];
+		$this->captureWrites($written);
+		$this->blurService->method('generateBlurHash')->willReturn('hash');
+		$document = new Document();
+		$document->setUrl('https://remote.example/files/pic.png');
+
+		$this->quietly(fn () => $this->service->saveRemoteFileToCache($document));
+
+		$this->assertSame(Document::AI_SOURCE_TRAINED, $document->getAiSource());
+		$this->assertSame('image/png', $document->getMediaType());
 	}
 
 	/**
@@ -1098,6 +1180,7 @@ class CacheDocumentServiceTest extends TestCase {
 			$quota,
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\VideoTranscodeService::class),
+			new ImageMetadataService(),
 		);
 
 		$bob = new Document();

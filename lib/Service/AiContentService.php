@@ -10,7 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Db\FollowedTagsRequest;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 
 /**
  * Whether a post says it was made with AI, and whether a reader wants such
@@ -215,6 +217,10 @@ class AiContentService {
 	private static function attachmentLabelled(mixed $attachment): bool {
 		if (is_array($attachment)) {
 			return ($attachment['ai_generated'] ?? false) === true;
+		}
+
+		if ($attachment instanceof Document || $attachment instanceof MediaAttachment) {
+			return $attachment->isAiGenerated();
 		}
 
 		return false;

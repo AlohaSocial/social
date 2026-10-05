@@ -14,6 +14,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\ImageMetadataService;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -83,9 +84,12 @@ class DocumentTest extends TestCase {
 			'parent_id' => 'https://mastodon.social/users/alice/statuses/1',
 			'caching' => '2024-05-01 12:00:00',
 			'meta' => '{"original":{"width":1200,"height":800},"focus":{"x":0,"y":0}}',
+			'ai_source' => 1,
 		]);
 
 		$this->assertSame(8, $document->getNid());
+		$this->assertSame(Document::AI_SOURCE_TRAINED, $document->getAiSource());
+		$this->assertTrue($document->isAiGenerated());
 		$this->assertSame('alice@mastodon.social', $document->getAccount());
 		$this->assertTrue($document->isPublic());
 		$this->assertSame(0, $document->getError());
@@ -109,6 +113,33 @@ class DocumentTest extends TestCase {
 		$this->assertSame(0, $document->getCaching());
 		$this->assertFalse($document->isPublic());
 		$this->assertNull($document->getMeta());
+		// a row from before the column existed: its metadata is gone and it
+		// stated nothing anybody can check now
+		$this->assertSame(Document::AI_SOURCE_NONE, $document->getAiSource());
+		$this->assertFalse($document->isAiGenerated());
+	}
+
+	public function testTheSourceTypeTermsMapOntoTheColumnsValues(): void {
+		$this->assertSame(Document::AI_SOURCE_TRAINED, Document::aiSourceFor(ImageMetadataService::SOURCE_TRAINED));
+		$this->assertSame(Document::AI_SOURCE_COMPOSITE, Document::aiSourceFor(ImageMetadataService::SOURCE_COMPOSITE));
+		$this->assertSame(Document::AI_SOURCE_NONE, Document::aiSourceFor(''));
+		$this->assertSame(Document::AI_SOURCE_NONE, Document::aiSourceFor('digitalCapture'));
+	}
+
+	public function testEitherKindOfProvenanceMakesTheDocumentGenerated(): void {
+		$this->assertFalse((new Document())->isAiGenerated());
+		$this->assertTrue((new Document())->setAiSource(Document::AI_SOURCE_TRAINED)->isAiGenerated());
+		$this->assertTrue((new Document())->setAiSource(Document::AI_SOURCE_COMPOSITE)->isAiGenerated());
+	}
+
+	public function testTheMediaAttachmentCarriesTheProvenance(): void {
+		$document = new Document();
+		$document->setMediaType('image/png');
+
+		$this->assertFalse($document->convertToMediaAttachment()->isAiGenerated());
+
+		$document->setAiSource(Document::AI_SOURCE_COMPOSITE);
+		$this->assertTrue($document->convertToMediaAttachment()->isAiGenerated());
 	}
 
 	public function testMediaUrlsPointToTheMediaRouteWithTheMimeExtension(): void {

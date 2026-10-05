@@ -64,6 +64,25 @@ class ImageMetadataService {
 	/** RIFF chunks inside a WebP that carry metadata. */
 	private const WEBP_DROP_CHUNKS = ['EXIF', 'XMP '];
 
+	/** IPTC's two `DigitalSourceType` terms for a picture a model produced. */
+	public const SOURCE_TRAINED = 'trainedAlgorithmicMedia';
+	public const SOURCE_COMPOSITE = 'compositeWithTrainedAlgorithmicMedia';
+
+	/** The terms, lower-cased for comparison, and the spelling answered for each. */
+	private const SOURCE_TERMS = [
+		'compositewithtrainedalgorithmicmedia' => self::SOURCE_COMPOSITE,
+		'trainedalgorithmicmedia' => self::SOURCE_TRAINED,
+	];
+
+	/** The property name the terms are stated under, in XMP and in a C2PA assertion alike. */
+	private const SOURCE_PROPERTY = 'DigitalSourceType';
+
+	/** How far past a `DigitalSourceType` the value is looked for. */
+	private const SOURCE_WINDOW = 512;
+
+	/** How many `DigitalSourceType` occurrences are examined before giving up. */
+	private const SOURCE_OCCURRENCES = 16;
+
 	/**
 	 * The picture with its metadata removed, or the bytes unchanged when the
 	 * format is one this cannot open safely.
@@ -109,6 +128,84 @@ class ImageMetadataService {
 	/** Whether a stripped copy would still need its pixels turned. */
 	public function needsRotation(string $content, string $mime): bool {
 		return $this->orientation($content, $mime) > self::ORIENTATION_NORMAL;
+	}
+
+	/**
+	 * The machine-generation provenance a picture states about itself:
+	 * `SOURCE_TRAINED`, `SOURCE_COMPOSITE`, or '' when it states none.
+	 *
+	 * Read before stripping, like the orientation, because XMP is one of the
+	 * blocks `strip()` removes. Two places are looked in. The IPTC property
+	 * `DigitalSourceType` in XMP, written by the generators that label their
+	 * output (as an attribute or an element, prefixed `Iptc4xmpExt:` or not,
+	 * valued with the IPTC NewsCodes URL or the bare term). And the same term
+	 * anywhere in the bytes under its `digitalsourcetype/` path, which is how
+	 * a C2PA manifest in a JUMBF segment carries it: the manifest is CBOR and
+	 * parsing it properly would be a library for one string, so the string is
+	 * searched for as bytes instead. Case never matters for the term.
+	 *
+	 * Bounded on purpose: the two searches are linear passes over bytes that
+	 * are already in memory, and the XMP value is only looked for in a short
+	 * window after each of the first few occurrences of the property name,
+	 * so no pattern ever runs over the whole file.
+	 */
+	public function digitalSourceType(string $content, string $mime): string {
+		if (!str_starts_with($mime, 'image/')) {
+			return '';
+		}
+
+		$offset = 0;
+		for ($seen = 0; $seen < self::SOURCE_OCCURRENCES; $seen++) {
+			$at = stripos($content, self::SOURCE_PROPERTY, $offset);
+			if ($at === false) {
+				break;
+			}
+
+			$offset = $at + strlen(self::SOURCE_PROPERTY);
+			$term = $this->sourceTermIn(substr($content, $offset, self::SOURCE_WINDOW));
+			if ($term !== '') {
+				return $term;
+			}
+		}
+
+		foreach (self::SOURCE_TERMS as $lower => $term) {
+			if (stripos($content, 'digitalsourcetype/' . $lower) !== false) {
+				return $term;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * The term stated in the bytes that follow a `DigitalSourceType`, in any
+	 * of the shapes XMP writes a property in, or '' when none is.
+	 */
+	private function sourceTermIn(string $window): string {
+		$value = '';
+		if (preg_match('/^\s*=\s*["\']([^"\']*)["\']/', $window, $found) === 1) {
+			// an attribute: DigitalSourceType="…"
+			$value = $found[1];
+		} elseif (preg_match('/^[^>]*\brdf:resource\s*=\s*["\']([^"\']*)["\']/', $window, $found) === 1) {
+			// an element whose value is a resource: <… rdf:resource="…"/>
+			$value = $found[1];
+		} elseif (preg_match('/^[^>\/]*>\s*(?:<rdf:(?:Bag|Seq|Alt)[^>]*>\s*<rdf:li[^>]*>\s*)?([^<]+)</', $window, $found) === 1) {
+			// an element with its value as text: <…>…</…>
+			$value = $found[1];
+		}
+
+		return $this->sourceTerm($value);
+	}
+
+	/** A stated value — the NewsCodes URL or the bare term — as the term it names. */
+	private function sourceTerm(string $value): string {
+		$value = trim($value);
+		$slash = strrpos($value, '/');
+		if ($slash !== false) {
+			$value = substr($value, $slash + 1);
+		}
+
+		return self::SOURCE_TERMS[strtolower($value)] ?? '';
 	}
 
 	/**
