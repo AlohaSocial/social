@@ -35,6 +35,15 @@
 		<p v-else-if="activeFeed === 'bluesky'" class="social-profile__feed-description">
 			{{ t('social', 'Posts published to Bluesky by this account, shown in the same profile.') }}
 		</p>
+		<div v-if="replyTo" class="social-profile__reply-composer">
+			<Composer
+				:inReplyTo="replyTo"
+				:startExpanded="true"
+				@posted="replyTo = null" />
+			<NcButton variant="tertiary" @click="replyTo = null">
+				{{ t('social', 'Cancel reply') }}
+			</NcButton>
+		</div>
 
 		<p v-if="feedLoading && feedTimeline.length === 0" role="status" class="social-profile__feed-state">
 			{{ t('social', 'Loading posts…') }}
@@ -65,7 +74,8 @@
 				:canEdit="isOwnProfile && activeFeed === 'bluesky'"
 				:nativeEdit="isOwnProfile && activeFeed === 'bluesky'"
 				@deleted="removeDeletedPost"
-				@updated="replaceUpdatedPost" />
+				@updated="replaceUpdatedPost"
+				@reply="replyTo = $event" />
 		</transition-group>
 		<p v-if="feedError && feedTimeline.length" class="social-profile__feed-state" role="alert">
 			{{ t('social', 'Could not load this feed') }}
@@ -86,6 +96,7 @@ import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import axios from '@nextcloud/axios'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import { defineAsyncComponent } from 'vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
 import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
@@ -97,10 +108,12 @@ import logger from './../services/logger.js'
 import { bannerOf } from '../utils/banner.js'
 
 const PAGE_SIZE = 20
+const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
 export default {
 	name: 'ProfilePageIntegration',
 	components: {
+		Composer,
 		NcButton,
 		ProfileStatusCard,
 		TimelineSwitcher,
@@ -124,6 +137,7 @@ export default {
 			feedHasMore: false,
 			feedRequest: 0,
 			anchorRequest: false,
+			replyTo: null,
 		}
 	},
 
@@ -387,5 +401,12 @@ export default {
 
 .social-profile__load-more {
 	margin-block: 1rem 2rem;
+}
+
+.social-profile__reply-composer {
+	margin-block: 1rem;
+	padding: 1rem;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
 }
 </style>
