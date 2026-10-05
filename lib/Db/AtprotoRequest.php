@@ -340,7 +340,7 @@ class AtprotoRequest extends CoreRequestBuilder {
 				->setState((string)($data['state'] ?? AtprotoAccount::STATE_LINKED))
 				->setLastError((string)($data['last_error'] ?? ''))
 				->setLastSync((int)($data['last_sync'] ?? 0))
-				->setCreation($this->timestampOf($data['creation'] ?? null));
+				->setCreation($this->dateOf($data['creation'] ?? null));
 			return $account;
 		}, $rows);
 	}
@@ -358,7 +358,7 @@ class AtprotoRequest extends CoreRequestBuilder {
 				->setCollection((string)($data['collection'] ?? ''))
 				->setRkey((string)($data['rkey'] ?? ''))
 				->setHandle((string)($data['handle'] ?? ''))
-				->setCreation($this->timestampOf($data['creation'] ?? null));
+				->setCreation($this->dateOf($data['creation'] ?? null));
 			return $link;
 		}, $this->rows($qb));
 	}
@@ -376,7 +376,7 @@ class AtprotoRequest extends CoreRequestBuilder {
 				->setFailures((int)($data['failures'] ?? 0))
 				->setImported((int)($data['imported'] ?? 0))
 				->setLastError((string)($data['last_error'] ?? ''))
-				->setCreation($this->timestampOf($data['creation'] ?? null));
+				->setCreation($this->dateOf($data['creation'] ?? null));
 			return $watch;
 		}, $this->rows($qb));
 	}
@@ -393,16 +393,16 @@ class AtprotoRequest extends CoreRequestBuilder {
 		return $rows;
 	}
 
-	/** The creation column as a unix timestamp, whatever the backend answers. */
-	private function timestampOf(mixed $value): int {
+	/**
+	 * The creation column as the backend gives it back: a datetime string,
+	 * which is what the models hold. An unset column is `null`, not the epoch
+	 * — a row created this minute is not one nobody can tell from 1970.
+	 */
+	private function dateOf(mixed $value): ?string {
 		if ($value === null || $value === '' || $value === false) {
-			return 0;
+			return null;
 		}
-		if (is_int($value)) {
-			return $value;
-		}
-		$time = strtotime((string)$value);
 
-		return ($time === false) ? 0 : $time;
+		return (string)$value;
 	}
 }

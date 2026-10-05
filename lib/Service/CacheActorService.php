@@ -14,6 +14,7 @@ use OCA\Social\AP;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -28,6 +29,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Details;
+use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -76,6 +78,7 @@ class CacheActorService {
 		private LoggerInterface $logger,
 		private ?ContainerInterface $container = null,
 		private ?ITimeFactory $timeFactory = null,
+		private ?AtprotoIdentity $atprotoIdentity = null,
 	) {
 	}
 
@@ -353,12 +356,20 @@ class CacheActorService {
 	public function getFromAccount(string $account, bool $retrieve = true): Person {
 		try {
 			return $this->getFromLocalAccount($account);
-		} catch (CacheActorDoesNotExistException $e) {
+		} catch (CacheActorDoesNotExistException|ActorDoesNotExistException $e) {
+			// an account nobody here has: the local actors table said so with
+			// its own exception, which used to reach the caller unhandled and
+			// answer a lookup with a 500. What follows is the lookup.
 		}
 
 		$this->logger->debug('[CacheActorService] getFromAccount', [
 			'account' => $account, 'retrieve' => $retrieve,
 		]);
+
+		$atproto = $this->atprotoAccount($account, $retrieve);
+		if ($atproto !== null) {
+			return $atproto;
+		}
 
 		try {
 			$actor = $this->cacheActorsRequest->getFromAccount($account);
@@ -388,6 +399,46 @@ class CacheActorService {
 		}
 
 		return $actor;
+	}
+
+	/**
+	 * The AT-Proto actor a handle names, or `null` when it names none.
+	 *
+	 * `null` is the ordinary answer: a fediverse account resolves below, a
+	 * bare local name is not a handle at all, and an account already read in
+	 * from a Bluesky handle is the cache lookup the rest of this method does
+	 * anyway. What this adds is the handle nobody here has heard of — a name
+	 * with a dot in it, which is what separates a Bluesky handle from the
+	 * local names, and which WebFinger has no `.well-known` to answer for.
+	 *
+	 * @throws AtprotoException when the handle resolved and its profile did not
+	 */
+	private function atprotoAccount(string $account, bool $retrieve): ?Person {
+		if (!$retrieve
+			|| $this->atprotoIdentity === null
+			|| $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) !== '1') {
+			return null;
+		}
+
+		if (!$this->atprotoIdentity->isHandle($account)) {
+			return null;
+		}
+
+		try {
+			$resolved = $this->atprotoIdentity->resolve($account);
+		} catch (AtprotoException $e) {
+			// not a handle the AT-Proto network publishes: whatever this name
+			// is, the federation path below is where its answer comes from
+			$this->logger->debug('[CacheActorService] not an AT-Proto handle', [
+				'account' => $account, 'error' => $e->getMessage(),
+			]);
+
+			return null;
+		}
+
+		return $this->atprotoIdentity->actor(
+			$resolved['did'], $resolved['handle'], null, $resolved['pds']
+		);
 	}
 
 	/**

@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\AP;
 use OCA\Social\Db\StreamQueueRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -27,6 +28,8 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Service\Atproto\AtprotoIdentity;
+use OCA\Social\Service\Atproto\AtprotoIngress;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -77,6 +80,8 @@ class StreamQueueService {
 		private MiscService $miscService,
 		private LinkPreviewService $linkPreviewService,
 		private LoggerInterface $logger,
+		private ?AtprotoIdentity $atprotoIdentity = null,
+		private ?AtprotoIngress $atprotoIngress = null,
 	) {
 	}
 
@@ -423,6 +428,19 @@ class StreamQueueService {
 	 * @throws UnauthorizedFediverseException
 	 */
 	private function cacheItem(Stream $stream, CacheItem &$item) {
+		// an id this instance issues for a record an AT-Proto PDS holds: the
+		// parent of a reply, or a quoted post, that is not here yet. The
+		// federation transport would answer one with a 404 or a document
+		// nobody can parse; the ingress reads it from the repository it came
+		// out of, which is the only place it exists.
+		if ($this->atprotoIngress !== null
+			&& $this->atprotoIdentity?->isBlueskyId($item->getUrl()) === true) {
+			$note = $this->blueskyItem($item, $stream);
+			$item->setContent(json_encode($note, JSON_UNESCAPED_SLASHES));
+
+			return;
+		}
+
 		try {
 			$note = $this->streamRequest->getStreamById($item->getUrl());
 		} catch (StreamNotFoundException $e) {
@@ -461,6 +479,38 @@ class StreamQueueService {
 		}
 
 		$item->setContent(json_encode($note, JSON_UNESCAPED_SLASHES));
+	}
+
+	/**
+	 * What the block above fetches from a peer, for a record an AT-Proto
+	 * PDS holds: read through the ingress rather than the federation
+	 * transport, and answered the way that transport's failures are
+	 * answered, so the queue keeps the distinctions it already makes — a
+	 * peer that cannot be reached is retried, a document that cannot be
+	 * taken in is dropped.
+	 *
+	 * @throws InvalidResourceException
+	 * @throws RequestNetworkException
+	 * @throws RedundancyLimitException
+	 * @throws StreamNotFoundException
+	 */
+	private function blueskyItem(CacheItem $item, Stream $stream): Stream {
+		try {
+			$note = $this->atprotoIngress->fetch(
+				$item->getUrl(),
+				$stream->getDetailInt(Details::ANCESTOR_DEPTH) + 1
+			);
+		} catch (AtprotoException $e) {
+			if ($e->isTransient()) {
+				throw new RequestNetworkException($e->getMessage());
+			}
+
+			throw new InvalidResourceException($e->getMessage());
+		}
+
+		$this->countStoredReplies($note);
+
+		return $note;
 	}
 
 	/**
