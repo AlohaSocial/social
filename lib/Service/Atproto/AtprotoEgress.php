@@ -325,11 +325,17 @@ class AtprotoEgress {
 			return;
 		}
 
-		$this->client->authedPost('com.atproto.repo.deleteRecord', [
-			'repo' => $account->getDid(),
-			'collection' => $link->getCollection(),
-			'rkey' => $link->getRkey(),
-		], $account, $account->getPds());
+		try {
+			$this->client->authedPost('com.atproto.repo.deleteRecord', [
+				'repo' => $account->getDid(),
+				'collection' => $link->getCollection(),
+				'rkey' => $link->getRkey(),
+			], $account, $account->getPds());
+		} catch (AtprotoException $e) {
+			if (!$this->isGone($e)) {
+				throw $e;
+			}
+		}
 		$this->atprotoRequest->deleteLinkByLocalId($post->getId());
 	}
 
@@ -357,11 +363,17 @@ class AtprotoEgress {
 			throw new AtprotoException('you may only delete your own Bluesky posts', 403);
 		}
 
-		$this->client->authedPost('com.atproto.repo.deleteRecord', [
-			'repo' => $account->getDid(),
-			'collection' => $link->getCollection(),
-			'rkey' => $link->getRkey(),
-		], $account, $account->getPds());
+		try {
+			$this->client->authedPost('com.atproto.repo.deleteRecord', [
+				'repo' => $account->getDid(),
+				'collection' => $link->getCollection(),
+				'rkey' => $link->getRkey(),
+			], $account, $account->getPds());
+		} catch (AtprotoException $e) {
+			if (!$this->isGone($e)) {
+				throw $e;
+			}
+		}
 		$this->atprotoRequest->deleteLinkByLocalId($localId);
 	}
 
@@ -379,11 +391,18 @@ class AtprotoEgress {
 			throw new AtprotoException('you may only edit your own Bluesky posts', 403);
 		}
 
-		$current = $this->client->authedGet('com.atproto.repo.getRecord', [
-			'repo' => $account->getDid(),
-			'collection' => $link->getCollection(),
-			'rkey' => $link->getRkey(),
-		], $account, $account->getPds());
+		try {
+			$current = $this->client->authedGet('com.atproto.repo.getRecord', [
+				'repo' => $account->getDid(),
+				'collection' => $link->getCollection(),
+				'rkey' => $link->getRkey(),
+			], $account, $account->getPds());
+		} catch (AtprotoException $e) {
+			if ($this->isGone($e)) {
+				$this->atprotoRequest->deleteLinkByLocalId($localId);
+			}
+			throw $e;
+		}
 		$record = is_array($current['value'] ?? null) ? $current['value'] : [];
 		$record['$type'] = 'app.bsky.feed.post';
 		$record['text'] = $this->nativeText($text);
@@ -399,6 +418,10 @@ class AtprotoEgress {
 			$link->setCid($cid);
 		}
 		$this->atprotoRequest->saveLink($link);
+	}
+
+	private function isGone(AtprotoException $exception): bool {
+		return in_array($exception->getStatus(), [404, 410], true);
 	}
 
 	private function shouldMirror(Stream $post): bool {

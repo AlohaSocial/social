@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service\Atproto;
 
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoRequest;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -277,6 +278,21 @@ class AtprotoEgressTest extends TestCase {
 			$account,
 			'https://pds.example',
 		)->willReturn([]);
+		$this->atprotoRequest->expects($this->once())->method('deleteLinkByLocalId')->with(self::POST);
+
+		$this->egress->deleteOwn('alice', self::POST);
+	}
+
+	public function testOwnNativeDeletionTreatsRemoteGoneAsAlreadyDeleted(): void {
+		$account = $this->account();
+		$link = (new AtprotoLink())
+			->setLocalId(self::POST)
+			->setDid(self::DID)
+			->setCollection(AtprotoIngress::COLLECTION)
+			->setRkey('3gone');
+		$this->atprotoRequest->method('getAccount')->willReturn($account);
+		$this->atprotoRequest->method('getLinkByLocalId')->willReturn($link);
+		$this->client->expects($this->once())->method('authedPost')->willThrowException(new AtprotoException('record not found', 404));
 		$this->atprotoRequest->expects($this->once())->method('deleteLinkByLocalId')->with(self::POST);
 
 		$this->egress->deleteOwn('alice', self::POST);
