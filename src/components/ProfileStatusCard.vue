@@ -18,6 +18,9 @@
 					<NcButton variant="tertiary" :aria-expanded="commentsOpen" @click="toggleComments">
 						{{ t('social', 'Comments ({count})', { count: commentCount }) }}
 					</NcButton>
+					<NcButton variant="tertiary" @click="$emit('reply', status)">
+						{{ t('social', 'Reply') }}
+					</NcButton>
 					<a v-if="postHref" class="profile-status-card__open" :href="postHref">{{ t('social', 'Open post') }}</a>
 				</div>
 				<PostReactedBy v-if="likesOpen" :status="status" />
@@ -66,6 +69,8 @@ export default {
 	props: {
 		status: { type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object), required: true },
 	},
+
+	emits: ['reply'],
 
 	data() {
 		return { likesOpen: false, commentsOpen: false, comments: [], commentsLoading: false, commentsError: false }

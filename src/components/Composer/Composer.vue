@@ -789,7 +789,7 @@ export default {
 			 */
 			visibilityChosen: Boolean(this.defaultVisibility || this.inReplyTo?.visibility),
 			/** @type {'fediverse'|'atproto'|'both'} */
-			publicationTarget: 'both',
+			publicationTarget: String(this.inReplyTo?.id ?? '').includes('/ap/bluesky/') ? 'atproto' : 'both',
 			atprotoStatus: null,
 
 			// what the last post went out in, else what Nextcloud is set to:
@@ -1105,6 +1105,11 @@ export default {
 		 */
 		inReplyTo(post) {
 			this.replyTo = post
+			if (String(post?.id ?? '').includes('/ap/bluesky/')) {
+				this.publicationTarget = 'atproto'
+				this.visibility = 'public'
+				this.visibilityChosen = true
+			}
 		},
 
 		// the warning is part of the draft, and it has its own field
@@ -1166,7 +1171,16 @@ export default {
 			// being answered: a reply that named one of three people reached
 			// one of three people
 			this.prefillMessageWithMentions(participantsOf(data, this.currentUser.uid, this.hostname))
-			this.visibility = data.visibility
+			// A Bluesky reply must be authored by the linked ATProto account and
+			// written to the same public protocol thread. Imported records carry
+			// the stable local `/ap/bluesky/` id, so this remains independent of
+			// how the profile was opened.
+			if (String(data?.id ?? '').includes('/ap/bluesky/')) {
+				this.publicationTarget = 'atproto'
+				this.visibility = 'public'
+			} else {
+				this.visibility = data.visibility
+			}
 			this.visibilityChosen = true
 			// somebody pressed reply, which is a request to write one — including
 			// on the post this box is anchored under, where the target does not

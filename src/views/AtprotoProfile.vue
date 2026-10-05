@@ -4,6 +4,11 @@
 -->
 <template>
 	<section class="atproto-profile">
+		<Composer
+			v-if="viewerCanFollow"
+			:inReplyTo="replyTo"
+			:startExpanded="replyTo !== null"
+			@posted="replyTo = null" />
 		<header class="atproto-profile__header">
 			<h2>@{{ profile.handle || handle }}</h2>
 			<p v-if="profile.displayName">
@@ -27,7 +32,11 @@
 			{{ t('social', 'No public Bluesky posts yet.') }}
 		</p>
 		<ul v-else class="atproto-profile__timeline">
-			<ProfileStatusCard v-for="status in statuses" :key="status.id" :status="status" />
+			<ProfileStatusCard
+				v-for="status in statuses"
+				:key="status.id"
+				:status="status"
+				@reply="replyTo = $event" />
 		</ul>
 	</section>
 </template>
@@ -38,12 +47,13 @@ import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
 import ProfileStatusCard from '../components/ProfileStatusCard.vue'
 import AtprotoFollowButton from '../components/AtprotoFollowButton.vue'
+import Composer from '../components/Composer/Composer.vue'
 
 export default {
 	name: 'AtprotoProfile',
-	components: { AtprotoFollowButton, ProfileStatusCard },
+	components: { AtprotoFollowButton, Composer, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], following: false, viewerCanFollow: false, loading: true, error: '' }),
+	data: () => ({ account: {}, profile: {}, statuses: [], following: false, viewerCanFollow: false, replyTo: null, loading: true, error: '' }),
 	computed: {
 		dataFollowing() {
 			return this.following
