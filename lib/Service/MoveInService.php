@@ -57,6 +57,7 @@ class MoveInService {
 		private FollowService $followService,
 		private PostImportService $postImportService,
 		private MigrationService $migrationService,
+		private MoveFinishService $moveFinishService,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -66,7 +67,7 @@ class MoveInService {
 	 *
 	 * @return array{id: string, acct: string, name: string, url: string, avatar: string,
 	 *               following: array{total: int, readable: bool},
-	 *               posts: array{total: int, readable: bool}}
+	 *               posts: array{total: int, readable: bool}, finishable: bool}
 	 * @throws InvalidResourceException when the handle names nobody
 	 */
 	public function inspect(string $handle): array {
@@ -80,6 +81,8 @@ class MoveInService {
 			'avatar' => $actor->getAvatar(),
 			'following' => $this->describe($actor->getFollowing()),
 			'posts' => $this->describe($actor->getOutbox()),
+			// the old server is this app too, so the last step can be done from here
+			'finishable' => $this->moveFinishService->canFinish($actor),
 		];
 	}
 
@@ -103,6 +106,7 @@ class MoveInService {
 			'follows' => $follows,
 			'posts' => $posts,
 			'fetch_media' => $fetchMedia,
+			'finishable' => $this->moveFinishService->canFinish($actor),
 		];
 	}
 

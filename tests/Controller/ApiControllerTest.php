@@ -65,6 +65,7 @@ use OCA\Social\Service\GifService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MarkerService;
+use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
@@ -175,6 +176,7 @@ class ApiControllerTest extends TestCase {
 	private AccountRelationService|Stub $accountRelationService;
 	private ScheduledStatusService|MockObject $scheduledStatusService;
 	private PostReviewService|MockObject $postReviewService;
+	private ModerationService|MockObject $moderationService;
 	private \OCA\Social\Service\SensitiveMediaService|Stub $sensitiveMediaService;
 	private \OCA\Social\Service\NotificationDeliveryService|Stub $notificationDeliveryService;
 	/** @var array<string, mixed> what the delivery service answers for the viewer */
@@ -298,6 +300,7 @@ class ApiControllerTest extends TestCase {
 		$this->accountRelationService = $this->createStub(AccountRelationService::class);
 		$this->scheduledStatusService = $this->createMock(ScheduledStatusService::class);
 		$this->postReviewService = $this->createMock(PostReviewService::class);
+		$this->moderationService = $this->createMock(ModerationService::class);
 		$this->notificationDeliveryService = $this->createStub(\OCA\Social\Service\NotificationDeliveryService::class);
 		$this->notificationDeliveryService->method('of')->willReturnCallback(
 			fn (): \OCA\Social\Model\NotificationDelivery
@@ -416,6 +419,7 @@ class ApiControllerTest extends TestCase {
 			'accountRelationService' => $this->accountRelationService,
 			'scheduledStatusService' => $this->scheduledStatusService,
 			'postReviewService' => $this->postReviewService,
+			'moderationService' => $this->moderationService,
 			'sensitiveMediaService' => $this->sensitiveMediaService,
 			'notificationDeliveryService' => $this->notificationDeliveryService,
 			'viewCountService' => $this->viewCountService,
@@ -1361,6 +1365,26 @@ class ApiControllerTest extends TestCase {
 			->willThrowException(new \OCA\Social\Exceptions\AccountMovedException('this account has moved to https://new.example/users/alice'));
 
 		$response = $this->controller()->statusNew('hello');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertStringContainsString('has moved', $response->getData()['error']);
+	}
+
+	/**
+	 * Found on devel with the review queue on: the first-post hold ran before
+	 * the moved guard, so a moderator was shown a post from an account that
+	 * had left, and the account was told "waiting for a moderator".
+	 */
+	public function testAMovedAccountIsRefusedBeforeTheReviewQueueHoldsItsPost(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'hello everybody']);
+		$this->moderationService->method('assertNotMoved')
+			->willThrowException(new \OCA\Social\Exceptions\AccountMovedException('this account has moved to https://new.example/users/alice'));
+		$this->postReviewService->method('assess')->willReturn(HeldPost::REASON_FIRST_POST);
+		$this->postReviewService->expects($this->never())->method('hold');
+		$this->postService->expects($this->never())->method('createPost');
+
+		$response = $this->controller()->statusNew();
 
 		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 		$this->assertStringContainsString('has moved', $response->getData()['error']);

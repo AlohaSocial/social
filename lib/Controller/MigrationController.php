@@ -15,6 +15,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationArchiveService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\SwitchService;
@@ -22,12 +23,15 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
+use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
+use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -59,6 +63,8 @@ class MigrationController extends Controller {
 		private PostImportService $postImportService,
 		private ImportQueueService $importQueueService,
 		private MoveInService $moveInService,
+		private MoveFinishService $moveFinishService,
+		private IURLGenerator $urlGenerator,
 		private AccountService $accountService,
 		private SwitchService $switchService,
 		private LoggerInterface $logger,
@@ -227,6 +233,62 @@ class MigrationController extends Controller {
 	 * Where this account stands: whether it moved, where, when, and when it
 	 * may move (again).
 	 */
+	/**
+	 * Starts finishing the move from here: the old server, when it is this
+	 * app too, is asked to register this one and the person is sent to consent
+	 * there. Answers the URL to send them to.
+	 */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 10, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/move-in/finish')]
+	public function moveInFinishStart(string $handle = ''): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+		try {
+			return new DataResponse(
+				['authorize_url' => $this->moveFinishService->start($this->userId, $handle)],
+				Http::STATUS_OK
+			);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/** Where a finish started from here stands. */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/move-in/finish')]
+	public function moveInFinishStatus(): DataResponse {
+		if ($this->userId === null) {
+			return new DataResponse(['error' => 'not logged in'], Http::STATUS_UNAUTHORIZED);
+		}
+
+		return new DataResponse($this->moveFinishService->status($this->userId), Http::STATUS_OK);
+	}
+
+	/**
+	 * Where the old server sends the person back with the code. The outcome
+	 * is kept for the Migration page, which this lands on either way; the
+	 * code is spent here and never shown.
+	 */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/migration/move-in/callback')]
+	public function moveInFinishCallback(string $code = '', string $state = '', string $error = ''): RedirectResponse {
+		if ($this->userId !== null) {
+			try {
+				if ($error !== '') {
+					throw new InvalidResourceException('the old server answered: ' . $error);
+				}
+				$this->moveFinishService->finish($this->userId, $code, $state);
+			} catch (Throwable $e) {
+				// recorded by the service for the page; nothing to add here
+			}
+		}
+
+		return new RedirectResponse($this->urlGenerator->linkToRoute('social.Navigation.navigatemigration'));
+	}
+
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/migration/move')]
 	public function moveStatus(): DataResponse {

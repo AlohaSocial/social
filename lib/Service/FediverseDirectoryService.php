@@ -428,14 +428,15 @@ class FediverseDirectoryService {
 
 	/**
 	 * What software a server says it runs, from its NodeInfo, or '' when it
-	 * does not say.
+	 * does not say. Over https unless the caller knows the server speaks
+	 * plain http, as a development instance does.
 	 */
-	private function softwareName(string $host): string {
+	public function softwareName(string $host, string $scheme = 'https'): string {
 		$name = '';
 		try {
 			$index = $this->curlService->retrieveJson(
 				'get',
-				'https://' . $host . '/.well-known/nodeinfo',
+				$scheme . '://' . $host . '/.well-known/nodeinfo',
 				['timeout' => self::TIMEOUT, 'json_headers' => false, 'headers' => ['Accept' => 'application/json']]
 			);
 
@@ -444,7 +445,7 @@ class FediverseDirectoryService {
 				$href = (string)(is_array($link) ? ($link['href'] ?? '') : '');
 				// any schema version: they differ in what else they carry, not
 				// in the name of the software
-				if ($href !== '' && str_starts_with($href, 'https://' . $host . '/')) {
+				if ($href !== '' && str_starts_with($href, $scheme . '://' . $host . '/')) {
 					$document = $href;
 				}
 			}

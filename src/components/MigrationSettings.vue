@@ -145,6 +145,9 @@
 						{{ moveAccount.posts.readable
 							? n('social', '%n public post can be brought over.', '%n public posts can be brought over.', moveAccount.posts.total)
 							: t('social', 'Its posts cannot be read from here; bring them with the export below.') }}
+						<template v-if="moveAccount.finishable">
+							{{ t('social', 'Its server is Aloha Social too, so the last step — moving your followers — can be done from here once the run is through.') }}
+						</template>
 					</p>
 				</div>
 			</div>
@@ -171,7 +174,25 @@
 					{{ t('social', 'Move here') }}
 				</NcButton>
 			</template>
-			<p v-if="finishedMoveIn" class="migration__move-in-finish">
+			<p v-if="finish.status === 'done'" class="migration__move-in-finish migration__move-in-finish--done">
+				{{ t('social', 'Done: {acct} told every server that knows you to follow this account instead. Your followers are on their way.', { acct: '@' + finish.acct }) }}
+			</p>
+			<template v-else-if="finishedMoveIn && finishedMoveIn.options?.finishable">
+				<p class="migration__move-in-finish">
+					{{ t('social', 'One step is left: your old server has to move your followers here. It is Aloha Social too, so you can do that from here — you will be asked to log in there and to agree to it.') }}
+				</p>
+				<p v-if="finish.status === 'failed'" class="migration__finish-error" role="alert">
+					{{ t('social', 'That did not work: {reason}', { reason: finish.error }) }}
+				</p>
+				<NcButton variant="primary" :disabled="finishing" @click="finishFromHere">
+					<template #icon>
+						<NcLoadingIcon v-if="finishing" :size="20" />
+						<IconAccountArrowLeft v-else :size="20" />
+					</template>
+					{{ t('social', 'Finish the move from here') }}
+				</NcButton>
+			</template>
+			<p v-else-if="finishedMoveIn" class="migration__move-in-finish">
 				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
 			</p>
 			<div v-if="finishedMoveIn && finishedMoveIn.options?.posts" class="migration__move-in-again">
@@ -583,6 +604,12 @@ export default {
 			/** @type {string} the address being added */
 			aliasInput: '',
 			aliasBusy: false,
+			/**
+			 * Where a move finished from here stands, as the server keeps it:
+			 * `none`, `pending`, `done` or `failed`, with the old account.
+			 */
+			finish: { status: 'none', acct: '', at: 0, error: '' },
+			finishing: false,
 		}
 	},
 
@@ -623,6 +650,7 @@ export default {
 		this.loadImports()
 		this.loadMoveStatus()
 		this.loadOwnHandle()
+		this.loadFinish()
 	},
 
 	beforeUnmount() {
@@ -678,6 +706,49 @@ export default {
 				this.moveHandle = ''
 				this.loadAliases()
 			}
+		},
+
+		/**
+		 * Where a move finished from here stands — asked when the page opens,
+		 * which is where the old server sends the person back to.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadFinish() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/migration/move-in/finish'))
+				this.finish = { status: 'none', acct: '', at: 0, error: '', ...data }
+			} catch (error) {
+				logger.debug('Could not read where the move stands', { error })
+			}
+		},
+
+		/**
+		 * Has the old server — this app too — move the followers here: the
+		 * person is sent there to log in and agree, and comes back to this page.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async finishFromHere() {
+			const from = this.finishedMoveIn?.options?.acct
+			if (!from || this.finishing) {
+				return
+			}
+			this.finishing = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in/finish'), { handle: '@' + from })
+				this.leaveFor(data.authorize_url)
+			} catch (error) {
+				showError(error?.response?.data?.error || t('social', 'Could not start the move'))
+				this.finishing = false
+			}
+		},
+
+		/**
+		 * @param {string} url where the browser goes next
+		 */
+		leaveFor(url) {
+			window.location.assign(url)
 		},
 
 		/**
@@ -1389,6 +1460,14 @@ export default {
 	.migration__note {
 		margin-bottom: 8px;
 	}
+}
+
+.migration__move-in-finish--done {
+	font-weight: 600;
+}
+
+.migration__finish-error {
+	color: var(--color-error-text, var(--color-error));
 }
 
 .migration__move-in-finish {

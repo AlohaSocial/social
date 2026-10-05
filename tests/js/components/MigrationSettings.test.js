@@ -339,6 +339,71 @@ describe('Migration', () => {
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in`, { handle: '@alice@old.example', follows: '0', posts: '1', fetch_media: '1' })
 	})
 
+	it('offers to finish the move from here when the old server is Aloha Social too, and sends the person there', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, { followed: 3, imported: 2 })] } })
+			}
+			if (url.endsWith('/migration/move-in/finish')) {
+				return Promise.resolve({ data: { status: 'none', acct: '', at: 0, error: '' } })
+			}
+			if (url.endsWith('/migration/announcement')) {
+				return Promise.resolve({ data: { handle: '@alice@cloud.example' } })
+			}
+			return Promise.resolve({ data: { aliases: [] } })
+		})
+		axios.post.mockResolvedValue({ data: { authorize_url: 'https://old.example/index.php/apps/social/oauth/authorize?client_id=c&state=s' } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const left = vi.spyOn(wrapper.vm, 'leaveFor').mockImplementation(() => {})
+		const finish = buttonNamed(wrapper, 'Finish the move from here')
+		expect(finish).toBeTruthy()
+		expect(wrapper.find('.migration__move-in-finish').text()).toContain('Aloha Social too')
+
+		await finish.trigger('click')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in/finish`, { handle: '@alice@old.example' })
+		expect(left).toHaveBeenCalledWith('https://old.example/index.php/apps/social/oauth/authorize?client_id=c&state=s')
+	})
+
+	it('says so, and offers nothing more, once the move was finished from here', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
+			}
+			if (url.endsWith('/migration/move-in/finish')) {
+				return Promise.resolve({ data: { status: 'done', acct: 'alice@old.example', at: 1700000000, error: '' } })
+			}
+			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
+		})
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		expect(wrapper.text()).toContain('Your followers are on their way')
+		expect(buttonNamed(wrapper, 'Finish the move from here')).toBeUndefined()
+	})
+
+	it('shows why finishing from here failed, and offers to try again', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', finishable: true } }, {})] } })
+			}
+			if (url.endsWith('/migration/move-in/finish')) {
+				return Promise.resolve({ data: { status: 'failed', acct: 'alice@old.example', at: 0, error: 'the old server refused the move: this account moved on 2026-10-01' } })
+			}
+			return Promise.resolve({ data: { aliases: [], handle: '@alice@cloud.example' } })
+		})
+
+		const wrapper = mountPage()
+		await flushPromises()
+
+		expect(wrapper.find('.migration__finish-error').text()).toContain('this account moved on 2026-10-01')
+		expect(buttonNamed(wrapper, 'Finish the move from here')).toBeTruthy()
+	})
+
 	it('shows the reason when the old account cannot be found', async () => {
 		axios.post.mockRejectedValue({ response: { data: { error: 'no account answers to alice@gone.example' } } })
 
