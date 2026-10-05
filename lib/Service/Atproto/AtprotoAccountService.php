@@ -55,7 +55,15 @@ class AtprotoAccountService {
 		if ($account !== null) {
 			try {
 				$profile = $this->identity->profile($account->getDid(), $account->getPds());
+				if ($account->getState() !== AtprotoAccount::STATE_LINKED || $account->getLastError() !== '') {
+					$account->setState(AtprotoAccount::STATE_LINKED)->setLastError('');
+					$this->atprotoRequest->setAccountState($userId, AtprotoAccount::STATE_LINKED);
+				}
 			} catch (AtprotoException $e) {
+				$message = trim($e->getMessage());
+				$state = $e->getStatus() === 401 ? AtprotoAccount::STATE_BROKEN : $account->getState();
+				$account->setState($state)->setLastError($message);
+				$this->atprotoRequest->setAccountState($userId, $state, $message);
 				$this->logger->debug('could not read linked ATProto profile', ['exception' => $e]);
 			}
 		}
