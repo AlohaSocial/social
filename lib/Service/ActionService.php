@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Service\Atproto\AtprotoEngagementService;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -164,8 +165,11 @@ class ActionService {
 
 		$post = $this->streamService->getStreamByNid($nid);
 		$this->assertAllowedByAuthor($post, $action);
+		$target = $post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both';
+		$isAtprotoPost = str_contains($post->getId(), '/ap/bluesky/') || $target === 'atproto';
+		$hasAtprotoMirror = $this->atprotoEngagementService !== null && $this->atprotoEngagementService->hasRecord($post);
 		if ($this->atprotoEngagementService !== null
-			&& str_contains($post->getId(), '/ap/bluesky/')
+			&& ($isAtprotoPost || ($target === 'both' && $hasAtprotoMirror))
 			&& in_array($action, [self::FAVOURITE, self::UNFAVOURITE, self::REBLOG, self::UNREBLOG], true)) {
 			$isLike = in_array($action, [self::FAVOURITE, self::UNFAVOURITE], true);
 			$enabled = in_array($action, [self::FAVOURITE, self::REBLOG], true);
@@ -181,7 +185,9 @@ class ActionService {
 			$this->streamActionService->setActionBool(
 				$actor->getId(), $post->getId(), $isLike ? StreamAction::LIKED : StreamAction::BOOSTED, $enabled
 			);
-			return null;
+			if ($isAtprotoPost) {
+				return null;
+			}
 		}
 
 		switch ($action) {

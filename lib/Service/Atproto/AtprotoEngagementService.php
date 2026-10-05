@@ -29,6 +29,10 @@ class AtprotoEngagementService {
 		$this->setRecordFlag($userId, $post, self::COLLECTION, $liked);
 	}
 
+	public function hasRecord(Stream $post): bool {
+		return $this->atprotoRequest->getLinkByLocalId($post->getId()) !== null;
+	}
+
 	/** @throws AtprotoException */
 	public function setReposted(string $userId, Stream $post, bool $reposted): void {
 		$this->setRecordFlag($userId, $post, 'app.bsky.feed.repost', $reposted);
