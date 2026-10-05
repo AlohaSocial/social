@@ -9,7 +9,7 @@
 			id="publication-target"
 			:value="target"
 			:aria-label="t('social', 'Where to publish')"
-			@change="$emit('update:target', $event.target.value)">
+			@change="changeTarget">
 			<option value="both">
 				{{ t('social', 'Fediverse + Bluesky') }}
 			</option>
@@ -44,7 +44,12 @@ export default {
 		},
 	},
 
-	methods: { t },
+	methods: {
+		t,
+		changeTarget(event) {
+			this.$emit('update:target', event.target.value)
+		},
+	},
 }
 </script>
 

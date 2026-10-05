@@ -788,6 +788,7 @@ export default {
 			 * late leaves it alone.
 			 */
 			visibilityChosen: Boolean(this.defaultVisibility || this.inReplyTo?.visibility),
+			/** @type {'fediverse'|'atproto'|'both'} */
 			publicationTarget: 'both',
 			atprotoStatus: null,
 
