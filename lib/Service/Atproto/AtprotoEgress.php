@@ -352,7 +352,7 @@ class AtprotoEgress {
 	 */
 	public function deleteOwn(string $userId, string $localId): void {
 		$account = $this->atprotoRequest->getAccount($userId);
-		if ($account === null) {
+		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before deleting posts', 401);
 		}
 		$link = $this->atprotoRequest->getLinkByLocalId($localId);
@@ -380,7 +380,7 @@ class AtprotoEgress {
 	/** Update the text of a native post owned by the linked account. */
 	public function updateOwn(string $userId, string $localId, string $text): void {
 		$account = $this->atprotoRequest->getAccount($userId);
-		if ($account === null) {
+		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before editing posts', 401);
 		}
 		$link = $this->atprotoRequest->getLinkByLocalId($localId);
