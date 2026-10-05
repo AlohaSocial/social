@@ -45,4 +45,28 @@ class AtprotoAccountServiceTest extends TestCase {
 		$this->assertSame(AtprotoAccount::STATE_BROKEN, $status['account']['state']);
 		$this->assertSame('session expired', $status['account']['lastError']);
 	}
+
+	public function testLinkRejectsASessionForAnotherDid(): void {
+		$client = $this->createMock(AtprotoClient::class);
+		$identity = $this->createMock(AtprotoIdentity::class);
+		$request = $this->createMock(AtprotoRequest::class);
+		$cipher = $this->createMock(PrivateKeyCipher::class);
+		$config = $this->createMock(ConfigService::class);
+		$identity->expects($this->once())->method('normalize')->with('alice.example')->willReturn('alice.example');
+		$identity->expects($this->once())->method('resolve')->with('alice.example')->willReturn([
+			'did' => 'did:plc:resolved', 'handle' => 'alice.example', 'pds' => 'https://pds.example',
+		]);
+		$client->expects($this->once())->method('post')->with(
+			'com.atproto.server.createSession',
+			['identifier' => 'alice.example', 'password' => 'xxxx'],
+			'https://pds.example',
+		)->willReturn(['did' => 'did:plc:other']);
+		$request->expects($this->never())->method('saveAccount');
+
+		$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
+
+		$this->expectException(AtprotoException::class);
+		$this->expectExceptionCode(409);
+		$service->link('alice', 'alice.example', 'xxxx');
+	}
 }

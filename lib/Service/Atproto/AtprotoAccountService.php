@@ -144,6 +144,9 @@ class AtprotoAccountService {
 		if (!str_starts_with($did, 'did:')) {
 			throw new AtprotoException('the PDS answered the login without an identity', 400);
 		}
+		if ($did !== $resolved['did']) {
+			throw new AtprotoException('the PDS session identity does not match the resolved handle', 409);
+		}
 
 		// the did the login proves is the one that would post: a handle
 		// pointed at another account between the directory read and this
