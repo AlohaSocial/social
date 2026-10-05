@@ -597,6 +597,26 @@ takes your follows in both directions with it. It is the answer to being
 bothered by a server rather than by one person — the alternative was blocking
 accounts one at a time as they appeared.
 
+### Posts made with AI
+
+**Settings → Blocking** has a switch, **Hide posts made with AI**, off until
+you turn it on. On, a post that says it was made with AI is kept out of
+everything you read — your feed, the public timelines, hashtags, threads,
+profiles, lists and your notifications alike — the same way a filtered word
+takes a post out, and nothing of it reaches this app. Off, such a post arrives
+as usual and carries a quiet **AI** mark, so you can tell without being told.
+
+"Says it was made with AI" is meant literally. A post counts when it carries
+one of the hashtags people and tools use for it — `#AIgenerated`, `#aiart`,
+`#midjourney`, `#stablediffusion` and a dozen more, which your administrator
+can add to — when its author marked it in the composer (which adds
+`#AIgenerated`), or when one of its pictures states in its own metadata that a
+model produced it, as the generators that label their output write. Nothing
+here looks at the picture itself or guesses from the words: a generated post
+that carries no label is not recognised, and a real photograph its author
+tagged `#ai` is. Like your filters, the switch is yours alone — nothing is
+sent to another server and nobody is told.
+
 ### What a post used to say
 
 A post that has been edited says so under it. That line is a button now: it

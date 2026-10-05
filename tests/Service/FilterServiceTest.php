@@ -15,6 +15,9 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\Filter;
 use OCA\Social\Model\Client\FilterKeyword;
 use OCA\Social\Model\Client\FilterStatus;
+use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Service\AiContentService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FilterService;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -37,6 +40,8 @@ class FilterServiceTest extends TestCase {
 	private array $stored = [];
 	/** @var string[] the actor ids the store was asked about */
 	private array $asked = [];
+	/** @var array<string, bool> user id => whether they hide posts made with AI */
+	private array $hidesAi = [];
 
 	protected function setUp(): void {
 		$this->filtersRequest = $this->createStub(FiltersRequest::class);
@@ -49,12 +54,20 @@ class FilterServiceTest extends TestCase {
 				return $this->stored[$actorId] ?? [];
 			});
 
-		$this->service = new FilterService($this->filtersRequest);
+		$configService = $this->createStub(ConfigService::class);
+		$configService->method('getUserValue')
+			->willReturnCallback(fn (string $key, string $userId = ''): string
+				=> ($this->hidesAi[$userId] ?? false) ? '1' : '');
+		$configService->method('getAppValue')->willReturn('');
+
+		$this->service = new FilterService($this->filtersRequest, new AiContentService($configService));
 	}
 
 	private function viewer(string $id): Person {
 		$person = new Person();
 		$person->setId($id);
+		// the AI switch is a user setting, so the viewer has to be somebody
+		$person->setUserId(substr($id, strrpos($id, '/') + 1));
 
 		return $person;
 	}
@@ -559,5 +572,139 @@ class FilterServiceTest extends TestCase {
 		$this->assertSame(
 			[], $this->service->results(['id' => '92233720368547758071'], $this->stored[self::ALICE])
 		);
+	}
+
+	// the switch for posts made with AI
+
+	/** A status labelled by its hashtag, as the exporter hands it over. */
+	private function aLabelledStatus(string $id = '1'): array {
+		return $this->aStatus('<p>a landscape</p>', [
+			'id' => $id,
+			'tags' => [['name' => 'AIgenerated', 'url' => '']],
+			'media_attachments' => [],
+			'ai_generated' => true,
+		]);
+	}
+
+	public function testPostsMadeWithAiAreShownUntilTheReaderAsksOtherwise(): void {
+		$page = $this->service->apply(
+			[$this->aLabelledStatus(), $this->aStatus('<p>an apple</p>', ['id' => '2'])],
+			Filter::CONTEXT_HOME,
+			$this->viewer(self::ALICE)
+		);
+
+		$this->assertCount(2, $page, 'the switch is off by default');
+		$this->assertTrue($page[0]['ai_generated']);
+		$this->assertSame([], $page[0]['filtered'], 'a label is not a keyword filter match');
+	}
+
+	public function testAReaderWhoHidesAiIsNotHandedALabelledPost(): void {
+		$this->hidesAi['alice'] = true;
+
+		$page = $this->service->apply(
+			[$this->aLabelledStatus(), $this->aStatus('<p>an apple</p>', ['id' => '2'])],
+			Filter::CONTEXT_HOME,
+			$this->viewer(self::ALICE)
+		);
+
+		$this->assertCount(1, $page);
+		$this->assertSame('2', $page[0]['id']);
+		$this->assertArrayHasKey('filtered', $page[0], 'the keyword filters still run on what is left');
+	}
+
+	/**
+	 * Unlike a keyword filter, the switch names no contexts: it applies
+	 * wherever statuses are handed to a client, the list timelines that no
+	 * keyword filter reaches included.
+	 */
+	public function testTheSwitchAppliesInEveryContext(): void {
+		$this->hidesAi['alice'] = true;
+
+		foreach (array_merge(Filter::CONTEXTS, ['']) as $context) {
+			$page = $this->service->apply([$this->aLabelledStatus()], $context, $this->viewer(self::ALICE));
+
+			$this->assertSame([], $page, 'context ' . var_export($context, true));
+		}
+	}
+
+	public function testAPostIsHiddenByALabelledPictureAsWellAsByATag(): void {
+		$this->hidesAi['alice'] = true;
+		$status = $this->aStatus('<p>look</p>', [
+			'tags' => [],
+			'media_attachments' => [['id' => '5', 'ai_generated' => true]],
+		]);
+
+		$this->assertSame([], $this->service->apply([$status], Filter::CONTEXT_PUBLIC, $this->viewer(self::ALICE)));
+	}
+
+	public function testABoostOfALabelledPostIsHiddenWithIt(): void {
+		$this->hidesAi['alice'] = true;
+		$boost = $this->aStatus('', ['id' => '9', 'tags' => [], 'reblog' => $this->aLabelledStatus('3')]);
+
+		$this->assertSame([], $this->service->apply([$boost], Filter::CONTEXT_HOME, $this->viewer(self::ALICE)));
+	}
+
+	public function testTheSwitchOfOneReaderHidesNothingFromAnother(): void {
+		$this->hidesAi['alice'] = true;
+
+		$page = $this->service->apply([$this->aLabelledStatus()], Filter::CONTEXT_HOME, $this->viewer(self::BOB));
+
+		$this->assertCount(1, $page);
+	}
+
+	public function testAnAnonymousReaderHasNoSwitch(): void {
+		$this->hidesAi[''] = true;
+
+		$this->assertCount(1, $this->service->apply([$this->aLabelledStatus()], Filter::CONTEXT_PUBLIC, null));
+	}
+
+	public function testASingleLabelledStatusIsWithheldLikeAHiddenOne(): void {
+		$this->hidesAi['alice'] = true;
+
+		$this->assertNull($this->service->applyToStatus($this->aLabelledStatus(), Filter::CONTEXT_THREAD, $this->viewer(self::ALICE)));
+		$this->assertNotNull($this->service->applyToStatus($this->aLabelledStatus(), Filter::CONTEXT_THREAD, $this->viewer(self::BOB)));
+	}
+
+	public function testAModelIsReadForItsLabelTheWayAnExportedStatusIs(): void {
+		$this->hidesAi['alice'] = true;
+		$labelled = (new Note())->setHashtags(['StableDiffusion']);
+		$labelled->setNid(1)->setContent('<p>a render</p>');
+		$plain = (new Note())->setHashtags(['cats']);
+		$plain->setNid(2)->setContent('<p>a cat</p>');
+
+		$page = $this->service->apply([$labelled, $plain], Filter::CONTEXT_HOME, $this->viewer(self::ALICE));
+
+		$this->assertCount(1, $page);
+		$this->assertSame('2', $page[0]['id']);
+	}
+
+	public function testANotificationAboutALabelledPostIsDroppedForAReaderWhoHidesAi(): void {
+		$this->hidesAi['alice'] = true;
+		$labelled = (new Note())->setHashtags(['aiart']);
+		$labelled->setNid(1)->setContent('<p>a render</p>');
+		$pictured = new Note();
+		$pictured->setNid(2)->setContent('<p>look</p>');
+		$pictured->setAttachments([(new MediaAttachment())->setAiGenerated(true)]);
+		$other = new Note();
+		$other->setNid(3)->setContent('<p>an apple</p>');
+
+		$kept = $this->service->applyToNotifications([$labelled, $pictured, $other], $this->viewer(self::ALICE));
+
+		$this->assertSame([$other], $kept);
+		$this->assertCount(
+			3, $this->service->applyToNotifications([$labelled, $pictured, $other], $this->viewer(self::BOB)),
+			'another reader, who did not ask, is told about all three'
+		);
+	}
+
+	public function testANotificationAboutABoostIsReadAsThePostItBoosts(): void {
+		$this->hidesAi['alice'] = true;
+		$boosted = (new Note())->setHashtags(['midjourney']);
+		$boosted->setNid(1);
+		$boost = new \OCA\Social\Model\ActivityPub\Object\Announce();
+		$boost->setNid(2);
+		$boost->setObject($boosted);
+
+		$this->assertSame([], $this->service->applyToNotifications([$boost], $this->viewer(self::ALICE)));
 	}
 }

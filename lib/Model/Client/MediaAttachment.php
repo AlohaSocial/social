@@ -281,6 +281,9 @@ class MediaAttachment implements JsonSerializable {
 			'meta' => ($meta === null || $meta === []) ? null : (object)$meta,
 			'description' => ($this->getDescription() === '') ? null : $this->getDescription(),
 			'blurhash' => ($this->getBlurHash() === '') ? null : $this->getBlurHash(),
+			// not Mastodon's: whether the picture's metadata stated that a
+			// model produced it, read when it was stored. Always a bool
+			'ai_generated' => $this->isAiGenerated(),
 		];
 	}
 

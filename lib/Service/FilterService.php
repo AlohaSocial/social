@@ -33,6 +33,13 @@ use OCA\Social\Tools\Nid;
  * Filters are always the *viewer's*: every read is scoped by the actor id in
  * SQL, and the per-request cache below is keyed by it, so one account's
  * filters can never be applied to another account's timeline.
+ *
+ * One more filter rides through here that nobody typed: the viewer's switch
+ * for posts made with AI (`AiContentService`). It is applied in the same two
+ * places as a `hide` keyword filter and in every context at once — the keyword
+ * filters' contexts are the reader's choice per filter, and this switch has no
+ * such choice, so a list timeline that no keyword filter reaches is still
+ * cleared by it.
  */
 class FilterService {
 	/** @var array<string, Filter[]> actor id => its active filters, for this request */
@@ -40,6 +47,7 @@ class FilterService {
 
 	public function __construct(
 		private FiltersRequest $filtersRequest,
+		private AiContentService $aiContentService,
 	) {
 	}
 
@@ -83,16 +91,27 @@ class FilterService {
 	 */
 	public function apply(array $items, string $context, ?Person $viewer): array {
 		$filters = ($viewer === null) ? [] : $this->activeFilters($viewer->getId(), $context);
+		$hidesAi = $this->hidesAi($viewer);
 
 		$statuses = [];
 		foreach ($items as $item) {
-			$status = $this->applyToExported($this->exportForClient($item), $filters);
+			$exported = $this->exportForClient($item);
+			if ($hidesAi && $this->aiContentService->isLabelled($exported)) {
+				continue;
+			}
+
+			$status = $this->applyToExported($exported, $filters);
 			if ($status !== null) {
 				$statuses[] = $status;
 			}
 		}
 
 		return $statuses;
+	}
+
+	/** Whether this viewer asked for posts made with AI to be dropped. */
+	private function hidesAi(?Person $viewer): bool {
+		return $viewer !== null && $this->aiContentService->hides($viewer->getUserId());
 	}
 
 	/**
@@ -124,13 +143,18 @@ class FilterService {
 	public function applyToNotifications(array $notifications, ?Person $viewer): array {
 		$filters = ($viewer === null)
 			? [] : $this->activeFilters($viewer->getId(), Filter::CONTEXT_NOTIFICATIONS);
-		if ($filters === []) {
+		$hidesAi = $this->hidesAi($viewer);
+		if ($filters === [] && !$hidesAi) {
 			return array_values($notifications);
 		}
 
 		$kept = [];
 		foreach ($notifications as $notification) {
-			if (!$this->isHidden($this->results($this->matchable($notification), $filters))) {
+			$matchable = $this->matchable($notification);
+			if ($hidesAi && $this->aiContentService->isLabelled($matchable)) {
+				continue;
+			}
+			if (!$this->isHidden($this->results($matchable, $filters))) {
 				$kept[] = $notification;
 			}
 		}
@@ -364,6 +388,7 @@ class FilterService {
 				'spoiler_text' => $subject->getSpoilerText(),
 				'content' => $subject->getContent(),
 				'media_attachments' => $subject->getAttachments(),
+				'tags' => $subject->getHashtags(),
 			];
 		}
 

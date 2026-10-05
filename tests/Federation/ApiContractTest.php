@@ -98,6 +98,9 @@ class ApiContractTest extends TestCase {
 		// same fact is carried as `Mention` tags, which is where a peer looks.
 		// 'interest' is why For you showed the post: the hashtags it
 		// matched and the reason. Null on every other timeline.
+		// 'ai_generated' is whether the post says it was made with AI — one
+		// of its hashtags, or a picture's stated provenance. A label the post
+		// carries, always a bool, and the key a client draws its mark from.
 		$expected = [
 			'archived', 'bookmarked', 'card', 'content', 'created_at', 'edited_at', 'emojis', 'favourited',
 			'favourites_count', 'id', 'in_reply_to_account_id', 'in_reply_to_id', 'language',
@@ -105,7 +108,7 @@ class ApiContractTest extends TestCase {
 			'quote_approval', 'reply_approval', 'interaction_policy', 'video',
 			'dislikes_count', 'disliked',
 			'reactions', 'reblog', 'reblogged', 'reblogs_count', 'replies_count', 'sensitive', 'spoiler_text',
-			'tagged_people', 'tags', 'uri', 'url', 'view_count', 'visibility', 'interest',
+			'tagged_people', 'tags', 'uri', 'url', 'view_count', 'visibility', 'interest', 'ai_generated',
 		];
 		sort($expected);
 
