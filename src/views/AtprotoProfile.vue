@@ -10,7 +10,7 @@
 				{{ profile.displayName }}
 			</p>
 			<div class="atproto-profile__actions">
-				<FollowButton v-if="account.id" :profile-account="account" />
+				<FollowButton v-if="account.id" :profileAccount="account" />
 				<a :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
 			</div>
 		</header>
