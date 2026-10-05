@@ -324,6 +324,21 @@
 						<AlertOutline :size="22" decorative title="" />
 					</template>
 				</NcButton>
+				<!-- the author's own word that this was made with AI. It is a
+				     hashtag in the text rather than a field of its own, so the
+				     button reads its state off the words: typing the tag by
+				     hand lights it, and pressing it writes or removes the tag -->
+				<NcButton
+					:title="t('social', 'Made with AI')"
+					variant="tertiary"
+					class="ai-toggle"
+					:aria-label="t('social', 'Made with AI')"
+					:aria-pressed="madeWithAi"
+					@click.prevent="toggleAiMark">
+					<template #icon>
+						<CreationOutline :size="22" decorative title="" />
+					</template>
+				</NcButton>
 				<NcButton
 					:title="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
 					variant="tertiary"
@@ -499,6 +514,7 @@ import AlertOutline from 'vue-material-design-icons/AlertOutline.vue'
 import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import PollIcon from 'vue-material-design-icons/Poll.vue'
 import CardTextOutline from 'vue-material-design-icons/CardTextOutline.vue'
+import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import PlacePicker from './PlacePicker.vue'
 import SchedulePicker from './SchedulePicker.vue'
 import { computed, defineAsyncComponent, getCurrentInstance, ref } from 'vue'
@@ -527,6 +543,7 @@ import { commandsIn, resolveCommands, tumble } from '../../utils/composerCommand
 import { accountHue } from '../../services/accountColour.js'
 import { cardGradients, findGradient, gradientCss, renderTextCard } from '../../utils/textCard.js'
 import { clearDraft, loadDraft, saveDraft } from '../../services/draft.js'
+import { addAiMark, hasAiMark, removeAiMark } from '../../services/aiContent.js'
 import { mapStores } from 'pinia'
 import { useInstanceStore } from '../../store/instance.js'
 import { useAccountStore } from '../../store/account.js'
@@ -612,6 +629,7 @@ export default {
 		EyeOutline,
 		PollIcon,
 		CardTextOutline,
+		CreationOutline,
 		PollEditor,
 		PreviewGrid,
 		ComposerPreview,
@@ -827,6 +845,11 @@ export default {
 		/** @return {string[]} the warnings offered as one press each */
 		warningPresets() {
 			return contentWarningPresets()
+		},
+
+		/** @return {boolean} whether the words carry the author's mark for a post made with AI */
+		madeWithAi() {
+			return hasAiMark(this.statusText)
 		},
 
 		/**
@@ -1808,6 +1831,17 @@ export default {
 			if (!this.showWarning) {
 				this.spoilerText = ''
 			}
+		},
+
+		/**
+		 * Writes the mark for a post made with AI into the words, or takes it
+		 * out, the way a restored draft fills the box: the text is set and
+		 * read back, so the draft on disk and the preview follow.
+		 */
+		toggleAiMark() {
+			const text = this.plainText()
+			this.inputElement().innerText = this.madeWithAi ? removeAiMark(text) : addAiMark(text)
+			this.updateStatusContent()
 		},
 
 		togglePoll() {

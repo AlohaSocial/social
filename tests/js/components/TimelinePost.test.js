@@ -1225,6 +1225,15 @@ describe('TimelinePost', () => {
 			expect(mountPost({ item: makeItem({ pinned: true }) }).wrapper.find('.post-pinned').text()).toBe('Pinned')
 		})
 
+		it('says a post was made with AI when the server says so, and only then', () => {
+			// the server's word: it reads the author's mark, the tag and the
+			// pictures' metadata, so the client does not look at the words
+			expect(mountPost().wrapper.find('.post-ai').exists()).toBe(false)
+			expect(mountPost({ item: makeItem({ ai_generated: false }) }).wrapper.find('.post-ai').exists()).toBe(false)
+			expect(mountPost({ item: makeItem({ content: '<p>#AIgenerated</p>' }) }).wrapper.find('.post-ai').exists()).toBe(false)
+			expect(mountPost({ item: makeItem({ ai_generated: true }) }).wrapper.find('.post-ai').text()).toBe('Made with AI')
+		})
+
 		it('says a video is still being converted while the server holds the post back', () => {
 			// `delivery` only ever arrives on the author's own copy, so the
 			// line needs no other guard

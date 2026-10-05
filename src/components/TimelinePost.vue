@@ -54,6 +54,12 @@
 				<Pin :size="14" />
 				{{ t('social', 'Pinned') }}
 			</span>
+			<!-- the server's word, not the client's: it reads the author's
+			     mark, the tag and the pictures' metadata -->
+			<span v-if="item.ai_generated === true" class="post-ai">
+				<CreationOutline :size="14" />
+				{{ t('social', 'Made with AI') }}
+			</span>
 			<!-- only ever on the author's own copy: the server says `held`
 			     while a video is converted into what other servers take, and
 			     the post is on this one in the meantime -->
@@ -473,6 +479,7 @@ import 'linkify-plugin-mention'
 import 'linkify-string'
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
+import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import DeliveryDialog from './DeliveryDialog.vue'
 import PostAttachment from './PostAttachment.vue'
 import PostMenu from './PostMenu.vue'
@@ -537,6 +544,7 @@ export default {
 		DeliveryDialog,
 		IconAccountBoxMultiple,
 		Pin,
+		CreationOutline,
 		QuoteControlDialog,
 		TagPeopleDialog,
 		IconEyeOutline,
@@ -1730,6 +1738,7 @@ export default {
 		}
 
 		.post-pinned,
+		.post-ai,
 		.post-held {
 			display: inline-flex;
 			align-items: center;
