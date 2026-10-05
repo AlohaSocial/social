@@ -241,7 +241,7 @@ class AtprotoEgress {
 							break;
 						}
 					}
-				unset($facet);
+					unset($facet);
 					continue;
 				}
 				try {
@@ -326,7 +326,7 @@ class AtprotoEgress {
 	 * account owns the DID that owns the record.
 	 *
 	 * @throws AtprotoException when the account is missing, the mapping is not
-	 *                         known, or the PDS refuses the delete
+	 *                          known, or the PDS refuses the delete
 	 */
 	public function deleteOwn(string $userId, string $localId): void {
 		$account = $this->atprotoRequest->getAccount($userId);
