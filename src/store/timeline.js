@@ -732,6 +732,11 @@ export const useTimelineStore = defineStore('timeline', {
 				this.statuses[status.id] = { ...this.statuses[status.id], bookmarked }
 			}
 		},
+		muteConversationOf({ status, muted }) {
+			if (this.statuses[status.id] !== undefined) {
+				this.statuses[status.id] = { ...this.statuses[status.id], muted }
+			}
+		},
 		pinStatus({ status, pinned }) {
 			if (this.statuses[status.id] !== undefined) {
 				this.statuses[status.id] = { ...this.statuses[status.id], pinned }
@@ -1162,6 +1167,37 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.error('Failed to delete the boost', { error })
 			}
 		},
+		/**
+		 * Mutes or unmutes the conversation a post belongs to, for this reader.
+		 *
+		 * The thread stays on every timeline; only what it would tell the
+		 * reader stops. The server keeps the mute against the thread's root,
+		 * so the flag the server answers with is the one to trust — a reply
+		 * elsewhere in the same thread is muted too, and this one copy is
+		 * what is flipped at once so the menu answers.
+		 *
+		 * @param {object} payload which post, and which way
+		 * @param {import('../types/Mastodon.js').Status} payload.status the post
+		 * @param {boolean} payload.muted whether the conversation is to be muted
+		 */
+		async postMuteConversation({ status, muted }) {
+			this.muteConversationOf({ status, muted })
+			try {
+				const action = muted ? 'mute' : 'unmute'
+				const response = await axios.post(generateUrl(`apps/social/api/v1/statuses/${status.id}/${action}`))
+				logger.info(muted ? 'Conversation muted' : 'Conversation unmuted')
+				this.addToStatuses(response.data)
+
+				return response
+			} catch (error) {
+				this.muteConversationOf({ status, muted: !muted })
+				showError(muted
+					? t('social', 'Could not mute the conversation')
+					: t('social', 'Could not unmute the conversation'))
+				logger.error('Failed to change the conversation mute', { error })
+			}
+		},
+
 		async postBookmark({ status, bookmarked }) {
 			// the flag flips first so the button answers at once, and is put back
 			// if the server refuses

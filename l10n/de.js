@@ -352,6 +352,8 @@ OC.L10N.register(
     "Close player" : "Player schließen",
     "Which posts to show" : "Welche Beiträge angezeigt werden",
     "Mark all as read" : "Alle als gelesen markieren",
+    "Mute conversation" : "Unterhaltung stummschalten",
+    "Unmute conversation" : "Unterhaltung nicht mehr stummschalten",
     "Which activities to show" : "Welche Aktivitäten angezeigt werden",
     "List" : "Liste",
     "Link" : "Link",

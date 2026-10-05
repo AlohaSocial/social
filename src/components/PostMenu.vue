@@ -102,6 +102,16 @@
 			</template>
 			{{ item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark') }}
 		</NcActionButton>
+		<!-- the thread, not the person: muting an account is too blunt when
+		     one conversation has gone wrong, and it is possible only after
+		     the unwanted mention has arrived -->
+		<NcActionButton v-if="!isPublic" @click="$emit('muteConversation')">
+			<template #icon>
+				<BellOutline v-if="item.muted" :size="20" />
+				<BellOffOutline v-else :size="20" />
+			</template>
+			{{ item.muted ? t('social', 'Unmute conversation') : t('social', 'Mute conversation') }}
+		</NcActionButton>
 		<!-- an album is made of the reader's own pictures; where the picture
 		     is, is where it is put into one -->
 		<NcActionButton v-if="canCollect" @click="$emit('collect')">
@@ -153,6 +163,8 @@ import { translate as t } from '@nextcloud/l10n'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
 import NcActions from '@nextcloud/vue/components/NcActions'
+import BellOffOutline from 'vue-material-design-icons/BellOffOutline.vue'
+import BellOutline from 'vue-material-design-icons/BellOutline.vue'
 import Bookmark from 'vue-material-design-icons/Bookmark.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
@@ -188,6 +200,8 @@ export default {
 	name: 'PostMenu',
 
 	components: {
+		BellOffOutline,
+		BellOutline,
 		Bookmark,
 		BookmarkOutline,
 		Cancel,
@@ -271,6 +285,7 @@ export default {
 		'translate',
 		'delivery',
 		'bookmark',
+		'muteConversation',
 		'collect',
 		'pin',
 		'lessLikeThis',

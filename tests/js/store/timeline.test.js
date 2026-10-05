@@ -1014,6 +1014,40 @@ describe('timeline store actions', () => {
 	})
 
 	describe.each([
+		['mute', true, 'Could not mute the conversation'],
+		['unmute', false, 'Could not unmute the conversation'],
+	])('postMuteConversation (%s)', (endpoint, muted, errorMessage) => {
+		it(`flips the flag, POSTs to /statuses/:id/${endpoint} and stores the server copy`, async () => {
+			const status = makeStatus('1', { muted: !muted })
+			store.addToTimeline([status])
+			const serverCopy = makeStatus('1', { muted })
+			let duringRequest
+			axios.post.mockImplementation(async () => {
+				duringRequest = { ...tl().statuses['1'] }
+				return { data: serverCopy }
+			})
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(axios.post).toHaveBeenCalledWith(`${API}/statuses/1/${endpoint}`)
+			expect(duringRequest).toMatchObject({ muted })
+			expect(tl().statuses['1']).toEqual(serverCopy)
+			expect(showError).not.toHaveBeenCalled()
+		})
+
+		it('puts the flag back and reports when the server refuses', async () => {
+			const status = makeStatus('1', { muted: !muted })
+			store.addToTimeline([status])
+			axios.post.mockRejectedValue(new Error('nope'))
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(tl().statuses['1'].muted).toBe(!muted)
+			expect(showError).toHaveBeenCalledWith(errorMessage)
+		})
+	})
+
+	describe.each([
 		['bookmark', true, 'Could not bookmark the post'],
 		['unbookmark', false, 'Could not remove the bookmark'],
 	])('postBookmark (%s)', (endpoint, bookmarked, errorMessage) => {
