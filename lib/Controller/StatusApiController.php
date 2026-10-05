@@ -33,6 +33,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\PollService;
@@ -98,6 +99,7 @@ class StatusApiController extends MastodonApiController {
 		private FilterService $filterService,
 		private ScheduledStatusService $scheduledStatusService,
 		private PostReviewService $postReviewService,
+		private ModerationService $moderationService,
 		private ViewCountService $viewCountService,
 		private TeamService $teamService,
 		private PlaceService $placeService,
@@ -239,6 +241,10 @@ class StatusApiController extends MastodonApiController {
 			// vocabulary Mastodon's API has — `held_for_review` beside it is
 			// what this app's own composer reads to say something better than
 			// "failed".
+			// a moved account may not post at all, and is told so before the
+			// review queue gets to hold something a moderator would then be
+			// shown from an account that has left
+			$this->moderationService->assertNotMoved($author);
 			// assessed against the person who wrote it, not the team: first-post
 			// review is about an account nobody has vouched for yet, and a team
 			// account exists because an administrator made it
