@@ -152,4 +152,31 @@ class AtprotoAccountServiceTest extends TestCase {
 			}
 		}
 	}
+
+	public function testProfileImageRejectsMismatchedContentType(): void {
+		$client = $this->createMock(AtprotoClient::class);
+		$identity = $this->createMock(AtprotoIdentity::class);
+		$request = $this->createMock(AtprotoRequest::class);
+		$cipher = $this->createMock(PrivateKeyCipher::class);
+		$config = $this->createMock(ConfigService::class);
+		$account = (new AtprotoAccount())->setUserId('alice')->setDid('did:plc:alice')->setPds('https://pds.example');
+		$path = tempnam(sys_get_temp_dir(), 'social-atproto-avatar-');
+		file_put_contents($path, 'not-an-image');
+		try {
+			$request->method('getAccount')->willReturn($account);
+			$identity->method('profile')->willReturn(['$type' => 'app.bsky.actor.profile']);
+			$client->expects($this->never())->method('authedBlobPost');
+			$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
+
+			$this->expectException(AtprotoException::class);
+			$this->expectExceptionCode(422);
+			$service->updateProfile('alice', 'Alice', '', [
+				'error' => UPLOAD_ERR_OK, 'tmp_name' => $path, 'type' => 'image/png', 'size' => filesize($path),
+			]);
+		} finally {
+			if (is_string($path) && is_file($path)) {
+				unlink($path);
+			}
+		}
+	}
 }
