@@ -492,11 +492,19 @@ class AtprotoEgress {
 				if (!is_array($blob)) {
 					continue;
 				}
+				$aspectRatio = $this->aspectRatio($attachment);
 				if (str_starts_with($mime, 'video/')) {
 					$video = ['$type' => 'app.bsky.embed.video', 'video' => $blob, 'alt' => $attachment->getDescription()];
+					if ($aspectRatio !== null) {
+						$video['aspectRatio'] = $aspectRatio;
+					}
 					break;
 				}
-				$images[] = ['image' => $blob, 'alt' => $attachment->getDescription()];
+				$image = ['image' => $blob, 'alt' => $attachment->getDescription()];
+				if ($aspectRatio !== null) {
+					$image['aspectRatio'] = $aspectRatio;
+				}
+				$images[] = $image;
 			} catch (\Throwable $e) {
 				$this->logger->info('could not upload an ATProto attachment', ['post' => $post->getId(), 'exception' => $e]);
 			}
@@ -506,6 +514,20 @@ class AtprotoEgress {
 		}
 
 		return $images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images];
+	}
+
+	/** @return array{width: int, height: int}|null */
+	private function aspectRatio(Document $attachment): ?array {
+		$meta = $attachment->getMeta();
+		$width = $meta?->getWidth();
+		$height = $meta?->getHeight();
+		if ((!is_int($width) || $width < 1) || (!is_int($height) || $height < 1)) {
+			[$width, $height] = $attachment->getLocalCopySize();
+		}
+
+		return is_int($width) && is_int($height) && $width > 0 && $height > 0
+			? ['width' => $width, 'height' => $height]
+			: null;
 	}
 
 	/** A 13-character AT Protocol timestamp record key (TID). */

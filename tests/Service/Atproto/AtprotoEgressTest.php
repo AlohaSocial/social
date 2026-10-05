@@ -17,6 +17,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
+use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\Atproto\AtprotoClient;
@@ -385,6 +386,7 @@ class AtprotoEgressTest extends TestCase {
 			->setAccount('alice')
 			->setMimeType('image/png')
 			->setSizeBytes(42)
+			->setMeta((new AttachmentMeta())->setWidth(1200)->setHeight(675))
 			->setDescription('A small test image');
 		$post = $this->post();
 		$post->setAttachments([$document]);
@@ -419,6 +421,7 @@ class AtprotoEgressTest extends TestCase {
 						'size' => 9,
 					],
 					'alt' => 'A small test image',
+					'aspectRatio' => ['width' => 1200, 'height' => 675],
 				]],
 			]),
 			$account,
