@@ -235,9 +235,9 @@
 				{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
 			</NcButton>
 
-			<h5>{{ t('social', 'Bring your blocks, mutes and lists') }}</h5>
+			<h5>{{ t('social', 'Bring your blocks, mutes, lists, bookmarks and blocked domains') }}</h5>
 			<p>
-				{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block federates, exactly as blocking somebody from here does.') }}
+				{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block federates, exactly as blocking somebody from here does. Bookmarks are the addresses of posts: each is fetched from where it lives and marked here, for you alone. A blocked domain hides a whole server from you, as it did there.') }}
 			</p>
 			<p class="migration__note">
 				{{ t('social', 'Import your follows first and your lists after. A list here can only hold accounts you follow, as on Mastodon, so anybody you have not followed again yet is counted as skipped rather than followed by a button that says lists. A list you already have is filled rather than made twice.') }}
@@ -287,6 +287,36 @@
 						<IconFormatListBulleted v-else :size="20" />
 					</template>
 					{{ t('social', 'Import lists') }}
+				</NcButton>
+				<input
+					ref="bookmarks"
+					type="file"
+					accept=".csv,text/csv"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importCsv($event, 'bookmarks')">
+				<NcButton :disabled="csvImport !== ''" @click="pick('bookmarks')">
+					<template #icon>
+						<NcLoadingIcon v-if="csvImport === 'bookmarks'" :size="20" />
+						<IconBookmarkOutline v-else :size="20" />
+					</template>
+					{{ t('social', 'Import bookmarks') }}
+				</NcButton>
+				<input
+					ref="domain_blocks"
+					type="file"
+					accept=".csv,text/csv"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importCsv($event, 'domain_blocks')">
+				<NcButton :disabled="csvImport !== ''" @click="pick('domain_blocks')">
+					<template #icon>
+						<NcLoadingIcon v-if="csvImport === 'domain_blocks'" :size="20" />
+						<IconDomainOff v-else :size="20" />
+					</template>
+					{{ t('social', 'Import blocked domains') }}
 				</NcButton>
 			</div>
 
@@ -466,6 +496,8 @@ import IconAccountArrowRight from 'vue-material-design-icons/AccountArrowRight.v
 import IconAccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
+import IconBookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
+import IconDomainOff from 'vue-material-design-icons/DomainOff.vue'
 import IconDownload from 'vue-material-design-icons/Download.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconPostOutline from 'vue-material-design-icons/PostOutline.vue'
@@ -488,6 +520,8 @@ export default {
 		IconAccountMultiplePlus,
 		IconCancel,
 		IconClose,
+		IconBookmarkOutline,
+		IconDomainOff,
 		IconDownload,
 		IconFormatListBulleted,
 		IconPostOutline,
@@ -561,6 +595,8 @@ export default {
 				{ name: 'blocks', label: t('social', 'Blocks') },
 				{ name: 'mutes', label: t('social', 'Mutes') },
 				{ name: 'lists', label: t('social', 'Lists') },
+				{ name: 'bookmarks', label: t('social', 'Bookmarks') },
+				{ name: 'domain_blocks', label: t('social', 'Blocked domains') },
 			]
 		},
 	},
@@ -923,10 +959,10 @@ export default {
 		},
 
 		/**
-		 * Queues a blocks, mutes or lists CSV.
+		 * Queues a blocks, mutes, lists, bookmarks or blocked-domains CSV.
 		 *
 		 * @param {Event} event the file input's change
-		 * @param {string} kind blocks, mutes or lists
+		 * @param {string} kind blocks, mutes, lists, bookmarks or domain_blocks
 		 * @return {Promise<void>}
 		 */
 		async importCsv(event, kind) {
@@ -1040,6 +1076,8 @@ export default {
 				lists: t('social', 'Lists'),
 				posts: t('social', 'Posts'),
 				move_in: t('social', 'Move here'),
+				bookmarks: t('social', 'Bookmarks'),
+				domain_blocks: t('social', 'Blocked domains'),
 			}[kind] ?? kind
 		},
 
@@ -1111,6 +1149,20 @@ export default {
 					'social',
 					'{followed} followed, {skipped} skipped, {failed} could not be reached',
 					{ followed: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'bookmarks') {
+				return t(
+					'social',
+					'{done} posts bookmarked, {skipped} lines were not the address of a post, {failed} could not be fetched',
+					{ done: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'domain_blocks') {
+				return t(
+					'social',
+					'{done} servers blocked, {skipped} lines were not a domain, {failed} could not be blocked',
+					{ done: job.done, skipped: job.skipped, failed: job.failed },
 				)
 			}
 			return t(

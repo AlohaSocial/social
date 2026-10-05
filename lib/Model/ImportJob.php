@@ -31,10 +31,12 @@ class ImportJob implements JsonSerializable {
 	public const KIND_LISTS = 'lists';
 	public const KIND_POSTS = 'posts';
 	public const KIND_MOVE_IN = 'move_in';
+	public const KIND_BOOKMARKS = 'bookmarks';
+	public const KIND_DOMAIN_BLOCKS = 'domain_blocks';
 
 	public const KINDS = [
 		self::KIND_FOLLOWS, self::KIND_BLOCKS, self::KIND_MUTES, self::KIND_LISTS,
-		self::KIND_POSTS, self::KIND_MOVE_IN,
+		self::KIND_POSTS, self::KIND_MOVE_IN, self::KIND_BOOKMARKS, self::KIND_DOMAIN_BLOCKS,
 	];
 
 	private int $id = 0;

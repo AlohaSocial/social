@@ -51,7 +51,8 @@ Three steps, two of them here.
    when you turned on *Hide your social graph*, Pixelfed always does — the
    page says so, and the file imports further down are for that: upload the
    old server's `following_accounts.csv` (Pixelfed: `pixelfed-following.json`)
-   and, for the posts, its archive. Blocks, mutes and lists come the same way.
+   and, for the posts, its archive. Blocks, mutes, lists, bookmarks and blocked
+   domains come the same way.
    Every upload runs in the background too.
 
 3. **On the old server, move your followers here.** On Mastodon that is

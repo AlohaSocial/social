@@ -88,7 +88,7 @@ describe('Migration', () => {
 		const wrapper = mountPage()
 		const inputs = wrapper.findAll('input[type="file"]')
 
-		expect(inputs).toHaveLength(6)
+		expect(inputs).toHaveLength(8)
 		for (const input of inputs) {
 			expect(input.attributes('tabindex')).toBe('-1')
 			expect(input.attributes('aria-hidden')).toBe('true')
@@ -530,6 +530,30 @@ describe('Migration', () => {
 		expect(named.text()).toContain('gone@dead.example — no such server')
 		expect(named.findAll('li')).toHaveLength(6)
 		expect(named.text()).toContain('and 2 more')
+	})
+
+	it('queues a bookmarks file and says what came of the addresses in it', async () => {
+		serverQueues('bookmarks', job('bookmarks', 'done', { done: 4, skipped: 1, failed: 2 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'bookmarks', 'bookmarks.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/bookmarks`, expect.any(FormData))
+		expect(wrapper.text()).toContain('4 posts bookmarked, 1 lines were not the address of a post, 2 could not be fetched')
+	})
+
+	it('queues a blocked-domains file under the name Mastodon gives the list', async () => {
+		serverQueues('domain_blocks', job('domain_blocks', 'done', { done: 2 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'domain_blocks', 'blocked_domains.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/domain_blocks`, expect.any(FormData))
+		expect(wrapper.text()).toContain('2 servers blocked')
 	})
 
 	it('queues a mutes CSV through the mutes route', async () => {

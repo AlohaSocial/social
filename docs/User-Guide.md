@@ -765,14 +765,18 @@ hand, it is picked up as one.
   network's export — a `following_accounts.csv`, or Pixelfed's
   `pixelfed-following.json`.
 - **One list at a time, out.** Under the Export button, **Or one list at a
-  time** downloads your follows, your followers, your blocks, your mutes or
-  your lists as a single CSV, each written the way Mastodon writes it. It is
+  time** downloads your follows, your followers, your blocks, your mutes,
+  your lists, your bookmarks or your blocked domains as a single CSV, each
+  written the way Mastodon writes it. It is
   the same content as the files inside the zip, for when the other end wants
   one file rather than an archive. The followers file is a record rather than
   something an import can re-create: a follower follows you again, or their
   server is told by the move.
-- **Blocks, mutes and lists, in.** **Bring your blocks, mutes and lists** reads
-  the other three files from the same export. Blocks and mutes are decisions
+- **Blocks, mutes, lists, bookmarks and blocked domains, in.** **Bring your
+  blocks, mutes, lists, bookmarks and blocked domains** reads the other files
+  from the same export. Bookmarks are the addresses of posts: each is fetched
+  from the server it lives on and marked here, for you alone. A blocked
+  domain hides a whole server from you, as it did there. Blocks and mutes are decisions
   your account makes on its own, so they apply as soon as the file is read —
   and a block federates, exactly as blocking somebody from here does. Do the
   follows first and the lists after: a list here can only hold accounts you

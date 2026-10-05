@@ -15,14 +15,18 @@ use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ListsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\FollowSameAccountException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Move;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MastodonList;
+use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\InstancePath;
+use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCP\AppFramework\Http;
 use OCP\IConfig;
@@ -51,7 +55,10 @@ class MigrationService {
 	private const REFOLLOW_PAGE = 200;
 
 	/** The lists of accounts `exportCsv()` will write, and their names. */
-	public const CSV_KINDS = ['following', 'followers', 'blocks', 'mutes', 'lists'];
+	public const CSV_KINDS = ['following', 'followers', 'blocks', 'mutes', 'lists', 'bookmarks', 'domain_blocks'];
+
+	/** How many blocked domains an export lists at most: every one anybody has. */
+	private const EXPORT_DOMAINS = 10000;
 
 	/** How many rows one page of a CSV export reads. */
 	private const EXPORT_PAGE = 200;
@@ -94,6 +101,10 @@ class MigrationService {
 		private ActorRelationRequest $actorRelationRequest,
 		private ListsRequest $listsRequest,
 		private RelationshipService $relationshipService,
+		private StreamRequest $streamRequest,
+		private SearchService $searchService,
+		private StreamActionService $streamActionService,
+		private DomainBlockService $domainBlockService,
 		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
@@ -324,6 +335,185 @@ class MigrationService {
 	}
 
 	/**
+	 * Marks again the posts a `bookmarks.csv` lists — Mastodon's, one post
+	 * address a line — fetching the ones this server has never seen.
+	 *
+	 * Fetching is the point here, where the account export's restore
+	 * deliberately skips what is not here: a person's bookmarks are mostly
+	 * other people's posts on other servers, and a mark on a post this
+	 * server does not hold is no mark at all. A bookmark is a local flag;
+	 * nothing is sent to anybody. A line that is not an address is skipped.
+	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
+	 * @return array{bookmarked: int, skipped: int, failed: array<string, string>}
+	 *                                                                             `failed` maps an address to the reason
+	 */
+	public function importBookmarks(string $userId, string $csv, ?callable $progress = null): array {
+		$actor = $this->accountService->getActorFromUserId($userId);
+		$result = ['bookmarked' => 0, 'skipped' => 0, 'failed' => []];
+
+		[$urls, $result['skipped']] = self::addressesOf($csv);
+		$total = count($urls);
+		$handled = 0;
+		foreach ($urls as $url) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
+
+			try {
+				$post = $this->searchService->resolveStatus($url);
+				if ($post === null) {
+					$result['failed'][$url] = 'not a post this server could fetch';
+					continue;
+				}
+				$this->streamActionService->setActionBool($actor->getId(), $post->getId(), StreamAction::BOOKMARKED, true);
+				$result['bookmarked']++;
+			} catch (Throwable $e) {
+				$result['failed'][$url] = $e->getMessage();
+				$this->logger->notice('cannot import a bookmark', [
+					'actor' => $actor->getId(), 'url' => $url, 'exception' => $e,
+				]);
+			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Blocks the servers a `blocked_domains.csv` lists — Mastodon's, one
+	 * domain a line. A domain block is this account's own decision and
+	 * federates nothing, so each one applies the moment it is read; the
+	 * instance itself cannot be blocked and is reported as failed, as the
+	 * API would.
+	 *
+	 * @param callable(int, int): void|null $progress told how many entries are done, of how many
+	 * @return array{blocked: int, skipped: int, failed: array<string, string>}
+	 *                                                                          `failed` maps a domain to the reason
+	 */
+	public function importDomainBlocks(string $userId, string $csv, ?callable $progress = null): array {
+		$actor = $this->accountService->getActorFromUserId($userId);
+		$result = ['blocked' => 0, 'skipped' => 0, 'failed' => []];
+
+		[$domains, $result['skipped']] = self::domainsOf($csv);
+		$total = count($domains);
+		$handled = 0;
+		foreach ($domains as $domain) {
+			if ($progress !== null) {
+				$progress($handled++, $total);
+			}
+
+			try {
+				$this->domainBlockService->block($actor, $domain);
+				$result['blocked']++;
+			} catch (Throwable $e) {
+				$result['failed'][$domain] = $e->getMessage();
+			}
+		}
+
+		if ($progress !== null) {
+			$progress($handled, $total);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * The post addresses in a bookmarks file, and how many lines were not one.
+	 *
+	 * @return array{0: string[], 1: int}
+	 */
+	private static function addressesOf(string $csv): array {
+		$urls = [];
+		$skipped = 0;
+		foreach (self::linesOf($csv) as $line) {
+			if (!str_starts_with($line, 'https://') && !str_starts_with($line, 'http://')) {
+				$skipped++;
+				continue;
+			}
+			$urls[$line] = true;
+		}
+
+		return [array_keys($urls), $skipped];
+	}
+
+	/**
+	 * The domains in a blocked-domains file, lowercased and de-duplicated, and
+	 * how many lines were not one. A header line is not one.
+	 *
+	 * @return array{0: string[], 1: int}
+	 */
+	private static function domainsOf(string $csv): array {
+		$domains = [];
+		$skipped = 0;
+		foreach (self::linesOf($csv) as $line) {
+			$domain = strtolower(ltrim($line, '#'));
+			if (preg_match('/^[a-z0-9][a-z0-9.-]*\.[a-z0-9-]+$/', $domain) !== 1) {
+				$skipped++;
+				continue;
+			}
+			$domains[$domain] = true;
+		}
+
+		return [array_keys($domains), $skipped];
+	}
+
+	/** @return string[] the non-empty lines, trimmed */
+	private static function linesOf(string $csv): array {
+		$lines = [];
+		foreach (preg_split('/\r\n|\r|\n/', $csv) ?: [] as $line) {
+			$line = trim($line);
+			if ($line !== '') {
+				$lines[] = $line;
+			}
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * The addresses of the posts this account bookmarked, newest first — the
+	 * shape Mastodon's `bookmarks.csv` has, and the only one that means
+	 * anything off this server.
+	 *
+	 * @return string[]
+	 */
+	private function bookmarkUrls(Person $actor): array {
+		$this->streamRequest->setViewer($actor);
+		$urls = [];
+		$maxId = 0;
+		while (true) {
+			$options = new ProbeOptions();
+			$options->setFormat(ACore::FORMAT_ACTIVITYPUB)
+				->setProbe(ProbeOptions::BOOKMARKS)
+				->setAccountId($actor->getId())
+				->setLimit(self::EXPORT_PAGE);
+			if ($maxId > 0) {
+				$options->setMaxId($maxId);
+			}
+
+			$posts = $this->streamRequest->getTimeline($options);
+			if ($posts === []) {
+				return $urls;
+			}
+			foreach ($posts as $post) {
+				$urls[] = $post->getId();
+			}
+
+			$last = end($posts);
+			$nid = ($last === false) ? 0 : $last->getNid();
+			if ($nid <= 0 || ($maxId > 0 && $nid >= $maxId)) {
+				// a row that cannot be paged on: stop rather than ask for the same page again
+				return $urls;
+			}
+			$maxId = $nid;
+		}
+	}
+
+	/**
 	 * Re-creates the mutes of an export — Mastodon's `muted_accounts.csv`,
 	 * which carries `Hide notifications` beside each handle and is the one
 	 * thing a mute stores besides its target.
@@ -449,6 +639,10 @@ class MigrationService {
 			'blocks' => ['blocked_accounts.csv', self::csvOf($this->handlesOfRelations($actor, ActorRelation::TYPE_BLOCK))],
 			'mutes' => ['muted_accounts.csv', $this->exportMutesCsv($actor)],
 			'lists' => ['lists.csv', $this->exportListsCsv($actor)],
+			'bookmarks' => ['bookmarks.csv', self::csvOf($this->bookmarkUrls($actor))],
+			'domain_blocks' => ['blocked_domains.csv', self::csvOf(
+				$this->domainBlockService->getBlocked($actor, self::EXPORT_DOMAINS)
+			)],
 			default => throw new InvalidResourceException(
 				'"' . $kind . '" is not something this account keeps a list of'
 			),
