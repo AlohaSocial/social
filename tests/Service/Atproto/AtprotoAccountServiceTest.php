@@ -69,4 +69,27 @@ class AtprotoAccountServiceTest extends TestCase {
 		$this->expectExceptionCode(409);
 		$service->link('alice', 'alice.example', 'xxxx');
 	}
+
+	public function testBrokenLinkCannotWriteProfileMetadata(): void {
+		$client = $this->createMock(AtprotoClient::class);
+		$identity = $this->createMock(AtprotoIdentity::class);
+		$request = $this->createMock(AtprotoRequest::class);
+		$cipher = $this->createMock(PrivateKeyCipher::class);
+		$config = $this->createMock(ConfigService::class);
+		$account = (new AtprotoAccount())
+			->setUserId('alice')
+			->setHandle('alice.example')
+			->setDid('did:plc:alice')
+			->setPds('https://pds.example')
+			->setState(AtprotoAccount::STATE_BROKEN);
+		$request->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
+		$identity->expects($this->never())->method('profile');
+		$client->expects($this->never())->method('authedPost');
+
+		$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
+
+		$this->expectException(AtprotoException::class);
+		$this->expectExceptionCode(401);
+		$service->updateProfile('alice', 'Alice', 'Description');
+	}
 }

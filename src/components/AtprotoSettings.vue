@@ -33,7 +33,7 @@
 				@click="relink">
 				{{ t('social', 'Reconnect Bluesky') }}
 			</NcButton>
-			<form class="atproto-settings__profile" @submit.prevent="saveProfile">
+			<form v-if="status.account.state !== 'broken'" class="atproto-settings__profile" @submit.prevent="saveProfile">
 				<NcTextField v-model="profile.displayName" :label="t('social', 'Bluesky display name')" :disabled="saving" />
 				<NcTextArea v-model="profile.description" :label="t('social', 'Bluesky profile description')" :disabled="saving" />
 				<NcButton type="submit" variant="secondary" :disabled="saving">

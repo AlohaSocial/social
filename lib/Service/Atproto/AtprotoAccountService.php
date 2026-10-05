@@ -88,6 +88,9 @@ class AtprotoAccountService {
 		if ($account === null) {
 			throw new AtprotoException('no Bluesky account is linked', 404);
 		}
+		if ($account->getState() !== AtprotoAccount::STATE_LINKED) {
+			throw new AtprotoException('reconnect the Bluesky account before editing its profile', 401);
+		}
 
 		$record = $this->identity->profile($account->getDid(), $account->getPds());
 		$record['$type'] = 'app.bsky.actor.profile';
