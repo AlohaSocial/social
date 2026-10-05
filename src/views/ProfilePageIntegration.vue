@@ -94,6 +94,7 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
+import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { defineAsyncComponent } from 'vue'
@@ -143,8 +144,8 @@ export default {
 
 	computed: {
 		isOwnProfile() {
-			return Boolean(window.OC?.getCurrentUser?.()?.uid)
-				&& window.OC.getCurrentUser().uid === this.userId
+			const currentUser = getCurrentUser?.() ?? window.OC?.getCurrentUser?.()
+			return Boolean(currentUser?.uid) && currentUser.uid === this.userId
 		},
 
 		feedOptions() {
