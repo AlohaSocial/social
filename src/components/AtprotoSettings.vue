@@ -20,6 +20,13 @@
 			<p v-if="status.account.lastError" class="atproto-settings__error" role="alert">
 				{{ status.account.lastError }}
 			</p>
+			<form class="atproto-settings__profile" @submit.prevent="saveProfile">
+				<NcTextField v-model="profile.displayName" :label="t('social', 'Bluesky display name')" :disabled="saving" />
+				<NcTextArea v-model="profile.description" :label="t('social', 'Bluesky profile description')" :disabled="saving" />
+				<NcButton type="submit" variant="secondary" :disabled="saving">
+					{{ t('social', 'Save Bluesky profile') }}
+				</NcButton>
+			</form>
 			<NcButton variant="error" :disabled="saving" @click="unlink">
 				{{ t('social', 'Disconnect Bluesky') }}
 			</NcButton>
@@ -66,13 +73,14 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
+import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import logger from '../services/logger.js'
 
 export default {
 	name: 'AtprotoSettings',
-	components: { NcButton, NcLoadingIcon, NcPasswordField, NcTextField },
-	data: () => ({ loading: true, saving: false, handle: '', pds: '', appPassword: '', error: '', status: { enabled: false, account: null } }),
+	components: { NcButton, NcLoadingIcon, NcPasswordField, NcTextArea, NcTextField },
+	data: () => ({ loading: true, saving: false, handle: '', pds: '', appPassword: '', error: '', profile: { displayName: '', description: '' }, status: { enabled: false, account: null, profile: null } }),
 	mounted() {
 		this.load()
 	},
@@ -86,6 +94,7 @@ export default {
 		async load() {
 			try {
 				this.status = (await axios.get(this.url())).data ?? this.status
+				this.profile = this.status.profile ?? this.profile
 			} catch (error) {
 				this.error = t('social', 'Could not load your Bluesky connection')
 				logger.error('could not load AT-Proto status', { error })
@@ -116,6 +125,19 @@ export default {
 				this.status.account = null
 			} catch (error) {
 				this.error = error?.response?.data?.message ?? t('social', 'Could not disconnect Bluesky')
+			} finally {
+				this.saving = false
+			}
+		},
+
+		async saveProfile() {
+			this.saving = true
+			this.error = ''
+			try {
+				const { data } = await axios.put(this.url('/profile'), this.profile)
+				this.profile = data.profile ?? this.profile
+			} catch (error) {
+				this.error = error?.response?.data?.message ?? t('social', 'Could not save your Bluesky profile')
 			} finally {
 				this.saving = false
 			}

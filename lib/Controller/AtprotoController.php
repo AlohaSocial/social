@@ -163,6 +163,30 @@ class AtprotoController extends Controller {
 		return new DataResponse($statuses, Http::STATUS_OK);
 	}
 
+	/** Update the linked Bluesky account's public display metadata. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 20, period: 300)]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/atproto/profile')]
+	public function updateProfile(): DataResponse {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return $this->signedOut();
+		}
+
+		try {
+			$body = $this->request->getParams();
+			return new DataResponse([
+				'profile' => $this->accountService->updateProfile(
+					$userId,
+					(string)($body['displayName'] ?? ''),
+					(string)($body['description'] ?? '')
+				),
+			], Http::STATUS_OK);
+		} catch (AtprotoException $e) {
+			return new DataResponse(['message' => $e->getMessage()], $e->getStatus() >= 400 ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	/** Public handle-based profile entry point, parallel to `/@account`. */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]

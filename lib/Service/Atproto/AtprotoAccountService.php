@@ -51,15 +51,60 @@ class AtprotoAccountService {
 	 */
 	public function status(string $userId): array {
 		$account = $this->atprotoRequest->getAccount($userId);
+		$profile = [];
+		if ($account !== null) {
+			try {
+				$profile = $this->identity->profile($account->getDid(), $account->getPds());
+			} catch (AtprotoException $e) {
+				$this->logger->debug('could not read linked ATProto profile', ['exception' => $e]);
+			}
+		}
 
 		return [
 			'enabled' => $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1',
 			'account' => $account === null ? null : $this->describe($account),
+			'profile' => $account === null ? null : [
+				'displayName' => (string)($profile['displayName'] ?? ''),
+				'description' => (string)($profile['description'] ?? ''),
+			],
 			// Watch rows are shared, deduplicated work for the instance. They are
 			// not a profile's public following list, so never disclose everybody
 			// else's follows through an account-settings response.
 			'watches' => [],
 		];
+	}
+
+	/** Update the public profile record in the linked account's repository. */
+	public function updateProfile(string $userId, string $displayName, string $description): array {
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($account === null) {
+			throw new AtprotoException('no Bluesky account is linked', 404);
+		}
+
+		$record = $this->identity->profile($account->getDid(), $account->getPds());
+		$record['$type'] = 'app.bsky.actor.profile';
+		$record['displayName'] = $this->limit($displayName, 64);
+		$record['description'] = $this->limit($description, 256);
+		$this->client->authedPost('com.atproto.repo.putRecord', [
+			'repo' => $account->getDid(),
+			'collection' => 'app.bsky.actor.profile',
+			'rkey' => 'self',
+			'record' => $record,
+		], $account, $account->getPds());
+
+		return [
+			'displayName' => $record['displayName'],
+			'description' => $record['description'],
+		];
+	}
+
+	private function limit(string $value, int $length): string {
+		$value = trim($value);
+		if (function_exists('grapheme_substr') && grapheme_strlen($value) > $length) {
+			return (string)grapheme_substr($value, 0, $length);
+		}
+
+		return mb_substr($value, 0, $length);
 	}
 
 	/**
