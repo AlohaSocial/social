@@ -82,6 +82,7 @@ import { defineAsyncComponent } from 'vue'
 import PostReactedBy from './PostReactedBy.vue'
 import MessageContent from './MessageContent.js'
 import logger from '../services/logger.js'
+import { showError } from '../services/toast.js'
 import { getActivePinia, mapStores } from 'pinia'
 import { useTimelineStore } from '../store/timeline.js'
 
@@ -180,6 +181,7 @@ export default {
 				this.$emit('deleted', this.displayStatus)
 			} catch (error) {
 				logger.error('Failed to delete profile post', { error, statusId: this.displayStatus.id })
+				await showError(error?.response?.data?.message ?? t('social', 'Could not delete this post'))
 			} finally {
 				this.deleting = false
 			}
@@ -201,6 +203,7 @@ export default {
 				this.editing = false
 			} catch (error) {
 				logger.error('Failed to edit native Bluesky post', { error, statusId: this.displayStatus.id })
+				await showError(error?.response?.data?.message ?? t('social', 'Could not edit this post'))
 			} finally {
 				this.savingEdit = false
 			}
