@@ -16,6 +16,12 @@ import { generateUrl } from '@nextcloud/router'
 export function localProfileUrl(account, statusId = null) {
 	const acct = String(account?.acct ?? '')
 	const username = String(account?.username || acct)
+	if (String(account?.id ?? '').includes('/ap/bluesky/')) {
+		const url = `${generateUrl('/apps/social')}/${encodeURIComponent(username)}`
+		return statusId === null || statusId === undefined
+			? url
+			: `${url}#social-profile-status-${encodeURIComponent(String(statusId))}`
+	}
 	if (!acct || acct.includes('@') || !username) {
 		return ''
 	}

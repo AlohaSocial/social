@@ -578,7 +578,9 @@ class AtprotoIdentity {
 
 	/** The internal profile URL shared with the Fediverse profile renderer. */
 	private function localProfileUrl(string $handle): string {
-		return $this->configService->getSocialUrl() . 'atproto/' . rawurlencode($handle);
+		// New actor links use the short handle URL; the explicit /atproto route
+		// remains available for older bookmarks.
+		return $this->configService->getSocialUrl() . rawurlencode($handle);
 	}
 
 	/**

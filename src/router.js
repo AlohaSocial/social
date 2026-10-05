@@ -407,6 +407,14 @@ const router = createRouter({
 			},
 			props: true,
 		},
+		{
+			// A Bluesky handle is itself a profile URL segment. This is last so
+			// named Social routes such as /settings and /discover win first.
+			path: '/:handle',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile-handle',
+		},
 	],
 })
 
