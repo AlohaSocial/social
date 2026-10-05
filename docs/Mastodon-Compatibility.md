@@ -106,6 +106,17 @@ Overview whether they are in place, and an administrator opening the app sees
 the same warning with the rules to paste until they are. Where they are not,
 nothing else in this section is reachable by a stock client.
 
+### 3.1a Fixed — account pictures
+
+Fixed in #2468: a local account that had never set a picture was sent with
+`avatar: ""` and its Nextcloud avatar in `header`, because the model's header
+fell back to the avatar and the cached copy of the actor handed that fallback
+back as if it were a banner; clients drew the face as the banner over an empty
+circle. The Account entity now always carries a URL in all four picture fields:
+the avatar is the account's own or, for a local account, Nextcloud's generated
+one; the header is the banner or a plain placeholder picture
+(`img/header-missing.svg`), as Mastodon's `missing.png`, never the avatar.
+
 ### 3.2 Fixed — one access token per registered app
 
 `social_client` used to hold a single `token`, `auth_user_id`, `auth_account`

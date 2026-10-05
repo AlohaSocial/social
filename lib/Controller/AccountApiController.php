@@ -355,16 +355,6 @@ class AccountApiController extends MastodonApiController {
 			$data['last_status_at'] = null;
 		}
 
-		$placeholder = null;
-		foreach (['avatar', 'avatar_static', 'header', 'header_static'] as $image) {
-			if (($data[$image] ?? null) !== '') {
-				continue;
-			}
-
-			$placeholder ??= $account->placeholderImage($this->urlGenerator);
-			$data[$image] = $placeholder;
-		}
-
 		return $data;
 	}
 

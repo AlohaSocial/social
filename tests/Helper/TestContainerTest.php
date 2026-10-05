@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Helper;
 
+use OCP\IURLGenerator;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\NotFoundExceptionInterface;
@@ -39,5 +40,14 @@ class TestContainerTest extends TestCase {
 		\OC::$server->reset();
 
 		$this->assertInstanceOf(NullLogger::class, Server::get(LoggerInterface::class));
+	}
+
+	public function testADefaultUrlGeneratorAnswersPredictableAddresses(): void {
+		\OC::$server->reset();
+
+		$urls = Server::get(IURLGenerator::class);
+
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.svg', $urls->getAbsoluteURL($urls->imagePath('social', 'header-missing.svg')));
+		$this->assertSame('https://cloud.example.org/core.avatar.getAvatar/alice/128', $urls->linkToRouteAbsolute('core.avatar.getAvatar', ['userId' => 'alice', 'size' => 128]));
 	}
 }

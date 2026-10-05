@@ -498,6 +498,7 @@ import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 import { fullDateTime } from '../utils/relativeTime.js'
 import { defineAsyncComponent } from 'vue'
+import { bannerOf } from '../utils/banner.js'
 
 // Neither is any use until the reader asks for it, and both bring a dialog
 // with them; they share one chunk, which is the same one the post overflow
@@ -819,8 +820,7 @@ export default {
 		},
 
 		bannerStyle() {
-			const info = this.accountInfo || {}
-			return this.bannerUrl || info.header || ''
+			return this.bannerUrl || bannerOf(this.accountInfo)
 		},
 	},
 
