@@ -125,6 +125,16 @@ describe('the post menu', () => {
 			expect(offered).toContain('Edit')
 		})
 
+		it('uses the signed-in Nextcloud identity while the account store hydrates', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { acct: 'alice@cloud.example', username: 'alice' },
+			}, { currentAccount: null }))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
 		/**
 		 * Muting, blocking and reporting yourself are all nonsense. Quoting
 		 * yourself is not — it is how somebody adds to their own post without

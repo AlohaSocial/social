@@ -287,7 +287,7 @@ export default {
 				return false
 			}
 			const localPart = (value) => String(value ?? '').split('@', 1)[0]
-			const nextcloudUser = getCurrentUser()
+			const nextcloudUser = getCurrentUser() ?? window.OC?.getCurrentUser?.()
 			const authorHandle = localPart(this.item.account.acct || this.item.account.username)
 			if (this.isLocal && nextcloudUser?.uid && authorHandle
 				&& authorHandle.toLowerCase() === String(nextcloudUser.uid).toLowerCase()) {

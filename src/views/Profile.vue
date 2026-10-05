@@ -107,7 +107,7 @@ export default {
 			// navigation can therefore render before verify_credentials has
 			// returned; Nextcloud's signed-in identity is already available in
 			// the page and is authoritative for a local /@username route.
-			const nextcloudUser = getCurrentUser()
+			const nextcloudUser = getCurrentUser() ?? window.OC?.getCurrentUser?.()
 			const localPart = (value) => String(value ?? '').split('@', 1)[0]
 			const routePart = localPart(this.$route.params.account)
 			if (nextcloudUser?.uid && routePart
