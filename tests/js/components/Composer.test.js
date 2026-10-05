@@ -558,6 +558,17 @@ describe('Composer', () => {
 			expect(currentVisibility(wrapper)).toBe('unlisted')
 		})
 
+		it('targets ATProto when opened on an imported Bluesky post', () => {
+			const { wrapper } = mountComposer({ inReplyTo: {
+				...replyTo(),
+				id: 'https://cloud.example.org/ap/bluesky/did:plc:bob/app.bsky.feed.post/3abc',
+				visibility: 'public',
+			} })
+
+			expect(wrapper.vm.publicationTarget).toBe('atproto')
+			expect(currentVisibility(wrapper)).toBe('public')
+		})
+
 		it('defaults to followers only', () => {
 			const { wrapper } = mountComposer()
 			expect(currentVisibility(wrapper)).toBe('followers')
