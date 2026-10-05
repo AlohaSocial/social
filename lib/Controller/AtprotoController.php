@@ -157,8 +157,10 @@ class AtprotoController extends Controller {
 			return new DataResponse([], Http::STATUS_OK);
 		}
 
+		$limit = min(max((int)$this->request->getParam('limit', 20), 1), 50);
+		$offset = min(max((int)$this->request->getParam('cursor', 0), 0), 1000000);
 		$statuses = [];
-		foreach ($this->atprotoRequest->getLinksForDid($account->getDid(), 100) as $link) {
+		foreach ($this->atprotoRequest->getLinksForDid($account->getDid(), $limit, $offset) as $link) {
 			try {
 				$status = $this->streamService->getStreamById($link->getLocalId(), true, ACore::FORMAT_LOCAL);
 				if ($status->getAttributedTo() === $actorId) {

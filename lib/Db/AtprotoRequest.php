@@ -158,12 +158,13 @@ class AtprotoRequest extends CoreRequestBuilder {
 	 *
 	 * @return AtprotoLink[]
 	 */
-	public function getLinksForDid(string $did, int $limit = self::LINK_BATCH): array {
+	public function getLinksForDid(string $did, int $limit = self::LINK_BATCH, int $offset = 0): array {
 		$qb = $this->getQueryBuilder();
 		$this->selectLink($qb)
 			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
 			->orderBy('nid', 'desc')
-			->setMaxResults($limit);
+			->setMaxResults(max(1, $limit))
+			->setFirstResult(max(0, $offset));
 
 		return $this->links($qb);
 	}

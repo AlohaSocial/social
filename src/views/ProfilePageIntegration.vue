@@ -136,6 +136,7 @@ export default {
 			feedLoading: false,
 			feedError: false,
 			feedHasMore: false,
+			blueskyOffset: 0,
 			feedRequest: 0,
 			anchorRequest: false,
 			replyTo: null,
@@ -219,6 +220,9 @@ export default {
 			if (!maxId) {
 				this.feedTimeline = []
 				this.feedHasMore = false
+				if (feed === 'bluesky') {
+					this.blueskyOffset = 0
+				}
 			}
 
 			try {
@@ -231,6 +235,9 @@ export default {
 					url = generateUrl(`apps/social/api/v1/accounts/${encodeURIComponent(this.userId)}/statuses`)
 				} else if (feed === 'bluesky') {
 					url = generateUrl('apps/social/api/v1/atproto/profile')
+					if (this.blueskyOffset > 0) {
+						params.cursor = this.blueskyOffset
+					}
 				} else if (feed === 'home') {
 					url = generateUrl('apps/social/api/v1/timelines/home')
 				} else {
@@ -247,6 +254,9 @@ export default {
 					? [...this.feedTimeline, ...page.filter((status) => !seen.has(String(status.id)))]
 					: page
 				this.feedHasMore = page.length === PAGE_SIZE
+				if (feed === 'bluesky') {
+					this.blueskyOffset += page.length
+				}
 				if (feed === 'profile' && !maxId) {
 					await this.restorePostAnchor(request)
 				}
