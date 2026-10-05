@@ -354,6 +354,8 @@ class ApiControllerTest extends TestCase {
 		$this->tempManager = $this->createStub(ITempManager::class);
 
 		\OC::$server->register(IRequest::class, $this->request);
+		// the Account export builds placeholder pictures through the container
+		\OC::$server->register(IURLGenerator::class, $this->urlGenerator);
 		// Response::cacheFor() stamps an Expires header from the clock
 		$clock = $this->createStub(ITimeFactory::class);
 		$clock->method('getTime')->willReturn(1700000000);
@@ -2319,6 +2321,10 @@ class ApiControllerTest extends TestCase {
 		$this->urlGenerator->method('linkToRouteAbsolute')
 			->with('core.avatar.getAvatar', ['userId' => 'alice', 'size' => 128])
 			->willReturn('https://cloud.example/avatar/alice/128');
+		$this->urlGenerator->method('imagePath')
+			->willReturnCallback(static fn (string $app, string $file): string => '/apps/' . $app . '/img/' . $file);
+		$this->urlGenerator->method('getAbsoluteURL')
+			->willReturnCallback(static fn (string $path): string => 'https://cloud.example' . $path);
 
 		$data = json_decode((string)json_encode($this->controller()->verifyCredentials()->getData()), true);
 
@@ -2326,8 +2332,9 @@ class ApiControllerTest extends TestCase {
 		$this->assertNull($data['last_status_at']);
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar']);
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar_static']);
-		$this->assertSame('https://cloud.example/avatar/alice/128', $data['header']);
-		$this->assertSame('https://cloud.example/avatar/alice/128', $data['header_static']);
+		// never the avatar: a client draws the header where a header goes
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header']);
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header_static']);
 	}
 
 	public function testUpdateCredentialsRequiresAViewer(): void {

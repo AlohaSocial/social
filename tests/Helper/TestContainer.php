@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Helper;
 
+use OCP\IURLGenerator;
 use OCP\IUserSession;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
@@ -37,7 +38,8 @@ class TestContainer implements ContainerInterface {
 	}
 
 	/**
-	 * Back to the defaults: a silent logger, and a session with nobody in it.
+	 * Back to the defaults: a silent logger, a session with nobody in it, and
+	 * a URL generator whose addresses follow from what was asked.
 	 *
 	 * The session is a default rather than something each test registers
 	 * because `Response::getHeaders()` resolves one on every render from
@@ -47,6 +49,7 @@ class TestContainer implements ContainerInterface {
 		$this->services = [
 			LoggerInterface::class => new NullLogger(),
 			IUserSession::class => new AnonymousUserSession(),
+			IURLGenerator::class => new PredictableUrlGenerator(),
 		];
 	}
 

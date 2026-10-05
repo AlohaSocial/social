@@ -202,14 +202,45 @@ class PersonTest extends TestCase {
 		$this->assertSame('', $person->getHeader());
 	}
 
-	public function testHeaderFallsBackToTheAvatar(): void {
+	/**
+	 * The header used to fall back to the avatar, and the cached copy of a
+	 * local actor handed that fallback back as if it were a banner: every
+	 * client drew the person's face across the top of the profile.
+	 */
+	public function testHeaderNeverFallsBackToTheAvatar(): void {
 		$person = new Person();
 		$person->setAvatar('https://a.example/avatar.png');
 
-		$this->assertSame('https://a.example/avatar.png', $person->getHeader());
+		$this->assertSame('', $person->getHeader());
 
 		$person->setHeader('https://a.example/header.jpg');
 		$this->assertSame('https://a.example/header.jpg', $person->getHeader());
+	}
+
+	/** alohasocial/social#2468: a local account that set no picture. */
+	public function testALocalAccountWithoutPicturesGetsItsNextcloudAvatarAndAHeaderPlaceholder(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame('https://cloud.example.org/core.avatar.getAvatar/alice/128', $account['avatar']);
+		$this->assertSame($account['avatar'], $account['avatar_static']);
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.svg', $account['header']);
+		$this->assertSame($account['header'], $account['header_static']);
+	}
+
+	public function testARemoteAccountWithoutABannerGetsTheHeaderPlaceholderNotItsAvatar(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$person = new Person();
+		$person->setPreferredUsername('bob')->setAccount('bob@mastodon.social')
+			->setAvatar('https://files.mastodon.social/avatars/bob.png');
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame('https://files.mastodon.social/avatars/bob.png', $account['avatar']);
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.svg', $account['header']);
 	}
 
 	public function testNameAndDisplayNameFallBackToThePreferredUsername(): void {
@@ -417,7 +448,8 @@ class PersonTest extends TestCase {
 				return 'https://cloud.example.org/' . $route . '/' . implode('/', $parameters);
 			}
 		);
-		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social.svg');
+		$this->urlGenerator->method('imagePath')
+			->willReturnCallback(static fn (string $app, string $file): string => '/apps/' . $app . '/img/' . $file);
 		$this->urlGenerator->method('getAbsoluteURL')
 			->willReturnCallback(fn (string $path): string => 'https://cloud.example.org' . $path);
 	}

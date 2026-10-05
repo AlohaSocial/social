@@ -212,10 +212,6 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 * @return string
 	 */
 	public function getHeader(): string {
-		if ($this->header === '') {
-			return $this->getAvatar();
-		}
-
 		return $this->header;
 	}
 
@@ -1399,6 +1395,19 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 * account Nextcloud's own avatar, which every user has (generated from the
 	 * initials when nothing was uploaded), the app icon otherwise.
 	 */
+	/**
+	 * The banner an account without one is given on the client API: a plain
+	 * picture of the right shape, as Mastodon's `missing.png`. Never the
+	 * avatar -- a client draws the header where a header goes, and a face
+	 * stretched across the top of a profile with an empty circle under it
+	 * is what that looked like.
+	 */
+	public function placeholderHeader(IURLGenerator $urlGenerator): string {
+		return $urlGenerator->getAbsoluteURL(
+			$urlGenerator->imagePath(SocialApp::APP_ID, 'header-missing.svg')
+		);
+	}
+
 	public function placeholderImage(IURLGenerator $urlGenerator): string {
 		if ($this->isLocal()) {
 			return $urlGenerator->linkToRouteAbsolute(
@@ -1424,9 +1433,16 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			if ($avatar === '') {
 				$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
 			}
+		} elseif ($this->getAvatar() === '') {
+			// an account that never set a picture: the client API promises a
+			// URL, and a local account always has Nextcloud's own avatar
+			$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
 		}
 
 		$headerUrl = $this->getHeader();
+		if ($headerUrl === '') {
+			$headerUrl = $this->placeholderHeader(Server::get(IURLGenerator::class));
+		}
 		$details = $this->getDetailsAll();
 		// when the page a field names was last seen linking back with rel="me"
 		// (ProfileLinkVerifier); null until it has, as on Mastodon
