@@ -275,9 +275,19 @@ export default {
 
 		selectProfileImage(event, field) {
 			const file = event?.target?.files?.[0]
-			if (file) {
-				this.profileImages[field] = file
+			if (!file) {
+				return
 			}
+			if (file.size > 1 * 1024 * 1024) {
+				this.profileError = t('social', 'Profile images must be 1 MiB or smaller')
+				if (event.target) {
+					event.target.value = ''
+				}
+
+				return
+			}
+			this.profileError = ''
+			this.profileImages[field] = file
 		},
 	},
 }

@@ -57,4 +57,18 @@ describe('AtprotoProfile', () => {
 		expect(get).toHaveBeenCalledTimes(2)
 		expect(wrapper.find('.atproto-profile__avatar').attributes('src')).toBe('new.jpg')
 	})
+
+	it('rejects profile images larger than the native limit before saving', () => {
+		const wrapper = mount(AtprotoProfile, {
+			props: { handle: 'bob.example' },
+			global: { stubs },
+		})
+		const target = { files: [{ size: 1 * 1024 * 1024 + 1 }], value: 'selected' }
+
+		wrapper.vm.selectProfileImage({ target }, 'avatar')
+
+		expect(target.value).toBe('')
+		expect(wrapper.vm.profileImages.avatar).toBeNull()
+		expect(wrapper.vm.profileError).toContain('1 MiB')
+	})
 })
