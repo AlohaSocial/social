@@ -32,6 +32,7 @@ The Aloha Social app exposes four groups of endpoints. Each is registered as a `
 
 - **Mastodon-compatible REST API** (the controllers built on `MastodonApiController` — `AccountApiController`, `StatusApiController`, `TimelineApiController`, `MediaApiController`, `InstanceApiController`, `ScheduledStatusApiController`, `AnnualReportApiController` and `ApiController` — plus `TagController` and `OAuthController`) — a partial implementation of the Mastodon client API. Several endpoints are stubs; each is marked below.
 - **Custom Local API** (`LocalController`, `ConfigController`) — the endpoints the app's own Vue frontend calls. They are not Mastodon-compatible and their response envelope differs (see Error Responses).
+- **AT-Proto account API** (`AtprotoController`) — the signed-in user's Bluesky link and status. These routes are deliberately session/CSRF based and do not change ActivityPub credentials or federation state.
 - **ActivityPub Federation API** (`ActivityPubController`, `SocialPubController`) — server-to-server ActivityPub, plus the HTML profile/post pages served on the same URLs.
 - **Frontend, document, OStatus and queue endpoints** (`NavigationController`, `OStatusController`, `QueueController`) — HTML pages and internal plumbing.
 
@@ -40,6 +41,28 @@ All URLs are relative to the app's route base, i.e. index.php/apps/social + the 
 **Conditional GETs.** The home timeline and the unread counts carry an `ETag` built from the newest id the viewer can see; the routes a page load reads for its sidebar — `/api/v1/custom_emojis`, `/api/v1/trends/tags`, `/api/v1/instance/`, `/api/v2/instance`, `/api/v1/lists` and `/api/v1/followed_tags` — carry one built from the answer itself. All of them go out with `Cache-Control: private, no-cache`, and a request whose `If-None-Match` names the current tag is answered `304` with no body.
 
 None of these are OCS routes: `#[ApiRoute]` would put them under `/ocsapp`, which is not where any of these paths are published.
+
+### AT-Proto account API
+
+These routes operate alongside the Fediverse account. Linking or unlinking a
+Bluesky account does not create an ActivityPub actor, alter local visibility,
+or change the user's Fediverse follows. The app password is accepted only by
+the link operation and is stored sealed with the instance secret; it is never
+returned by the API.
+
+| Method | Route | Auth | Parameters | Description |
+|--------|-------|------|------------|-------------|
+| GET | `/api/v1/atproto` | user, no-csrf | — | Returns the server switch, the linked account summary (`handle`, `did`, `pds`, `state`, `lastSync`, `lastError`) and the Bluesky profiles followed by this user. A signed-out caller receives **401**. This is status data for the Settings card, not a Mastodon or ActivityPub account entity. |
+| POST | `/api/v1/atproto/link` | user, rate-limited (10/5min), CSRF required | `handle`, `appPassword` | Resolves the handle through AT-Proto identity, verifies the app password with `com.atproto.server.createSession`, seals the credential and replaces this user's existing link. The DID and PDS are stored as protocol-native identity data. Invalid credentials/handles are returned as a JSON `message` with a client error status; the normal Nextcloud session and Fediverse account remain unchanged. |
+| DELETE | `/api/v1/atproto` | user, no-csrf | — | Removes this user's Bluesky link and its sealed credential. An absent link is **404**; otherwise the response is an empty JSON object. Existing imported posts remain local records, while future mirroring stops immediately. |
+
+The account API is intentionally separate from ActivityPub. A local post is
+eligible for an AT-Proto mirror only when the server switch and mirror switch
+are enabled, the author has a linked account, and the post is public; direct,
+followers-only and unlisted posts stay on the Fediverse side. Published,
+edited and deleted local posts use protocol-native repository operations and
+are mapped through the local `social_atproto_link` table rather than exposing
+an `at://` URI as a local ActivityPub id.
 
 `GET /api/v1/accounts/{id}` is the one route still declared in `appinfo/routes.php`. Its `{id}` accepts slashes, so it also matches `/api/v1/accounts/{account}/lists` and `/api/v1/accounts/{account}/featured_tags`, and it has to be offered to the matcher after them; those two belong to other controllers, and attribute routes are contributed one controller at a time in filesystem order. The array file is loaded after every attribute route of the app, which is the guarantee that route needs.
 
