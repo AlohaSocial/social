@@ -31,10 +31,16 @@
 			</p>
 			<NcTextField
 				v-model.trim="handle"
-				:label="t('social', 'Bluesky handle')"
+				:label="t('social', 'Bluesky username or handle')"
 				placeholder="alice.bsky.social"
 				:disabled="saving"
 				required />
+			<NcTextField
+				v-model.trim="pds"
+				:label="t('social', 'PDS server (optional)')"
+				placeholder="https://bsky.social"
+				:description="t('social', 'Leave empty to use the PDS resolved from the handle. Self-hosted PDS URLs can be entered separately.')"
+				:disabled="saving" />
 			<NcPasswordField
 				v-model="appPassword"
 				:label="t('social', 'Bluesky app password')"
@@ -66,7 +72,7 @@ import logger from '../services/logger.js'
 export default {
 	name: 'AtprotoSettings',
 	components: { NcButton, NcLoadingIcon, NcPasswordField, NcTextField },
-	data: () => ({ loading: true, saving: false, handle: '', appPassword: '', error: '', status: { enabled: false, account: null } }),
+	data: () => ({ loading: true, saving: false, handle: '', pds: '', appPassword: '', error: '', status: { enabled: false, account: null } }),
 	mounted() {
 		this.load()
 	},
@@ -92,7 +98,7 @@ export default {
 			this.saving = true
 			this.error = ''
 			try {
-				await axios.post(this.url('/link'), { handle: this.handle, appPassword: this.appPassword })
+				await axios.post(this.url('/link'), { handle: this.handle, pds: this.pds, appPassword: this.appPassword })
 				this.appPassword = ''
 				await this.load()
 			} catch (error) {

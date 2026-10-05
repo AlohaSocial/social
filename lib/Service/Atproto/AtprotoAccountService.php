@@ -67,20 +67,25 @@ class AtprotoAccountService {
 	 *
 	 * @param string $handle as typed, with or without an `@`
 	 * @param string $appPassword from Bluesky's app-password page, not the account password
+	 * @param string $pds optional PDS base URL; empty uses the DID-resolved PDS
 	 *
 	 * @throws AtprotoException what the PDS said, when the pair is no good
 	 */
-	public function link(string $userId, string $handle, string $appPassword): AtprotoAccount {
+	public function link(string $userId, string $handle, string $appPassword, string $pds = ''): AtprotoAccount {
 		$handle = $this->identity->normalize($handle);
 		if ($appPassword === '') {
 			throw new AtprotoException('an app password is required to link an account', 400);
 		}
 
 		$resolved = $this->identity->resolve($handle);
+		$pds = trim($pds) !== '' ? rtrim(trim($pds), '/') : $resolved['pds'];
+		if (filter_var($pds, FILTER_VALIDATE_URL) === false || !in_array(parse_url($pds, PHP_URL_SCHEME), ['http', 'https'], true)) {
+			throw new AtprotoException('the PDS server must be a valid http(s) URL', 400);
+		}
 		$session = $this->client->post('com.atproto.server.createSession', [
 			'identifier' => $handle,
 			'password' => $appPassword,
-		], $resolved['pds']);
+		], $pds);
 
 		$did = (string)($session['did'] ?? '');
 		if (!str_starts_with($did, 'did:')) {
@@ -93,7 +98,7 @@ class AtprotoAccountService {
 		$account->setUserId($userId)
 			->setHandle($handle)
 			->setDid($did)
-			->setPds($resolved['pds'])
+			->setPds($pds)
 			->setAppPassword($this->cipher->seal($appPassword))
 			->setState(AtprotoAccount::STATE_LINKED)
 			->setLastError('')

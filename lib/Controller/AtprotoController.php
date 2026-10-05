@@ -88,7 +88,8 @@ class AtprotoController extends Controller {
 			$account = $this->accountService->link(
 				$userId,
 				(string)($body['handle'] ?? ''),
-				(string)($body['appPassword'] ?? '')
+				(string)($body['appPassword'] ?? ''),
+				(string)($body['pds'] ?? '')
 			);
 		} catch (AtprotoException $e) {
 			$this->logger->info('a Bluesky link was refused', [
