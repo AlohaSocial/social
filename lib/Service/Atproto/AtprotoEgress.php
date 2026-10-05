@@ -13,10 +13,13 @@ use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\DocumentService;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -38,6 +41,7 @@ class AtprotoEgress {
 		private ConfigService $configService,
 		private LoggerInterface $logger,
 		private ?AtprotoIdentity $identity = null,
+		private ?DocumentService $documentService = null,
 	) {
 	}
 
@@ -66,7 +70,7 @@ class AtprotoEgress {
 		// newest writes together, which is what lets the ingress stop at the
 		// first already-known page instead of repeatedly scanning a repository.
 		$rkey = $this->tid();
-		$record = $this->record($post);
+		$record = $this->record($post, $account);
 		$answer = $this->put($account, $rkey, $record);
 		$this->saveLink($post, $account, $rkey, $answer);
 	}
@@ -92,12 +96,12 @@ class AtprotoEgress {
 			return;
 		}
 
-		$answer = $this->put($account, $link->getRkey(), $this->record($post));
+		$answer = $this->put($account, $link->getRkey(), $this->record($post, $account));
 		$this->saveLink($post, $account, $link->getRkey(), $answer);
 	}
 
 	/** @return array<string, mixed> */
-	private function record(Stream $post): array {
+	private function record(Stream $post, ?AtprotoAccount $account = null): array {
 		$text = $this->text($post->getContent());
 		$record = [
 			'$type' => 'app.bsky.feed.post',
@@ -135,6 +139,18 @@ class AtprotoEgress {
 					'description' => $card->getDescription(),
 				],
 			];
+		}
+		$media = $account === null ? null : $this->mediaEmbed($post, $account);
+		if ($media !== null) {
+			if (($record['embed']['$type'] ?? '') === 'app.bsky.embed.record') {
+				$record['embed'] = [
+					'$type' => 'app.bsky.embed.recordWithMedia',
+					'media' => $media,
+					'record' => $record['embed']['record'],
+				];
+			} else {
+				$record['embed'] = $media;
+			}
 		}
 		$parent = null;
 		if ($post->getInReplyTo() !== '') {
@@ -427,6 +443,46 @@ class AtprotoEgress {
 		}
 
 		return mb_strlen($text) > 300 ? mb_substr($text, 0, 299) . '…' : $text;
+	}
+
+	/** Upload local attachments and return one native image/video embed. */
+	private function mediaEmbed(Stream $post, AtprotoAccount $account): ?array {
+		if ($this->documentService === null) {
+			return null;
+		}
+		$images = [];
+		$video = null;
+		foreach (array_slice($post->getAttachments(), 0, 4) as $attachment) {
+			if (!$attachment instanceof Document
+				|| !$attachment->isLocalUpload() || $attachment->isStreamed()) {
+				continue;
+			}
+			$mime = strtolower(trim($attachment->getMimeType()));
+			$limit = str_starts_with($mime, 'video/') ? 50 * 1024 * 1024 : 1 * 1024 * 1024;
+			if ($mime === '' || (!str_starts_with($mime, 'image/') && !str_starts_with($mime, 'video/'))
+				|| $attachment->getSizeBytes() < 1 || $attachment->getSizeBytes() > $limit) {
+				continue;
+			}
+			try {
+				$file = $this->documentService->getFromCache($attachment->getId(), $mime, true);
+				$blob = $this->client->authedBlobPost($file->getContent(), $mime, $account, $account->getPds())['blob'] ?? null;
+				if (!is_array($blob)) {
+					continue;
+				}
+				if (str_starts_with($mime, 'video/')) {
+					$video = ['$type' => 'app.bsky.embed.video', 'video' => $blob, 'alt' => $attachment->getDescription()];
+					break;
+				}
+				$images[] = ['image' => $blob, 'alt' => $attachment->getDescription()];
+			} catch (\Throwable $e) {
+				$this->logger->info('could not upload an ATProto attachment', ['post' => $post->getId(), 'exception' => $e]);
+			}
+		}
+		if ($video !== null) {
+			return $video;
+		}
+
+		return $images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images];
 	}
 
 	/** A 13-character AT Protocol timestamp record key (TID). */

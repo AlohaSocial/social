@@ -71,6 +71,11 @@ edited and deleted local posts use protocol-native repository operations and
 are mapped through the local `social_atproto_link` table rather than exposing
 an `at://` URI as a local ActivityPub id.
 
+Mirrored posts with locally uploaded images or video also use
+`com.atproto.repo.uploadBlob` and native `app.bsky.embed.images`/
+`app.bsky.embed.video` records. Image uploads are capped at 1 MiB each and
+video uploads at 50 MiB; streamed or remote-only cache rows are skipped.
+
 `GET /api/v1/accounts/{id}` is the one route still declared in `appinfo/routes.php`. Its `{id}` accepts slashes, so it also matches `/api/v1/accounts/{account}/lists` and `/api/v1/accounts/{account}/featured_tags`, and it has to be offered to the matcher after them; those two belong to other controllers, and attribute routes are contributed one controller at a time in filesystem order. The array file is loaded after every attribute route of the app, which is the guarantee that route needs.
 
 ### Removed: the superseded half of the Custom Local API

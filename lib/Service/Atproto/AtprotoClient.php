@@ -121,6 +121,23 @@ class AtprotoClient {
 		return $this->withSession($nsid, [], $body, $base, $account);
 	}
 
+	/** Uploads one binary blob to the linked account's PDS. */
+	public function authedBlobPost(string $binary, string $mimeType, AtprotoAccount $account, string $base): array {
+		$session = $this->sessionOf($account);
+		try {
+			return $this->blobPost($binary, $mimeType, $base, $session['accessJwt']);
+		} catch (AtprotoException $e) {
+			if ($e->getStatus() !== 401) {
+				throw $e;
+			}
+		}
+
+		$this->forgetSession($account);
+		$session = $this->sessionOf($account);
+
+		return $this->blobPost($binary, $mimeType, $base, $session['accessJwt']);
+	}
+
 	/**
 	 * Forgets the session of an account, whether it was unlinked, its app
 	 * password was replaced, or its last call said the session was no good.
@@ -252,6 +269,16 @@ class AtprotoClient {
 		}
 
 		return $this->send($method, $url, $headers, $payload, $nsid);
+	}
+
+	/** @return array<string, mixed> */
+	private function blobPost(string $binary, string $mimeType, string $base, string $bearer): array {
+		$url = rtrim($base, '/') . '/xrpc/com.atproto.repo.uploadBlob';
+		$headers = $this->headers();
+		$headers['content-type'] = $mimeType !== '' ? $mimeType : 'application/octet-stream';
+		$headers['authorization'] = 'Bearer ' . $bearer;
+
+		return $this->send('post', $url, $headers, $binary, 'com.atproto.repo.uploadBlob');
 	}
 
 	/**

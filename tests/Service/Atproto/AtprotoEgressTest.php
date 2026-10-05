@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service\Atproto;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
@@ -22,6 +23,8 @@ use OCA\Social\Service\Atproto\AtprotoEgress;
 use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Service\Atproto\AtprotoIngress;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\DocumentService;
+use OCP\Files\SimpleFS\ISimpleFile;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +41,7 @@ class AtprotoEgressTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private ConfigService|MockObject $configService;
 	private AtprotoIdentity|MockObject $identity;
+	private DocumentService|MockObject $documentService;
 	private AtprotoEgress $egress;
 
 	protected function setUp(): void {
@@ -47,6 +51,7 @@ class AtprotoEgressTest extends TestCase {
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturn('1');
 		$this->identity = $this->createMock(AtprotoIdentity::class);
+		$this->documentService = $this->createMock(DocumentService::class);
 		$this->egress = new AtprotoEgress(
 			$this->client,
 			$this->atprotoRequest,
@@ -54,6 +59,7 @@ class AtprotoEgressTest extends TestCase {
 			$this->configService,
 			new NullLogger(),
 			$this->identity,
+			$this->documentService,
 		);
 	}
 
@@ -355,5 +361,55 @@ class AtprotoEgressTest extends TestCase {
 			}));
 
 		$this->egress->update($post);
+	}
+
+	public function testLocalImageIsUploadedAsANativeBlobEmbed(): void {
+		$document = (new Document())
+			->setId('https://cloud.example/apps/social/document/image-1')
+			->setAccount('alice')
+			->setMimeType('image/png')
+			->setSizeBytes(42)
+			->setDescription('A small test image');
+		$post = $this->post();
+		$post->setAttachments([$document]);
+		$account = $this->account();
+		$file = $this->createMock(ISimpleFile::class);
+		$file->expects($this->once())->method('getContent')->willReturn('png-bytes');
+		$this->documentService->expects($this->once())->method('getFromCache')
+			->with($document->getId(), 'image/png', true)->willReturn($file);
+		$this->atprotoRequest->expects($this->once())->method('getLinkByLocalId')
+			->with(self::POST)->willReturn(null);
+		$this->actorsRequest->expects($this->once())->method('getFromId')
+			->with(self::AUTHOR)->willReturn($this->localAuthor());
+		$this->atprotoRequest->expects($this->once())->method('getAccount')
+			->with('alice')->willReturn($account);
+		$this->client->expects($this->once())->method('authedBlobPost')
+			->with('png-bytes', 'image/png', $account, 'https://pds.example')
+			->willReturn(['blob' => [
+				'$type' => 'blob',
+				'ref' => ['$link' => 'bafy-image'],
+				'mimeType' => 'image/png',
+				'size' => 9,
+			]]);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.putRecord',
+			$this->callback(static fn (array $request): bool => ($request['record']['embed'] ?? []) === [
+				'$type' => 'app.bsky.embed.images',
+				'images' => [[
+					'image' => [
+						'$type' => 'blob',
+						'ref' => ['$link' => 'bafy-image'],
+						'mimeType' => 'image/png',
+						'size' => 9,
+					],
+					'alt' => 'A small test image',
+				]],
+			]),
+			$account,
+			'https://pds.example',
+		)->willReturn(['uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3media', 'cid' => 'bafy-media']);
+		$this->atprotoRequest->expects($this->once())->method('saveLink');
+
+		$this->egress->publish($post);
 	}
 }
