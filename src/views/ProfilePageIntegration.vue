@@ -60,8 +60,12 @@
 				v-for="entry in feedTimeline"
 				:key="`${activeFeed}-${entry.id}`"
 				:status="entry"
-				:canDelete="isOwnProfile && activeFeed === 'profile'"
-				@deleted="removeDeletedPost" />
+				:canDelete="isOwnProfile && (activeFeed === 'profile' || activeFeed === 'bluesky')"
+				:nativeDelete="isOwnProfile && activeFeed === 'bluesky'"
+				:canEdit="isOwnProfile && activeFeed === 'bluesky'"
+				:nativeEdit="isOwnProfile && activeFeed === 'bluesky'"
+				@deleted="removeDeletedPost"
+				@updated="replaceUpdatedPost" />
 		</transition-group>
 		<p v-if="feedError && feedTimeline.length" class="social-profile__feed-state" role="alert">
 			{{ t('social', 'Could not load this feed') }}
@@ -246,6 +250,14 @@ export default {
 		removeDeletedPost(status) {
 			const id = String(status?.id ?? '')
 			this.feedTimeline = this.feedTimeline.filter((entry) => String(entry.id) !== id)
+		},
+
+		replaceUpdatedPost(status) {
+			const id = String(status?.id ?? '')
+			if (id === '') {
+				return
+			}
+			this.feedTimeline = this.feedTimeline.map((entry) => String(entry.id) === id ? status : entry)
 		},
 
 		async restorePostAnchor(request) {
