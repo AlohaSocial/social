@@ -49,6 +49,11 @@
 			<p class="atproto-settings__hint">
 				{{ t('social', 'Link a Bluesky account to follow Bluesky profiles here and, if this server enables it, mirror public posts. Create an app password in Bluesky; never enter your normal password.') }}
 			</p>
+			<p class="atproto-settings__hint">
+				<a href="https://bsky.app/settings/app-passwords" target="_blank" rel="noreferrer">
+					{{ t('social', 'Create a Bluesky app password') }}
+				</a>
+			</p>
 			<NcTextField
 				v-model.trim="handle"
 				:label="t('social', 'Bluesky username or handle')"
