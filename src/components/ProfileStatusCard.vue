@@ -21,6 +21,13 @@
 					<NcButton variant="tertiary" @click="$emit('reply', status)">
 						{{ t('social', 'Reply') }}
 					</NcButton>
+					<NcButton
+						v-if="canDelete"
+						variant="tertiary"
+						:disabled="deleting"
+						@click="deletePost">
+						{{ deleting ? t('social', 'Deleting…') : t('social', 'Delete') }}
+					</NcButton>
 					<a v-if="postHref" class="profile-status-card__open" :href="postHref">{{ t('social', 'Open post') }}</a>
 				</div>
 				<PostReactedBy v-if="likesOpen" :status="status" />
@@ -68,12 +75,13 @@ export default {
 	components: { MessageContent, NcButton, PostReactedBy, TimelineEntry },
 	props: {
 		status: { type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object), required: true },
+		canDelete: { type: Boolean, default: false },
 	},
 
-	emits: ['reply'],
+	emits: ['reply', 'deleted'],
 
 	data() {
-		return { likesOpen: false, commentsOpen: false, comments: [], commentsLoading: false, commentsError: false }
+		return { likesOpen: false, commentsOpen: false, comments: [], commentsLoading: false, commentsError: false, deleting: false }
 	},
 
 	computed: {
@@ -105,6 +113,21 @@ export default {
 				logger.error('Failed to load profile post comments', { error, statusId: this.status.id })
 			} finally {
 				this.commentsLoading = false
+			}
+		},
+
+		async deletePost() {
+			if (this.deleting || !this.canDelete || String(this.status.id).includes('/')) {
+				return
+			}
+			this.deleting = true
+			try {
+				await axios.delete(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(String(this.status.id))}`))
+				this.$emit('deleted', this.status)
+			} catch (error) {
+				logger.error('Failed to delete profile post', { error, statusId: this.status.id })
+			} finally {
+				this.deleting = false
 			}
 		},
 	},

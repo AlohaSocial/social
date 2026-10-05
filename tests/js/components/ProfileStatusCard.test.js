@@ -53,4 +53,13 @@ describe('ProfileStatusCard', () => {
 		expect(wrapper.findAll('.profile-status-card__comment')).toHaveLength(1)
 		expect(wrapper.find('.message-content-stub').attributes('data-content')).toContain('Direct reply')
 	})
+
+	it('deletes a local own post from the profile card', async () => {
+		const del = vi.spyOn(axios, 'delete').mockResolvedValue({ data: {} })
+		const wrapper = mount(ProfileStatusCard, { props: { status, canDelete: true }, global: { stubs } })
+		await wrapper.findAll('.profile-status-card__toolbar button')[3].trigger('click')
+		await flushPromises()
+		expect(del).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses/42')
+		expect(wrapper.emitted('deleted')).toHaveLength(1)
+	})
 })

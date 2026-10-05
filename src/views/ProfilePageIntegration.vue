@@ -59,7 +59,9 @@
 			<ProfileStatusCard
 				v-for="entry in feedTimeline"
 				:key="`${activeFeed}-${entry.id}`"
-				:status="entry" />
+				:status="entry"
+				:canDelete="isOwnProfile && activeFeed === 'profile'"
+				@deleted="removeDeletedPost" />
 		</transition-group>
 		<p v-if="feedError && feedTimeline.length" class="social-profile__feed-state" role="alert">
 			{{ t('social', 'Could not load this feed') }}
@@ -239,6 +241,11 @@ export default {
 					this.feedLoading = false
 				}
 			}
+		},
+
+		removeDeletedPost(status) {
+			const id = String(status?.id ?? '')
+			this.feedTimeline = this.feedTimeline.filter((entry) => String(entry.id) !== id)
 		},
 
 		async restorePostAnchor(request) {
