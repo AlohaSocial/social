@@ -102,14 +102,14 @@ class AtprotoAccountServiceTest extends TestCase {
 		$account = (new AtprotoAccount())
 			->setUserId('alice')->setHandle('alice.example')->setDid('did:plc:alice')->setPds('https://pds.example');
 		$path = tempnam(sys_get_temp_dir(), 'social-atproto-avatar-');
-		file_put_contents($path, 'avatar-bytes');
+		file_put_contents($path, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='));
 		try {
 			$request->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
 			$identity->expects($this->once())->method('profile')->with('did:plc:alice', 'https://pds.example')->willReturn([
 				'$type' => 'app.bsky.actor.profile', 'displayName' => 'Old', 'banner' => ['$type' => 'blob'],
 			]);
 			$client->expects($this->once())->method('authedBlobPost')
-				->with('avatar-bytes', 'image/png', $account, 'https://pds.example')
+				->with($this->anything(), 'image/png', $account, 'https://pds.example')
 				->willReturn(['blob' => ['$type' => 'blob', 'ref' => ['$link' => 'bafy-avatar']]]);
 			$client->expects($this->once())->method('authedPost')
 				->with('com.atproto.repo.putRecord', $this->callback(static fn (array $body): bool => ($body['record']['avatar']['ref']['$link'] ?? '') === 'bafy-avatar' && !isset($body['record']['banner'])), $account, 'https://pds.example')
@@ -117,7 +117,7 @@ class AtprotoAccountServiceTest extends TestCase {
 
 			$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
 			$this->assertSame(['displayName' => 'Alice', 'description' => 'Description'], $service->updateProfile('alice', 'Alice', 'Description', [
-				'error' => UPLOAD_ERR_OK, 'tmp_name' => $path, 'type' => 'image/png', 'size' => 12,
+				'error' => UPLOAD_ERR_OK, 'tmp_name' => $path, 'type' => 'image/png', 'size' => filesize($path),
 			], null, false, true));
 		} finally {
 			if (is_string($path) && is_file($path)) {

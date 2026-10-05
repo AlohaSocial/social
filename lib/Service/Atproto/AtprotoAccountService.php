@@ -127,7 +127,15 @@ class AtprotoAccountService {
 		$size = (int)($upload['size'] ?? 0);
 		$allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 		$actualSize = $path !== '' && is_readable($path) ? filesize($path) : false;
-		if ($error !== UPLOAD_ERR_OK || $path === '' || !is_readable($path) || !in_array($mime, $allowed, true) || $size < 1 || $size > 1 * 1024 * 1024 || !is_int($actualSize) || $actualSize < 1 || $actualSize > 1 * 1024 * 1024) {
+		$detectedMime = null;
+		if ($path !== '' && is_readable($path) && function_exists('finfo_open')) {
+			$finfo = finfo_open(FILEINFO_MIME_TYPE);
+			$detectedMime = $finfo === false ? null : finfo_file($finfo, $path);
+			if ($finfo !== false) {
+				finfo_close($finfo);
+			}
+		}
+		if ($error !== UPLOAD_ERR_OK || $path === '' || !is_readable($path) || !in_array($mime, $allowed, true) || $detectedMime !== $mime || $size < 1 || $size > 1 * 1024 * 1024 || !is_int($actualSize) || $actualSize < 1 || $actualSize > 1 * 1024 * 1024) {
 			throw new AtprotoException('profile images must be readable JPEG, PNG, GIF or WebP files up to 1 MiB', 422);
 		}
 
