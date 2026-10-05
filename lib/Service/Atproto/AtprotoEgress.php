@@ -69,7 +69,10 @@ class AtprotoEgress {
 			'text' => $this->text($post->getContent()),
 			'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', max(1, $post->getPublishedTime())),
 		];
-		$parent = $this->atprotoRequest->getLinkByLocalId($post->getInReplyTo());
+		$parent = null;
+		if ($post->getInReplyTo() !== '') {
+			$parent = $this->atprotoRequest->getLinkByLocalId($post->getInReplyTo());
+		}
 		if ($parent !== null && $parent->getCollection() === AtprotoIngress::COLLECTION) {
 			// A reply mirrored from an ActivityPub-only thread has no AT root;
 			// the closest mapped parent is a valid root and keeps the reply in
