@@ -23,6 +23,8 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Model\InstancePath;
+use OCA\Social\Tools\Exceptions\RequestContentException;
+use OCP\AppFramework\Http;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -916,10 +918,33 @@ class MigrationService {
 		try {
 			return $this->cacheActorService->getFromAccount($handle);
 		} catch (Throwable $e) {
-			throw new InvalidResourceException(
-				'no account answers to ' . $handle . ': ' . $e->getMessage(), 0, $e
-			);
+			throw new InvalidResourceException(self::whyNobodyAnswered($handle, $e), 0, $e);
 		}
+	}
+
+	/**
+	 * What to tell the person when a handle resolved to nobody.
+	 *
+	 * A 401 or 403 from the actor fetch is not "nobody there": that server
+	 * answers only requests it can verify — Mastodon's AUTHORIZED_FETCH,
+	 * GoToSocial always — and could not verify this one, which is what
+	 * happens when this Nextcloud cannot be reached from the internet over
+	 * https. Said as such, because "no account answers" sends the person off
+	 * to check a handle that was right.
+	 */
+	private static function whyNobodyAnswered(string $handle, Throwable $e): string {
+		for ($cause = $e; $cause !== null; $cause = $cause->getPrevious()) {
+			if ($cause instanceof RequestContentException
+				&& in_array($cause->getCode(), [Http::STATUS_UNAUTHORIZED, Http::STATUS_FORBIDDEN], true)) {
+				$host = substr($handle, (int)strrpos($handle, '@') + 1);
+
+				return $host . ' only answers servers it can verify, and it could not verify this one:'
+					. ' this Nextcloud has to be reachable from the internet over https before '
+					. $handle . ' can be read from here';
+			}
+		}
+
+		return 'no account answers to ' . $handle . ': ' . $e->getMessage();
 	}
 
 	/**

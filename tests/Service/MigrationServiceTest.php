@@ -31,6 +31,8 @@ use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MigrationService;
 use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\SignatureService;
+use OCA\Social\Tools\Exceptions\RequestContentException;
+use OCP\AppFramework\Http;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -659,6 +661,34 @@ class MigrationServiceTest extends TestCase {
 		$list->setId($id)->setOwnerId(self::ALICE)->setTitle($title)->setGroupId($groupId);
 
 		return $list;
+	}
+
+	/**
+	 * mastodon.social and every GoToSocial answer 401 to a fetch they cannot
+	 * verify. "No account answers" sent the person to check a handle that was
+	 * right; the reason is their own server's reachability, and is said.
+	 */
+	public function testAServerThatRefusesAnUnverifiableFetchIsExplainedNotCalledEmpty(): void {
+		$this->cacheActorService->method('getFromAccount')
+			->willThrowException(new RequestContentException('Request not signed', Http::STATUS_UNAUTHORIZED));
+
+		try {
+			$this->service->resolveActor('@gargron@mastodon.social');
+			$this->fail('expected the handle to be refused');
+		} catch (InvalidResourceException $e) {
+			$this->assertStringContainsString('mastodon.social only answers servers it can verify', $e->getMessage());
+			$this->assertStringContainsString('reachable from the internet over https', $e->getMessage());
+			$this->assertStringNotContainsString('no account answers', $e->getMessage());
+		}
+	}
+
+	public function testAHandleNobodyAnswersToIsStillSaidPlainly(): void {
+		$this->cacheActorService->method('getFromAccount')
+			->willThrowException(new RequestContentException('not found', Http::STATUS_NOT_FOUND));
+
+		$this->expectException(InvalidResourceException::class);
+		$this->expectExceptionMessage('no account answers to nobody@old.example');
+		$this->service->resolveActor('@nobody@old.example');
 	}
 
 	public function testImportBlocksBlocksEveryAccountInTheFile(): void {
