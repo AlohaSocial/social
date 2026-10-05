@@ -117,4 +117,30 @@ class AtprotoEngagementServiceTest extends TestCase {
 		$this->assertTrue($this->service->isLinked('alice'));
 		$this->assertFalse($this->service->isLinked('bob'));
 	}
+
+	public function testViewerStatePaginatesNativeRecords(): void {
+		$link = (new AtprotoLink())->setLocalId($this->post()->getId())->setAtUri('at://did:plc:bob/app.bsky.feed.post/3xyz')->setCid('bafy-post');
+		$this->request->method('getLinkByLocalId')->willReturn($link);
+		$this->request->method('getAccount')->willReturn($this->account());
+		$call = 0;
+		$this->client->expects($this->exactly(4))->method('authedGet')->willReturnCallback(function (string $endpoint, array $params) use (&$call): array {
+			$call++;
+			$this->assertSame('com.atproto.repo.listRecords', $endpoint);
+			$this->assertSame(100, $params['limit']);
+			$collection = (string)$params['collection'];
+			if ($call === 1) {
+				return ['records' => [], 'cursor' => 'next'];
+			}
+			if ($call === 2) {
+				return ['records' => [['uri' => 'at://did:plc:alice/app.bsky.feed.like/3like', 'value' => ['subject' => ['uri' => 'at://did:plc:bob/app.bsky.feed.post/3xyz']]]]];
+			}
+			if ($call === 3) {
+				return ['records' => [], 'cursor' => 'next-repost'];
+			}
+			$this->assertSame('app.bsky.feed.repost', $collection);
+			return ['records' => [['uri' => 'at://did:plc:alice/app.bsky.feed.repost/3repost', 'value' => ['subject' => ['uri' => 'at://did:plc:bob/app.bsky.feed.post/3xyz']]]]];
+		});
+
+		$this->assertSame(['liked' => true, 'reposted' => true], $this->service->viewerState('alice', $this->post()));
+	}
 }

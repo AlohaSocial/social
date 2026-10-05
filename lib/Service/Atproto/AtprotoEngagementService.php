@@ -164,14 +164,28 @@ class AtprotoEngagementService {
 	private function records(AtprotoAccount $account, string $collection, string $uri): array {
 		$key = $this->cacheKey($account, $collection);
 		if (!isset($this->recordsCache[$key])) {
-			$answer = $this->client->authedGet('com.atproto.repo.listRecords', [
-				'repo' => $account->getDid(),
-				'collection' => $collection,
-				'limit' => 100,
-			], $account, $account->getPds());
-			$this->recordsCache[$key] = array_values(array_filter(
-				(array)($answer['records'] ?? []), static fn (mixed $record): bool => is_array($record)
-			));
+			$all = [];
+			$cursor = '';
+			for ($page = 0; $page < 10; $page++) {
+				$params = [
+					'repo' => $account->getDid(),
+					'collection' => $collection,
+					'limit' => 100,
+				];
+				if ($cursor !== '') {
+					$params['cursor'] = $cursor;
+				}
+				$answer = $this->client->authedGet('com.atproto.repo.listRecords', $params, $account, $account->getPds());
+				$all = array_merge($all, array_values(array_filter(
+					(array)($answer['records'] ?? []), static fn (mixed $record): bool => is_array($record)
+				)));
+				$next = (string)($answer['cursor'] ?? '');
+				if ($next === '' || $next === $cursor) {
+					break;
+				}
+				$cursor = $next;
+			}
+			$this->recordsCache[$key] = $all;
 		}
 		$records = [];
 		foreach ($this->recordsCache[$key] as $record) {
