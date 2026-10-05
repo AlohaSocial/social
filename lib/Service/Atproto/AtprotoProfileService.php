@@ -59,6 +59,7 @@ class AtprotoProfileService {
 			try {
 				$status = $this->ingress->fetch($this->localId($uri), 0);
 				$this->applyCounts($status, $post);
+				$this->applyLabels($status, $post);
 				if ($viewerId !== null) {
 					try {
 						$state = $this->engagement->viewerState($viewerId, $status);
@@ -106,6 +107,7 @@ class AtprotoProfileService {
 				try {
 					$status = $this->ingress->fetch($this->localId($uri), 0);
 					$this->applyCounts($status, $post);
+					$this->applyLabels($status, $post);
 					if ($viewerId !== null) {
 						$state = $this->engagement->viewerState($viewerId, $status);
 						$status->setViewerEngagement($state['liked'], $state['reposted']);
@@ -138,6 +140,29 @@ class AtprotoProfileService {
 			if (is_int($count) || (is_string($count) && ctype_digit($count))) {
 				$status->setDetailInt($detail, max(0, (int)$count));
 			}
+		}
+	}
+
+	/** Keep AppView moderation labels visible without changing Fediverse policy. */
+	private function applyLabels(Stream $status, array $post): void {
+		$labels = $post['labels'] ?? [];
+		if (!is_array($labels)) {
+			return;
+		}
+		$values = [];
+		foreach ((array)($labels['labels'] ?? $labels) as $label) {
+			$value = is_array($label) ? trim((string)($label['val'] ?? '')) : '';
+			if ($value !== '' && !in_array($value, $values, true)) {
+				$values[] = $value;
+			}
+		}
+		if ($values === []) {
+			return;
+		}
+
+		$status->setSensitive(true);
+		if ($status->getSpoilerText() === '') {
+			$status->setSpoilerText('Bluesky: ' . implode(', ', array_slice($values, 0, 3)));
 		}
 	}
 

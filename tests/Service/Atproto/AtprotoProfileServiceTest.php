@@ -74,4 +74,33 @@ class AtprotoProfileServiceTest extends TestCase {
 
 		$this->assertSame([], $service->thread('https://cloud.example/apps/social/ap/bluesky/did:plc:profile/app.bsky.feed.post/3replyroot'));
 	}
+
+	public function testAppViewModerationLabelsBecomeAContentWarning(): void {
+		$this->identity->method('recordId')->willReturn('https://cloud.example/apps/social/ap/bluesky/did:plc:profile/app.bsky.feed.post/3label');
+		$post = (new \OCA\Social\Model\ActivityPub\Stream())
+			->setId('https://cloud.example/apps/social/ap/bluesky/did:plc:profile/app.bsky.feed.post/3label')
+			->setContent('<p>hello</p>');
+		$this->ingress->expects($this->once())->method('fetch')->willReturn($post);
+		$calls = 0;
+		$this->client->expects($this->exactly(2))->method('get')->willReturnCallback(
+			function (string $nsid, array $params) use (&$calls): array {
+				$calls++;
+
+				return $calls === 1
+					? ['displayName' => 'Alice']
+					: ['feed' => [[
+						'post' => [
+							'uri' => 'at://did:plc:profile/app.bsky.feed.post/3label',
+							'labels' => [['val' => 'graphic-media']],
+						],
+					]], 'cursor' => ''];
+			}
+		);
+
+		$service = new AtprotoProfileService($this->client, $this->identity, $this->ingress, $this->engagement);
+		$data = $service->read('alice.example');
+
+		$this->assertTrue($data['statuses'][0]->isSensitive());
+		$this->assertSame('Bluesky: graphic-media', $data['statuses'][0]->getSpoilerText());
+	}
 }
