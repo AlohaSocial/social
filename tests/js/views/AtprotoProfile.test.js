@@ -39,4 +39,22 @@ describe('AtprotoProfile', () => {
 		expect(wrapper.find('.atproto-profile__banner').attributes('src')).toBe('banner.jpg')
 		expect(wrapper.find('a[href="https://bsky.app/profile/bob.example"]').exists()).toBe(true)
 	})
+
+	it('refreshes profile media after saving native metadata', async () => {
+		const get = vi.spyOn(axios, 'get')
+			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example', avatar: 'old.jpg' }, statuses: [], viewerCanEdit: true, viewerCanFollow: true } })
+			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example', avatar: 'new.jpg' }, statuses: [], viewerCanEdit: true, viewerCanFollow: true } })
+		vi.spyOn(axios, 'put').mockResolvedValue({ data: { profile: { handle: 'bob.example', avatar: 'new.jpg' } } })
+		const wrapper = mount(AtprotoProfile, {
+			props: { handle: 'bob.example' },
+			global: { stubs },
+		})
+
+		await flushPromises()
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+
+		expect(get).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('.atproto-profile__avatar').attributes('src')).toBe('new.jpg')
+	})
 })

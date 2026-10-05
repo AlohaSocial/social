@@ -260,6 +260,10 @@ export default {
 					displayName: this.profile.displayName ?? '',
 					description: this.profile.description ?? '',
 				}
+				// The PDS assigns a new blob reference (and therefore a new public
+				// URL) for uploads. Re-read the profile so replacement/removal is
+				// visible immediately rather than after a manual page reload.
+				await this.loadProfile()
 			} catch (error) {
 				this.profileError = error?.response?.data?.message ?? t('social', 'Could not save your Bluesky profile')
 			} finally {
