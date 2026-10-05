@@ -37,6 +37,7 @@ const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-st
 const AnnouncementsStub = { name: 'Announcements', template: '<div class="announcements-stub" />' }
 const WeeklyRecapStub = { name: 'WeeklyRecap', template: '<div class="weekly-recap-stub" />' }
 const StoryBarStub = { name: 'StoryBar', template: '<div class="story-bar-stub" />' }
+const NotificationRequestsStub = { name: 'NotificationRequests', emits: ['changed'], template: '<div class="notification-requests-stub" />' }
 const TimelineListStub = {
 	name: 'TimelineList',
 	props: ['type', 'showParents', 'reverseOrder', 'display'],
@@ -67,6 +68,7 @@ function makeStore(serverData = {}) {
 	vi.spyOn(accountStore, 'followAccount').mockResolvedValue(undefined)
 	vi.spyOn(timelineStore, 'changeTimelineType')
 	vi.spyOn(timelineStore, 'celebrateFirstPost')
+	vi.spyOn(useNotificationsStore(), 'fetchPendingRequests').mockResolvedValue(undefined)
 	useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', firstrun: false, ...serverData })
 
 	return pinia
@@ -81,7 +83,7 @@ function mountTimeline(route = {}) {
 			// Announcements what the instance is telling everybody; each is its
 			// own request with its own tests, and left real they would answer
 			// after these tests have finished
-			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub },
+			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub, NotificationRequests: NotificationRequestsStub },
 		},
 	})
 }
@@ -302,7 +304,7 @@ describe('Timeline', () => {
 					$route: { name: 'timeline', params: {}, query: { welcome: '1', other: 'x' } },
 					$router: { replace },
 				},
-				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub },
+				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub, NotificationRequests: NotificationRequestsStub },
 			},
 		})
 		await wrapper.findComponent(FirstRunStub).vm.$emit('done')
@@ -706,6 +708,58 @@ describe('Timeline', () => {
 	// The badge in the sidebar says how many; until this there was nothing at
 	// the other end of it saying so, and no way to answer it except to look at
 	// the page for two seconds and let it mark itself.
+	describe('the senders the policy is holding back', () => {
+		const strip = (wrapper) => wrapper.find('.held-requests')
+
+		const withHeld = (count) => {
+			useNotificationsStore().setPendingRequests(count)
+		}
+
+		it('says how many are waiting, above the activities, and offers to review them', async () => {
+			withHeld(3)
+			const wrapper = mountTimeline({ params: { type: 'notifications' } })
+
+			expect(strip(wrapper).text()).toContain('3 people you have no relationship with are waiting to notify you')
+			expect(strip(wrapper).find('.notification-requests-stub').exists()).toBe(false)
+
+			await strip(wrapper).findComponent({ name: 'NcButton' }).trigger('click')
+
+			expect(strip(wrapper).find('.notification-requests-stub').exists()).toBe(true)
+		})
+
+		it('asks the server for the count when the activities open', () => {
+			mountTimeline({ params: { type: 'notifications' } })
+
+			expect(useNotificationsStore().fetchPendingRequests).toHaveBeenCalled()
+		})
+
+		it('is not there when nobody is held, and never on another page', () => {
+			withHeld(0)
+			expect(strip(mountTimeline({ params: { type: 'notifications' } })).exists()).toBe(false)
+			withHeld(4)
+			expect(strip(mountTimeline({ params: { type: 'home' } })).exists()).toBe(false)
+		})
+
+		it('follows the list: an emptied list folds away with its count', async () => {
+			withHeld(1)
+			const wrapper = mountTimeline({ params: { type: 'notifications' } })
+			await strip(wrapper).findComponent({ name: 'NcButton' }).trigger('click')
+
+			wrapper.findComponent(NotificationRequestsStub).vm.$emit('changed', 0)
+			await wrapper.vm.$nextTick()
+
+			expect(strip(wrapper).exists()).toBe(false)
+			expect(useNotificationsStore().pendingRequests).toBe(0)
+		})
+
+		it('links to where the policy is set', () => {
+			withHeld(2)
+			const links = mountTimeline({ params: { type: 'notifications' } }).find('.held-requests').findAllComponents(RouterLinkStub)
+
+			expect(links.map((link) => link.props('to'))).toContainEqual({ name: 'settings', hash: '#notification-policy' })
+		})
+	})
+
 	describe('the count above the activities', () => {
 		const header = (wrapper) => wrapper.find('.new-activities')
 

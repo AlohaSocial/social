@@ -113,10 +113,12 @@ describe('BlockedAccounts', () => {
 	 * reader is not being shown, so they belong with the rest of it rather
 	 * than behind a sidebar entry that is empty for most people.
 	 */
-	it('holds the senders a notification policy is keeping back', async () => {
+	it('points at Activities for the senders a notification policy is keeping back, where they are now', async () => {
 		const { wrapper } = await mountView()
 
-		expect(wrapper.find('#filtered-notifications .notification-requests-stub').exists()).toBe(true)
+		expect(wrapper.find('#filtered-notifications .notification-requests-stub').exists()).toBe(false)
+		expect(wrapper.find('#filtered-notifications').text()).toContain('top of Activities')
+		expect(wrapper.find('#filtered-notifications').text()).toContain('Who may reach you')
 	})
 
 	it('links each account to its profile', async () => {

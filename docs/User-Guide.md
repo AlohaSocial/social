@@ -299,7 +299,9 @@ The sidebar is the map:
   counts what arrived since you last looked, and sits on your name while the
   menu is shut so it is never out of sight; the same
   events reach the Nextcloud bell and its mail digest; a follow request can be
-  accepted or declined from the bell itself. The page says how many that is at
+  accepted or declined from the bell itself. Above the list, when your
+  notification policy is holding anybody back, a line says how many are
+  waiting and unfolds them on **Review**. The page says how many that is at
   the top — *3 new activities*, with a **Mark all as read** button that clears
   the badge whichever filter you are looking at — and marks the activities
   themselves: each new one carries a **New** tag beside its timestamp, and a
@@ -333,6 +335,10 @@ The sidebar is the map:
   no more — make the window taller and more appears. What you follow is never
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
+- **Mute conversation**, in a post's menu, silences one thread without muting
+  anybody: the posts stay on your timelines and only what the thread would tell
+  you stops. It reads **Unmute conversation** on a post of a thread you muted,
+  wherever the post is drawn, a mention in Activities included.
 - **Liked posts** and **Bookmarks** — what you favourited, and what you saved
   with **Bookmark** in a post's menu. Bookmarks are private and never leave
   this server.
@@ -559,11 +565,19 @@ under the post takes your name off, and needs nobody's permission.
 
 ### Notifications your settings held back
 
-**Settings → Blocking**, under **Filtered notifications**. Your notification
-settings can hold some notifications back rather than show them — from accounts
-nobody here follows, from brand-new accounts, from people you do not follow.
-They wait in that card, one row per sender with how many they have sent and the
-first words of their most recent post.
+**Settings → Who may reach you** is where you say it: five questions about
+people you have no relationship with — people you do not follow, people who do
+not follow you, accounts less than a month old, private mentions you did not
+start, accounts a moderator has limited — each answered *Notify me*, *Hold them
+for me to look at* or *Do not notify me*. Nothing is deleted by any answer: on
+this server not notifying works like holding, which is also what lets a
+mistake be undone.
+
+The senders being held wait **at the top of Activities**: a line says how many
+people are waiting to notify you, **Review** unfolds them, one row per sender
+with how many they have sent and the first words of their most recent post,
+and **Who may reach you** beside it opens the setting. (The **Filtered
+notifications** card on the Blocking page points there now.)
 
 You decide about the **person**, not about each notification: **Show these**
 settles everything that account has sent and will send, and **Dismiss** stops
