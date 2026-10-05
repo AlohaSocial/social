@@ -124,6 +124,11 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
 	#[FrontpageRoute(verb: 'GET', url: '/search', postfix: 'search')]
 	#[FrontpageRoute(verb: 'GET', url: '/search/{term}', postfix: 'searchterm')]
+	// ATProto handles are domain-shaped. This server-side shell route is what
+	// makes a direct reload of /apps/social/<handle> reach Vue instead of a
+	// Nextcloud 404; the narrow requirement leaves all named Social pages and
+	// Fediverse /@account routes to their existing handlers.
+	#[FrontpageRoute(verb: 'GET', url: '/{path}', postfix: 'atprotohandle', requirements: ['path' => '[A-Za-z0-9][A-Za-z0-9-]*\\.[A-Za-z0-9.-]+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/collections/{id}', postfix: 'collection', requirements: ['id' => '\\d+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/places/{id}', postfix: 'place', requirements: ['id' => '\\d+'])]
 	public function navigate(string $path = ''): TemplateResponse {
