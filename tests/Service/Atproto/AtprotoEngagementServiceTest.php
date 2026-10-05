@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service\Atproto;
 
 use OCA\Social\Db\AtprotoRequest;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
@@ -116,6 +117,15 @@ class AtprotoEngagementServiceTest extends TestCase {
 
 		$this->assertTrue($this->service->isLinked('alice'));
 		$this->assertFalse($this->service->isLinked('bob'));
+	}
+
+	public function testBrokenLinkIsNotUsableForNativeActions(): void {
+		$broken = $this->account()->setState(AtprotoAccount::STATE_BROKEN);
+		$this->request->method('getAccount')->willReturn($broken);
+
+		$this->assertFalse($this->service->isLinked('alice'));
+		$this->expectException(AtprotoException::class);
+		$this->service->setFollowing('alice', 'did:plc:bob', true);
 	}
 
 	public function testViewerStatePaginatesNativeRecords(): void {

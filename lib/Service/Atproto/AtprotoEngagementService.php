@@ -38,7 +38,9 @@ class AtprotoEngagementService {
 
 	/** Whether this reader has a linked Bluesky session to use for actions. */
 	public function isLinked(string $userId): bool {
-		return $this->atprotoRequest->getAccount($userId) !== null;
+		$account = $this->atprotoRequest->getAccount($userId);
+
+		return $account !== null && $account->getState() === AtprotoAccount::STATE_LINKED;
 	}
 
 	/**
@@ -52,7 +54,7 @@ class AtprotoEngagementService {
 	public function viewerState(string $userId, Stream $post): array {
 		$link = $this->atprotoRequest->getLinkByLocalId($post->getId());
 		$account = $this->atprotoRequest->getAccount($userId);
-		if ($link === null || $account === null || $link->getAtUri() === '') {
+		if ($link === null || $account === null || $account->getState() !== AtprotoAccount::STATE_LINKED || $link->getAtUri() === '') {
 			return ['liked' => false, 'reposted' => false];
 		}
 
@@ -71,7 +73,7 @@ class AtprotoEngagementService {
 	/** @throws AtprotoException */
 	public function setFollowing(string $userId, string $did, bool $following): void {
 		$account = $this->atprotoRequest->getAccount($userId);
-		if ($account === null) {
+		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before following profiles', 401);
 		}
 		$did = trim($did);
@@ -124,7 +126,7 @@ class AtprotoEngagementService {
 			throw new AtprotoException('this post has no AT Protocol record', 422);
 		}
 		$account = $this->atprotoRequest->getAccount($userId);
-		if ($account === null) {
+		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before liking Bluesky posts', 401);
 		}
 
