@@ -181,13 +181,14 @@ class MoveInServiceTest extends TestCase {
 		$this->documents[self::OLD . '/outbox?page=true'] = ['type' => 'OrderedCollectionPage', 'orderedItems' => [$create, $announce]];
 		$this->postImportService->expects($this->once())->method('importItems')
 			->with($this->isInstanceOf(Person::class), [$create, $announce], false, $this->isCallable())
-			->willReturn(['imported' => 1, 'skipped' => 1, 'already' => 0, 'media' => 0, 'failed' => 0, 'total' => 2, 'capped' => false]);
+			->willReturn(['imported' => 1, 'skipped' => 1, 'already' => 0, 'media' => 0, 'failed' => 1, 'failures' => ['https://old.example/users/alice/statuses/3' => 'disk full'], 'total' => 2, 'capped' => false]);
 
 		$report = $this->service->run($this->new(), ['source' => self::OLD, 'follows' => false, 'posts' => true, 'fetch_media' => false], static function (): void {
 		});
 
 		$this->assertSame(1, $report['imported']);
 		$this->assertSame(1, $report['posts_skipped']);
+		$this->assertSame(['https://old.example/users/alice/statuses/3' => 'disk full'], $report['post_failures'], 'the posts that failed are named, with the reason');
 		$this->assertTrue($report['posts_readable']);
 		$this->assertFalse($report['following_readable'], 'not asked for');
 	}

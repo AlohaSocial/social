@@ -120,7 +120,7 @@ class MoveInService {
 		$report = [
 			'source' => $source->getAccount(),
 			'followed' => 0, 'skipped' => 0, 'failed' => 0, 'failures' => [],
-			'imported' => 0, 'already' => 0, 'posts_skipped' => 0, 'posts_failed' => 0, 'media' => 0,
+			'imported' => 0, 'already' => 0, 'posts_skipped' => 0, 'posts_failed' => 0, 'post_failures' => [], 'media' => 0,
 			'following_readable' => false, 'posts_readable' => false,
 		];
 
@@ -170,6 +170,7 @@ class MoveInService {
 			$report['already'] = $tally['already'];
 			$report['posts_skipped'] = $tally['skipped'];
 			$report['posts_failed'] = $tally['failed'];
+			$report['post_failures'] = $tally['failures'];
 			$report['media'] = $tally['media'];
 		}
 

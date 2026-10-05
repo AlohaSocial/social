@@ -50,6 +50,14 @@ re-pointed at `arrival` and `leaver` is recorded as moved. The inbound half is
 three steps in the workflow rather than one test, because the `Move` has to be
 sent by Mastodon between what this side prepares and what it asserts.
 
+Covered for **moving in from the handle alone** (`MoveInFromMastodonTest`):
+our `puller` names Mastodon's `interop` as its old account, and the same
+service the wizard runs reads `interop`'s public `following` and `outbox` and
+brings both over — the test has `interop` write a post first, then finds the
+copy here, written by `puller` with the same words, and sees `admin` followed
+because `interop` follows it. This is the half of a move that is ours alone;
+the `Move` tests above are the half the protocol carries.
+
 Covered against **PeerTube**: a video published here, arriving as a `Video`,
 filed under the right channel, with a duration and a file link that survived —
 and a `Delete` that takes it away again. This is the one that had never been

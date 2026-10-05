@@ -88,7 +88,7 @@ describe('Migration', () => {
 		const wrapper = mountPage()
 		const inputs = wrapper.findAll('input[type="file"]')
 
-		expect(inputs).toHaveLength(6)
+		expect(inputs).toHaveLength(8)
 		for (const input of inputs) {
 			expect(input.attributes('tabindex')).toBe('-1')
 			expect(input.attributes('aria-hidden')).toBe('true')
@@ -316,6 +316,29 @@ describe('Migration', () => {
 		expect(wrapper.find('.migration__move-in-finish').text()).toContain('@alice@cloud.example')
 	})
 
+	it('offers to copy the newer posts of a finished move, posts only, from the same account', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', posts: true } }, { followed: 3, imported: 2 })] } })
+			}
+			if (url.endsWith('/migration/announcement')) {
+				return Promise.resolve({ data: { handle: '@alice@cloud.example' } })
+			}
+			return Promise.resolve({ data: { aliases: [] } })
+		})
+		axios.post.mockResolvedValue({ data: { import: job('move_in', 'queued') } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const again = buttonNamed(wrapper, 'Copy newer posts from @alice@old.example')
+		expect(again).toBeTruthy()
+
+		await again.trigger('click')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in`, { handle: '@alice@old.example', follows: '0', posts: '1', fetch_media: '1' })
+	})
+
 	it('shows the reason when the old account cannot be found', async () => {
 		axios.post.mockRejectedValue({ response: { data: { error: 'no account answers to alice@gone.example' } } })
 
@@ -516,6 +539,44 @@ describe('Migration', () => {
 		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/blocks`, expect.any(FormData))
 		expect(wrapper.text()).toContain('3 applied, 1 skipped, 1 could not be reached')
 		expect(showSuccess).toHaveBeenCalled()
+	})
+
+	it('names what could not be done, with the reason, under the summary', async () => {
+		serverQueues('blocks', job('blocks', 'done', { done: 1, failed: 7 }, { failed: { 'gone@dead.example': 'no such server', 'two@x.example': 'b', 'three@x.example': 'c', 'four@x.example': 'd', 'five@x.example': 'e', 'six@x.example': 'f', 'seven@x.example': 'g' } }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'blocks', 'blocked_accounts.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		const named = wrapper.find('.migration__failures')
+		expect(named.text()).toContain('gone@dead.example — no such server')
+		expect(named.findAll('li')).toHaveLength(6)
+		expect(named.text()).toContain('and 2 more')
+	})
+
+	it('queues a bookmarks file and says what came of the addresses in it', async () => {
+		serverQueues('bookmarks', job('bookmarks', 'done', { done: 4, skipped: 1, failed: 2 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'bookmarks', 'bookmarks.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/bookmarks`, expect.any(FormData))
+		expect(wrapper.text()).toContain('4 posts bookmarked, 1 lines were not the address of a post, 2 could not be fetched')
+	})
+
+	it('queues a blocked-domains file under the name Mastodon gives the list', async () => {
+		serverQueues('domain_blocks', job('domain_blocks', 'done', { done: 2 }))
+
+		const wrapper = mountPage()
+		await choose(wrapper, 'domain_blocks', 'blocked_domains.csv')
+		await vi.runOnlyPendingTimersAsync()
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/domain_blocks`, expect.any(FormData))
+		expect(wrapper.text()).toContain('2 servers blocked')
 	})
 
 	it('queues a mutes CSV through the mutes route', async () => {

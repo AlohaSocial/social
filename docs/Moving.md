@@ -45,13 +45,16 @@ Three steps, two of them here.
    the old account follows is followed from here and its public posts are
    written here as yours, dated when you wrote them, with their pictures.
    Nothing is sent to anybody. The list on the Migration page shows where the
-   run has got to.
+   run has got to. Posts you write on the old account after that are not
+   picked up by anything: **Copy newer posts**, under the finished run, runs
+   the copy again and brings over only what is new.
 
 2. **If the old server hides your follows or your posts** — Mastodon does
    when you turned on *Hide your social graph*, Pixelfed always does — the
    page says so, and the file imports further down are for that: upload the
    old server's `following_accounts.csv` (Pixelfed: `pixelfed-following.json`)
-   and, for the posts, its archive. Blocks, mutes and lists come the same way.
+   and, for the posts, its archive. Blocks, mutes, lists, bookmarks and blocked
+   domains come the same way.
    Every upload runs in the background too.
 
 3. **On the old server, move your followers here.** On Mastodon that is

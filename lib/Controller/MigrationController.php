@@ -425,6 +425,22 @@ class MigrationController extends Controller {
 		return $this->queueUpload(ImportJob::KIND_BLOCKS);
 	}
 
+	/** The posts an export bookmarked — Mastodon's `bookmarks.csv`, one address a line. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/bookmarks')]
+	public function importBookmarks(): DataResponse {
+		return $this->queueUpload(ImportJob::KIND_BOOKMARKS);
+	}
+
+	/** The servers an export blocks — Mastodon's `blocked_domains.csv`, one domain a line. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/migration/domain_blocks')]
+	public function importDomainBlocks(): DataResponse {
+		return $this->queueUpload(ImportJob::KIND_DOMAIN_BLOCKS);
+	}
+
 	/** The accounts an export mutes — Mastodon's `muted_accounts.csv`. */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 30, period: 3600)]
@@ -450,7 +466,8 @@ class MigrationController extends Controller {
 	/**
 	 * One of this account's lists of accounts as a CSV, to carry on elsewhere.
 	 *
-	 * `{kind}` is `following`, `followers`, `blocks`, `mutes` or `lists`, and
+	 * `{kind}` is `following`, `followers`, `blocks`, `mutes`, `lists`,
+	 * `bookmarks` or `domain_blocks`, and
 	 * each is written in the shape the network it is named after writes it —
 	 * the archive from the Export button holds the same files, and this is for
 	 * the person who wants one of them without the whole thing.
@@ -467,7 +484,7 @@ class MigrationController extends Controller {
 			[$name, $csv] = $this->migrationService->exportCsv($this->userId, $kind);
 
 			// `text/csv` with the name spelled out, the way export() hands the
-			// archive over. The name is one of the five the service chooses
+			// archive over. The name is one of the seven the service chooses
 			// from and never anything the caller sent, so there is nothing in
 			// it that could break out of the quotes.
 			$response = new DataDisplayResponse($csv, Http::STATUS_OK, [

@@ -13,6 +13,7 @@ use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ListsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\FollowSameAccountException;
@@ -21,16 +22,22 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Move;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\DomainBlockService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MigrationService;
 use OCA\Social\Service\RelationshipService;
+use OCA\Social\Service\SearchService;
 use OCA\Social\Service\SignatureService;
+use OCA\Social\Service\StreamActionService;
+use OCA\Social\Tools\Exceptions\RequestContentException;
+use OCP\AppFramework\Http;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -57,6 +64,10 @@ class MigrationServiceTest extends TestCase {
 	private ActorRelationRequest|Stub $actorRelationRequest;
 	private ListsRequest|MockObject $listsRequest;
 	private RelationshipService|MockObject $relationshipService;
+	private StreamRequest|MockObject $streamRequest;
+	private SearchService|MockObject $searchService;
+	private StreamActionService|MockObject $streamActionService;
+	private DomainBlockService|MockObject $domainBlockService;
 	private IConfig|MockObject $config;
 	private MigrationService $service;
 	/** @var array<string, string> the user values written, by key */
@@ -73,6 +84,10 @@ class MigrationServiceTest extends TestCase {
 		$this->actorRelationRequest = $this->createStub(ActorRelationRequest::class);
 		$this->listsRequest = $this->createMock(ListsRequest::class);
 		$this->relationshipService = $this->createMock(RelationshipService::class);
+		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->searchService = $this->createMock(SearchService::class);
+		$this->streamActionService = $this->createMock(StreamActionService::class);
+		$this->domainBlockService = $this->createMock(DomainBlockService::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->config->method('getUserValue')->willReturnCallback(
 			fn (string $userId, string $app, string $key, string $default = ''): string => $this->userValues[$key] ?? $default
@@ -92,6 +107,10 @@ class MigrationServiceTest extends TestCase {
 			$this->actorRelationRequest,
 			$this->listsRequest,
 			$this->relationshipService,
+			$this->streamRequest,
+			$this->searchService,
+			$this->streamActionService,
+			$this->domainBlockService,
 			$this->config,
 			new NullLogger(),
 		);
@@ -659,6 +678,101 @@ class MigrationServiceTest extends TestCase {
 		$list->setId($id)->setOwnerId(self::ALICE)->setTitle($title)->setGroupId($groupId);
 
 		return $list;
+	}
+
+	/**
+	 * mastodon.social and every GoToSocial answer 401 to a fetch they cannot
+	 * verify. "No account answers" sent the person to check a handle that was
+	 * right; the reason is their own server's reachability, and is said.
+	 */
+	public function testAServerThatRefusesAnUnverifiableFetchIsExplainedNotCalledEmpty(): void {
+		$this->cacheActorService->method('getFromAccount')
+			->willThrowException(new RequestContentException('Request not signed', Http::STATUS_UNAUTHORIZED));
+
+		try {
+			$this->service->resolveActor('@gargron@mastodon.social');
+			$this->fail('expected the handle to be refused');
+		} catch (InvalidResourceException $e) {
+			$this->assertStringContainsString('mastodon.social only answers servers it can verify', $e->getMessage());
+			$this->assertStringContainsString('reachable from the internet over https', $e->getMessage());
+			$this->assertStringNotContainsString('no account answers', $e->getMessage());
+		}
+	}
+
+	public function testAHandleNobodyAnswersToIsStillSaidPlainly(): void {
+		$this->cacheActorService->method('getFromAccount')
+			->willThrowException(new RequestContentException('not found', Http::STATUS_NOT_FOUND));
+
+		$this->expectException(InvalidResourceException::class);
+		$this->expectExceptionMessage('no account answers to nobody@old.example');
+		$this->service->resolveActor('@nobody@old.example');
+	}
+
+	public function testImportBookmarksFetchesEachPostAndMarksIt(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$found = $this->createStub(Stream::class);
+		$found->method('getId')->willReturn('https://remote.example/users/carol/statuses/1');
+		$this->searchService->method('resolveStatus')
+			->willReturnCallback(static fn (string $url): ?Stream => str_ends_with($url, '/1') ? $found : null);
+		$marked = [];
+		$this->streamActionService->method('setActionBool')
+			->willReturnCallback(static function (string $actorId, string $streamId, string $key, bool $value) use (&$marked): void {
+				$marked[] = [$streamId, $key, $value];
+			});
+
+		$result = $this->service->importBookmarks('alice', "https://remote.example/users/carol/statuses/1\nhttps://gone.example/statuses/2\nnot an address\n");
+
+		$this->assertSame([['https://remote.example/users/carol/statuses/1', 'bookmarked', true]], $marked);
+		$this->assertSame(1, $result['bookmarked']);
+		$this->assertSame(1, $result['skipped'], 'a line that is not an address');
+		$this->assertSame(['https://gone.example/statuses/2' => 'not a post this server could fetch'], $result['failed']);
+	}
+
+	public function testImportDomainBlocksBlocksEachDomainOnceAndSkipsTheHeader(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$blocked = [];
+		$this->domainBlockService->method('block')
+			->willReturnCallback(static function (Person $actor, string $domain) use (&$blocked): string {
+				if ($domain === 'cloud.example') {
+					throw new InvalidResourceException('cannot block your own instance');
+				}
+				$blocked[] = $domain;
+
+				return $domain;
+			});
+
+		$result = $this->service->importDomainBlocks('alice', "#domain\nSpam.Example\nspam.example\ncloud.example\nnot a domain at all\n");
+
+		$this->assertSame(['spam.example'], $blocked);
+		$this->assertSame(1, $result['blocked']);
+		$this->assertSame(2, $result['skipped'], 'the header and the line that is not a domain');
+		$this->assertSame(['cloud.example' => 'cannot block your own instance'], $result['failed']);
+	}
+
+	public function testExportCsvWritesTheBookmarkedPostsAddressesNewestFirst(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$one = $this->createStub(Stream::class);
+		$one->method('getId')->willReturn('https://remote.example/users/carol/statuses/9');
+		$one->method('getNid')->willReturn(9);
+		$two = $this->createStub(Stream::class);
+		$two->method('getId')->willReturn('https://remote.example/users/dave/statuses/4');
+		$two->method('getNid')->willReturn(4);
+		$this->streamRequest->method('getTimeline')->willReturnOnConsecutiveCalls([$one, $two], []);
+
+		[$name, $csv] = $this->service->exportCsv('alice', 'bookmarks');
+
+		$this->assertSame('bookmarks.csv', $name);
+		$this->assertSame("https://remote.example/users/carol/statuses/9\nhttps://remote.example/users/dave/statuses/4\n", $csv);
+	}
+
+	public function testExportCsvWritesTheBlockedDomainsOneALine(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->domainBlockService->method('getBlocked')->willReturn(['spam.example', 'worse.example']);
+
+		[$name, $csv] = $this->service->exportCsv('alice', 'domain_blocks');
+
+		$this->assertSame('blocked_domains.csv', $name);
+		$this->assertSame("spam.example\nworse.example\n", $csv);
 	}
 
 	public function testImportBlocksBlocksEveryAccountInTheFile(): void {

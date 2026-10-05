@@ -173,6 +173,16 @@ class ImportQueueService {
 				$this->tally($job, $result['muted'], $result['skipped'], $result['failed']);
 				break;
 
+			case ImportJob::KIND_BOOKMARKS:
+				$result = $this->migrationService->importBookmarks($userId, $this->contents($job), $progress);
+				$this->tally($job, $result['bookmarked'], $result['skipped'], $result['failed']);
+				break;
+
+			case ImportJob::KIND_DOMAIN_BLOCKS:
+				$result = $this->migrationService->importDomainBlocks($userId, $this->contents($job), $progress);
+				$this->tally($job, $result['blocked'], $result['skipped'], $result['failed']);
+				break;
+
 			case ImportJob::KIND_LISTS:
 				$result = $this->migrationService->importLists($userId, $this->contents($job), $progress);
 				$this->tally($job, $result['added'], $result['skipped'], $result['failed']);

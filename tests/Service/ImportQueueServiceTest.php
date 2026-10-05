@@ -181,6 +181,31 @@ class ImportQueueServiceTest extends TestCase {
 		$this->assertSame(ImportJob::STATUS_DONE, end($this->writes)->getStatus());
 	}
 
+	public function testRunHandsBookmarksToTheirImporter(): void {
+		$job = $this->queuedRow(ImportJob::KIND_BOOKMARKS, 'b.csv');
+		$this->kept['b.csv'] = "https://remote.example/users/carol/statuses/1\n";
+		$this->migrationService->expects($this->once())->method('importBookmarks')
+			->with('alice', $this->kept['b.csv'], $this->isCallable())
+			->willReturn(['bookmarked' => 1, 'skipped' => 0, 'failed' => []]);
+
+		$this->service->run(42);
+
+		$this->assertSame(ImportJob::STATUS_DONE, $job->getStatus());
+		$this->assertSame(1, $job->getDone());
+	}
+
+	public function testRunHandsBlockedDomainsToTheirImporter(): void {
+		$job = $this->queuedRow(ImportJob::KIND_DOMAIN_BLOCKS, 'd.csv');
+		$this->kept['d.csv'] = "spam.example\n";
+		$this->migrationService->expects($this->once())->method('importDomainBlocks')
+			->with('alice', $this->kept['d.csv'], $this->isCallable())
+			->willReturn(['blocked' => 1, 'skipped' => 0, 'failed' => []]);
+
+		$this->service->run(42);
+
+		$this->assertSame(1, $job->getDone());
+	}
+
 	public function testRunLeavesARowThatIsNotQueuedAlone(): void {
 		$job = $this->queuedRow(ImportJob::KIND_FOLLOWS, 'f.csv');
 		$job->setStatus(ImportJob::STATUS_DONE);

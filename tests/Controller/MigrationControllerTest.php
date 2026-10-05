@@ -482,8 +482,15 @@ class MigrationControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_ACCEPTED, $this->controller()->importMutes()->getStatus());
 		$this->uploadWith("Friends,carol@remote.example\n");
 		$this->assertSame(Http::STATUS_ACCEPTED, $this->controller()->importLists()->getStatus());
+		$this->uploadWith("https://remote.example/users/carol/statuses/1\n");
+		$this->assertSame(Http::STATUS_ACCEPTED, $this->controller()->importBookmarks()->getStatus());
+		$this->uploadWith("spam.example\n");
+		$this->assertSame(Http::STATUS_ACCEPTED, $this->controller()->importDomainBlocks()->getStatus());
 
-		$this->assertSame([ImportJob::KIND_BLOCKS, ImportJob::KIND_MUTES, ImportJob::KIND_LISTS], $kinds);
+		$this->assertSame([
+			ImportJob::KIND_BLOCKS, ImportJob::KIND_MUTES, ImportJob::KIND_LISTS,
+			ImportJob::KIND_BOOKMARKS, ImportJob::KIND_DOMAIN_BLOCKS,
+		], $kinds);
 	}
 
 	public function testTheOtherImportsWithNoFileSaySo(): void {
@@ -491,6 +498,8 @@ class MigrationControllerTest extends TestCase {
 			fn (): object => $this->controller()->importBlocks(),
 			fn (): object => $this->controller()->importMutes(),
 			fn (): object => $this->controller()->importLists(),
+			fn (): object => $this->controller()->importBookmarks(),
+			fn (): object => $this->controller()->importDomainBlocks(),
 		] as $call) {
 			$response = $call();
 			$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());

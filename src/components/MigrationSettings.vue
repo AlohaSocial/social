@@ -174,6 +174,18 @@
 			<p v-if="finishedMoveIn" class="migration__move-in-finish">
 				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
 			</p>
+			<div v-if="finishedMoveIn && finishedMoveIn.options?.posts" class="migration__move-in-again">
+				<p class="migration__note">
+					{{ t('social', 'Posts written on the old account since the copy are not picked up by anything. Running the copy again brings over only what is new; nothing already here is written twice.') }}
+				</p>
+				<NcButton :disabled="moveStarting || moveInRunning" @click="copyNewerPosts">
+					<template #icon>
+						<NcLoadingIcon v-if="moveStarting" :size="20" />
+						<IconPostOutline v-else :size="20" />
+					</template>
+					{{ t('social', 'Copy newer posts from {acct}', { acct: '@' + finishedMoveIn.options.acct }) }}
+				</NcButton>
+			</div>
 		</section>
 
 		<!-- from elsewhere -->
@@ -194,6 +206,14 @@
 					:class="'migration__import--' + job.status">
 					<span class="migration__import-kind">{{ kindLabel(job.kind) }}</span>
 					<span class="migration__result">{{ importSummary(job) }}</span>
+					<ul v-if="failuresOf(job).length > 0" class="migration__failures">
+						<li v-for="[what, why] in failuresOf(job)" :key="what">
+							<span class="migration__failure-what">{{ what }}</span> — {{ why }}
+						</li>
+						<li v-if="job.failed > failuresOf(job).length">
+							{{ n('social', 'and %n more', 'and %n more', job.failed - failuresOf(job).length) }}
+						</li>
+					</ul>
 					<NcButton
 						v-if="job.status === 'done' || job.status === 'failed'"
 						variant="tertiary"
@@ -227,9 +247,9 @@
 				{{ followsBusy ? t('social', 'Following …') : t('social', 'Import follows from a file') }}
 			</NcButton>
 
-			<h5>{{ t('social', 'Bring your blocks, mutes and lists') }}</h5>
+			<h5>{{ t('social', 'Bring your blocks, mutes, lists, bookmarks and blocked domains') }}</h5>
 			<p>
-				{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block federates, exactly as blocking somebody from here does.') }}
+				{{ t('social', 'The rest of what the same export holds. Blocks and mutes are decisions this account makes on its own, so they apply the moment the file is read — and a block federates, exactly as blocking somebody from here does. Bookmarks are the addresses of posts: each is fetched from where it lives and marked here, for you alone. A blocked domain hides a whole server from you, as it did there.') }}
 			</p>
 			<p class="migration__note">
 				{{ t('social', 'Import your follows first and your lists after. A list here can only hold accounts you follow, as on Mastodon, so anybody you have not followed again yet is counted as skipped rather than followed by a button that says lists. A list you already have is filled rather than made twice.') }}
@@ -279,6 +299,36 @@
 						<IconFormatListBulleted v-else :size="20" />
 					</template>
 					{{ t('social', 'Import lists') }}
+				</NcButton>
+				<input
+					ref="bookmarks"
+					type="file"
+					accept=".csv,text/csv"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importCsv($event, 'bookmarks')">
+				<NcButton :disabled="csvImport !== ''" @click="pick('bookmarks')">
+					<template #icon>
+						<NcLoadingIcon v-if="csvImport === 'bookmarks'" :size="20" />
+						<IconBookmarkOutline v-else :size="20" />
+					</template>
+					{{ t('social', 'Import bookmarks') }}
+				</NcButton>
+				<input
+					ref="domain_blocks"
+					type="file"
+					accept=".csv,text/csv"
+					class="hidden-visually"
+					tabindex="-1"
+					aria-hidden="true"
+					@change="importCsv($event, 'domain_blocks')">
+				<NcButton :disabled="csvImport !== ''" @click="pick('domain_blocks')">
+					<template #icon>
+						<NcLoadingIcon v-if="csvImport === 'domain_blocks'" :size="20" />
+						<IconDomainOff v-else :size="20" />
+					</template>
+					{{ t('social', 'Import blocked domains') }}
 				</NcButton>
 			</div>
 
@@ -458,6 +508,8 @@ import IconAccountArrowRight from 'vue-material-design-icons/AccountArrowRight.v
 import IconAccountMultiplePlus from 'vue-material-design-icons/AccountMultiplePlus.vue'
 import IconCancel from 'vue-material-design-icons/Cancel.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
+import IconBookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
+import IconDomainOff from 'vue-material-design-icons/DomainOff.vue'
 import IconDownload from 'vue-material-design-icons/Download.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconPostOutline from 'vue-material-design-icons/PostOutline.vue'
@@ -480,6 +532,8 @@ export default {
 		IconAccountMultiplePlus,
 		IconCancel,
 		IconClose,
+		IconBookmarkOutline,
+		IconDomainOff,
 		IconDownload,
 		IconFormatListBulleted,
 		IconPostOutline,
@@ -538,6 +592,11 @@ export default {
 			return this.imports.find((job) => job.kind === 'move_in' && job.status === 'done')
 		},
 
+		/** @return {boolean} whether a move here is queued or running, which the server allows one of at a time */
+		moveInRunning() {
+			return this.imports.some((job) => job.kind === 'move_in' && (job.status === 'queued' || job.status === 'running'))
+		},
+
 		/**
 		 * The lists of accounts that can be downloaded one at a time.
 		 *
@@ -553,6 +612,8 @@ export default {
 				{ name: 'blocks', label: t('social', 'Blocks') },
 				{ name: 'mutes', label: t('social', 'Mutes') },
 				{ name: 'lists', label: t('social', 'Lists') },
+				{ name: 'bookmarks', label: t('social', 'Bookmarks') },
+				{ name: 'domain_blocks', label: t('social', 'Blocked domains') },
 			]
 		},
 	},
@@ -611,24 +672,57 @@ export default {
 			if (!this.moveAccount || this.moveStarting) {
 				return
 			}
+			const queued = await this.queueMoveIn(this.moveHandle.trim(), this.moveFollows, this.movePosts)
+			if (queued) {
+				this.moveAccount = null
+				this.moveHandle = ''
+				this.loadAliases()
+			}
+		},
+
+		/**
+		 * Runs the copy again for the account a finished move came from, posts
+		 * only: what was written there since comes over, what is here already
+		 * is left alone by the import itself.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async copyNewerPosts() {
+			const from = this.finishedMoveIn?.options?.acct
+			if (!from || this.moveStarting) {
+				return
+			}
+			await this.queueMoveIn('@' + from, false, true)
+		},
+
+		/**
+		 * Queues a move here from `handle` and starts watching the list.
+		 *
+		 * @param {string} handle the old account
+		 * @param {boolean} follows whether to follow who it follows
+		 * @param {boolean} posts whether to copy its posts
+		 * @return {Promise<boolean>} whether the server took it
+		 */
+		async queueMoveIn(handle, follows, posts) {
 			this.moveStarting = true
 			try {
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in'), {
-					handle: this.moveHandle.trim(),
-					follows: this.moveFollows ? '1' : '0',
-					posts: this.movePosts ? '1' : '0',
+					handle,
+					follows: follows ? '1' : '0',
+					posts: posts ? '1' : '0',
 					fetch_media: this.fetchMedia ? '1' : '0',
 				})
 				if (data?.import) {
 					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
 				}
-				this.moveAccount = null
-				this.moveHandle = ''
-				this.loadAliases()
 				showSuccess(t('social', 'Moving — it runs in the background, and this page shows where it gets to'))
 				this.schedulePoll()
+
+				return true
 			} catch (error) {
 				showError(error?.response?.data?.error || t('social', 'Could not start the move'))
+
+				return false
 			} finally {
 				this.moveStarting = false
 			}
@@ -915,10 +1009,10 @@ export default {
 		},
 
 		/**
-		 * Queues a blocks, mutes or lists CSV.
+		 * Queues a blocks, mutes, lists, bookmarks or blocked-domains CSV.
 		 *
 		 * @param {Event} event the file input's change
-		 * @param {string} kind blocks, mutes or lists
+		 * @param {string} kind blocks, mutes, lists, bookmarks or domain_blocks
 		 * @return {Promise<void>}
 		 */
 		async importCsv(event, kind) {
@@ -1032,7 +1126,28 @@ export default {
 				lists: t('social', 'Lists'),
 				posts: t('social', 'Posts'),
 				move_in: t('social', 'Move here'),
+				bookmarks: t('social', 'Bookmarks'),
+				domain_blocks: t('social', 'Blocked domains'),
 			}[kind] ?? kind
+		},
+
+		/**
+		 * What could not be done, by name, with the reason — the first few.
+		 *
+		 * The server keeps them under three keys, one per importer: `failed`
+		 * for the account lists, `failures` for the follows of a move-in and
+		 * `post_failures` for its posts.
+		 *
+		 * @param {object} job the import as the server lists it
+		 * @return {Array<[string, string]>} what, and why
+		 */
+		failuresOf(job) {
+			if (job.status !== 'done' || !job.report) {
+				return []
+			}
+			const named = { ...(job.report.failed ?? {}), ...(job.report.failures ?? {}), ...(job.report.post_failures ?? {}) }
+
+			return Object.entries(named).slice(0, 5)
 		},
 
 		/**
@@ -1084,6 +1199,20 @@ export default {
 					'social',
 					'{followed} followed, {skipped} skipped, {failed} could not be reached',
 					{ followed: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'bookmarks') {
+				return t(
+					'social',
+					'{done} posts bookmarked, {skipped} lines were not the address of a post, {failed} could not be fetched',
+					{ done: job.done, skipped: job.skipped, failed: job.failed },
+				)
+			}
+			if (job.kind === 'domain_blocks') {
+				return t(
+					'social',
+					'{done} servers blocked, {skipped} lines were not a domain, {failed} could not be blocked',
+					{ done: job.done, skipped: job.skipped, failed: job.failed },
 				)
 			}
 			return t(
@@ -1254,6 +1383,14 @@ export default {
 	color: var(--color-text-maxcontrast);
 }
 
+.migration__move-in-again {
+	margin-top: 12px;
+
+	.migration__note {
+		margin-bottom: 8px;
+	}
+}
+
 .migration__move-in-finish {
 	margin-top: 12px;
 	padding: 8px 12px;
@@ -1302,6 +1439,22 @@ export default {
 
 .migration__import--failed .migration__result {
 	color: var(--color-error-text, var(--color-error));
+}
+
+.migration__failures {
+	flex-basis: 100%;
+	margin: 0 0 4px 0;
+	padding-inline-start: 20px;
+	font-size: var(--font-size-small, 13px);
+	color: var(--color-text-maxcontrast);
+
+	li {
+		overflow-wrap: anywhere;
+	}
+}
+
+.migration__failure-what {
+	font-family: var(--font-face-mono, monospace);
 }
 
 .migration__result {
