@@ -51,9 +51,6 @@ class AtprotoIdentity {
 	/** The path segment every Bluesky id starts with, after the social url. */
 	public const PATH = 'ap/bluesky/';
 
-	/** Bluesky's own profile page, the one place a person can go and edit. */
-	private const PROFILE_URL = 'https://bsky.app/profile/';
-
 	/** @var array<string, string> did => the pds endpoint, for this process */
 	private array $endpoints = [];
 
@@ -496,7 +493,9 @@ class AtprotoIdentity {
 			'followers' => $id . '/followers',
 			'following' => $id . '/following',
 			'featured' => $id . '/collections/featured',
-			'url' => self::PROFILE_URL . $did,
+			// Keep profile navigation inside the shared Social surface. The
+			// external bsky.app URL remains available from the post itself.
+			'url' => $this->localProfileUrl($handle),
 		];
 
 		$avatar = $this->blobUrl($did, $profile['avatar'] ?? null, $pds);
@@ -538,7 +537,7 @@ class AtprotoIdentity {
 
 		$actor->setName($this->displayNameOf($handle, $profile));
 		$actor->setDescription($this->htmlOf((string)($profile['description'] ?? '')));
-		$actor->setUrl(self::PROFILE_URL . $did);
+		$actor->setUrl($this->localProfileUrl($handle));
 
 		$avatar = $this->blobUrl($did, $profile['avatar'] ?? null, $pds);
 		if ($avatar !== '') {
@@ -575,6 +574,11 @@ class AtprotoIdentity {
 		$text = htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
 		return str_replace(["\r\n", "\r", "\n"], '<br />', $text);
+	}
+
+	/** The internal profile URL shared with the Fediverse profile renderer. */
+	private function localProfileUrl(string $handle): string {
+		return $this->configService->getSocialUrl() . 'atproto/' . rawurlencode($handle);
 	}
 
 	/**
