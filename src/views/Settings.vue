@@ -122,6 +122,7 @@ const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "s
 // and again: a radio pair, a few switches and some time fields, only ever
 // drawn on this page
 const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
+const NotificationPolicySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationPolicySettings.vue'))
 // and again: a bar and a line for a self-registered external user, and the
 // invitation links, only ever drawn on this page
 const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
@@ -174,6 +175,7 @@ export default {
 		IconTags,
 		ListsSettings,
 		NotificationDeliverySettings,
+		NotificationPolicySettings,
 		PortfolioSettings,
 		RecapSettings,
 		SensesSettings,
@@ -302,6 +304,13 @@ export default {
 					component: 'NotificationDeliverySettings',
 					title: t('social', 'Notifications'),
 					lede: t('social', 'When Aloha Social is allowed to interrupt you. Everything still lands in your notifications here; this is only about the bell, the phone and the mail.'),
+				},
+				{
+					id: 'notification-policy',
+					icon: 'IconNotifications',
+					component: 'NotificationPolicySettings',
+					title: t('social', 'Who may reach you'),
+					lede: t('social', 'Whether people you have no relationship with — strangers, brand-new accounts, people who do not follow you — may notify you at all, or wait for your say-so first. What they send is kept either way.'),
 				},
 				{
 					id: 'apps',
