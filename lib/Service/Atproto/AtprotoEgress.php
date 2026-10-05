@@ -97,13 +97,29 @@ class AtprotoEgress {
 
 	/** @return array<string, mixed> */
 	private function record(Stream $post): array {
+		$text = $this->text($post->getContent());
 		$record = [
 			'$type' => 'app.bsky.feed.post',
-			'text' => $this->text($post->getContent()),
+			'text' => $text,
 			'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', max(1, $post->getPublishedTime())),
 		];
 		if ($post->getLanguage() !== '') {
 			$record['langs'] = [$post->getLanguage()];
+		}
+		$facets = $this->facets($post->getContent(), $text);
+		if ($facets !== []) {
+			$record['facets'] = $facets;
+		}
+		$card = $post->getCard();
+		if ($card !== null && $card->getUrl() !== '') {
+			$record['embed'] = [
+				'$type' => 'app.bsky.embed.external',
+				'external' => [
+					'uri' => $card->getUrl(),
+					'title' => $card->getTitle(),
+					'description' => $card->getDescription(),
+				],
+			];
 		}
 		$parent = null;
 		if ($post->getInReplyTo() !== '') {
@@ -120,6 +136,66 @@ class AtprotoEgress {
 		}
 
 		return $record;
+	}
+
+	/**
+	 * Converts the HTML anchors and hashtags Social already stores into
+	 * Bluesky's byte-based rich-text facets. The offsets are calculated against
+	 * the final plain text, never the HTML, so UTF-8 text remains addressable.
+	 *
+	 * @return list<array{index: array{byteStart: int, byteEnd: int}, features: list<array<string, string>>}>
+	 */
+	private function facets(string $html, string $text): array {
+		$facets = [];
+		$occupied = [];
+		$offset = 0;
+		$pattern = '/<a\\b[^>]*href=["\\\']([^"\\\']+)["\\\'][^>]*>(.*?)<\\/a>/isu';
+		if (preg_match_all($pattern, $html, $matches, PREG_SET_ORDER) !== false) {
+			foreach ($matches as $match) {
+				$label = trim(html_entity_decode(strip_tags((string)$match[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+				$start = $label === '' ? false : strpos($text, $label, $offset);
+				if ($start === false) {
+					continue;
+				}
+				$end = $start + strlen($label);
+				$offset = $end;
+				$occupied[] = [$start, $end];
+				$facets[] = [
+					'index' => ['byteStart' => $start, 'byteEnd' => $end],
+					'features' => [[
+						'$type' => 'app.bsky.richtext.facet#link',
+						'uri' => html_entity_decode((string)$match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+					]],
+				];
+			}
+		}
+
+		if (preg_match_all('/(?<![\\pL\\pN_])#([\\pL\\pN_]+)/u', $text, $tags, PREG_OFFSET_CAPTURE) !== false) {
+			foreach ($tags[0] as $index => [$tag, $start]) {
+				$end = $start + strlen($tag);
+				$overlap = false;
+				foreach ($occupied as [$from, $to]) {
+					$overlap = $start < $to && $end > $from;
+					if ($overlap) {
+						break;
+					}
+				}
+				if ($overlap) {
+					continue;
+				}
+				$facets[] = [
+					'index' => ['byteStart' => $start, 'byteEnd' => $end],
+					'features' => [[
+						'$type' => 'app.bsky.richtext.facet#tag',
+						'tag' => ltrim((string)$tag, '#'),
+					]],
+				];
+			}
+		}
+
+		usort($facets, static fn (array $left, array $right): int => $left['index']['byteStart'] <=> $right['index']['byteStart']);
+
+		return $facets;
 	}
 
 	/** @return array<string, mixed> */

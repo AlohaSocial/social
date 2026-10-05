@@ -16,6 +16,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\Atproto\AtprotoClient;
 use OCA\Social\Service\Atproto\AtprotoEgress;
 use OCA\Social\Service\Atproto\AtprotoIngress;
@@ -120,6 +121,37 @@ class AtprotoEgressTest extends TestCase {
 		$this->client->expects($this->never())->method('authedPost');
 
 		$this->egress->publish($this->post(Stream::TYPE_DIRECT));
+	}
+
+	public function testRichTextFacetsAndExternalCardAreWritten(): void {
+		$post = $this->post();
+		$post->setContent('<p>See <a href="https://example.test">example</a> #Tag</p>');
+		$post->setCard((new StreamCard(self::POST, 'https://example.test'))
+			->setTitle('Example')
+			->setDescription('A preview'));
+		$account = $this->account();
+		$this->atprotoRequest->method('getLinkByLocalId')->willReturn(null);
+		$this->actorsRequest->method('getFromId')->willReturn($this->localAuthor());
+		$this->atprotoRequest->method('getAccount')->willReturn($account);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.putRecord',
+			$this->callback(function (array $request): bool {
+				$this->assertSame('See example #Tag', $request['record']['text']);
+				$this->assertSame('https://example.test', $request['record']['facets'][0]['features'][0]['uri']);
+				$this->assertSame('app.bsky.richtext.facet#tag', $request['record']['facets'][1]['features'][0]['$type']);
+				$this->assertSame('https://example.test', $request['record']['embed']['external']['uri']);
+
+				return true;
+			}),
+			$account,
+			'https://pds.example',
+		)->willReturn([
+			'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3mrich',
+			'cid' => 'bafy-rich',
+		]);
+		$this->atprotoRequest->expects($this->once())->method('saveLink');
+
+		$this->egress->publish($post);
 	}
 
 	public function testFediverseOnlyPostNeverLeavesForBluesky(): void {
