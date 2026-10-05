@@ -147,7 +147,7 @@ class AtprotoController extends Controller {
 		}
 		$account = $this->atprotoRequest->getAccount($userId);
 		if ($account === null) {
-			return new DataResponse([], Http::STATUS_OK);
+			return new DataResponse(['statuses' => [], 'nextCursor' => ''], Http::STATUS_OK);
 		}
 
 		try {
@@ -159,8 +159,10 @@ class AtprotoController extends Controller {
 
 		$limit = min(max((int)$this->request->getParam('limit', 20), 1), 50);
 		$offset = min(max((int)$this->request->getParam('cursor', 0), 0), 1000000);
+		$links = $this->atprotoRequest->getLinksForDid($account->getDid(), $limit + 1, $offset);
+		$hasMore = count($links) > $limit;
 		$statuses = [];
-		foreach ($this->atprotoRequest->getLinksForDid($account->getDid(), $limit, $offset) as $link) {
+		foreach (array_slice($links, 0, $limit) as $link) {
 			try {
 				$status = $this->streamService->getStreamById($link->getLocalId(), true, ACore::FORMAT_LOCAL);
 				if ($status->getAttributedTo() === $actorId) {
@@ -171,7 +173,10 @@ class AtprotoController extends Controller {
 			}
 		}
 
-		return new DataResponse($statuses, Http::STATUS_OK);
+		return new DataResponse([
+			'statuses' => $statuses,
+			'nextCursor' => $hasMore ? (string)($offset + $limit) : '',
+		], Http::STATUS_OK);
 	}
 
 	/** Update the linked Bluesky account's public display metadata. */

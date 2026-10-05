@@ -248,14 +248,22 @@ export default {
 				if (request !== this.feedRequest || feed !== this.activeFeed) {
 					return
 				}
-				const page = Array.isArray(data) ? data : []
+				const blueskyPage = feed === 'bluesky' && !Array.isArray(data)
+					? data
+					: null
+				const page = Array.isArray(data) ? data : (blueskyPage?.statuses ?? [])
 				const seen = new Set(this.feedTimeline.map((status) => String(status.id)))
 				this.feedTimeline = maxId
 					? [...this.feedTimeline, ...page.filter((status) => !seen.has(String(status.id)))]
 					: page
-				this.feedHasMore = page.length === PAGE_SIZE
+				this.feedHasMore = feed === 'bluesky'
+					? String(blueskyPage?.nextCursor ?? '') !== ''
+					: page.length === PAGE_SIZE
 				if (feed === 'bluesky') {
-					this.blueskyOffset += page.length
+					const nextOffset = Number(blueskyPage?.nextCursor)
+					this.blueskyOffset = Number.isSafeInteger(nextOffset) && nextOffset > this.blueskyOffset
+						? nextOffset
+						: this.blueskyOffset + page.length
 				}
 				if (feed === 'profile' && !maxId) {
 					await this.restorePostAnchor(request)
