@@ -98,10 +98,22 @@ export default {
 		 * @return {boolean}
 		 */
 		isOwnProfile() {
-			return Boolean(this.accountInfo)
-				&& Boolean(this.currentAccount)
-				&& this.accountInfo.acct === this.currentAccount.acct
-				&& this.$route.name === 'profile'
+			if (!this.accountInfo || !this.currentAccount || this.$route.name !== 'profile') {
+				return false
+			}
+
+			// A local account can be exported as either `admin2` or
+			// `admin2@cloud.example`. The profile route must still be the
+			// reader's own profile in both forms; otherwise `/@admin2` loses the
+			// composer and the Edit profile action even though the account is ours.
+			if (this.accountInfo.id && this.currentAccount.id
+				&& this.accountInfo.id === this.currentAccount.id) {
+				return true
+			}
+
+			const localPart = (value) => String(value ?? '').split('@', 1)[0]
+			return localPart(this.accountInfo.acct || this.accountInfo.username)
+				=== localPart(this.currentAccount.acct || this.currentAccount.username)
 		},
 	},
 

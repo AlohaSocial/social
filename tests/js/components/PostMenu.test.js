@@ -101,6 +101,18 @@ describe('the post menu', () => {
 			])
 		})
 
+		it('recognises an own post by its stable actor id when handles differ', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { id: 'https://cloud.example.org/users/alice', acct: 'alice@pds.example' },
+			}, {
+				currentAccount: { id: 'https://cloud.example.org/users/alice', acct: 'alice' },
+			}))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
 		/**
 		 * Muting, blocking and reporting yourself are all nonsense. Quoting
 		 * yourself is not — it is how somebody adds to their own post without
