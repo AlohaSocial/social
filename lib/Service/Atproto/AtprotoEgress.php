@@ -37,6 +37,7 @@ class AtprotoEgress {
 		private ActorsRequest $actorsRequest,
 		private ConfigService $configService,
 		private LoggerInterface $logger,
+		private ?AtprotoIdentity $identity = null,
 	) {
 	}
 
@@ -106,7 +107,7 @@ class AtprotoEgress {
 		if ($post->getLanguage() !== '') {
 			$record['langs'] = [$post->getLanguage()];
 		}
-		$facets = $this->facets($post->getContent(), $text);
+		$facets = $this->facets($post->getContent(), $text, $post);
 		if ($facets !== []) {
 			$record['facets'] = $facets;
 		}
@@ -159,7 +160,7 @@ class AtprotoEgress {
 	 *
 	 * @return list<array{index: array{byteStart: int, byteEnd: int}, features: list<array<string, string>>}>
 	 */
-	private function facets(string $html, string $text): array {
+	private function facets(string $html, string $text, Stream $post): array {
 		$facets = [];
 		$occupied = [];
 		$offset = 0;
@@ -202,6 +203,58 @@ class AtprotoEgress {
 					'features' => [[
 						'$type' => 'app.bsky.richtext.facet#tag',
 						'tag' => ltrim((string)$tag, '#'),
+					]],
+				];
+			}
+		}
+		if ($this->identity !== null) {
+			foreach ($post->getTags('Mention') as $mention) {
+				$name = trim((string)($mention['name'] ?? ''));
+				$handle = ltrim($name, '@');
+				if ($name === '' || !str_contains($handle, '.') || str_contains($handle, '@')) {
+					continue;
+				}
+				$start = strpos($text, $name);
+				if ($start === false) {
+					continue;
+				}
+				$end = $start + strlen($name);
+				$overlap = false;
+				foreach ($occupied as [$occupiedStart, $occupiedEnd]) {
+					if ($start < $occupiedEnd && $end > $occupiedStart) {
+						$overlap = true;
+						break;
+					}
+				}
+				if ($overlap) {
+					try {
+						$did = $this->identity->resolve($handle)['did'];
+					} catch (AtprotoException) {
+						continue;
+					}
+					foreach ($facets as &$facet) {
+						if ($facet['index']['byteStart'] === $start && $facet['index']['byteEnd'] === $end) {
+							$facet['features'] = [[
+								'$type' => 'app.bsky.richtext.facet#mention',
+								'did' => $did,
+							]];
+							break;
+						}
+					}
+				unset($facet);
+					continue;
+				}
+				try {
+					$did = $this->identity->resolve($handle)['did'];
+				} catch (AtprotoException) {
+					continue;
+				}
+				$occupied[] = [$start, $end];
+				$facets[] = [
+					'index' => ['byteStart' => $start, 'byteEnd' => $end],
+					'features' => [[
+						'$type' => 'app.bsky.richtext.facet#mention',
+						'did' => $did,
 					]],
 				];
 			}

@@ -19,6 +19,7 @@ use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\Atproto\AtprotoClient;
 use OCA\Social\Service\Atproto\AtprotoEgress;
+use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Service\Atproto\AtprotoIngress;
 use OCA\Social\Service\ConfigService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -36,6 +37,7 @@ class AtprotoEgressTest extends TestCase {
 	private AtprotoRequest|MockObject $atprotoRequest;
 	private ActorsRequest|MockObject $actorsRequest;
 	private ConfigService|MockObject $configService;
+	private AtprotoIdentity|MockObject $identity;
 	private AtprotoEgress $egress;
 
 	protected function setUp(): void {
@@ -44,12 +46,14 @@ class AtprotoEgressTest extends TestCase {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->configService->method('getAppValue')->willReturn('1');
+		$this->identity = $this->createMock(AtprotoIdentity::class);
 		$this->egress = new AtprotoEgress(
 			$this->client,
 			$this->atprotoRequest,
 			$this->actorsRequest,
 			$this->configService,
 			new NullLogger(),
+			$this->identity,
 		);
 	}
 
@@ -179,6 +183,33 @@ class AtprotoEgressTest extends TestCase {
 		)->willReturn([
 			'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3quote',
 			'cid' => 'bafy-quote',
+		]);
+		$this->atprotoRequest->expects($this->once())->method('saveLink');
+
+		$this->egress->publish($post);
+	}
+
+	public function testMentionFacetUsesResolvedAtprotoDid(): void {
+		$post = $this->post();
+		$post->setContent('<p>Hello <a href="https://social.example/@alice.example">@alice.example</a></p>');
+		$post->addTag(['type' => 'Mention', 'name' => '@alice.example', 'href' => 'https://social.example/@alice.example']);
+		$account = $this->account();
+		$this->identity->expects($this->once())->method('resolve')->with('alice.example')->willReturn([
+			'did' => 'did:plc:mentioned', 'handle' => 'alice.example', 'pds' => 'https://pds.example',
+		]);
+		$this->atprotoRequest->method('getLinkByLocalId')->willReturn(null);
+		$this->actorsRequest->method('getFromId')->willReturn($this->localAuthor());
+		$this->atprotoRequest->method('getAccount')->willReturn($account);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.putRecord',
+			$this->callback(static fn (array $request): bool => ($request['record']['facets'][0]['features'][0] ?? []) === [
+				'$type' => 'app.bsky.richtext.facet#mention', 'did' => 'did:plc:mentioned',
+			]),
+			$account,
+			'https://pds.example',
+		)->willReturn([
+			'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3mention',
+			'cid' => 'bafy-mention',
 		]);
 		$this->atprotoRequest->expects($this->once())->method('saveLink');
 
