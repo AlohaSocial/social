@@ -60,6 +60,13 @@
 				</p>
 			</form>
 			<div class="atproto-profile__actions">
+				<a
+					v-if="profile.handle || handle"
+					:href="blueskyProfileUrl"
+					target="_blank"
+					rel="noreferrer">
+					{{ t('social', 'Open on Bluesky') }}
+				</a>
 				<a v-if="viewerCanEdit && fediverseProfileUrl" :href="fediverseProfileUrl">
 					{{ t('social', 'Open Fediverse profile') }}
 				</a>
@@ -138,6 +145,10 @@ export default {
 
 		settingsUrl() {
 			return generateUrl('apps/social/settings') + '#bluesky'
+		},
+
+		blueskyProfileUrl() {
+			return `https://bsky.app/profile/${encodeURIComponent(this.profile.handle || this.handle)}`
 		},
 	},
 

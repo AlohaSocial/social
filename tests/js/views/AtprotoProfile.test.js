@@ -37,5 +37,6 @@ describe('AtprotoProfile', () => {
 		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 		expect(wrapper.find('h2').text()).toBe('@bob.example')
 		expect(wrapper.find('.atproto-profile__banner').attributes('src')).toBe('banner.jpg')
+		expect(wrapper.find('a[href="https://bsky.app/profile/bob.example"]').exists()).toBe(true)
 	})
 })
