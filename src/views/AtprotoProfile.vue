@@ -9,7 +9,10 @@
 			<p v-if="profile.displayName">
 				{{ profile.displayName }}
 			</p>
-			<a :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
+			<div class="atproto-profile__actions">
+				<FollowButton v-if="account.id" :profile-account="account" />
+				<a :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
+			</div>
 		</header>
 		<p v-if="loading" role="status">
 			{{ t('social', 'Loading Bluesky profile…') }}
@@ -31,12 +34,13 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
 import ProfileStatusCard from '../components/ProfileStatusCard.vue'
+import FollowButton from '../components/FollowButton.vue'
 
 export default {
 	name: 'AtprotoProfile',
-	components: { ProfileStatusCard },
+	components: { FollowButton, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ profile: {}, statuses: [], loading: true, error: '' }),
+	data: () => ({ account: {}, profile: {}, statuses: [], loading: true, error: '' }),
 	computed: {
 		settingsUrl() {
 			return generateUrl('apps/social/settings') + '#bluesky'
@@ -47,6 +51,7 @@ export default {
 		try {
 			const { data } = await axios.get(generateUrl(`apps/social/api/v1/atproto/profiles/${encodeURIComponent(this.handle)}`))
 			this.profile = data.profile ?? {}
+			this.account = data.account ?? {}
 			this.statuses = data.statuses ?? []
 		} catch (error) {
 			this.error = error?.response?.data?.message ?? t('social', 'Could not load this Bluesky profile')

@@ -22,7 +22,7 @@ class AtprotoProfileService {
 	) {
 	}
 
-	/** @return array{profile: array<string, mixed>, statuses: list<Stream>} */
+	/** @return array{profile: array<string, mixed>, account: array<string, mixed>, statuses: list<Stream>} */
 	public function read(string $handle, int $limit = 20): array {
 		$resolved = $this->identity->resolve($handle);
 		$profile = [
@@ -36,6 +36,8 @@ class AtprotoProfileService {
 		} catch (AtprotoException) {
 			// A PDS can be valid while the public appview is temporarily behind.
 		}
+		$actor = $this->identity->actor($resolved['did'], $resolved['handle'], $profile, $resolved['pds']);
+		$actor->setExportFormat(ACore::FORMAT_LOCAL);
 
 		$answer = $this->client->get('app.bsky.feed.getAuthorFeed', [
 			'actor' => $resolved['did'],
@@ -57,7 +59,7 @@ class AtprotoProfileService {
 			}
 		}
 
-		return ['profile' => $profile, 'statuses' => $statuses];
+		return ['profile' => $profile, 'account' => $actor->exportAsLocal(), 'statuses' => $statuses];
 	}
 
 	private function localId(string $uri): string {
