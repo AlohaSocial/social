@@ -282,7 +282,19 @@ export default {
 	computed: {
 		/** @return {boolean} whether the reader wrote this post */
 		isMine() {
-			return this.item.account.acct === this.currentAccount?.acct
+			if (!this.currentAccount || !this.item.account) {
+				return false
+			}
+
+			// Local and ATProto-backed exports can carry different display
+			// spellings for the same actor (handle versus acct). Prefer the
+			// stable actor id, while retaining acct/username for older clients.
+			return (this.item.account.id && this.currentAccount.id
+				&& this.item.account.id === this.currentAccount.id)
+			|| (this.item.account.acct && this.currentAccount.acct
+				&& this.item.account.acct === this.currentAccount.acct)
+			|| (this.item.account.username && this.currentAccount.username
+				&& this.item.account.username === this.currentAccount.username)
 		},
 
 		/**
