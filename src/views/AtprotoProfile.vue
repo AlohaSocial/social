@@ -10,9 +10,18 @@
 			:startExpanded="replyTo !== null"
 			@posted="replyTo = null" />
 		<header class="atproto-profile__header">
+			<img
+				v-if="profile.avatar"
+				class="atproto-profile__avatar"
+				:src="profile.avatar"
+				:alt="profile.displayName || profile.handle || handle"
+				loading="lazy">
 			<h2>@{{ profile.handle || handle }}</h2>
 			<p v-if="profile.displayName">
 				{{ profile.displayName }}
+			</p>
+			<p v-if="profile.description" class="atproto-profile__description">
+				{{ profile.description }}
 			</p>
 			<form v-if="viewerCanEdit" class="atproto-profile__editor" @submit.prevent="saveProfile">
 				<NcTextField
@@ -165,6 +174,17 @@ export default {
 	display: grid;
 	gap: 8px;
 	margin: 12px 0;
+}
+
+.atproto-profile__avatar {
+	width: 80px;
+	height: 80px;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.atproto-profile__description {
+	white-space: pre-wrap;
 }
 
 .atproto-profile__error {
