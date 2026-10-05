@@ -32,7 +32,9 @@
 			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle && profileNetwork === 'atproto'"
 			class="social__atproto-profile"
 			aria-labelledby="social-atproto-profile-heading">
-			<h2 id="social-atproto-profile-heading">{{ t('social', 'Bluesky profile') }}</h2>
+			<h2 id="social-atproto-profile-heading">
+				{{ t('social', 'Bluesky profile') }}
+			</h2>
 			<AtprotoProfile :handle="atprotoHandle" />
 		</section>
 		<!-- the lookup is what says an account is missing: `accountLoaded` only
