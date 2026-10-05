@@ -120,5 +120,6 @@ export default {
 
 <style scoped lang="scss">
 .atproto-settings__hint, .atproto-settings__connected, .atproto-settings__error { margin: 0 0 12px; }
+
 .atproto-settings__error { color: var(--color-error); }
 </style>

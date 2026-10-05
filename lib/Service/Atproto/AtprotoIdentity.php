@@ -590,7 +590,7 @@ class AtprotoIdentity {
 		}
 
 		$cid = (string)($blob['ref']['$link'] ?? ($blob['ref'] ?? ''));
-		if ($cid === '' || !is_string($cid)) {
+		if ($cid === '') {
 			return '';
 		}
 

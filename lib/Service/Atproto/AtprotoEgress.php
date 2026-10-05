@@ -9,11 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service\Atproto;
 
-use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Db\ActorsRequest;
-use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
-use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoLink;
 use OCA\Social\Service\ConfigService;
@@ -148,7 +147,7 @@ class AtprotoEgress {
 
 	/** Bluesky accepts text, not the ActivityPub HTML held in a local row. */
 	private function text(string $html): string {
-		$text = trim(html_entity_decode(strip_tags(preg_replace('/<br\\s*\\/?\\s*>/i', "\\n", $html) ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+		$text = trim(html_entity_decode(strip_tags(preg_replace('/<br\\s*\\/?\\s*>/i', chr(10), $html) ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 		// The network's 300-grapheme maximum is part of its record contract;
 		// cutting here is safer than an opaque PDS validation failure.
 		if (function_exists('grapheme_substr') && grapheme_strlen($text) > 300) {
@@ -161,7 +160,8 @@ class AtprotoEgress {
 	/** A 13-character AT Protocol timestamp record key (TID). */
 	private function tid(): string {
 		$alphabet = '234567abcdefghijklmnopqrstuvwxyz';
-		$value = (int)floor(microtime(true) * 1_000_000);
+		$now = new \DateTimeImmutable('now');
+		$value = ((int)$now->format('U') * 1_000_000) + (int)$now->format('u');
 		$key = '';
 		for ($position = 0; $position < 11; $position++) {
 			$key = $alphabet[$value % 32] . $key;
