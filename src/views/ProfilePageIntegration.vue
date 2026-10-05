@@ -227,7 +227,7 @@ export default {
 
 			try {
 				const params = { limit: PAGE_SIZE }
-				if (maxId) {
+				if (maxId && feed !== 'bluesky') {
 					params.max_id = maxId
 				}
 				let url

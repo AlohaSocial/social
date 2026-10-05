@@ -118,6 +118,33 @@ describe('ProfilePageIntegration', () => {
 		expect(card.props('nativeEdit')).toBe(true)
 	})
 
+	it('loads subsequent own Bluesky pages with the returned cursor', async () => {
+		const firstPage = Array.from({ length: 20 }, (_, index) => ({
+			id: `at://did:plc:alice/app.bsky.feed.post/${index}`,
+			content: `<p>native ${index}</p>`,
+			account: bob,
+		}))
+		const secondPage = [{ id: 'at://did:plc:alice/app.bsky.feed.post/20', content: '<p>native 20</p>', account: bob }]
+		get.mockImplementation(async (url, options = {}) => {
+			if (url.endsWith('/atproto/profile')) {
+				return options.params?.cursor
+					? { data: { statuses: secondPage, nextCursor: '' } }
+					: { data: { statuses: firstPage, nextCursor: '20' } }
+			}
+			return { data: url.endsWith('/statuses') ? statuses : bob }
+		})
+
+		const wrapper = mountSection('alice')
+		await flushPromises()
+		await wrapper.findAll('.feed-switcher button').find((button) => button.text() === 'Bluesky').trigger('click')
+		await flushPromises()
+		await wrapper.find('.social-profile__load-more').trigger('click')
+		await flushPromises()
+
+		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/atproto/profile', { params: { limit: 20, cursor: 20 } })
+		expect(wrapper.findAllComponents(ProfileStatusCardStub)).toHaveLength(21)
+	})
+
 	it('opens the shared composer with the selected native parent', async () => {
 		const wrapper = mountSection('alice')
 		await flushPromises()
