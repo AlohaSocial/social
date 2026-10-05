@@ -52,6 +52,22 @@
 					v-model="editProfile.description"
 					:label="t('social', 'Bluesky profile description')"
 					:disabled="savingProfile" />
+				<label class="atproto-profile__upload">
+					{{ t('social', 'Bluesky avatar') }}
+					<input
+						type="file"
+						accept="image/jpeg,image/png,image/gif,image/webp"
+						:disabled="savingProfile"
+						@change="selectProfileImage($event, 'avatar')">
+				</label>
+				<label class="atproto-profile__upload">
+					{{ t('social', 'Bluesky banner') }}
+					<input
+						type="file"
+						accept="image/jpeg,image/png,image/gif,image/webp"
+						:disabled="savingProfile"
+						@change="selectProfileImage($event, 'banner')">
+				</label>
 				<NcButton type="submit" variant="secondary" :disabled="savingProfile">
 					{{ savingProfile ? t('social', 'Saving…') : t('social', 'Edit Bluesky profile') }}
 				</NcButton>
@@ -132,7 +148,7 @@ export default {
 	name: 'AtprotoProfile',
 	components: { AtprotoFollowButton, Composer, NcButton, NcTextArea, NcTextField, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
+	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' }, profileImages: { avatar: null, banner: null } }),
 	computed: {
 		fediverseProfileUrl() {
 			const uid = getCurrentUser()?.uid ?? window.OC?.getCurrentUser?.()?.uid ?? ''
@@ -208,8 +224,18 @@ export default {
 			this.savingProfile = true
 			this.profileError = ''
 			try {
-				const { data } = await axios.put(generateUrl('apps/social/api/v1/atproto/profile'), this.editProfile)
+				const body = new FormData()
+				body.append('displayName', this.editProfile.displayName)
+				body.append('description', this.editProfile.description)
+				if (this.profileImages.avatar) {
+					body.append('avatar', this.profileImages.avatar)
+				}
+				if (this.profileImages.banner) {
+					body.append('banner', this.profileImages.banner)
+				}
+				const { data } = await axios.put(generateUrl('apps/social/api/v1/atproto/profile'), body)
 				this.profile = { ...this.profile, ...(data.profile ?? this.editProfile) }
+				this.profileImages = { avatar: null, banner: null }
 				this.editProfile = {
 					displayName: this.profile.displayName ?? '',
 					description: this.profile.description ?? '',
@@ -218,6 +244,13 @@ export default {
 				this.profileError = error?.response?.data?.message ?? t('social', 'Could not save your Bluesky profile')
 			} finally {
 				this.savingProfile = false
+			}
+		},
+
+		selectProfileImage(event, field) {
+			const file = event?.target?.files?.[0]
+			if (file) {
+				this.profileImages[field] = file
 			}
 		},
 	},
@@ -229,6 +262,11 @@ export default {
 	display: grid;
 	gap: 8px;
 	margin: 12px 0;
+}
+
+.atproto-profile__upload {
+	display: grid;
+	gap: 4px;
 }
 
 .atproto-profile__banner {

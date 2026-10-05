@@ -191,11 +191,15 @@ class AtprotoController extends Controller {
 
 		try {
 			$body = $this->request->getParams();
+			$avatar = $this->request->getUploadedFile('avatar');
+			$banner = $this->request->getUploadedFile('banner');
 			return new DataResponse([
 				'profile' => $this->accountService->updateProfile(
 					$userId,
 					(string)($body['displayName'] ?? ''),
-					(string)($body['description'] ?? '')
+					(string)($body['description'] ?? ''),
+					is_array($avatar) ? $avatar : null,
+					is_array($banner) ? $banner : null,
 				),
 			], Http::STATUS_OK);
 		} catch (AtprotoException $e) {

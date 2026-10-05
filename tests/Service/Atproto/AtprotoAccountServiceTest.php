@@ -92,4 +92,37 @@ class AtprotoAccountServiceTest extends TestCase {
 		$this->expectExceptionCode(401);
 		$service->updateProfile('alice', 'Alice', 'Description');
 	}
+
+	public function testProfileImageUploadsAsNativeBlob(): void {
+		$client = $this->createMock(AtprotoClient::class);
+		$identity = $this->createMock(AtprotoIdentity::class);
+		$request = $this->createMock(AtprotoRequest::class);
+		$cipher = $this->createMock(PrivateKeyCipher::class);
+		$config = $this->createMock(ConfigService::class);
+		$account = (new AtprotoAccount())
+			->setUserId('alice')->setHandle('alice.example')->setDid('did:plc:alice')->setPds('https://pds.example');
+		$path = tempnam(sys_get_temp_dir(), 'social-atproto-avatar-');
+		file_put_contents($path, 'avatar-bytes');
+		try {
+			$request->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
+			$identity->expects($this->once())->method('profile')->with('did:plc:alice', 'https://pds.example')->willReturn([
+				'$type' => 'app.bsky.actor.profile', 'displayName' => 'Old',
+			]);
+			$client->expects($this->once())->method('authedBlobPost')
+				->with('avatar-bytes', 'image/png', $account, 'https://pds.example')
+				->willReturn(['blob' => ['$type' => 'blob', 'ref' => ['$link' => 'bafy-avatar']]]);
+			$client->expects($this->once())->method('authedPost')
+				->with('com.atproto.repo.putRecord', $this->callback(static fn (array $body): bool => ($body['record']['avatar']['ref']['$link'] ?? '') === 'bafy-avatar'), $account, 'https://pds.example')
+				->willReturn([]);
+
+			$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
+			$this->assertSame(['displayName' => 'Alice', 'description' => 'Description'], $service->updateProfile('alice', 'Alice', 'Description', [
+				'error' => UPLOAD_ERR_OK, 'tmp_name' => $path, 'type' => 'image/png', 'size' => 12,
+			]));
+		} finally {
+			if (is_string($path) && is_file($path)) {
+				unlink($path);
+			}
+		}
+	}
 }

@@ -83,7 +83,7 @@ class AtprotoAccountService {
 	}
 
 	/** Update the public profile record in the linked account's repository. */
-	public function updateProfile(string $userId, string $displayName, string $description): array {
+	public function updateProfile(string $userId, string $displayName, string $description, ?array $avatarUpload = null, ?array $bannerUpload = null): array {
 		$account = $this->atprotoRequest->getAccount($userId);
 		if ($account === null) {
 			throw new AtprotoException('no Bluesky account is linked', 404);
@@ -96,6 +96,12 @@ class AtprotoAccountService {
 		$record['$type'] = 'app.bsky.actor.profile';
 		$record['displayName'] = $this->limit($displayName, 64);
 		$record['description'] = $this->limit($description, 256);
+		if ($avatarUpload !== null) {
+			$record['avatar'] = $this->uploadProfileBlob($avatarUpload, $account);
+		}
+		if ($bannerUpload !== null) {
+			$record['banner'] = $this->uploadProfileBlob($bannerUpload, $account);
+		}
 		$this->client->authedPost('com.atproto.repo.putRecord', [
 			'repo' => $account->getDid(),
 			'collection' => 'app.bsky.actor.profile',
@@ -107,6 +113,30 @@ class AtprotoAccountService {
 			'displayName' => $record['displayName'],
 			'description' => $record['description'],
 		];
+	}
+
+	/** @return array<string, mixed> */
+	private function uploadProfileBlob(array $upload, AtprotoAccount $account): array {
+		$error = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+		$path = (string)($upload['tmp_name'] ?? '');
+		$mime = strtolower(trim((string)($upload['type'] ?? '')));
+		$size = (int)($upload['size'] ?? 0);
+		$allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+		if ($error !== UPLOAD_ERR_OK || $path === '' || !is_readable($path) || !in_array($mime, $allowed, true) || $size < 1 || $size > 1 * 1024 * 1024) {
+			throw new AtprotoException('profile images must be readable JPEG, PNG, GIF or WebP files up to 1 MiB', 422);
+		}
+
+		$binary = file_get_contents($path);
+		if (!is_string($binary) || $binary === '') {
+			throw new AtprotoException('could not read the uploaded profile image', 422);
+		}
+
+		$blob = $this->client->authedBlobPost($binary, $mime, $account, $account->getPds())['blob'] ?? null;
+		if (!is_array($blob)) {
+			throw new AtprotoException('the PDS did not return a profile image blob', 502);
+		}
+
+		return $blob;
 	}
 
 	private function limit(string $value, int $length): string {
