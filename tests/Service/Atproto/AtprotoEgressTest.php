@@ -77,6 +77,7 @@ class AtprotoEgressTest extends TestCase {
 
 	public function testPublicPostIsWrittenAsANativeRecordAndMapped(): void {
 		$post = $this->post();
+		$post->setLanguage('de');
 		$account = $this->account();
 		$this->atprotoRequest->expects($this->once())->method('getLinkByLocalId')
 			->with(self::POST)->willReturn(null);
@@ -92,6 +93,7 @@ class AtprotoEgressTest extends TestCase {
 					$this->assertSame(AtprotoIngress::COLLECTION, $request['collection']);
 					$this->assertMatchesRegularExpression('/^[234567abcdefghijklmnopqrstuvwxyz]{13}$/', $request['rkey']);
 					$this->assertSame('Hello' . chr(10) . 'Bluesky', $request['record']['text']);
+					$this->assertSame(['de'], $request['record']['langs']);
 
 					return true;
 				}),

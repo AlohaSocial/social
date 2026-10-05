@@ -102,6 +102,9 @@ class AtprotoEgress {
 			'text' => $this->text($post->getContent()),
 			'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z', max(1, $post->getPublishedTime())),
 		];
+		if ($post->getLanguage() !== '') {
+			$record['langs'] = [$post->getLanguage()];
+		}
 		$parent = null;
 		if ($post->getInReplyTo() !== '') {
 			$parent = $this->atprotoRequest->getLinkByLocalId($post->getInReplyTo());
