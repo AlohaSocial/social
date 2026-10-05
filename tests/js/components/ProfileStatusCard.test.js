@@ -4,8 +4,10 @@
  */
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createPinia } from 'pinia'
 import axios from '@nextcloud/axios'
 import ProfileStatusCard from '../../../src/components/ProfileStatusCard.vue'
+import { useTimelineStore } from '../../../src/store/timeline.js'
 
 const status = {
 	id: '42',
@@ -35,6 +37,15 @@ describe('ProfileStatusCard', () => {
 		expect(wrapper.text()).toContain('Comments (2)')
 		await wrapper.findAll('.profile-status-card__toolbar button')[0].trigger('click')
 		expect(wrapper.find('.reacted-by-stub').exists()).toBe(true)
+	})
+
+	it('reflects a native reaction update from the shared timeline store', async () => {
+		const pinia = createPinia()
+		const wrapper = mount(ProfileStatusCard, { props: { status }, global: { stubs, plugins: [pinia] } })
+		const timeline = useTimelineStore(pinia)
+		timeline.addToStatuses({ ...status, favourites_count: 4, favourited: true })
+		await wrapper.vm.$nextTick()
+		expect(wrapper.text()).toContain('Likes (4)')
 	})
 
 	it('fetches the post renderer only once there is a post to draw', () => {
