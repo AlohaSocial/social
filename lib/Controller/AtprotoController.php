@@ -15,7 +15,10 @@ use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\Atproto\AtprotoAccountService;
+use OCA\Social\Service\Atproto\AtprotoEngagementService;
+use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Service\Atproto\AtprotoProfileService;
+use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -43,6 +46,9 @@ class AtprotoController extends Controller {
 		IRequest $request,
 		private IUserSession $userSession,
 		private AtprotoAccountService $accountService,
+		private AtprotoEngagementService $engagementService,
+		private AtprotoIdentity $identity,
+		private FollowService $followService,
 		private AtprotoRequest $atprotoRequest,
 		private AccountService $localAccountService,
 		private StreamService $streamService,
@@ -194,10 +200,87 @@ class AtprotoController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profiles/{handle}')]
 	public function publicProfile(string $handle): DataResponse {
 		try {
-			return new DataResponse($this->profileService->read($handle), Http::STATUS_OK);
+			$data = $this->profileService->read($handle);
+			$userId = $this->currentUserId();
+			$data['following'] = false;
+			$data['viewerCanFollow'] = false;
+			if ($userId !== null) {
+				$data['viewerCanFollow'] = $this->accountService->status($userId)['account'] !== null;
+				if ($data['viewerCanFollow']) {
+					try {
+						$data['following'] = $this->engagementService->isFollowing($userId, (string)($data['profile']['did'] ?? ''));
+					} catch (AtprotoException $e) {
+						$this->logger->info('could not read native Bluesky follow state', ['exception' => $e]);
+					}
+				}
+			}
+			return new DataResponse($data, Http::STATUS_OK);
 		} catch (\Throwable $e) {
 			$this->logger->info('ATProto profile lookup failed', ['handle' => $handle, 'exception' => $e]);
 			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
+	/** Follow a Bluesky actor with the linked account and mirror the local watch. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 60, period: 300)]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/atproto/follow')]
+	public function follow(): DataResponse {
+		return $this->setFollowing(true);
+	}
+
+	/** Remove the linked account's native Bluesky follow and local relationship. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 60, period: 300)]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/atproto/follow')]
+	public function unfollow(): DataResponse {
+		return $this->setFollowing(false);
+	}
+
+	private function setFollowing(bool $following): DataResponse {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return $this->signedOut();
+		}
+
+		$nativeChanged = false;
+		$resolved = ['did' => ''];
+		try {
+			$handle = trim((string)$this->request->getParam('handle', ''));
+			$resolved = $this->identity->resolve($handle);
+			$this->engagementService->setFollowing($userId, $resolved['did'], $following);
+			$nativeChanged = true;
+
+			// Keep the existing Social relationship and shared ATProto watch in
+			// step, so followed Bluesky posts enter the same home timeline.
+			$actor = $this->localAccountService->getActorFromUserId($userId);
+			$remote = $this->identity->actor($resolved['did'], $resolved['handle'], null, $resolved['pds']);
+			if ($following) {
+				$this->followService->followActor($actor, $remote);
+			} else {
+				$this->followService->unfollowAccount($actor, $resolved['handle']);
+			}
+
+			return new DataResponse(['following' => $following], Http::STATUS_OK);
+		} catch (AtprotoException $e) {
+			if ($nativeChanged) {
+				try {
+					$this->engagementService->setFollowing($userId, $resolved['did'], !$following);
+				} catch (\Throwable $rollback) {
+					$this->logger->error('could not roll back native Bluesky follow', ['exception' => $rollback]);
+				}
+			}
+			return new DataResponse(['message' => $e->getMessage()], $e->getStatus() >= 400 ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		} catch (\Throwable $e) {
+			if ($nativeChanged) {
+				try {
+					$this->engagementService->setFollowing($userId, $resolved['did'], !$following);
+				} catch (\Throwable $rollback) {
+					$this->logger->error('could not roll back native Bluesky follow', ['exception' => $rollback]);
+				}
+			}
+			$this->logger->warning('could not change native Bluesky follow', ['exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
 		}
 	}
 

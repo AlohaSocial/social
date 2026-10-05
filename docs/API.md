@@ -58,6 +58,8 @@ returned by the API.
 | GET | `/api/v1/atproto/profile` | user | — | Returns the signed-in account's locally known posts that have a Bluesky record, for the shared Fediverse/Bluesky profile switcher. Other users' linked credentials are never exposed. |
 | PUT | `/api/v1/atproto/profile` | user, rate-limited (20/5min), CSRF required | `displayName`, `description` | Updates the linked account's public `app.bsky.actor.profile` record on its stored PDS. Existing profile fields are preserved; display name and description are length-limited. The app password is never returned. |
 | GET | `/api/v1/atproto/profiles/{handle}` | public, no-csrf | `handle` | Resolves a Bluesky handle, reads its public author feed and imports the records into the shared normalized timeline rows. The response contains profile metadata and statuses; credentials are never required. |
+| PUT | `/api/v1/atproto/follow` | user, rate-limited (60/5min), CSRF required | `handle` | Writes a native `app.bsky.graph.follow` record with the linked Bluesky account and starts the shared local watch for the resolved DID. The response contains `following: true`. |
+| DELETE | `/api/v1/atproto/follow` | user, rate-limited (60/5min), CSRF required | `handle` | Deletes the linked account's native follow record and removes the local relationship when no other local follow remains. The response contains `following: false`. |
 
 The account API is intentionally separate from ActivityPub. A local post is
 eligible for an AT-Proto mirror only when the server switch and mirror switch

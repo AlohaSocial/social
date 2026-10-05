@@ -70,4 +70,42 @@ class AtprotoEngagementServiceTest extends TestCase {
 
 		$this->service->setLiked('alice', $this->post(), false);
 	}
+
+	public function testFollowingCreatesNativeGraphRecord(): void {
+		$this->request->expects($this->once())->method('getAccount')->with('alice')->willReturn($this->account());
+		$this->client->expects($this->once())->method('authedGet')->willReturn(['records' => []]);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.createRecord',
+			$this->callback(fn (array $body): bool => $body['collection'] === 'app.bsky.graph.follow'
+				&& $body['record']['subject'] === 'did:plc:bob'),
+			$this->isInstanceOf(AtprotoAccount::class), 'https://pds.example'
+		)->willReturn([]);
+
+		$this->service->setFollowing('alice', 'did:plc:bob', true);
+	}
+
+	public function testUnfollowingDeletesNativeGraphRecord(): void {
+		$this->request->method('getAccount')->willReturn($this->account());
+		$this->client->method('authedGet')->willReturn(['records' => [[
+			'uri' => 'at://did:plc:alice/app.bsky.graph.follow/3follow',
+			'value' => ['subject' => 'did:plc:bob'],
+		]]]);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.deleteRecord',
+			['repo' => 'did:plc:alice', 'collection' => 'app.bsky.graph.follow', 'rkey' => '3follow'],
+			$this->isInstanceOf(AtprotoAccount::class), 'https://pds.example'
+		)->willReturn([]);
+
+		$this->service->setFollowing('alice', 'did:plc:bob', false);
+	}
+
+	public function testFollowingStatusReadsNativeGraphRecord(): void {
+		$this->request->method('getAccount')->willReturn($this->account());
+		$this->client->expects($this->once())->method('authedGet')->willReturn(['records' => [[
+			'uri' => 'at://did:plc:alice/app.bsky.graph.follow/3follow',
+			'value' => ['subject' => 'did:plc:bob'],
+		]]]);
+
+		$this->assertTrue($this->service->isFollowing('alice', 'did:plc:bob'));
+	}
 }

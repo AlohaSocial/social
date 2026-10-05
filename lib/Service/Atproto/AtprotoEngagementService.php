@@ -17,6 +17,7 @@ use OCA\Social\Model\Atproto\AtprotoAccount;
 /** Native likes for Bluesky records, kept separate from ActivityPub Like. */
 class AtprotoEngagementService {
 	private const COLLECTION = 'app.bsky.feed.like';
+	private const FOLLOW_COLLECTION = 'app.bsky.graph.follow';
 
 	public function __construct(
 		private AtprotoClient $client,
@@ -36,6 +37,54 @@ class AtprotoEngagementService {
 	/** @throws AtprotoException */
 	public function setReposted(string $userId, Stream $post, bool $reposted): void {
 		$this->setRecordFlag($userId, $post, 'app.bsky.feed.repost', $reposted);
+	}
+
+	/** Write or remove the linked account's native follow record. */
+	/** @throws AtprotoException */
+	public function setFollowing(string $userId, string $did, bool $following): void {
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($account === null) {
+			throw new AtprotoException('link a Bluesky account before following profiles', 401);
+		}
+		$did = trim($did);
+		if (!str_starts_with($did, 'did:')) {
+			throw new AtprotoException('the Bluesky profile did is invalid', 422);
+		}
+
+		$existing = $this->records($account, self::FOLLOW_COLLECTION, $did);
+		if ($following) {
+			if ($existing !== []) {
+				return;
+			}
+			$this->client->authedPost('com.atproto.repo.createRecord', [
+				'repo' => $account->getDid(),
+				'collection' => self::FOLLOW_COLLECTION,
+				'record' => [
+					'$type' => self::FOLLOW_COLLECTION,
+					'subject' => $did,
+					'createdAt' => gmdate('Y-m-d\\TH:i:s\\Z'),
+				],
+			], $account, $account->getPds());
+			return;
+		}
+
+		foreach ($existing as $record) {
+			$rkey = (string)($record['rkey'] ?? '');
+			if ($rkey !== '') {
+				$this->client->authedPost('com.atproto.repo.deleteRecord', [
+					'repo' => $account->getDid(),
+					'collection' => self::FOLLOW_COLLECTION,
+					'rkey' => $rkey,
+				], $account, $account->getPds());
+			}
+		}
+	}
+
+	/** @throws AtprotoException */
+	public function isFollowing(string $userId, string $did): bool {
+		$account = $this->atprotoRequest->getAccount($userId);
+		return $account !== null && $did !== ''
+			&& $this->records($account, self::FOLLOW_COLLECTION, $did) !== [];
 	}
 
 	/** @throws AtprotoException */
@@ -92,8 +141,9 @@ class AtprotoEngagementService {
 				continue;
 			}
 			$value = is_array($record['value'] ?? null) ? $record['value'] : [];
-			$subject = is_array($value['subject'] ?? null) ? $value['subject'] : [];
-			if ((string)($subject['uri'] ?? '') === $uri) {
+			$subject = $value['subject'] ?? '';
+			$subjectUri = is_array($subject) ? (string)($subject['uri'] ?? '') : (string)$subject;
+			if ($subjectUri === $uri) {
 				$recordUri = (string)($record['uri'] ?? '');
 				$parts = explode('/', trim(substr($recordUri, 5), '/'));
 				$records[] = [

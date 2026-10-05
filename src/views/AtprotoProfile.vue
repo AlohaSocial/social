@@ -10,7 +10,10 @@
 				{{ profile.displayName }}
 			</p>
 			<div class="atproto-profile__actions">
-				<FollowButton v-if="account.id" :profileAccount="account" />
+				<AtprotoFollowButton
+					v-if="profile.did && viewerCanFollow"
+					:handle="profile.handle || handle"
+					:initialFollowing="dataFollowing" />
 				<a :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
 			</div>
 		</header>
@@ -34,14 +37,18 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
 import ProfileStatusCard from '../components/ProfileStatusCard.vue'
-import FollowButton from '../components/FollowButton.vue'
+import AtprotoFollowButton from '../components/AtprotoFollowButton.vue'
 
 export default {
 	name: 'AtprotoProfile',
-	components: { FollowButton, ProfileStatusCard },
+	components: { AtprotoFollowButton, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], loading: true, error: '' }),
+	data: () => ({ account: {}, profile: {}, statuses: [], following: false, viewerCanFollow: false, loading: true, error: '' }),
 	computed: {
+		dataFollowing() {
+			return this.following
+		},
+
 		settingsUrl() {
 			return generateUrl('apps/social/settings') + '#bluesky'
 		},
@@ -53,6 +60,8 @@ export default {
 			this.profile = data.profile ?? {}
 			this.account = data.account ?? {}
 			this.statuses = data.statuses ?? []
+			this.following = data.following === true
+			this.viewerCanFollow = data.viewerCanFollow === true
 		} catch (error) {
 			this.error = error?.response?.data?.message ?? t('social', 'Could not load this Bluesky profile')
 		} finally {
