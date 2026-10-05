@@ -567,6 +567,24 @@ you being asked about them again while leaving what they sent hidden. There are
 buttons for the whole list too. Until this page existed the setting held things
 back with nowhere to see them, which is worse than not having the setting.
 
+**Digests and quiet hours.** The notifications above are about *whether* you
+are told; your notification delivery setting is about *when* the Nextcloud
+bell — and with it the mobile app and the notification mail — rings for what
+happens in Aloha Social. Left at **instant**, it rings the moment somebody
+mentions, favourites, boosts or follows you, as it always did. Set to
+**digest**, it stays quiet and rings once at each time of day you choose, up
+to four, with a count of what came in since the last one: "14 new
+notifications in Aloha Social — 3 mentions, 6 favourites, 4 boosts, 1 new
+follower". Two kinds of news can still reach you at once, each on its own
+switch: a direct message, and a mention from somebody you follow. **Quiet
+hours** work in either mode — between the two times you set, nothing but those
+pass-throughs rings, and one digest of what arrived is raised when the window
+ends. The times are read in the time zone of your Nextcloud account. None of
+this changes the notifications page itself: everything is listed there the
+moment it happens, read or unread, and the digest only counts what you have
+not read yet. Switching a digest on does not deliver a backlog, and switching
+it off raises one last digest of what it was still holding.
+
 ### Hiding a whole server
 
 **Settings → Blocking** now has a third list: the servers you

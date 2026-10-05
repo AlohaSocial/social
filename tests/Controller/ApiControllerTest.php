@@ -176,6 +176,9 @@ class ApiControllerTest extends TestCase {
 	private ScheduledStatusService|MockObject $scheduledStatusService;
 	private PostReviewService|MockObject $postReviewService;
 	private \OCA\Social\Service\SensitiveMediaService|Stub $sensitiveMediaService;
+	private \OCA\Social\Service\NotificationDeliveryService|Stub $notificationDeliveryService;
+	/** @var array<string, mixed> what the delivery service answers for the viewer */
+	private array $delivery = [];
 	private ViewCountService|Stub $viewCountService;
 	private TeamService|Stub $teamService;
 	private EmojiService|Stub $emojiService;
@@ -295,6 +298,11 @@ class ApiControllerTest extends TestCase {
 		$this->accountRelationService = $this->createStub(AccountRelationService::class);
 		$this->scheduledStatusService = $this->createMock(ScheduledStatusService::class);
 		$this->postReviewService = $this->createMock(PostReviewService::class);
+		$this->notificationDeliveryService = $this->createStub(\OCA\Social\Service\NotificationDeliveryService::class);
+		$this->notificationDeliveryService->method('of')->willReturnCallback(
+			fn (): \OCA\Social\Model\NotificationDelivery
+				=> \OCA\Social\Model\NotificationDelivery::fromArray($this->delivery)
+		);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
@@ -409,6 +417,7 @@ class ApiControllerTest extends TestCase {
 			'scheduledStatusService' => $this->scheduledStatusService,
 			'postReviewService' => $this->postReviewService,
 			'sensitiveMediaService' => $this->sensitiveMediaService,
+			'notificationDeliveryService' => $this->notificationDeliveryService,
 			'viewCountService' => $this->viewCountService,
 			'teamService' => $this->teamService,
 			'emojiService' => $this->emojiService,
@@ -2691,6 +2700,26 @@ class ApiControllerTest extends TestCase {
 		$this->assertTrue($data['posting:default:sensitive']);
 		$this->assertSame('de', $data['posting:default:language']);
 		$this->assertSame('default', $data['reading:expand:media']);
+	}
+
+	public function testPreferencesEchoTheNotificationDeliverySetting(): void {
+		$this->loggedInAs();
+		$this->delivery = ['mode' => 'digest', 'times' => ['07:00'], 'quiet' => ['from' => '22:00', 'to' => '06:00']];
+
+		$data = $this->controller()->preferences()->getData();
+
+		$this->assertSame([
+			'mode' => 'digest',
+			'times' => ['07:00'],
+			'passthrough' => ['direct' => true, 'mentions_from_followed' => true],
+			'quiet' => ['from' => '22:00', 'to' => '06:00'],
+		], $data['notifications:delivery']);
+	}
+
+	public function testPreferencesEchoTheDeliveryDefaultsForAnUntouchedAccount(): void {
+		$this->loggedInAs();
+
+		$this->assertSame('instant', $this->controller()->preferences()->getData()['notifications:delivery']['mode']);
 	}
 
 	public function testPreferencesReportNoLanguageAsNullRatherThanEmpty(): void {

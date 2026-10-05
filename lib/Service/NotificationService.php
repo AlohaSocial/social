@@ -17,6 +17,7 @@ use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -33,6 +34,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Client\Story;
 use OCA\Social\Model\Client\StoryInteraction;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Reference\PostReferenceProvider;
 use OCP\IURLGenerator;
 use OCP\Notification\IManager as INotificationManager;
@@ -55,6 +57,11 @@ use Psr\Log\LoggerInterface;
  * is what keeps the bell and the in-app list from ever disagreeing about what
  * happened: a row that was suppressed, or that was never written because the
  * post was not local, cannot produce a bell either.
+ *
+ * The bell is the one half the reader can turn down. `NotificationDelivery`
+ * may hold it for a digest or for quiet hours; the stored row is written
+ * regardless, because it is what the digest counts and what the in-app list
+ * shows, and only the Nextcloud notification waits.
  */
 class NotificationService {
 	/**
@@ -107,6 +114,8 @@ class NotificationService {
 		private ActorRelationRequest $actorRelationRequest,
 		private ActionsRequest $actionsRequest,
 		private AccountRelationService $accountRelationService,
+		private FollowsRequest $followsRequest,
+		private NotificationDeliveryService $deliveryService,
 		private INotificationManager $notificationManager,
 		private ActivityPublisher $activityPublisher,
 		private LoggerInterface $logger,
@@ -588,14 +597,16 @@ class NotificationService {
 			$parameters['nid'] = $actor->getNid();
 		}
 
-		$raised = $this->notificationManager->createNotification();
-		$raised->setApp('social')
-			->setDateTime(new DateTime('now'))
-			->setUser($recipient->getUserId())
-			->setObject(self::OBJECT, $this->objectId($notification->getId()))
-			->setSubject($subject, $parameters);
+		if (!$this->isHeld($notification, $subject, $recipient->getUserId(), $recipientId, $actorId)) {
+			$raised = $this->notificationManager->createNotification();
+			$raised->setApp('social')
+				->setDateTime(new DateTime('now'))
+				->setUser($recipient->getUserId())
+				->setObject(self::OBJECT, $this->objectId($notification->getId()))
+				->setSubject($subject, $parameters);
 
-		$this->notificationManager->notify($raised);
+			$this->notificationManager->notify($raised);
+		}
 
 		// the same news, in the Activity app's stream and digest mail — with
 		// the actor as the Nextcloud user they are, when they are one here
@@ -612,23 +623,70 @@ class NotificationService {
 	}
 
 	/**
-	 * The post an entry is about, as plain text: the copy the caller passed
-	 * along where there is one, else the stored one, else nothing.
+	 * Whether the bell stays quiet about this one because the reader chose a
+	 * digest or is in their quiet hours. The stored row is untouched either
+	 * way: it is what the digest will count and what the in-app list shows.
+	 *
+	 * The follow lookup is made only for a mention, which is the one subject
+	 * whose pass-through depends on it; a like from a stranger and a like from
+	 * a friend are held alike.
 	 */
-	private function excerptOf(SocialAppNotification $notification): string {
+	private function isHeld(
+		SocialAppNotification $notification,
+		string $subject,
+		string $userId,
+		string $recipientId,
+		string $actorId,
+	): bool {
+		$kind = ($subject === 'mention' && $this->isDirectMessage($notification))
+			? NotificationDelivery::SUBJECT_DIRECT : $subject;
+		$followed = ($kind === NotificationDelivery::SUBJECT_MENTION) && $this->follows($recipientId, $actorId);
+
+		return $this->deliveryService->holds($userId, $kind, $followed);
+	}
+
+	/**
+	 * A mention in a post addressed to its readers alone. There is no DM row
+	 * of its own: a direct message reaches the bell as the mention it carries.
+	 */
+	private function isDirectMessage(SocialAppNotification $notification): bool {
+		return $this->postOf($notification)?->getVisibility() === Stream::TYPE_DIRECT;
+	}
+
+	/** Whether the reader follows the actor, as the follows table has it. */
+	private function follows(string $recipientId, string $actorId): bool {
+		try {
+			return $this->followsRequest->getByPersons($recipientId, $actorId)->isAccepted();
+		} catch (Exception $e) {
+			return false;
+		}
+	}
+
+	/**
+	 * The post an entry is about: the copy the caller passed along where
+	 * there is one, else the stored one, else nothing.
+	 */
+	private function postOf(SocialAppNotification $notification): ?Stream {
 		$post = $notification->getDetailsAll()[Details::POST] ?? null;
-		if (!($post instanceof Stream)) {
-			if ($notification->getObjectId() === '') {
-				return '';
-			}
-			try {
-				$post = $this->streamRequest->getStreamById($notification->getObjectId());
-			} catch (Exception $e) {
-				return '';
-			}
+		if ($post instanceof Stream) {
+			return $post;
+		}
+		if ($notification->getObjectId() === '') {
+			return null;
 		}
 
-		return PostReferenceProvider::excerpt($post->getContent(), 200);
+		try {
+			return $this->streamRequest->getStreamById($notification->getObjectId());
+		} catch (Exception $e) {
+			return null;
+		}
+	}
+
+	/** The post an entry is about, as plain text; nothing when there is no post. */
+	private function excerptOf(SocialAppNotification $notification): string {
+		$post = $this->postOf($notification);
+
+		return ($post === null) ? '' : PostReferenceProvider::excerpt($post->getContent(), 200);
 	}
 
 	/**
@@ -661,13 +719,9 @@ class NotificationService {
 	 * own address when it is not one this instance holds.
 	 */
 	private function postLink(SocialAppNotification $notification): string {
-		$post = $notification->getDetailsAll()[Details::POST] ?? null;
-		if (!($post instanceof Stream)) {
-			try {
-				$post = $this->streamRequest->getStreamById($notification->getObjectId());
-			} catch (Exception $e) {
-				return $notification->getObjectId();
-			}
+		$post = $this->postOf($notification);
+		if ($post === null) {
+			return $notification->getObjectId();
 		}
 
 		$acct = $this->acctOf($this->cachedActor($post->getAttributedTo()));

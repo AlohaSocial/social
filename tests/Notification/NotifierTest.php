@@ -69,6 +69,10 @@ class NotifierTest extends TestCase {
 			fn (string $text, $params = []): string => '[' . $language . '] '
 				. ((array)$params === [] ? $text : vsprintf($text, (array)$params))
 		);
+		$l10n->method('n')->willReturnCallback(
+			fn (string $one, string $many, int $count): string
+				=> str_replace('%n', (string)$count, ($count === 1) ? $one : $many)
+		);
 		$this->factory->method('get')->with('social', $language)->willReturn($l10n);
 
 		return $l10n;
@@ -254,6 +258,85 @@ class NotifierTest extends TestCase {
 		]);
 		$notification->expects($this->once())->method('setParsedSubject')
 			->with('[en] New report about https://cloud.example/apps/social/@bob from another instance');
+
+		$this->notifier->prepare($notification, 'en');
+	}
+	// -- the digest -------------------------------------------------------------
+
+	/** @return INotification&MockObject */
+	private function digest(array $params): INotification {
+		$notification = $this->createMock(INotification::class);
+		$notification->method('getApp')->willReturn('social');
+		$notification->method('getSubject')->willReturn('digest');
+		$notification->method('getSubjectParameters')->willReturn($params);
+		$notification->method('setIcon')->willReturnSelf();
+		$notification->method('setParsedSubject')->willReturnSelf();
+		$notification->method('setParsedMessage')->willReturnSelf();
+		$notification->method('setRichSubject')->willReturnSelf();
+		$notification->method('setLink')->willReturnSelf();
+
+		return $notification;
+	}
+
+	public function testADigestSaysHowMuchIsNewAndListsTheCountsInOrder(): void {
+		$this->translationsFor('en');
+		$notification = $this->digest([
+			'counts' => ['follow' => 1, 'favourite' => 6, 'reblog' => 4, 'mention' => 3],
+			'total' => 14,
+			'link' => 'https://cloud.example/apps/social/timeline/notifications',
+		]);
+
+		$notification->expects($this->once())->method('setParsedSubject')
+			->with('14 new notifications in Aloha Social');
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with('3 mentions, 6 favourites, 4 boosts, 1 new follower');
+		$notification->expects($this->once())->method('setLink')
+			->with('https://cloud.example/apps/social/timeline/notifications');
+		$notification->expects($this->once())->method('setRichSubject')
+			->with('14 new notifications in {app}', $this->callback(
+				fn (array $rich): bool => $rich['app']['type'] === 'highlight'
+					&& $rich['app']['name'] === '[en] Aloha Social'
+					&& $rich['app']['link'] === 'https://cloud.example/apps/social/timeline/notifications'
+			));
+
+		$this->notifier->prepare($notification, 'en');
+	}
+
+	public function testADigestOfOneIsSingular(): void {
+		$this->translationsFor('en');
+		$notification = $this->digest([
+			'counts' => ['follow_request' => 1],
+			'total' => 1,
+			'link' => 'https://cloud.example/apps/social/timeline/notifications',
+		]);
+
+		$notification->expects($this->once())->method('setParsedSubject')
+			->with('1 new notification in Aloha Social');
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with('1 follow request');
+
+		$this->notifier->prepare($notification, 'en');
+	}
+
+	public function testADigestWithoutAWebLinkPointsNowhere(): void {
+		$this->translationsFor('en');
+		$notification = $this->digest(['counts' => ['poll' => 2], 'total' => 2, 'link' => 'javascript:alert(1)']);
+
+		$notification->expects($this->never())->method('setLink');
+		$notification->expects($this->never())->method('setRichSubject');
+		$notification->expects($this->once())->method('setParsedMessage')->with('2 polls that ended');
+
+		$this->notifier->prepare($notification, 'en');
+	}
+
+	public function testADigestKeepsTheAppIcon(): void {
+		$this->translationsFor('en');
+		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social_dark.svg');
+		$this->urlGenerator->method('getAbsoluteURL')->willReturn('https://cloud.example/apps/social/img/social_dark.svg');
+		$notification = $this->digest(['counts' => ['status' => 1], 'total' => 1, 'link' => '']);
+
+		$notification->expects($this->once())->method('setIcon')
+			->with('https://cloud.example/apps/social/img/social_dark.svg');
 
 		$this->notifier->prepare($notification, 'en');
 	}

@@ -17,6 +17,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FilterService;
+use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationGroupService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
@@ -57,6 +58,7 @@ class NotificationController extends ClientApiController {
 		private NotificationService $notificationService,
 		private NotificationGroupService $notificationGroupService,
 		private NotificationPolicyService $notificationPolicyService,
+		private NotificationDeliveryService $notificationDeliveryService,
 		private FilterService $filterService,
 		private CacheActorService $cacheActorService,
 	) {
@@ -316,6 +318,45 @@ class NotificationController extends ClientApiController {
 			$this->notificationPolicyService->save($this->userId(), $this->body());
 
 			return new DataResponse($this->policyWithSummary(), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * When this account's Nextcloud notifications are raised: at once, or as
+	 * a digest at the times it chose, with the pass-throughs and quiet hours
+	 * around that. Not a Mastodon route — Mastodon has no equivalent, since
+	 * its notifications are the list itself — hence the `/social/` path.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/notification_delivery')]
+	public function delivery(): DataResponse {
+		try {
+			$this->initViewer(['read:notifications']);
+
+			return new DataResponse($this->notificationDeliveryService->of($this->userId()), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Changes the delivery setting and answers the whole of it. Any subset of
+	 * its keys may be sent; a value that does not validate refuses the whole
+	 * change with a 422 that says which, and nothing is written.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'PATCH', url: '/api/v1/social/notification_delivery')]
+	public function deliveryUpdate(): DataResponse {
+		try {
+			$this->initViewer(['write:notifications']);
+
+			return new DataResponse(
+				$this->notificationDeliveryService->save($this->userId(), $this->body()), Http::STATUS_OK
+			);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

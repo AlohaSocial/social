@@ -244,6 +244,17 @@ the author's own copy while its deliveries wait for a video to be converted
 Mastodon client ignores an unknown key; the app's own web client draws the
 "still converting" hint from it rather than guessing from the attachment type.
 
+A second extension lives beside the notifications: `GET`/`PATCH
+/api/v1/social/notification_delivery`, and the `notifications:delivery` key
+`/api/v1/preferences` echoes. Mastodon has nothing to compare it with — its
+notifications *are* the list, and a client's push is the client's business —
+whereas here the list has a second half, the Nextcloud bell, and this is the
+setting for when that half rings: at once, or as a digest at times of the
+reader's choosing, with direct messages and mentions from followed accounts
+passing through and optional quiet hours. A Mastodon client never sees the
+difference: `/api/v1/notifications` and the markers read the stored rows, and
+the setting only decides when the bell is told about them.
+
 `showing_reblogs` is no longer among them either: `POST /accounts/{id}/follow`
 takes `reblogs` as well as `notify`, a "no" is stored as a row in
 `social_actor_relation`, and the home and list timelines drop that account's

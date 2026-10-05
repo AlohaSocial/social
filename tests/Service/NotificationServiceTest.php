@@ -15,9 +15,11 @@ use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
+use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Interfaces\Internal\SocialAppNotificationInterface;
@@ -35,7 +37,9 @@ use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Client\Story as ClientStory;
 use OCA\Social\Model\Client\StoryInteraction as ClientStoryInteraction;
+use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Service\AccountRelationService;
+use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
@@ -74,6 +78,8 @@ class NotificationServiceTest extends TestCase {
 	private ActorRelationRequest|Stub $actorRelationRequest;
 	private ActionsRequest|Stub $actionsRequest;
 	private AccountRelationService|Stub $accountRelationService;
+	private FollowsRequest|Stub $followsRequest;
+	private NotificationDeliveryService|Stub $deliveryService;
 	private INotificationManager|Stub $notificationManager;
 	private ActivityPublisher|Stub $activityPublisher;
 	/** @var array<int, array> every Activity entry published: user, subject, actor label, link, excerpt */
@@ -86,6 +92,13 @@ class NotificationServiceTest extends TestCase {
 	private array $relations = [];
 	/** @var string[] "reader|actor" pairs whose mute has run out */
 	private array $expired = [];
+	/** @var array<string, bool> "reader|actor" => whether the follow is accepted */
+	private array $follows = [];
+	/** The reader's delivery setting, read by the delivery stub */
+	private NotificationDelivery $delivery;
+	/** The moment the delivery stub reads the clock at, UTC */
+	private \DateTimeImmutable $now;
+	private string $postVisibility = Stream::TYPE_PUBLIC;
 	/** @var Stream[] the viewer's notifications, newest first */
 	private array $timeline = [];
 	/** @var ACore[] what is stored against the edited post */
@@ -176,6 +189,29 @@ class NotificationServiceTest extends TestCase {
 				=> in_array($reader . '|' . $actor, $this->expired, true)
 		);
 
+		$this->followsRequest = $this->createStub(FollowsRequest::class);
+		$this->followsRequest->method('getByPersons')->willReturnCallback(
+			function (string $reader, string $actor): Follow {
+				if (!array_key_exists($reader . '|' . $actor, $this->follows)) {
+					throw new FollowNotFoundException('no follow');
+				}
+				$follow = new Follow();
+				$follow->setAccepted($this->follows[$reader . '|' . $actor]);
+
+				return $follow;
+			}
+		);
+
+		// the real decision over a real setting, so what is asserted here is
+		// what the reader's choice does to the bell rather than a stubbed yes
+		$this->delivery = new NotificationDelivery();
+		$this->now = new \DateTimeImmutable('2026-03-10 12:00:00', new \DateTimeZone('UTC'));
+		$this->deliveryService = $this->createStub(NotificationDeliveryService::class);
+		$this->deliveryService->method('holds')->willReturnCallback(
+			fn (string $userId, string $subject, bool $followed): bool
+				=> $this->delivery->holds($subject, $followed, $this->now, new \DateTimeZone('UTC'))
+		);
+
 		$this->notificationManager = $this->createStub(INotificationManager::class);
 		$this->notificationManager->method('createNotification')
 			->willReturnCallback(fn (): INotification => $this->notification());
@@ -211,6 +247,8 @@ class NotificationServiceTest extends TestCase {
 			$this->actorRelationRequest,
 			$this->actionsRequest,
 			$this->accountRelationService,
+			$this->followsRequest,
+			$this->deliveryService,
 			$this->notificationManager,
 			$this->activityPublisher,
 			new NullLogger(),
@@ -287,6 +325,7 @@ class NotificationServiceTest extends TestCase {
 		$post->setId(self::POST);
 		$post->setAttributedTo(self::BOB);
 		$post->setNid(90);
+		$post->setVisibility($this->postVisibility);
 
 		return $post;
 	}
@@ -459,6 +498,122 @@ class NotificationServiceTest extends TestCase {
 		$this->assertSame([[$request->getId(), SocialAppNotification::TYPE]], $this->deleted);
 		$this->assertCount(1, $this->withdrawn);
 		$this->assertSame([$other], $this->timeline, 'the like stays');
+	}
+
+	// -- held for a digest or quiet hours -------------------------------------
+
+	public function testADigestHoldsALikeButKeepsTheRowAndTheActivityEntry(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([], $this->raised);
+		$this->assertCount(1, $this->activities);
+		$this->assertSame([], $this->deleted);
+	}
+
+	public function testADigestLetsADirectMessageThrough(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$this->postVisibility = Stream::TYPE_DIRECT;
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertCount(1, $this->raised);
+		$this->assertSame('mention', $this->raised[0]['subject']);
+	}
+
+	public function testADigestHoldsADirectMessageWhenThatSwitchIsOff(): void {
+		$this->delivery->apply(['mode' => 'digest', 'passthrough' => ['direct' => false]]);
+		$this->postVisibility = Stream::TYPE_DIRECT;
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testTheDirectMessageIsReadOffTheStoredPostWhenTheRowOnlyNamesIt(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$this->postVisibility = Stream::TYPE_DIRECT;
+
+		$this->service->onNotification($this->mention(self::ALICE));
+
+		$this->assertCount(1, $this->raised);
+	}
+
+	public function testADigestLetsAMentionFromAFollowedAccountThrough(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$this->follows[self::ALICE . '|' . self::BOB] = true;
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertCount(1, $this->raised);
+	}
+
+	public function testADigestHoldsAMentionFromAnAccountTheReaderDoesNotFollow(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testAFollowStillPendingDoesNotLetAMentionThrough(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$this->follows[self::ALICE . '|' . self::BOB] = false;
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testAFollowedAccountsLikeIsHeldAllTheSame(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$this->follows[self::ALICE . '|' . self::BOB] = true;
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testQuietHoursHoldTheBellInInstantMode(): void {
+		$this->delivery->apply(['quiet' => ['from' => '22:00', 'to' => '07:00']]);
+		$this->now = new \DateTimeImmutable('2026-03-10 23:30:00', new \DateTimeZone('UTC'));
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([], $this->raised);
+		$this->assertCount(1, $this->activities);
+	}
+
+	public function testOutsideQuietHoursInstantModeRaisesAsBefore(): void {
+		$this->delivery->apply(['quiet' => ['from' => '22:00', 'to' => '07:00']]);
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertCount(1, $this->raised);
+	}
+
+	public function testTheDeliverySettingIsTheRecipientsNotTheActors(): void {
+		$this->delivery->apply(['mode' => 'digest']);
+		$asked = [];
+		$this->deliveryService = $this->createStub(NotificationDeliveryService::class);
+		$this->deliveryService->method('holds')->willReturnCallback(
+			function (string $userId, string $subject, bool $followed) use (&$asked): bool {
+				$asked[] = [$userId, $subject, $followed];
+
+				return false;
+			}
+		);
+		$this->service = new NotificationService(
+			$this->streamRequest, $this->streamService, $this->actorsRequest, $this->cacheActorsRequest,
+			$this->actorRelationRequest, $this->actionsRequest, $this->accountRelationService,
+			$this->followsRequest, $this->deliveryService, $this->notificationManager,
+			$this->activityPublisher, new NullLogger(), $this->urlGenerator()
+		);
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([['alice', 'favourite', false]], $asked);
 	}
 
 	public function testNobodyIsToldAboutTheirOwnAction(): void {
