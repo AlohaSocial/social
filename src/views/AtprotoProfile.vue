@@ -4,6 +4,12 @@
 -->
 <template>
 	<section class="atproto-profile">
+		<img
+			v-if="profile.banner"
+			class="atproto-profile__banner"
+			:src="profile.banner"
+			:alt="t('social', 'Bluesky profile banner')"
+			loading="lazy">
 		<Composer
 			v-if="viewerCanFollow && (viewerCanEdit || replyTo !== null)"
 			:inReplyTo="replyTo"
@@ -212,6 +218,14 @@ export default {
 	display: grid;
 	gap: 8px;
 	margin: 12px 0;
+}
+
+.atproto-profile__banner {
+	width: 100%;
+	max-height: 220px;
+	object-fit: cover;
+	border-radius: var(--border-radius-large);
+	margin-block-end: 12px;
 }
 
 .atproto-profile__avatar {

@@ -22,7 +22,7 @@ describe('AtprotoProfile', () => {
 	it('can retry a transient profile lookup without leaving the error state', async () => {
 		const get = vi.spyOn(axios, 'get')
 			.mockRejectedValueOnce({ response: { data: { message: 'temporary AppView failure' } } })
-			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example' }, statuses: [] } })
+			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example', banner: 'banner.jpg' }, statuses: [] } })
 		const wrapper = mount(AtprotoProfile, {
 			props: { handle: 'bob.example' },
 			global: { stubs },
@@ -36,5 +36,6 @@ describe('AtprotoProfile', () => {
 		expect(get).toHaveBeenCalledTimes(2)
 		expect(wrapper.find('[role="alert"]').exists()).toBe(false)
 		expect(wrapper.find('h2').text()).toBe('@bob.example')
+		expect(wrapper.find('.atproto-profile__banner').attributes('src')).toBe('banner.jpg')
 	})
 })
