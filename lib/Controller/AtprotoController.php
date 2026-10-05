@@ -261,14 +261,18 @@ class AtprotoController extends Controller {
 			$data['viewerCanFollow'] = false;
 			$data['viewerCanEdit'] = false;
 			if ($userId !== null) {
-				$linked = $this->accountService->status($userId)['account'] ?? null;
-				$linkedIsUsable = is_array($linked)
-					&& (string)($linked['state'] ?? '') === AtprotoAccount::STATE_LINKED;
+				// Do not make the profile's edit/delete controls depend on a second
+				// network round-trip. The durable linked-account row is authoritative
+				// for ownership; status() also probes the PDS and can temporarily mark
+				// an otherwise valid account broken when the AppView is unavailable.
+				$linkedAccount = $this->atprotoRequest->getAccount($userId);
+				$linkedIsUsable = $linkedAccount !== null
+					&& $linkedAccount->getState() === AtprotoAccount::STATE_LINKED;
 				$data['viewerCanFollow'] = $linkedIsUsable;
-				$data['viewerCanEdit'] = $linked !== null
+				$data['viewerCanEdit'] = $linkedAccount !== null
 					&& $linkedIsUsable
-					&& (string)($linked['did'] ?? '') !== ''
-					&& (string)($linked['did'] ?? '') === (string)($data['profile']['did'] ?? '');
+					&& $linkedAccount->getDid() !== ''
+					&& $linkedAccount->getDid() === (string)($data['profile']['did'] ?? '');
 				if ($data['viewerCanFollow']) {
 					try {
 						$data['following'] = $this->engagementService->isFollowing($userId, (string)($data['profile']['did'] ?? ''));
