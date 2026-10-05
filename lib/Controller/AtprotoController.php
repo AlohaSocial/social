@@ -13,6 +13,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\Atproto\AtprotoAccountService;
 use OCA\Social\Service\Atproto\AtprotoEgress;
@@ -254,8 +255,11 @@ class AtprotoController extends Controller {
 			$data['viewerCanEdit'] = false;
 			if ($userId !== null) {
 				$linked = $this->accountService->status($userId)['account'] ?? null;
-				$data['viewerCanFollow'] = $linked !== null;
+				$linkedIsUsable = is_array($linked)
+					&& (string)($linked['state'] ?? '') === AtprotoAccount::STATE_LINKED;
+				$data['viewerCanFollow'] = $linkedIsUsable;
 				$data['viewerCanEdit'] = $linked !== null
+					&& $linkedIsUsable
 					&& (string)($linked['did'] ?? '') !== ''
 					&& (string)($linked['did'] ?? '') === (string)($data['profile']['did'] ?? '');
 				if ($data['viewerCanFollow']) {
