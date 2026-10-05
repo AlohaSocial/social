@@ -42,6 +42,8 @@ class Status implements \JsonSerializable {
 	private string $status = '';
 	/** BCP 47 as the client sent it, normalised; empty for "whatever the poster's default is" */
 	private string $language = '';
+	/** `fediverse`, `atproto` or `both`; legacy clients default to both. */
+	private string $publicationTarget = 'both';
 
 	//"media_ids": [],
 
@@ -183,6 +185,16 @@ class Status implements \JsonSerializable {
 		return $this->language;
 	}
 
+	public function setPublicationTarget(string $target): self {
+		$this->publicationTarget = in_array($target, ['fediverse', 'atproto', 'both'], true) ? $target : 'both';
+
+		return $this;
+	}
+
+	public function getPublicationTarget(): string {
+		return $this->publicationTarget;
+	}
+
 	/**
 	 * @param string $status
 	 *
@@ -230,6 +242,7 @@ class Status implements \JsonSerializable {
 		$this->setStatus($this->get('status', $data));
 		$this->setLanguage($this->get('language', $data));
 		$this->setPostAs($this->get('post_as', $data));
+		$this->setPublicationTarget($this->get('publication_target', $data));
 
 		// Where the post was taken, if the client said. Either an id it got
 		// from /api/v1/places/search, or a name it already had.

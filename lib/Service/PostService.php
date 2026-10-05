@@ -27,6 +27,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
@@ -139,6 +140,7 @@ class PostService {
 		$this->streamService->assignItem($note, $actor, $post->getType());
 
 		$note->setAttributedTo($actor->getId());
+		$note->setDetail(Details::PUBLICATION_TARGET, $post->getPublicationTarget());
 		// The warning rides as the object's `summary`, which is what every other
 		// server reads it from — and unlike the content it is plain text
 		// wherever it is read: `spoiler_text` to a client, interpolated rather
@@ -189,7 +191,13 @@ class PostService {
 		// because the servers that refuse the original do so on arrival and
 		// are never asked again; 0, and nothing waits, for every other post
 		$holdUntil = $this->videoDeliveryHold->holdUntil($note);
-		$token = $this->activityService->createActivity($actor, $note, $activity, $holdUntil);
+		$token = $this->activityService->createActivity(
+			$actor,
+			$note,
+			$activity,
+			$holdUntil,
+			$post->getPublicationTarget() !== 'atproto'
+		);
 		if ($holdUntil > 0) {
 			$this->videoDeliveryHold->convertSoon($note);
 		}
@@ -352,7 +360,12 @@ class PostService {
 			// with it, and is rebuilt from the post when the conversion ends,
 			// so it cannot overtake the Create or carry the old file
 			$holdUntil = $this->videoDeliveryHold->holdUntil($updated);
-			$this->activityService->updateActivity($actor, $updated, $holdUntil);
+			$this->activityService->updateActivity(
+				$actor,
+				$updated,
+				$holdUntil,
+				($updated->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') !== 'atproto'
+			);
 			if ($holdUntil > 0) {
 				$this->videoDeliveryHold->convertSoon($updated);
 			}

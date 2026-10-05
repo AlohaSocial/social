@@ -115,12 +115,12 @@ class ActivityService {
 	 * @return string
 	 * @throws SocialAppConfigException
 	 */
-	public function createActivity(Person $actor, ACore $item, ?ACore &$activity = null, int $holdUntil = 0): string {
+	public function createActivity(Person $actor, ACore $item, ?ACore &$activity = null, int $holdUntil = 0, bool $deliverFediverse = true): string {
 		$activity = $this->buildCreate($actor, $item);
 
 		$this->saveActivity($activity);
 
-		return $this->request($activity, $holdUntil);
+		return $deliverFediverse ? $this->request($activity, $holdUntil) : '';
 	}
 
 	private function buildCreate(Person $actor, ACore $item): Create {
@@ -147,7 +147,10 @@ class ActivityService {
 	 * @return string
 	 * @throws SocialAppConfigException
 	 */
-	public function updateActivity(Person $actor, ACore $item, int $holdUntil = 0): string {
+	public function updateActivity(Person $actor, ACore $item, int $holdUntil = 0, bool $deliverFediverse = true): string {
+		if (!$deliverFediverse) {
+			return '';
+		}
 		// An edit is read back from the database in the client format, whose
 		// `id` is the nid and which has no `type` and no `updated`. Wrapped as
 		// it was, the Update named no post a peer had, and every edit was

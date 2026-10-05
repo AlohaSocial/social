@@ -10,8 +10,12 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Service\Atproto\AtprotoAccountService;
+use OCA\Social\Service\AccountService;
+use OCA\Social\Service\StreamService;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -36,6 +40,9 @@ class AtprotoController extends Controller {
 		IRequest $request,
 		private IUserSession $userSession,
 		private AtprotoAccountService $accountService,
+		private AtprotoRequest $atprotoRequest,
+		private AccountService $localAccountService,
+		private StreamService $streamService,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -114,6 +121,41 @@ class AtprotoController extends Controller {
 		}
 
 		return new DataResponse([], Http::STATUS_OK);
+	}
+
+	/** Return this account's locally known posts that have a Bluesky record. */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profile')]
+	public function profile(): DataResponse {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return $this->signedOut();
+		}
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($account === null) {
+			return new DataResponse([], Http::STATUS_OK);
+		}
+
+		try {
+			$actorId = $this->localAccountService->getActorFromUserId($userId)->getId();
+		} catch (\Throwable $e) {
+			$this->logger->debug('could not resolve local actor for ATProto profile', ['exception' => $e]);
+			return new DataResponse([], Http::STATUS_OK);
+		}
+
+		$statuses = [];
+		foreach ($this->atprotoRequest->getLinksForDid($account->getDid(), 100) as $link) {
+			try {
+				$status = $this->streamService->getStreamById($link->getLocalId(), true, ACore::FORMAT_LOCAL);
+				if ($status->getAttributedTo() === $actorId) {
+					$statuses[] = $status;
+				}
+			} catch (\Throwable $e) {
+				$this->logger->debug('stale ATProto profile link skipped', ['exception' => $e]);
+			}
+		}
+
+		return new DataResponse($statuses, Http::STATUS_OK);
 	}
 
 	/**

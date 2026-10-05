@@ -187,6 +187,10 @@ class StatusApiController extends MastodonApiController {
 			$post->setSpoilerText($status->getSpoilerText());
 			$post->setSensitive($status->isSensitive());
 			$post->setType($this->visibilityOf($status));
+			$post->setPublicationTarget($status->getPublicationTarget());
+			if ($post->getPublicationTarget() === 'atproto' && $post->getType() !== Stream::TYPE_PUBLIC) {
+				throw new InvalidActionException('AT Protocol posts must use public visibility');
+			}
 			$post->setLanguage($status->getLanguage());
 			$post->setPlaceId(
 				$this->placeService->resolve(

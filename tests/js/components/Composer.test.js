@@ -128,6 +128,7 @@ function quoteOf(account = bob, overrides = {}) {
 	return {
 		id: '77',
 		visibility: 'public',
+		publication_target: 'both',
 		content: '<p>The post being quoted</p>',
 		mentions: [],
 		tags: [],
@@ -1877,6 +1878,7 @@ describe('Composer', () => {
 				quote_id: undefined,
 				sensitive: false,
 				spoiler_text: '',
+				publication_target: 'both',
 				language: 'en',
 			})
 		})

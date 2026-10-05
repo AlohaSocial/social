@@ -32,6 +32,9 @@
 		<p v-else-if="activeFeed === 'federated'" class="social-profile__feed-description">
 			{{ t('social', 'Public posts from across the Fediverse.') }}
 		</p>
+		<p v-else-if="activeFeed === 'bluesky'" class="social-profile__feed-description">
+			{{ t('social', 'Posts published to Bluesky by this account, shown in the same profile.') }}
+		</p>
 
 		<p v-if="feedLoading && feedTimeline.length === 0" role="status" class="social-profile__feed-state">
 			{{ t('social', 'Loading posts…') }}
@@ -81,6 +84,7 @@ import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
 import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
+import IconBird from 'vue-material-design-icons/Bird.vue'
 import ProfileStatusCard from './../components/ProfileStatusCard.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import logger from './../services/logger.js'
@@ -129,6 +133,7 @@ export default {
 			]
 			if (this.isOwnProfile) {
 				options.push({ value: 'home', label: t('social', 'My Feed'), icon: IconHome })
+				options.push({ value: 'bluesky', label: t('social', 'Bluesky'), icon: IconBird })
 			}
 			options.push(
 				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple },
@@ -203,6 +208,8 @@ export default {
 				let url
 				if (feed === 'profile') {
 					url = generateUrl(`apps/social/api/v1/accounts/${encodeURIComponent(this.userId)}/statuses`)
+				} else if (feed === 'bluesky') {
+					url = generateUrl('apps/social/api/v1/atproto/profile')
 				} else if (feed === 'home') {
 					url = generateUrl('apps/social/api/v1/timelines/home')
 				} else {

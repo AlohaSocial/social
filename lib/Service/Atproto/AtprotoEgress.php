@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\ActorDoesNotExistException;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoLink;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\ConfigService;
 use Psr\Log\LoggerInterface;
 
@@ -150,6 +151,9 @@ class AtprotoEgress {
 
 	/** Removes the mirrored record after its local post was deleted. */
 	public function delete(Stream $post): void {
+		if (($post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') === 'fediverse') {
+			return;
+		}
 		$link = $this->atprotoRequest->getLinkByLocalId($post->getId());
 		if ($link === null) {
 			return;
@@ -168,7 +172,8 @@ class AtprotoEgress {
 	}
 
 	private function shouldMirror(Stream $post): bool {
-		return $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1'
+		return ($post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') !== 'fediverse'
+			&& $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1'
 			&& $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_EGRESS) === '1'
 			&& $post->getAttributedTo() !== ''
 			&& $post->getVisibility() === Stream::TYPE_PUBLIC;
