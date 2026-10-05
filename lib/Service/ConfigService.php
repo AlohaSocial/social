@@ -445,6 +445,58 @@ class ConfigService {
 	public const USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED = 'external_signup_notice_accepted';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT = 'external_signup_notice_snapshot';
 
+	/**
+	 * Whether this instance speaks AT-Proto at all: linking a Bluesky account,
+	 * reading the accounts local accounts follow there, mirroring posts out.
+	 *
+	 * Off means none of the settings below are consulted and no link can be
+	 * made — it is the one switch an administrator needs to be able to take
+	 * the whole feature away. It says nothing about the fediverse side: an
+	 * instance with AT-Proto off is a normal ActivityPub server, and an
+	 * instance with it on is both at once.
+	 */
+	public const SOCIAL_ATPROTO_ENABLED = 'atproto_enabled';
+
+	/**
+	 * The public app view Bluesky's own reads are served from, as a base URL.
+	 *
+	 * Everything an app.bsky.* lexicon asks for is proxied to it rather than
+	 * served by a PDS, including for actors this instance hosts: asking a PDS
+	 * for `app.bsky.feed.getAuthorFeed` answers with whatever the PDS knows,
+	 * which for its own actor is its whole repository, and for a record made
+	 * through the public Bluesky network is nothing at all.
+	 */
+	public const SOCIAL_ATPROTO_APPVIEW = 'atproto_appview';
+
+	/**
+	 * The PLC directory did:plc documents are read and written through.
+	 *
+	 * A did:plc document is where an actor's PDS endpoint lives, so this is
+	 * what turns a handle into somewhere to send requests. The public default
+	 * is the only one that exists; an instance testing against its own PLC
+	 * can point it elsewhere.
+	 */
+	public const SOCIAL_ATPROTO_PLC = 'atproto_plc';
+
+	/**
+	 * Seconds between two reads of the same watched actor; minimum 60.
+	 *
+	 * One pass reads `Cron\AtprotoSync`'s due watches, so this is also what
+	 * sets how long a post written on Bluesky takes to appear here. A failure
+	 * pushes a watch's next pass out by its own backoff on top of this.
+	 */
+	public const SOCIAL_ATPROTO_SYNC_INTERVAL = 'atproto_sync_interval';
+
+	/**
+	 * Whether local posts are also written to the linked Bluesky account.
+	 *
+	 * Reading is decided by follows, not by this: an account that linked in
+	 * order to see Bluesky here and not to mirror anything out can switch it
+	 * off and its reads keep working. On by default, because mirroring is the
+	 * reason most people will link an account at all.
+	 */
+	public const SOCIAL_ATPROTO_EGRESS = 'atproto_egress';
+
 	public array $defaults = [
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
@@ -511,6 +563,11 @@ class ConfigService {
 		self::SOCIAL_EXTERNAL_USER_INVITES => '0',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE => '',
 		self::SOCIAL_EXTERNAL_SIGNUP_NOTICE_REQUIRED => '0',
+		self::SOCIAL_ATPROTO_ENABLED => '1',
+		self::SOCIAL_ATPROTO_APPVIEW => 'https://api.bsky.app',
+		self::SOCIAL_ATPROTO_PLC => 'https://plc.directory',
+		self::SOCIAL_ATPROTO_SYNC_INTERVAL => '300',
+		self::SOCIAL_ATPROTO_EGRESS => '1',
 	];
 
 	public array $accessTypeList = [
