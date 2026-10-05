@@ -168,9 +168,16 @@ class ActionService {
 		$target = $post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both';
 		$isAtprotoPost = str_contains($post->getId(), '/ap/bluesky/') || $target === 'atproto';
 		$hasAtprotoMirror = $this->atprotoEngagementService !== null && $this->atprotoEngagementService->hasRecord($post);
+		$atprotoAction = in_array($action, [self::FAVOURITE, self::UNFAVOURITE, self::REBLOG, self::UNREBLOG], true);
+		$linkedForAtproto = $this->atprotoEngagementService?->isLinked($actor->getUserId()) ?? false;
+		if ($this->atprotoEngagementService !== null && $isAtprotoPost && !$linkedForAtproto && $atprotoAction) {
+			// Let the native service return its precise "link an account" error.
+			$this->atprotoEngagementService->setLiked($actor->getUserId(), $post, false);
+		}
 		if ($this->atprotoEngagementService !== null
 			&& ($isAtprotoPost || ($target === 'both' && $hasAtprotoMirror))
-			&& in_array($action, [self::FAVOURITE, self::UNFAVOURITE, self::REBLOG, self::UNREBLOG], true)) {
+			&& $atprotoAction
+			&& ($isAtprotoPost || $linkedForAtproto)) {
 			$isLike = in_array($action, [self::FAVOURITE, self::UNFAVOURITE], true);
 			$enabled = in_array($action, [self::FAVOURITE, self::REBLOG], true);
 			if ($isLike) {

@@ -34,6 +34,11 @@ class AtprotoEngagementService {
 		return $this->atprotoRequest->getLinkByLocalId($post->getId()) !== null;
 	}
 
+	/** Whether this reader has a linked Bluesky session to use for actions. */
+	public function isLinked(string $userId): bool {
+		return $this->atprotoRequest->getAccount($userId) !== null;
+	}
+
 	/** @throws AtprotoException */
 	public function setReposted(string $userId, Stream $post, bool $reposted): void {
 		$this->setRecordFlag($userId, $post, 'app.bsky.feed.repost', $reposted);

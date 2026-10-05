@@ -108,4 +108,13 @@ class AtprotoEngagementServiceTest extends TestCase {
 
 		$this->assertTrue($this->service->isFollowing('alice', 'did:plc:bob'));
 	}
+
+	public function testLinkedChecksWhetherTheReaderHasCredentials(): void {
+		$this->request->expects($this->exactly(2))->method('getAccount')->willReturnCallback(
+			static fn (string $userId): ?AtprotoAccount => $userId === 'alice' ? (new AtprotoAccount())->setUserId('alice') : null
+		);
+
+		$this->assertTrue($this->service->isLinked('alice'));
+		$this->assertFalse($this->service->isLinked('bob'));
+	}
 }
