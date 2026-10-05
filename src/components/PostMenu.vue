@@ -285,6 +285,7 @@ export default {
 			if (!this.currentAccount || !this.item.account) {
 				return false
 			}
+			const localPart = (value) => String(value ?? '').split('@', 1)[0]
 
 			// Local and ATProto-backed exports can carry different display
 			// spellings for the same actor (handle versus acct). Prefer the
@@ -295,6 +296,13 @@ export default {
 				&& this.item.account.acct === this.currentAccount.acct)
 			|| (this.item.account.username && this.currentAccount.username
 				&& this.item.account.username === this.currentAccount.username)
+			// Some profile/status serializers expose the local actor as
+			// `admin2`, others as `admin2@cloud.example`. Treat those as the same
+			// owner so the Edit/Delete actions remain available on /@admin2.
+			|| (this.isLocal
+				&& localPart(this.item.account.acct || this.item.account.username)
+				&& localPart(this.item.account.acct || this.item.account.username)
+				=== localPart(this.currentAccount.acct || this.currentAccount.username))
 		},
 
 		/**

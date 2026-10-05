@@ -113,6 +113,18 @@ describe('the post menu', () => {
 			expect(offered).toContain('Edit')
 		})
 
+		it('recognises local handle spellings with and without the host', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { acct: 'alice@cloud.example', username: 'alice' },
+			}, {
+				currentAccount: { acct: 'alice', username: 'alice' },
+			}))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
 		/**
 		 * Muting, blocking and reporting yourself are all nonsense. Quoting
 		 * yourself is not — it is how somebody adds to their own post without
