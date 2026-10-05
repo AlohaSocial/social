@@ -54,6 +54,9 @@
 				</p>
 			</form>
 			<div class="atproto-profile__actions">
+				<a v-if="viewerCanEdit && fediverseProfileUrl" :href="fediverseProfileUrl">
+					{{ t('social', 'Open Fediverse profile') }}
+				</a>
 				<AtprotoFollowButton
 					v-if="profile.did && viewerCanFollow"
 					:handle="profile.handle || handle"
@@ -98,6 +101,7 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t } from '@nextcloud/l10n'
+import { getCurrentUser } from '@nextcloud/auth'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -111,6 +115,11 @@ export default {
 	props: { handle: { type: String, required: true } },
 	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
 	computed: {
+		fediverseProfileUrl() {
+			const uid = getCurrentUser()?.uid ?? window.OC?.getCurrentUser?.()?.uid ?? ''
+			return uid ? generateUrl('/@' + encodeURIComponent(uid)) : ''
+		},
+
 		dataFollowing() {
 			return this.following
 		},
