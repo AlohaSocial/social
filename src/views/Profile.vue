@@ -30,6 +30,7 @@
 <script>
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import { generateFilePath } from '@nextcloud/router'
+import { getCurrentUser } from '@nextcloud/auth'
 import ProfileInfo from './../components/ProfileInfo.vue'
 import { defineAsyncComponent, ref } from 'vue'
 import logger from '../services/logger.js'
@@ -98,7 +99,23 @@ export default {
 		 * @return {boolean}
 		 */
 		isOwnProfile() {
-			if (!this.accountInfo || !this.currentAccount || this.$route.name !== 'profile') {
+			if (!this.accountInfo || this.$route.name !== 'profile') {
+				return false
+			}
+
+			// The app account store is populated asynchronously. Direct profile
+			// navigation can therefore render before verify_credentials has
+			// returned; Nextcloud's signed-in identity is already available in
+			// the page and is authoritative for a local /@username route.
+			const nextcloudUser = getCurrentUser()
+			const localPart = (value) => String(value ?? '').split('@', 1)[0]
+			const routePart = localPart(this.$route.params.account)
+			if (nextcloudUser?.uid && routePart
+				&& routePart.toLowerCase() === String(nextcloudUser.uid).toLowerCase()) {
+				return true
+			}
+
+			if (!this.currentAccount) {
 				return false
 			}
 
@@ -111,7 +128,6 @@ export default {
 				return true
 			}
 
-			const localPart = (value) => String(value ?? '').split('@', 1)[0]
 			return localPart(this.accountInfo.acct || this.accountInfo.username)
 				=== localPart(this.currentAccount.acct || this.currentAccount.username)
 		},
