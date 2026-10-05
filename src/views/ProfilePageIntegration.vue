@@ -84,6 +84,7 @@ import IconHome from 'vue-material-design-icons/Home.vue'
 import ProfileStatusCard from './../components/ProfileStatusCard.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import logger from './../services/logger.js'
+import { bannerOf } from '../utils/banner.js'
 
 const PAGE_SIZE = 20
 
@@ -137,8 +138,7 @@ export default {
 		},
 
 		bannerUrl() {
-			const header = this.accountInfo?.header
-			return header && header !== this.accountInfo?.avatar ? header : ''
+			return bannerOf(this.accountInfo)
 		},
 
 		emptyFeedMessage() {
