@@ -69,6 +69,9 @@
 		</p>
 		<p v-else-if="error" role="alert">
 			{{ error }}
+			<NcButton variant="secondary" :disabled="loading" @click="loadProfile">
+				{{ t('social', 'Try again') }}
+			</NcButton>
 		</p>
 		<p v-else-if="statuses.length === 0">
 			{{ t('social', 'No public Bluesky posts yet.') }}
@@ -133,28 +136,36 @@ export default {
 	},
 
 	async mounted() {
-		try {
-			const { data } = await axios.get(generateUrl(`apps/social/api/v1/atproto/profiles/${encodeURIComponent(this.handle)}`))
-			this.profile = data.profile ?? {}
-			this.account = data.account ?? {}
-			this.statuses = data.statuses ?? []
-			this.nextCursor = data.nextCursor ?? ''
-			this.following = data.following === true
-			this.viewerCanFollow = data.viewerCanFollow === true
-			this.viewerCanEdit = data.viewerCanEdit === true
-			this.editProfile = {
-				displayName: this.profile.displayName ?? '',
-				description: this.profile.description ?? '',
-			}
-		} catch (error) {
-			this.error = error?.response?.data?.message ?? t('social', 'Could not load this Bluesky profile')
-		} finally {
-			this.loading = false
-		}
+		await this.loadProfile()
 	},
 
 	methods: {
 		t,
+		async loadProfile() {
+			this.loading = true
+			this.error = ''
+			this.loadMoreError = ''
+			this.nextCursor = ''
+			try {
+				const { data } = await axios.get(generateUrl(`apps/social/api/v1/atproto/profiles/${encodeURIComponent(this.handle)}`))
+				this.profile = data.profile ?? {}
+				this.account = data.account ?? {}
+				this.statuses = data.statuses ?? []
+				this.nextCursor = data.nextCursor ?? ''
+				this.following = data.following === true
+				this.viewerCanFollow = data.viewerCanFollow === true
+				this.viewerCanEdit = data.viewerCanEdit === true
+				this.editProfile = {
+					displayName: this.profile.displayName ?? '',
+					description: this.profile.description ?? '',
+				}
+			} catch (error) {
+				this.error = error?.response?.data?.message ?? t('social', 'Could not load this Bluesky profile')
+			} finally {
+				this.loading = false
+			}
+		},
+
 		async loadMore() {
 			if (this.loadingMore || !this.nextCursor) {
 				return
