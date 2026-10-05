@@ -14,6 +14,9 @@
 			<p class="atproto-settings__connected">
 				{{ t('social', 'Connected to @{handle}', { handle: status.account.handle }) }}
 			</p>
+			<p class="atproto-settings__connection-details">
+				{{ t('social', 'PDS: {pds} · State: {state}', { pds: status.account.pds, state: status.account.state }) }}
+			</p>
 			<p>
 				<a :href="profileUrl()">{{ t('social', 'Open my Bluesky profile') }}</a>
 			</p>
@@ -23,6 +26,13 @@
 			<p v-if="status.account.lastError" class="atproto-settings__error" role="alert">
 				{{ status.account.lastError }}
 			</p>
+			<NcButton
+				v-if="status.account.state === 'broken'"
+				variant="secondary"
+				:disabled="saving"
+				@click="relink">
+				{{ t('social', 'Reconnect Bluesky') }}
+			</NcButton>
 			<form class="atproto-settings__profile" @submit.prevent="saveProfile">
 				<NcTextField v-model="profile.displayName" :label="t('social', 'Bluesky display name')" :disabled="saving" />
 				<NcTextArea v-model="profile.description" :label="t('social', 'Bluesky profile description')" :disabled="saving" />
@@ -137,6 +147,10 @@ export default {
 			} finally {
 				this.saving = false
 			}
+		},
+
+		async relink() {
+			await this.unlink()
 		},
 
 		async saveProfile() {
