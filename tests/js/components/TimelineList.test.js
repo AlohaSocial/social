@@ -90,6 +90,7 @@ function mountList({
 	restored = false,
 	attachTo = undefined,
 	lastRead = 0,
+	homeMarker = null,
 } = {}) {
 	const dispatch = vi.fn()
 	for (const response of responses) {
@@ -109,6 +110,8 @@ function mountList({
 	vi.spyOn(store, 'fetchTimeline').mockImplementation(dispatch)
 	vi.spyOn(notificationsStore, 'markNotificationsRead').mockResolvedValue(undefined)
 	vi.spyOn(notificationsStore, 'fetchLastRead').mockResolvedValue(lastRead)
+	vi.spyOn(store, 'fetchHomeMarker').mockResolvedValue(homeMarker)
+	vi.spyOn(store, 'markHomeRead').mockResolvedValue(undefined)
 	store.$patch({
 		statuses: Object.fromEntries([...timeline, ...parents].map((entry) => [entry.id, entry])),
 		timeline: timeline.map((entry) => entry.id),
@@ -1513,6 +1516,81 @@ describe('TimelineList', () => {
 			const parents = mountList({ route, props: { showParents: true } })
 			await flushPromises()
 			expect(parents.wrapper.findComponent(EmptyContent).exists()).toBe(false)
+		})
+	})
+
+	describe('where the reader had got to on the home timeline', () => {
+		const posts = [{ id: '30' }, { id: '20' }, { id: '10' }].map((post) => ({ ...post, account: { id: 'a' } }))
+		const PLACE = 'social:seen:["home","",{}]'
+		const lineBefore = (wrapper) => wrapper.find('.timeline-caughtup + .timeline-entry-stub').attributes('data-id')
+
+		beforeEach(() => {
+			window.localStorage.clear()
+			vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] })
+		})
+
+		it('draws the line where the server says the reader got to, so a phone and this page agree', async () => {
+			const { wrapper, store } = mountList({
+				timeline: posts,
+				homeMarker: { id: '20', at: Date.parse('2026-10-05T09:00:00Z') },
+			})
+			await flushPromises()
+
+			expect(store.fetchHomeMarker).toHaveBeenCalled()
+			expect(lineBefore(wrapper)).toBe('20')
+			expect(wrapper.find('.timeline-caughtup__label').text()).toMatch(/Up to date since/)
+		})
+
+		it('falls back to what this browser remembers when the server has no marker yet', async () => {
+			window.localStorage.setItem(PLACE, JSON.stringify({ id: '20', at: 1 }))
+			const { wrapper } = mountList({ timeline: posts })
+			await flushPromises()
+
+			expect(lineBefore(wrapper)).toBe('20')
+		})
+
+		it('takes whichever of the two is further along', async () => {
+			window.localStorage.setItem(PLACE, JSON.stringify({ id: '10', at: 1 }))
+			const serverAhead = mountList({ timeline: posts, homeMarker: { id: '20', at: 2 } })
+			await flushPromises()
+			expect(lineBefore(serverAhead.wrapper)).toBe('20')
+
+			window.localStorage.setItem(PLACE, JSON.stringify({ id: '20', at: 1 }))
+			const browserAhead = mountList({ timeline: posts, homeMarker: { id: '10', at: 2 } })
+			await flushPromises()
+			expect(lineBefore(browserAhead.wrapper)).toBe('20')
+		})
+
+		it('draws no line when nothing is new', async () => {
+			const { wrapper } = mountList({ timeline: posts, homeMarker: { id: '30', at: 2 } })
+			await flushPromises()
+
+			expect(wrapper.find('.timeline-caughtup').exists()).toBe(false)
+		})
+
+		it('tells the server once the page has been looked at, not merely by rendering', async () => {
+			// a tab opened in the background must not move the phone's line
+			const { store } = mountList({ timeline: posts })
+			await flushPromises()
+			expect(store.markHomeRead).not.toHaveBeenCalled()
+
+			await vi.advanceTimersByTimeAsync(2000)
+
+			expect(store.markHomeRead).toHaveBeenCalledWith('30')
+		})
+
+		it('asks the server nothing on the other timelines', async () => {
+			const { store } = mountList({
+				timeline: posts,
+				identity: '["timeline","",{}]',
+				props: { type: 'timeline' },
+				route: { name: 'timeline', params: { type: 'timeline' } },
+			})
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2000)
+
+			expect(store.fetchHomeMarker).not.toHaveBeenCalled()
+			expect(store.markHomeRead).not.toHaveBeenCalled()
 		})
 	})
 })

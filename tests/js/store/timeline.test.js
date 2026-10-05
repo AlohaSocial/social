@@ -1356,3 +1356,68 @@ describe('timeline store actions', () => {
 		})
 	})
 })
+
+describe('the home read marker', () => {
+	let store
+
+	beforeEach(() => {
+		setActivePinia(createPinia())
+		store = useTimelineStore()
+		axios.get.mockReset()
+		axios.post.mockReset()
+		logger.error.mockClear()
+	})
+
+	it('asks for the home marker and answers where, and when it was moved', async () => {
+		axios.get.mockResolvedValue({
+			data: { home: { last_read_id: '1789553297940456473', version: 2, updated_at: '2026-10-05T09:00:00.000Z' } },
+		})
+
+		const marker = await store.fetchHomeMarker()
+
+		expect(axios.get).toHaveBeenCalledWith(expect.stringContaining('/api/v1/markers'), { params: { timeline: ['home'] } })
+		expect(marker).toEqual({ id: '1789553297940456473', at: Date.parse('2026-10-05T09:00:00.000Z') })
+		expect(store.homeReadUpTo).toBe('1789553297940456473')
+	})
+
+	it('answers null for an account that has never read its feed', async () => {
+		axios.get.mockResolvedValue({ data: {} })
+
+		expect(await store.fetchHomeMarker()).toBeNull()
+		expect(store.homeReadUpTo).toBe('0')
+	})
+
+	it('answers null, and says so in the log, when the server does not answer', async () => {
+		axios.get.mockRejectedValue(new Error('offline'))
+
+		expect(await store.fetchHomeMarker()).toBeNull()
+		expect(logger.error).toHaveBeenCalled()
+	})
+
+	it('tells the server a new position once, as a string', async () => {
+		axios.post.mockResolvedValue({ data: {} })
+
+		await store.markHomeRead(42)
+		await store.markHomeRead('42')
+		await store.markHomeRead('41')
+
+		expect(axios.post).toHaveBeenCalledTimes(1)
+		expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('/api/v1/markers'), { home: { last_read_id: '42' } })
+	})
+
+	it('never reports a position behind the one the server already holds', async () => {
+		axios.get.mockResolvedValue({ data: { home: { last_read_id: '50' } } })
+		await store.fetchHomeMarker()
+
+		await store.markHomeRead('40')
+
+		expect(axios.post).not.toHaveBeenCalled()
+	})
+
+	it('keeps reading when a position cannot be saved', async () => {
+		axios.post.mockRejectedValue(new Error('offline'))
+
+		await expect(store.markHomeRead('42')).resolves.toBeUndefined()
+		expect(logger.error).toHaveBeenCalled()
+	})
+})

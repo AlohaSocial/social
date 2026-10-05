@@ -260,7 +260,11 @@ The sidebar is the map:
   written on this Nextcloud; Global is every public post this server has
   received. **Photos** and **Videos** carry the same switcher over posts that
   are pictures, or videos — including videos from PeerTube channels anyone
-  here follows — with **For you** in it as well (see below).
+  here follows — with **For you** in it as well (see below). A thin line
+  across My Feed — *Up to date since 14:02* — marks where you had got to last
+  time, and the posts below it are drawn a shade quieter. It is the position
+  Mastodon apps keep too: read your feed on your phone and the line here has
+  moved, and the other way round.
 - **Shorts** — the Videos timeline watched one at a time, full height, each
   playing as it comes up and pausing as you scroll past. The switch in the top
   corner picks whose videos (**My Feed**, **For you**, **Local** or

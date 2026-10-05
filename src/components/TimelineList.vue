@@ -961,10 +961,15 @@ export default {
 		/**
 		 * Where this reader had got to on this timeline, from last time.
 		 *
-		 * Per timeline and per browser, in local storage: it is a convenience
-		 * about where somebody was looking, not something the server should be
-		 * told or another device should inherit. A browser that refuses storage
-		 * simply has no line, which is the state every timeline was in before.
+		 * Per timeline and per browser, in local storage, for most lists: a
+		 * convenience about where somebody was looking. The home timeline asks
+		 * the server as well — the `home` marker of `GET /api/v1/markers`,
+		 * which every Mastodon client reads and writes — so a feed read on the
+		 * phone is up to date here, and the other way round. Whichever of the
+		 * two is further along wins; the server answers when it answers, and
+		 * the line is drawn from the browser's copy until then. A browser that
+		 * refuses storage and a server with no marker yet simply draw no line,
+		 * which is the state every timeline was in before.
 		 */
 		readPlace() {
 			this.lastSeen = ''
@@ -979,6 +984,25 @@ export default {
 			} catch {
 				// no stored place to read, which is not a failure
 			}
+
+			if (this.type !== 'home') {
+				return
+			}
+			const identity = this.timelineIdentity
+			this.timelineStore.fetchHomeMarker().then((marker) => {
+				// the list may have been switched while the server was asked
+				if (identity !== this.timelineIdentity) {
+					return
+				}
+				if (marker !== null && (this.lastSeen === '' || isNewerId(marker.id, this.lastSeen))) {
+					this.lastSeen = marker.id
+					this.lastSeenAt = marker.at
+				}
+				// only now does looking at the page count as reading it: the
+				// line is drawn first, and the marker it is drawn against is
+				// the one that was there before this visit moved it
+				this.armSeenTimer()
+			})
 		},
 
 		/** Remembers the newest post on this timeline as where the reader got to. */
@@ -1235,8 +1259,9 @@ export default {
 			// the two lists that carry a badge: Activities, and Direct
 			// messages -- which is one page with the messages on it rather
 			// than exchanges to open one at a time, so having looked at it is
-			// having read them
-			if (!['notifications', 'direct'].includes(this.type) || this.showParents) {
+			// having read them -- and the home timeline, whose marker every
+			// other client draws its own line from
+			if (!['notifications', 'direct', 'home'].includes(this.type) || this.showParents) {
 				return
 			}
 			if (this.entries.length === 0 || document.visibilityState === 'hidden') {
@@ -1306,6 +1331,12 @@ export default {
 				(highest, entry) => newerId(newestIdOf(entry), highest),
 				'0',
 			)
+			if (this.type === 'home') {
+				// the position Mastodon apps share; the store says it once
+				this.timelineStore.markHomeRead(newest)
+
+				return
+			}
 			if (isNewerId(newest, this.markedUpTo)) {
 				this.markedUpTo = newest
 				this.notificationsStore.markNotificationsRead(newest)
