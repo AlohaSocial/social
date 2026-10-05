@@ -237,6 +237,14 @@ const router = createRouter({
 			name: 'atproto-profile',
 		},
 		{
+			// Domain-shaped @handles belong to ATProto; the Fediverse route
+			// below continues to own ordinary /@username profiles.
+			path: '/@:handle([^@]+\\.[^@]+)',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile-handle',
+		},
+		{
 			path: '/@:account',
 			components: {
 				default: Profile,
@@ -413,7 +421,7 @@ const router = createRouter({
 			path: '/:handle',
 			components: { default: AtprotoProfile },
 			props: true,
-			name: 'atproto-profile-handle',
+			name: 'atproto-profile-bare-handle',
 		},
 	],
 })

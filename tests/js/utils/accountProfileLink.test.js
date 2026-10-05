@@ -16,7 +16,7 @@ describe('account profile links', () => {
 			id: 'https://social.example/ap/bluesky/did:plc:abc',
 			acct: 'at-zeichenbob.schaechner.dpdns.org',
 			username: 'at-zeichenbob.schaechner.dpdns.org',
-		})).toBe('/index.php/apps/social/at-zeichenbob.schaechner.dpdns.org')
+		})).toBe('/index.php/apps/social/@at-zeichenbob.schaechner.dpdns.org')
 	})
 
 	it('leaves remote accounts to Social or their ActivityPub address', () => {
