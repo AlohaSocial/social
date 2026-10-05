@@ -18,6 +18,7 @@ use OCA\Social\Model\Client\Filter;
 use OCA\Social\Model\Client\FilterKeyword;
 use OCA\Social\Model\Client\FilterStatus;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Tools\Nid;
@@ -68,8 +69,53 @@ class FilterController extends ClientApiController {
 		ClientService $clientService,
 		private FiltersRequest $filtersRequest,
 		private TimelineRevisionService $timelineRevisionService,
+		private AiContentService $aiContentService,
 	) {
 		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
+	}
+
+	/**
+	 * Whether the viewer hides posts made with AI: `{"hide": bool}`.
+	 *
+	 * Under the filter scopes because it is a filter — one the app keeps for
+	 * the reader rather than one they wrote keyword by keyword — and applied in
+	 * the same place, `FilterService::apply()`, in every context at once.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/ai_content')]
+	public function aiContent(): DataResponse {
+		try {
+			$this->initViewer(['read:filters', 'read']);
+
+			return new DataResponse(
+				$this->aiContentService->export($this->viewer->getUserId()), Http::STATUS_OK
+			);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Turns the switch, and answers with it. `hide` is required and has to be
+	 * a boolean in one of the spellings a client uses; anything else is a 422,
+	 * because a request that is unclear about a switch must not flip it.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'PATCH', url: '/api/v1/social/ai_content')]
+	public function aiContentUpdate(mixed $hide = null): DataResponse {
+		try {
+			$this->initViewer(['write:filters', 'write']);
+
+			$this->aiContentService->setHides($this->viewer->getUserId(), $this->requiredFlag($hide, 'hide'));
+
+			return new DataResponse(
+				$this->aiContentService->export($this->viewer->getUserId()), Http::STATUS_OK
+			);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
 	}
 
 	/**
@@ -801,6 +847,23 @@ class FilterController extends ClientApiController {
 	/** A flag as any client spells one: true, "true", 1, "1", "on". */
 	private function flag(mixed $raw): bool {
 		return filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true;
+	}
+
+	/**
+	 * A flag that has to be there and has to be one: `flag()` reads what it
+	 * does not recognise as `false`, which is the right default for an
+	 * optional one and the wrong answer for a switch being set.
+	 *
+	 * @throws InvalidResourceException
+	 */
+	private function requiredFlag(mixed $raw, string $name): bool {
+		$flag = (is_scalar($raw) && $raw !== '')
+			? filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) : null;
+		if ($flag === null) {
+			throw new InvalidResourceException($name . ' must be true or false');
+		}
+
+		return $flag;
 	}
 
 	/**

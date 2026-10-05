@@ -31,6 +31,7 @@ use OCA\Social\Model\Client\Place;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Model\StreamCard;
+use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\VideoDeliveryHold;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Tools\Model\Cache;
@@ -1966,6 +1967,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			'mentions' => $this->exportMentionsAsLocal(),
 			'emojis' => $this->getEmojis(),
 			'tags' => $this->exportTagsAsLocal(),
+			// Aloha Social's own: whether the post says it was made with AI
+			// — by one of its hashtags, or by a picture whose metadata stated
+			// so. A label the post carries, never a judgement about it; a
+			// client draws a quiet mark from it, and a reader who asked has
+			// such posts dropped before they get this far
+			'ai_generated' => $this->exportAiGenerated(),
 			'replies_count' => $this->getDetailInt(Details::REPLIES),
 			'reblogs_count' => $this->getDetailInt(Details::BOOSTS),
 			'favourites_count' => $this->getDetailInt(Details::LIKES),
@@ -2513,6 +2520,19 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 *
 	 * @return array<array{name: string, url: string}>
 	 */
+	/**
+	 * Whether this post is labelled as made with AI, against the instance's
+	 * tag set where the container can hand it out and the built-in defaults
+	 * where it cannot — a model exported outside a request.
+	 */
+	private function exportAiGenerated(): bool {
+		try {
+			return Server::get(AiContentService::class)->labelsPost($this);
+		} catch (\Throwable $e) {
+			return AiContentService::labels($this, AiContentService::DEFAULT_TAGS);
+		}
+	}
+
 	private function exportTagsAsLocal(): array {
 		$tags = [];
 		foreach ($this->getHashtags() as $hashtag) {

@@ -179,6 +179,9 @@ class ApiControllerTest extends TestCase {
 	private ModerationService|MockObject $moderationService;
 	private \OCA\Social\Service\SensitiveMediaService|Stub $sensitiveMediaService;
 	private \OCA\Social\Service\NotificationDeliveryService|Stub $notificationDeliveryService;
+	private \OCA\Social\Service\AiContentService|Stub $aiContentService;
+	/** what the AI switch stub answers for the viewer */
+	private bool $hidesAi = false;
 	/** @var array<string, mixed> what the delivery service answers for the viewer */
 	private array $delivery = [];
 	private ViewCountService|Stub $viewCountService;
@@ -306,6 +309,8 @@ class ApiControllerTest extends TestCase {
 			fn (): \OCA\Social\Model\NotificationDelivery
 				=> \OCA\Social\Model\NotificationDelivery::fromArray($this->delivery)
 		);
+		$this->aiContentService = $this->createStub(\OCA\Social\Service\AiContentService::class);
+		$this->aiContentService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesAi);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
@@ -422,6 +427,7 @@ class ApiControllerTest extends TestCase {
 			'moderationService' => $this->moderationService,
 			'sensitiveMediaService' => $this->sensitiveMediaService,
 			'notificationDeliveryService' => $this->notificationDeliveryService,
+			'aiContentService' => $this->aiContentService,
 			'viewCountService' => $this->viewCountService,
 			'teamService' => $this->teamService,
 			'emojiService' => $this->emojiService,
@@ -2756,6 +2762,15 @@ class ApiControllerTest extends TestCase {
 		$this->loggedInAs();
 
 		$this->assertSame('instant', $this->controller()->preferences()->getData()['notifications:delivery']['mode']);
+	}
+
+	public function testPreferencesEchoTheAiContentSwitch(): void {
+		$this->loggedInAs();
+
+		$this->assertFalse($this->controller()->preferences()->getData()['reading:hide:ai']);
+
+		$this->hidesAi = true;
+		$this->assertTrue($this->controller()->preferences()->getData()['reading:hide:ai']);
 	}
 
 	public function testPreferencesReportNoLanguageAsNullRatherThanEmpty(): void {

@@ -1,4 +1,8 @@
 { "translations": {
+    "Made with AI" : "Mit KI erstellt",
+    "Posts made with AI" : "Mit KI erstellte Beiträge",
+    "Hide posts made with AI" : "Mit KI erstellte Beiträge ausblenden",
+    "Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled." : "Blendet Beiträge aus, die als mit KI erstellt getaggt sind, die ihr Autor so gekennzeichnet hat oder deren Bilder es in ihren Metadaten sagen. Was niemand gekennzeichnet hat, kann es nicht erkennen.",
     "Aloha Social" : "Aloha Social",
     "When Aloha Social is allowed to interrupt you. Everything still lands in your notifications here; this is only about the bell, the phone and the mail." : "Wann Aloha Social dich unterbrechen darf. Alles landet weiterhin hier in deinen Benachrichtigungen; es geht nur um die Glocke, das Telefon und die E-Mail.",
     "When to tell you" : "Wann du es erfährst",

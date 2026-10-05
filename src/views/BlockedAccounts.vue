@@ -163,6 +163,29 @@
 			<FiltersSettings />
 		</section>
 
+		<!-- one more rule that applies to everybody: not a word but a kind of
+		     post, and one switch rather than a list -->
+		<section id="ai-content" class="block-card">
+			<header class="block-card__head">
+				<span class="block-card__icon">
+					<CreationOutline :size="20" />
+				</span>
+				<h3 class="block-card__title">
+					{{ t('social', 'Posts made with AI') }}
+				</h3>
+			</header>
+			<p class="block-card__lede">
+				{{ t('social', 'Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled.') }}
+			</p>
+			<NcCheckboxRadioSwitch
+				type="switch"
+				class="block-card__switch"
+				:modelValue="hideAi"
+				@update:modelValue="setHideAi">
+				{{ t('social', 'Hide posts made with AI') }}
+			</NcCheckboxRadioSwitch>
+		</section>
+
 		<!-- and after the standing rules, the one thing here that is still
 		     waiting on the reader: the senders a notification policy is
 		     holding. It was a sidebar entry of its own, which stayed empty
@@ -192,13 +215,16 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError } from '../services/toast.js'
+import { fetchAiContent, saveAiContent } from '../services/aiContent.js'
 import ActorAvatar from '../components/ActorAvatar.vue'
 import FiltersSettings from '../components/FiltersSettings.vue'
 import NotificationRequests from '../components/NotificationRequests.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AccountCancelOutline from 'vue-material-design-icons/AccountCancelOutline.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
+import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import DomainOff from 'vue-material-design-icons/DomainOff.vue'
 import FilterOutline from 'vue-material-design-icons/FilterOutline.vue'
 import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
@@ -213,12 +239,14 @@ export default {
 	components: {
 		AccountCancelOutline,
 		ActorAvatar,
+		CreationOutline,
 		DomainOff,
 		FilterOutline,
 		FiltersSettings,
 		IconInboxOutline,
 		NotificationRequests,
 		NcButton,
+		NcCheckboxRadioSwitch,
 		NcTextField,
 		Cancel,
 		VolumeHigh,
@@ -237,6 +265,8 @@ export default {
 			hidingDomain: false,
 			busy: [],
 			loading: true,
+			/** whether posts made with AI are hidden, as the server last confirmed it */
+			hideAi: false,
 		}
 	},
 
@@ -245,10 +275,42 @@ export default {
 	},
 
 	async mounted() {
-		await this.fetchAll()
+		// side by side: the one switch is not one of the lists, and a server
+		// that cannot answer for it must not take the lists down with it
+		await Promise.all([this.fetchAll(), this.loadAiContent()])
 	},
 
 	methods: {
+		/**
+		 * An unreadable setting is not worth a toast on a page the reader may
+		 * only be passing through; the switch shows the default and still works.
+		 */
+		async loadAiContent() {
+			try {
+				this.hideAi = (await fetchAiContent()).hide
+			} catch (error) {
+				logger.debug('Could not read whether posts made with AI are hidden', { error })
+			}
+		},
+
+		/**
+		 * Flips the switch at once and sends the change; on a refusal the
+		 * switch goes back to what the server has and the reason is shown.
+		 *
+		 * @param {boolean} hide what the reader set the switch to
+		 */
+		async setHideAi(hide) {
+			const before = this.hideAi
+			this.hideAi = hide
+			try {
+				this.hideAi = (await saveAiContent(hide)).hide
+			} catch (error) {
+				logger.error('Could not save whether posts made with AI are hidden', { error })
+				showError(error?.response?.data?.error || t('social', 'Could not save that setting'))
+				this.hideAi = before
+			}
+		},
+
 		async fetchAll() {
 			this.loading = true
 			try {
@@ -425,6 +487,12 @@ export default {
 		margin: 10px 0 0;
 		color: var(--color-text-maxcontrast);
 		font-size: 13px;
+	}
+
+	/* the one card that is a switch rather than a list; the same breathing
+	   room under the lede as the first row of a list gets */
+	&__switch {
+		margin-top: 6px;
 	}
 }
 

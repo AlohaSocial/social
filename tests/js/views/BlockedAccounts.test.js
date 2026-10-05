@@ -13,7 +13,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAccountStore } from '../../../src/store/account.js'
 
 vi.mock('@nextcloud/axios', () => ({
-	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+	default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn() }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -26,8 +26,12 @@ const bob = { id: '22', acct: 'bob@remote.tld', username: 'bob', display_name: '
 const carol = { id: '33', acct: 'carol@remote.tld', username: 'carol', display_name: 'Carol', avatar: 'https://remote.tld/carol.png' }
 const dave = { id: '44', acct: 'dave', username: 'dave', display_name: '', avatar: 'https://cloud.example.org/dave.png' }
 
-/** Answers /blocks, /mutes and /domain_blocks, whichever order they come in. */
-function serve(blocked, muted, domains = []) {
+/**
+ * Answers /blocks, /mutes, /domain_blocks and /ai_content, whichever order
+ * they come in. `aiContent` may be an Error, for a server that cannot answer
+ * for the one switch.
+ */
+function serve(blocked, muted, domains = [], aiContent = { hide: false }) {
 	axios.get.mockImplementation((url) => {
 		if (url.endsWith('/blocks')) {
 			return Promise.resolve({ data: blocked })
@@ -38,12 +42,15 @@ function serve(blocked, muted, domains = []) {
 		if (url.endsWith('/domain_blocks')) {
 			return Promise.resolve({ data: domains })
 		}
+		if (url.endsWith('/ai_content')) {
+			return aiContent instanceof Error ? Promise.reject(aiContent) : Promise.resolve({ data: aiContent })
+		}
 		return Promise.reject(new Error(`unexpected ${url}`))
 	})
 }
 
-async function mountView({ blocked = [bob], muted = [carol], domains = [], dispatch } = {}) {
-	serve(blocked, muted, domains)
+async function mountView({ blocked = [bob], muted = [carol], domains = [], aiContent, dispatch } = {}) {
+	serve(blocked, muted, domains, aiContent)
 	const pinia = createPinia()
 	setActivePinia(pinia)
 	const accountStore = useAccountStore()
@@ -105,7 +112,7 @@ describe('BlockedAccounts', () => {
 
 		expect(wrapper.find('#filters .filters-settings-stub').exists()).toBe(true)
 		expect(wrapper.findAll('h3').map((heading) => heading.text()))
-			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Filtered notifications'])
+			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered notifications'])
 	})
 
 	/**
@@ -268,6 +275,92 @@ describe('BlockedAccounts', () => {
 			const empty = wrapper.findAll('.block-card__empty')
 			expect(empty).toHaveLength(1)
 			expect(empty[0].text()).toContain('No blocked accounts')
+		})
+	})
+
+	/**
+	 * One more thing the reader has decided not to read, so it lives with the
+	 * rest: not a person or a word but a kind of post, and one switch rather
+	 * than a list. The server decides what counts; the switch only says
+	 * whether to hide it.
+	 */
+	describe('hiding posts made with AI', () => {
+		const AI = `${API}/social/ai_content`
+		const aiSwitch = (wrapper) => wrapper.find('#ai-content').findComponent({ name: 'NcCheckboxRadioSwitch' })
+		const refusal = (data) => Object.assign(new Error('Unprocessable'), { response: { status: 422, data } })
+
+		it('reads the setting on mount and shows it', async () => {
+			const { wrapper } = await mountView({ aiContent: { hide: true } })
+
+			expect(axios.get).toHaveBeenCalledWith(AI)
+			expect(aiSwitch(wrapper).props('type')).toBe('switch')
+			expect(aiSwitch(wrapper).text()).toBe('Hide posts made with AI')
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(true)
+		})
+
+		it('says what it can and cannot tell apart', async () => {
+			const { wrapper } = await mountView()
+
+			expect(wrapper.find('#ai-content .block-card__lede').text())
+				.toBe('Hides posts that are tagged as made with AI, that their author marked, or whose pictures say so in their metadata. It cannot recognise what nobody labelled.')
+		})
+
+		it('starts off, and keeps the lists, when the server cannot answer for it', async () => {
+			const { wrapper } = await mountView({ aiContent: new Error('boom') })
+
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(false)
+			expect(rowNames(wrapper)).toEqual(['Bob', 'Carol'])
+			// a setting that could not be read is not worth a toast on a page
+			// the reader may only be passing through
+			expect(showError).not.toHaveBeenCalled()
+		})
+
+		it('flips at once, saves, and says nothing on success', async () => {
+			axios.patch.mockResolvedValue({ data: { hide: true } })
+			const { wrapper } = await mountView()
+
+			aiSwitch(wrapper).vm.$emit('update:modelValue', true)
+			await wrapper.vm.$nextTick()
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(true)
+
+			await flushPromises()
+			expect(axios.patch).toHaveBeenCalledWith(AI, { hide: true })
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(true)
+			expect(showError).not.toHaveBeenCalled()
+		})
+
+		it('takes the server\'s answer over its own guess', async () => {
+			// a server that answers something other than what was asked for
+			// is still the one that decides
+			axios.patch.mockResolvedValue({ data: { hide: false } })
+			const { wrapper } = await mountView()
+
+			aiSwitch(wrapper).vm.$emit('update:modelValue', true)
+			await flushPromises()
+
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(false)
+		})
+
+		it('goes back and shows the server\'s reason when the change is refused', async () => {
+			axios.patch.mockRejectedValue(refusal({ error: 'hide must be a boolean' }))
+			const { wrapper } = await mountView({ aiContent: { hide: false } })
+
+			aiSwitch(wrapper).vm.$emit('update:modelValue', true)
+			await flushPromises()
+
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(false)
+			expect(showError).toHaveBeenCalledWith('hide must be a boolean')
+		})
+
+		it('goes back with the usual words when the failure has no reason', async () => {
+			axios.patch.mockRejectedValue(new Error('network'))
+			const { wrapper } = await mountView({ aiContent: { hide: true } })
+
+			aiSwitch(wrapper).vm.$emit('update:modelValue', false)
+			await flushPromises()
+
+			expect(aiSwitch(wrapper).props('modelValue')).toBe(true)
+			expect(showError).toHaveBeenCalledWith('Could not save that setting')
 		})
 	})
 

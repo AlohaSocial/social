@@ -174,6 +174,13 @@ class ConfigService {
 	public const SOCIAL_AUTOSPAM = 'autospam';
 
 	/**
+	 * Hashtags that label a post as made with AI, comma-separated, added to
+	 * `AiContentService::DEFAULT_TAGS`. Compared case-insensitively, with or
+	 * without the `#`. Empty by default: the defaults are the list.
+	 */
+	public const SOCIAL_AI_TAGS = 'ai_tags';
+
+	/**
 	 * Whether the composer offers the 881 animated emoji.
 	 *
 	 * On by default. What ships is the list, not the pictures — see
@@ -464,6 +471,7 @@ class ConfigService {
 		self::SOCIAL_PUBLISH_BLOCKS => '0',
 		self::SOCIAL_REVIEW_FIRST_POST => '0',
 		self::SOCIAL_AUTOSPAM => '1',
+		self::SOCIAL_AI_TAGS => '',
 		self::SOCIAL_GIF_PACK => '1',
 		self::SOCIAL_STORIES => '1',
 		self::SOCIAL_SECTION_PHOTOS => '1',

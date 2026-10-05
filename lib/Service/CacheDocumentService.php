@@ -72,6 +72,7 @@ class CacheDocumentService {
 		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
 		private VideoTranscodeService $videoTranscodeService,
+		private ImageMetadataService $imageMetadataService,
 	) {
 	}
 
@@ -335,6 +336,14 @@ class CacheDocumentService {
 		// megapixels under the size ceiling is a fatal error rather than a
 		// refusal.
 		$this->assertWithinPixelLimit($content);
+
+		// What the picture says about where it came from is read off the bytes
+		// as they arrived, local upload and fetched attachment alike, because
+		// the XMP it is stated in is one of the blocks the conversion below
+		// removes. The row is the only place it survives.
+		$document->setAiSource(
+			Document::aiSourceFor($this->imageMetadataService->digitalSourceType($content, $mime))
+		);
 
 		// Then the camera's metadata comes off, and a format no browser can
 		// draw becomes one it can. Both can change the mime, so the document is

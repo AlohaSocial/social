@@ -43,7 +43,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->setValue('parent_id', $qb->createNamedParameter($document->getParentId()))
 			->setValue('parent_id_prim', $qb->createNamedParameter($qb->prim($document->getParentId())))
 			->setValue('public', $qb->createNamedParameter(($document->isPublic()) ? '1' : '0'))
-			->setValue('transcoded', $qb->createNamedParameter($document->getTranscoded(), IQueryBuilder::PARAM_INT));
+			->setValue('transcoded', $qb->createNamedParameter($document->getTranscoded(), IQueryBuilder::PARAM_INT))
+			->setValue('ai_source', $qb->createNamedParameter($document->getAiSource(), IQueryBuilder::PARAM_INT));
 
 		// generate Meta
 		$document->convertToMediaAttachment();
@@ -80,7 +81,8 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->set('description', $qb->createNamedParameter($document->getDescription()))
 			->set('parent_id', $qb->createNamedParameter($document->getParentId()))
 			->set('parent_id_prim', $qb->createNamedParameter($qb->prim($document->getParentId())))
-			->set('public', $qb->createNamedParameter(($document->isPublic()) ? '1' : '0'));
+			->set('public', $qb->createNamedParameter(($document->isPublic()) ? '1' : '0'))
+			->set('ai_source', $qb->createNamedParameter($document->getAiSource(), IQueryBuilder::PARAM_INT));
 
 		try {
 			$qb->set(
@@ -212,6 +214,9 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 		// was created with and the copy is served with no Content-Type at all.
 		$qb->set('mime_type', $qb->createNamedParameter($document->getMimeType()));
 		$qb->set('media_type', $qb->createNamedParameter($document->getMediaType()));
+		// read off the downloaded bytes, like the mime, and stripped from them
+		// a moment later: this write is the only record of it
+		$qb->set('ai_source', $qb->createNamedParameter($document->getAiSource(), IQueryBuilder::PARAM_INT));
 
 		$qb->executeStatement();
 	}

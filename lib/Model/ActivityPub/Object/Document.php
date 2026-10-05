@@ -19,6 +19,7 @@ use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaDim;
 use OCA\Social\Model\Client\AttachmentMetaFocus;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Service\ImageMetadataService;
 use OCP\IURLGenerator;
 
 /**
@@ -80,6 +81,18 @@ class Document extends ACore implements JsonSerializable {
 	 * conversion to wait for.
 	 */
 	private int $transcoded = 0;
+
+	/** `social_cache_doc.ai_source`: nothing stated, or one of the two IPTC terms. */
+	public const AI_SOURCE_NONE = 0;
+	public const AI_SOURCE_TRAINED = 1;
+	public const AI_SOURCE_COMPOSITE = 2;
+
+	/**
+	 * The machine-generation provenance the picture's metadata stated when it
+	 * was stored, read before that metadata was stripped. Carried on the row
+	 * because the bytes no longer say it.
+	 */
+	private int $aiSource = self::AI_SOURCE_NONE;
 	private array $localCopySize = [0, 0];
 	private array $resizedCopySize = [0, 0];
 
@@ -429,6 +442,7 @@ class Document extends ACore implements JsonSerializable {
 		$this->setSizeBytes($this->getInt('size', $data, 0));
 		$this->setLaddered($this->getInt('laddered', $data, 0));
 		$this->setTranscoded($this->getInt('transcoded', $data, 0));
+		$this->setAiSource($this->getInt('ai_source', $data, self::AI_SOURCE_NONE));
 		$this->setDescription($this->get('description', $data, ''));
 		$this->setMediaType($this->get('media_type', $data, ''));
 		$this->setMimeType($this->get('mime_type', $data, ''));
@@ -544,6 +558,30 @@ class Document extends ACore implements JsonSerializable {
 			'social.MediaApi.mediaStream',
 			['nid' => (string)$this->getNid()]
 		);
+	}
+
+	public function getAiSource(): int {
+		return $this->aiSource;
+	}
+
+	public function setAiSource(int $aiSource): self {
+		$this->aiSource = $aiSource;
+
+		return $this;
+	}
+
+	/** Whether the picture said a model produced it, in whole or in part. */
+	public function isAiGenerated(): bool {
+		return $this->aiSource > self::AI_SOURCE_NONE;
+	}
+
+	/** The `ai_source` value for what `ImageMetadataService::digitalSourceType()` read. */
+	public static function aiSourceFor(string $digitalSourceType): int {
+		return match ($digitalSourceType) {
+			ImageMetadataService::SOURCE_TRAINED => self::AI_SOURCE_TRAINED,
+			ImageMetadataService::SOURCE_COMPOSITE => self::AI_SOURCE_COMPOSITE,
+			default => self::AI_SOURCE_NONE,
+		};
 	}
 
 	public function getLaddered(): int {
@@ -683,7 +721,8 @@ class Document extends ACore implements JsonSerializable {
 
 		$media->setMeta($this->getMeta())
 			->setDescription($this->getDescription())
-			->setBlurHash($this->getBlurHash());
+			->setBlurHash($this->getBlurHash())
+			->setAiGenerated($this->isAiGenerated());
 
 		return $media;
 	}

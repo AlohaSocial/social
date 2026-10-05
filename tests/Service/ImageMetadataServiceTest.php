@@ -210,4 +210,134 @@ class ImageMetadataServiceTest extends TestCase {
 		$this->assertNotFalse($decoded, 'a stripped PNG no longer decodes');
 		$this->assertSame(12, imagesx($decoded));
 	}
+
+	// provenance: what a picture says about where it came from
+
+	private const CV = 'http://cv.iptc.org/newscodes/digitalsourcetype/';
+
+	/** A JPEG whose APP1 XMP packet carries the given body inside its rdf:Description. */
+	private function jpegWithXmp(string $description, string $attributes = ''): string {
+		$xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+			. '<rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/"' . $attributes . '>'
+			. $description . '</rdf:Description></rdf:RDF></x:xmpmeta>';
+
+		return "\xFF\xD8"
+			. $this->segment(0xE0, "JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+			. $this->segment(0xE1, "http://ns.adobe.com/xap/1.0/\x00" . $xmp)
+			. $this->segment(0xDB, str_repeat("\x01", 64))
+			. "\xFF\xDA" . "\x00\x0C" . str_repeat("\x11", 10)
+			. str_repeat("\x7F", 32)
+			. "\xFF\xD9";
+	}
+
+	public function testTheSourceTypeIsReadFromAnXmpAttribute(): void {
+		$jpeg = $this->jpegWithXmp('', ' Iptc4xmpExt:DigitalSourceType="' . self::CV . 'trainedAlgorithmicMedia"');
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+	}
+
+	public function testTheSourceTypeIsReadFromAnXmpElement(): void {
+		$jpeg = $this->jpegWithXmp(
+			'<Iptc4xmpExt:DigitalSourceType>' . self::CV . 'compositeWithTrainedAlgorithmicMedia</Iptc4xmpExt:DigitalSourceType>'
+		);
+
+		$this->assertSame(ImageMetadataService::SOURCE_COMPOSITE, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+	}
+
+	public function testTheSourceTypeIsReadFromAResourceElement(): void {
+		$jpeg = $this->jpegWithXmp('<Iptc4xmpExt:DigitalSourceType rdf:resource="' . self::CV . 'trainedAlgorithmicMedia"/>');
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+	}
+
+	public function testTheBareTermCountsAndSoDoesAnUnprefixedProperty(): void {
+		// some writers state the term rather than the NewsCodes URL, and some
+		// leave the namespace prefix off
+		$jpeg = $this->jpegWithXmp('<DigitalSourceType>TrainedAlgorithmicMedia</DigitalSourceType>');
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+		$this->assertSame(
+			ImageMetadataService::SOURCE_COMPOSITE,
+			$this->service->digitalSourceType($this->jpegWithXmp('', ' DigitalSourceType="compositewithtrainedalgorithmicmedia"'), 'image/jpeg')
+		);
+	}
+
+	public function testAnotherSourceTypeIsNotAGeneratedOne(): void {
+		// IPTC has a dozen terms; a scan of a painting or a photo off a camera
+		// are stated too, and must not be read as a model's output
+		foreach (['digitalCapture', 'negativeFilm', 'digitalCreation', 'algorithmicMedia'] as $term) {
+			$jpeg = $this->jpegWithXmp('', ' Iptc4xmpExt:DigitalSourceType="' . self::CV . $term . '"');
+
+			$this->assertSame('', $this->service->digitalSourceType($jpeg, 'image/jpeg'), $term);
+		}
+	}
+
+	/**
+	 * A C2PA manifest rides in APP11 (JUMBF) segments and is CBOR, which is
+	 * not parsed here; what is looked for is the term's path as bytes, which
+	 * the `c2pa.actions` assertion carries verbatim.
+	 */
+	public function testTheSourceTypeIsFoundInsideAC2paManifest(): void {
+		$manifest = "\x00\x00\x00\x1Cjumb" . random_bytes(40)
+			. "\xA2\x67actions\x81\xA2\x66action\x6Cc2pa.created\x71digitalSourceType\x78\x3A"
+			. 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia'
+			. random_bytes(20);
+		$jpeg = "\xFF\xD8"
+			. $this->segment(0xE0, "JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+			. $this->segment(0xEB, "JP\x00\x01" . $manifest)
+			. $this->segment(0xDB, str_repeat("\x01", 64))
+			. "\xFF\xDA" . "\x00\x0C" . str_repeat("\x11", 10)
+			. "\xFF\xD9";
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+	}
+
+	public function testTheSourceTypeIsReadFromAPngTextChunk(): void {
+		$xmp = '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+			. '<rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/">'
+			. '<Iptc4xmpExt:DigitalSourceType>' . self::CV . 'trainedAlgorithmicMedia</Iptc4xmpExt:DigitalSourceType>'
+			. '</rdf:Description></rdf:RDF></x:xmpmeta>';
+		$png = "\x89PNG\r\n\x1a\n"
+			. $this->pngChunk('IHDR', str_repeat("\x00", 13))
+			. $this->pngChunk('iTXt', "XML:com.adobe.xmp\x00\x00\x00\x00\x00" . $xmp)
+			. $this->pngChunk('IDAT', str_repeat("\x55", 16))
+			. $this->pngChunk('IEND', '');
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($png, 'image/png'));
+	}
+
+	public function testAPictureThatStatesNothingAnswersNothing(): void {
+		$this->assertSame('', $this->service->digitalSourceType($this->jpegWithMetadata(), 'image/jpeg'));
+		$this->assertSame('', $this->service->digitalSourceType($this->jpegWithXmp(''), 'image/jpeg'));
+		$this->assertSame('', $this->service->digitalSourceType('', 'image/jpeg'));
+		$this->assertSame('', $this->service->digitalSourceType('not a picture at all', 'image/gif'));
+	}
+
+	public function testOnlyAPictureIsAskedAboutItsProvenance(): void {
+		// a video or a PDF can carry the same string; this reader is for images
+		$bytes = 'DigitalSourceType="' . self::CV . 'trainedAlgorithmicMedia"';
+
+		$this->assertSame('', $this->service->digitalSourceType($bytes, 'video/mp4'));
+		$this->assertSame('', $this->service->digitalSourceType($bytes, 'application/pdf'));
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($bytes, 'image/webp'));
+	}
+
+	public function testTheSourceTypeHasToBeReadBeforeStripping(): void {
+		$jpeg = $this->jpegWithXmp('', ' Iptc4xmpExt:DigitalSourceType="' . self::CV . 'trainedAlgorithmicMedia"');
+
+		$this->assertSame(ImageMetadataService::SOURCE_TRAINED, $this->service->digitalSourceType($jpeg, 'image/jpeg'));
+
+		$stripped = $this->service->strip($jpeg, 'image/jpeg');
+
+		// the XMP went with the rest of the metadata, and the statement with it
+		$this->assertSame('', $this->service->digitalSourceType($stripped, 'image/jpeg'));
+	}
+
+	public function testTheWindowAfterThePropertyNameIsBounded(): void {
+		// a property whose value is further away than the window is not found
+		// by the XMP reader; only the path search, which is linear, still can
+		$far = '<DigitalSourceType>' . str_repeat(' ', 600) . 'trainedAlgorithmicMedia</DigitalSourceType>';
+
+		$this->assertSame('', $this->service->digitalSourceType($this->jpegWithXmp($far), 'image/jpeg'));
+	}
 }

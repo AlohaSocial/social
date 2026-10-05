@@ -74,6 +74,7 @@
    @property {object} meta -
    @property {string} description - Ex: "test media description"
    @property {string} blurhash - Ex: "UFBWY:8_0Jxv4mx]t8t64.%M-:IUWGWAt6M}"
+   @property {boolean} [ai_generated] - whether the picture's own metadata says it was machine-generated
  */
 
 /**
@@ -159,6 +160,7 @@
  * @property {?object} [video] - PeerTube's metadata for a video post, null for anything else
  * @property {string} [type] - set when a timeline entry is a notification about the post rather than the post itself
  * @property {string} [delivery] - `held` while a video is being converted before the post goes to other servers; only ever on the author's own copy
+ * @property {boolean} [ai_generated] - made with AI, by the author's mark (`#AIgenerated`), the tag or a picture's metadata
  */
 
 /**

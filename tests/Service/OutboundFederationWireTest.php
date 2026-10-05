@@ -662,6 +662,7 @@ class OutboundFederationWireTest extends TestCase {
 			$this->noExternalQuota(),
 			new NullLogger(),
 			$this->createStub(\OCA\Social\Service\VideoTranscodeService::class),
+			$this->createStub(\OCA\Social\Service\ImageMetadataService::class),
 		);
 
 		$service->retrieveContent('https://' . self::REMOTE . '/media/1.png?sig=abc');

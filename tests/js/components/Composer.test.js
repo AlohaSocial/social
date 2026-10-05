@@ -2667,6 +2667,106 @@ describe('Composer', () => {
 		})
 	})
 
+	/**
+	 * The author's word that a post was made with AI is a hashtag in the
+	 * words, `#AIgenerated`, because a tag is the one thing every server
+	 * already carries. The button is a view of the words, not a field of
+	 * its own: it reads its state off them and writes into them.
+	 */
+	describe('marking a post as made with AI', () => {
+		const aiButton = (wrapper) => wrapper.find('button[aria-label="Made with AI"]')
+		const pressed = (wrapper) => aiButton(wrapper).attributes('aria-pressed')
+		const stored = () => JSON.parse(localStorage.getItem('social.composer.draft::alice') ?? 'null')
+
+		afterEach(() => {
+			localStorage.clear()
+		})
+
+		it('is off over words that do not carry the tag', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'A sunset')
+
+			expect(pressed(wrapper)).toBe('false')
+		})
+
+		it('writes the tag into the words when pressed, and the draft and the post carry it', async () => {
+			const { wrapper, store } = mountComposer()
+			await setContent(wrapper, 'A sunset')
+
+			await aiButton(wrapper).trigger('click')
+
+			expect(typed(wrapper)).toBe('A sunset #AIgenerated')
+			expect(pressed(wrapper)).toBe('true')
+			// through the same path a restored draft takes, so what is on
+			// disk is what is in the box
+			expect(stored().text).toBe('A sunset #AIgenerated')
+
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(postedStatus(store).status).toBe('A sunset #AIgenerated')
+		})
+
+		it('takes the tag out again when pressed a second time', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, 'A sunset')
+			await aiButton(wrapper).trigger('click')
+
+			await aiButton(wrapper).trigger('click')
+
+			expect(typed(wrapper)).toBe('A sunset')
+			expect(pressed(wrapper)).toBe('false')
+			expect(stored().text).toBe('A sunset')
+		})
+
+		it('is the whole of an empty post when pressed first', async () => {
+			const { wrapper } = mountComposer()
+
+			await aiButton(wrapper).trigger('click')
+
+			expect(typed(wrapper)).toBe('#AIgenerated')
+			expect(canPost(wrapper)).toBe(true)
+		})
+
+		it('lights up when the tag is typed by hand, whatever its case', async () => {
+			const { wrapper } = mountComposer()
+
+			await setContent(wrapper, 'A sunset #aigenerated')
+			expect(pressed(wrapper)).toBe('true')
+
+			await setContent(wrapper, 'A sunset #AIgeneratedArt')
+			expect(pressed(wrapper)).toBe('false')
+		})
+
+		it('takes a tag typed by hand out, in the case it was typed in', async () => {
+			const { wrapper } = mountComposer()
+			await setContent(wrapper, '#AIGENERATED A sunset')
+
+			await aiButton(wrapper).trigger('click')
+
+			expect(typed(wrapper)).toBe('A sunset')
+			expect(pressed(wrapper)).toBe('false')
+		})
+
+		it('stays on when a post that carried the tag is written again', async () => {
+			const { wrapper } = mountComposer()
+
+			eventBus.emit('composer-redraft', {
+				id: '101',
+				content: '<p>A sunset <a href="https://cloud.example.org/tag/AIgenerated" class="mention hashtag" rel="tag">#<span>AIgenerated</span></a></p>',
+				spoiler_text: '',
+				visibility: 'public',
+				language: 'en',
+				media_attachments: [],
+				account: bob,
+			})
+			await flushPromises()
+
+			expect(typed(wrapper)).toBe('A sunset #AIgenerated')
+			expect(pressed(wrapper)).toBe('true')
+		})
+	})
+
 	describe('writing a deleted post again', () => {
 		const deleted = (extra = {}) => ({
 			id: '101',

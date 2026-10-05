@@ -91,7 +91,7 @@ class MediaAttachmentTest extends TestCase {
 		$this->assertArrayHasKey('description', $local);
 		$this->assertNull($local['description']);
 		$this->assertSame(
-			['id', 'type', 'media_type', 'url', 'preview_url', 'hls_url', 'remote_url', 'cache_error', 'meta', 'description', 'blurhash'],
+			['id', 'type', 'media_type', 'url', 'preview_url', 'hls_url', 'remote_url', 'cache_error', 'meta', 'description', 'blurhash', 'ai_generated'],
 			array_keys($local)
 		);
 	}
@@ -363,6 +363,21 @@ class MediaAttachmentTest extends TestCase {
 		$this->assertSame(
 			'https://cloud.example.org/index.php/apps/social/media/abc.jpeg',
 			$media->asDocument()['url']
+		);
+	}
+
+	public function testTheEntityStatesWhetherThePictureSaidAModelMadeIt(): void {
+		$this->withUrlGenerator();
+		$attachment = (new MediaAttachment())->import($this->mastodonAttachment());
+
+		$this->assertFalse($attachment->asLocal()['ai_generated']);
+		$this->assertTrue($attachment->setAiGenerated(true)->asLocal()['ai_generated']);
+	}
+
+	public function testTheProvenanceFlagIsReadBackOffAStoredEntity(): void {
+		$this->assertFalse((new MediaAttachment())->import($this->mastodonAttachment())->isAiGenerated());
+		$this->assertTrue(
+			(new MediaAttachment())->import(array_merge($this->mastodonAttachment(), ['ai_generated' => true]))->isAiGenerated()
 		);
 	}
 }

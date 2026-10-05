@@ -207,6 +207,7 @@ class CoreRequestBuilder {
 			'error',
 			'transcoded',
 			'laddered',
+			'ai_source',
 			'creation',
 			'caching'
 		],

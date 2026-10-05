@@ -183,6 +183,24 @@ class DocumentInterfaceTest extends ActivityPubTestCase {
 		$this->assertSame(42, $incoming->getNid());
 	}
 
+	/**
+	 * Provenance is read off the bytes when the copy is made and the wire
+	 * never carries it, so a re-delivered attachment arrives stating nothing
+	 * and must not overwrite what the row learnt.
+	 */
+	public function testAReDeliveredDocumentKeepsTheProvenanceTheRowRecorded(): void {
+		$stored = $this->document();
+		$stored->setNid(42);
+		$stored->setAiSource(Document::AI_SOURCE_TRAINED);
+		$this->cacheDocumentsRequest->method('getById')->with(self::DOCUMENT)->willReturn($stored);
+
+		$incoming = $this->document();
+
+		$this->handler->save($incoming);
+
+		$this->assertSame(Document::AI_SOURCE_TRAINED, $incoming->getAiSource());
+	}
+
 	/** A streamed video deliberately has no copy, and must not gain one. */
 	public function testAReDeliveredStreamedDocumentStaysStreamed(): void {
 		$stored = $this->document();

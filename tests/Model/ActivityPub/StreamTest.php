@@ -15,12 +15,15 @@ use OCA\Social\Interfaces\Object\DocumentInterface;
 use OCA\Social\Interfaces\Object\ImageInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\StreamAction;
+use OCA\Social\Service\AiContentService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -476,6 +479,63 @@ class StreamTest extends TestCase {
 
 		$this->assertArrayNotHasKey('delivery', (new Note())->setDeliveryHeld(false)->exportAsLocal());
 		$this->assertArrayNotHasKey('delivery', (new Note())->exportAsLocal());
+	}
+
+	// `ai_generated`: what the post says about itself, never a judgement
+
+	public function testAnOrdinaryPostIsNotMarkedAsMadeWithAi(): void {
+		$status = (new Note())->setHashtags(['cats'])->exportAsLocal();
+
+		$this->assertArrayHasKey('ai_generated', $status);
+		$this->assertFalse($status['ai_generated']);
+		$this->assertFalse((new Note())->exportAsLocal()['ai_generated']);
+	}
+
+	public function testAPostTaggedAsMadeWithAiSaysSo(): void {
+		foreach (['aigenerated', 'AIgenerated', '#MidJourney'] as $tag) {
+			$this->assertTrue((new Note())->setHashtags(['cats', $tag])->exportAsLocal()['ai_generated'], $tag);
+		}
+	}
+
+	public function testAPostWhosePictureStatesProvenanceSaysSo(): void {
+		$note = new Note();
+		$note->setAttachments([new MediaAttachment(), (new MediaAttachment())->setAiGenerated(true)]);
+
+		$status = $note->exportAsLocal();
+
+		$this->assertTrue($status['ai_generated']);
+		$this->assertFalse($status['media_attachments'][0]->isAiGenerated());
+		$this->assertTrue($status['media_attachments'][1]->isAiGenerated());
+	}
+
+	public function testABoostCarriesTheLabelOfThePostItBoostsOnBothLevels(): void {
+		$boost = new Announce();
+		$boost->setObject((new Note())->setHashtags(['stablediffusion']));
+
+		$status = $boost->exportAsLocal();
+
+		$this->assertTrue($status['reblog']['ai_generated'], 'the boosted post is labelled');
+		$this->assertTrue($status['ai_generated'], 'and so is the boost, which has no tags of its own');
+
+		$plain = new Announce();
+		$plain->setObject((new Note())->setHashtags(['cats']));
+		$this->assertFalse($plain->exportAsLocal()['ai_generated']);
+	}
+
+	/**
+	 * Inside a request the container hands out the service, and with it the
+	 * tags the administrator added; a model exported with no container to ask
+	 * falls back to the built-in list, which is what every other test here
+	 * exercises.
+	 */
+	public function testTheInstancesOwnTagsCountWhenTheServiceIsThere(): void {
+		$configService = $this->createStub(ConfigService::class);
+		$configService->method('getAppValue')->willReturn('synthetic');
+		\OC::$server->register(AiContentService::class, new AiContentService($configService));
+
+		$this->assertTrue((new Note())->setHashtags(['Synthetic'])->exportAsLocal()['ai_generated']);
+		$this->assertTrue((new Note())->setHashtags(['aiart'])->exportAsLocal()['ai_generated']);
+		$this->assertFalse((new Note())->setHashtags(['cats'])->exportAsLocal()['ai_generated']);
 	}
 
 	public function testExportAsLocalWithoutActorHasNoAccount(): void {

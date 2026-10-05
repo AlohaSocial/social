@@ -244,6 +244,19 @@ the author's own copy while its deliveries wait for a video to be converted
 Mastodon client ignores an unknown key; the app's own web client draws the
 "still converting" hint from it rather than guessing from the attachment type.
 
+Another: every `Status` and every `MediaAttachment` carries `ai_generated`
+(bool, always present) — whether the post *says* it was made with AI, by one
+of a set of hashtags (`#aigenerated`, `#midjourney`, … plus the administrator's
+`ai_tags`) or by a picture whose metadata stated IPTC `DigitalSourceType`
+provenance when it was stored. A label the post carries, never a judgement
+about its content. The reader's switch for it is `GET`/`PATCH
+/api/v1/social/ai_content` under the filter scopes, echoed by
+`/api/v1/preferences` as `reading:hide:ai`; turned on, such posts are dropped
+server-side in `FilterService::apply()` — every timeline, thread, profile and
+notification page, lists included — so a Mastodon client that knows nothing
+of the switch still shows what the reader chose. One that reads the key can
+draw a quiet mark for readers who left the switch off.
+
 A second extension lives beside the notifications: `GET`/`PATCH
 /api/v1/social/notification_delivery`, and the `notifications:delivery` key
 `/api/v1/preferences` echoes. Mastodon has nothing to compare it with — its

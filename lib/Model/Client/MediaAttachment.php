@@ -56,6 +56,8 @@ class MediaAttachment implements JsonSerializable {
 	private ?AttachmentMeta $meta = null;
 	private string $description = '';
 	private string $blurHash = '';
+	/** whether the picture's metadata stated machine-generation provenance when it was stored */
+	private bool $aiGenerated = false;
 	private int $exportFormat = ACore::FORMAT_LOCAL;
 
 	public function setId(string $id): self {
@@ -176,6 +178,16 @@ class MediaAttachment implements JsonSerializable {
 		return $this->blurHash;
 	}
 
+	public function setAiGenerated(bool $aiGenerated): self {
+		$this->aiGenerated = $aiGenerated;
+
+		return $this;
+	}
+
+	public function isAiGenerated(): bool {
+		return $this->aiGenerated;
+	}
+
 	public function setExportFormat(int $exportFormat): self {
 		$this->exportFormat = $exportFormat;
 
@@ -202,6 +214,7 @@ class MediaAttachment implements JsonSerializable {
 		$this->setCacheError($this->getInt('cache_error', $data, 0));
 		$this->setDescription($this->get('description', $data));
 		$this->setBlurHash($this->get('blurhash', $data));
+		$this->setAiGenerated($this->getBool('ai_generated', $data));
 
 		$meta = new AttachmentMeta();
 		$meta->import($this->getArray('meta', $data));
@@ -268,6 +281,9 @@ class MediaAttachment implements JsonSerializable {
 			'meta' => ($meta === null || $meta === []) ? null : (object)$meta,
 			'description' => ($this->getDescription() === '') ? null : $this->getDescription(),
 			'blurhash' => ($this->getBlurHash() === '') ? null : $this->getBlurHash(),
+			// not Mastodon's: whether the picture's metadata stated that a
+			// model produced it, read when it was stored. Always a bool
+			'ai_generated' => $this->isAiGenerated(),
 		];
 	}
 
