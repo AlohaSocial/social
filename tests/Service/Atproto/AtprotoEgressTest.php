@@ -255,6 +255,27 @@ class AtprotoEgressTest extends TestCase {
 		$this->egress->delete($post);
 	}
 
+	public function testOwnNativeDeletionUsesTheLinkedAccountAndRemovesTheMapping(): void {
+		$account = $this->account();
+		$link = (new AtprotoLink())
+			->setLocalId(self::POST)
+			->setAtUri('at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3native')
+			->setDid(self::DID)
+			->setCollection(AtprotoIngress::COLLECTION)
+			->setRkey('3native');
+		$this->atprotoRequest->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
+		$this->atprotoRequest->expects($this->once())->method('getLinkByLocalId')->with(self::POST)->willReturn($link);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.deleteRecord',
+			['repo' => self::DID, 'collection' => AtprotoIngress::COLLECTION, 'rkey' => '3native'],
+			$account,
+			'https://pds.example',
+		)->willReturn([]);
+		$this->atprotoRequest->expects($this->once())->method('deleteLinkByLocalId')->with(self::POST);
+
+		$this->egress->deleteOwn('alice', self::POST);
+	}
+
 	public function testEditReplacesTheMappedRecordWithoutCreatingANewPost(): void {
 		$post = $this->post();
 		$post->setContent('<p>Edited<br>Bluesky</p>');

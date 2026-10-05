@@ -62,4 +62,14 @@ describe('ProfileStatusCard', () => {
 		expect(del).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses/42')
 		expect(wrapper.emitted('deleted')).toHaveLength(1)
 	})
+
+	it('deletes a native Bluesky post through the ATProto endpoint', async () => {
+		const nativeStatus = { ...status, id: 'https://cloud.example/apps/social/ap/bluesky/did:plc:alice/app.bsky.feed.post/3native' }
+		const del = vi.spyOn(axios, 'delete').mockResolvedValue({ data: {} })
+		const wrapper = mount(ProfileStatusCard, { props: { status: nativeStatus, canDelete: true, nativeDelete: true }, global: { stubs } })
+		await wrapper.findAll('.profile-status-card__toolbar button')[3].trigger('click')
+		await flushPromises()
+		expect(del).toHaveBeenCalledWith('/index.php/apps/social/api/v1/atproto/post', { params: { id: nativeStatus.id } })
+		expect(wrapper.emitted('deleted')).toHaveLength(1)
+	})
 })

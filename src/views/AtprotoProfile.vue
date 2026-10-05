@@ -52,6 +52,9 @@
 				v-for="status in statuses"
 				:key="status.id"
 				:status="status"
+				:canDelete="viewerCanEdit"
+				:nativeDelete="viewerCanEdit"
+				@deleted="statuses = statuses.filter((entry) => entry.id !== status.id)"
 				@reply="replyTo = $event" />
 		</ul>
 	</section>

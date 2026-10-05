@@ -317,6 +317,38 @@ class AtprotoEgress {
 		$this->atprotoRequest->deleteLinkByLocalId($post->getId());
 	}
 
+	/**
+	 * Deletes a native record from the linked author's repository.
+	 *
+	 * This is the profile-page counterpart to delete(Stream): imported/native
+	 * posts have no local ActivityPub delete lifecycle, so the controller must
+	 * address the mapping directly while still proving that the signed-in
+	 * account owns the DID that owns the record.
+	 *
+	 * @throws AtprotoException when the account is missing, the mapping is not
+	 *                         known, or the PDS refuses the delete
+	 */
+	public function deleteOwn(string $userId, string $localId): void {
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($account === null) {
+			throw new AtprotoException('link a Bluesky account before deleting posts', 401);
+		}
+		$link = $this->atprotoRequest->getLinkByLocalId($localId);
+		if ($link === null || $link->getCollection() !== AtprotoIngress::COLLECTION) {
+			throw new AtprotoException('this Bluesky post is no longer known here', 404);
+		}
+		if ($link->getDid() !== $account->getDid()) {
+			throw new AtprotoException('you may only delete your own Bluesky posts', 403);
+		}
+
+		$this->client->authedPost('com.atproto.repo.deleteRecord', [
+			'repo' => $account->getDid(),
+			'collection' => $link->getCollection(),
+			'rkey' => $link->getRkey(),
+		], $account, $account->getPds());
+		$this->atprotoRequest->deleteLinkByLocalId($localId);
+	}
+
 	private function shouldMirror(Stream $post): bool {
 		return ($post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') !== 'fediverse'
 			&& $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1'

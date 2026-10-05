@@ -76,6 +76,7 @@ export default {
 	props: {
 		status: { type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object), required: true },
 		canDelete: { type: Boolean, default: false },
+		nativeDelete: { type: Boolean, default: false },
 	},
 
 	emits: ['reply', 'deleted'],
@@ -117,12 +118,17 @@ export default {
 		},
 
 		async deletePost() {
-			if (this.deleting || !this.canDelete || String(this.status.id).includes('/')) {
+			if (this.deleting || !this.canDelete) {
 				return
 			}
 			this.deleting = true
 			try {
-				await axios.delete(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(String(this.status.id))}`))
+				const id = String(this.status.id)
+				if (this.nativeDelete) {
+					await axios.delete(generateUrl('apps/social/api/v1/atproto/post'), { params: { id } })
+				} else {
+					await axios.delete(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(id)}`))
+				}
 				this.$emit('deleted', this.status)
 			} catch (error) {
 				logger.error('Failed to delete profile post', { error, statusId: this.status.id })

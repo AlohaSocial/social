@@ -16,6 +16,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\Atproto\AtprotoAccountService;
 use OCA\Social\Service\Atproto\AtprotoEngagementService;
+use OCA\Social\Service\Atproto\AtprotoEgress;
 use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Service\Atproto\AtprotoProfileService;
 use OCA\Social\Service\FollowService;
@@ -47,6 +48,7 @@ class AtprotoController extends Controller {
 		private IUserSession $userSession,
 		private AtprotoAccountService $accountService,
 		private AtprotoEngagementService $engagementService,
+		private AtprotoEgress $egress,
 		private AtprotoIdentity $identity,
 		private FollowService $followService,
 		private AtprotoRequest $atprotoRequest,
@@ -188,6 +190,28 @@ class AtprotoController extends Controller {
 					(string)($body['description'] ?? '')
 				),
 			], Http::STATUS_OK);
+		} catch (AtprotoException $e) {
+			return new DataResponse(['message' => $e->getMessage()], $e->getStatus() >= 400 ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
+	/** Delete one native post owned by the linked Bluesky account. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 300)]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/atproto/post')]
+	public function deletePost(): DataResponse {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return $this->signedOut();
+		}
+
+		$localId = trim((string)$this->request->getParam('id', ''));
+		if ($localId === '') {
+			return new DataResponse(['message' => 'a Bluesky post id is required'], Http::STATUS_BAD_REQUEST);
+		}
+		try {
+			$this->egress->deleteOwn($userId, $localId);
+			return new DataResponse([], Http::STATUS_OK);
 		} catch (AtprotoException $e) {
 			return new DataResponse(['message' => $e->getMessage()], $e->getStatus() >= 400 ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
 		}
