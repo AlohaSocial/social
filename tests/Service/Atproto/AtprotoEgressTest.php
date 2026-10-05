@@ -276,6 +276,45 @@ class AtprotoEgressTest extends TestCase {
 		$this->egress->deleteOwn('alice', self::POST);
 	}
 
+	public function testOwnNativeUpdatePreservesRecordMetadataAndSwapsTheCid(): void {
+		$account = $this->account();
+		$link = (new AtprotoLink())
+			->setLocalId(self::POST)
+			->setAtUri('at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3native')
+			->setCid('bafy-old')
+			->setDid(self::DID)
+			->setCollection(AtprotoIngress::COLLECTION)
+			->setRkey('3native');
+		$this->atprotoRequest->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
+		$this->atprotoRequest->expects($this->once())->method('getLinkByLocalId')->with(self::POST)->willReturn($link);
+		$this->client->expects($this->once())->method('authedGet')->with(
+			'com.atproto.repo.getRecord',
+			['repo' => self::DID, 'collection' => AtprotoIngress::COLLECTION, 'rkey' => '3native'],
+			$account,
+			'https://pds.example',
+		)->willReturn(['cid' => 'bafy-old', 'value' => [
+			'$type' => 'app.bsky.feed.post', 'text' => 'old', 'createdAt' => '2026-01-01T00:00:00Z',
+			'langs' => ['de'], 'embed' => ['old' => true],
+		]]);
+		$this->client->expects($this->once())->method('authedPost')->with(
+			'com.atproto.repo.putRecord',
+			$this->callback(static function (array $request): bool {
+				return $request['swapRecord'] === 'bafy-old'
+					&& $request['record']['text'] === 'new text'
+					&& $request['record']['createdAt'] === '2026-01-01T00:00:00Z'
+					&& $request['record']['embed'] === ['old' => true]
+					&& !isset($request['record']['facets']);
+			}),
+			$account,
+			'https://pds.example',
+		)->willReturn(['cid' => 'bafy-new']);
+		$this->atprotoRequest->expects($this->once())->method('saveLink')->with($this->callback(
+			static fn (AtprotoLink $saved): bool => $saved->getCid() === 'bafy-new'
+		));
+
+		$this->egress->updateOwn('alice', self::POST, 'new text');
+	}
+
 	public function testEditReplacesTheMappedRecordWithoutCreatingANewPost(): void {
 		$post = $this->post();
 		$post->setContent('<p>Edited<br>Bluesky</p>');

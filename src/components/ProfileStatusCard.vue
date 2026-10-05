@@ -22,6 +22,13 @@
 						{{ t('social', 'Reply') }}
 					</NcButton>
 					<NcButton
+						v-if="canEdit"
+						variant="tertiary"
+						:disabled="editing || savingEdit"
+						@click="beginEdit">
+						{{ t('social', 'Edit') }}
+					</NcButton>
+					<NcButton
 						v-if="canDelete"
 						variant="tertiary"
 						:disabled="deleting"
@@ -30,6 +37,19 @@
 					</NcButton>
 					<a v-if="postHref" class="profile-status-card__open" :href="postHref">{{ t('social', 'Open post') }}</a>
 				</div>
+				<form v-if="editing" class="profile-status-card__editor" @submit.prevent="saveEdit">
+					<textarea v-model="editText" :disabled="savingEdit" :aria-label="t('social', 'Edit post')" />
+					<NcButton type="submit" variant="primary" :disabled="savingEdit">
+						{{ savingEdit ? t('social', 'Saving…') : t('social', 'Save') }}
+					</NcButton>
+					<NcButton
+						type="button"
+						variant="tertiary"
+						:disabled="savingEdit"
+						@click="editing = false">
+						{{ t('social', 'Cancel') }}
+					</NcButton>
+				</form>
 				<PostReactedBy v-if="likesOpen" :status="status" />
 				<section v-if="commentsOpen" class="profile-status-card__comments" :aria-label="t('social', 'Comments')">
 					<p v-if="commentsLoading" role="status">
@@ -77,12 +97,14 @@ export default {
 		status: { type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status>} */ (Object), required: true },
 		canDelete: { type: Boolean, default: false },
 		nativeDelete: { type: Boolean, default: false },
+		canEdit: { type: Boolean, default: false },
+		nativeEdit: { type: Boolean, default: false },
 	},
 
-	emits: ['reply', 'deleted'],
+	emits: ['reply', 'deleted', 'updated'],
 
 	data() {
-		return { likesOpen: false, commentsOpen: false, comments: [], commentsLoading: false, commentsError: false, deleting: false }
+		return { likesOpen: false, commentsOpen: false, comments: [], commentsLoading: false, commentsError: false, deleting: false, editing: false, savingEdit: false, editText: '' }
 	},
 
 	computed: {
@@ -134,6 +156,27 @@ export default {
 				logger.error('Failed to delete profile post', { error, statusId: this.status.id })
 			} finally {
 				this.deleting = false
+			}
+		},
+
+		beginEdit() {
+			this.editText = String(this.status.text ?? this.status.content ?? '').replace(/<[^>]+>/g, '').trim()
+			this.editing = true
+		},
+
+		async saveEdit() {
+			if (this.savingEdit || !this.canEdit || !this.nativeEdit) {
+				return
+			}
+			this.savingEdit = true
+			try {
+				await axios.put(generateUrl('apps/social/api/v1/atproto/post'), { id: this.status.id, text: this.editText })
+				this.$emit('updated', { ...this.status, text: this.editText, content: `<p>${this.editText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>` })
+				this.editing = false
+			} catch (error) {
+				logger.error('Failed to edit native Bluesky post', { error, statusId: this.status.id })
+			} finally {
+				this.savingEdit = false
 			}
 		},
 	},

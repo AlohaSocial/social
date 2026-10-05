@@ -54,7 +54,10 @@
 				:status="status"
 				:canDelete="viewerCanEdit"
 				:nativeDelete="viewerCanEdit"
+				:canEdit="viewerCanEdit"
+				:nativeEdit="viewerCanEdit"
 				@deleted="statuses = statuses.filter((entry) => entry.id !== status.id)"
+				@updated="statuses = statuses.map((entry) => entry.id === $event.id ? $event : entry)"
 				@reply="replyTo = $event" />
 		</ul>
 	</section>

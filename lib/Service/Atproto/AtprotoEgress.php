@@ -349,6 +349,42 @@ class AtprotoEgress {
 		$this->atprotoRequest->deleteLinkByLocalId($localId);
 	}
 
+	/** Update the text of a native post owned by the linked account. */
+	public function updateOwn(string $userId, string $localId, string $text): void {
+		$account = $this->atprotoRequest->getAccount($userId);
+		if ($account === null) {
+			throw new AtprotoException('link a Bluesky account before editing posts', 401);
+		}
+		$link = $this->atprotoRequest->getLinkByLocalId($localId);
+		if ($link === null || $link->getCollection() !== AtprotoIngress::COLLECTION) {
+			throw new AtprotoException('this Bluesky post is no longer known here', 404);
+		}
+		if ($link->getDid() !== $account->getDid()) {
+			throw new AtprotoException('you may only edit your own Bluesky posts', 403);
+		}
+
+		$current = $this->client->authedGet('com.atproto.repo.getRecord', [
+			'repo' => $account->getDid(),
+			'collection' => $link->getCollection(),
+			'rkey' => $link->getRkey(),
+		], $account, $account->getPds());
+		$record = is_array($current['value'] ?? null) ? $current['value'] : [];
+		$record['$type'] = 'app.bsky.feed.post';
+		$record['text'] = $this->nativeText($text);
+		unset($record['facets']);
+		$answer = $this->client->authedPost('com.atproto.repo.putRecord', [
+			'repo' => $account->getDid(),
+			'collection' => $link->getCollection(),
+			'rkey' => $link->getRkey(),
+			'record' => $record,
+			'swapRecord' => $link->getCid(),
+		], $account, $account->getPds());
+		if (($cid = (string)($answer['cid'] ?? '')) !== '') {
+			$link->setCid($cid);
+		}
+		$this->atprotoRequest->saveLink($link);
+	}
+
 	private function shouldMirror(Stream $post): bool {
 		return ($post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') !== 'fediverse'
 			&& $this->configService->getAppValue(ConfigService::SOCIAL_ATPROTO_ENABLED) === '1'
@@ -377,6 +413,15 @@ class AtprotoEgress {
 		$text = trim(html_entity_decode(strip_tags(preg_replace('/<br\\s*\\/?\\s*>/i', chr(10), $html) ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 		// The network's 300-grapheme maximum is part of its record contract;
 		// cutting here is safer than an opaque PDS validation failure.
+		if (function_exists('grapheme_substr') && grapheme_strlen($text) > 300) {
+			return grapheme_substr($text, 0, 299) . '…';
+		}
+
+		return mb_strlen($text) > 300 ? mb_substr($text, 0, 299) . '…' : $text;
+	}
+
+	private function nativeText(string $text): string {
+		$text = trim(preg_replace('/\r\n?/', "\n", $text) ?? '');
 		if (function_exists('grapheme_substr') && grapheme_strlen($text) > 300) {
 			return grapheme_substr($text, 0, 299) . '…';
 		}

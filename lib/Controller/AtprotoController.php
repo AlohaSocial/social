@@ -217,6 +217,28 @@ class AtprotoController extends Controller {
 		}
 	}
 
+	/** Update one native post owned by the linked Bluesky account. */
+	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 300)]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/atproto/post')]
+	public function updatePost(): DataResponse {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return $this->signedOut();
+		}
+		$body = $this->request->getParams();
+		$localId = trim((string)($body['id'] ?? ''));
+		if ($localId === '' || !array_key_exists('text', $body)) {
+			return new DataResponse(['message' => 'a Bluesky post id and text are required'], Http::STATUS_BAD_REQUEST);
+		}
+		try {
+			$this->egress->updateOwn($userId, $localId, (string)$body['text']);
+			return new DataResponse(['updated' => true], Http::STATUS_OK);
+		} catch (AtprotoException $e) {
+			return new DataResponse(['message' => $e->getMessage()], $e->getStatus() >= 400 ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	/** Public handle-based profile entry point, parallel to `/@account`. */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]

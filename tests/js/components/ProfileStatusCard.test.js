@@ -33,7 +33,7 @@ describe('ProfileStatusCard', () => {
 		expect(wrapper.find('.profile-status-card__open').attributes('href')).toBe(status.url)
 		expect(wrapper.text()).toContain('Likes (3)')
 		expect(wrapper.text()).toContain('Comments (2)')
-		await wrapper.find('.profile-status-card__toolbar button').trigger('click')
+		await wrapper.findAll('.profile-status-card__toolbar button')[0].trigger('click')
 		expect(wrapper.find('.reacted-by-stub').exists()).toBe(true)
 	})
 
@@ -71,5 +71,17 @@ describe('ProfileStatusCard', () => {
 		await flushPromises()
 		expect(del).toHaveBeenCalledWith('/index.php/apps/social/api/v1/atproto/post', { params: { id: nativeStatus.id } })
 		expect(wrapper.emitted('deleted')).toHaveLength(1)
+	})
+
+	it('edits a native Bluesky post through the ATProto endpoint', async () => {
+		const nativeStatus = { ...status, id: 'https://cloud.example/apps/social/ap/bluesky/did:plc:alice/app.bsky.feed.post/3native' }
+		const put = vi.spyOn(axios, 'put').mockResolvedValue({ data: { updated: true } })
+		const wrapper = mount(ProfileStatusCard, { props: { status: nativeStatus, canEdit: true, nativeEdit: true }, global: { stubs } })
+		await wrapper.findAll('.profile-status-card__toolbar button')[3].trigger('click')
+		await wrapper.find('textarea').setValue('Edited post')
+		await wrapper.find('form').trigger('submit')
+		await flushPromises()
+		expect(put).toHaveBeenCalledWith('/index.php/apps/social/api/v1/atproto/post', { id: nativeStatus.id, text: 'Edited post' })
+		expect(wrapper.emitted('updated')?.[0]?.[0]?.text).toBe('Edited post')
 	})
 })
