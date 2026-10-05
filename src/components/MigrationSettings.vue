@@ -174,6 +174,18 @@
 			<p v-if="finishedMoveIn" class="migration__move-in-finish">
 				{{ t('social', 'One step is left, on your old server: tell it to move your followers here. On Mastodon that is Preferences → Account → Move to a different account; enter {handle} there.', { handle: ownHandle || t('social', 'your handle here') }) }}
 			</p>
+			<div v-if="finishedMoveIn && finishedMoveIn.options?.posts" class="migration__move-in-again">
+				<p class="migration__note">
+					{{ t('social', 'Posts written on the old account since the copy are not picked up by anything. Running the copy again brings over only what is new; nothing already here is written twice.') }}
+				</p>
+				<NcButton :disabled="moveStarting || moveInRunning" @click="copyNewerPosts">
+					<template #icon>
+						<NcLoadingIcon v-if="moveStarting" :size="20" />
+						<IconPostOutline v-else :size="20" />
+					</template>
+					{{ t('social', 'Copy newer posts from {acct}', { acct: '@' + finishedMoveIn.options.acct }) }}
+				</NcButton>
+			</div>
 		</section>
 
 		<!-- from elsewhere -->
@@ -580,6 +592,11 @@ export default {
 			return this.imports.find((job) => job.kind === 'move_in' && job.status === 'done')
 		},
 
+		/** @return {boolean} whether a move here is queued or running, which the server allows one of at a time */
+		moveInRunning() {
+			return this.imports.some((job) => job.kind === 'move_in' && (job.status === 'queued' || job.status === 'running'))
+		},
+
 		/**
 		 * The lists of accounts that can be downloaded one at a time.
 		 *
@@ -655,24 +672,57 @@ export default {
 			if (!this.moveAccount || this.moveStarting) {
 				return
 			}
+			const queued = await this.queueMoveIn(this.moveHandle.trim(), this.moveFollows, this.movePosts)
+			if (queued) {
+				this.moveAccount = null
+				this.moveHandle = ''
+				this.loadAliases()
+			}
+		},
+
+		/**
+		 * Runs the copy again for the account a finished move came from, posts
+		 * only: what was written there since comes over, what is here already
+		 * is left alone by the import itself.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async copyNewerPosts() {
+			const from = this.finishedMoveIn?.options?.acct
+			if (!from || this.moveStarting) {
+				return
+			}
+			await this.queueMoveIn('@' + from, false, true)
+		},
+
+		/**
+		 * Queues a move here from `handle` and starts watching the list.
+		 *
+		 * @param {string} handle the old account
+		 * @param {boolean} follows whether to follow who it follows
+		 * @param {boolean} posts whether to copy its posts
+		 * @return {Promise<boolean>} whether the server took it
+		 */
+		async queueMoveIn(handle, follows, posts) {
 			this.moveStarting = true
 			try {
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/migration/move-in'), {
-					handle: this.moveHandle.trim(),
-					follows: this.moveFollows ? '1' : '0',
-					posts: this.movePosts ? '1' : '0',
+					handle,
+					follows: follows ? '1' : '0',
+					posts: posts ? '1' : '0',
 					fetch_media: this.fetchMedia ? '1' : '0',
 				})
 				if (data?.import) {
 					this.imports = [data.import, ...this.imports.filter((job) => job.id !== data.import.id)]
 				}
-				this.moveAccount = null
-				this.moveHandle = ''
-				this.loadAliases()
 				showSuccess(t('social', 'Moving — it runs in the background, and this page shows where it gets to'))
 				this.schedulePoll()
+
+				return true
 			} catch (error) {
 				showError(error?.response?.data?.error || t('social', 'Could not start the move'))
+
+				return false
 			} finally {
 				this.moveStarting = false
 			}
@@ -1331,6 +1381,14 @@ export default {
 
 .migration__move-in-acct {
 	color: var(--color-text-maxcontrast);
+}
+
+.migration__move-in-again {
+	margin-top: 12px;
+
+	.migration__note {
+		margin-bottom: 8px;
+	}
 }
 
 .migration__move-in-finish {

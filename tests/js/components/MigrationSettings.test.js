@@ -316,6 +316,29 @@ describe('Migration', () => {
 		expect(wrapper.find('.migration__move-in-finish').text()).toContain('@alice@cloud.example')
 	})
 
+	it('offers to copy the newer posts of a finished move, posts only, from the same account', async () => {
+		axios.get.mockImplementation((url) => {
+			if (url.endsWith('/migration/imports')) {
+				return Promise.resolve({ data: { imports: [job('move_in', 'done', { done: 5, options: { acct: 'alice@old.example', posts: true } }, { followed: 3, imported: 2 })] } })
+			}
+			if (url.endsWith('/migration/announcement')) {
+				return Promise.resolve({ data: { handle: '@alice@cloud.example' } })
+			}
+			return Promise.resolve({ data: { aliases: [] } })
+		})
+		axios.post.mockResolvedValue({ data: { import: job('move_in', 'queued') } })
+
+		const wrapper = mountPage()
+		await flushPromises()
+		const again = buttonNamed(wrapper, 'Copy newer posts from @alice@old.example')
+		expect(again).toBeTruthy()
+
+		await again.trigger('click')
+		await flushPromises()
+
+		expect(axios.post).toHaveBeenCalledWith(`${API}/migration/move-in`, { handle: '@alice@old.example', follows: '0', posts: '1', fetch_media: '1' })
+	})
+
 	it('shows the reason when the old account cannot be found', async () => {
 		axios.post.mockRejectedValue({ response: { data: { error: 'no account answers to alice@gone.example' } } })
 

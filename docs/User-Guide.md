@@ -793,7 +793,9 @@ hand, it is picked up as one.
   that case. Press **Move here** and this account is marked as also being
   that one, and in the background everyone the old account follows is followed
   from here and its public posts are written here as yours, dated when you
-  wrote them. The list at the top of the page shows where it has got to.
+  wrote them. The list at the top of the page shows where it has got to, and
+  once it is done, **Copy newer posts** under it runs the copy again for
+  whatever you wrote on the old account since — only what is new is written.
   Nothing is sent to anybody; your followers stay where they are until the
   last step, which is done on the old server and which the page tells you
   about when the run is done: on Mastodon, *Preferences → Account → Move to a
