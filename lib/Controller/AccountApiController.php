@@ -23,6 +23,7 @@ use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AdminApiService;
+use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\AvatarService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
@@ -89,6 +90,7 @@ class AccountApiController extends MastodonApiController {
 		private NotificationDeliveryService $notificationDeliveryService,
 		private MultipartBodyService $multipartBodyService,
 		private AdminApiService $adminApiService,
+		private AiContentService $aiContentService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -457,6 +459,10 @@ class AccountApiController extends MastodonApiController {
 				'notifications:delivery' => $this->notificationDeliveryService->of(
 					$this->currentSession()
 				)->toArray(),
+				// this app's own: whether posts labelled as made with AI are
+				// kept out of what this reader is shown, read-only here and
+				// written at `PATCH /api/v1/social/ai_content`
+				'reading:hide:ai' => $this->aiContentService->hides($this->currentSession()),
 			], Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);

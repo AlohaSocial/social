@@ -19,7 +19,9 @@ use OCA\Social\Model\Client\FilterKeyword;
 use OCA\Social\Model\Client\FilterStatus;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
@@ -55,6 +57,9 @@ class FilterControllerTest extends TestCase {
 	/** how many times the controller has asked for one change to be one change */
 	private int $transactions = 0;
 	private TimelineRevisionService|Stub $timelineRevisionService;
+	private AiContentService $aiContentService;
+	/** @var array<string, bool> user id => the AI switch as stored */
+	private array $hidesAi = [];
 	private IUserSession|Stub $userSession;
 
 	/** @var array<string, string> the request headers the controller will see */
@@ -91,12 +96,14 @@ class FilterControllerTest extends TestCase {
 			->willReturnCallback(function (): Person {
 				$viewer = new Person();
 				$viewer->setId($this->viewerId);
+				$viewer->setUserId('alice');
 
 				return $viewer;
 			});
 
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->stubStore();
+		$this->stubAiSwitch();
 
 		// Response::getHeaders() asks the container for the request
 		\OC::$server->register(IRequest::class, $this->request);
@@ -104,6 +111,19 @@ class FilterControllerTest extends TestCase {
 
 	protected function tearDown(): void {
 		\OC::$server->reset();
+	}
+
+	/** The AI switch over a config service that remembers what was written. */
+	private function stubAiSwitch(): void {
+		$configService = $this->createStub(ConfigService::class);
+		$configService->method('getUserValue')
+			->willReturnCallback(fn (string $key, string $userId = ''): string
+				=> ($this->hidesAi[$userId] ?? false) ? '1' : '');
+		$configService->method('setValueForUser')
+			->willReturnCallback(function (string $userId, string $key, string $value): void {
+				$this->hidesAi[$userId] = ($value === '1');
+			});
+		$this->aiContentService = new AiContentService($configService);
 	}
 
 	private function stubStore(): void {
@@ -339,6 +359,7 @@ class FilterControllerTest extends TestCase {
 			$this->clientService,
 			$this->filtersRequest,
 			$this->timelineRevisionService,
+			$this->aiContentService,
 		);
 	}
 
@@ -919,4 +940,85 @@ class FilterControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->deleteStatus(1)->getStatus());
 	}
 
+	// the switch for posts made with AI
+
+	public function testTheAiSwitchIsOffForAnAccountThatNeverTouchedIt(): void {
+		$response = $this->controller()->aiContent();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['hide' => false], $response->getData());
+	}
+
+	public function testTurningTheAiSwitchOnIsStoredAndAnswered(): void {
+		$response = $this->controller()->aiContentUpdate('true');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['hide' => true], $response->getData());
+		$this->assertTrue($this->hidesAi['alice']);
+		$this->assertSame(['hide' => true], $this->controller()->aiContent()->getData());
+	}
+
+	public function testTheAiSwitchTakesEverySpellingOfABoolean(): void {
+		foreach ([true, 'true', 1, '1', 'on', 'yes'] as $on) {
+			$this->assertSame(['hide' => true], $this->controller()->aiContentUpdate($on)->getData(), var_export($on, true));
+		}
+		foreach ([false, 'false', 0, '0', 'off', 'no'] as $off) {
+			$this->assertSame(['hide' => false], $this->controller()->aiContentUpdate($off)->getData(), var_export($off, true));
+		}
+	}
+
+	public function testTheAiSwitchRefusesWhatIsNotABoolean(): void {
+		$this->hidesAi['alice'] = true;
+
+		foreach ([null, '', 'maybe', 2, ['true'], 'tru'] as $raw) {
+			$response = $this->controller()->aiContentUpdate($raw);
+
+			$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus(), var_export($raw, true));
+			$this->assertArrayHasKey('error', $response->getData());
+		}
+
+		$this->assertTrue($this->hidesAi['alice'], 'a refused request must not flip the switch');
+	}
+
+	public function testTheAiSwitchNeedsAViewer(): void {
+		$this->csrf = false;
+
+		foreach ([$this->controller()->aiContent(), $this->controller()->aiContentUpdate('true')] as $response) {
+			$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+		}
+		$this->assertSame([], $this->hidesAi);
+	}
+
+	public function testTheAiSwitchIsUnderTheFilterScopes(): void {
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:filters']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller('Bearer readonly')->aiContent()->getStatus());
+		$this->assertSame(
+			Http::STATUS_FORBIDDEN, $this->controller('Bearer readonly')->aiContentUpdate('true')->getStatus()
+		);
+		$this->assertSame([], $this->hidesAi);
+	}
+
+	public function testAWriteFiltersTokenMayTurnTheAiSwitch(): void {
+		$this->csrf = false;
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:filters', 'write:filters']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(['hide' => true], $this->controller('Bearer sometoken')->aiContentUpdate('1')->getData());
+	}
+
+	public function testAnUnrelatedScopeDoesNotReachTheAiSwitch(): void {
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes(['read:statuses', 'write:statuses']);
+		$this->clientService->method('getFromToken')->willReturn($client);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer statuses')->aiContent()->getStatus());
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller('Bearer statuses')->aiContentUpdate('1')->getStatus());
+	}
 }
