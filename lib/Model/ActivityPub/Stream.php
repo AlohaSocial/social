@@ -387,6 +387,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private string $timeline = '';
 	private bool $filterDuplicate = false;
 	private bool $pinned = false;
+	/** whether the viewer muted the thread this post is in; attached per read, see `StreamRequestBuilder::markMutedConversations()` */
+	private bool $mutedConversation = false;
 	private ?StreamCard $card = null;
 	/** null until asked; see isDeliveryHeld() */
 	private ?bool $deliveryHeld = null;
@@ -1037,6 +1039,21 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	public function setPinned(bool $pinned): Stream {
 		$this->pinned = $pinned;
+
+		return $this;
+	}
+
+	/**
+	 * Whether the viewer has muted the conversation this post belongs to.
+	 * A property of the viewer, not of the post, so it is attached by the
+	 * read that knows who is reading.
+	 */
+	public function isMutedConversation(): bool {
+		return $this->mutedConversation;
+	}
+
+	public function setMutedConversation(bool $muted): Stream {
+		$this->mutedConversation = $muted;
 
 		return $this;
 	}
@@ -1971,7 +1988,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			'favourites_count' => $this->getDetailInt(Details::LIKES),
 			'favourited' => $favorited,
 			'reblogged' => $reblogged,
-			'muted' => false,
+			'muted' => $this->isMutedConversation(),
 			'bookmarked' => $bookmarked,
 			'pinned' => $this->isPinned(),
 			'card' => $this->card?->jsonSerialize(),

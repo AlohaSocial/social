@@ -28,6 +28,20 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * @package OCA\Social\Db
  */
 class StreamRequestBuilder extends CoreRequestBuilder {
+	/** how deep a reply chain is followed to find its root; the bound ConversationsRequest::rootOf() uses */
+	private const MAX_THREAD_DEPTH = 40;
+	/** how many muted threads are read for a viewer; more than anybody mutes */
+	private const MUTED_ROOTS_LIMIT = 500;
+
+	/**
+	 * viewer id => the roots they muted, for this request. Static, as the
+	 * blocked-domains memo is, so the write that changes a mute can drop it
+	 * from whichever request object it was read through.
+	 *
+	 * @var array<string, array<string, true>>
+	 */
+	private static array $mutedRoots = [];
+
 	use TArrayTools;
 
 	/**
@@ -245,6 +259,7 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 		} catch (RowNotFoundException $e) {
 			throw new StreamNotFoundException('stream not found');
 		}
+		$this->markMutedConversations([$result]);
 
 		return $result;
 	}
@@ -257,8 +272,141 @@ class StreamRequestBuilder extends CoreRequestBuilder {
 	public function getStreamsFromRequest(SocialQueryBuilder $qb): array {
 		/** @var Stream[] $result */
 		$result = $qb->getRows([$this, 'parseStreamSelectSql']);
+		$this->markMutedConversations($result);
 
 		return $result;
+	}
+
+	/**
+	 * Marks the posts whose conversation the viewer has muted.
+	 *
+	 * Mastodon's `muted` on a status is about the thread: the mute is kept
+	 * against the thread's root (`social_convo_state`) and a post does not
+	 * store its root, so the roots of a page are walked here — a level at a
+	 * time, one query per level — and compared with the viewer's muted roots.
+	 * Those are asked once per request and nothing more is asked for a viewer
+	 * who muted nothing, which is nearly every viewer. A notification is a
+	 * stream too, and the post it is about is its object.
+	 *
+	 * @param Stream[] $streams
+	 */
+	protected function markMutedConversations(array $streams): void {
+		$viewerId = $this->getViewerId();
+		if ($viewerId === '' || $streams === []) {
+			return;
+		}
+		$muted = $this->mutedRootsOf($viewerId);
+		if ($muted === []) {
+			return;
+		}
+
+		$posts = [];
+		foreach ($streams as $stream) {
+			$posts[] = $stream;
+			$object = $stream->getObject();
+			if ($object instanceof Stream) {
+				$posts[] = $object;
+			}
+		}
+		$roots = $this->rootsOf(array_map(static fn (Stream $post): string => $post->getId(), $posts));
+		foreach ($posts as $post) {
+			if (isset($muted[$roots[$post->getId()] ?? $post->getId()])) {
+				$post->setMutedConversation(true);
+			}
+		}
+	}
+
+	/** Muting or unmuting a conversation makes the memo wrong; drop it. */
+	public static function forgetMutedRoots(): void {
+		self::$mutedRoots = [];
+	}
+
+	/**
+	 * The roots the viewer muted, as a set, asked once per viewer and request.
+	 *
+	 * @return array<string, true>
+	 */
+	private function mutedRootsOf(string $viewerId): array {
+		if (isset(self::$mutedRoots[$viewerId])) {
+			return self::$mutedRoots[$viewerId];
+		}
+
+		$qb = $this->getQueryBuilder();
+		$qb->select('cs.root_id')
+			->from(self::TABLE_CONVERSATION_STATE, 'cs')
+			->where($qb->expr()->eq('cs.actor_id_prim', $qb->createNamedParameter($qb->prim($viewerId))))
+			->andWhere($qb->expr()->eq('cs.muted', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
+			->setMaxResults(self::MUTED_ROOTS_LIMIT);
+
+		$roots = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$roots[(string)$data['root_id']] = true;
+		}
+		$cursor->closeCursor();
+
+		return self::$mutedRoots[$viewerId] = $roots;
+	}
+
+	/**
+	 * The thread root of each post, by id.
+	 *
+	 * The parent chain is followed a level at a time, every level one query
+	 * for the whole page, at most `MAX_THREAD_DEPTH` levels — a malformed
+	 * chain must not walk for ever. A post that replies to nothing, or whose
+	 * parent this instance does not hold, is its own root, as
+	 * `ConversationsRequest::rootOf()` has it for one post.
+	 *
+	 * @param string[] $ids
+	 * @return array<string, string> id => root id
+	 */
+	private function rootsOf(array $ids): array {
+		$parents = [];
+		$frontier = array_values(array_unique(array_filter($ids, static fn (string $id): bool => $id !== '')));
+		for ($depth = 0; $depth < self::MAX_THREAD_DEPTH && $frontier !== []; $depth++) {
+			$qb = $this->getQueryBuilder();
+			$qb->select('s.id', 's.in_reply_to')
+				->from(self::TABLE_STREAM, 's')
+				->where($qb->expr()->in(
+					's.id_prim',
+					$qb->createNamedParameter(array_map([$qb, 'prim'], $frontier), IQueryBuilder::PARAM_STR_ARRAY)
+				));
+
+			$found = [];
+			$cursor = $qb->executeQuery();
+			while ($data = $cursor->fetch()) {
+				$parents[(string)$data['id']] = (string)$data['in_reply_to'];
+				$found[(string)$data['id']] = true;
+			}
+			$cursor->closeCursor();
+
+			$next = [];
+			foreach ($frontier as $id) {
+				if (!isset($found[$id])) {
+					$parents[$id] = '';
+				}
+				$parent = $parents[$id];
+				if ($parent !== '' && !isset($parents[$parent])) {
+					$next[$parent] = true;
+				}
+			}
+			$frontier = array_keys($next);
+		}
+
+		$roots = [];
+		foreach ($ids as $id) {
+			$current = $id;
+			for ($depth = 0; $depth < self::MAX_THREAD_DEPTH; $depth++) {
+				$parent = $parents[$current] ?? '';
+				if ($parent === '') {
+					break;
+				}
+				$current = $parent;
+			}
+			$roots[$id] = $current;
+		}
+
+		return $roots;
 	}
 
 	/**
