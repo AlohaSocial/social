@@ -21,6 +21,7 @@ import { defineStore } from 'pinia'
 const REMEMBERED = 4
 
 import logger from '../services/logger.js'
+import { isNewerId, newerId } from '../utils/snowflake.js'
 import { noteTimelineRequest } from '../services/boot.js'
 import { excludeTypesFor } from '../services/notifications.js'
 import { useAccountStore } from './account.js'
@@ -83,6 +84,7 @@ function rememberCelebrated() {
  * @property {boolean} firstPostCelebration whether the celebration is on screen
  * @property {boolean} firstPostCelebrated whether this session has celebrated already
  * @property {string} arrivedId the post this reader has just published, while it makes its entrance
+ * @property {string} homeReadUpTo the server's `home` read marker as last read or reported; '0' until known
  */
 
 /**
@@ -293,6 +295,11 @@ export const useTimelineStore = defineStore('timeline', {
 		 * make its entrance at the top of the timeline; '' the rest of the time.
 		 */
 		arrivedId: '',
+		/**
+		 * The `home` read marker as the server last stated it or was told it:
+		 * the position every Mastodon client shares. '0' until known.
+		 */
+		homeReadUpTo: '0',
 	}),
 
 	getters: {
@@ -395,6 +402,62 @@ export const useTimelineStore = defineStore('timeline', {
 	},
 
 	actions: {
+		/**
+		 * Where this reader had got to on the home timeline, from the server.
+		 *
+		 * The `home` marker of `GET /api/v1/markers` is the one every Mastodon
+		 * client reads and writes, so a feed read on the phone moves the line
+		 * here and the other way round. Asked when the home timeline opens.
+		 * A failure answers null rather than a guess: the list is still
+		 * readable, and the line falls back to what this browser remembers.
+		 *
+		 * @return {Promise<{id: string, at: number}|null>} the marker and when it was last moved; null when the server has none, or did not answer
+		 */
+		async fetchHomeMarker() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/markers'), {
+					params: { timeline: ['home'] },
+				})
+				const id = String(data?.home?.last_read_id ?? '')
+				if (!isNewerId(id, '0')) {
+					return null
+				}
+				this.homeReadUpTo = newerId(id, this.homeReadUpTo)
+
+				return { id, at: Date.parse(data.home.updated_at ?? '') || 0 }
+			} catch (error) {
+				logger.error('Failed to read the home marker', { error })
+
+				return null
+			}
+		},
+
+		/**
+		 * Tells the server the home timeline has been read up to `id`.
+		 *
+		 * Said once per position: the server never moves a marker backwards,
+		 * so there is nothing to say about an id it already holds or has
+		 * passed. Quiet on failure — a place not saved is a line drawn a
+		 * little low next time, not something to interrupt reading for.
+		 *
+		 * @param {string|number} id the newest post the reader has had on screen
+		 */
+		async markHomeRead(id) {
+			const newest = String(id ?? '')
+			if (!isNewerId(newest, this.homeReadUpTo)) {
+				return
+			}
+			this.homeReadUpTo = newest
+
+			try {
+				await axios.post(generateUrl('apps/social/api/v1/markers'), {
+					home: { last_read_id: newest },
+				})
+			} catch (error) {
+				logger.error('Failed to move the home marker', { error })
+			}
+		},
+
 		addToStatuses(status) {
 			indexStatus(this, status)
 		},

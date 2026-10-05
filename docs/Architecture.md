@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.114
+**App version:** 0.26.115
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1745,6 +1745,23 @@ cleared the reader's phone for notifications no human had seen. The "New" and
 (`GET /api/v1/markers`), read once when the page opens and then frozen in the
 component: a boundary that followed the marker would rub itself out as the page
 was read.
+
+**The home feed's line is the server's marker too.** The *Up to date since
+14:02* line on My Feed (`caughtUpAt`, `.timeline-caughtup`) used to be drawn
+from a place this browser kept in `localStorage` — a convenience no other
+device inherited, so the phone and the web each had their own idea of what was
+new. It is now drawn from the `home` marker of `GET /api/v1/markers`, the
+position every Mastodon client reads and writes
+(`timelineStore.fetchHomeMarker()`, asked when the list opens), and advanced by
+the same rule as notifications: after `SEEN_AFTER` in front of the reader with
+the tab visible, up to the newest post on the page
+(`timelineStore.markHomeRead()`, which says each position once; the server
+never moves a marker backwards). The browser's own copy stays — as the line
+until the server has answered, and as the fallback for an account whose server
+marker is empty; whichever of the two is further along wins. The other
+timelines keep the per-browser line, because Mastodon's marker vocabulary has
+`home` and `notifications` only, and a marker no app would sync is not worth a
+request.
 
 **What the server's limits are, and who asks.** `MAX_LENGTH` and
 `MAX_ATTACHMENTS` were hard-coded in `Composer.vue`, `TimelinePost.vue` and
