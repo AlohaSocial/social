@@ -17,6 +17,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Traits\TStringTools;
+use OCA\Social\Service\Atproto\AtprotoEngagementService;
 
 class ActionService {
 	use TStringTools;
@@ -60,6 +61,7 @@ class ActionService {
 		private ConversationsRequest $conversationsRequest,
 		private DislikeService $dislikeService,
 		private InterestService $interestService,
+		private ?AtprotoEngagementService $atprotoEngagementService = null,
 	) {
 	}
 
@@ -162,6 +164,25 @@ class ActionService {
 
 		$post = $this->streamService->getStreamByNid($nid);
 		$this->assertAllowedByAuthor($post, $action);
+		if ($this->atprotoEngagementService !== null
+			&& str_contains($post->getId(), '/ap/bluesky/')
+			&& in_array($action, [self::FAVOURITE, self::UNFAVOURITE, self::REBLOG, self::UNREBLOG], true)) {
+			$isLike = in_array($action, [self::FAVOURITE, self::UNFAVOURITE], true);
+			$enabled = in_array($action, [self::FAVOURITE, self::REBLOG], true);
+			if ($isLike) {
+				$this->atprotoEngagementService->setLiked(
+					$actor->getUserId(), $post, $enabled
+				);
+			} else {
+				$this->atprotoEngagementService->setReposted(
+					$actor->getUserId(), $post, $enabled
+				);
+			}
+			$this->streamActionService->setActionBool(
+				$actor->getId(), $post->getId(), $isLike ? StreamAction::LIKED : StreamAction::BOOSTED, $enabled
+			);
+			return null;
+		}
 
 		switch ($action) {
 			case self::FAVOURITE:

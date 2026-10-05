@@ -17,6 +17,7 @@ const ProfileTimeline = () => import(/* webpackChunkName: "profile" */'./views/P
 const ProfileFollowers = () => import(/* webpackChunkName: "profile" */'./views/ProfileFollowers.vue')
 const ProfileCollections = () => import(/* webpackChunkName: "profile" */'./views/ProfileCollections.vue')
 const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/ProfileTagged.vue')
+const AtprotoProfile = () => import(/* webpackChunkName: "profile" */'./views/AtprotoProfile.vue')
 const Portfolio = () => import(/* webpackChunkName: "portfolio" */'./views/Portfolio.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
@@ -228,6 +229,12 @@ const router = createRouter({
 					name: 'list',
 				}),
 			],
+		},
+		{
+			path: '/atproto/:handle',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile',
 		},
 		{
 			path: '/@:account',

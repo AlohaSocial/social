@@ -56,6 +56,7 @@ returned by the API.
 | POST | `/api/v1/atproto/link` | user, rate-limited (10/5min), CSRF required | `handle`, `appPassword` | Resolves the handle through AT-Proto identity, verifies the app password with `com.atproto.server.createSession`, seals the credential and replaces this user's existing link. The DID and PDS are stored as protocol-native identity data. Invalid credentials/handles are returned as a JSON `message` with a client error status; the normal Nextcloud session and Fediverse account remain unchanged. |
 | DELETE | `/api/v1/atproto` | user, no-csrf | — | Removes this user's Bluesky link and its sealed credential. An absent link is **404**; otherwise the response is an empty JSON object. Existing imported posts remain local records, while future mirroring stops immediately. |
 | GET | `/api/v1/atproto/profile` | user | — | Returns the signed-in account's locally known posts that have a Bluesky record, for the shared Fediverse/Bluesky profile switcher. Other users' linked credentials are never exposed. |
+| GET | `/api/v1/atproto/profiles/{handle}` | public, no-csrf | `handle` | Resolves a Bluesky handle, reads its public author feed and imports the records into the shared normalized timeline rows. The response contains profile metadata and statuses; credentials are never required. |
 
 The account API is intentionally separate from ActivityPub. A local post is
 eligible for an AT-Proto mirror only when the server switch and mirror switch

@@ -13,12 +13,15 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Service\Atproto\AtprotoAccountService;
+use OCA\Social\Service\Atproto\AtprotoProfileService;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\DataResponse;
@@ -43,6 +46,7 @@ class AtprotoController extends Controller {
 		private AtprotoRequest $atprotoRequest,
 		private AccountService $localAccountService,
 		private StreamService $streamService,
+		private AtprotoProfileService $profileService,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -156,6 +160,20 @@ class AtprotoController extends Controller {
 		}
 
 		return new DataResponse($statuses, Http::STATUS_OK);
+	}
+
+	/** Public handle-based profile entry point, parallel to `/@account`. */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profiles/{handle}')]
+	public function publicProfile(string $handle): DataResponse {
+		try {
+			return new DataResponse($this->profileService->read($handle), Http::STATUS_OK);
+		} catch (\Throwable $e) {
+			$this->logger->info('ATProto profile lookup failed', ['handle' => $handle, 'exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
 	}
 
 	/**

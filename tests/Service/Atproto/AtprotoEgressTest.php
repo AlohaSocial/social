@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Atproto\AtprotoAccount;
 use OCA\Social\Model\Atproto\AtprotoLink;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\Atproto\AtprotoClient;
 use OCA\Social\Service\Atproto\AtprotoEgress;
 use OCA\Social\Service\Atproto\AtprotoIngress;
@@ -117,6 +118,18 @@ class AtprotoEgressTest extends TestCase {
 		$this->client->expects($this->never())->method('authedPost');
 
 		$this->egress->publish($this->post(Stream::TYPE_DIRECT));
+	}
+
+	public function testFediverseOnlyPostNeverLeavesForBluesky(): void {
+		$post = $this->post();
+		$post->setDetail(Details::PUBLICATION_TARGET, 'fediverse');
+		$this->atprotoRequest->expects($this->never())->method('getLinkByLocalId');
+		$this->actorsRequest->expects($this->never())->method('getFromId');
+		$this->client->expects($this->never())->method('authedPost');
+
+		$this->egress->publish($post);
+		$this->egress->update($post);
+		$this->egress->delete($post);
 	}
 
 	public function testDeletionRemovesTheMappedRecordFromThePds(): void {
