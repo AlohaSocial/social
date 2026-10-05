@@ -204,8 +204,13 @@ class AtprotoController extends Controller {
 			$userId = $this->currentUserId();
 			$data['following'] = false;
 			$data['viewerCanFollow'] = false;
+			$data['viewerCanEdit'] = false;
 			if ($userId !== null) {
-				$data['viewerCanFollow'] = $this->accountService->status($userId)['account'] !== null;
+				$linked = $this->accountService->status($userId)['account'] ?? null;
+				$data['viewerCanFollow'] = $linked !== null;
+				$data['viewerCanEdit'] = $linked !== null
+					&& (string)($linked['did'] ?? '') !== ''
+					&& (string)($linked['did'] ?? '') === (string)($data['profile']['did'] ?? '');
 				if ($data['viewerCanFollow']) {
 					try {
 						$data['following'] = $this->engagementService->isFollowing($userId, (string)($data['profile']['did'] ?? ''));
