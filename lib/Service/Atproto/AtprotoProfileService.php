@@ -82,6 +82,51 @@ class AtprotoProfileService {
 		];
 	}
 
+	/** @return list<array<string, mixed>> */
+	public function thread(string $localId, ?string $viewerId = null): array {
+		$did = $this->identity->didOf($localId);
+		$collection = $this->identity->collectionOf($localId);
+		$rkey = $this->identity->rkeyOf($localId);
+		if ($did === '' || $collection !== AtprotoIngress::COLLECTION || $rkey === '') {
+			throw new AtprotoException('not an ATProto post id', 400);
+		}
+
+		$answer = $this->client->get('app.bsky.feed.getPostThread', [
+			'uri' => 'at://' . $did . '/' . $collection . '/' . $rkey,
+			'depth' => 1,
+		]);
+		$descendants = [];
+		$walk = function (mixed $node) use (&$walk, &$descendants, $viewerId): void {
+			if (!is_array($node)) {
+				return;
+			}
+			$post = is_array($node['post'] ?? null) ? $node['post'] : [];
+			$uri = (string)($post['uri'] ?? '');
+			if ($uri !== '') {
+				try {
+					$status = $this->ingress->fetch($this->localId($uri), 0);
+					$this->applyCounts($status, $post);
+					if ($viewerId !== null) {
+						$state = $this->engagement->viewerState($viewerId, $status);
+						$status->setViewerEngagement($state['liked'], $state['reposted']);
+					}
+					$status->setExportFormat(ACore::FORMAT_LOCAL);
+					$descendants[] = $status->exportAsLocal();
+				} catch (\Throwable) {
+					// A deleted or not-yet-imported reply does not hide its siblings.
+				}
+			}
+			foreach ((array)($node['replies'] ?? []) as $reply) {
+				$walk($reply);
+			}
+		};
+		foreach ((array)($answer['thread']['replies'] ?? []) as $reply) {
+			$walk($reply);
+		}
+
+		return $descendants;
+	}
+
 	/** Copy the public AppView counters into the shared Social status model. */
 	private function applyCounts(Stream $status, array $post): void {
 		$counts = [

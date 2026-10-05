@@ -60,4 +60,18 @@ class AtprotoProfileServiceTest extends TestCase {
 		$this->assertSame('next-page', $data['nextCursor']);
 		$this->assertSame('alice.example', $data['profile']['handle']);
 	}
+
+	public function testNativeThreadUsesThePostUriAndReturnsDirectReplies(): void {
+		$this->identity->method('didOf')->willReturn('did:plc:profile');
+		$this->identity->method('collectionOf')->willReturn('app.bsky.feed.post');
+		$this->identity->method('rkeyOf')->willReturn('3replyroot');
+		$this->client->expects($this->once())->method('get')->with(
+			'app.bsky.feed.getPostThread',
+			['uri' => 'at://did:plc:profile/app.bsky.feed.post/3replyroot', 'depth' => 1],
+		)->willReturn(['thread' => ['replies' => []]]);
+
+		$service = new AtprotoProfileService($this->client, $this->identity, $this->ingress, $this->engagement);
+
+		$this->assertSame([], $service->thread('https://cloud.example/apps/social/ap/bluesky/did:plc:profile/app.bsky.feed.post/3replyroot'));
+	}
 }

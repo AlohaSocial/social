@@ -127,10 +127,13 @@ export default {
 			this.commentsLoading = true
 			this.commentsError = false
 			try {
-				const id = encodeURIComponent(String(this.status.id))
-				const { data } = await axios.get(generateUrl(`apps/social/api/v1/statuses/${id}/context`))
+				const id = String(this.status.id)
+				const native = id.includes('/ap/bluesky/')
+				const { data } = native
+					? await axios.get(generateUrl('apps/social/api/v1/atproto/thread'), { params: { id } })
+					: await axios.get(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(id)}/context`))
 				this.comments = (Array.isArray(data?.descendants) ? data.descendants : [])
-					.filter((reply) => String(reply.in_reply_to_id) === String(this.status.id))
+					.filter((reply) => native || String(reply.in_reply_to_id) === String(this.status.id))
 			} catch (error) {
 				this.commentsError = true
 				logger.error('Failed to load profile post comments', { error, statusId: this.status.id })

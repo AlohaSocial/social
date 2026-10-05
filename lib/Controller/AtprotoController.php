@@ -273,6 +273,26 @@ class AtprotoController extends Controller {
 		}
 	}
 
+	/** Read direct replies from the native Bluesky thread endpoint. */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/thread')]
+	public function thread(): DataResponse {
+		try {
+			$id = trim((string)$this->request->getParam('id', ''));
+			if ($id === '') {
+				return new DataResponse(['message' => 'a Bluesky post id is required'], Http::STATUS_BAD_REQUEST);
+			}
+			return new DataResponse([
+				'descendants' => $this->profileService->thread($id, $this->currentUserId()),
+			], Http::STATUS_OK);
+		} catch (\Throwable $e) {
+			$this->logger->info('ATProto thread lookup failed', ['exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	/** Follow a Bluesky actor with the linked account and mirror the local watch. */
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 60, period: 300)]
