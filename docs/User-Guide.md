@@ -799,7 +799,10 @@ hand, it is picked up as one.
   Nothing is sent to anybody; your followers stay where they are until the
   last step, which is done on the old server and which the page tells you
   about when the run is done: on Mastodon, *Preferences → Account → Move to a
-  different account*, and enter your handle here.
+  different account*, and enter your handle here. If the old server is Aloha
+  Social too, the page offers **Finish the move from here** instead: you are
+  sent to your old Nextcloud to log in and agree, and your followers are moved
+  without a visit to its settings.
 - **Naming your old account.** Your old server will not send your followers
   here until this account says it is also you. **Settings → Migration →
   Accounts you also answer to** is where you say it: type the old account's

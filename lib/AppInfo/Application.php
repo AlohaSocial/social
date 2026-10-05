@@ -77,6 +77,8 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'social';
+	/** what NodeInfo announces this app as, and what a peer is recognised as this app by */
+	public const SOFTWARE_NAME = 'nextcloud-social';
 	public const APP_NAME = 'Social';
 	public const APP_SUBJECT = 'http://nextcloud.com/';
 	public const APP_REL = 'https://apps.nextcloud.com/apps/social';

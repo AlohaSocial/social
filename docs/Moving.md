@@ -66,6 +66,15 @@ Three steps, two of them here.
 Pixelfed cannot do step 3: it has no account migration. Your follows and your
 posts come over; your followers have to follow you again.
 
+**From another Aloha Social server, step 3 is here too.** Mastodon has no way
+to ask for a move from outside, which is why the last step is always done on
+the old server. Another Aloha Social does: once the run is through, the
+Migration page offers **Finish the move from here**. You are sent to your old
+Nextcloud to log in and to agree — the only permission asked for is to move
+the account, nothing else — and the old server moves your followers here.
+It checks, as it would for its own button, that this account names the old
+one; the thirty days between moves apply there as everywhere.
+
 ## Moving away
 
 1. **On the new account, name this one** as an account you also answer to.

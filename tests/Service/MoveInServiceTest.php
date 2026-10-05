@@ -16,6 +16,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -37,6 +38,7 @@ class MoveInServiceTest extends TestCase {
 	private FollowService|MockObject $followService;
 	private PostImportService|MockObject $postImportService;
 	private MigrationService|MockObject $migrationService;
+	private MoveFinishService|MockObject $moveFinishService;
 	private MoveInService $service;
 
 	/** @var array<string, array<string, mixed>> what each URL answers */
@@ -49,6 +51,7 @@ class MoveInServiceTest extends TestCase {
 		$this->followService = $this->createMock(FollowService::class);
 		$this->postImportService = $this->createMock(PostImportService::class);
 		$this->migrationService = $this->createMock(MigrationService::class);
+		$this->moveFinishService = $this->createMock(MoveFinishService::class);
 
 		$this->curlService->method('retrieveObject')->willReturnCallback(function (string $url): array {
 			if (!isset($this->documents[$url])) {
@@ -64,6 +67,7 @@ class MoveInServiceTest extends TestCase {
 			$this->followService,
 			$this->postImportService,
 			$this->migrationService,
+			$this->moveFinishService,
 			new NullLogger(),
 		);
 	}
@@ -104,6 +108,14 @@ class MoveInServiceTest extends TestCase {
 		$this->assertSame('Alice', $account['name']);
 		$this->assertSame(['total' => 120, 'readable' => true], $account['following']);
 		$this->assertSame(['total' => 900, 'readable' => false], $account['posts']);
+	}
+
+	public function testInspectSaysWhetherTheLastStepCanBeDoneFromHere(): void {
+		$this->migrationService->method('resolveActor')->willReturn($this->old());
+		$this->moveFinishService->method('canFinish')->willReturn(true);
+
+		$this->assertTrue($this->service->inspect('@alice@old.example')['finishable']);
+		$this->assertTrue($this->service->prepare('bob', '@alice@old.example', true, true, false)['finishable'], 'kept with the run, so the finished row can offer it');
 	}
 
 	public function testInspectOfAServerThatDoesNotAnswerIsNotReadable(): void {

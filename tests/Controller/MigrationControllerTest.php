@@ -17,12 +17,15 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ImportQueueService;
 use OCA\Social\Service\MigrationArchiveService;
 use OCA\Social\Service\MigrationService;
+use OCA\Social\Service\MoveFinishService;
 use OCA\Social\Service\MoveInService;
 use OCA\Social\Service\PostImportService;
 use OCA\Social\Service\SwitchService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataDisplayResponse;
+use OCP\AppFramework\Http\RedirectResponse;
 use OCP\IRequest;
+use OCP\IURLGenerator;
 use OCP\UserMigration\UserMigrationException;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -44,6 +47,8 @@ class MigrationControllerTest extends TestCase {
 	private PostImportService|MockObject $postImportService;
 	private ImportQueueService|MockObject $importQueueService;
 	private MoveInService|MockObject $moveInService;
+	private MoveFinishService|MockObject $moveFinishService;
+	private IURLGenerator|Stub $urlGenerator;
 	private AccountService|Stub $accountService;
 	private SwitchService|Stub $switchService;
 
@@ -59,6 +64,9 @@ class MigrationControllerTest extends TestCase {
 		$this->postImportService = $this->createMock(PostImportService::class);
 		$this->importQueueService = $this->createMock(ImportQueueService::class);
 		$this->moveInService = $this->createMock(MoveInService::class);
+		$this->moveFinishService = $this->createMock(MoveFinishService::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
+		$this->urlGenerator->method('linkToRoute')->willReturnCallback(static fn (string $route): string => '/' . $route);
 		$this->accountService = $this->createStub(AccountService::class);
 		$this->switchService = $this->createStub(SwitchService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn(new Person());
@@ -89,6 +97,8 @@ class MigrationControllerTest extends TestCase {
 			$this->postImportService,
 			$this->importQueueService,
 			$this->moveInService,
+			$this->moveFinishService,
+			$this->urlGenerator,
 			$this->accountService,
 			$this->switchService,
 			new NullLogger(),
@@ -408,6 +418,49 @@ class MigrationControllerTest extends TestCase {
 	}
 
 	/** The alias is set in the request; the follows and the posts are the queued run's. */
+	public function testFinishingFromHereAnswersWhereToSendThePerson(): void {
+		$this->moveFinishService->expects($this->once())->method('start')->with('alice', '@alice@old.example')
+			->willReturn('https://old.example/index.php/apps/social/oauth/authorize?client_id=c');
+
+		$response = $this->controller()->moveInFinishStart('@alice@old.example');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('https://old.example/index.php/apps/social/oauth/authorize?client_id=c', $response->getData()['authorize_url']);
+	}
+
+	public function testFinishingFromAServerThatIsNotThisAppIsRefusedWithTheReason(): void {
+		$this->moveFinishService->method('start')->willThrowException(new InvalidResourceException('the old account is not on an Aloha Social server; finish the move there, with its own button'));
+
+		$response = $this->controller()->moveInFinishStart('@alice@mastodon.example');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertStringContainsString('finish the move there', $response->getData()['error']);
+	}
+
+	public function testTheCallbackSpendsTheCodeAndLandsOnTheMigrationPageEitherWay(): void {
+		$this->moveFinishService->expects($this->once())->method('finish')->with('alice', 'the-code', 'the-state')
+			->willReturn(['status' => 'done', 'acct' => 'alice@old.example', 'at' => 1, 'error' => '']);
+
+		$response = $this->controller()->moveInFinishCallback('the-code', 'the-state');
+		$this->assertInstanceOf(RedirectResponse::class, $response);
+		$this->assertSame('/social.Navigation.navigatemigration', $response->getRedirectURL());
+
+		// a refusal is the service's to record; the person still lands on the page
+		$this->moveFinishService = $this->createMock(MoveFinishService::class);
+		$this->moveFinishService->method('finish')->willThrowException(new InvalidResourceException('this is not the move that was started'));
+		$response = $this->controller()->moveInFinishCallback('the-code', 'wrong');
+		$this->assertSame('/social.Navigation.navigatemigration', $response->getRedirectURL());
+	}
+
+	public function testTheFinishStatusIsAnsweredAsTheServiceKeepsIt(): void {
+		$this->moveFinishService->method('status')->willReturn(['status' => 'failed', 'acct' => 'alice@old.example', 'at' => 0, 'error' => 'refused']);
+
+		$response = $this->controller()->moveInFinishStatus();
+
+		$this->assertSame('failed', $response->getData()['status']);
+		$this->assertSame('refused', $response->getData()['error']);
+	}
+
 	public function testMovingInSetsTheAliasAndQueuesTheRun(): void {
 		$this->importQueueService->method('hasActive')->with('alice', ImportJob::KIND_MOVE_IN)->willReturn(false);
 		$options = ['source' => 'https://old.example/users/alice', 'acct' => 'alice@old.example', 'follows' => true, 'posts' => false, 'fetch_media' => true];

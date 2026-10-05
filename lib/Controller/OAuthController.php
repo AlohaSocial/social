@@ -65,7 +65,6 @@ class OAuthController extends Controller {
 	 * under its own "software" and made the app invisible in every statistic.
 	 * The human title travels as `metadata.nodeName`.
 	 */
-	private const SOFTWARE_NAME = 'nextcloud-social';
 	private const REPOSITORY = 'https://github.com/alohasocial/social';
 
 	/**
@@ -125,7 +124,7 @@ class OAuthController extends Controller {
 		}
 
 		$software = [
-			'name' => self::SOFTWARE_NAME,
+			'name' => Application::SOFTWARE_NAME,
 			'version' => (string)$version,
 		];
 		if ($schema === '2.1') {
