@@ -1416,7 +1416,11 @@ class PostImportService {
 		foreach ($post['attachments'] as $attachment) {
 			$temp = $this->fetch($attachment['url'], $zip, $fetchMedia);
 			if ($temp === null) {
-				$tally['failed']++;
+				// a picture that was asked for and could not be had failed; one
+				// the reader declined to fetch was simply not fetched
+				if ($this->wanted($attachment['url'], $zip, $fetchMedia)) {
+					$tally['failed']++;
+				}
 				continue;
 			}
 
@@ -1448,6 +1452,13 @@ class PostImportService {
 	 * for that: it means telling the old server that the import is happening,
 	 * and it only works while that server is still up.
 	 */
+	/** Whether fetch() was going to try at all for this attachment. */
+	private function wanted(string $url, ?ZipArchive $zip, bool $fetchMedia): bool {
+		$isRemote = str_starts_with($url, 'http://') || str_starts_with($url, 'https://');
+
+		return $isRemote ? $fetchMedia : $zip !== null;
+	}
+
 	private function fetch(string $url, ?ZipArchive $zip, bool $fetchMedia): ?string {
 		$isRemote = str_starts_with($url, 'http://') || str_starts_with($url, 'https://');
 

@@ -382,6 +382,28 @@ class PostImportServiceTest extends TestCase {
 		$this->assertSame(1, $tally['imported']);
 		$this->assertSame(0, $tally['media']);
 		$this->assertSame([], $this->written[0]->getAttachments());
+		// the move-in report told the person "10 failed" for the ten pictures
+		// they had asked not to fetch
+		$this->assertSame(0, $tally['failed'], 'a picture nobody asked for is not a failure');
+	}
+
+	public function testAPictureThatWasAskedForAndCouldNotBeHadIsAFailure(): void {
+		$path = tempnam(sys_get_temp_dir(), 'pixelfed') . '.json';
+		$this->temps[] = $path;
+		file_put_contents($path, json_encode([[
+			'id' => '712000000000000032',
+			'url' => 'https://pixelfed.social/p/alice/712000000000000032',
+			'created_at' => '2025-06-01T12:00:00Z',
+			'content' => '<p>a pier</p>',
+			'visibility' => 'public',
+			'media_attachments' => [['url' => 'https://pixelfed.social/storage/m/gone.jpg', 'description' => 'a pier']],
+		]]));
+		$this->cacheDocumentService->method('retrieveContent')->willThrowException(new \RuntimeException('404'));
+
+		$tally = $this->service->import($this->alice(), $path, true);
+
+		$this->assertSame(1, $tally['imported'], 'the post is still written, without its picture');
+		$this->assertSame(1, $tally['failed']);
 	}
 
 	public function testAFileThatIsNotAnExportSaysSo(): void {
