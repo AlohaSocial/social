@@ -91,7 +91,9 @@ export default {
 	methods: {
 		t,
 		profileUrl() {
-			return generateUrl('apps/social/@' + encodeURIComponent(this.status.account?.handle ?? ''))
+			// Keep the public address literal and familiar: an ATProto handle is
+			// written as `@handle`, never as a translated word for the at-sign.
+			return generateUrl('/apps/social/@' + encodeURIComponent(this.status.account?.handle ?? ''))
 		},
 
 		url(path = '') {
