@@ -12,6 +12,7 @@ namespace OCA\Social\Service\Atproto;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 
 /** Resolves a Bluesky handle and imports its author feed into shared rows. */
 class AtprotoProfileService {
@@ -52,6 +53,7 @@ class AtprotoProfileService {
 			}
 			try {
 				$status = $this->ingress->fetch($this->localId($uri), 0);
+				$this->applyCounts($status, $post);
 				$status->setExportFormat(ACore::FORMAT_LOCAL);
 				$statuses[] = $status;
 			} catch (\Throwable) {
@@ -60,6 +62,20 @@ class AtprotoProfileService {
 		}
 
 		return ['profile' => $profile, 'account' => $actor->exportAsLocal(), 'statuses' => $statuses];
+	}
+
+	/** Copy the public AppView counters into the shared Social status model. */
+	private function applyCounts(Stream $status, array $post): void {
+		$counts = [
+			Details::LIKES => $post['likeCount'] ?? null,
+			Details::BOOSTS => $post['repostCount'] ?? null,
+			Details::REPLIES => $post['replyCount'] ?? null,
+		];
+		foreach ($counts as $detail => $count) {
+			if (is_int($count) || (is_string($count) && ctype_digit($count))) {
+				$status->setDetailInt($detail, max(0, (int)$count));
+			}
+		}
 	}
 
 	private function localId(string $uri): string {
