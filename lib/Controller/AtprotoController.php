@@ -247,7 +247,8 @@ class AtprotoController extends Controller {
 	public function publicProfile(string $handle): DataResponse {
 		try {
 			$userId = $this->currentUserId();
-			$data = $this->profileService->read($handle, 20, $userId);
+			$cursor = trim((string)$this->request->getParam('cursor', ''));
+			$data = $this->profileService->read($handle, 20, $userId, $cursor);
 			$data['following'] = false;
 			$data['viewerCanFollow'] = false;
 			$data['viewerCanEdit'] = false;

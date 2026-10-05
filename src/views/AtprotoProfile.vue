@@ -60,6 +60,14 @@
 				@updated="statuses = statuses.map((entry) => entry.id === $event.id ? $event : entry)"
 				@reply="replyTo = $event" />
 		</ul>
+		<NcButton
+			v-if="nextCursor"
+			class="atproto-profile__load-more"
+			variant="secondary"
+			:disabled="loadingMore"
+			@click="loadMore">
+			{{ loadingMore ? t('social', 'Loading…') : t('social', 'Load more Bluesky posts') }}
+		</NcButton>
 	</section>
 </template>
 
@@ -78,7 +86,7 @@ export default {
 	name: 'AtprotoProfile',
 	components: { AtprotoFollowButton, Composer, NcButton, NcTextArea, NcTextField, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, error: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
+	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' } }),
 	computed: {
 		dataFollowing() {
 			return this.following
@@ -95,6 +103,7 @@ export default {
 			this.profile = data.profile ?? {}
 			this.account = data.account ?? {}
 			this.statuses = data.statuses ?? []
+			this.nextCursor = data.nextCursor ?? ''
 			this.following = data.following === true
 			this.viewerCanFollow = data.viewerCanFollow === true
 			this.viewerCanEdit = data.viewerCanEdit === true
@@ -111,6 +120,23 @@ export default {
 
 	methods: {
 		t,
+		async loadMore() {
+			if (this.loadingMore || !this.nextCursor) {
+				return
+			}
+			this.loadingMore = true
+			try {
+				const { data } = await axios.get(generateUrl(`apps/social/api/v1/atproto/profiles/${encodeURIComponent(this.handle)}`), { params: { cursor: this.nextCursor } })
+				const known = new Set(this.statuses.map((status) => status.id))
+				this.statuses = this.statuses.concat((data.statuses ?? []).filter((status) => !known.has(status.id)))
+				this.nextCursor = data.nextCursor ?? ''
+			} catch (error) {
+				this.error = error?.response?.data?.message ?? t('social', 'Could not load more Bluesky posts')
+			} finally {
+				this.loadingMore = false
+			}
+		},
+
 		async saveProfile() {
 			if (this.savingProfile) {
 				return

@@ -24,8 +24,8 @@ class AtprotoProfileService {
 	) {
 	}
 
-	/** @return array{profile: array<string, mixed>, account: array<string, mixed>, statuses: list<Stream>} */
-	public function read(string $handle, int $limit = 20, ?string $viewerId = null): array {
+	/** @return array{profile: array<string, mixed>, account: array<string, mixed>, statuses: list<Stream>, nextCursor: string} */
+	public function read(string $handle, int $limit = 20, ?string $viewerId = null, string $cursor = ''): array {
 		$resolved = $this->identity->resolve($handle);
 		$profile = [
 			'did' => $resolved['did'],
@@ -41,10 +41,14 @@ class AtprotoProfileService {
 		$actor = $this->identity->actor($resolved['did'], $resolved['handle'], $profile, $resolved['pds']);
 		$actor->setExportFormat(ACore::FORMAT_LOCAL);
 
-		$answer = $this->client->get('app.bsky.feed.getAuthorFeed', [
+		$params = [
 			'actor' => $resolved['did'],
 			'limit' => min(max($limit, 1), 50),
-		]);
+		];
+		if ($cursor !== '') {
+			$params['cursor'] = $cursor;
+		}
+		$answer = $this->client->get('app.bsky.feed.getAuthorFeed', $params);
 		$statuses = [];
 		foreach ((array)($answer['feed'] ?? []) as $entry) {
 			$post = is_array($entry['post'] ?? null) ? $entry['post'] : [];
@@ -70,7 +74,12 @@ class AtprotoProfileService {
 			}
 		}
 
-		return ['profile' => $profile, 'account' => $actor->exportAsLocal(), 'statuses' => $statuses];
+		return [
+			'profile' => $profile,
+			'account' => $actor->exportAsLocal(),
+			'statuses' => $statuses,
+			'nextCursor' => (string)($answer['cursor'] ?? ''),
+		];
 	}
 
 	/** Copy the public AppView counters into the shared Social status model. */
