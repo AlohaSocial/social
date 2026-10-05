@@ -253,7 +253,9 @@ export default {
 				if (this.profileImages.removeBanner) {
 					body.append('removeBanner', '1')
 				}
-				const { data } = await axios.put(generateUrl('apps/social/api/v1/atproto/profile'), body)
+				// PHP parses multipart fields reliably on POST; the controller
+				// exposes POST alongside JSON PUT specifically for this editor.
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/atproto/profile'), body)
 				this.profile = { ...this.profile, ...(data.profile ?? this.editProfile) }
 				this.profileImages = { avatar: null, banner: null, removeAvatar: false, removeBanner: false }
 				this.editProfile = {

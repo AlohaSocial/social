@@ -44,7 +44,7 @@ describe('AtprotoProfile', () => {
 		const get = vi.spyOn(axios, 'get')
 			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example', avatar: 'old.jpg' }, statuses: [], viewerCanEdit: true, viewerCanFollow: true } })
 			.mockResolvedValueOnce({ data: { profile: { handle: 'bob.example', avatar: 'new.jpg' }, statuses: [], viewerCanEdit: true, viewerCanFollow: true } })
-		vi.spyOn(axios, 'put').mockResolvedValue({ data: { profile: { handle: 'bob.example', avatar: 'new.jpg' } } })
+		vi.spyOn(axios, 'post').mockResolvedValue({ data: { profile: { handle: 'bob.example', avatar: 'new.jpg' } } })
 		const wrapper = mount(AtprotoProfile, {
 			props: { handle: 'bob.example' },
 			global: { stubs },

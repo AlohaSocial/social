@@ -183,6 +183,7 @@ class AtprotoController extends Controller {
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 20, period: 300)]
 	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/atproto/profile')]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/atproto/profile')]
 	public function updateProfile(): DataResponse {
 		$userId = $this->currentUserId();
 		if ($userId === null) {
