@@ -5,7 +5,7 @@
 <template>
 	<section class="atproto-profile">
 		<Composer
-			v-if="viewerCanFollow"
+			v-if="viewerCanFollow && (viewerCanEdit || replyTo !== null)"
 			:inReplyTo="replyTo"
 			:startExpanded="replyTo !== null"
 			@posted="replyTo = null" />
@@ -35,7 +35,7 @@
 					v-if="profile.did && viewerCanFollow"
 					:handle="profile.handle || handle"
 					:initialFollowing="dataFollowing" />
-				<a :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
+				<a v-if="!viewerCanFollow" :href="settingsUrl">{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}</a>
 			</div>
 		</header>
 		<p v-if="loading" role="status">
