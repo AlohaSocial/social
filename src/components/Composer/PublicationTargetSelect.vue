@@ -5,10 +5,20 @@
 <template>
 	<div class="publication-target" :title="hint">
 		<label class="hidden-visually" for="publication-target">{{ t('social', 'Where to publish') }}</label>
-		<select id="publication-target" :value="target" :aria-label="t('social', 'Where to publish')" @change="$emit('update:target', $event.target.value)">
-			<option value="both">{{ t('social', 'Fediverse + Bluesky') }}</option>
-			<option value="fediverse">{{ t('social', 'Fediverse only') }}</option>
-			<option value="atproto" :disabled="!available">{{ t('social', 'Bluesky only') }}</option>
+		<select
+			id="publication-target"
+			:value="target"
+			:aria-label="t('social', 'Where to publish')"
+			@change="$emit('update:target', $event.target.value)">
+			<option value="both">
+				{{ t('social', 'Fediverse + Bluesky') }}
+			</option>
+			<option value="fediverse">
+				{{ t('social', 'Fediverse only') }}
+			</option>
+			<option value="atproto" :disabled="!available">
+				{{ t('social', 'Bluesky only') }}
+			</option>
 		</select>
 		<a v-if="!available" :href="settingsUrl">{{ t('social', 'Connect Bluesky') }}</a>
 	</div>
@@ -24,6 +34,7 @@ export default {
 		available: { type: Boolean, default: false },
 		settingsUrl: { type: String, required: true },
 	},
+
 	emits: ['update:target'],
 	computed: {
 		hint() {
@@ -32,12 +43,15 @@ export default {
 				: t('social', 'Connect a Bluesky account to publish there.')
 		},
 	},
+
 	methods: { t },
 }
 </script>
 
 <style scoped>
 .publication-target { display: inline-flex; align-items: center; gap: 6px; }
+
 .publication-target select { max-width: 190px; }
+
 .publication-target a { font-size:  var(--font-size-small); }
 </style>

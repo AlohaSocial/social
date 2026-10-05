@@ -16,8 +16,8 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamAction;
-use OCA\Social\Tools\Traits\TStringTools;
 use OCA\Social\Service\Atproto\AtprotoEngagementService;
+use OCA\Social\Tools\Traits\TStringTools;
 
 class ActionService {
 	use TStringTools;
