@@ -59,6 +59,13 @@
 						accept="image/jpeg,image/png,image/gif,image/webp"
 						:disabled="savingProfile"
 						@change="selectProfileImage($event, 'avatar')">
+					<NcButton
+						type="button"
+						variant="tertiary"
+						:disabled="savingProfile"
+						@click="profileImages.removeAvatar = true">
+						{{ t('social', 'Remove Bluesky avatar') }}
+					</NcButton>
 				</label>
 				<label class="atproto-profile__upload">
 					{{ t('social', 'Bluesky banner') }}
@@ -67,6 +74,13 @@
 						accept="image/jpeg,image/png,image/gif,image/webp"
 						:disabled="savingProfile"
 						@change="selectProfileImage($event, 'banner')">
+					<NcButton
+						type="button"
+						variant="tertiary"
+						:disabled="savingProfile"
+						@click="profileImages.removeBanner = true">
+						{{ t('social', 'Remove Bluesky banner') }}
+					</NcButton>
 				</label>
 				<NcButton type="submit" variant="secondary" :disabled="savingProfile">
 					{{ savingProfile ? t('social', 'Saving…') : t('social', 'Edit Bluesky profile') }}
@@ -148,7 +162,7 @@ export default {
 	name: 'AtprotoProfile',
 	components: { AtprotoFollowButton, Composer, NcButton, NcTextArea, NcTextField, ProfileStatusCard },
 	props: { handle: { type: String, required: true } },
-	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' }, profileImages: { avatar: null, banner: null } }),
+	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editProfile: { displayName: '', description: '' }, profileImages: { avatar: null, banner: null, removeAvatar: false, removeBanner: false } }),
 	computed: {
 		fediverseProfileUrl() {
 			const uid = getCurrentUser()?.uid ?? window.OC?.getCurrentUser?.()?.uid ?? ''
@@ -233,9 +247,15 @@ export default {
 				if (this.profileImages.banner) {
 					body.append('banner', this.profileImages.banner)
 				}
+				if (this.profileImages.removeAvatar) {
+					body.append('removeAvatar', '1')
+				}
+				if (this.profileImages.removeBanner) {
+					body.append('removeBanner', '1')
+				}
 				const { data } = await axios.put(generateUrl('apps/social/api/v1/atproto/profile'), body)
 				this.profile = { ...this.profile, ...(data.profile ?? this.editProfile) }
-				this.profileImages = { avatar: null, banner: null }
+				this.profileImages = { avatar: null, banner: null, removeAvatar: false, removeBanner: false }
 				this.editProfile = {
 					displayName: this.profile.displayName ?? '',
 					description: this.profile.description ?? '',

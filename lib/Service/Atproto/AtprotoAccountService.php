@@ -83,7 +83,7 @@ class AtprotoAccountService {
 	}
 
 	/** Update the public profile record in the linked account's repository. */
-	public function updateProfile(string $userId, string $displayName, string $description, ?array $avatarUpload = null, ?array $bannerUpload = null): array {
+	public function updateProfile(string $userId, string $displayName, string $description, ?array $avatarUpload = null, ?array $bannerUpload = null, bool $removeAvatar = false, bool $removeBanner = false): array {
 		$account = $this->atprotoRequest->getAccount($userId);
 		if ($account === null) {
 			throw new AtprotoException('no Bluesky account is linked', 404);
@@ -98,9 +98,13 @@ class AtprotoAccountService {
 		$record['description'] = $this->limit($description, 256);
 		if ($avatarUpload !== null) {
 			$record['avatar'] = $this->uploadProfileBlob($avatarUpload, $account);
+		} elseif ($removeAvatar) {
+			unset($record['avatar']);
 		}
 		if ($bannerUpload !== null) {
 			$record['banner'] = $this->uploadProfileBlob($bannerUpload, $account);
+		} elseif ($removeBanner) {
+			unset($record['banner']);
 		}
 		$this->client->authedPost('com.atproto.repo.putRecord', [
 			'repo' => $account->getDid(),

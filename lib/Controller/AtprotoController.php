@@ -200,6 +200,8 @@ class AtprotoController extends Controller {
 					(string)($body['description'] ?? ''),
 					is_array($avatar) ? $avatar : null,
 					is_array($banner) ? $banner : null,
+					in_array(strtolower((string)($body['removeAvatar'] ?? '')), ['1', 'true', 'yes'], true),
+					in_array(strtolower((string)($body['removeBanner'] ?? '')), ['1', 'true', 'yes'], true),
 				),
 			], Http::STATUS_OK);
 		} catch (AtprotoException $e) {

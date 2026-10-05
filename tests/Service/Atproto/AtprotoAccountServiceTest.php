@@ -106,19 +106,19 @@ class AtprotoAccountServiceTest extends TestCase {
 		try {
 			$request->expects($this->once())->method('getAccount')->with('alice')->willReturn($account);
 			$identity->expects($this->once())->method('profile')->with('did:plc:alice', 'https://pds.example')->willReturn([
-				'$type' => 'app.bsky.actor.profile', 'displayName' => 'Old',
+				'$type' => 'app.bsky.actor.profile', 'displayName' => 'Old', 'banner' => ['$type' => 'blob'],
 			]);
 			$client->expects($this->once())->method('authedBlobPost')
 				->with('avatar-bytes', 'image/png', $account, 'https://pds.example')
 				->willReturn(['blob' => ['$type' => 'blob', 'ref' => ['$link' => 'bafy-avatar']]]);
 			$client->expects($this->once())->method('authedPost')
-				->with('com.atproto.repo.putRecord', $this->callback(static fn (array $body): bool => ($body['record']['avatar']['ref']['$link'] ?? '') === 'bafy-avatar'), $account, 'https://pds.example')
+				->with('com.atproto.repo.putRecord', $this->callback(static fn (array $body): bool => ($body['record']['avatar']['ref']['$link'] ?? '') === 'bafy-avatar' && !isset($body['record']['banner'])), $account, 'https://pds.example')
 				->willReturn([]);
 
 			$service = new AtprotoAccountService($client, $identity, $request, $cipher, $config, new NullLogger());
 			$this->assertSame(['displayName' => 'Alice', 'description' => 'Description'], $service->updateProfile('alice', 'Alice', 'Description', [
 				'error' => UPLOAD_ERR_OK, 'tmp_name' => $path, 'type' => 'image/png', 'size' => 12,
-			]));
+			], null, false, true));
 		} finally {
 			if (is_string($path) && is_file($path)) {
 				unlink($path);
