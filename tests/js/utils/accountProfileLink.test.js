@@ -14,9 +14,9 @@ describe('account profile links', () => {
 	it('uses the shared handle route for synthetic ATProto actors', () => {
 		expect(localProfileUrl({
 			id: 'https://social.example/ap/bluesky/did:plc:abc',
-			acct: 'at-zeichenbob.schaechner.dpdns.org',
-			username: 'at-zeichenbob.schaechner.dpdns.org',
-		})).toBe('/index.php/apps/social/@at-zeichenbob.schaechner.dpdns.org')
+			acct: 'bob.schaechner.dpdns.org',
+			username: 'bob.schaechner.dpdns.org',
+		})).toBe('/index.php/apps/social/@bob.schaechner.dpdns.org')
 	})
 
 	it('leaves remote accounts to Social or their ActivityPub address', () => {

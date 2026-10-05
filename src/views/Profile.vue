@@ -11,6 +11,13 @@
 		<Composer v-if="isOwnProfile" />
 
 		<router-view v-if="accountLoaded && accountInfo" name="details" />
+		<section
+			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle"
+			class="social__atproto-profile"
+			aria-labelledby="social-atproto-profile-heading">
+			<h2 id="social-atproto-profile-heading">{{ t('social', 'Bluesky profile') }}</h2>
+			<AtprotoProfile :handle="atprotoHandle" />
+		</section>
 		<!-- the lookup is what says an account is missing: `accountLoaded` only
 		     says the store has it (see useAccount), so it cannot say it has not -->
 		<NcEmptyContent
@@ -29,7 +36,8 @@
 
 <script>
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import { generateFilePath } from '@nextcloud/router'
+import { generateFilePath, generateUrl } from '@nextcloud/router'
+import axios from '@nextcloud/axios'
 import { getCurrentUser } from '@nextcloud/auth'
 import ProfileInfo from './../components/ProfileInfo.vue'
 import { defineAsyncComponent, ref } from 'vue'
@@ -41,6 +49,7 @@ import { useAccount } from '../composables/useAccount.js'
 import { useServerData } from '../composables/useServerData.js'
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
+const AtprotoProfile = defineAsyncComponent(() => import(/* webpackChunkName: "profile" */'./AtprotoProfile.vue'))
 
 export default {
 	name: 'Profile',
@@ -48,6 +57,7 @@ export default {
 		NcEmptyContent,
 		ProfileInfo,
 		Composer,
+		AtprotoProfile,
 	},
 
 	setup() {
@@ -62,6 +72,8 @@ export default {
 	data() {
 		return {
 			state: [],
+			atprotoHandle: '',
+			atprotoLoading: false,
 			/** whether a lookup for the handle on screen has come back, either way */
 			lookupFinished: false,
 		}
@@ -161,6 +173,7 @@ export default {
 
 			const response = await this.accountStore[fetchMethod](this.profileAccount)
 			this.lookupFinished = true
+			await this.loadAtprotoHandle()
 			if (response) {
 				this.uid = response.acct
 				const infoId = this.accountInfo?.nid || this.accountInfo?.id
@@ -169,6 +182,27 @@ export default {
 				} else {
 					logger.debug('Not asking for a relationship', { known: Boolean(infoId), isPublic: this.serverData.public })
 				}
+			}
+		},
+
+		/** Load the signed-in person's linked Bluesky handle for the combined profile. */
+		async loadAtprotoHandle() {
+			this.atprotoHandle = ''
+			if (!this.isOwnProfile || this.atprotoLoading) {
+				return
+			}
+			this.atprotoLoading = true
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
+				if (data?.account?.state === 'linked' && data.account.handle) {
+					this.atprotoHandle = data.account.handle
+				}
+			} catch (error) {
+				// A missing or temporarily unavailable Bluesky link must never hide
+				// the ordinary Fediverse profile.
+				logger.debug('Could not load linked Bluesky profile', { error })
+			} finally {
+				this.atprotoLoading = false
 			}
 		},
 	},
@@ -184,5 +218,11 @@ export default {
 	&.icon-loading {
 		margin-top: 50vh;
 	}
+}
+
+.social__atproto-profile {
+	margin-block-start: calc(var(--default-grid-baseline) * 4);
+	padding-block-start: calc(var(--default-grid-baseline) * 2);
+	border-block-start: 1px solid var(--color-border);
 }
 </style>

@@ -364,7 +364,7 @@ class AtprotoEgress {
 		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before deleting posts', 401);
 		}
-		$link = $this->atprotoRequest->getLinkByLocalId($localId);
+		$link = $this->linkForPostId($localId);
 		if ($link === null || $link->getCollection() !== AtprotoIngress::COLLECTION) {
 			throw new AtprotoException('this Bluesky post is no longer known here', 404);
 		}
@@ -383,7 +383,7 @@ class AtprotoEgress {
 				throw $e;
 			}
 		}
-		$this->atprotoRequest->deleteLinkByLocalId($localId);
+		$this->atprotoRequest->deleteLinkByLocalId($link->getLocalId());
 	}
 
 	/** Update the text of a native post owned by the linked account. */
@@ -392,7 +392,7 @@ class AtprotoEgress {
 		if ($account === null || $account->getState() !== AtprotoAccount::STATE_LINKED) {
 			throw new AtprotoException('link a Bluesky account before editing posts', 401);
 		}
-		$link = $this->atprotoRequest->getLinkByLocalId($localId);
+		$link = $this->linkForPostId($localId);
 		if ($link === null || $link->getCollection() !== AtprotoIngress::COLLECTION) {
 			throw new AtprotoException('this Bluesky post is no longer known here', 404);
 		}
@@ -408,7 +408,7 @@ class AtprotoEgress {
 			], $account, $account->getPds());
 		} catch (AtprotoException $e) {
 			if ($this->isGone($e)) {
-				$this->atprotoRequest->deleteLinkByLocalId($localId);
+				$this->atprotoRequest->deleteLinkByLocalId($link->getLocalId());
 			}
 			throw $e;
 		}
@@ -432,6 +432,20 @@ class AtprotoEgress {
 			$link->setCid($cid);
 		}
 		$this->atprotoRequest->saveLink($link);
+	}
+
+	/**
+	 * Profile responses normally expose the stable local ActivityPub-shaped id.
+	 * Older cached responses can still carry the native `at://` URI; accepting
+	 * both keeps delete/edit reliable across an upgrade and a stale browser.
+	 */
+	private function linkForPostId(string $postId): ?AtprotoLink {
+		$link = $this->atprotoRequest->getLinkByLocalId($postId);
+		if ($link === null && str_starts_with($postId, 'at://')) {
+			$link = $this->atprotoRequest->getLinkByAtUri($postId);
+		}
+
+		return $link;
 	}
 
 	private function isGone(AtprotoException $exception): bool {
