@@ -432,4 +432,27 @@ class AtprotoEgressTest extends TestCase {
 
 		$this->egress->publish($post);
 	}
+
+	public function testUnsupportedLocalMediaIsNotUploadedAsANativeBlob(): void {
+		$document = (new Document())
+			->setId('https://cloud.example/apps/social/document/vector-1')
+			->setAccount('alice')
+			->setMimeType('image/svg+xml')
+			->setSizeBytes(42);
+		$post = $this->post();
+		$post->setAttachments([$document]);
+		$account = $this->account();
+		$this->documentService->expects($this->never())->method('getFromCache');
+		$this->client->expects($this->never())->method('authedBlobPost');
+		$this->atprotoRequest->method('getLinkByLocalId')->willReturn(null);
+		$this->actorsRequest->method('getFromId')->willReturn($this->localAuthor());
+		$this->atprotoRequest->method('getAccount')->willReturn($account);
+		$this->client->expects($this->once())->method('authedPost')->willReturn([
+			'uri' => 'at://' . self::DID . '/' . AtprotoIngress::COLLECTION . '/3vector',
+			'cid' => 'bafy-vector',
+		]);
+		$this->atprotoRequest->expects($this->once())->method('saveLink');
+
+		$this->egress->publish($post);
+	}
 }

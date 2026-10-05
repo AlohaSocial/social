@@ -31,6 +31,15 @@ use Psr\Log\LoggerInterface;
  * before this service is called and cannot be held up by a PDS failure.
  */
 class AtprotoEgress {
+	/** Formats accepted by the native Bluesky image/video embed lexicons. */
+	private const NATIVE_MEDIA_MIME_TYPES = [
+		'image/jpeg' => 'image',
+		'image/png' => 'image',
+		'image/gif' => 'image',
+		'image/webp' => 'image',
+		'video/mp4' => 'video',
+		'video/webm' => 'video',
+	];
 	/** The low ten bits that make two writes in the same microsecond distinct. */
 	private int $clock = 0;
 
@@ -551,8 +560,9 @@ class AtprotoEgress {
 				continue;
 			}
 			$mime = strtolower(trim($attachment->getMimeType()));
-			$limit = str_starts_with($mime, 'video/') ? 50 * 1024 * 1024 : 1 * 1024 * 1024;
-			if ($mime === '' || (!str_starts_with($mime, 'image/') && !str_starts_with($mime, 'video/'))
+			$mediaType = self::NATIVE_MEDIA_MIME_TYPES[$mime] ?? null;
+			$limit = $mediaType === 'video' ? 50 * 1024 * 1024 : 1 * 1024 * 1024;
+			if ($mediaType === null
 				|| $attachment->getSizeBytes() < 1 || $attachment->getSizeBytes() > $limit) {
 				continue;
 			}
@@ -563,7 +573,7 @@ class AtprotoEgress {
 					continue;
 				}
 				$aspectRatio = $this->aspectRatio($attachment);
-				if (str_starts_with($mime, 'video/')) {
+				if ($mediaType === 'video') {
 					$video = ['$type' => 'app.bsky.embed.video', 'video' => $blob, 'alt' => $attachment->getDescription()];
 					if ($aspectRatio !== null) {
 						$video['aspectRatio'] = $aspectRatio;
