@@ -323,10 +323,11 @@ class AtprotoEgressTest extends TestCase {
 			'com.atproto.repo.putRecord',
 			$this->callback(static function (array $request): bool {
 				return $request['swapRecord'] === 'bafy-old'
-					&& $request['record']['text'] === 'new text'
+					&& $request['record']['text'] === 'new text https://example.test #edited'
 					&& $request['record']['createdAt'] === '2026-01-01T00:00:00Z'
 					&& $request['record']['embed'] === ['old' => true]
-					&& !isset($request['record']['facets']);
+					&& $request['record']['facets'][0]['features'][0]['uri'] === 'https://example.test'
+					&& $request['record']['facets'][1]['features'][0]['$type'] === 'app.bsky.richtext.facet#tag';
 			}),
 			$account,
 			'https://pds.example',
@@ -335,7 +336,7 @@ class AtprotoEgressTest extends TestCase {
 			static fn (AtprotoLink $saved): bool => $saved->getCid() === 'bafy-new'
 		));
 
-		$this->egress->updateOwn('alice', self::POST, 'new text');
+		$this->egress->updateOwn('alice', self::POST, 'new text https://example.test #edited');
 	}
 
 	public function testEditReplacesTheMappedRecordWithoutCreatingANewPost(): void {

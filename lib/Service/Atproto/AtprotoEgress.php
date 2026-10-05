@@ -406,7 +406,12 @@ class AtprotoEgress {
 		$record = is_array($current['value'] ?? null) ? $current['value'] : [];
 		$record['$type'] = 'app.bsky.feed.post';
 		$record['text'] = $this->nativeText($text);
-		unset($record['facets']);
+		$facets = $this->facetsFromPlainText($record['text']);
+		if ($facets === []) {
+			unset($record['facets']);
+		} else {
+			$record['facets'] = $facets;
+		}
 		$answer = $this->client->authedPost('com.atproto.repo.putRecord', [
 			'repo' => $account->getDid(),
 			'collection' => $link->getCollection(),
@@ -466,6 +471,71 @@ class AtprotoEgress {
 		}
 
 		return mb_strlen($text) > 300 ? mb_substr($text, 0, 299) . '…' : $text;
+	}
+
+	/**
+	 * Rebuild facets when the profile editor supplies plain text rather than
+	 * Social's stored HTML. Offsets from PCRE are byte offsets, as ATProto
+	 * requires, so Unicode text remains addressable without splitting a glyph.
+	 *
+	 * @return list<array{index: array{byteStart: int, byteEnd: int}, features: list<array<string, string>>}>
+	 */
+	private function facetsFromPlainText(string $text): array {
+		$facets = [];
+		$occupied = [];
+		$add = static function (int $start, int $end, array $feature) use (&$facets, &$occupied): void {
+			foreach ($occupied as [$from, $to]) {
+				if ($start < $to && $end > $from) {
+					return;
+				}
+			}
+			$occupied[] = [$start, $end];
+			$facets[] = [
+				'index' => ['byteStart' => $start, 'byteEnd' => $end],
+				'features' => [$feature],
+			];
+		};
+
+		if (preg_match_all('~https?://[^\s<>]+~u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
+			foreach ($matches[0] as [$url, $start]) {
+				$url = rtrim((string)$url, '.,!?;:)]}');
+				if ($url !== '') {
+					$add((int)$start, (int)$start + strlen($url), [
+						'$type' => 'app.bsky.richtext.facet#link',
+						'uri' => $url,
+					]);
+				}
+			}
+		}
+
+		if (preg_match_all('/(?<![\pL\pN_])#([\pL\pN_]+)/u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
+			foreach ($matches[0] as $index => [$tag, $start]) {
+				$add((int)$start, (int)$start + strlen((string)$tag), [
+					'$type' => 'app.bsky.richtext.facet#tag',
+					'tag' => ltrim((string)$tag, '#'),
+				]);
+			}
+		}
+
+		if ($this->identity !== null
+			&& preg_match_all('/(?<![\pL\pN_])@([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+)/u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
+			foreach ($matches[0] as [$mention, $start]) {
+				$handle = ltrim((string)$mention, '@');
+				try {
+					$did = $this->identity->resolve($handle)['did'];
+				} catch (AtprotoException) {
+					continue;
+				}
+				$add((int)$start, (int)$start + strlen((string)$mention), [
+					'$type' => 'app.bsky.richtext.facet#mention',
+					'did' => $did,
+				]);
+			}
+		}
+
+		usort($facets, static fn (array $left, array $right): int => $left['index']['byteStart'] <=> $right['index']['byteStart']);
+
+		return $facets;
 	}
 
 	/** Upload local attachments and return one native image/video embed. */
