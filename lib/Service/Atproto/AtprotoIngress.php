@@ -166,11 +166,22 @@ class AtprotoIngress {
 		}
 
 		$pds = $this->identity->pdsOf($did);
-		$answer = $this->client->get('com.atproto.repo.getRecord', [
-			'repo' => $did,
-			'collection' => $collection,
-			'rkey' => $rkey,
-		], $pds);
+		try {
+			$answer = $this->client->get('com.atproto.repo.getRecord', [
+				'repo' => $did,
+				'collection' => $collection,
+				'rkey' => $rkey,
+			], $pds);
+		} catch (AtprotoException $e) {
+			if (in_array($e->getStatus(), [404, 410], true)) {
+				// A repository deletion is authoritative. Removing only the mapping
+				// keeps future quote/reply resolution from repeatedly asking for a
+				// record that no longer exists while leaving the local audit row intact.
+				$this->atprotoRequest->deleteLinkByLocalId($id);
+				$this->logger->info('removed stale ATProto record mapping', ['id' => $id]);
+			}
+			throw $e;
+		}
 
 		$entry = [
 			'uri' => 'at://' . $did . '/' . $collection . '/' . $rkey,
