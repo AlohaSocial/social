@@ -16,7 +16,6 @@ on:
   push:
     branches:
       - master
-      - test/interop-pixelfed
   workflow_dispatch:
   schedule:
     # Mondays, early, beside the Mastodon run
