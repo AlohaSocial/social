@@ -300,7 +300,13 @@ jobs:
           if [ -z "$TOKEN" ]; then echo "no token"; exit 1; fi
           echo "::add-mask::$TOKEN"
           echo "PIXELFED_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-          curl -sf -H "Authorization: Bearer $TOKEN" "$PIXELFED_BASE_URL/api/v1/accounts/verify_credentials" | head -c 400; echo
+          ANSWER=$(curl -s -w '\n%{http_code}' -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN" \
+            "$PIXELFED_BASE_URL/api/v1/accounts/verify_credentials")
+          echo "$ANSWER" | head -c 1500; echo
+          if [ "$(echo "$ANSWER" | tail -1)" != "200" ]; then
+            docker logs pixelfed 2>&1 | tail -40
+            exit 1
+          fi
 
       - name: Interop tests
         working-directory: apps/social
