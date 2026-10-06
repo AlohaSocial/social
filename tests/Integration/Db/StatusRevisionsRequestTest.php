@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Integration\Db;
 
 use OCA\Social\Db\StatusRevisionsRequest;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\StatusRevision;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -56,6 +57,19 @@ class StatusRevisionsRequestTest extends TestCase {
 		$this->assertTrue($read[1]->isSensitive());
 		$this->assertSame('cw', $read[1]->getSpoilerText());
 		$this->assertSame(self::POST, $read[0]->getStreamId(), 'handed back as the status asked about, not its hash');
+	}
+
+	public function testEachRevisionKeepsTheAttachmentsOfItsVersion(): void {
+		$this->revisions->save($this->revision('<p>a</p>')->setMediaAttachments([
+			(new MediaAttachment())->setId('11')->setType('image')->setDescription('Before'),
+		]));
+		$this->revisions->save($this->revision('<p>a</p>')->setMediaAttachments([
+			(new MediaAttachment())->setId('11')->setType('image')->setDescription('After'),
+		]));
+
+		$read = $this->revisions->getByStreamId(self::POST);
+		$this->assertSame('Before', $read[0]->getMediaAttachments()[0]->getDescription());
+		$this->assertSame('After', $read[1]->getMediaAttachments()[0]->getDescription());
 	}
 
 	public function testAPostThatWasNeverEditedHasNone(): void {

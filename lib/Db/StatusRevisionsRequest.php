@@ -29,6 +29,7 @@ class StatusRevisionsRequest extends StatusRevisionsRequestBuilder {
 			->setValue('spoiler_text', $qb->createNamedParameter($revision->getSpoilerText()))
 			->setValue('sensitive', $qb->createNamedParameter($revision->isSensitive() ? 1 : 0))
 			->setValue('published', $qb->createNamedParameter($revision->getPublished()))
+			->setValue('media', $qb->createNamedParameter($revision->getMediaAttachmentsAsJson()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
 		$qb->executeStatement();

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StatusRevisionsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\StatusRevision;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\StatusRevisionService;
@@ -107,6 +108,24 @@ class StatusRevisionServiceTest extends TestCase {
 
 		$this->assertSame('2026-09-11T10:00:00Z', $this->saved[0]->getPublished());
 		$this->assertSame('2026-09-11T11:00:00Z', $this->saved[1]->getPublished());
+	}
+
+	/**
+	 * `media_attributes` rewrites a description on the attachment itself, so
+	 * the versions are only told apart by what each revision kept.
+	 */
+	public function testAnEditThatOnlyChangedADescriptionRecordsBothDescriptions(): void {
+		$before = $this->note('same words', '2026-09-11T10:00:00Z');
+		$before->setAttachments([(new MediaAttachment())->setId('11')->setDescription('Before')]);
+		$after = $this->note('same words', '2026-09-11T10:00:00Z', '2026-09-11T11:00:00Z');
+		$after->setAttachments([(new MediaAttachment())->setId('11')->setDescription('After')]);
+
+		$this->service->recordEdit($before, $after);
+
+		$this->assertSame(
+			['Before', 'After'],
+			array_map(static fn (StatusRevision $r): string => $r->getMediaAttachments()[0]->getDescription(), $this->saved)
+		);
 	}
 
 	public function testALaterEditRecordsOnlyTheNewVersion(): void {
