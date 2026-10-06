@@ -668,6 +668,69 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		);
 	}
 
+	/**
+	 * PeerTube files a video under its channel and sends the video's Update
+	 * and Delete as the account that owns the channel; the channel's own
+	 * document names that account.
+	 */
+	public function testUpdateByTheAccountBehindTheChannelRewritesTheVideo(): void {
+		[$channel, $owner, $video] = $this->channelVideo(self::REMOTE_URL . '/accounts/owner');
+		$this->knownActors($channel);
+
+		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($video));
+
+		$this->handler->activity($this->incoming(Update::TYPE, $owner . '#updates/1', $owner, $video), $video);
+	}
+
+	public function testDeleteByTheAccountBehindTheChannelRemovesTheVideo(): void {
+		[$channel, $owner, $video] = $this->channelVideo(self::REMOTE_URL . '/accounts/owner');
+		$this->knownActors($channel);
+
+		$this->streamRequest->expects($this->once())->method('deleteById')->with(self::NOTE);
+
+		$this->handler->activity($this->incoming(Delete::TYPE, $owner . '#delete/1', $owner, $video), $video);
+	}
+
+	public function testUpdateByAnAccountTheChannelDoesNotNameIsRefused(): void {
+		[$channel, , $video] = $this->channelVideo(self::REMOTE_URL . '/accounts/owner');
+		$this->knownActors($channel);
+		$mallory = self::REMOTE_URL . '/accounts/mallory';
+
+		$this->streamRequest->expects($this->never())->method('update');
+
+		$this->expectException(InvalidOriginException::class);
+
+		$this->handler->activity($this->incoming(Update::TYPE, $mallory . '#updates/1', $mallory, $video), $video);
+	}
+
+	public function testAChannelOnAnotherServerCannotBeOwnedFromThisOne(): void {
+		$owner = 'https://other.example/accounts/owner';
+		[$channel, , $video] = $this->channelVideo($owner);
+		$this->knownActors($channel);
+
+		$this->streamRequest->expects($this->never())->method('update');
+
+		$this->expectException(InvalidOriginException::class);
+
+		$this->handler->activity($this->incoming(Update::TYPE, $owner . '#updates/1', $owner, $video), $video);
+	}
+
+	/**
+	 * A video stored under a remote channel whose document names `$owner`.
+	 *
+	 * @return array{0: Person, 1: string, 2: Note}
+	 */
+	private function channelVideo(string $owner): array {
+		$channel = $this->person(self::REMOTE_URL . '/video-channels/films');
+		$channel->setType('Group');
+		$channel->setAttributedToActors([['type' => Person::TYPE, 'id' => $owner]]);
+
+		$stored = $this->note(self::NOTE, $channel->getId());
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($stored);
+
+		return [$channel, $owner, $this->note(self::NOTE, $channel->getId())];
+	}
+
 	public function testUpdateOfANoteNeverReceivedRewritesNothing(): void {
 		$this->nothingStored();
 		$note = $this->incomingNote();
