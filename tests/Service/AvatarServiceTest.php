@@ -188,6 +188,31 @@ class AvatarServiceTest extends TestCase {
 		$this->service->restoreFromArchive(self::USER, $this->file('<?php phpinfo();'));
 	}
 
+	/** The checks `update_credentials` makes before it writes anything. */
+	public function testCheckingAnUploadRefusesWhatSettingItWouldAndWritesNothing(): void {
+		$path = $this->file('<?php phpinfo();');
+		$this->uploaded[] = $path;
+
+		try {
+			$this->service->checkUpload(self::USER, ['tmp_name' => $path]);
+			$this->fail('bytes that are not a picture were accepted');
+		} catch (InvalidActionException $e) {
+			$this->assertStringContainsString('JPEG, PNG, GIF or WebP', $e->getMessage());
+		}
+
+		$this->assertNull($this->stored);
+		$this->assertSame([], $this->refreshed);
+	}
+
+	public function testCheckingAnUploadedPictureWritesNothing(): void {
+		$path = $this->png();
+		$this->uploaded[] = $path;
+
+		$this->assertSame($path, $this->service->checkUpload(self::USER, ['tmp_name' => $path]));
+		$this->assertNull($this->stored);
+		$this->assertSame([], $this->refreshed);
+	}
+
 	public function testAnEmptyFileIsRefused(): void {
 		$this->expectException(InvalidActionException::class);
 		$this->expectExceptionMessage('empty');

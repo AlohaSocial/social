@@ -4208,6 +4208,133 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
 	}
 
+	/** @param array<string, mixed> $fields */
+	private function updateCredentialsSends(array $fields, array $files = []): void {
+		$this->multipartBodyService->method('read')->willReturn(['fields' => $fields, 'files' => $files]);
+	}
+
+	/**
+	 * Everything that can be refused is refused before anything is written:
+	 * the bio used to be stored and the request answered with an error.
+	 */
+	public function testUpdateCredentialsRefusesAnUnknownAudienceBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends([
+			'note' => 'A new bio', 'display_name' => 'Alice', 'source' => ['privacy' => 'friends'],
+		]);
+		$this->accountService->method('assertDefaultPrivacy')
+			->willThrowException(new InvalidActionException('unknown visibility: friends'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+		$this->accountService->expects($this->never())->method('setDefaultPrivacy');
+
+		$this->assertUnprocessable(
+			$this->controller()->updateCredentials(), 'unknown visibility: friends'
+		);
+	}
+
+	public function testUpdateCredentialsRefusesANameTheBackendOwnsBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice']);
+		$this->accountService->method('assertDisplayNameWritable')
+			->willThrowException(new InvalidActionException('the display name of this account is managed outside Nextcloud'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
+	}
+
+	public function testUpdateCredentialsRefusesAnAvatarThatIsNotAPictureBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$avatar = ['tmp_name' => '/tmp/parsed-avatar', 'error' => UPLOAD_ERR_OK, 'name' => 'me.png'];
+		$this->updateCredentialsSends(['note' => 'A new bio'], ['avatar' => $avatar]);
+		$this->avatarService->method('checkUpload')
+			->willThrowException(new InvalidActionException('an avatar has to be a JPEG, PNG, GIF or WebP image'));
+		$this->avatarService->expects($this->never())->method('setFromTempFile');
+		$this->accountService->expects($this->never())->method('setSummary');
+
+		$this->assertUnprocessable(
+			$this->controller()->updateCredentials(), 'an avatar has to be a JPEG, PNG, GIF or WebP image'
+		);
+	}
+
+	/**
+	 * The banner is the one part whose bytes are only judged once stored, so
+	 * it goes first and its refusal leaves the rest unwritten.
+	 */
+	public function testUpdateCredentialsWritesTheBannerFirstAndARefusedOneWritesNothing(): void {
+		$this->loggedInAs();
+		$header = ['tmp_name' => '/tmp/parsed-header', 'error' => UPLOAD_ERR_OK, 'name' => 'banner.txt'];
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice'], ['header' => $header]);
+		$this->bannerService->method('setFromTempFile')
+			->willThrowException(new \OCA\Social\Exceptions\CacheContentMimeTypeException('not an image'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
+	}
+
+	/**
+	 * A part that fails after the first was stored no longer turns the whole
+	 * save into a 500 over half a profile: the rest is written, the failure
+	 * logged, and the entity answered shows what was stored.
+	 */
+	public function testUpdateCredentialsStoresTheRestWhenALaterPartFails(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends([
+			'display_name' => 'Alice',
+			'note' => 'A new bio',
+			'fields_attributes' => [['name' => 'Web', 'value' => 'https://alice.example']],
+		]);
+		$written = [];
+		$this->accountService->expects($this->once())->method('setDisplayName')
+			->willReturnCallback(function () use (&$written): void {
+				$written[] = 'display_name';
+			});
+		$this->accountService->expects($this->once())->method('setSummary')
+			->willThrowException(new \RuntimeException('database went away'));
+		$this->accountService->expects($this->once())->method('setFields')
+			->willReturnCallback(function () use (&$written): void {
+				$written[] = 'fields_attributes';
+			});
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains('could not store note'));
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->updateCredentials();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['display_name', 'fields_attributes'], $written);
+	}
+
+	public function testUpdateCredentialsWritesTheDisplayNameBeforeTheBio(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice']);
+		$written = [];
+		$this->accountService->method('setSummary')->willReturnCallback(function () use (&$written): void {
+			$written[] = 'note';
+		});
+		$this->accountService->method('setDisplayName')->willReturnCallback(function () use (&$written): void {
+			$written[] = 'display_name';
+		});
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
+		$this->assertSame(['display_name', 'note'], $written);
+	}
+
+	public function testUpdateCredentialsAnswersTheFirstPartsFailureWhenNothingWasWritten(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['display_name' => 'Alice', 'note' => 'A new bio']);
+		$this->accountService->method('setDisplayName')->willThrowException(new \RuntimeException('backend down'));
+		$this->accountService->expects($this->never())->method('setSummary');
+
+		$this->assertServerError($this->controller()->updateCredentials());
+	}
+
 	/** A body that cannot be read is an error, not a 200 over the old profile. */
 	public function testUpdateCredentialsRefusesAMultipartBodyItCannotRead(): void {
 		$this->loggedInAs();

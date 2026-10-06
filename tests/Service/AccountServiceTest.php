@@ -53,7 +53,6 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
-use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
 class AccountServiceTest extends TestCase {
@@ -76,6 +75,7 @@ class AccountServiceTest extends TestCase {
 	private CacheActorService|MockObject $cacheActorService;
 	private \OCA\Social\Db\CacheActorsRequest|MockObject $cacheActorsRequest;
 	private ModerationRequest|MockObject $moderationRequest;
+	private LoggerInterface|MockObject $logger;
 
 	/** @var string[] the addresses this instance gives no fediverse account to */
 	private array $blockedEmails = [];
@@ -138,7 +138,7 @@ class AccountServiceTest extends TestCase {
 			$this->cacheActorService,
 			$this->cacheActorsRequest,
 			$this->moderationRequest,
-			new NullLogger(),
+			$this->logger = $this->createMock(LoggerInterface::class),
 		);
 		error_reporting($this->errorReporting);
 	}
@@ -1295,6 +1295,70 @@ class AccountServiceTest extends TestCase {
 		$this->expectException(InvalidActionException::class);
 
 		$this->service->setDefaultPrivacy('alice', 'friends');
+	}
+
+	public function testAnAudienceThisAppCannotPostWithIsRefusedBeforeAnythingIsWritten(): void {
+		$this->configService->expects($this->never())->method('setValueForUser');
+
+		$this->expectException(InvalidActionException::class);
+
+		$this->service->assertDefaultPrivacy('friends');
+	}
+
+	public function testAKnownAudienceIsAccepted(): void {
+		$this->service->assertDefaultPrivacy('  Unlisted ');
+
+		$this->addToAssertionCount(1);
+	}
+
+	// setDisplayName()
+
+	/**
+	 * Core stores the name with the backend and then lets its own listener
+	 * re-validate the profile, which throws when the `fediverse` property
+	 * cannot be verified over the network. The stored name is kept.
+	 */
+	public function testADisplayNameIsKeptWhenAProfileListenerFailsAfterStoringIt(): void {
+		$alice = $this->alice();
+		$user = $this->user('alice');
+		$user->method('canChangeDisplayName')->willReturn(true);
+		$user->expects($this->once())->method('setDisplayName')->with(' Alice Liddell ')
+			->willThrowException(new \InvalidArgumentException('fediverse'));
+		$user->method('getDisplayName')->willReturn('Alice Liddell');
+		$this->userManager->method('get')->with('alice')->willReturn($user);
+		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($alice);
+		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		$this->logger->expects($this->once())->method('warning')
+			->with($this->stringContains('the display name is stored'));
+		// the actor is refreshed all the same, so the new name reaches it
+		$this->actorService->expects($this->once())->method('cacheLocalActor')
+			->with($this->identicalTo($alice));
+
+		$this->service->setDisplayName('alice', ' Alice Liddell ');
+	}
+
+	public function testADisplayNameThatWasNotStoredIsAnError(): void {
+		$user = $this->user('alice');
+		$user->method('canChangeDisplayName')->willReturn(true);
+		$user->method('setDisplayName')->willThrowException(new \RuntimeException('backend down'));
+		$user->method('getDisplayName')->willReturn('Alice');
+		$this->userManager->method('get')->with('alice')->willReturn($user);
+		$this->actorService->expects($this->never())->method('cacheLocalActor');
+
+		$this->expectException(\RuntimeException::class);
+
+		$this->service->setDisplayName('alice', 'Alice Liddell');
+	}
+
+	public function testADisplayNameTheBackendOwnsIsRefusedBeforeAnythingIsWritten(): void {
+		$user = $this->user('alice');
+		$user->method('canChangeDisplayName')->willReturn(false);
+		$user->expects($this->never())->method('setDisplayName');
+		$this->userManager->method('get')->with('alice')->willReturn($user);
+
+		$this->expectException(InvalidActionException::class);
+
+		$this->service->assertDisplayNameWritable('alice');
 	}
 
 	// email-domain blocks
