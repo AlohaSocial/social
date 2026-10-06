@@ -283,6 +283,12 @@ jobs:
       - name: Make a Pixelfed account and a token for it
         run: |
           set -euo pipefail
+          # an account before the suite's, so the suite's is not number 1:
+          # Passport's guard reads a token whose user id equals its client id
+          # as a client-credentials token and authenticates nobody, and the
+          # one personal client is number 1 too
+          docker exec pixelfed php artisan user:create --name=Bystander --username=bystander \
+            --email=bystander@example.com --password='Interop-Test-2026!' --confirm_email=1
           docker exec pixelfed php artisan user:create --name=Interop --username="$PIXELFED_USER" \
             --email=interop@example.com --password='Interop-Test-2026!' --is_admin=true --confirm_email=1
           cat > /tmp/token.php <<'PHP'
@@ -300,33 +306,6 @@ jobs:
           if [ -z "$TOKEN" ]; then echo "no token"; exit 1; fi
           echo "::add-mask::$TOKEN"
           echo "PIXELFED_TOKEN=$TOKEN" >> "$GITHUB_ENV"
-          echo "token: ${#TOKEN} characters, $(echo "$TOKEN" | tr -cd . | wc -c) dots"
-          # the same request through Pixelfed's own HTTP kernel, inside the
-          # container: tells a key or token problem from a web-server one
-          cat > /tmp/probe.php <<'PHP'
-          <?php
-          require 'vendor/autoload.php';
-          $app = require 'bootstrap/app.php';
-          $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
-          $request = Illuminate\Http\Request::create('https://pixelfed.test/api/v1/accounts/verify_credentials', 'GET', [], [], [], [
-            'HTTP_AUTHORIZATION' => 'Bearer ' . getenv('PF_TOKEN'),
-            'HTTP_ACCEPT' => 'application/json',
-          ]);
-          $response = $kernel->handle($request);
-          echo $response->getStatusCode(), ' ', substr((string)$response->getContent(), 0, 300), "\n";
-          try {
-            $psr = new GuzzleHttp\Psr7\ServerRequest('GET', 'https://pixelfed.test/api/v1/accounts/verify_credentials', ['Authorization' => 'Bearer ' . getenv('PF_TOKEN')]);
-            $validated = $app->make(League\OAuth2\Server\ResourceServer::class)->validateAuthenticatedRequest($psr);
-            echo json_encode($validated->getAttributes()), "\n";
-            $client = Laravel\Passport\Passport::client()->find($validated->getAttribute('oauth_client_id'));
-            echo 'client: ', json_encode($client?->only(['id', 'provider', 'revoked', 'grant_types'])), "\n";
-            echo 'user: ', json_encode(App\Models\User::find($validated->getAttribute('oauth_user_id'))?->only(['id', 'status', 'username'])), "\n";
-          } catch (Throwable $e) {
-            echo get_class($e), ': ', $e->getMessage(), ' ', method_exists($e, 'getHint') ? $e->getHint() : '', "\n";
-          }
-          PHP
-          docker exec -i -e PF_TOKEN="$TOKEN" pixelfed php < /tmp/probe.php || true
-          docker exec pixelfed ls -la storage | grep -i oauth || true
           ANSWER=$(curl -s -w '\n%{http_code}' -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN" \
             "$PIXELFED_BASE_URL/api/v1/accounts/verify_credentials")
           echo "$ANSWER" | head -c 1500; echo
