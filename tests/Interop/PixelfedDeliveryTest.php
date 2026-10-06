@@ -182,9 +182,13 @@ class PixelfedDeliveryTest extends TestCase {
 	 * Pixelfed reads nothing out of the activity: it fetches the story through
 	 * the bearcap the activity carries, so this proves the capability, the
 	 * route that honours it and the document behind it.
+	 *
+	 * The picture is 1080 by 1920, the frame Pixelfed's own composer crops
+	 * every story to: Pixelfed drops a fetched story of any other size
+	 * ("Image dimensions out of range").
 	 */
 	public function testOurStoryReachesPixelfedsStoryBar(): void {
-		$media = $this->aloha->uploadPhoto($this->picture(), 'a story picture');
+		$media = $this->aloha->uploadPhoto($this->picture(1080, 1920), 'a story picture');
 		$story = $this->aloha->post('/api/v1/stories', ['media_id' => $media, 'caption' => $this->words('story'), 'duration' => 5]);
 		$this->assertNotSame('', (string)($story['id'] ?? ''), 'the story was not written: ' . json_encode($story));
 		$this->drainQueue();

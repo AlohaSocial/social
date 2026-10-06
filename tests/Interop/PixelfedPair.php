@@ -164,9 +164,7 @@ trait PixelfedPair {
 	 * file they have seen, and a test must not pass on a picture an earlier
 	 * run left behind.
 	 */
-	protected function picture(): string {
-		$width = 480;
-		$height = 360;
+	protected function picture(int $width = 480, int $height = 360): string {
 		$image = imagecreatetruecolor($width, $height);
 		for ($block = 0; $block < 48; $block++) {
 			$colour = imagecolorallocate($image, random_int(0, 255), random_int(0, 255), random_int(0, 255));
