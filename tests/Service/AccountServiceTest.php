@@ -1358,6 +1358,57 @@ class AccountServiceTest extends TestCase {
 		yield 'a directory flag' => ['flags'];
 	}
 
+	/**
+	 * Mastodon handles several `Update`s of one actor in parallel under a lock
+	 * per actor, and keeps whichever wins: a name, a bio and fields sent as
+	 * three Updates arrived as a name and a bio.
+	 */
+	public function testSeveralChangesAtOnceAreToldInOneUpdateCarryingAllOfThem(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->willReturnCallback(function (Person $actor, Person $item): string {
+				$this->assertSame('I keep bees.', $item->getSummary());
+				$this->assertSame('https://alice.example', $item->getFields()[0]['value'] ?? '');
+				$this->assertTrue($item->isLocked());
+
+				return 'token';
+			});
+
+		$answer = $this->service->changingProfile('alice', function (): string {
+			$this->service->setSummary('alice', 'I keep bees.');
+			$this->service->setFields('alice', [['name' => 'Web', 'value' => 'https://alice.example']]);
+			$this->service->setLocked('alice', true);
+
+			return 'done';
+		});
+
+		$this->assertSame('done', $answer);
+	}
+
+	public function testNothingChangedTellsNobody(): void {
+		$this->activityService->expects($this->never())->method('updateActivity');
+
+		$this->service->changingProfile('alice', static fn (): bool => false);
+	}
+
+	public function testChangesMadeBeforeAFailureAreStillTold(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		try {
+			$this->service->changingProfile('alice', function (): void {
+				$this->service->setSummary('alice', 'I keep bees.');
+				throw new Exception('the avatar backend is down');
+			});
+			$this->fail('the failure is the caller\'s to see');
+		} catch (Exception $e) {
+			$this->assertSame('the avatar backend is down', $e->getMessage());
+		}
+	}
+
 	public function testAProfileChangeIsStoredEvenIfNobodyCanBeTold(): void {
 		$alice = $this->alice();
 		$this->aliceIsKnown($alice);

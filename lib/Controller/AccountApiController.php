@@ -229,7 +229,7 @@ class AccountApiController extends MastodonApiController {
 				);
 			}
 
-			if ($this->applyProfileParts($parts)) {
+			if ($this->accountService->changingProfile($userId, fn (): bool => $this->applyProfileParts($parts))) {
 				// refresh the viewer so the returned entity carries the change
 				$this->viewer = $this->refreshedViewer();
 			}
