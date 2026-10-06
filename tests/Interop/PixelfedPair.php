@@ -102,11 +102,24 @@ trait PixelfedPair {
 		}
 
 		$this->pixelfed->follow($this->ourIdThere);
-		$followed = $this->pixelfed->await(function (): ?bool {
+		$asked = time();
+		$followed = $this->pixelfed->await(function () use (&$asked): ?bool {
 			// the Accept is ours to send: it waits in the queue
 			$this->drainQueue();
+			if ($this->pixelfed->relationship($this->ourIdThere)['following'] === true) {
+				return true;
+			}
 
-			return ($this->pixelfed->relationship($this->ourIdThere)['following'] === true) ? true : null;
+			// Pixelfed clears an unfollow up in a queued job, which can land
+			// after the Accept of a follow made straight afterwards and take
+			// that follow with it; asking again is what its user would do,
+			// and this side answers a repeated Follow with the Accept again
+			if (time() - $asked >= 30) {
+				$this->pixelfed->follow($this->ourIdThere);
+				$asked = time();
+			}
+
+			return null;
 		});
 
 		$this->assertTrue($followed, 'Pixelfed asked to follow ' . $this->ourHandle . ' and never got to');

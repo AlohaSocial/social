@@ -361,7 +361,9 @@ jobs:
             | grep -v -E "SMTP" | cut -c1-700 | tail -120 || true
           echo '--- Pixelfed Horizon ---'
           docker exec pixelfed php artisan horizon:status 2>&1 || true
-          docker logs pixelfed-horizon 2>&1 | grep -v -E "^\s*$" | cut -c1-500 | tail -120 || true
+          docker logs pixelfed-horizon 2>&1 | grep -v -E "^\s*$|Worker STOPPED" | cut -c1-500 | tail -60 || true
+          echo '--- Pixelfed Horizon: stories, warnings and errors ---'
+          docker logs pixelfed-horizon 2>&1 | grep -i -E "story|warning|error|exception|fail" | cut -c1-900 | tail -80 || true
           echo '--- Pixelfed failed jobs ---'
           docker exec pixelfed php artisan queue:failed 2>&1 | tail -40 || true
           echo '--- Pixelfed log files ---'

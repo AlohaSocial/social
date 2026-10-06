@@ -39,6 +39,10 @@ class PixelfedInboundTest extends TestCase {
 			$this->aloha->await(fn (): ?bool => ($this->aloha->relationship($this->theirIdHere)['followed_by'] === false) ? true : null),
 			'this side still lists ' . $this->theirHandle . ' as a follower after the unfollow'
 		);
+		$this->assertTrue(
+			$this->pixelfed->await(fn (): ?bool => ($this->pixelfed->relationship($this->ourIdThere)['following'] === false) ? true : null),
+			'Pixelfed still counts the follow it took back'
+		);
 
 		$this->pixelfedFollowsUs();
 
