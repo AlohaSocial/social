@@ -192,7 +192,7 @@ class AtprotoEgress {
 		$pattern = '/<a\\b[^>]*href=["\\\']([^"\\\']+)["\\\'][^>]*>(.*?)<\\/a>/isu';
 		if (preg_match_all($pattern, $html, $matches, PREG_SET_ORDER) !== false) {
 			foreach ($matches as $match) {
-				$label = trim(html_entity_decode(strip_tags((string)$match[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+				$label = trim(html_entity_decode(strip_tags($match[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
 				$start = $label === '' ? false : strpos($text, $label, $offset);
 				if ($start === false) {
 					continue;
@@ -204,7 +204,7 @@ class AtprotoEgress {
 					'index' => ['byteStart' => $start, 'byteEnd' => $end],
 					'features' => [[
 						'$type' => 'app.bsky.richtext.facet#link',
-						'uri' => html_entity_decode((string)$match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+						'uri' => html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
 					]],
 				];
 			}
@@ -227,7 +227,7 @@ class AtprotoEgress {
 					'index' => ['byteStart' => $start, 'byteEnd' => $end],
 					'features' => [[
 						'$type' => 'app.bsky.richtext.facet#tag',
-						'tag' => ltrim((string)$tag, '#'),
+						'tag' => ltrim($tag, '#'),
 					]],
 				];
 			}
@@ -521,9 +521,9 @@ class AtprotoEgress {
 
 		if (preg_match_all('~https?://[^\s<>]+~u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
 			foreach ($matches[0] as [$url, $start]) {
-				$url = rtrim((string)$url, '.,!?;:)]}');
+				$url = rtrim($url, '.,!?;:)]}');
 				if ($url !== '') {
-					$add((int)$start, (int)$start + strlen($url), [
+					$add($start, $start + strlen($url), [
 						'$type' => 'app.bsky.richtext.facet#link',
 						'uri' => $url,
 					]);
@@ -533,9 +533,9 @@ class AtprotoEgress {
 
 		if (preg_match_all('/(?<![\pL\pN_])#([\pL\pN_]+)/u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
 			foreach ($matches[0] as $index => [$tag, $start]) {
-				$add((int)$start, (int)$start + strlen((string)$tag), [
+				$add($start, $start + strlen($tag), [
 					'$type' => 'app.bsky.richtext.facet#tag',
-					'tag' => ltrim((string)$tag, '#'),
+					'tag' => ltrim($tag, '#'),
 				]);
 			}
 		}
@@ -543,13 +543,13 @@ class AtprotoEgress {
 		if ($this->identity !== null
 			&& preg_match_all('/(?<![\pL\pN_])@([A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+)/u', $text, $matches, PREG_OFFSET_CAPTURE) !== false) {
 			foreach ($matches[0] as [$mention, $start]) {
-				$handle = ltrim((string)$mention, '@');
+				$handle = ltrim($mention, '@');
 				try {
 					$did = $this->identity->resolve($handle)['did'];
 				} catch (AtprotoException) {
 					continue;
 				}
-				$add((int)$start, (int)$start + strlen((string)$mention), [
+				$add($start, $start + strlen($mention), [
 					'$type' => 'app.bsky.richtext.facet#mention',
 					'did' => $did,
 				]);

@@ -131,9 +131,6 @@ class AtprotoAccountService {
 		if ($path !== '' && is_readable($path) && function_exists('finfo_open')) {
 			$finfo = finfo_open(FILEINFO_MIME_TYPE);
 			$detectedMime = $finfo === false ? null : finfo_file($finfo, $path);
-			if ($finfo !== false) {
-				finfo_close($finfo);
-			}
 			$detectedMime = [
 				'image/x-png' => 'image/png',
 				'image/pjpeg' => 'image/jpeg',
