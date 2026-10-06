@@ -400,6 +400,8 @@ copy in app storage; the original stays where it was, untouched.
 
 ## ActivityPub Federation
 
+ActivityPub is the one federation protocol this app speaks today. The specification for a second one — native Bluesky / AT Protocol identities, with this app as the PDS — is [Atproto-Compatibility.md](Atproto-Compatibility.md); nothing of it is implemented, and its sections move into this document as its phases land.
+
 The app is an ActivityPub **Server** that both produces and consumes ActivityPub messages.
 
 ### Actor Identity
