@@ -103,8 +103,10 @@ title following the text.
 And the other way round (`PeerTubeInboundTest`): PeerTube's account uploads a
 real video — a few seconds made by PeerTube's own ffmpeg in the workflow — to
 the channel our `admin` follows, and it arrives on the videos timeline here
-with its title, description, duration and poster. A reply written here
-becomes a comment on the video there; PeerTube's answer to that comment
+with its title, description, duration and poster — as the video, or as the
+channel's boost of it, which is how a channel tells its followers. An edit and
+a delete on PeerTube apply here. A reply written here becomes a comment on the
+video there; PeerTube's answer to that comment
 notifies its author here; a like from here is counted there; and following a
 channel puts our account among its followers there, unfollowing takes it out
 again.
@@ -121,6 +123,13 @@ silent on this side:
 - an edit federated the client-format object, so Mastodon dropped every one;
 - PeerTube refused every `Video` on its version-5 `uuid`;
 - a `Video` with no `likes`/`dislikes` crashed PeerTube outright.
+
+Its later runs found three more: a PeerTube video's edit and deletion, sent
+by the account behind the channel the video is filed under, were refused as
+coming from somebody other than the author; a vote cast on Mastodon on a poll
+of ours was never counted, and was stored as a message instead; and a display
+name, profile fields or a lock changed here never reached anybody who
+already followed the account.
 
 ## What it cannot prove
 

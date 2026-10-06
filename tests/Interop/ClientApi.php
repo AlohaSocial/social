@@ -21,6 +21,14 @@ use RuntimeException;
  * API will not render has not arrived either.
  */
 abstract class ClientApi extends RestClient {
+	/**
+	 * Account ids already resolved, by side and handle: an id does not change
+	 * within a run, and a search is rate limited on both sides.
+	 *
+	 * @var array<string, string>
+	 */
+	private static array $resolved = [];
+
 	// --- what both sides answer the same way --------------------------------
 
 	/**
@@ -31,6 +39,10 @@ abstract class ClientApi extends RestClient {
 	 * this one call already proves the actor document is one it accepts.
 	 */
 	public function resolveAccount(string $handle): string {
+		return self::$resolved[$this->name() . ' ' . strtolower(ltrim($handle, '@'))] ??= $this->searchAccount($handle);
+	}
+
+	private function searchAccount(string $handle): string {
 		$found = $this->get('/api/v2/search', [
 			'q' => $handle,
 			'type' => 'accounts',

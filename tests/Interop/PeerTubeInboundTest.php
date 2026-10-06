@@ -134,6 +134,39 @@ class PeerTubeInboundTest extends TestCase {
 		);
 	}
 
+	/** PeerTube's edit of the video is the video here too. */
+	public function testAnEditOnPeerTubeIsApplied(): void {
+		$video = $this->upload($this->unique('video'), $this->unique());
+		$status = $this->awaitVideoHere($video['uuid']);
+		$this->assertNotNull($status, 'the video never reached this side');
+
+		$renamed = $this->unique('renamed');
+		$this->peertube->put('/api/v1/videos/' . $video['uuid'], ['name' => $renamed]);
+
+		$this->assertNotNull(
+			$this->here->awaitStatusThat(
+				(string)$status['id'],
+				static fn (array $now): bool => str_contains((string)($now['content'] ?? ''), $renamed),
+				90
+			),
+			'the video was renamed on PeerTube and is still shown here under its old title'
+		);
+	}
+
+	/** A video deleted on PeerTube is gone here as well. */
+	public function testADeleteOnPeerTubeRemovesTheVideo(): void {
+		$video = $this->upload($this->unique('video'), $this->unique());
+		$status = $this->awaitVideoHere($video['uuid']);
+		$this->assertNotNull($status, 'the video never reached this side');
+
+		$this->peertube->delete('/api/v1/videos/' . $video['uuid']);
+
+		$this->assertTrue(
+			$this->here->await(fn (): ?bool => ($this->here->status((string)$status['id']) === null) ? true : null, 90) === true,
+			'the video deleted on PeerTube can still be read here'
+		);
+	}
+
 	/** Following a channel puts us among its followers there; unfollowing takes us out. */
 	public function testFollowingAndUnfollowingAChannel(): void {
 		$watcher = Here::forUser(self::WATCHER);
@@ -185,9 +218,18 @@ class PeerTubeInboundTest extends TestCase {
 	private function awaitVideoHere(string $uuid): ?array {
 		$uri = rtrim((string)getenv('PEERTUBE_BASE_URL'), '/') . '/videos/watch/' . $uuid;
 
-		return $this->here->await(
-			fn (): ?array => ClientApi::findByUri($this->here->timeline('home', ['only_video' => 'true']), $uri),
-			90
-		);
+		return $this->here->await(function () use ($uri): ?array {
+			foreach ($this->here->timeline('home', ['only_video' => 'true']) as $status) {
+				// a channel announces its videos to its followers, so the video
+				// may be on the timeline as the channel's boost of it
+				foreach ([$status, $status['reblog'] ?? null] as $candidate) {
+					if (is_array($candidate) && ($candidate['uri'] ?? '') === $uri) {
+						return $candidate;
+					}
+				}
+			}
+
+			return null;
+		}, 90);
 	}
 }

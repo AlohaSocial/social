@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interop;
 
+use OCA\Social\Service\DocumentService;
+use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -312,7 +314,18 @@ class MastodonInboundTest extends TestCase {
 		});
 		$this->assertNotNull($after, 'the new display name never reached this side');
 		$this->assertStringContainsString($bio, (string)($after['note'] ?? ''), 'the new bio never reached this side');
-		$this->assertNotSame($before['avatar'] ?? '', $after['avatar'] ?? '', 'the new avatar never reached this side');
+
+		// a remote picture is copied here by the cache job cron runs, and
+		// shown once it has been
+		$documents = Server::get(DocumentService::class);
+		$this->assertNotNull(
+			$this->here->await(function () use ($before, $documents): ?bool {
+				$documents->manageCacheDocuments();
+
+				return (($this->here->account($this->interopHere)['avatar'] ?? '') !== ($before['avatar'] ?? '')) ? true : null;
+			}),
+			'the new avatar never reached this side'
+		);
 	}
 
 	/** An `Undo` of Mastodon's follow ends it here, so nothing more is sent there. */
