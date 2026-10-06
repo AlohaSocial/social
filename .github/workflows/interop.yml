@@ -5,16 +5,20 @@
 # PeerTube, read back out of each one's own API. See tests/Interop/README.md for
 # why, and for what this cannot prove.
 #
-# Deliberately NOT on `pull_request`. It stands up four containers and depends
-# on a third-party image whose startup this repository does not control, so a
-# bad day for that image would block every pull request on a failure that says
-# nothing about the change under review. Run it by hand from the Actions tab,
-# or leave the weekly run to find drift; make it required once it has been
-# green for a while.
+# On every pull request and every push to master, as well as weekly and by
+# hand. It stands up four containers and depends on third-party images whose
+# startup this repository does not control, so a red run is worth reading for
+# which side failed before blaming the change under review: the last step
+# prints what each side saw. A newer push to the same pull request cancels the
+# run still going for the old one.
 
 name: Interop against Mastodon and PeerTube
 
 on:
+  pull_request:
+  push:
+    branches:
+      - master
   workflow_dispatch:
   schedule:
     # Mondays, early: a week is the right cadence for "has the other end moved"

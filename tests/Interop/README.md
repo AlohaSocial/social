@@ -178,8 +178,9 @@ holds from us, the last `Update` run through Mastodon's own processing, the
 last `Create` sent to PeerTube, and PeerTube's validator refusals, which it
 logs only at debug level.
 
-It is deliberately **not** on `pull_request`. It depends on a third-party image
-whose startup this repository does not control, so a bad day for that image
-would block every pull request on a failure that says nothing about the change
-under review. It runs weekly and on demand from the Actions tab; make it
-required once it has been green for a while.
+It runs on **every pull request** and every push to master, weekly to catch
+the other end moving, and by hand from the Actions tab. It depends on
+third-party images whose startup this repository does not control, so a red
+run is worth reading for which side failed before blaming the change under
+review; a newer push to the same pull request cancels the run still going for
+the old one. One run takes about twenty minutes.
