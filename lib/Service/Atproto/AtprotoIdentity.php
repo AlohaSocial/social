@@ -590,12 +590,16 @@ class AtprotoIdentity {
 	 *
 	 * @param mixed $blob the `avatar`/`image` field of a profile record
 	 */
-	private function blobUrl(string $did, mixed $blob, string $pds): string {
+	public function blobUrl(string $did, mixed $blob, string $pds): string {
+		if (is_string($blob) && (str_starts_with($blob, 'http://') || str_starts_with($blob, 'https://'))) {
+			return $blob;
+		}
+
 		if (!is_array($blob)) {
 			return '';
 		}
 
-		$cid = (string)($blob['ref']['$link'] ?? ($blob['ref'] ?? ''));
+		$cid = (string)($blob['ref']['$link'] ?? ($blob['ref'] ?? ($blob['cid'] ?? '')));
 		if ($cid === '') {
 			return '';
 		}

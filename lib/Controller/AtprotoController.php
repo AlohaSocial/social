@@ -378,6 +378,61 @@ class AtprotoController extends Controller {
 		}
 	}
 
+	/** Accounts following this Bluesky handle. */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profiles/{handle}/followers')]
+	public function followers(string $handle): DataResponse {
+		try {
+			$limit = min(max((int)$this->request->getParam('limit', 20), 1), 50);
+			$cursor = trim((string)$this->request->getParam('cursor', ''));
+			return new DataResponse(
+				$this->profileService->followers($handle, $limit, $this->currentUserId(), $cursor),
+				Http::STATUS_OK
+			);
+		} catch (\Throwable $e) {
+			$this->logger->info('ATProto followers lookup failed', ['handle' => $handle, 'exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
+	/** Accounts this Bluesky handle follows. */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/profiles/{handle}/following')]
+	public function following(string $handle): DataResponse {
+		try {
+			$limit = min(max((int)$this->request->getParam('limit', 20), 1), 50);
+			$cursor = trim((string)$this->request->getParam('cursor', ''));
+			return new DataResponse(
+				$this->profileService->following($handle, $limit, $this->currentUserId(), $cursor),
+				Http::STATUS_OK
+			);
+		} catch (\Throwable $e) {
+			$this->logger->info('ATProto following lookup failed', ['handle' => $handle, 'exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
+	/** Feed generator items (Discover, Popular with Friends, Mutuals, Science). */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/atproto/feed/{feed}')]
+	public function feed(string $feed): DataResponse {
+		try {
+			$limit = min(max((int)$this->request->getParam('limit', 20), 1), 50);
+			$cursor = trim((string)($this->request->getParam('cursor', '') ?: $this->request->getParam('max_id', '')));
+			$data = $this->profileService->feed($feed, $limit, $this->currentUserId(), $cursor);
+			return new DataResponse($data['statuses'], Http::STATUS_OK);
+		} catch (\Throwable $e) {
+			$this->logger->info('ATProto feed lookup failed', ['feed' => $feed, 'exception' => $e]);
+			return new DataResponse(['message' => $e->getMessage()], $e instanceof AtprotoException ? $e->getStatus() : Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	/**
 	 * The Nextcloud account behind the reader, which is what a link is stored
 	 * under — `null` when nobody is signed in, which these routes answer
