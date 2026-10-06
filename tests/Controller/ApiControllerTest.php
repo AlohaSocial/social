@@ -2338,8 +2338,11 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar']);
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar_static']);
 		// never the avatar: a client draws the header where a header goes
-		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header']);
-		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header_static']);
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.png', $data['header']);
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.png', $data['header_static']);
+		// and says that both are placeholders, so a client need not guess from the URL
+		$this->assertTrue($data['avatar_default']);
+		$this->assertTrue($data['header_default']);
 	}
 
 	public function testUpdateCredentialsRequiresAViewer(): void {

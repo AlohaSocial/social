@@ -209,10 +209,50 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * @return string
+	 * The banner, or `''`. A local account's stored header that is its own
+	 * Nextcloud avatar is no banner: it is what the header used to fall back
+	 * to, and the cached copy kept it as if it were one.
 	 */
 	public function getHeader(): string {
+		if ($this->hasOwnAvatarAsHeader()) {
+			return '';
+		}
+
 		return $this->header;
+	}
+
+	/**
+	 * Whether the stored header of a local account is its own avatar: the
+	 * address of its icon, or Nextcloud's avatar route of its user.
+	 */
+	public function hasOwnAvatarAsHeader(): bool {
+		if (!$this->isLocal() || $this->header === '') {
+			return false;
+		}
+
+		if ($this->hasIcon() && $this->getIcon()->getUrl() === $this->header) {
+			return true;
+		}
+
+		return self::isAvatarRouteOf($this->header, [$this->getPreferredUsername(), $this->getUserId()]);
+	}
+
+	/**
+	 * Whether a URL is Nextcloud's avatar route of one of these users, at any
+	 * size: `/index.php/avatar/{user}/{size}`, or `/avatar/{user}/{size}` with
+	 * pretty URLs, each with an optional `/dark`.
+	 *
+	 * @param string[] $users
+	 */
+	public static function isAvatarRouteOf(string $url, array $users): bool {
+		$path = (string)parse_url($url, PHP_URL_PATH);
+		if (preg_match('#/avatar/([^/]+)/\d+(?:/dark)?/?$#', $path, $match) !== 1) {
+			return false;
+		}
+
+		$user = rawurldecode($match[1]);
+
+		return $user !== '' && in_array($user, array_filter($users, static fn (string $name): bool => $name !== ''), true);
 	}
 
 	/**
@@ -1340,11 +1380,11 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			];
 		}
 
-		if ($this->header !== '') {
+		if ($this->getHeader() !== '') {
 			$data['image'] = array_filter([
 				'type' => 'Image',
 				'mediaType' => $this->headerMediaType(),
-				'url' => $this->header,
+				'url' => $this->getHeader(),
 			], static fn (string $value): bool => $value !== '');
 		}
 
@@ -1391,23 +1431,24 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * The banner an account without one is given on the client API: a plain
+	 * picture of the right shape, as Mastodon's `missing.png`, and a PNG like
+	 * it, because clients that decode only raster images draw nothing for an
+	 * SVG. Never the avatar -- a client draws the header where a header goes,
+	 * and a face stretched across the top of a profile with an empty circle
+	 * under it is what that looked like.
+	 */
+	public function placeholderHeader(IURLGenerator $urlGenerator): string {
+		return $urlGenerator->getAbsoluteURL(
+			$urlGenerator->imagePath(SocialApp::APP_ID, 'header-missing.png')
+		);
+	}
+
+	/**
 	 * The picture shown for an account that has none cached yet: for a local
 	 * account Nextcloud's own avatar, which every user has (generated from the
 	 * initials when nothing was uploaded), the app icon otherwise.
 	 */
-	/**
-	 * The banner an account without one is given on the client API: a plain
-	 * picture of the right shape, as Mastodon's `missing.png`. Never the
-	 * avatar -- a client draws the header where a header goes, and a face
-	 * stretched across the top of a profile with an empty circle under it
-	 * is what that looked like.
-	 */
-	public function placeholderHeader(IURLGenerator $urlGenerator): string {
-		return $urlGenerator->getAbsoluteURL(
-			$urlGenerator->imagePath(SocialApp::APP_ID, 'header-missing.svg')
-		);
-	}
-
 	public function placeholderImage(IURLGenerator $urlGenerator): string {
 		if ($this->isLocal()) {
 			return $urlGenerator->linkToRouteAbsolute(
@@ -1425,6 +1466,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 */
 	#[\Override]
 	public function exportAsLocal(): array {
+		$avatarDefault = false;
 		if ($this->hasIcon()) {
 			// an icon with no local copy yet -- fetched by the next cache run,
 			// or replaced a moment ago by a removed or renamed avatar -- has
@@ -1432,15 +1474,18 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 			$avatar = $this->getIcon()->getMediaUrl(Server::get(IURLGenerator::class));
 			if ($avatar === '') {
 				$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
+				$avatarDefault = true;
 			}
 		} elseif ($this->getAvatar() === '') {
 			// an account that never set a picture: the client API promises a
 			// URL, and a local account always has Nextcloud's own avatar
 			$avatar = $this->placeholderImage(Server::get(IURLGenerator::class));
+			$avatarDefault = true;
 		}
 
 		$headerUrl = $this->getHeader();
-		if ($headerUrl === '') {
+		$headerDefault = ($headerUrl === '');
+		if ($headerDefault) {
 			$headerUrl = $this->placeholderHeader(Server::get(IURLGenerator::class));
 		}
 		$details = $this->getDetailsAll();
@@ -1476,6 +1521,11 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				'avatar_static' => $avatar ?? $this->getAvatar(),
 				'header' => $headerUrl,
 				'header_static' => $headerUrl,
+				// this app's own: whether `avatar` and `header` are placeholders
+				// rather than pictures the account set, which a client could
+				// otherwise only guess from the shape of the URL
+				'avatar_default' => $avatarDefault,
+				'header_default' => $headerDefault,
 				'followers_count' => $this->getInt('count.followers', $details),
 				'following_count' => $this->getInt('count.following', $details),
 				'statuses_count' => $this->getInt('count.post', $details),

@@ -147,6 +147,21 @@ them. `pronouns` is `''` when the value is longer than 40 characters (a
 sentence in the wrong row), and `support_link` is `''` unless the value is an
 `https://` URL, because it is drawn as a button.
 
+**An Account entity says whether its pictures are placeholders.**
+`avatar_default` and `header_default` are `true` when `avatar` or `header` is
+a placeholder rather than a picture the account set: Nextcloud's own avatar
+route for a local account without an uploaded picture, the app icon for a
+remote account whose picture is missing or not cached yet, and
+`img/header-missing.png` (a plain 1500×500 PNG, as Mastodon's `missing.png`)
+for an account without a banner. They are on every Account entity,
+`verify_credentials` and `update_credentials` included; `avatar` and `header`
+stay URLs, so a client that does not know the keys draws what it drew before.
+Without them a client could only guess from the shape of the URL, which
+depends on URL rewriting, the app folder and the size argument. A local
+account's header that is its own avatar — what the header used to fall back
+to, kept by the cached copy — counts as no header and is removed from the
+cache by the `ClearAvatarHeaders` repair step.
+
 | Method | Route | Auth | Parameters | Description |
 |--------|-------|------|------------|-------------|
 | GET | `/api/v1/accounts/verify_credentials` | public, no-csrf | — | The viewer's `Person` actor serialised in local format, with `source` and Mastodon's `role` (see [Admin API](#admin-api-mastodon) for what the role says). 401 `{"error": ...}` when unauthenticated. |
