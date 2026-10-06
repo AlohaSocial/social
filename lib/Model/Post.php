@@ -50,6 +50,8 @@ class Post implements JsonSerializable {
 
 	/** BCP 47; empty means the poster's default, decided by PostService */
 	private string $language = '';
+	/** `fediverse`, `atproto` or `both`; legacy callers default to both. */
+	private string $publicationTarget = 'both';
 	private int $placeId = 0;
 
 	/** @var string[] */
@@ -179,6 +181,16 @@ class Post implements JsonSerializable {
 		$this->type = Stream::visibilityFromClient($type);
 
 		return $this;
+	}
+
+	public function setPublicationTarget(string $target): Post {
+		$this->publicationTarget = in_array($target, ['fediverse', 'atproto', 'both'], true) ? $target : 'both';
+
+		return $this;
+	}
+
+	public function getPublicationTarget(): string {
+		return $this->publicationTarget;
 	}
 
 	/**

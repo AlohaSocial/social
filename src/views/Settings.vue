@@ -76,6 +76,7 @@
 <script>
 import ArchivedPosts from '../components/ArchivedPosts.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
+import AtprotoSettings from '../components/AtprotoSettings.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
 import HeldPosts from '../components/HeldPosts.vue'
 import IntroductionSettings from '../components/IntroductionSettings.vue'
@@ -84,6 +85,7 @@ import ScheduledPosts from '../components/ScheduledPosts.vue'
 import ShortcutList from '../components/ShortcutList.vue'
 import IconAccount from 'vue-material-design-icons/AccountCircleOutline.vue'
 import IconApps from 'vue-material-design-icons/KeyOutline.vue'
+import IconBluesky from 'vue-material-design-icons/Bird.vue'
 import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
@@ -146,6 +148,7 @@ export default {
 
 	components: {
 		AccountSettings,
+		AtprotoSettings,
 		ArchivedPosts,
 		AuthorizedApps,
 		DeleteAccount,
@@ -157,6 +160,7 @@ export default {
 		InviteSettings,
 		IconAccount,
 		IconApps,
+		IconBluesky,
 		IconArchive,
 		IconDelete,
 		IconInterests,
@@ -218,6 +222,13 @@ export default {
 					component: 'AccountSettings',
 					title: t('social', 'Your account'),
 					lede: t('social', 'How others find you, and who sees what you post.'),
+				},
+				{
+					id: 'bluesky',
+					icon: 'IconBluesky',
+					component: 'AtprotoSettings',
+					title: t('social', 'Bluesky'),
+					lede: t('social', 'A separate AT Protocol connection beside your Fediverse account.'),
 				},
 				// a self-registered external user's media quota
 				...(this.serverData?.externalMedia

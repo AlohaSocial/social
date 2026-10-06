@@ -23,7 +23,11 @@ use OCA\Social\Dashboard\SocialReportsWidget;
 use OCA\Social\Dashboard\SocialTimelineWidget;
 use OCA\Social\Dashboard\SocialTrendingWidget;
 use OCA\Social\Dashboard\SocialWidget;
+use OCA\Social\Events\PostDeletedEvent;
+use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Events\PostUpdatedEvent;
 use OCA\Social\External\SignupLoginProvider;
+use OCA\Social\Listeners\AtprotoPostListener;
 use OCA\Social\Listeners\ExternalAddressBookListener;
 use OCA\Social\Listeners\ExternalDavListener;
 use OCA\Social\Listeners\ExternalFirstLoginListener;
@@ -86,7 +90,7 @@ class ApplicationTest extends TestCase {
 
 		$listeners = [];
 		$priorities = [];
-		$context->expects($this->exactly(15))->method('registerEventListener')
+		$context->expects($this->exactly(18))->method('registerEventListener')
 			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$priorities): void {
 				$listeners[$event] = $listener;
 				$priorities[$event] = $priority;
@@ -104,6 +108,9 @@ class ApplicationTest extends TestCase {
 			UserUpdatedEvent::class => UserAccountListener::class,
 			// without this one a deleted user keeps a live Fediverse account
 			UserDeletedEvent::class => UserDeletedListener::class,
+			PostPublishedEvent::class => AtprotoPostListener::class,
+			PostUpdatedEvent::class => AtprotoPostListener::class,
+			PostDeletedEvent::class => AtprotoPostListener::class,
 			// without this one Files has no "Share to Social"
 			LoadAdditionalScriptsEvent::class => FilesScriptsListener::class,
 			// the group lists follow the groups

@@ -32,6 +32,18 @@
 		<p v-else-if="activeFeed === 'federated'" class="social-profile__feed-description">
 			{{ t('social', 'Public posts from across the Fediverse.') }}
 		</p>
+		<p v-else-if="activeFeed === 'bluesky'" class="social-profile__feed-description">
+			{{ t('social', 'Posts published to Bluesky by this account, shown in the same profile.') }}
+		</p>
+		<div v-if="replyTo" class="social-profile__reply-composer">
+			<Composer
+				:inReplyTo="replyTo"
+				:startExpanded="true"
+				@posted="replyTo = null" />
+			<NcButton variant="tertiary" @click="replyTo = null">
+				{{ t('social', 'Cancel reply') }}
+			</NcButton>
+		</div>
 
 		<p v-if="feedLoading && feedTimeline.length === 0" role="status" class="social-profile__feed-state">
 			{{ t('social', 'Loading posts…') }}
@@ -56,7 +68,14 @@
 			<ProfileStatusCard
 				v-for="entry in feedTimeline"
 				:key="`${activeFeed}-${entry.id}`"
-				:status="entry" />
+				:status="entry"
+				:canDelete="isOwnProfile && (activeFeed === 'profile' || activeFeed === 'bluesky')"
+				:nativeDelete="isOwnProfile && activeFeed === 'bluesky'"
+				:canEdit="isOwnProfile && activeFeed === 'bluesky'"
+				:nativeEdit="isOwnProfile && activeFeed === 'bluesky'"
+				@deleted="removeDeletedPost"
+				@updated="replaceUpdatedPost"
+				@reply="replyTo = $event" />
 		</transition-group>
 		<p v-if="feedError && feedTimeline.length" class="social-profile__feed-state" role="alert">
 			{{ t('social', 'Could not load this feed') }}
@@ -75,22 +94,27 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
+import { getCurrentUser } from '@nextcloud/auth'
 import axios from '@nextcloud/axios'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import { defineAsyncComponent } from 'vue'
 import IconAccountCircle from 'vue-material-design-icons/AccountCircle.vue'
 import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
+import IconBird from 'vue-material-design-icons/Bird.vue'
 import ProfileStatusCard from './../components/ProfileStatusCard.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
 import logger from './../services/logger.js'
 import { bannerOf } from '../utils/banner.js'
 
 const PAGE_SIZE = 20
+const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
 export default {
 	name: 'ProfilePageIntegration',
 	components: {
+		Composer,
 		NcButton,
 		ProfileStatusCard,
 		TimelineSwitcher,
@@ -112,15 +136,17 @@ export default {
 			feedLoading: false,
 			feedError: false,
 			feedHasMore: false,
+			blueskyOffset: 0,
 			feedRequest: 0,
 			anchorRequest: false,
+			replyTo: null,
 		}
 	},
 
 	computed: {
 		isOwnProfile() {
-			return Boolean(window.OC?.getCurrentUser?.()?.uid)
-				&& window.OC.getCurrentUser().uid === this.userId
+			const currentUser = getCurrentUser?.() ?? window.OC?.getCurrentUser?.()
+			return Boolean(currentUser?.uid) && currentUser.uid === this.userId
 		},
 
 		feedOptions() {
@@ -129,6 +155,7 @@ export default {
 			]
 			if (this.isOwnProfile) {
 				options.push({ value: 'home', label: t('social', 'My Feed'), icon: IconHome })
+				options.push({ value: 'bluesky', label: t('social', 'Bluesky'), icon: IconBird })
 			}
 			options.push(
 				{ value: 'timeline', label: t('social', 'Local'), icon: IconAccountMultiple },
@@ -193,16 +220,24 @@ export default {
 			if (!maxId) {
 				this.feedTimeline = []
 				this.feedHasMore = false
+				if (feed === 'bluesky') {
+					this.blueskyOffset = 0
+				}
 			}
 
 			try {
 				const params = { limit: PAGE_SIZE }
-				if (maxId) {
+				if (maxId && feed !== 'bluesky') {
 					params.max_id = maxId
 				}
 				let url
 				if (feed === 'profile') {
 					url = generateUrl(`apps/social/api/v1/accounts/${encodeURIComponent(this.userId)}/statuses`)
+				} else if (feed === 'bluesky') {
+					url = generateUrl('apps/social/api/v1/atproto/profile')
+					if (this.blueskyOffset > 0) {
+						params.cursor = this.blueskyOffset
+					}
 				} else if (feed === 'home') {
 					url = generateUrl('apps/social/api/v1/timelines/home')
 				} else {
@@ -213,12 +248,23 @@ export default {
 				if (request !== this.feedRequest || feed !== this.activeFeed) {
 					return
 				}
-				const page = Array.isArray(data) ? data : []
+				const blueskyPage = feed === 'bluesky' && !Array.isArray(data)
+					? data
+					: null
+				const page = Array.isArray(data) ? data : (blueskyPage?.statuses ?? [])
 				const seen = new Set(this.feedTimeline.map((status) => String(status.id)))
 				this.feedTimeline = maxId
 					? [...this.feedTimeline, ...page.filter((status) => !seen.has(String(status.id)))]
 					: page
-				this.feedHasMore = page.length === PAGE_SIZE
+				this.feedHasMore = feed === 'bluesky'
+					? String(blueskyPage?.nextCursor ?? '') !== ''
+					: page.length === PAGE_SIZE
+				if (feed === 'bluesky') {
+					const nextOffset = Number(blueskyPage?.nextCursor)
+					this.blueskyOffset = Number.isSafeInteger(nextOffset) && nextOffset > this.blueskyOffset
+						? nextOffset
+						: this.blueskyOffset + page.length
+				}
 				if (feed === 'profile' && !maxId) {
 					await this.restorePostAnchor(request)
 				}
@@ -232,6 +278,19 @@ export default {
 					this.feedLoading = false
 				}
 			}
+		},
+
+		removeDeletedPost(status) {
+			const id = String(status?.id ?? '')
+			this.feedTimeline = this.feedTimeline.filter((entry) => String(entry.id) !== id)
+		},
+
+		replaceUpdatedPost(status) {
+			const id = String(status?.id ?? '')
+			if (id === '') {
+				return
+			}
+			this.feedTimeline = this.feedTimeline.map((entry) => String(entry.id) === id ? status : entry)
 		},
 
 		async restorePostAnchor(request) {
@@ -361,5 +420,12 @@ export default {
 
 .social-profile__load-more {
 	margin-block: 1rem 2rem;
+}
+
+.social-profile__reply-composer {
+	margin-block: 1rem;
+	padding: 1rem;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
 }
 </style>

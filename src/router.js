@@ -17,6 +17,7 @@ const ProfileTimeline = () => import(/* webpackChunkName: "profile" */'./views/P
 const ProfileFollowers = () => import(/* webpackChunkName: "profile" */'./views/ProfileFollowers.vue')
 const ProfileCollections = () => import(/* webpackChunkName: "profile" */'./views/ProfileCollections.vue')
 const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/ProfileTagged.vue')
+const AtprotoProfile = () => import(/* webpackChunkName: "profile" */'./views/AtprotoProfile.vue')
 const Portfolio = () => import(/* webpackChunkName: "portfolio" */'./views/Portfolio.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
@@ -230,6 +231,20 @@ const router = createRouter({
 			],
 		},
 		{
+			path: '/atproto/:handle',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile',
+		},
+		{
+			// Domain-shaped @handles belong to ATProto; the Fediverse route
+			// below continues to own ordinary /@username profiles.
+			path: '/@:handle([^@]+\\.[^@]+)',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile-handle',
+		},
+		{
 			path: '/@:account',
 			components: {
 				default: Profile,
@@ -399,6 +414,14 @@ const router = createRouter({
 				details: ProfileTimeline,
 			},
 			props: true,
+		},
+		{
+			// A Bluesky handle is itself a profile URL segment. This is last so
+			// named Social routes such as /settings and /discover win first.
+			path: '/:handle',
+			components: { default: AtprotoProfile },
+			props: true,
+			name: 'atproto-profile-bare-handle',
 		},
 	],
 })

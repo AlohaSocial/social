@@ -101,6 +101,40 @@ describe('the post menu', () => {
 			])
 		})
 
+		it('recognises an own post by its stable actor id when handles differ', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { id: 'https://cloud.example.org/users/alice', acct: 'alice@pds.example' },
+			}, {
+				currentAccount: { id: 'https://cloud.example.org/users/alice', acct: 'alice' },
+			}))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
+		it('recognises local handle spellings with and without the host', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { acct: 'alice@cloud.example', username: 'alice' },
+			}, {
+				currentAccount: { acct: 'alice', username: 'alice' },
+			}))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
+		it('uses the signed-in Nextcloud identity while the account store hydrates', () => {
+			const offered = items(mountMenu({
+				...MINE,
+				account: { acct: 'alice@cloud.example', username: 'alice' },
+			}, { currentAccount: null }))
+
+			expect(offered).toContain('Delete')
+			expect(offered).toContain('Edit')
+		})
+
 		/**
 		 * Muting, blocking and reporting yourself are all nonsense. Quoting
 		 * yourself is not — it is how somebody adds to their own post without

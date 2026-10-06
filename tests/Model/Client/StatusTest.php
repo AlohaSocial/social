@@ -45,6 +45,18 @@ class StatusTest extends TestCase {
 		$this->assertSame([7], $status->getMediaIds());
 	}
 
+	public function testImportPreservesAnAtprotoReplyReference(): void {
+		$status = (new Status())->import([
+			'in_reply_to_id' => 'https://cloud.example/apps/social/ap/bluesky/did:plc:bob/app.bsky.feed.post/3xyz',
+		]);
+
+		$this->assertSame(0, $status->getInReplyToId());
+		$this->assertSame(
+			'https://cloud.example/apps/social/ap/bluesky/did:plc:bob/app.bsky.feed.post/3xyz',
+			$status->getInReplyToReference()
+		);
+	}
+
 	public function testImportOfAnEmptyRequestKeepsTheDefaults(): void {
 		$status = new Status();
 

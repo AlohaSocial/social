@@ -150,6 +150,7 @@
 
 <script>
 import { translate as t } from '@nextcloud/l10n'
+import { getCurrentUser } from '@nextcloud/auth'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
 import NcActions from '@nextcloud/vue/components/NcActions'
@@ -282,7 +283,37 @@ export default {
 	computed: {
 		/** @return {boolean} whether the reader wrote this post */
 		isMine() {
-			return this.item.account.acct === this.currentAccount?.acct
+			if (!this.item.account) {
+				return false
+			}
+			const localPart = (value) => String(value ?? '').split('@', 1)[0]
+			const nextcloudUser = getCurrentUser() ?? window.OC?.getCurrentUser?.()
+			const authorHandle = localPart(this.item.account.acct || this.item.account.username)
+			if (this.isLocal && nextcloudUser?.uid && authorHandle
+				&& authorHandle.toLowerCase() === String(nextcloudUser.uid).toLowerCase()) {
+				return true
+			}
+
+			if (!this.currentAccount) {
+				return false
+			}
+
+			// Local and ATProto-backed exports can carry different display
+			// spellings for the same actor (handle versus acct). Prefer the
+			// stable actor id, while retaining acct/username for older clients.
+			return (this.item.account.id && this.currentAccount.id
+				&& this.item.account.id === this.currentAccount.id)
+			|| (this.item.account.acct && this.currentAccount.acct
+				&& this.item.account.acct === this.currentAccount.acct)
+			|| (this.item.account.username && this.currentAccount.username
+				&& this.item.account.username === this.currentAccount.username)
+			// Some profile/status serializers expose the local actor as
+			// `admin2`, others as `admin2@cloud.example`. Treat those as the same
+			// owner so the Edit/Delete actions remain available on /@admin2.
+			|| (this.isLocal
+				&& authorHandle
+				&& authorHandle
+				=== localPart(this.currentAccount.acct || this.currentAccount.username))
 		},
 
 		/**

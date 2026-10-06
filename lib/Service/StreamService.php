@@ -537,7 +537,9 @@ class StreamService {
 		// a channel's follower that took the video in has to be told it is gone
 		$this->addChannelFollowers($item);
 		$this->addressBoostersAndRepliers($item);
-		$this->activityService->deleteActivity($item);
+		if (($item->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both') !== 'atproto') {
+			$this->activityService->deleteActivity($item);
+		}
 		$this->streamRequest->deleteById($item->getId(), $type);
 		// their profile has one post fewer. Nothing moved this counter down at
 		// all, so an account that wrote and deleted a post all day climbed

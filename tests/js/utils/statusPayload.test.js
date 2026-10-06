@@ -18,6 +18,7 @@ function post(overrides = {}) {
 		inReplyToId: undefined,
 		quoteId: undefined,
 		visibility: 'public',
+		publication_target: 'both',
 		postAs: '',
 		language: 'en',
 		video: null,
@@ -39,6 +40,7 @@ describe('statusPayload', () => {
 			in_reply_to_id: undefined,
 			quote_id: undefined,
 			visibility: 'public',
+			publication_target: 'both',
 			language: 'en',
 		})
 	})
