@@ -138,7 +138,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	 */
 	private function getStoredForAuthor(ACore $activity, string $id): Stream {
 		$stored = $this->streamRequest->getStreamById($id);
-		if ($stored->getAttributedTo() !== $activity->getActorId()) {
+		if ($stored->getAttributedTo() !== $activity->getActorId()
+			&& !$this->ownsChannel($activity->getActorId(), $stored->getAttributedTo())) {
 			throw new InvalidOriginException(
 				'NoteInterface::getStoredForAuthor - actor: ' . $activity->getActorId()
 				. ' - attributedTo: ' . $stored->getAttributedTo()
@@ -146,6 +147,21 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		}
 
 		return $stored;
+	}
+
+	/**
+	 * Whether `$actorId` is the account behind the channel `$authorId`.
+	 *
+	 * PeerTube files a video under its channel, a `Group`, and sends the
+	 * video's `Update` and `Delete` as the account that owns the channel,
+	 * which the channel's own document names; see `Person::isRunBy()`.
+	 */
+	private function ownsChannel(string $actorId, string $authorId): bool {
+		try {
+			return $this->cacheActorsRequest->getFromId($authorId)->isRunBy($actorId);
+		} catch (CacheActorDoesNotExistException $e) {
+			return false;
+		}
 	}
 
 	private function isKnown(string $id): bool {

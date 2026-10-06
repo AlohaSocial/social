@@ -92,6 +92,10 @@ class AccountService {
 	 */
 	public const KEY_PAIR_LIFESPAN = 60;
 
+	/** whether `changingProfile()` is collecting changes to tell about once */
+	private bool $holdingProfileUpdates = false;
+	private bool $profileChanged = false;
+
 	public function __construct(
 		private IUserManager $userManager,
 		private IUserSession $userSession,
@@ -449,6 +453,7 @@ class AccountService {
 		$actor->setLocked($locked);
 		$this->actorsRequest->updateLocked($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -494,6 +499,7 @@ class AccountService {
 
 		$this->actorsRequest->updateFlags($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -536,6 +542,7 @@ class AccountService {
 		}
 
 		$this->cacheLocalActorByUsername($this->getActorFromUserId($userId)->getPreferredUsername());
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -631,6 +638,7 @@ class AccountService {
 		$actor->setFields($fields);
 		$this->actorsRequest->updateFields($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -660,7 +668,7 @@ class AccountService {
 		$actor->setSummary($this->plainSummary($summary));
 		$this->actorsRequest->updateSummary($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
-		$this->federateActorUpdate($actor);
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -708,6 +716,64 @@ class AccountService {
 		}
 
 		return $summary;
+	}
+
+	/**
+	 * Applies several changes to one profile and tells the followers once.
+	 *
+	 * Each setter tells them on its own, and a peer handed several `Update`s
+	 * of one actor at the same moment may keep any one of them: Mastodon
+	 * processes them in parallel under a lock per actor, and an `Update` that
+	 * loses the race is the change that never shows.
+	 *
+	 * @template T
+	 * @param callable(): T $changes
+	 * @return T
+	 */
+	public function changingProfile(string $userId, callable $changes): mixed {
+		$this->holdingProfileUpdates = true;
+		try {
+			return $changes();
+		} finally {
+			$this->holdingProfileUpdates = false;
+			if ($this->takeProfileChanged()) {
+				$this->federateProfile($userId);
+			}
+		}
+	}
+
+	/** Whether a held change is waiting to be told, forgetting it. */
+	private function takeProfileChanged(): bool {
+		$changed = $this->profileChanged;
+		$this->profileChanged = false;
+
+		return $changed;
+	}
+
+	/**
+	 * Tells the followers about a profile change, with the display name the
+	 * actor document is served with: the stored actor row does not carry it.
+	 */
+	private function federateProfile(string $userId): void {
+		if ($this->holdingProfileUpdates) {
+			$this->profileChanged = true;
+
+			return;
+		}
+
+		try {
+			$actor = $this->getActorFromUserId($userId);
+			$this->updateCacheLocalActorName($actor);
+		} catch (Exception $e) {
+			$this->logger->warning(
+				'could not tell the followers that a local actor changed',
+				['userId' => $userId, 'exception' => $e]
+			);
+
+			return;
+		}
+
+		$this->federateActorUpdate($actor);
 	}
 
 	/**

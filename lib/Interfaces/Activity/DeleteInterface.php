@@ -49,6 +49,25 @@ class DeleteInterface extends AbstractActivityPubInterface implements IActivityP
 	}
 
 	/**
+	 * Whether the deleting actor is the account behind the author: PeerTube
+	 * files a video under its channel and deletes it as the account that
+	 * runs the channel; see `Person::isRunBy()`.
+	 */
+	private function runsAuthor(string $actorId, string $authorId): bool {
+		if ($actorId === $authorId) {
+			return false;
+		}
+
+		try {
+			$author = AP::instance()->getInterfaceFromType(Person::TYPE)->getItemById($authorId);
+		} catch (ItemNotFoundException|ItemUnknownException $e) {
+			return false;
+		}
+
+		return $author instanceof Person && $author->isRunBy($actorId);
+	}
+
+	/**
 	 * @throws InvalidOriginException the id names something of someone else's
 	 */
 	private function deleteById(ACore $activity): void {
@@ -70,7 +89,8 @@ class DeleteInterface extends AbstractActivityPubInterface implements IActivityP
 			// account — or any user of the author's server could take it down.
 			// A story goes the same way: on its author's word, not on that of
 			// anybody whose server can reach this one.
-			if ($object instanceof Story || $object instanceof Stream) {
+			if (($object instanceof Story || $object instanceof Stream)
+				&& !$this->runsAuthor($actorId, $object->getAttributedTo())) {
 				$activity->checkActor($object->getAttributedTo(), $actorId);
 			}
 

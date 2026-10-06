@@ -14,6 +14,7 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Interfaces\Activity\DeleteInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -80,6 +81,45 @@ class DeleteInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest(
 			$this->incomingDelete(['type' => 'Tombstone', 'id' => self::NOTE])
 		);
+	}
+
+	/**
+	 * PeerTube files a video under its channel and deletes it as the account
+	 * that runs the channel, with a Tombstone; the channel names that account.
+	 */
+	public function testATombstoneOfAChannelsVideoFromTheAccountBehindItRemovesIt(): void {
+		$channel = $this->channel(self::BOB);
+		$video = $this->note(self::NOTE, $channel->getId());
+		$this->noteInterface->method('getItemById')->with(self::NOTE)->willReturn($video);
+		$this->personInterface->method('getItemById')->with($channel->getId())->willReturn($channel);
+
+		$this->noteInterface->expects($this->once())->method('delete')->with($this->identicalTo($video));
+
+		$this->handler->processIncomingRequest(
+			$this->incomingDelete(['type' => 'Tombstone', 'id' => self::NOTE])
+		);
+	}
+
+	public function testATombstoneOfAChannelsVideoFromAnAccountItDoesNotNameIsRefused(): void {
+		$channel = $this->channel(self::REMOTE_URL . '/users/mallory');
+		$video = $this->note(self::NOTE, $channel->getId());
+		$this->noteInterface->method('getItemById')->with(self::NOTE)->willReturn($video);
+		$this->personInterface->method('getItemById')->with($channel->getId())->willReturn($channel);
+
+		$this->noteInterface->expects($this->never())->method('delete');
+
+		$this->expectException(InvalidOriginException::class);
+
+		$this->handler->processIncomingRequest(
+			$this->incomingDelete(['type' => 'Tombstone', 'id' => self::NOTE])
+		);
+	}
+
+	private function channel(string $owner): Person {
+		$channel = $this->person(self::REMOTE_URL . '/video-channels/films');
+		$channel->setAttributedToActors([['type' => Person::TYPE, 'id' => $owner]]);
+
+		return $channel;
 	}
 
 	public function testDeleteNamingAKnownActorRemovesTheActor(): void {

@@ -133,13 +133,8 @@ class PlaylistService {
 			return;
 		}
 
-		$actorHost = parse_url($actorId, PHP_URL_HOST);
-		if (is_string($actorHost) && $actorHost !== '' && $actorHost === parse_url($ownerId, PHP_URL_HOST)) {
-			foreach ($owner->getAttributedToActors() as $behind) {
-				if ($behind['id'] === $actorId) {
-					return;
-				}
-			}
+		if ($owner->isRunBy($actorId)) {
+			return;
 		}
 
 		throw new InvalidOriginException(

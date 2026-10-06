@@ -259,13 +259,16 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 	private function updateActor(Person $actor, ACore $activity) {
 		$actor->setCreation($activity->getOriginCreationTime());
 
+		// through ActorService, which stores the picture the profile names
+		// before the profile points at it: written straight to the cache, a
+		// new avatar pointed at a document nobody had stored
 		try {
 			$current = $this->cacheActorsRequest->getFromId($actor->getId());
 			if ($current->getCreation() < $activity->getOriginCreationTime()) {
-				$this->cacheActorsRequest->update($actor);
+				$this->actorService->update($actor);
 			}
 		} catch (CacheActorDoesNotExistException $e) {
-			$this->cacheActorsRequest->save($actor);
+			$this->actorService->save($actor);
 		}
 	}
 }

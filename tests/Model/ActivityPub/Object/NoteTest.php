@@ -127,6 +127,51 @@ class NoteTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Mastodon votes on a poll with a bare `Note` whose `name` is the option.
+	 * The name was never read, so no vote from Mastodon was ever counted: it
+	 * was stored as a message to the poll's author instead.
+	 */
+	public function testImportReadsTheOptionAPollVoteChose(): void {
+		$this->nobodyIsKnown();
+		$note = new Note();
+
+		$note->import([
+			'id' => 'https://mastodon.social/users/alice#votes/7',
+			'type' => 'Note',
+			'name' => 'Dogs',
+			'inReplyTo' => 'https://cloud.example/@bob/1',
+			'attributedTo' => 'https://mastodon.social/users/alice',
+			'to' => 'https://cloud.example/@bob',
+		]);
+
+		$this->assertSame('Dogs', $note->getName());
+	}
+
+	/** @return iterable<string, array{array<string, string>}> */
+	public static function notAVote(): iterable {
+		yield 'it has content' => [['content' => '<p>Dogs, obviously</p>']];
+		yield 'it answers nothing' => [['inReplyTo' => '']];
+		yield 'it is a video' => [['type' => 'Video']];
+	}
+
+	/** @param array<string, string> $differs */
+	#[\PHPUnit\Framework\Attributes\DataProvider('notAVote')]
+	public function testANameThatIsNotAVoteIsNotRead(array $differs): void {
+		$this->nobodyIsKnown();
+		$note = new Note();
+
+		$note->import($differs + [
+			'id' => 'https://mastodon.social/users/alice/statuses/1',
+			'type' => 'Note',
+			'name' => 'Dogs',
+			'inReplyTo' => 'https://cloud.example/@bob/1',
+			'attributedTo' => 'https://mastodon.social/users/alice',
+		]);
+
+		$this->assertSame('', $note->getName());
+	}
+
 	public function testFillMentionsKeepsTagDataForUnknownActors(): void {
 		$this->nobodyIsKnown();
 		$note = new Note();
