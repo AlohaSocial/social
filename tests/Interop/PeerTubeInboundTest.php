@@ -68,7 +68,7 @@ class PeerTubeInboundTest extends TestCase {
 
 		$status = $this->awaitVideoHere($video['uuid']);
 
-		$this->assertNotNull($status, 'the video never reached the videos timeline of a follower here');
+		$this->assertNotNull($status, 'the video never reached the videos timeline of a follower here: ' . $this->whatIsHere($video['uuid']));
 		$this->assertStringContainsString($title, (string)$status['content'], 'the title was lost');
 		$this->assertStringContainsString($description, (string)$status['content'], 'the description was lost');
 		$attachment = $status['media_attachments'][0] ?? null;
@@ -193,6 +193,26 @@ class PeerTubeInboundTest extends TestCase {
 	}
 
 	// --- the harness ------------------------------------------------------
+
+	/** What this side holds of a PeerTube video, for a failure message. */
+	private function whatIsHere(string $uuid): string {
+		$uri = rtrim((string)getenv('PEERTUBE_BASE_URL'), '/') . '/videos/watch/' . $uuid;
+		$home = array_map(
+			static fn (array $s): string => (string)($s['uri'] ?? '') . ' -> ' . (string)($s['reblog']['uri'] ?? ''),
+			array_slice($this->here->timeline('home'), 0, 5)
+		);
+		$found = $this->here->resolveStatus($uri);
+
+		return json_encode([
+			'stored' => ($found === null) ? null : [
+				'id' => $found['id'] ?? null,
+				'visibility' => $found['visibility'] ?? null,
+				'account' => $found['account']['acct'] ?? null,
+				'media' => array_map(static fn (array $m): string => (string)($m['type'] ?? ''), $found['media_attachments'] ?? []),
+			],
+			'home' => $home,
+		], JSON_UNESCAPED_SLASHES) ?: '';
+	}
 
 	private function channelHandle(): string {
 		$host = (string)getenv('PEERTUBE_HOST');
