@@ -25,22 +25,22 @@ use RuntimeException;
  * PeerTube user would get, and a row its serialiser will not render has not
  * arrived either.
  */
-class PeerTube {
+class PeerTube extends RestClient {
 	/**
 	 * Ingest here is a queue and a job runner, and a video that is going to
 	 * arrive arrives within a few seconds of the delivery.
 	 */
-	private const WAIT_SECONDS = 60;
-	private const POLL_SECONDS = 2;
+	protected const WAIT_SECONDS = 60;
+	protected const POLL_SECONDS = 2;
 
 	private string $token = '';
 
 	public function __construct(
-		private string $baseUrl,
+		string $baseUrl,
 		private string $username,
 		private string $password,
 	) {
-		$this->baseUrl = rtrim($baseUrl, '/');
+		parent::__construct($baseUrl);
 	}
 
 	/** Whether this suite has a PeerTube to talk to at all. */
@@ -140,43 +140,153 @@ class PeerTube {
 		}) === true;
 	}
 
-	/**
-	 * @template T
-	 * @param callable(): ?T $probe
-	 * @return ?T
-	 */
-	public function await(callable $probe) {
-		$until = time() + self::WAIT_SECONDS;
-		do {
-			$answer = $probe();
-			if ($answer !== null) {
-				return $answer;
-			}
-			sleep(self::POLL_SECONDS);
-		} while (time() < $until);
+	/** Stops PeerTube's account following one of our channels or accounts. */
+	public function unfollow(string $handle): void {
+		$this->delete('/api/v1/users/me/subscriptions/' . rawurlencode(ltrim($handle, '@')));
+	}
 
-		return null;
+	/** Whether PeerTube's account follows a channel or account, by handle. */
+	public function follows(string $handle): bool {
+		$handle = ltrim($handle, '@');
+		$answer = $this->get('/api/v1/users/me/subscriptions/exist', ['uris' => $handle]);
+
+		return (bool)($answer[$handle] ?? false);
 	}
 
 	/**
-	 * @param array<string, string> $query
-	 * @return array<mixed>
+	 * One of PeerTube's own channels.
+	 *
+	 * @return array<string, mixed>
 	 */
-	public function get(string $path, array $query = []): array {
-		$url = $this->baseUrl . $path;
-		if ($query !== []) {
-			$url .= '?' . http_build_query($query);
+	public function channel(string $name): array {
+		return $this->get('/api/v1/video-channels/' . rawurlencode($name));
+	}
+
+	/**
+	 * The actor ids following one of PeerTube's own channels; only the
+	 * channel's owner may ask.
+	 *
+	 * @return string[]
+	 */
+	public function channelFollowers(string $name): array {
+		$answer = $this->get('/api/v1/video-channels/' . rawurlencode($name) . '/followers', ['count' => '100']);
+
+		$followers = [];
+		foreach ((is_array($answer['data'] ?? null) ? $answer['data'] : []) as $follow) {
+			$url = (string)($follow['follower']['url'] ?? '');
+			if ($url !== '') {
+				$followers[] = $url;
+			}
 		}
 
-		return $this->request('GET', $url);
+		return $followers;
 	}
 
 	/**
-	 * @param array<string, mixed> $body
-	 * @return array<mixed>
+	 * Uploads a video to one of PeerTube's own channels, public at once.
+	 *
+	 * @return array{id: int, uuid: string, shortUUID: string}
 	 */
-	public function post(string $path, array $body = []): array {
-		return $this->request('POST', $this->baseUrl . $path, $body);
+	public function uploadVideo(int $channelId, string $file, string $name, string $description): array {
+		$answer = $this->upload('/api/v1/videos/upload', [
+			'channelId' => (string)$channelId,
+			'name' => $name,
+			'description' => $description,
+			'privacy' => '1',
+			'waitTranscoding' => 'false',
+		], ['videofile' => [$file, 'video/mp4']]);
+
+		$video = $answer['video'] ?? [];
+		if (!is_array($video) || ($video['uuid'] ?? '') === '') {
+			throw new RuntimeException('PeerTube did not take the upload: ' . json_encode($answer));
+		}
+
+		return [
+			'id' => (int)$video['id'],
+			'uuid' => (string)$video['uuid'],
+			'shortUUID' => (string)($video['shortUUID'] ?? ''),
+		];
+	}
+
+	/**
+	 * One video, as a PeerTube user sees it.
+	 *
+	 * @return array<string, mixed>
+	 */
+	public function video(string $uuid): array {
+		return $this->get('/api/v1/videos/' . rawurlencode($uuid));
+	}
+
+	/**
+	 * Every comment on a video, threads and their replies, flattened.
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function comments(string $uuid): array {
+		$threads = $this->get('/api/v1/videos/' . rawurlencode($uuid) . '/comment-threads', ['count' => '100']);
+
+		$comments = [];
+		foreach ((is_array($threads['data'] ?? null) ? $threads['data'] : []) as $thread) {
+			if (!is_array($thread)) {
+				continue;
+			}
+			$comments[] = $thread;
+			if ((int)($thread['totalReplies'] ?? 0) === 0) {
+				continue;
+			}
+
+			$tree = $this->get('/api/v1/videos/' . rawurlencode($uuid) . '/comment-threads/' . (int)$thread['id']);
+			$pending = is_array($tree['children'] ?? null) ? $tree['children'] : [];
+			while ($pending !== []) {
+				$node = array_shift($pending);
+				if (is_array($node['comment'] ?? null)) {
+					$comments[] = $node['comment'];
+				}
+				foreach ((is_array($node['children'] ?? null) ? $node['children'] : []) as $child) {
+					$pending[] = $child;
+				}
+			}
+		}
+
+		return $comments;
+	}
+
+	/**
+	 * Waits for a comment on a video whose text contains `$words`.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	public function awaitComment(string $uuid, string $words): ?array {
+		return $this->await(function () use ($uuid, $words): ?array {
+			foreach ($this->comments($uuid) as $comment) {
+				if (str_contains((string)($comment['text'] ?? ''), $words)) {
+					return $comment;
+				}
+			}
+
+			return null;
+		});
+	}
+
+	/**
+	 * Replies to a comment on a video, as PeerTube's account.
+	 *
+	 * @return array<string, mixed> the new comment
+	 */
+	public function replyToComment(string $uuid, int $commentId, string $text): array {
+		$answer = $this->post('/api/v1/videos/' . rawurlencode($uuid) . '/comments/' . $commentId, ['text' => $text]);
+
+		return is_array($answer['comment'] ?? null) ? $answer['comment'] : [];
+	}
+
+	#[\Override]
+	public function name(): string {
+		return 'PeerTube';
+	}
+
+	#[\Override]
+	protected function authorization(): string {
+		return 'Bearer ' . $this->token();
 	}
 
 	/**
@@ -191,8 +301,8 @@ class PeerTube {
 			return $this->token;
 		}
 
-		// unauthenticated: request() asks for this very token
-		$client = $this->send('GET', $this->baseUrl . '/api/v1/oauth-clients/local', null, [
+		// unauthenticated: headers() asks for this very token
+		$client = $this->exchange('GET', $this->baseUrl . '/api/v1/oauth-clients/local', null, [
 			'Accept: application/json',
 		]);
 		$answer = $this->form('/api/v1/users/token', [
@@ -217,57 +327,8 @@ class PeerTube {
 	 * @return array<mixed>
 	 */
 	private function form(string $path, array $fields): array {
-		return $this->send('POST', $this->baseUrl . $path, http_build_query($fields), [
+		return $this->exchange('POST', $this->baseUrl . $path, http_build_query($fields), [
 			'Content-Type: application/x-www-form-urlencoded',
 		]);
-	}
-
-	/**
-	 * @param array<string, mixed>|null $body
-	 * @return array<mixed>
-	 */
-	private function request(string $method, string $url, ?array $body = null): array {
-		$headers = ['Authorization: Bearer ' . $this->token(), 'Accept: application/json'];
-		$payload = null;
-		if ($body !== null) {
-			$headers[] = 'Content-Type: application/json';
-			$payload = json_encode($body, JSON_UNESCAPED_SLASHES);
-		}
-
-		return $this->send($method, $url, $payload, $headers);
-	}
-
-	/**
-	 * @param string[] $headers
-	 * @return array<mixed>
-	 */
-	private function send(string $method, string $url, ?string $payload, array $headers): array {
-		$handle = curl_init($url);
-		curl_setopt($handle, CURLOPT_CUSTOMREQUEST, $method);
-		curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($handle, CURLOPT_TIMEOUT, 30);
-		curl_setopt($handle, CURLOPT_HTTPHEADER, $headers);
-		if ($payload !== null) {
-			curl_setopt($handle, CURLOPT_POSTFIELDS, $payload);
-		}
-
-		$answer = curl_exec($handle);
-		$status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-		$error = curl_error($handle);
-		curl_close($handle);
-
-		if ($answer === false) {
-			throw new RuntimeException($method . ' ' . $url . ' failed: ' . $error);
-		}
-
-		if ($status >= 400) {
-			throw new RuntimeException(
-				$method . ' ' . $url . ' answered ' . $status . ': ' . substr((string)$answer, 0, 500)
-			);
-		}
-
-		$decoded = json_decode((string)$answer, true);
-
-		return is_array($decoded) ? $decoded : [];
 	}
 }

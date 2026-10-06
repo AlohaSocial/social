@@ -143,6 +143,25 @@ class PeerTubeDeliveryTest extends TestCase {
 		$this->assertNotSame([], $video['files'] ?? [], 'the file link was dropped');
 	}
 
+	/** An edit reaches PeerTube as an `Update` of the video, and its title follows the text. */
+	public function testAnEditReachesPeerTube(): void {
+		$words = 'interop ' . bin2hex(random_bytes(4));
+		$post = $this->publishVideo($words);
+		$video = $this->peertube->awaitVideo($this->channelHandle, $post->getId());
+		$this->assertNotNull($video, 'PeerTube never took the video in');
+
+		$changed = 'edited ' . bin2hex(random_bytes(4));
+		Server::get(PostService::class)->editPost($post->getNid(), $this->actor, $changed);
+		$this->drainQueue();
+
+		$edited = $this->peertube->await(function () use ($video, $changed): ?array {
+			$now = $this->peertube->video((string)$video['uuid']);
+
+			return str_contains((string)($now['name'] ?? '') . ' ' . (string)($now['description'] ?? ''), $changed) ? $now : null;
+		});
+		$this->assertNotNull($edited, 'PeerTube still shows the video as it was before the edit');
+	}
+
 	public function testADeleteTakesTheVideoAwayThere(): void {
 		$post = $this->publishVideo('interop ' . bin2hex(random_bytes(4)));
 		$this->assertNotNull(

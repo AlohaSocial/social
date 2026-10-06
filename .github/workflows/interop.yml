@@ -131,6 +131,14 @@ jobs:
           OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env mover
           OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env arrival
           OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env puller
+          # one account per thing a test does to its own account, so no test
+          # finds another's locked, renamed, deleted or unfollowed account:
+          # shy locks itself, profile edits itself, goner deletes itself,
+          # watcher follows and unfollows a PeerTube channel, and bystander
+          # is the other reader here a direct message must not reach
+          for user in shy profile goner watcher bystander; do
+            OC_PASS='Interop-Test-2026!' ./occ user:add --password-from-env "$user"
+          done
           ./occ config:system:set trusted_domains 1 --value localhost:8080
           ./occ config:system:set trusted_domains 2 --value nextcloud.test
           ./occ config:system:set overwriteprotocol --value https
@@ -257,20 +265,31 @@ jobs:
           docker exec mastodon-web bin/tootctl accounts create interop \
             --email interop@example.com --confirmed --approve --role Owner > /tmp/account.txt
           cat /tmp/account.txt
-          # an application with the scopes the suite needs, and a token for it
-          TOKEN=$(docker exec mastodon-web bin/rails runner '
-            app = Doorkeeper::Application.create!(
-              name: "interop", redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
-              scopes: "read write follow"
-            )
-            account = Account.find_by(username: "interop")
-            token = Doorkeeper::AccessToken.create!(
-              application: app, resource_owner_id: account.user.id,
-              scopes: app.scopes, expires_in: nil
-            )
-            puts token.token
-          ' | tail -1)
-          echo "MASTODON_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          # an application with the scopes the suite needs, and a token for an
+          # account: `interop` acts in most tests, `stranger` follows nobody
+          # on our side, and `guarded` is locked, so a follow of it waits
+          token_for() {
+            docker exec mastodon-web bin/rails runner "
+              app = Doorkeeper::Application.find_or_create_by!(name: 'interop') do |a|
+                a.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+                a.scopes = 'read write follow'
+              end
+              account = Account.find_by(username: '$1', domain: nil)
+              token = Doorkeeper::AccessToken.create!(
+                application: app, resource_owner_id: account.user.id,
+                scopes: app.scopes, expires_in: nil
+              )
+              puts token.token
+            " | tail -1
+          }
+          echo "MASTODON_TOKEN=$(token_for interop)" >> "$GITHUB_ENV"
+          for name in stranger guarded; do
+            docker exec mastodon-web bin/tootctl accounts create "$name" \
+              --email "$name@example.com" --confirmed --approve > /dev/null
+          done
+          docker exec mastodon-web bin/rails runner 'Account.find_local("guarded").update!(locked: true)'
+          echo "MASTODON_TOKEN_STRANGER=$(token_for stranger)" >> "$GITHUB_ENV"
+          echo "MASTODON_TOKEN_GUARDED=$(token_for guarded)" >> "$GITHUB_ENV"
           # the two accounts of the Move tests: `landing` is where our `mover`
           # moves to, and names it the way Mastodon's own form would; `leaver`
           # moves to our `arrival`, later, once this side has named it back
@@ -358,6 +377,14 @@ jobs:
           curl -sf -X POST "$PEERTUBE_BASE_URL/api/v1/users" \
             -H "Authorization: Bearer $ROOT_TOKEN" -H 'Content-Type: application/json' \
             -d "{\"username\":\"$PEERTUBE_USER\",\"password\":\"$PEERTUBE_PASSWORD\",\"email\":\"interop-user@example.com\",\"role\":2,\"videoQuota\":-1,\"videoQuotaDaily\":-1}"
+          # a few seconds of test card and tone for the inbound video tests,
+          # made by PeerTube's own ffmpeg so it is a file PeerTube can read
+          docker exec peertube ffmpeg -loglevel error -y \
+            -f lavfi -i testsrc=duration=4:size=320x240:rate=15 \
+            -f lavfi -i sine=frequency=440:duration=4 \
+            -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest /tmp/interop-sample.mp4
+          docker cp peertube:/tmp/interop-sample.mp4 /tmp/interop-sample.mp4
+          echo "PEERTUBE_SAMPLE_VIDEO=/tmp/interop-sample.mp4" >> "$GITHUB_ENV"
 
       - name: Interop tests
         working-directory: apps/social
@@ -376,6 +403,8 @@ jobs:
           done) &
           status=0
           timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MastodonDeliveryTest || status=1
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MastodonInboundTest || status=1
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MastodonOutboundTest || status=1
           # what each side makes of our account, asked directly, so a failure
           # above can be told apart from a failure to reach us at all
           WF="https://nextcloud.test/.well-known/webfinger?resource=acct:admin@nextcloud.test"
@@ -416,6 +445,7 @@ jobs:
           # the wizard's half: the old account read from the new side
           timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MoveInFromMastodonTest || status=1
           timeout 900 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PeerTubeDeliveryTest || status=1
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PeerTubeInboundTest || status=1
           exit $status
 
       - name: What each side saw, when it went wrong
