@@ -324,7 +324,11 @@ class MastodonInboundTest extends TestCase {
 
 				return (($this->here->account($this->interopHere)['avatar'] ?? '') !== ($before['avatar'] ?? '')) ? true : null;
 			}),
-			'the new avatar never reached this side'
+			'the new avatar never reached this side: ' . json_encode([
+				'before' => $before['avatar'] ?? null,
+				'after' => $this->here->account($this->interopHere)['avatar'] ?? null,
+				'there' => $this->mastodon->get('/api/v1/accounts/verify_credentials')['avatar'] ?? null,
+			], JSON_UNESCAPED_SLASHES)
 		);
 	}
 

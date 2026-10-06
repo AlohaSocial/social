@@ -509,6 +509,9 @@ jobs:
           if not raw: print("none"); sys.exit()
           o=json.loads(raw).get("object",{})
           print(json.dumps({k: o.get(k) for k in ("type","id","uuid","name","duration","attributedTo","icon","url","state","mediaType","to","cc")}, indent=1)[:3000])' || true
+          echo '--- what we hold from PeerTube ---'
+          sqlite3 -header data/nextcloud.db \
+            "select nid, type, substr(id,1,70) as id, substr(attributed_to,1,60) as author, substr(object_id,1,60) as object, media_kind from oc_social_stream where id like 'http://localhost:9000%' or object_id like 'http://localhost:9000%' order by nid" 2>&1 | tail -40 || true
           echo '--- Mastodon sidekiq, without the mailer noise ---'
           docker logs mastodon-sidekiq 2>&1 | grep -v -E "action_mailer|actionmailer|mail-2|SMTP|^/usr/local/bundle" \
             | grep -i -E "fail|error|warn|reject|ActivityPub" | tail -60 || true
