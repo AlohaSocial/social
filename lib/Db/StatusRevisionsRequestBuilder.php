@@ -33,7 +33,7 @@ class StatusRevisionsRequestBuilder extends CoreRequestBuilder {
 
 	protected function getStatusRevisionsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
-		$qb->select('sr.id', 'sr.stream_id_prim', 'sr.content', 'sr.spoiler_text', 'sr.sensitive', 'sr.published')
+		$qb->select('sr.id', 'sr.stream_id_prim', 'sr.content', 'sr.spoiler_text', 'sr.sensitive', 'sr.published', 'sr.media')
 			->from(self::TABLE_STATUS_REVISIONS, 'sr');
 
 		$this->defaultSelectAlias = 'sr';

@@ -316,6 +316,12 @@ changed only the upload while the post kept its own copy, so a description
 could only be fixed by deleting the post. That route now refuses an upload a
 post carries, as Mastodon's does.
 
+Fixed in #2486: `GET /api/v1/statuses/:id/history` carries each version's
+`media_attachments`, descriptions and focal points included, as Mastodon's
+`StatusEdit` does. Every version used to have `[]`, so an edit that only
+changed a description looked like no change at all. Versions recorded before
+this keep `[]`.
+
 ---
 
 ## 4. The peer test
