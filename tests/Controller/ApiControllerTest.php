@@ -297,6 +297,11 @@ class ApiControllerTest extends TestCase {
 		$this->curlService = $this->createMock(CurlService::class);
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1048576);
+		// what a client is told: the app's ceiling under PHP's 2 MB
+		$this->instanceService->method('imageSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('videoSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('phpUploadLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('postMaxSize')->willReturn(8 * 1048576);
 
 		// a pass-through: these tests are about the routes, not about filtering,
 		// and a filter that removed anything would rewrite what they assert
@@ -4007,11 +4012,100 @@ class ApiControllerTest extends TestCase {
 		);
 	}
 
-	public function testMediaNewReportsFailedUploads(): void {
+	/**
+	 * A file PHP refused for its size is answered with the limit a client can
+	 * shrink it to, and the reason is logged for the admin who can raise it.
+	 */
+	#[DataProvider('oversizedUploadErrors')]
+	public function testMediaNewNamesTheLimitOfAFilePhpRefusedForItsSize(int $error): void {
+		$this->loggedInAs();
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'image/jpeg', 'error' => $error];
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')
+			->with($this->stringContains('larger than this server accepts'));
+		$this->cacheDocumentService->expects($this->never())->method('saveFromTempToCache');
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', [], $logger)->mediaNew(),
+			'the file is larger than this server accepts (2 MB)'
+		);
+	}
+
+	public static function oversizedUploadErrors(): array {
+		return [
+			'over upload_max_filesize' => [UPLOAD_ERR_INI_SIZE],
+			'over the form\'s MAX_FILE_SIZE' => [UPLOAD_ERR_FORM_SIZE],
+		];
+	}
+
+	public function testMediaNewNamesTheVideoLimitForAVideo(): void {
+		$this->loggedInAs();
+		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->instanceService->method('imageSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('videoSizeLimit')->willReturn(64 * 1048576);
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'video/mp4', 'error' => UPLOAD_ERR_INI_SIZE];
+
+		$this->assertUnprocessable(
+			$this->controller()->mediaNew(), 'the file is larger than this server accepts (64 MB)'
+		);
+	}
+
+	public function testMediaNewAsksForARetryOfAnInterruptedUpload(): void {
 		$this->loggedInAs();
 		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_PARTIAL];
 
-		$this->assertSame(['error' => 'error during upload'], $this->controller()->mediaNew()->getData());
+		$this->assertUnprocessable(
+			$this->controller()->mediaNew(), 'the file upload was interrupted, try again'
+		);
+	}
+
+	/**
+	 * Nothing is wrong with the file when PHP cannot store it, so the answer
+	 * is a 500 that says so instead of a refusal of the file.
+	 */
+	#[DataProvider('serverUploadErrors')]
+	public function testMediaNewAnswersAServerProblemAsOne(int $error, string $reason): void {
+		$this->loggedInAs();
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'image/png', 'error' => $error];
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains($reason));
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->mediaNew();
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertSame(
+			['error' => 'the file could not be received because of a problem on this server (' . $reason . ')'],
+			$response->getData()
+		);
+	}
+
+	public static function serverUploadErrors(): array {
+		return [
+			'no temporary directory' => [UPLOAD_ERR_NO_TMP_DIR, 'PHP has no temporary directory for uploads'],
+			'cannot write' => [UPLOAD_ERR_CANT_WRITE, 'PHP could not write the upload to disk'],
+			'an extension stopped it' => [UPLOAD_ERR_EXTENSION, 'a PHP extension stopped the upload'],
+		];
+	}
+
+	/** PHP empties `$_FILES` for a body over post_max_size; that is a size refusal, not a missing file. */
+	public function testMediaNewRecognisesABodyOverPostMaxSize(): void {
+		$this->loggedInAs();
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains('post_max_size'));
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', ['Content-Length' => (string)(8 * 1048576 + 1)], $logger)->mediaNew(),
+			'the file is larger than this server accepts (2 MB)'
+		);
+	}
+
+	public function testMediaNewWithASmallBodyAndNoFileFindsNoMedia(): void {
+		$this->loggedInAs();
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', ['Content-Length' => '512'])->mediaNew(), 'no media found'
+		);
 	}
 
 	public function testMediaNewRejectsUploadsWithoutAType(): void {
@@ -4142,7 +4236,24 @@ class ApiControllerTest extends TestCase {
 		$response = $this->controller()->updateCredentials();
 
 		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
-		$this->assertStringContainsString('larger than this server accepts', $response->getData()['error']);
+		$this->assertSame(
+			['error' => 'the avatar is larger than this server accepts (2 MB)'], $response->getData()
+		);
+	}
+
+	public function testUpdateCredentialsAnswersAPictureTheServerCouldNotStoreAsAServerProblem(): void {
+		$this->loggedInAs();
+		$_FILES['header'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_CANT_WRITE];
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->bannerService->expects($this->never())->method('setFromTempFile');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertSame(
+			['error' => 'the header could not be received because of a problem on this server (PHP could not write the upload to disk)'],
+			$response->getData()
+		);
 	}
 
 	public function testUpdateCredentialsRefusesAHeaderUploadThatStoppedHalfway(): void {

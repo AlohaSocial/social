@@ -67,7 +67,7 @@ class PixelfedConfigService {
 	 */
 	public function config(): array {
 		$instance = $this->instanceService->getLocal();
-		$maxUpload = $this->instanceService->maxUploadSize();
+		$maxUpload = $this->instanceService->imageSizeLimit();
 
 		return [
 			// Registration is Nextcloud's business, not this app's: an account

@@ -108,11 +108,23 @@ class MediaApiController extends MastodonApiController {
 
 			$file = $_FILES['file'] ?? [];
 			if (empty($file)) {
+				// PHP drops a body over post_max_size whole, which leaves
+				// $_FILES as empty as a request that sent no file at all
+				$sent = (int)$this->request->getHeader('Content-Length');
+				if ($sent > $this->instanceService->postMaxSize()) {
+					throw $this->uploadTooLarge(
+						'file', $this->instanceService->phpUploadLimit(), 'the request body is over post_max_size'
+					);
+				}
+
 				throw new InvalidActionException('no media found');
 			}
 
-			if ($file['error'] !== UPLOAD_ERR_OK) {
-				throw new InvalidActionException('error during upload');
+			$limit = str_starts_with(strtolower($file['type'] ?? ''), 'video/')
+				? $this->instanceService->videoSizeLimit()
+				: $this->instanceService->imageSizeLimit();
+			if (!$this->uploadArrived($file, 'file', $limit)) {
+				throw new InvalidActionException('no media found');
 			}
 
 			$name = $file['tmp_name'] ?? '';

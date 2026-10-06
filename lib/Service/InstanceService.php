@@ -23,6 +23,7 @@ use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
+use OCP\Util;
 
 class InstanceService {
 	use TArrayTools;
@@ -318,11 +319,11 @@ class InstanceService {
 			],
 			'media_attachments' => [
 				'supported_mime_types' => $this->supportedMimeTypes(),
-				'image_size_limit' => $this->maxUploadSize(),
+				'image_size_limit' => $this->imageSizeLimit(),
 				// its own ceiling, not the picture one: a client reads this to
 				// decide whether to offer the upload at all, and telling it
 				// 10 MB when the server takes two gigabytes means it never does
-				'video_size_limit' => $this->maxVideoUploadSize(),
+				'video_size_limit' => $this->videoSizeLimit(),
 				'image_matrix_limit' => CacheDocumentService::MAX_PIXELS,
 				'video_frame_rate_limit' => 0,
 				'video_matrix_limit' => 0,
@@ -399,6 +400,42 @@ class InstanceService {
 		$ceiling = (($megabytes > 0) ? $megabytes : 2048) * 1048576;
 
 		return max($ceiling, $this->maxUploadSize());
+	}
+
+	/**
+	 * The largest picture an upload can deliver, in bytes: the app's own
+	 * ceiling, or PHP's when that is lower. PHP refuses a larger file before
+	 * this app sees it, so this, not `maxUploadSize()`, is what a client is
+	 * told.
+	 */
+	public function imageSizeLimit(): int {
+		return min($this->maxUploadSize(), $this->phpUploadLimit());
+	}
+
+	/** The largest video an upload can deliver, as `imageSizeLimit()` is for a picture. */
+	public function videoSizeLimit(): int {
+		return min($this->maxVideoUploadSize(), $this->phpUploadLimit());
+	}
+
+	/**
+	 * The largest file PHP accepts in an upload, in bytes: the smaller of
+	 * `upload_max_filesize` and `post_max_size`, `PHP_INT_MAX` when neither is
+	 * set.
+	 */
+	public function phpUploadLimit(): int {
+		$limit = Util::uploadLimit();
+
+		return ($limit >= PHP_INT_MAX) ? PHP_INT_MAX : (int)$limit;
+	}
+
+	/**
+	 * PHP's `post_max_size` in bytes, `PHP_INT_MAX` when it is not set. A
+	 * request body over it reaches the app with `$_FILES` and `$_POST` empty.
+	 */
+	public function postMaxSize(): int {
+		$size = Util::computerFileSize((string)ini_get('post_max_size'));
+
+		return ($size === false || $size <= 0 || $size >= PHP_INT_MAX) ? PHP_INT_MAX : (int)$size;
 	}
 
 	/**

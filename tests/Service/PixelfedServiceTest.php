@@ -84,7 +84,7 @@ class PixelfedServiceTest extends TestCase {
 		$this->postService = $this->createMock(PostService::class);
 		$this->instanceService = $this->createStub(InstanceService::class);
 		$this->instanceService->method('supportedMimeTypes')->willReturn(['image/jpeg', 'video/mp4']);
-		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1024 * 1024);
+		$this->instanceService->method('imageSizeLimit')->willReturn(10 * 1024 * 1024);
 
 		// a user config that remembers, so what is written can be read back
 		$this->configService = $this->createStub(ConfigService::class);
