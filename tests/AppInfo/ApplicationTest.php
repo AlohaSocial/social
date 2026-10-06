@@ -38,6 +38,7 @@ use OCA\Social\Listeners\UserDeletedListener;
 use OCA\Social\Middleware\AccessBlockMiddleware;
 use OCA\Social\Middleware\ApiRateLimitMiddleware;
 use OCA\Social\Middleware\ExternalScopeMiddleware;
+use OCA\Social\Middleware\HideCountsMiddleware;
 use OCA\Social\Middleware\RateLimitHeadersMiddleware;
 use OCA\Social\Notification\Notifier;
 use OCA\Social\Search\UnifiedSearchProvider;
@@ -188,6 +189,7 @@ class ApplicationTest extends TestCase {
 				AccessBlockMiddleware::class,
 				RateLimitHeadersMiddleware::class,
 				ApiRateLimitMiddleware::class,
+				HideCountsMiddleware::class,
 				ExternalScopeMiddleware::class,
 			],
 			$registered
@@ -214,6 +216,7 @@ class ApplicationTest extends TestCase {
 			AccessBlockMiddleware::class => false,
 			RateLimitHeadersMiddleware::class => false,
 			ApiRateLimitMiddleware::class => false,
+			HideCountsMiddleware::class => false,
 			ExternalScopeMiddleware::class => true,
 		], $global);
 	}

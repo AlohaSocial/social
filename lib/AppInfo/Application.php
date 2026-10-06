@@ -40,6 +40,7 @@ use OCA\Social\Listeners\UserDeletedListener;
 use OCA\Social\Middleware\AccessBlockMiddleware;
 use OCA\Social\Middleware\ApiRateLimitMiddleware;
 use OCA\Social\Middleware\ExternalScopeMiddleware;
+use OCA\Social\Middleware\HideCountsMiddleware;
 use OCA\Social\Middleware\RateLimitHeadersMiddleware;
 use OCA\Social\Notification\Notifier;
 use OCA\Social\Reference\PostReferenceProvider;
@@ -96,6 +97,8 @@ class Application extends App implements IBootstrap {
 		$context->registerMiddleware(RateLimitHeadersMiddleware::class);
 		// and the budget itself, for the routes that carry no limit of their own
 		$context->registerMiddleware(ApiRateLimitMiddleware::class);
+		// the like, boost and follower numbers out of what a reader who hides them is sent
+		$context->registerMiddleware(HideCountsMiddleware::class);
 		// global: it keeps self-registered external users out of every other
 		// app's controllers, not only this app's
 		$context->registerMiddleware(ExternalScopeMiddleware::class, true);

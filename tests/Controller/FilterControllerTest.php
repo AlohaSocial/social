@@ -22,6 +22,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
@@ -58,6 +59,9 @@ class FilterControllerTest extends TestCase {
 	private int $transactions = 0;
 	private TimelineRevisionService|Stub $timelineRevisionService;
 	private AiContentService $aiContentService;
+	private CountsService $countsService;
+	/** @var array<string, string> user id => the stored `show_counts` */
+	private array $showCounts = [];
 	/** @var array<string, bool> user id => the AI switch as stored */
 	private array $hidesAi = [];
 	private IUserSession|Stub $userSession;
@@ -124,6 +128,15 @@ class FilterControllerTest extends TestCase {
 				$this->hidesAi[$userId] = ($value === '1');
 			});
 		$this->aiContentService = new AiContentService($configService);
+
+		$countsConfig = $this->createStub(ConfigService::class);
+		$countsConfig->method('getUserValue')
+			->willReturnCallback(fn (string $key, string $userId = ''): string => $this->showCounts[$userId] ?? '');
+		$countsConfig->method('setValueForUser')
+			->willReturnCallback(function (string $userId, string $key, string $value): void {
+				$this->showCounts[$userId] = $value;
+			});
+		$this->countsService = new CountsService($countsConfig);
 	}
 
 	private function stubStore(): void {
@@ -360,6 +373,7 @@ class FilterControllerTest extends TestCase {
 			$this->filtersRequest,
 			$this->timelineRevisionService,
 			$this->aiContentService,
+			$this->countsService,
 		);
 	}
 
@@ -938,6 +952,41 @@ class FilterControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->getStatus(1)->getStatus());
 		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->deleteStatus(1)->getStatus());
+	}
+
+	// the switch for the like, boost and follower numbers
+
+	/** Hidden for an account that never chose, which is every account on the day this ships. */
+	public function testTheNumbersAreHiddenForAnAccountThatNeverTouchedTheSwitch(): void {
+		$response = $this->controller()->counts();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['hide' => true], $response->getData());
+	}
+
+	public function testShowingTheNumbersIsStoredAndAnswered(): void {
+		$response = $this->controller()->countsUpdate('false');
+
+		$this->assertSame(['hide' => false], $response->getData());
+		$this->assertSame('1', $this->showCounts['alice'], 'stored as showing, so the default stays hidden');
+		$this->assertSame(['hide' => false], $this->controller()->counts()->getData());
+
+		$this->assertSame(['hide' => true], $this->controller()->countsUpdate(true)->getData());
+	}
+
+	public function testTheCountsSwitchRefusesWhatIsNotABoolean(): void {
+		foreach ([null, '', 'maybe'] as $raw) {
+			$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->countsUpdate($raw)->getStatus(), var_export($raw, true));
+		}
+		$this->assertSame([], $this->showCounts, 'a refused request must not flip the switch');
+	}
+
+	public function testTheCountsSwitchNeedsAViewer(): void {
+		$this->csrf = false;
+
+		foreach ([$this->controller()->counts(), $this->controller()->countsUpdate('false')] as $response) {
+			$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+		}
 	}
 
 	// the switch for posts made with AI

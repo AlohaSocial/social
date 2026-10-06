@@ -59,6 +59,7 @@ class NavigationControllerTest extends TestCase {
 	/** @var CheckService&MockObject */
 	private $checkService;
 	private $sensitiveMediaService;
+	private \OCA\Social\Service\CountsService $countsService;
 	private $sectionsService;
 	private $streamService;
 	private $filterService;
@@ -84,6 +85,8 @@ class NavigationControllerTest extends TestCase {
 		// what it does by default: hides nothing, hands each post back exported
 		$this->filterService->method('apply')->willReturnArgument(0);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
+		$this->countsService = $this->createStub(\OCA\Social\Service\CountsService::class);
+		$this->countsService->method('hides')->willReturn(true);
 		$this->sensitiveMediaService->method('policyFor')->willReturn('default');
 		$this->sensitiveMediaService->method('choiceOf')->willReturn('');
 		$this->sectionsService = $this->createStub(\OCA\Social\Service\SectionsService::class);
@@ -126,6 +129,7 @@ class NavigationControllerTest extends TestCase {
 			$this->configService,
 			$this->checkService,
 			$this->sensitiveMediaService,
+			$this->countsService,
 			$this->sectionsService,
 			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
@@ -179,6 +183,9 @@ class NavigationControllerTest extends TestCase {
 			// in the page because the timeline needs both before it draws
 			'nsfwPolicy' => 'default',
 			'nsfwChoice' => '',
+			// whether the like, boost and follower numbers are hidden, which
+			// the page needs before it draws a post
+			'hideCounts' => true,
 			// which sections this instance offers, so the sidebar is drawn
 			// right the first time rather than losing entries a moment later
 			'sections' => [
