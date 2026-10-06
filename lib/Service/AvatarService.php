@@ -53,6 +53,18 @@ class AvatarService {
 	 *                                are not a picture this can store
 	 */
 	public function setFromTempFile(string $userId, array $upload): void {
+		$this->write($userId, $this->checkUpload($userId, $upload));
+	}
+
+	/**
+	 * Refuses, without writing anything, an upload `setFromTempFile()` would
+	 * refuse.
+	 *
+	 * @return string the uploaded file's path
+	 * @throws InvalidActionException the backend owns the avatar, or the bytes
+	 *                                are not a picture this can store
+	 */
+	public function checkUpload(string $userId, array $upload): string {
 		$user = $this->userManager->get($userId);
 		if ($user === null) {
 			throw new InvalidActionException('unknown account');
@@ -72,7 +84,9 @@ class AvatarService {
 			throw new InvalidActionException('no avatar found in the request');
 		}
 
-		$this->store($userId, $tmpPath);
+		$this->checkFile($tmpPath);
+
+		return $tmpPath;
 	}
 
 	/**
@@ -145,18 +159,19 @@ class AvatarService {
 			return false;
 		}
 
-		$this->store($userId, $tmpPath);
+		$this->checkFile($tmpPath);
+		$this->write($userId, $tmpPath);
 
 		return true;
 	}
 
 	/**
-	 * The checks and the write both ways in: the bytes decide what this is, not
-	 * the name they arrived under.
+	 * The checks both ways in make: the bytes decide what this is, not the
+	 * name they arrived under.
 	 *
 	 * @throws InvalidActionException
 	 */
-	private function store(string $userId, string $tmpPath): void {
+	private function checkFile(string $tmpPath): void {
 		$size = filesize($tmpPath);
 		if ($size === false || $size === 0) {
 			throw new InvalidActionException('the uploaded avatar is empty');
@@ -172,7 +187,14 @@ class AvatarService {
 		if (!in_array($type, self::ALLOWED_TYPES, true)) {
 			throw new InvalidActionException('an avatar has to be a JPEG, PNG, GIF or WebP image');
 		}
+	}
 
+	/**
+	 * Stores a file `checkFile()` accepted as the account's avatar.
+	 *
+	 * @throws InvalidActionException
+	 */
+	private function write(string $userId, string $tmpPath): void {
 		$data = file_get_contents($tmpPath);
 		if ($data === false) {
 			throw new InvalidActionException('the uploaded avatar could not be read');

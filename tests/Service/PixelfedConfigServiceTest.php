@@ -39,7 +39,7 @@ class PixelfedConfigServiceTest extends TestCase {
 
 		$this->instanceService = $this->createStub(InstanceService::class);
 		$this->instanceService->method('getLocal')->willReturn($instance);
-		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1024 * 1024);
+		$this->instanceService->method('imageSizeLimit')->willReturn(10 * 1024 * 1024);
 		$this->instanceService->method('supportedMimeTypes')
 			->willReturn(['image/jpeg', 'image/png', 'video/mp4']);
 

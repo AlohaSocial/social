@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.121
+**App version:** 0.26.126
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -223,7 +223,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_domain_block` | Instances one account has blocked for itself: one row per (account, domain), unique on the pair |
 | `social_account_note` | The private note one account keeps about another: one row per pair, never federated |
 | `social_mute_expiry` | When a mute runs out: one row per (muter, muted), and only for a mute that was given a duration |
-| `social_stream_rev` | The versions a status has been through: one row per version including the original, oldest first |
+| `social_stream_rev` | The versions a status has been through: one row per version including the original, oldest first. `media` (TEXT, nullable) is the attachments of that version as a JSON list of client `MediaAttachment` entities, the shape `social_stream.attachments` stores — kept on the revision because `media_attributes` rewrites a description or focal point on the attachment itself; null on rows from before the column, which read as no attachments |
 | `social_featured_tag` | The hashtags an account pins to its profile: one row per (actor, lowercased tag), unique on the pair |
 | `social_announcement` | The instance's announcements: one row per notice, with the text as typed and the window it is served in (both bounds nullable) |
 | `social_announce_read` | Who has dismissed which announcement: one row per (account, announcement), unique on the pair |
@@ -249,7 +249,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 
 `Version1000Date20261005000001` adds `social_cache_doc.ai_source`, the provenance a cached picture stated about itself (see the schema table). A column rather than a flag inside `meta`: `meta` is a JSON blob nothing queries, and this one is read on every attachment of every status a client is handed.
 
-`Version1000Date20261006000001` adds the three `social_atproto_*` tables — which local account has linked a Bluesky handle, how a record of theirs is named by both sides, and which remote Bluesky actors are read here (see the schema table). None of it is a cache of a repository: the records stay on the PDS and are fetched when they are needed. What the tables hold is the mapping the two id schemes cannot derive from each other, and it is not derivable by design — an ActivityPub id has to pass `ACore::checkOrigin()`, and `parse_url('at://…')` has no host to check, so an `at://` uri can never be the id of a local row. Every record written for one therefore gets an `https://<cloud>/ap/bluesky/…` id, and this is where its way back lives.
+`Version1000Date20261006000010` adds `social_stream_rev.media`, the attachments of each recorded version of a status (see the schema table).
 
 Two of those deserve a warning.
 
@@ -402,6 +402,8 @@ copy in app storage; the original stays where it was, untouched.
 ---
 
 ## ActivityPub Federation
+
+ActivityPub is the one federation protocol this app speaks today. The specification for a second one — native Bluesky / AT Protocol identities, with this app as the PDS — is [Atproto-Compatibility.md](Atproto-Compatibility.md); nothing of it is implemented, and its sections move into this document as its phases land.
 
 The app is an ActivityPub **Server** that both produces and consumes ActivityPub messages.
 
@@ -2555,7 +2557,7 @@ unchanged, and mentions later in the message still render normally.
 | Dashboard | `SocialReportsWidget` | `Application::register()` | Open moderation reports; conditional — admins only |
 | Dashboard | `SocialFederationHealthWidget` | `Application::register()` | Instances the outbound queue is failing to reach; conditional — admins only |
 | Unified Search | `UnifiedSearchProvider` | `Application::register()` | Searches URIs, accounts, hashtags and **status content** (case-insensitive substring over the statuses the viewer may see: own posts, public/unlisted, and what is addressed to them — the timeline viewer bound). Local hits link to the post page, remote hits to their origin. Honours the query's cursor and limit — each source is asked for one entry past the end of the page, and a further page is offered only when one of them supplied it. It used to advertise a next cursor unconditionally while reading neither, so "load more" served the first page for ever |
-| Notifications | `Notifier` | `Application::register()` | Prepares Aloha Social notifications for the NC notification system: every subject in `NotificationService::SUBJECTS` is worded, linked into this app's own pages, and so is the `digest` subject `NotificationDeliveryService::digestFor()` raises — "%n new notifications in Aloha Social" with the counts per kind read out in `SUBJECTS` order, plural-aware, linking to the notifications timeline (`NotificationService::emit()` builds the link from the post's nid or the account's handle), and a `follow_request` carries Accept/Decline actions that POST to `/api/v1/follow_requests/{id}/authorize` and `/reject`; the answer dismisses the stored row and withdraws the bell entry (`onFollowRequestAnswered()`) |
+| Notifications | `Notifier` | `Application::register()` | Prepares Aloha Social notifications for the NC notification system: every subject in `NotificationService::SUBJECTS` is worded, linked into this app's own pages, and so is the `digest` subject `NotificationDeliveryService::digestFor()` raises — "%n new notifications in Aloha Social" with the counts per kind read out in `SUBJECTS` order, plural-aware, linking to the notifications timeline (`NotificationService::emit()` builds the link from the post's nid or the account's handle), and a `follow_request` carries Accept/Decline actions that POST to `/api/v1/follow_requests/{id}/authorize` and `/reject`; the answer dismisses the stored row and withdraws the bell entry (`onFollowRequestAnswered()`). The icon is the acting account's avatar as this server serves it — a local account's Nextcloud avatar route, a remote account's cached copy through `/media/{uuid}` (`NotificationService::avatarOf()`), never the picture on its own server, which the web interface's content policy will not load — and otherwise a monochrome picture of what happened (`img/favourite.svg`, `boost.svg`, `reply.svg`, `follow.svg`, `follow_request.svg`, `poll.svg`, `notifications.svg`, `edit.svg`, `report.svg`, `moderation.svg`); only the digest keeps the app icon |
 | References | `Reference\PostReferenceProvider` | `Application::register()` | Unfurls links to this app's posts and profiles (`/@acct/{nid}`, `/@acct/{id tail}`, `/@acct`) into a card wherever Nextcloud renders references — Talk, Text, Deck — and on public shares too (`IPublicReferenceProvider`). Renders only public and unlisted posts and profiles, because the card is cached per link for everyone (`getCacheKey()` is `null`, the prefix is the link); anything narrower resolves to nothing and stays a link. Never fetches from another server: a remote account not cached here is not looked up |
 | Activity | `Activity\Publisher`, `Activity\Provider`, `Activity\Setting`, `Activity\Filter` | `appinfo/info.xml` (`Publisher` is called from `NotificationService::emit()`) | Every bell entry is also an Activity entry with the same subject (`NotificationService::SUBJECTS`), worded by `Provider` with the actor as a rich `user` (local) or `highlight` (remote) and the post as the message. `Setting` puts it in the stream by default, the digest mail off by default, and Activity's own notifications off for good — this app has a bell. `Filter` is the "Aloha Social" entry in Activity's sidebar |
 | User migration | `UserMigration\SocialMigrator` | `Application::register()` | Puts the user's Aloha Social data in a Nextcloud account export, and reads it back on import. See "Account export and import" below |
@@ -2609,6 +2611,7 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | Repair step | `Migration\BackfillRemoteVisibility` | `appinfo/info.xml` | Backfills the empty visibility of remote statuses stored before estimation landed (public/unlisted set-based, followers/direct per author), idempotent |
 | Repair step | `Migration\CacheFeaturedCollections` | `appinfo/info.xml` | Rebuilds the cached copy of every local actor when something the cache carries has changed — the `featured` URL, the display name. Gated on a `VERSION` marker rather than re-running on every upgrade, and it counts the local actors before loading any |
 | Repair step | `Migration\BackfillStreamPostFields` | `appinfo/info.xml` | Fills in `social_stream.tags`, `language`, `updated`, `quote` and `quote_authorization` for the rows stored before those columns existed, by re-reading each row's wire object through `Stream::importFromDatabase()` — one parser, not a second copy of it. Pages on the primary key, writes only the rows that disagree, and is gated on a marker so it is not a full scan of the largest table on every later upgrade |
+| Repair step | `Migration\ClearAvatarHeaders` | `appinfo/info.xml` | Removes the header the old avatar fallback stored in the source document of a cached local actor: an `image` that is the account's icon, or Nextcloud's avatar route of its handle at any size. A cache rebuild read it back from there, so it never went away by itself; until this has run `Person::getHeader()` reads such a header as none. Local rows only, paged on the primary key, gated on a marker |
 
 The four timeline tiles (home, mentions, direct, bookmarks) extend
 `Dashboard\TimelineWidget`, which resolves the viewer, builds the `ProbeOptions`

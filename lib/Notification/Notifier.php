@@ -25,6 +25,24 @@ use OCP\Notification\UnknownNotificationException;
  * @package OCA\Social\Notification
  */
 class Notifier implements INotifier {
+	/**
+	 * The monochrome picture of what happened, drawn where the acting
+	 * account's avatar is not known. The digest and anything unknown keep the
+	 * app icon.
+	 */
+	private const ACTION_ICONS = [
+		'mention' => 'reply.svg',
+		'favourite' => 'favourite.svg',
+		'reblog' => 'boost.svg',
+		'follow' => 'follow.svg',
+		'follow_request' => 'follow_request.svg',
+		'poll' => 'poll.svg',
+		'status' => 'notifications.svg',
+		'update' => 'edit.svg',
+		'report_new' => 'report.svg',
+		'moderation_warning' => 'moderation.svg',
+	];
+
 	public function __construct(
 		private IL10N $l10n,
 		protected IFactory $factory,
@@ -75,9 +93,7 @@ class Notifier implements INotifier {
 
 		$l10n = $this->factory->get(Application::APP_ID, $languageCode);
 
-		$notification->setIcon(
-			$this->url->getAbsoluteURL($this->url->imagePath('social', 'social_dark.svg'))
-		);
+		$notification->setIcon($this->image(self::ACTION_ICONS[$notification->getSubject()] ?? 'social_dark.svg'));
 		$params = $notification->getSubjectParameters();
 
 		switch ($notification->getSubject()) {
@@ -206,12 +222,16 @@ class Notifier implements INotifier {
 
 	/**
 	 * Points the notification at the post or the profile it is about, and
-	 * shows the acting account's avatar instead of the app icon.
+	 * shows the acting account's avatar instead of the picture of the action.
 	 *
-	 * Both are taken only when they are absolute http(s) URLs: the parameters
-	 * come from a stored notification, whose actor may be on another server,
-	 * and a relative or exotic value there would be rendered as a link out of
-	 * the Nextcloud interface to something nobody vouched for.
+	 * The link is taken only when it is an absolute http(s) URL: the
+	 * parameters come from a stored notification, whose actor may be on
+	 * another server, and a relative or exotic value there would be rendered
+	 * as a link out of the Nextcloud interface to something nobody vouched
+	 * for. The avatar is taken only when this server serves it: the web
+	 * interface's content policy does not load pictures from anywhere else,
+	 * and a stored notification may name the picture on the account's own
+	 * server.
 	 */
 	private function point(INotification $notification, array $params): void {
 		$link = (string)($params['link'] ?? '');
@@ -220,9 +240,23 @@ class Notifier implements INotifier {
 		}
 
 		$avatar = (string)($params['avatar'] ?? '');
-		if ($this->isWebUrl($avatar)) {
+		if ($this->isWebUrl($avatar) && $this->isServedHere($avatar)) {
 			$notification->setIcon($avatar);
 		}
+	}
+
+	/** One of this app's pictures, as the absolute URL a notification needs. */
+	private function image(string $file): string {
+		return $this->url->getAbsoluteURL($this->url->imagePath(Application::APP_ID, $file));
+	}
+
+	/** Whether a URL is on this server: the same scheme, host and port. */
+	private function isServedHere(string $url): bool {
+		$origin = static fn (string $address): string => strtolower(
+			(string)parse_url($address, PHP_URL_SCHEME) . '://' . (string)parse_url($address, PHP_URL_HOST)
+		) . ':' . (string)parse_url($address, PHP_URL_PORT);
+
+		return $origin($url) === $origin($this->url->getAbsoluteURL('/'));
 	}
 
 	/**

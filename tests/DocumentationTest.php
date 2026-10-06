@@ -1127,6 +1127,7 @@ class DocumentationTest extends TestCase {
 		yield 'technical debt' => ['docs/Technical-Debt.md', 'Technical debt and legacy code'];
 		yield 'performance' => ['docs/Performance.md', 'Performance and scalability'];
 		yield 'mastodon compatibility' => ['docs/Mastodon-Compatibility.md', 'Mastodon compatibility'];
+		yield 'atproto specification' => ['docs/Atproto-Compatibility.md', 'Bluesky and AT Protocol compatibility'];
 		yield 'user guide' => ['docs/User-Guide.md', 'User guide'];
 	}
 

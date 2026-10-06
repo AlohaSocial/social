@@ -18,9 +18,9 @@ use OCA\Social\Tools\Traits\TArrayTools;
 /**
  * Mastodon's StatusEdit entity: one version a status has been through.
  *
- * A revision is a snapshot of the three fields an edit may change — the text,
- * the content warning and the sensitivity flag — and of when that version came
- * into being. It is deliberately not a Status: it carries no id, no counts and
+ * A revision is a snapshot of what an edit may change — the text, the content
+ * warning, the sensitivity flag and the attachments with their descriptions
+ * and focal points — and of when that version came into being. It is deliberately not a Status: it carries no id, no counts and
  * no interaction state, because a client renders it as a diff against the
  * status it already has rather than as a post of its own.
  *
@@ -30,11 +30,15 @@ use OCA\Social\Tools\Traits\TArrayTools;
  * copying them into every revision row would freeze a stale one into the
  * history.
  *
- * `poll`, `media_attachments` and `emojis` are always `null`/`[]`. Nothing
- * here can edit any of the three — `PostService::editPost()` takes content,
- * spoiler and sensitivity and nothing else — so there is no version of them to
- * record. The keys are emitted because a client that declares them
- * non-optional cannot decode the entity without them.
+ * `media_attachments` are the attachments as they were in that version,
+ * stored with the row because `media_attributes` rewrites a description or a
+ * focal point in place and the post keeps only the latest. A revision written
+ * before the row had a place for them reads as `[]`: what they were then was
+ * never kept and cannot be recovered.
+ *
+ * `poll` and `emojis` are always `null`/`[]`: no edit here changes a poll, and
+ * the emojis are derived from the text. The keys are emitted because a client
+ * that declares them non-optional cannot decode the entity without them.
  */
 class StatusRevision implements JsonSerializable {
 	use TArrayTools;
@@ -46,6 +50,8 @@ class StatusRevision implements JsonSerializable {
 	private bool $sensitive = false;
 	private string $published = '';
 	private ?Person $account = null;
+	/** @var list<MediaAttachment> */
+	private array $mediaAttachments = [];
 
 	/**
 	 * The version a status is in right now.
@@ -62,6 +68,10 @@ class StatusRevision implements JsonSerializable {
 			->setContent($stream->getContent())
 			->setSpoilerText($stream->getSpoilerText())
 			->setSensitive($stream->isSensitive())
+			->setMediaAttachments(array_values(array_filter(
+				$stream->getAttachments(),
+				static fn (mixed $attachment): bool => $attachment instanceof MediaAttachment
+			)))
 			->setPublished(($updated === '') ? $stream->getPublished() : $updated);
 	}
 
@@ -125,6 +135,29 @@ class StatusRevision implements JsonSerializable {
 		return $this->published;
 	}
 
+	/** @param list<MediaAttachment> $mediaAttachments */
+	public function setMediaAttachments(array $mediaAttachments): self {
+		$this->mediaAttachments = $mediaAttachments;
+
+		return $this;
+	}
+
+	/** @return list<MediaAttachment> */
+	public function getMediaAttachments(): array {
+		return $this->mediaAttachments;
+	}
+
+	/**
+	 * The attachments in the form the row stores them, the same one a status
+	 * row stores its own in.
+	 */
+	public function getMediaAttachmentsAsJson(): string {
+		return (string)json_encode(
+			array_map(static fn (MediaAttachment $attachment): array => $attachment->asLocal(), $this->mediaAttachments),
+			JSON_UNESCAPED_SLASHES
+		);
+	}
+
 	public function setAccount(?Person $account): self {
 		$this->account = $account;
 
@@ -143,6 +176,16 @@ class StatusRevision implements JsonSerializable {
 			->setSpoilerText($this->get('spoiler_text', $data))
 			->setSensitive($this->getInt('sensitive', $data) === 1)
 			->setPublished($this->get('published', $data));
+
+		// null on a row written before the column existed
+		$stored = json_decode((string)($data['media'] ?? ''), true);
+		$attachments = [];
+		foreach (is_array($stored) ? $stored : [] as $attachment) {
+			if (is_array($attachment)) {
+				$attachments[] = (new MediaAttachment())->import($attachment);
+			}
+		}
+		$this->setMediaAttachments($attachments);
 
 		return $this;
 	}
@@ -166,7 +209,10 @@ class StatusRevision implements JsonSerializable {
 			'created_at' => $this->getPublished(),
 			'account' => $account,
 			'poll' => null,
-			'media_attachments' => [],
+			'media_attachments' => array_map(
+				static fn (MediaAttachment $attachment): MediaAttachment => $attachment->setExportFormat(ACore::FORMAT_LOCAL),
+				$this->getMediaAttachments()
+			),
 			'emojis' => [],
 		];
 	}

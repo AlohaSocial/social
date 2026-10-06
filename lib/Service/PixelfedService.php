@@ -253,7 +253,7 @@ class PixelfedService {
 			'default_license' => self::LICENSE_ALL_RIGHTS_RESERVED,
 			// whether alt text is *required*; it is asked for, not demanded
 			'media_descriptions' => false,
-			'max_file_size' => $this->instanceService->maxUploadSize(),
+			'max_file_size' => $this->instanceService->imageSizeLimit(),
 			'max_media_attachments' => Stream::MAX_ATTACHMENTS,
 			'max_altext_length' => PixelfedConfigService::MAX_ALTTEXT_LENGTH,
 			'default_scope' => $this->defaultScope($viewer),

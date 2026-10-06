@@ -582,6 +582,7 @@ class NotificationService {
 		}
 
 		$actor = $this->cachedActor($actorId);
+		$local = $this->localActor($actorId);
 		$parameters = [
 			'account' => ($actor === null) ? $actorId : $this->labelOf($actor),
 			// into this app, not at the remote object: a bell entry that opened
@@ -590,7 +591,7 @@ class NotificationService {
 			'link' => in_array($subject, ['follow', 'follow_request'], true)
 				? $this->profileLink($actor, $actorId)
 				: $this->postLink($notification),
-			'avatar' => ($actor === null) ? '' : $actor->getAvatar(),
+			'avatar' => $this->avatarOf($local, $actor),
 		];
 		if ($subject === 'follow_request' && $actor !== null && $actor->getNid() > 0) {
 			// what Notifier builds the Accept and Decline actions from
@@ -611,7 +612,6 @@ class NotificationService {
 		// the same news, in the Activity app's stream and digest mail — with
 		// the actor as the Nextcloud user they are, when they are one here
 		$activityActor = $actor;
-		$local = $this->localActor($actorId);
 		if ($local !== null) {
 			$activityActor ??= $local;
 			$activityActor->setUserId($local->getUserId());
@@ -887,6 +887,35 @@ class NotificationService {
 		} catch (Exception $e) {
 			return null;
 		}
+	}
+
+	/**
+	 * The acting account's picture as this server serves it, or `''`: for an
+	 * account of this server its Nextcloud avatar, for anyone else the cached
+	 * copy of its icon. Never the address on the account's own server, which
+	 * the Nextcloud web interface's content policy will not load, and which
+	 * would tell that server who is reading their notifications.
+	 */
+	private function avatarOf(?Person $local, ?Person $cached): string {
+		$userId = ($local === null) ? '' : $local->getUserId();
+		if ($userId !== '' && !str_starts_with($userId, 'team/') && !str_starts_with($userId, 'channel/')) {
+			return $this->urlGenerator->linkToRouteAbsolute(
+				'core.avatar.getAvatar', ['userId' => $userId, 'size' => 64]
+			);
+		}
+
+		if ($cached === null || !$cached->hasIcon()) {
+			return '';
+		}
+
+		$icon = $cached->getIcon();
+		if ($icon->getLocalCopy() === '') {
+			return '';
+		}
+
+		return ($icon->getResizedCopy() === '')
+			? $icon->getMediaUrl($this->urlGenerator)
+			: $icon->getResizedMediaUrl($this->urlGenerator);
 	}
 
 	/** What to call an account in a sentence. */

@@ -561,6 +561,7 @@ class CoreRequestBuilder {
 			'spoiler_text',
 			'sensitive',
 			'published',
+			'media',
 			'creation'
 		],
 		self::TABLE_FEATURED_TAGS => [

@@ -115,7 +115,18 @@ back as if it were a banner; clients drew the face as the banner over an empty
 circle. The Account entity now always carries a URL in all four picture fields:
 the avatar is the account's own or, for a local account, Nextcloud's generated
 one; the header is the banner or a plain placeholder picture
-(`img/header-missing.svg`), as Mastodon's `missing.png`, never the avatar.
+(`img/header-missing.png`), a PNG as Mastodon's `missing.png` so that clients
+which decode only raster images draw it too, never the avatar.
+
+Fixed in #2487: the avatars the old fallback had already stored as the header
+of cached local actors are removed by the `ClearAvatarHeaders` repair step, and
+read as no header until it has run. `GET /api/v1/accounts/{id}` read the actor
+without its cached icon and answered the placeholder avatar where
+`verify_credentials` answered the uploaded picture; it joins the icon in like
+every other lookup. Every Account entity also carries `avatar_default` and
+`header_default`, `true` when the picture is a placeholder, so a client can
+tell one from a picture the account set without matching URLs — something
+Mastodon itself has no flag for.
 
 ### 3.2 Fixed — one access token per registered app
 
@@ -207,9 +218,17 @@ private as the post.
 
 `Instance::COMPAT_VERSION = '4.3.0'`. It said `3.5.0` until #2126 and `4.2.0` until
 the 4.3 surface was whole, which is what it announces now — with `api_versions`
-(`{"mastodon": 3}`) beside it, which is what a 4.3 client reads *instead of*
-parsing a string that, on a fork, says nothing about which Mastodon API is
-implemented. This was
+(`{"mastodon": 3, "aloha_social": 1}`) beside it, which is what a 4.3 client
+reads *instead of* parsing a string that, on a fork, says nothing about which
+Mastodon API is implemented. `aloha_social` is this app's own generation, for
+behaviour a client cannot infer from `mastodon` because older versions of the
+app reported the same number without it; a client gates on `>=`. Generation 1
+(#2481): `/api/v2/search` honours `account_id`, narrowing `statuses` to that
+account's posts the viewer may see while `accounts` and `hashtags` stay as they
+are, as in Mastodon; an account this instance does not know finds no posts
+rather than an error. `offset` pages the posts up to 400 deep, and `max_id` /
+`min_id` bound them by status id without changing the newest-first order.
+This was
 right when it was written and had stopped being: clients gate features on this
 string, so they were hiding edit and history, calling the v1 filter routes that
 404 instead of v2, and never asking for `/api/v2/instance` or
@@ -315,6 +334,12 @@ edited the way Mastodon edits them, with `media_attributes` on
 changed only the upload while the post kept its own copy, so a description
 could only be fixed by deleting the post. That route now refuses an upload a
 post carries, as Mastodon's does.
+
+Fixed in #2486: `GET /api/v1/statuses/:id/history` carries each version's
+`media_attachments`, descriptions and focal points included, as Mastodon's
+`StatusEdit` does. Every version used to have `[]`, so an edit that only
+changed a description looked like no change at all. Versions recorded before
+this keep `[]`.
 
 ---
 

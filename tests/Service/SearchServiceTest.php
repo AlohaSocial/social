@@ -257,6 +257,18 @@ class SearchServiceTest extends TestCase {
 		$this->assertSame([], $this->service->searchStreamContent(''));
 	}
 
+	public function testAContentSearchHandsTheNarrowingAndThePageToTheQuery(): void {
+		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest->expects($this->once())->method('searchContent')
+			->with('fox', 10, 20, 'https://cloud.example/users/alice', '1791284215592836068', 5)
+			->willReturn([]);
+		$service = new SearchService(
+			$this->cacheActorService, $this->hashtagService, $streamRequest, new NullLogger(), $this->curlService
+		);
+
+		$service->searchStreamContent('fox', 10, 20, 'https://cloud.example/users/alice', '1791284215592836068', 5);
+	}
+
 	public function testSearchAccountsIgnoresAHashtagSearch(): void {
 		$this->cacheActorService->expects($this->never())->method('getFromAccount');
 		$this->cacheActorService->expects($this->never())->method('searchCachedAccounts');

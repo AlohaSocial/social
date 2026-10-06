@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidActionException;
+use OCA\Social\Exceptions\UploadFailedException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -32,6 +33,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationService;
@@ -91,6 +93,7 @@ class AccountApiController extends MastodonApiController {
 		private MultipartBodyService $multipartBodyService,
 		private AdminApiService $adminApiService,
 		private AiContentService $aiContentService,
+		private InstanceService $instanceService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -131,6 +134,10 @@ class AccountApiController extends MastodonApiController {
 	 * elsewhere) makes this a **422** rather than a silent success: the profile
 	 * looks the same afterwards either way, and only one of those two tells the
 	 * user why.
+	 *
+	 * Every refusal is made before anything is written, and a part that fails
+	 * after the first was stored is logged rather than answered: the request
+	 * either changes nothing or answers 200 with what it stored.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -138,8 +145,8 @@ class AccountApiController extends MastodonApiController {
 	public function updateCredentials(): DataResponse {
 		try {
 			$this->initViewer(true);
+			$userId = $this->currentSession();
 
-			$changed = false;
 			// clients send this route as multipart whenever a picture is in it,
 			// and PHP parses a multipart body by itself for a POST only
 			$multipart = $this->multipartBodyService->read($this->request);
@@ -148,41 +155,30 @@ class AccountApiController extends MastodonApiController {
 				: $multipart['fields'];
 			$files = ($multipart === null) ? $_FILES : $multipart['files'];
 
-			// a picture that was sent and did not arrive refuses the whole
-			// request, before anything else in it is written
+			// Everything that can be refused is refused here, before anything
+			// is written: a picture that was sent and did not arrive, one that
+			// is not a picture, a name or an avatar the backend owns, an
+			// audience no post can have.
 			$header = $files['header'] ?? [];
 			$avatar = $files['avatar'] ?? [];
 			$headerSent = $this->wasUploaded($header, 'header');
 			$avatarSent = $this->wasUploaded($avatar, 'avatar');
-
-			if (array_key_exists('locked', $input)) {
-				$this->accountService->setLocked($this->currentSession(), $this->formBool($input['locked']));
-				$changed = true;
+			if ($avatarSent) {
+				$this->avatarService->checkUpload($userId, $avatar);
 			}
 
-			// an absent `note` is a client that did not mention the bio, not a
-			// client asking for an empty one
-			if (array_key_exists('note', $input)) {
-				$this->accountService->setSummary($this->currentSession(), (string)$input['note']);
-				$changed = true;
+			// an absent display name is a client that did not mention it
+			$displayNameSent = array_key_exists('display_name', $input);
+			if ($displayNameSent) {
+				$this->accountService->assertDisplayNameWritable($userId);
 			}
 
 			// `source[privacy]` is the audience this account posts with when a
 			// client does not name one, and `statusNew()` reads it back
 			$privacy = $input['source']['privacy'] ?? null;
-			if (is_string($privacy) && $privacy !== '') {
-				$this->accountService->setDefaultPrivacy($this->currentSession(), $privacy);
-				$changed = true;
-			}
-
-			// an absent display name is a client that did not mention it. A
-			// backend that owns the name raises, and the client sees the
-			// refusal rather than a 200 over an unchanged profile
-			if (array_key_exists('display_name', $input)) {
-				$this->accountService->setDisplayName(
-					$this->currentSession(), (string)$input['display_name']
-				);
-				$changed = true;
+			$privacy = (is_string($privacy) && $privacy !== '') ? $privacy : null;
+			if ($privacy !== null) {
+				$this->accountService->assertDefaultPrivacy($privacy);
 			}
 
 			// only the flags that were sent: a client updating the display
@@ -193,35 +189,47 @@ class AccountApiController extends MastodonApiController {
 					$flags[$flag] = $this->formBool($input[$flag]);
 				}
 			}
-			if ($flags !== []) {
-				$this->accountService->setActorFlags($this->currentSession(), $flags);
-				$changed = true;
-			}
 
-			// Mastodon sends both pictures multipart on this same route: the
-			// banner as `header`, the avatar as `avatar`. The avatar is the
-			// Nextcloud account's picture — the same one the whole server shows
-			// — so it is written there, and a backend that owns it raises
-			// rather than answering 200 over an unchanged picture.
+			// The parts in the order they are written. The banner goes first:
+			// whether its bytes are an image this app stores is only known
+			// once they are stored, so a banner that is refused is refused
+			// before anything else is written. Mastodon sends both pictures
+			// on this route; the avatar is the Nextcloud account's picture,
+			// the one the whole server shows, and is written there.
+			$parts = [];
 			if ($headerSent) {
-				$this->bannerService->setFromTempFile($this->currentSession(), $header['tmp_name']);
-				$changed = true;
+				$parts['header'] = fn () => $this->bannerService->setFromTempFile($userId, $header['tmp_name']);
 			}
-
 			if ($avatarSent) {
-				$this->avatarService->setFromTempFile($this->currentSession(), $avatar);
-				$changed = true;
+				$parts['avatar'] = fn () => $this->avatarService->setFromTempFile($userId, $avatar);
 			}
-
+			if ($displayNameSent) {
+				$parts['display_name'] = fn () => $this->accountService->setDisplayName(
+					$userId, (string)$input['display_name']
+				);
+			}
+			// an absent `note` is a client that did not mention the bio, not a
+			// client asking for an empty one
+			if (array_key_exists('note', $input)) {
+				$parts['note'] = fn () => $this->accountService->setSummary($userId, (string)$input['note']);
+			}
+			if ($privacy !== null) {
+				$parts['source[privacy]'] = fn () => $this->accountService->setDefaultPrivacy($userId, $privacy);
+			}
+			if (array_key_exists('locked', $input)) {
+				$parts['locked'] = fn () => $this->accountService->setLocked($userId, $this->formBool($input['locked']));
+			}
+			if ($flags !== []) {
+				$parts['flags'] = fn () => $this->accountService->setActorFlags($userId, $flags);
+			}
 			if (array_key_exists('fields_attributes', $input) && is_array($input['fields_attributes'])) {
 				// clients send either a list or an object keyed by index
-				$this->accountService->setFields(
-					$this->currentSession(), array_values($input['fields_attributes'])
+				$parts['fields_attributes'] = fn () => $this->accountService->setFields(
+					$userId, array_values($input['fields_attributes'])
 				);
-				$changed = true;
 			}
 
-			if ($changed) {
+			if ($this->applyProfileParts($parts)) {
 				// refresh the viewer so the returned entity carries the change
 				$this->viewer = $this->refreshedViewer();
 			}
@@ -233,22 +241,49 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
+	 * Writes the parts of a profile update in turn.
+	 *
+	 * A failure of the first part fails the request with nothing written. A
+	 * failure after that is logged and the rest is still written: the answer
+	 * is then a 200 whose account entity shows what was stored, which a client
+	 * can show, where a 500 after half a profile left it unable to tell what
+	 * had changed.
+	 *
+	 * @param array<string, callable(): mixed> $parts by the field they write
+	 * @return bool whether anything was written
+	 * @throws Throwable the first part failed
+	 */
+	private function applyProfileParts(array $parts): bool {
+		$written = false;
+		foreach ($parts as $part => $apply) {
+			try {
+				$apply();
+				$written = true;
+			} catch (Throwable $e) {
+				if (!$written) {
+					throw $e;
+				}
+
+				$this->logger->warning('[' . static::class . '] update_credentials could not store ' . $part . ', the rest of the profile was stored', [
+					'exception' => $e,
+					'userId' => $this->currentSession(),
+				]);
+			}
+		}
+
+		return $written;
+	}
+
+	/**
 	 * Whether a picture arrived in this `$_FILES`-shaped entry. A picture that
 	 * was sent and did not arrive is an error rather than nothing: skipping it
 	 * answered 200 over the old picture.
 	 *
 	 * @throws InvalidActionException
-	 * @throws Exception the upload failed on this side
+	 * @throws UploadFailedException the upload failed on this side
 	 */
 	private function wasUploaded(array $upload, string $field): bool {
-		return match ($upload['error'] ?? UPLOAD_ERR_NO_FILE) {
-			UPLOAD_ERR_OK => true,
-			UPLOAD_ERR_NO_FILE => false,
-			UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE
-				=> throw new InvalidActionException('the ' . $field . ' is larger than this server accepts'),
-			UPLOAD_ERR_PARTIAL => throw new InvalidActionException('the ' . $field . ' upload did not finish'),
-			default => throw new Exception('the ' . $field . ' upload failed on the server, error ' . $upload['error']),
-		};
+		return $this->uploadArrived($upload, $field, $this->instanceService->imageSizeLimit());
 	}
 
 	/**

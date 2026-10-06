@@ -32,7 +32,7 @@ use PHPUnit\Framework\TestCase;
 class NotifierSubjectsTest extends TestCase {
 	private const APP_ICON = 'https://cloud.example/apps/social/img/social_dark.svg';
 	private const POST = 'https://cloud.example/@alice/post-1';
-	private const AVATAR = 'https://remote.example/avatars/bob.png';
+	private const AVATAR = 'https://cloud.example/apps/social/media/bob-avatar';
 
 	/** @var IFactory&Stub */
 	private $factory;
@@ -53,8 +53,12 @@ class NotifierSubjectsTest extends TestCase {
 		$this->factory->method('get')->willReturn($l10n);
 
 		$this->urlGenerator = $this->createStub(IURLGenerator::class);
-		$this->urlGenerator->method('imagePath')->willReturn('/apps/social/img/social_dark.svg');
-		$this->urlGenerator->method('getAbsoluteURL')->willReturn(self::APP_ICON);
+		$this->urlGenerator->method('imagePath')->willReturnCallback(
+			static fn (string $app, string $file): string => '/apps/' . $app . '/img/' . $file
+		);
+		$this->urlGenerator->method('getAbsoluteURL')->willReturnCallback(
+			static fn (string $path): string => 'https://cloud.example' . $path
+		);
 
 		$this->notifier = new Notifier(
 			$this->createStub(IL10N::class),
@@ -164,6 +168,64 @@ class NotifierSubjectsTest extends TestCase {
 	public function testNothingButAWebUrlBecomesTheIcon(string $avatar): void {
 		$this->notifier->prepare(
 			$this->notification('mention', $this->params(['avatar' => $avatar])), 'en'
+		);
+
+		$this->assertSame('https://cloud.example/apps/social/img/reply.svg', $this->rendered['icon']);
+	}
+
+	public static function actionIconProvider(): array {
+		return [
+			'mention' => ['mention', 'reply.svg'],
+			'favourite' => ['favourite', 'favourite.svg'],
+			'reblog' => ['reblog', 'boost.svg'],
+			'follow' => ['follow', 'follow.svg'],
+			'follow_request' => ['follow_request', 'follow_request.svg'],
+			'poll' => ['poll', 'poll.svg'],
+			'status' => ['status', 'notifications.svg'],
+			'update' => ['update', 'edit.svg'],
+			'report_new' => ['report_new', 'report.svg'],
+			'moderation_warning' => ['moderation_warning', 'moderation.svg'],
+		];
+	}
+
+	/** alohasocial/social#2483: what happened, when who did it has no picture here. */
+	#[DataProvider('actionIconProvider')]
+	public function testWithoutAnAvatarTheIconShowsWhatHappened(string $subject, string $file): void {
+		$this->notifier->prepare($this->notification($subject, $this->params(['avatar' => ''])), 'en');
+
+		$this->assertSame('https://cloud.example/apps/social/img/' . $file, $this->rendered['icon']);
+		$this->assertFileExists(__DIR__ . '/../../img/' . $file);
+	}
+
+	public function testEverySubjectTheServiceRaisesHasAnActionIcon(): void {
+		foreach (NotificationService::SUBJECTS as $subject) {
+			$this->rendered = [];
+			$this->notifier->prepare($this->notification($subject, $this->params(['avatar' => ''])), 'en');
+
+			$this->assertNotSame(self::APP_ICON, $this->rendered['icon'], $subject . ' shows the app icon');
+		}
+	}
+
+	public function testAnAvatarOnAnotherServerIsNotLoaded(): void {
+		// a stored notification may name the picture on the account's own
+		// server, which the web interface's content policy would refuse
+		$this->notifier->prepare(
+			$this->notification('favourite', $this->params(['avatar' => 'https://remote.example/avatars/bob.png'])), 'en'
+		);
+
+		$this->assertSame('https://cloud.example/apps/social/img/favourite.svg', $this->rendered['icon']);
+	}
+
+	public function testTheLocalAvatarRouteIsLoaded(): void {
+		$avatar = 'https://cloud.example/index.php/avatar/bob/64';
+		$this->notifier->prepare($this->notification('reblog', $this->params(['avatar' => $avatar])), 'en');
+
+		$this->assertSame($avatar, $this->rendered['icon']);
+	}
+
+	public function testTheDigestKeepsTheAppIcon(): void {
+		$this->notifier->prepare(
+			$this->notification('digest', ['total' => 3, 'counts' => ['favourite' => 3], 'link' => self::POST]), 'en'
 		);
 
 		$this->assertSame(self::APP_ICON, $this->rendered['icon']);

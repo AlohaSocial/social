@@ -84,11 +84,11 @@ class StreamContentSearchTest extends TestCase {
 		return $viewer;
 	}
 
-	private function found(string $term): array {
+	private function found(string $term, string $authorId = ''): array {
 		$this->streamRequest->setViewer($this->viewer());
 		$ids = array_map(
 			static fn ($stream): string => $stream->getId(),
-			$this->streamRequest->searchContent($term)
+			$this->streamRequest->searchContent($term, 20, 0, $authorId)
 		);
 		sort($ids);
 
@@ -105,6 +105,14 @@ class StreamContentSearchTest extends TestCase {
 			self::BASE . '/notes/own-dm',
 			self::BASE . '/notes/public',
 		], $this->found('zeBRA'), 'public + own DM, never a foreign DM');
+	}
+
+	public function testANarrowedSearchFindsOnlyThatAccountsPostsTheViewerMaySee(): void {
+		$this->note('public', '<p>the Zebra crossed the road</p>', ACore::CONTEXT_PUBLIC);
+		$this->note('foreign-dm', '<p>zebra gossip not for the viewer</p>', self::OTHER);
+
+		$this->assertSame([self::BASE . '/notes/public'], $this->found('zebra', self::AUTHOR));
+		$this->assertSame([], $this->found('zebra', self::OTHER), 'nothing of somebody who wrote none of it');
 	}
 
 	public function testATooShortTermReturnsNothing(): void {

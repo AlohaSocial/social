@@ -297,6 +297,11 @@ class ApiControllerTest extends TestCase {
 		$this->curlService = $this->createMock(CurlService::class);
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 		$this->instanceService->method('maxUploadSize')->willReturn(10 * 1048576);
+		// what a client is told: the app's ceiling under PHP's 2 MB
+		$this->instanceService->method('imageSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('videoSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('phpUploadLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('postMaxSize')->willReturn(8 * 1048576);
 
 		// a pass-through: these tests are about the routes, not about filtering,
 		// and a filter that removed anything would rewrite what they assert
@@ -2336,8 +2341,11 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar']);
 		$this->assertSame('https://cloud.example/avatar/alice/128', $data['avatar_static']);
 		// never the avatar: a client draws the header where a header goes
-		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header']);
-		$this->assertSame('https://cloud.example/apps/social/img/header-missing.svg', $data['header_static']);
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.png', $data['header']);
+		$this->assertSame('https://cloud.example/apps/social/img/header-missing.png', $data['header_static']);
+		// and says that both are placeholders, so a client need not guess from the URL
+		$this->assertTrue($data['avatar_default']);
+		$this->assertTrue($data['header_default']);
 	}
 
 	public function testUpdateCredentialsRequiresAViewer(): void {
@@ -2908,6 +2916,63 @@ class ApiControllerTest extends TestCase {
 		$data = $this->controller()->searchV2('https://remote.example/notes/1', '', 20, true)->getData();
 
 		$this->assertSame([$status], $data['statuses']);
+	}
+
+	/**
+	 * Mastodon's `account_id` narrows the posts and nothing else: a client that
+	 * wants the posts alone sends `type=statuses` as well.
+	 */
+	public function testSearchV2NarrowsThePostsToTheNamedAccount(): void {
+		$this->loggedInAs();
+		$alice = $this->createStub(Person::class);
+		$alice->method('getId')->willReturn('https://cloud.example/users/alice');
+		$alice->method('setExportFormat')->willReturnSelf();
+		$this->cacheActorService->method('getFromNids')->with([42])->willReturn([$alice]);
+		$this->searchService->method('searchUri')->willReturn([]);
+		$this->searchService->method('searchAccounts')->with('fox')->willReturn([$alice]);
+		$this->searchService->method('searchHashtags')->with('fox')
+			->willReturn([['hashtag' => 'foxes', 'trend' => []]]);
+		$status = $this->createStub(Stream::class);
+		$this->searchService->expects($this->once())->method('searchStreamContent')
+			->with('fox', 20, 0, 'https://cloud.example/users/alice', 0, 0)
+			->willReturn([$status]);
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/tags/foxes');
+
+		$data = $this->controller()->searchV2('fox', '', 20, false, '42')->getData();
+
+		$this->assertSame([$status], $data['statuses']);
+		$this->assertCount(1, $data['accounts'], 'accounts are not narrowed');
+		$this->assertSame('foxes', $data['hashtags'][0]['name'], 'hashtags are not narrowed');
+	}
+
+	public function testSearchV2FindsNoPostsOfAnAccountItDoesNotKnow(): void {
+		$this->loggedInAs();
+		$this->cacheActorService->method('getFromNids')->willReturn([]);
+		$this->searchService->expects($this->never())->method('searchStreamContent');
+		$this->searchService->expects($this->never())->method('resolveStatus');
+
+		$response = $this->controller()->searchV2('https://remote.example/notes/1', 'statuses', 20, true, '999');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([], $response->getData()['statuses']);
+	}
+
+	public function testSearchV2PagesThePosts(): void {
+		$this->loggedInAs();
+		$this->searchService->expects($this->once())->method('searchStreamContent')
+			->with('fox', 10, 30, '', '1791284215592836068', 0)
+			->willReturn([]);
+
+		$this->controller()->searchV2('fox', 'statuses', 10, false, '', 30, '1791284215592836068', 'not-an-id');
+	}
+
+	/** A later page that found nothing is the end of the answer, not a link to fetch. */
+	public function testSearchV2ResolvesOnlyOnTheFirstPage(): void {
+		$this->loggedInAs();
+		$this->searchService->method('searchStreamContent')->willReturn([]);
+		$this->searchService->expects($this->never())->method('resolveStatus');
+
+		$this->controller()->searchV2('https://remote.example/notes/1', 'statuses', 20, true, '', 20);
 	}
 
 	public function testSearchV2RequiresAViewer(): void {
@@ -3953,11 +4018,100 @@ class ApiControllerTest extends TestCase {
 		);
 	}
 
-	public function testMediaNewReportsFailedUploads(): void {
+	/**
+	 * A file PHP refused for its size is answered with the limit a client can
+	 * shrink it to, and the reason is logged for the admin who can raise it.
+	 */
+	#[DataProvider('oversizedUploadErrors')]
+	public function testMediaNewNamesTheLimitOfAFilePhpRefusedForItsSize(int $error): void {
+		$this->loggedInAs();
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'image/jpeg', 'error' => $error];
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')
+			->with($this->stringContains('larger than this server accepts'));
+		$this->cacheDocumentService->expects($this->never())->method('saveFromTempToCache');
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', [], $logger)->mediaNew(),
+			'the file is larger than this server accepts (2 MB)'
+		);
+	}
+
+	public static function oversizedUploadErrors(): array {
+		return [
+			'over upload_max_filesize' => [UPLOAD_ERR_INI_SIZE],
+			'over the form\'s MAX_FILE_SIZE' => [UPLOAD_ERR_FORM_SIZE],
+		];
+	}
+
+	public function testMediaNewNamesTheVideoLimitForAVideo(): void {
+		$this->loggedInAs();
+		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->instanceService->method('imageSizeLimit')->willReturn(2 * 1048576);
+		$this->instanceService->method('videoSizeLimit')->willReturn(64 * 1048576);
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'video/mp4', 'error' => UPLOAD_ERR_INI_SIZE];
+
+		$this->assertUnprocessable(
+			$this->controller()->mediaNew(), 'the file is larger than this server accepts (64 MB)'
+		);
+	}
+
+	public function testMediaNewAsksForARetryOfAnInterruptedUpload(): void {
 		$this->loggedInAs();
 		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_PARTIAL];
 
-		$this->assertSame(['error' => 'error during upload'], $this->controller()->mediaNew()->getData());
+		$this->assertUnprocessable(
+			$this->controller()->mediaNew(), 'the file upload was interrupted, try again'
+		);
+	}
+
+	/**
+	 * Nothing is wrong with the file when PHP cannot store it, so the answer
+	 * is a 500 that says so instead of a refusal of the file.
+	 */
+	#[DataProvider('serverUploadErrors')]
+	public function testMediaNewAnswersAServerProblemAsOne(int $error, string $reason): void {
+		$this->loggedInAs();
+		$_FILES['file'] = ['tmp_name' => '', 'size' => 0, 'type' => 'image/png', 'error' => $error];
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains($reason));
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->mediaNew();
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertSame(
+			['error' => 'the file could not be received because of a problem on this server (' . $reason . ')'],
+			$response->getData()
+		);
+	}
+
+	public static function serverUploadErrors(): array {
+		return [
+			'no temporary directory' => [UPLOAD_ERR_NO_TMP_DIR, 'PHP has no temporary directory for uploads'],
+			'cannot write' => [UPLOAD_ERR_CANT_WRITE, 'PHP could not write the upload to disk'],
+			'an extension stopped it' => [UPLOAD_ERR_EXTENSION, 'a PHP extension stopped the upload'],
+		];
+	}
+
+	/** PHP empties `$_FILES` for a body over post_max_size; that is a size refusal, not a missing file. */
+	public function testMediaNewRecognisesABodyOverPostMaxSize(): void {
+		$this->loggedInAs();
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains('post_max_size'));
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', ['Content-Length' => (string)(8 * 1048576 + 1)], $logger)->mediaNew(),
+			'the file is larger than this server accepts (2 MB)'
+		);
+	}
+
+	public function testMediaNewWithASmallBodyAndNoFileFindsNoMedia(): void {
+		$this->loggedInAs();
+
+		$this->assertUnprocessable(
+			$this->controllerWithHeaders('', ['Content-Length' => '512'])->mediaNew(), 'no media found'
+		);
 	}
 
 	public function testMediaNewRejectsUploadsWithoutAType(): void {
@@ -4060,6 +4214,133 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
 	}
 
+	/** @param array<string, mixed> $fields */
+	private function updateCredentialsSends(array $fields, array $files = []): void {
+		$this->multipartBodyService->method('read')->willReturn(['fields' => $fields, 'files' => $files]);
+	}
+
+	/**
+	 * Everything that can be refused is refused before anything is written:
+	 * the bio used to be stored and the request answered with an error.
+	 */
+	public function testUpdateCredentialsRefusesAnUnknownAudienceBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends([
+			'note' => 'A new bio', 'display_name' => 'Alice', 'source' => ['privacy' => 'friends'],
+		]);
+		$this->accountService->method('assertDefaultPrivacy')
+			->willThrowException(new InvalidActionException('unknown visibility: friends'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+		$this->accountService->expects($this->never())->method('setDefaultPrivacy');
+
+		$this->assertUnprocessable(
+			$this->controller()->updateCredentials(), 'unknown visibility: friends'
+		);
+	}
+
+	public function testUpdateCredentialsRefusesANameTheBackendOwnsBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice']);
+		$this->accountService->method('assertDisplayNameWritable')
+			->willThrowException(new InvalidActionException('the display name of this account is managed outside Nextcloud'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
+	}
+
+	public function testUpdateCredentialsRefusesAnAvatarThatIsNotAPictureBeforeWritingAnything(): void {
+		$this->loggedInAs();
+		$avatar = ['tmp_name' => '/tmp/parsed-avatar', 'error' => UPLOAD_ERR_OK, 'name' => 'me.png'];
+		$this->updateCredentialsSends(['note' => 'A new bio'], ['avatar' => $avatar]);
+		$this->avatarService->method('checkUpload')
+			->willThrowException(new InvalidActionException('an avatar has to be a JPEG, PNG, GIF or WebP image'));
+		$this->avatarService->expects($this->never())->method('setFromTempFile');
+		$this->accountService->expects($this->never())->method('setSummary');
+
+		$this->assertUnprocessable(
+			$this->controller()->updateCredentials(), 'an avatar has to be a JPEG, PNG, GIF or WebP image'
+		);
+	}
+
+	/**
+	 * The banner is the one part whose bytes are only judged once stored, so
+	 * it goes first and its refusal leaves the rest unwritten.
+	 */
+	public function testUpdateCredentialsWritesTheBannerFirstAndARefusedOneWritesNothing(): void {
+		$this->loggedInAs();
+		$header = ['tmp_name' => '/tmp/parsed-header', 'error' => UPLOAD_ERR_OK, 'name' => 'banner.txt'];
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice'], ['header' => $header]);
+		$this->bannerService->method('setFromTempFile')
+			->willThrowException(new \OCA\Social\Exceptions\CacheContentMimeTypeException('not an image'));
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->accountService->expects($this->never())->method('setDisplayName');
+
+		$this->assertSame(
+			Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->updateCredentials()->getStatus()
+		);
+	}
+
+	/**
+	 * A part that fails after the first was stored no longer turns the whole
+	 * save into a 500 over half a profile: the rest is written, the failure
+	 * logged, and the entity answered shows what was stored.
+	 */
+	public function testUpdateCredentialsStoresTheRestWhenALaterPartFails(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends([
+			'display_name' => 'Alice',
+			'note' => 'A new bio',
+			'fields_attributes' => [['name' => 'Web', 'value' => 'https://alice.example']],
+		]);
+		$written = [];
+		$this->accountService->expects($this->once())->method('setDisplayName')
+			->willReturnCallback(function () use (&$written): void {
+				$written[] = 'display_name';
+			});
+		$this->accountService->expects($this->once())->method('setSummary')
+			->willThrowException(new \RuntimeException('database went away'));
+		$this->accountService->expects($this->once())->method('setFields')
+			->willReturnCallback(function () use (&$written): void {
+				$written[] = 'fields_attributes';
+			});
+		$logger = $this->createMock(LoggerInterface::class);
+		$logger->expects($this->once())->method('warning')->with($this->stringContains('could not store note'));
+		$logger->expects($this->never())->method('error');
+
+		$response = $this->controllerWithHeaders('', [], $logger)->updateCredentials();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['display_name', 'fields_attributes'], $written);
+	}
+
+	public function testUpdateCredentialsWritesTheDisplayNameBeforeTheBio(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['note' => 'A new bio', 'display_name' => 'Alice']);
+		$written = [];
+		$this->accountService->method('setSummary')->willReturnCallback(function () use (&$written): void {
+			$written[] = 'note';
+		});
+		$this->accountService->method('setDisplayName')->willReturnCallback(function () use (&$written): void {
+			$written[] = 'display_name';
+		});
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->updateCredentials()->getStatus());
+		$this->assertSame(['display_name', 'note'], $written);
+	}
+
+	public function testUpdateCredentialsAnswersTheFirstPartsFailureWhenNothingWasWritten(): void {
+		$this->loggedInAs();
+		$this->updateCredentialsSends(['display_name' => 'Alice', 'note' => 'A new bio']);
+		$this->accountService->method('setDisplayName')->willThrowException(new \RuntimeException('backend down'));
+		$this->accountService->expects($this->never())->method('setSummary');
+
+		$this->assertServerError($this->controller()->updateCredentials());
+	}
+
 	/** A body that cannot be read is an error, not a 200 over the old profile. */
 	public function testUpdateCredentialsRefusesAMultipartBodyItCannotRead(): void {
 		$this->loggedInAs();
@@ -4088,7 +4369,24 @@ class ApiControllerTest extends TestCase {
 		$response = $this->controller()->updateCredentials();
 
 		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
-		$this->assertStringContainsString('larger than this server accepts', $response->getData()['error']);
+		$this->assertSame(
+			['error' => 'the avatar is larger than this server accepts (2 MB)'], $response->getData()
+		);
+	}
+
+	public function testUpdateCredentialsAnswersAPictureTheServerCouldNotStoreAsAServerProblem(): void {
+		$this->loggedInAs();
+		$_FILES['header'] = ['tmp_name' => '', 'size' => 0, 'type' => '', 'error' => UPLOAD_ERR_CANT_WRITE];
+		$this->accountService->expects($this->never())->method('setSummary');
+		$this->bannerService->expects($this->never())->method('setFromTempFile');
+
+		$response = $this->controller()->updateCredentials();
+
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		$this->assertSame(
+			['error' => 'the header could not be received because of a problem on this server (PHP could not write the upload to disk)'],
+			$response->getData()
+		);
 	}
 
 	public function testUpdateCredentialsRefusesAHeaderUploadThatStoppedHalfway(): void {

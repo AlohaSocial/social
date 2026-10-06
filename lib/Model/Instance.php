@@ -122,8 +122,16 @@ class Instance implements IQueryRow, JsonSerializable {
 	 *
 	 * `mastodon: 3` is what 4.3 reports. It is the API generation, not the
 	 * release: 4.3 and 4.4 both say 3, and 4.5 says 4.
+	 *
+	 * `aloha_social` is this app's own generation, for what a client cannot
+	 * learn from `mastodon` because older versions of this app reported the
+	 * same number without it. It is raised when such a behaviour is added;
+	 * a client gates on `>=`:
+	 *
+	 * - 1: `/api/v2/search` honours `account_id`, `offset`, `max_id` and
+	 *   `min_id` for `statuses`.
 	 */
-	public const API_VERSIONS = ['mastodon' => 3];
+	public const API_VERSIONS = ['mastodon' => 3, 'aloha_social' => 1];
 
 	public function getCompatVersion(): string {
 		return self::COMPAT_VERSION . ' (compatible; Aloha Social ' . $this->version . ')';

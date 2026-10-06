@@ -49,21 +49,22 @@ class SearchService {
 	 * comes from StreamRequest::setViewer(), set by the caller.
 	 *
 	 * $limit is how many rows a caller that pages its results needs; null asks
-	 * for as many as the request returns on its own.
+	 * for as many as the request returns on its own. `$authorId` narrows the
+	 * answers to one account's posts; `$offset`, `$maxId` and `$minId` page
+	 * them, see StreamRequest::searchContent().
 	 *
 	 * @return \OCA\Social\Model\ActivityPub\Stream[]
 	 */
-	public function searchStreamContent(string $search, ?int $limit = null): array {
+	public function searchStreamContent(
+		string $search, ?int $limit = null, int $offset = 0, string $authorId = '',
+		int|string $maxId = 0, int|string $minId = 0,
+	): array {
 		$type = $this->getTypeFromSearch($search);
 		if ($search === '' || !($type & self::SEARCH_CONTENT)) {
 			return [];
 		}
 
-		if ($limit === null) {
-			return $this->streamRequest->searchContent($search);
-		}
-
-		return $this->streamRequest->searchContent($search, $limit);
+		return $this->streamRequest->searchContent($search, $limit ?? 20, $offset, $authorId, $maxId, $minId);
 	}
 
 	/**
