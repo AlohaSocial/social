@@ -124,12 +124,22 @@ silent on this side:
 - PeerTube refused every `Video` on its version-5 `uuid`;
 - a `Video` with no `likes`/`dislikes` crashed PeerTube outright.
 
-Its later runs found three more: a PeerTube video's edit and deletion, sent
-by the account behind the channel the video is filed under, were refused as
-coming from somebody other than the author; a vote cast on Mastodon on a poll
-of ours was never counted, and was stored as a message instead; and a display
-name, profile fields or a lock changed here never reached anybody who
-already followed the account.
+Its later runs, with the inbound and client-API tests, found these:
+
+- a PeerTube video's edit, and its deletion by Tombstone, are sent by the
+  account behind the channel the video is filed under, and both were refused
+  as coming from somebody other than the author;
+- a followed PeerTube channel's videos never reached its follower's home or
+  Videos timeline, because PeerTube addresses them to the followers of the
+  account, not of the channel;
+- a vote cast on Mastodon on a poll of ours was never counted, and was stored
+  as a message to the poll's author instead;
+- a display name, profile fields or a lock changed here never reached anybody
+  who already followed the account;
+- a profile edit sent one `Update` per field, and Mastodon kept whichever won
+  its lock, so the fields of a combined edit never showed there;
+- a remote account's new avatar was never shown here, the profile pointing
+  at a picture nobody had stored.
 
 ## What it cannot prove
 
