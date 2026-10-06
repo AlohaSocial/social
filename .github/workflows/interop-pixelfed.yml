@@ -1,0 +1,375 @@
+# SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Interop against a real Pixelfed: this app's activities delivered to it and
+# read back out of its own API, and Pixelfed's activities delivered here and
+# read back out of ours. See tests/Interop/README.md for what it covers and
+# for what it cannot prove.
+#
+# A job of its own, beside interop.yml, so the two run in parallel and neither
+# waits for the other's peer to boot.
+
+name: Interop against Pixelfed
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+  schedule:
+    # Mondays, early, beside the Mastodon run
+    - cron: '47 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interop-pixelfed-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  interop-pixelfed:
+    runs-on: ubuntu-latest
+    name: Nextcloud Social ↔ Pixelfed
+    timeout-minutes: 45
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: pixelfed-root
+          MYSQL_DATABASE: pixelfed
+          MYSQL_USER: pixelfed
+          MYSQL_PASSWORD: pixelfed
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -ppixelfed-root"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 3306:3306
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 6379:6379
+
+    env:
+      APP_NAME: social
+      # Pixelfed v0.14.4, the official image, pinned by digest: a moved tag
+      # would change what is being tested without a commit here saying so
+      PIXELFED_IMAGE: ghcr.io/pixelfed/pixelfed:v0.14.4@sha256:7d96925cb75c763878ab72a4e1a37c09fe64fffa8a0ad5ae68f90a3bacbab69e
+      PIXELFED_HOST: pixelfed.test
+      PIXELFED_BASE_URL: https://pixelfed.test
+      PIXELFED_USER: interop
+      # the container the profile test runs Pixelfed's ap:update-actors in
+      PIXELFED_CONTAINER: pixelfed
+      NEXTCLOUD_URL: https://nextcloud.test
+      NEXTCLOUD_USER: admin
+      NEXTCLOUD_PASSWORD: admin
+      # Pixelfed refuses to federate with any host that resolves to a private,
+      # loopback or reserved address, and it has no setting to say otherwise.
+      # Both names therefore resolve to one globally routed address that this
+      # runner, and only this runner, answers on its loopback: Pixelfed's
+      # check passes and nothing leaves the machine.
+      FEDERATION_IP: 100.128.0.10
+
+    steps:
+      - name: Checkout server
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: true
+          repository: nextcloud/server
+          # see e2e.yml: the newest version info.xml claims
+          ref: master
+
+      - name: Checkout app
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: apps/social
+
+      - name: Set up php
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.3'
+          extensions: bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, xmlreader, xmlwriter, zip, zlib, sqlite, pdo_sqlite
+          coverage: none
+          ini-file: development
+
+      - name: Set up the app's PHP dependencies
+        working-directory: apps/social
+        # without the dev ones, as the app store ships it: the app's autoloader
+        # is prepended to the server's, so a dev-only package the server also
+        # carries (symfony/console) is served in place of the server's own
+        run: composer i --no-dev
+
+      - name: Give both servers a name, an address and a certificate
+        # Pixelfed fetches and delivers over https only, so both ends need a
+        # host name and a certificate the other trusts: a CA made here, trusted
+        # by the runner, by Nextcloud and by the Pixelfed container, and thrown
+        # away with the job.
+        run: |
+          set -euo pipefail
+          sudo ip addr add "$FEDERATION_IP/32" dev lo
+          echo "$FEDERATION_IP nextcloud.test pixelfed.test" | sudo tee -a /etc/hosts
+          mkdir -p /tmp/tls && cd /tmp/tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=Interop CA' \
+            -keyout ca.key -out ca.crt \
+            -addext 'basicConstraints=critical,CA:true' -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -newkey rsa:2048 -nodes -subj '/CN=nextcloud.test' -keyout nc.key -out nc.csr
+          printf 'subjectAltName=DNS:nextcloud.test,DNS:pixelfed.test\nextendedKeyUsage=serverAuth\n' > nc.ext
+          openssl x509 -req -in nc.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 \
+            -extfile nc.ext -out nc.crt
+          chmod 644 nc.key
+          sudo cp ca.crt /usr/local/share/ca-certificates/interop-ca.crt
+          sudo update-ca-certificates
+
+      - name: Set up Nextcloud
+        run: |
+          mkdir data
+          ./occ maintenance:install --verbose --database=sqlite --database-name=nextcloud \
+            --admin-user "$NEXTCLOUD_USER" --admin-pass "$NEXTCLOUD_PASSWORD"
+          ./occ app:enable --force social
+          ./occ config:system:set trusted_domains 1 --value localhost:8080
+          ./occ config:system:set trusted_domains 2 --value nextcloud.test
+          ./occ config:system:set overwriteprotocol --value https
+          ./occ config:system:set overwritehost --value nextcloud.test
+          # Nextcloud's own HTTP client keeps its own CA bundle
+          ./occ security:certificates:import /tmp/tls/ca.crt
+          ./occ config:system:set overwrite.cli.url --value "$NEXTCLOUD_URL"
+          ./occ config:app:set social cloud_url --value "$NEXTCLOUD_URL"
+          ./occ config:app:set social social_url --value "$NEXTCLOUD_URL/index.php/apps/social/"
+          # Pixelfed is on this same runner: Nextcloud's HTTP client has to be
+          # willing to talk to an address it would otherwise call local
+          ./occ config:system:set allow_local_remote_servers --value true --type boolean
+          # the suite logs in with a password over basic auth, many times a
+          # minute, from one address
+          ./occ config:system:set auth.bruteforce.protection.enabled --value false --type boolean
+          ./occ config:system:set ratelimit.protection.enabled --value false --type boolean
+          ./occ log:manage --level=info
+
+      - name: Run Nextcloud
+        # several workers: rendering or fetching anything makes the server ask
+        # itself over HTTP, and a single-worker built-in server deadlocks on that
+        # behind the TLS proxy
+        run: |
+          PHP_CLI_SERVER_WORKERS=8 php -S localhost:8080 &
+          cat > /tmp/tls/Caddyfile <<'CADDY'
+          {
+            admin off
+            auto_https disable_redirects
+          }
+          nextcloud.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            # what Nextcloud's .htaccess does under Apache: the built-in
+            # server only serves files, and webfinger, nodeinfo and host-meta
+            # are routes of index.php
+            @wellknown path /.well-known/*
+            rewrite @wellknown /index.php{path}
+            reverse_proxy localhost:8080
+          }
+          pixelfed.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            reverse_proxy localhost:8090
+          }
+          CADDY
+          docker run -d --name proxy --network host -v /tmp/tls:/tls:ro caddy:2 \
+            caddy run --config /tls/Caddyfile --adapter caddyfile
+          for attempt in $(seq 1 30); do
+            # nodeinfo proves the /.well-known rewrite as well as the proxy
+            curl -sf https://nextcloud.test/status.php \
+              && curl -sf https://nextcloud.test/.well-known/nodeinfo && exit 0
+            sleep 2
+          done
+          docker logs proxy
+          exit 1
+
+      - name: Start Pixelfed
+        run: |
+          set -euo pipefail
+          cat > /tmp/pixelfed.env <<ENV
+          APP_NAME=Pixelfed
+          APP_ENV=production
+          APP_DEBUG=false
+          APP_KEY=base64:$(openssl rand -base64 32)
+          APP_URL=https://${PIXELFED_HOST}
+          APP_DOMAIN=${PIXELFED_HOST}
+          ADMIN_DOMAIN=${PIXELFED_HOST}
+          SESSION_DOMAIN=${PIXELFED_HOST}
+          TRUST_PROXIES=*
+          OPEN_REGISTRATION=false
+          ENFORCE_EMAIL_VERIFICATION=false
+          OAUTH_ENABLED=true
+          DB_CONNECTION=mysql
+          DB_HOST=172.17.0.1
+          DB_PORT=3306
+          DB_DATABASE=pixelfed
+          DB_USERNAME=pixelfed
+          DB_PASSWORD=pixelfed
+          REDIS_CLIENT=phpredis
+          REDIS_HOST=172.17.0.1
+          REDIS_PORT=6379
+          REDIS_PASSWORD=null
+          CACHE_STORE=redis
+          CACHE_DRIVER=redis
+          QUEUE_CONNECTION=redis
+          QUEUE_DRIVER=redis
+          SESSION_DRIVER=redis
+          BROADCAST_DRIVER=log
+          LOG_CHANNEL=stderr
+          LOG_LEVEL=debug
+          MAIL_MAILER=log
+          MAIL_DRIVER=log
+          ACTIVITY_PUB=true
+          AP_REMOTE_FOLLOW=true
+          AP_INBOX=true
+          AP_OUTBOX=true
+          AP_SHAREDINBOX=true
+          AP_LOGGER_ENABLED=true
+          # its federation jobs say why they dropped something only with this
+          PIXELFED_DEV_LOG=true
+          STORIES_ENABLED=true
+          INSTANCE_DISCOVER_PUBLIC=true
+          PF_OPTIMIZE_IMAGES=false
+          MEDIA_TYPES=image/jpeg,image/jpg,image/png,image/gif,image/webp,video/mp4
+          MAX_ALBUM_LENGTH=10
+          SSL_MODE=off
+          AUTORUN_ENABLED=false
+          PHP_OPCACHE_ENABLE=1
+          ENV
+
+          # the host's bundle, which now trusts the job's CA, in place of the
+          # container's own; the names resolve to the runner, through the proxy
+          # storage is a volume, shared with the Horizon container below: an
+          # upload written by the web server is processed by a queue worker
+          PIXELFED_RUN="--env-file /tmp/pixelfed.env
+            --add-host nextcloud.test:$FEDERATION_IP --add-host pixelfed.test:$FEDERATION_IP
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+            -v pixelfed-storage:/var/www/html/storage"
+          # shellcheck disable=SC2086
+          docker run -d --name pixelfed -p 127.0.0.1:8090:8080 $PIXELFED_RUN "$PIXELFED_IMAGE"
+
+          for attempt in $(seq 1 30); do
+            docker exec pixelfed php artisan migrate --force && break
+            sleep 4
+          done
+          docker exec pixelfed php artisan storage:link || true
+          docker exec pixelfed php artisan passport:keys --force
+          docker exec pixelfed php artisan instance:actor
+          docker exec pixelfed php artisan passport:client --personal --name=interop --provider=users --no-interaction
+          # federation is queue-driven: every delivery, fetch and fan-out is a
+          # Horizon job, so without this nothing ever leaves Pixelfed
+          # shellcheck disable=SC2086
+          docker run -d --name pixelfed-horizon $PIXELFED_RUN "$PIXELFED_IMAGE" php artisan horizon
+
+      - name: Wait for Pixelfed
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -sf "$PIXELFED_BASE_URL/api/v1/instance" > /dev/null; then
+              echo "Pixelfed is up"
+              curl -s "$PIXELFED_BASE_URL/.well-known/nodeinfo"; echo
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Pixelfed never came up"
+          curl -s -w '\n%{http_code}\n' "$PIXELFED_BASE_URL/api/v1/instance" | tail -c 2000 || true
+          docker logs pixelfed 2>&1 | tail -80
+          exit 1
+
+      - name: Make a Pixelfed account and a token for it
+        run: |
+          set -euo pipefail
+          # an account before the suite's, so the suite's is not number 1:
+          # Passport's guard reads a token whose user id equals its client id
+          # as a client-credentials token and authenticates nobody, and the
+          # one personal client is number 1 too
+          docker exec pixelfed php artisan user:create --name=Bystander --username=bystander \
+            --email=bystander@example.com --password='Interop-Test-2026!' --confirm_email=1
+          docker exec pixelfed php artisan user:create --name=Interop --username="$PIXELFED_USER" \
+            --email=interop@example.com --password='Interop-Test-2026!' --is_admin=true --confirm_email=1
+          cat > /tmp/token.php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $app = require 'bootstrap/app.php';
+          $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+          $user = App\Models\User::where('username', getenv('PF_USER'))->firstOrFail();
+          // a status written by an account that was never active is refused
+          $user->last_active_at = now();
+          $user->save();
+          echo $user->createToken('interop', ['read', 'write', 'follow', 'push'])->accessToken, "\n";
+          PHP
+          TOKEN=$(docker exec -i -e PF_USER="$PIXELFED_USER" pixelfed php < /tmp/token.php | tail -1)
+          if [ -z "$TOKEN" ]; then echo "no token"; exit 1; fi
+          echo "::add-mask::$TOKEN"
+          echo "PIXELFED_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          ANSWER=$(curl -s -w '\n%{http_code}' -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN" \
+            "$PIXELFED_BASE_URL/api/v1/accounts/verify_credentials")
+          echo "$ANSWER" | head -c 1500; echo
+          if [ "$(echo "$ANSWER" | tail -1)" != "200" ]; then
+            docker logs pixelfed 2>&1 | tail -40
+            exit 1
+          fi
+
+      - name: Interop tests
+        working-directory: apps/social
+        # the suite needs phpunit; installed only now, once the server is up
+        # and the app enabled with what ships. One class at a time, so each
+        # prints its own failures even if the other hangs.
+        run: |
+          composer i
+          status=0
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PixelfedDeliveryTest || status=1
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PixelfedInboundTest || status=1
+          exit $status
+
+      - name: What each side saw, when it went wrong
+        if: failure()
+        run: |
+          echo '--- Nextcloud log, notices and worse ---'
+          python3 -c 'import json,sys
+          for l in open("data/nextcloud.log"):
+              try: d=json.loads(l)
+              except Exception: continue
+              m=d.get("message","")
+              if d.get("level",0)>=1 and "headers already sent" not in m: print(d.get("time"),d.get("level"),d.get("app"),m[:300])' | tail -150 || true
+          echo '--- hosts the circuit breaker held back ---'
+          sqlite3 -header data/nextcloud.db "select * from oc_social_host_breaker" 2>&1 || true
+          echo '--- our delivery queue ---'
+          sqlite3 -header data/nextcloud.db \
+            "select id, token, status, tries, priority, substr(instance,1,90) as instance, substr(activity,1,80) as activity from oc_social_req_queue order by id" 2>&1 | tail -80 || true
+          echo '--- every request through the proxy: the writes, and what the servers fetch from each other ---'
+          docker logs proxy 2>&1 | python3 -c 'import json,sys,datetime
+          for l in sys.stdin:
+              try: d=json.loads(l)
+              except Exception: continue
+              r=d.get("request")
+              ua=(r or {}).get("headers",{}).get("User-Agent") or [""]
+              if not r or r["method"]=="GET" and "webfinger" not in r["uri"] and not ua[0].startswith(("(Pixelfed","Aloha")): continue
+              print(datetime.datetime.utcfromtimestamp(d["ts"]).strftime("%H:%M:%S"), d.get("status"), r["method"], r["host"], r["uri"][:90], (r.get("headers",{}).get("User-Agent") or [""])[0][:30])' | tail -200 || true
+          echo '--- Pixelfed, its failures ---'
+          docker logs pixelfed 2>&1 | grep -i -E "error|exception|fail|refus|invalid|warning" \
+            | grep -v -E "SMTP" | cut -c1-700 | tail -120 || true
+          echo '--- Pixelfed Horizon ---'
+          docker exec pixelfed php artisan horizon:status 2>&1 || true
+          docker logs pixelfed-horizon 2>&1 | grep -v -E "^\s*$|Worker STOPPED" | cut -c1-500 | tail -60 || true
+          echo '--- Pixelfed Horizon: stories, warnings and errors ---'
+          docker logs pixelfed-horizon 2>&1 | grep -i -E "story|warning|error|exception|fail" | cut -c1-900 | tail -80 || true
+          echo '--- Pixelfed failed jobs ---'
+          docker exec pixelfed php artisan queue:failed 2>&1 | tail -40 || true
+          echo '--- Pixelfed log files ---'
+          docker exec pixelfed sh -c 'tail -n 80 storage/logs/*.log' 2>&1 | cut -c1-700 || true
+          echo '--- Pixelfed follows ---'
+          mysql -h 127.0.0.1 -u pixelfed -ppixelfed pixelfed -e \
+            "select id, profile_id, following_id from followers; select id, follower_id, following_id, is_rejected from follow_requests; select id, username, domain, inbox_url, sharedInbox from profiles" 2>&1 || true
+          echo '--- the last Accept we queued ---'
+          sqlite3 data/nextcloud.db \
+            "select activity from oc_social_req_queue where json_extract(activity, '$.type') = 'Accept' order by id desc limit 1" 2>&1 | cut -c1-2000 || true

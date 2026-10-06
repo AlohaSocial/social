@@ -268,18 +268,32 @@ class FollowInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($this->incomingFollow(null, 'evil.example'));
 	}
 
-	public function testFollowAlreadyAcceptedIsIgnored(): void {
+	/**
+	 * A follower whose own record of the follow went missing or stayed
+	 * pending sends the Follow again; Mastodon answers that with the Accept
+	 * once more, and so does this side. Without it the follower is pending
+	 * for ever while this side counts it.
+	 */
+	public function testFollowAlreadyAcceptedGetsTheAcceptAgainAndChangesNothingHere(): void {
 		$known = new Follow();
 		$known->setAccepted(true);
 		$this->followsRequest->method('getByPersons')
 			->with($this->bob->getId(), $this->alice->getId())
 			->willReturn($known);
+		$follow = $this->incomingFollow();
 
+		$sent = null;
+		$this->capture($this->activityService, 'request', $sent, '');
 		$this->followsRequest->expects($this->never())->method('save');
 		$this->followsRequest->expects($this->never())->method('accepted');
-		$this->activityService->expects($this->never())->method('request');
+		$this->accountService->expects($this->never())->method('bumpActorCount');
+		$this->notificationInterface->expects($this->never())->method('save');
 
-		$this->handler->processIncomingRequest($this->incomingFollow());
+		$this->handler->processIncomingRequest($follow);
+
+		$this->assertInstanceOf(Accept::class, $sent);
+		$this->assertSame($follow, $sent->getObject());
+		$this->assertSame($this->bob->getInbox(), $sent->getInstancePaths()[0]->getUri());
 	}
 
 	public function testFollowStillPendingGetsTheAcceptAgainWithoutBeingStoredTwice(): void {
