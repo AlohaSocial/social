@@ -99,11 +99,12 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 			return;
 		}
 
-		if ($this->generateStreamDirect($stream)) {
+		$author = $this->cachedAuthor($stream);
+		if ($this->generateStreamDirect($stream, $author)) {
 			return;
 		}
 
-		$this->generateStreamHome($stream);
+		$this->generateStreamHome($stream, $author);
 	}
 
 	/**
@@ -146,11 +147,24 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		return $seen;
 	}
 
-	private function generateStreamHome(Stream $stream): void {
+	/**
+	 * A public or unlisted post reaches its author's followers whatever it
+	 * names, as on Mastodon. PeerTube files a video under its channel and
+	 * addresses it to the followers of the account behind the channel, so a
+	 * follower of the channel was never one of the post's recipients.
+	 */
+	private function generateStreamHome(Stream $stream, ?Person $author): void {
+		$cc = array_merge($stream->getCcArray(), $stream->getBccArray());
+		$addressed = array_merge($stream->getToAll(), $cc);
+		if ($author !== null && $author->getFollowers() !== ''
+			&& in_array(Stream::CONTEXT_PUBLIC, $addressed, true)) {
+			$cc[] = $author->getFollowers();
+		}
+
 		$recipients = self::uniqueRecipients(
 			[
 				'to' => array_merge($stream->getToAll(), [$stream->getAttributedTo()]),
-				'cc' => array_merge($stream->getCcArray(), $stream->getBccArray())
+				'cc' => $cc,
 			]
 		);
 
@@ -167,7 +181,7 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	 * as a home-timeline post, which is what an unknown followers collection
 	 * amounted to before as well.
 	 */
-	private function generateStreamDirect(Stream $stream): bool {
+	private function cachedAuthor(Stream $stream): ?Person {
 		$authorId = $stream->getAttributedTo();
 		$anchor = strpos($authorId, '#');
 		if ($anchor !== false) {
@@ -175,12 +189,18 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 		}
 
 		try {
-			$author = $this->cacheActorsRequest->getFromId($authorId);
+			return $this->cacheActorsRequest->getFromId($authorId);
 		} catch (CacheActorDoesNotExistException $e) {
 			$this->logger->debug('author not cached while addressing a stream; treated as not direct', [
 				'stream' => $stream->getId(), 'author' => $authorId,
 			]);
 
+			return null;
+		}
+	}
+
+	private function generateStreamDirect(Stream $stream, ?Person $author): bool {
+		if ($author === null) {
 			return false;
 		}
 

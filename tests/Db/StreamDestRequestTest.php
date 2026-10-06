@@ -115,6 +115,38 @@ class StreamDestRequestTest extends TestCase {
 		], $this->rows);
 	}
 
+	/**
+	 * PeerTube addresses a video to the followers of the account behind its
+	 * channel and files it under the channel: a follower of the channel was
+	 * no recipient, and the video never reached their home timeline.
+	 */
+	public function testAPublicPostReachesItsAuthorsFollowersWhateverItNames(): void {
+		$request = $this->request();
+		$this->cacheActorsRequest->method('getFromId')->willReturn($this->alice());
+
+		$request->generateStreamDest($this->note([Stream::CONTEXT_PUBLIC, self::BOB . '/followers']));
+
+		$this->assertSame([
+			[Stream::CONTEXT_PUBLIC, 'recipient', 'to'],
+			[self::BOB . '/followers', 'recipient', 'to'],
+			[self::ALICE, 'recipient', 'to'],
+			[self::ALICE . '/followers', 'recipient', 'cc'],
+		], $this->rows);
+	}
+
+	public function testAPostThatNamesTheFollowersAlreadyNamesThemOnce(): void {
+		$request = $this->request();
+		$this->cacheActorsRequest->method('getFromId')->willReturn($this->alice());
+
+		$request->generateStreamDest($this->note([Stream::CONTEXT_PUBLIC, self::ALICE . '/followers']));
+
+		$this->assertSame([
+			[Stream::CONTEXT_PUBLIC, 'recipient', 'to'],
+			[self::ALICE . '/followers', 'recipient', 'to'],
+			[self::ALICE, 'recipient', 'to'],
+		], $this->rows);
+	}
+
 	public function testAFragmentOnTheAuthorIdIsNotPartOfTheLookup(): void {
 		$request = $this->request();
 		$this->cacheActorsRequest->expects($this->once())->method('getFromId')
