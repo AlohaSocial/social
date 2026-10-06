@@ -176,7 +176,7 @@ abstract class ActorInterfaceTestCase extends ActivityPubTestCase {
 		$stored->setCreation(1);
 		$this->cacheActorsRequest->method('getFromId')->with(self::BOB)->willReturn($stored);
 
-		$this->cacheActorsRequest->expects($this->once())->method('update')->with($this->identicalTo($bob));
+		$this->actorService->expects($this->once())->method('update')->with($this->identicalTo($bob));
 
 		$this->handler->activity($update, $bob);
 	}

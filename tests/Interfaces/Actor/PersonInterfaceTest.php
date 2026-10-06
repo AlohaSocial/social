@@ -98,8 +98,10 @@ class PersonInterfaceTest extends ActorInterfaceTestCase {
 		$bob = $this->bob();
 		$this->cacheActorsRequest->method('getFromId')->with(self::BOB)->willReturn($this->cachedBob(1000));
 
-		$this->cacheActorsRequest->expects($this->once())->method('update')->with($this->identicalTo($bob));
-		$this->cacheActorsRequest->expects($this->never())->method('save');
+		// ActorService stores the avatar the profile names, then the profile
+		$this->actorService->expects($this->once())->method('update')->with($this->identicalTo($bob));
+		$this->actorService->expects($this->never())->method('save');
+		$this->cacheActorsRequest->expects($this->never())->method('update');
 
 		$this->handler->activity($this->update($bob, 2000), $bob);
 
@@ -110,8 +112,8 @@ class PersonInterfaceTest extends ActorInterfaceTestCase {
 		$bob = $this->bob();
 		$this->cacheActorsRequest->method('getFromId')->willReturn($this->cachedBob(3000));
 
-		$this->cacheActorsRequest->expects($this->never())->method('update');
-		$this->cacheActorsRequest->expects($this->never())->method('save');
+		$this->actorService->expects($this->never())->method('update');
+		$this->actorService->expects($this->never())->method('save');
 
 		$this->handler->activity($this->update($bob, 2000), $bob);
 	}
@@ -120,8 +122,9 @@ class PersonInterfaceTest extends ActorInterfaceTestCase {
 		$this->nothingCached();
 		$bob = $this->bob();
 
-		$this->cacheActorsRequest->expects($this->once())->method('save')->with($this->identicalTo($bob));
-		$this->cacheActorsRequest->expects($this->never())->method('update');
+		$this->actorService->expects($this->once())->method('save')->with($this->identicalTo($bob));
+		$this->actorService->expects($this->never())->method('update');
+		$this->cacheActorsRequest->expects($this->never())->method('save');
 
 		$this->handler->activity($this->update($bob, 2000), $bob);
 	}
