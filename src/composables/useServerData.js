@@ -41,6 +41,7 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {string} [linkedHandle] - The fediverse handle the reader's profile names, or '' (only with needsAccount)
  * @property {string} local - The local part of the account that the user wants to follow
  * @property {boolean} needsAccount - Whether the reader has no account in this app yet
+ * @property {boolean} [hideCounts] - Whether the reader hides how many likes, dislikes, boosts and followers things have
  * @property {''|'show_all'|'default'|'hide_all'} [nsfwChoice] - What the reader chose for sensitive media; '' follows the instance (not on a public page)
  * @property {'show_all'|'default'|'hide_all'} [nsfwPolicy] - What happens to sensitive media for this reader (not on a public page)
  * @property {boolean} public - False when the page is accessed by an authenticated user. True otherwise

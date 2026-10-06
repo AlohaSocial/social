@@ -216,6 +216,20 @@ describe('AccountHoverCard', () => {
 			expect(card().querySelector('.account-hover-card__counts').textContent).toContain('7')
 		})
 
+		it('leaves the followers out for a reader who hides the numbers, and keeps the rest', async () => {
+			settingsStore.setServerDataEntry({ key: 'hideCounts', value: true })
+			axios.get.mockResolvedValue({ data: bob })
+			const wrapper = mountCard()
+
+			await hoverUntilOpen(wrapper)
+			await advance(0)
+
+			const counts = card().querySelector('.account-hover-card__counts').textContent
+			expect(counts).not.toContain('128')
+			expect(counts).not.toContain('followers')
+			expect(counts).toContain('following')
+		})
+
 		it('shows what the profile says about itself, not only the two counts', async () => {
 			// the card is the answer to "who is this?" — a bio and two numbers
 			// left the reader opening the profile to find out anything else

@@ -106,7 +106,7 @@
 						<strong>{{ statusesCount }}</strong>
 						{{ n('social', 'post', 'posts', statusesCount) }}
 					</li>
-					<li>
+					<li v-if="serverData.hideCounts !== true">
 						<strong>{{ followersCount }}</strong>
 						{{ n('social', 'follower', 'followers', followersCount) }}
 					</li>

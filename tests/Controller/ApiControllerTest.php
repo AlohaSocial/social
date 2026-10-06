@@ -180,8 +180,10 @@ class ApiControllerTest extends TestCase {
 	private \OCA\Social\Service\SensitiveMediaService|Stub $sensitiveMediaService;
 	private \OCA\Social\Service\NotificationDeliveryService|Stub $notificationDeliveryService;
 	private \OCA\Social\Service\AiContentService|Stub $aiContentService;
+	private \OCA\Social\Service\CountsService|Stub $countsService;
 	/** what the AI switch stub answers for the viewer */
 	private bool $hidesAi = false;
+	private bool $hidesCounts = true;
 	/** @var array<string, mixed> what the delivery service answers for the viewer */
 	private array $delivery = [];
 	private ViewCountService|Stub $viewCountService;
@@ -320,6 +322,8 @@ class ApiControllerTest extends TestCase {
 		);
 		$this->aiContentService = $this->createStub(\OCA\Social\Service\AiContentService::class);
 		$this->aiContentService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesAi);
+		$this->countsService = $this->createStub(\OCA\Social\Service\CountsService::class);
+		$this->countsService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesCounts);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
@@ -439,6 +443,7 @@ class ApiControllerTest extends TestCase {
 			'sensitiveMediaService' => $this->sensitiveMediaService,
 			'notificationDeliveryService' => $this->notificationDeliveryService,
 			'aiContentService' => $this->aiContentService,
+			'countsService' => $this->countsService,
 			'viewCountService' => $this->viewCountService,
 			'teamService' => $this->teamService,
 			'emojiService' => $this->emojiService,
@@ -2790,6 +2795,15 @@ class ApiControllerTest extends TestCase {
 
 		$this->hidesAi = true;
 		$this->assertTrue($this->controller()->preferences()->getData()['reading:hide:ai']);
+	}
+
+	public function testPreferencesEchoTheCountsSwitch(): void {
+		$this->loggedInAs();
+
+		$this->assertTrue($this->controller()->preferences()->getData()['reading:hide:counts'], 'hidden unless turned off');
+
+		$this->hidesCounts = false;
+		$this->assertFalse($this->controller()->preferences()->getData()['reading:hide:counts']);
 	}
 
 	public function testPreferencesReportNoLanguageAsNullRatherThanEmpty(): void {

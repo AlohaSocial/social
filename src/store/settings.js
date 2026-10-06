@@ -28,6 +28,19 @@ export const useSettingsStore = defineStore('settings', {
 		getServerData(state) {
 			return state.serverData
 		},
+
+		/**
+		 * Whether the reader hides how many likes, dislikes, boosts and
+		 * followers things have. The server already sends zeros then; the
+		 * page needs to know as well, because it counts on its own when the
+		 * reader likes something and would draw a 1.
+		 *
+		 * @param {SettingsState} state the store state
+		 * @return {boolean}
+		 */
+		hidesCounts(state) {
+			return state.serverData?.hideCounts === true
+		},
 	},
 
 	actions: {

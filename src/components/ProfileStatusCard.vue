@@ -13,7 +13,7 @@
 			<div class="profile-status-card__details">
 				<div class="profile-status-card__toolbar" :aria-label="t('social', 'Post actions')">
 					<NcButton variant="tertiary" :aria-expanded="likesOpen" @click="likesOpen = !likesOpen">
-						{{ t('social', 'Likes ({count})', { count: status.favourites_count || 0 }) }}
+						{{ hidesCounts ? t('social', 'Likes') : t('social', 'Likes ({count})', { count: status.favourites_count || 0 }) }}
 					</NcButton>
 					<NcButton variant="tertiary" :aria-expanded="commentsOpen" @click="toggleComments">
 						{{ t('social', 'Comments ({count})', { count: commentCount }) }}
@@ -52,6 +52,7 @@ import { defineAsyncComponent } from 'vue'
 import PostReactedBy from './PostReactedBy.vue'
 import MessageContent from './MessageContent.js'
 import logger from '../services/logger.js'
+import { useSettingsStore } from '../store/settings.js'
 
 // The whole post renderer: the menu, the gallery, the hover card, polls and
 // quotes. The profile page's entry is loaded on Nextcloud's own profile page
@@ -72,6 +73,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether the reader has the like, boost and follower numbers hidden */
+		hidesCounts() {
+			return useSettingsStore().hidesCounts
+		},
+
 		postHref() {
 			return this.status.url || this.status.uri || ''
 		},

@@ -21,6 +21,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\ExternalMediaQuota;
 use OCA\Social\Service\FilterService;
@@ -73,6 +74,7 @@ class NavigationController extends Controller {
 		private ConfigService $configService,
 		private CheckService $checkService,
 		private SensitiveMediaService $sensitiveMediaService,
+		private CountsService $countsService,
 		private SectionsService $sectionsService,
 		private InterestService $interestService,
 		private StreamService $streamService,
@@ -170,6 +172,7 @@ class NavigationController extends Controller {
 			// the state it is rather than as whichever policy that currently
 			// resolves to
 			'nsfwChoice' => $this->sensitiveMediaService->choiceOf($this->userId),
+			'hideCounts' => $this->countsService->hides($this->userId),
 			// which sections this instance offers. In the page rather than
 			// behind a request for the same reason the policy above is: the
 			// sidebar is drawn before anything is fetched, and entries that

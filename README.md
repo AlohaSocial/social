@@ -192,6 +192,9 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   single video can be brought over by its address. Nothing is federated on the way in:
   re-publishing somebody's back catalogue would put it into every follower's timeline
   in one afternoon.
+- **No scores by default.** How many likes, dislikes, boosts and followers
+  something has is hidden unless you turn the numbers on — on posts, profiles and in
+  your phone apps alike. Less of a scoreboard, less pressure.
 - **How many people read it** — on your own posts and nobody else's, counted when
   somebody opens the post rather than scrolls past it, and never sent to another
   server. Three likes means something different out of five readers than out of four

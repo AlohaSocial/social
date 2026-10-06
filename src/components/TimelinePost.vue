@@ -351,7 +351,7 @@
 									<Repeat :size="20" :fillColor="isBoosted ? 'var(--color-primary)' : 'var(--color-main-text)'" />
 								</template>
 							</NcButton>
-							<RollingCount :count="item.reblogs_count || 0" />
+							<RollingCount v-if="!hidesCounts" :count="item.reblogs_count || 0" />
 						</div>
 						<div
 							class="post-action-group post-action-group--like"
@@ -391,7 +391,7 @@
 									<HeartOutline v-else :size="20" />
 								</template>
 							</NcButton>
-							<RollingCount :count="item.favourites_count || 0" />
+							<RollingCount v-if="!hidesCounts" :count="item.favourites_count || 0" />
 						</div>
 						<!-- only ever on the author's own copy: the server sends
 						     `view_count` as null on everybody else's, because how
@@ -653,6 +653,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether the reader has the like, boost and follower numbers hidden */
+		hidesCounts() {
+			return this.serverData.hideCounts === true
+		},
+
 		...mapStores(useAccountStore, useInstanceStore, useTimelineStore),
 
 		/**

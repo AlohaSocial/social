@@ -30,6 +30,7 @@ use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
@@ -93,6 +94,7 @@ class AccountApiController extends MastodonApiController {
 		private MultipartBodyService $multipartBodyService,
 		private AdminApiService $adminApiService,
 		private AiContentService $aiContentService,
+		private CountsService $countsService,
 		private InstanceService $instanceService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
@@ -488,6 +490,9 @@ class AccountApiController extends MastodonApiController {
 				// kept out of what this reader is shown, read-only here and
 				// written at `PATCH /api/v1/social/ai_content`
 				'reading:hide:ai' => $this->aiContentService->hides($this->currentSession()),
+				// this app's own: whether like, boost and follower numbers are
+				// left out, read-only here and written at `PATCH /api/v1/social/counts`
+				'reading:hide:counts' => $this->countsService->hides($this->currentSession()),
 			], Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);

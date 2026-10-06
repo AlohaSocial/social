@@ -50,7 +50,7 @@
 					@click.stop="toggleLike(index)">
 					<IconHeart v-if="entry.status.favourited === true" :size="24" />
 					<IconHeartOutline v-else :size="24" />
-					<span v-if="entry.status.favourites_count > 0" class="reel__like-count">
+					<span v-if="entry.status.favourites_count > 0 && !settingsStore.hidesCounts" class="reel__like-count">
 						{{ entry.status.favourites_count }}
 					</span>
 				</button>

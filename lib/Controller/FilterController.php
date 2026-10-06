@@ -20,6 +20,7 @@ use OCA\Social\Model\Client\FilterStatus;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Http;
@@ -70,6 +71,7 @@ class FilterController extends ClientApiController {
 		private FiltersRequest $filtersRequest,
 		private TimelineRevisionService $timelineRevisionService,
 		private AiContentService $aiContentService,
+		private CountsService $countsService,
 	) {
 		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
 	}
@@ -113,6 +115,40 @@ class FilterController extends ClientApiController {
 			return new DataResponse(
 				$this->aiContentService->export($this->viewer->getUserId()), Http::STATUS_OK
 			);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Whether the reader is shown how many likes, dislikes, boosts and
+	 * followers things have. Beside the AI switch because it is the same kind
+	 * of thing: a choice about what reading here is like, applied to every
+	 * answer at once (`HideCountsMiddleware`). Hidden unless turned off.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/counts')]
+	public function counts(): DataResponse {
+		try {
+			$this->initViewer(['read:accounts', 'read']);
+
+			return new DataResponse($this->countsService->export($this->viewer->getUserId()), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/** Turns the switch, and answers with it. `hide` is required, as for the AI switch. */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'PATCH', url: '/api/v1/social/counts')]
+	public function countsUpdate(mixed $hide = null): DataResponse {
+		try {
+			$this->initViewer(['write:accounts', 'write']);
+			$this->countsService->setHides($this->viewer->getUserId(), $this->requiredFlag($hide, 'hide'));
+
+			return new DataResponse($this->countsService->export($this->viewer->getUserId()), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
