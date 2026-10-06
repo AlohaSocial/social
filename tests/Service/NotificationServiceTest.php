@@ -29,6 +29,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Follow;
+use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Mention;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -114,6 +115,8 @@ class NotificationServiceTest extends TestCase {
 	/** @var ProbeOptions[] every timeline query the service made */
 	private array $asked = [];
 	private bool $bellFails = false;
+	/** the cached icon of the remote account, when the test gives it one */
+	private ?Image $bobIcon = null;
 
 	protected function setUp(): void {
 		$this->local = [self::ALICE => 'alice', self::CAROL => 'carol'];
@@ -170,6 +173,9 @@ class NotificationServiceTest extends TestCase {
 				$bob->setName('Bob');
 				$bob->setAccount('bob@remote.example');
 				$bob->setAvatar('https://remote.example/avatars/bob.png');
+				if ($this->bobIcon !== null) {
+					$bob->setIcon($this->bobIcon);
+				}
 
 				return $bob;
 			});
@@ -260,7 +266,12 @@ class NotificationServiceTest extends TestCase {
 	private function urlGenerator(): IURLGenerator {
 		$urlGenerator = $this->createMock(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
-			fn (string $route): string => ($route === 'social.Navigation.navigate') ? 'https://cloud.example/apps/social/' : 'https://cloud.example/' . $route
+			fn (string $route, array $parameters = []): string => match ($route) {
+				'social.Navigation.navigate' => 'https://cloud.example/apps/social/',
+				'core.avatar.getAvatar' => 'https://cloud.example/index.php/avatar/' . $parameters['userId'] . '/' . $parameters['size'],
+				'social.MediaApi.mediaOpen' => 'https://cloud.example/apps/social/media/' . $parameters['uuid'],
+				default => 'https://cloud.example/' . $route,
+			}
 		);
 
 		return $urlGenerator;
@@ -371,9 +382,36 @@ class NotificationServiceTest extends TestCase {
 		$this->assertSame('Bob', $this->raised[0]['parameters']['account']);
 		// into this app's page for the post, not out to the remote object
 		$this->assertSame('https://cloud.example/apps/social/@bob@remote.example/90', $this->raised[0]['parameters']['link']);
-		$this->assertSame(
-			'https://remote.example/avatars/bob.png', $this->raised[0]['parameters']['avatar']
-		);
+		// never the picture on bob's own server, which the web interface
+		// would not load: his icon has no copy here yet
+		$this->assertSame('', $this->raised[0]['parameters']['avatar']);
+	}
+
+	/** alohasocial/social#2483 */
+	public function testARemoteActorsAvatarIsTheCopyThisServerServes(): void {
+		$this->bobIcon = new Image();
+		$this->bobIcon->setUrl('https://remote.example/avatars/bob.png');
+		$this->bobIcon->setLocalCopy('full-copy');
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+		$this->assertSame('https://cloud.example/apps/social/media/full-copy', $this->raised[0]['parameters']['avatar']);
+
+		$this->bobIcon->setResizedCopy('thumb');
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+		$this->assertSame('https://cloud.example/apps/social/media/thumb', $this->raised[1]['parameters']['avatar']);
+	}
+
+	public function testALocalActorsAvatarIsTheirNextcloudAvatar(): void {
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::CAROL));
+
+		$this->assertSame('https://cloud.example/index.php/avatar/carol/64', $this->raised[0]['parameters']['avatar']);
+	}
+
+	public function testATeamAccountHasNoNextcloudAvatar(): void {
+		$this->local[self::CAROL] = 'team/editors';
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::CAROL));
+
+		$this->assertSame('', $this->raised[0]['parameters']['avatar']);
 	}
 
 	public function testWhatTheBellIsToldTheActivityAppIsToldToo(): void {
