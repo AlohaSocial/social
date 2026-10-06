@@ -300,6 +300,23 @@ jobs:
           if [ -z "$TOKEN" ]; then echo "no token"; exit 1; fi
           echo "::add-mask::$TOKEN"
           echo "PIXELFED_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "token: ${#TOKEN} characters, $(echo "$TOKEN" | tr -cd . | wc -c) dots"
+          # the same request through Pixelfed's own HTTP kernel, inside the
+          # container: tells a key or token problem from a web-server one
+          cat > /tmp/probe.php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $app = require 'bootstrap/app.php';
+          $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+          $request = Illuminate\Http\Request::create('https://pixelfed.test/api/v1/accounts/verify_credentials', 'GET', [], [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . getenv('PF_TOKEN'),
+            'HTTP_ACCEPT' => 'application/json',
+          ]);
+          $response = $kernel->handle($request);
+          echo $response->getStatusCode(), ' ', substr((string)$response->getContent(), 0, 300), "\n";
+          PHP
+          docker exec -i -e PF_TOKEN="$TOKEN" pixelfed php < /tmp/probe.php || true
+          docker exec pixelfed ls -la storage | grep -i oauth || true
           ANSWER=$(curl -s -w '\n%{http_code}' -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN" \
             "$PIXELFED_BASE_URL/api/v1/accounts/verify_credentials")
           echo "$ANSWER" | head -c 1500; echo
