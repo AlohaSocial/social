@@ -732,16 +732,22 @@ class AccountService {
 	 */
 	public function changingProfile(string $userId, callable $changes): mixed {
 		$this->holdingProfileUpdates = true;
-		$this->profileChanged = false;
 		try {
 			return $changes();
 		} finally {
 			$this->holdingProfileUpdates = false;
-			if ($this->profileChanged) {
-				$this->profileChanged = false;
+			if ($this->takeProfileChanged()) {
 				$this->federateProfile($userId);
 			}
 		}
+	}
+
+	/** Whether a held change is waiting to be told, forgetting it. */
+	private function takeProfileChanged(): bool {
+		$changed = $this->profileChanged;
+		$this->profileChanged = false;
+
+		return $changed;
 	}
 
 	/**
