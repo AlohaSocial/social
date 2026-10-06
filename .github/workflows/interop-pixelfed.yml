@@ -247,10 +247,14 @@ jobs:
 
           # the host's bundle, which now trusts the job's CA, in place of the
           # container's own; the names resolve to the runner, through the proxy
-          docker run -d --name pixelfed -p 127.0.0.1:8090:8080 --env-file /tmp/pixelfed.env \
-            --add-host "nextcloud.test:$FEDERATION_IP" --add-host "pixelfed.test:$FEDERATION_IP" \
-            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
-            "$PIXELFED_IMAGE"
+          # storage is a volume, shared with the Horizon container below: an
+          # upload written by the web server is processed by a queue worker
+          PIXELFED_RUN="--env-file /tmp/pixelfed.env
+            --add-host nextcloud.test:$FEDERATION_IP --add-host pixelfed.test:$FEDERATION_IP
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+            -v pixelfed-storage:/var/www/html/storage"
+          # shellcheck disable=SC2086
+          docker run -d --name pixelfed -p 127.0.0.1:8090:8080 $PIXELFED_RUN "$PIXELFED_IMAGE"
 
           for attempt in $(seq 1 30); do
             docker exec pixelfed php artisan migrate --force && break
@@ -261,9 +265,9 @@ jobs:
           docker exec pixelfed php artisan instance:actor
           docker exec pixelfed php artisan passport:client --personal --name=interop --provider=users --no-interaction
           # federation is queue-driven: every delivery, fetch and fan-out is a
-          # Horizon job, so without this nothing ever leaves Pixelfed. Its
-          # output goes where the web server's does, into `docker logs`.
-          docker exec -d pixelfed sh -c 'exec php artisan horizon > /proc/1/fd/2 2>&1'
+          # Horizon job, so without this nothing ever leaves Pixelfed
+          # shellcheck disable=SC2086
+          docker run -d --name pixelfed-horizon $PIXELFED_RUN "$PIXELFED_IMAGE" php artisan horizon
 
       - name: Wait for Pixelfed
         run: |
@@ -352,5 +356,16 @@ jobs:
           echo '--- Pixelfed, its failures ---'
           docker logs pixelfed 2>&1 | grep -i -E "error|exception|fail|refus|invalid|warning" \
             | grep -v -E "SMTP" | cut -c1-700 | tail -120 || true
+          echo '--- Pixelfed Horizon ---'
+          docker exec pixelfed php artisan horizon:status 2>&1 || true
+          docker logs pixelfed-horizon 2>&1 | grep -v -E "^\s*$" | cut -c1-500 | tail -120 || true
           echo '--- Pixelfed failed jobs ---'
           docker exec pixelfed php artisan queue:failed 2>&1 | tail -40 || true
+          echo '--- Pixelfed log files ---'
+          docker exec pixelfed sh -c 'tail -n 80 storage/logs/*.log' 2>&1 | cut -c1-700 || true
+          echo '--- Pixelfed follows ---'
+          mysql -h 127.0.0.1 -u pixelfed -ppixelfed pixelfed -e \
+            "select id, profile_id, following_id from followers; select id, follower_id, following_id, is_rejected from follow_requests; select id, username, domain, inbox_url, sharedInbox from profiles" 2>&1 || true
+          echo '--- the last Accept we queued ---'
+          sqlite3 data/nextcloud.db \
+            "select activity from oc_social_req_queue where json_extract(activity, '$.type') = 'Accept' order by id desc limit 1" 2>&1 | cut -c1-2000 || true

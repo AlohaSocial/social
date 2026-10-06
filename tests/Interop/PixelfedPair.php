@@ -44,6 +44,12 @@ trait PixelfedPair {
 	/** our id for Pixelfed's account */
 	protected string $theirIdHere = '';
 
+	/**
+	 * Why pairing failed, once it has: every later test would wait out the
+	 * same timeouts to fail the same way, so they fail at once instead.
+	 */
+	private static string $pairingFailed = '';
+
 	/** @var string[] pictures made for this test, removed afterwards */
 	private array $pictures = [];
 
@@ -66,11 +72,20 @@ trait PixelfedPair {
 			. Server::get(ConfigService::class)->getCloudAuthority();
 		$this->theirHandle = $this->pixelfed->selfHandle();
 
-		$this->ourIdThere = $this->pixelfed->resolveAccount($this->ourHandle);
-		$this->theirIdHere = $this->aloha->resolveAccount($this->theirHandle);
+		if (self::$pairingFailed !== '') {
+			$this->fail('the two accounts could not be paired in an earlier test: ' . self::$pairingFailed);
+		}
 
-		$this->pixelfedFollowsUs();
-		$this->weFollowPixelfed();
+		try {
+			$this->ourIdThere = $this->pixelfed->resolveAccount($this->ourHandle);
+			$this->theirIdHere = $this->aloha->resolveAccount($this->theirHandle);
+
+			$this->pixelfedFollowsUs();
+			$this->weFollowPixelfed();
+		} catch (\Throwable $e) {
+			self::$pairingFailed = $e->getMessage();
+			throw $e;
+		}
 	}
 
 	protected function tearDownPair(): void {
