@@ -227,7 +227,7 @@ class PersonTest extends TestCase {
 
 		$this->assertSame('https://cloud.example.org/core.avatar.getAvatar/alice/128', $account['avatar']);
 		$this->assertSame($account['avatar'], $account['avatar_static']);
-		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.svg', $account['header']);
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.png', $account['header']);
 		$this->assertSame($account['header'], $account['header_static']);
 	}
 
@@ -240,7 +240,112 @@ class PersonTest extends TestCase {
 		$account = $person->exportAsLocal();
 
 		$this->assertSame('https://files.mastodon.social/avatars/bob.png', $account['avatar']);
-		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.svg', $account['header']);
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.png', $account['header']);
+	}
+
+	/**
+	 * alohasocial/social#2487: the cached copy of a local actor kept the avatar
+	 * the old fallback stored as its header. Until the repair step has taken
+	 * it out, it is read as no header at all, on the client API and on the
+	 * wire.
+	 */
+	public function testALocalHeaderThatIsTheAccountsOwnAvatarIsNoHeader(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Image();
+		$icon->setUrl('https://cloud.example.org/index.php/avatar/u-1/128');
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+		$person->setIcon($icon);
+		$person->setHeader('https://cloud.example.org/index.php/avatar/u-1/128');
+
+		$this->assertTrue($person->hasOwnAvatarAsHeader());
+		$this->assertSame('', $person->getHeader());
+		$this->assertArrayNotHasKey('image', $person->exportAsActivityPub());
+
+		$account = $person->exportAsLocal();
+		$this->assertSame('https://cloud.example.org/apps/social/img/header-missing.png', $account['header']);
+		$this->assertTrue($account['header_default']);
+	}
+
+	public static function ownAvatarRoutes(): array {
+		return [
+			'the route' => ['https://cloud.example.org/index.php/avatar/alice/128'],
+			'pretty URLs, another size' => ['https://cloud.example.org/avatar/alice/512'],
+			'under a base path, dark' => ['https://cloud.example.org/nc/index.php/avatar/alice/64/dark'],
+			'by the user id' => ['https://cloud.example.org/index.php/avatar/u-1/128'],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('ownAvatarRoutes')]
+	public function testTheAvatarRouteOfTheAccountIsRecognisedWithoutAnIcon(string $header): void {
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setUserId('u-1')->setLocal(true);
+		$person->setHeader($header);
+
+		$this->assertSame('', $person->getHeader());
+	}
+
+	public function testABannerOrSomebodyElsesAvatarIsKept(): void {
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+
+		$person->setHeader('https://cloud.example.org/apps/social/media/9f0c.png');
+		$this->assertSame('https://cloud.example.org/apps/social/media/9f0c.png', $person->getHeader());
+
+		$person->setHeader('https://cloud.example.org/index.php/avatar/bob/128');
+		$this->assertSame('https://cloud.example.org/index.php/avatar/bob/128', $person->getHeader());
+
+		// a remote account's banner is whatever its server says it is
+		$remote = new Person();
+		$remote->setPreferredUsername('alice');
+		$remote->setHeader('https://other.example/index.php/avatar/alice/128');
+		$this->assertSame('https://other.example/index.php/avatar/alice/128', $remote->getHeader());
+	}
+
+	public function testPlaceholdersAreFlaggedAsDefaults(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertTrue($account['avatar_default']);
+		$this->assertTrue($account['header_default']);
+	}
+
+	public function testPicturesTheAccountSetAreNotDefaults(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Image();
+		$icon->setUrl('https://cloud.example.org/index.php/avatar/alice/128');
+		$icon->setLocalCopy('abc123');
+		$person = new Person();
+		$person->setPreferredUsername('alice')->setLocal(true);
+		$person->setIcon($icon);
+		$person->setHeader('https://cloud.example.org/apps/social/media/9f0c.png');
+
+		$account = $person->exportAsLocal();
+
+		$this->assertFalse($account['avatar_default']);
+		$this->assertFalse($account['header_default']);
+
+		$remote = new Person();
+		$remote->setPreferredUsername('bob')->setAccount('bob@mastodon.social')
+			->setAvatar('https://files.mastodon.social/avatars/bob.png');
+		$this->assertFalse($remote->exportAsLocal()['avatar_default']);
+	}
+
+	public function testAnIconWithoutALocalCopyIsAPlaceholderToo(): void {
+		$this->routerThatRefusesAnEmptyUuid();
+		$icon = new Image();
+		$icon->setUrl('https://files.mastodon.social/avatars/bob.png');
+		$person = new Person();
+		$person->setPreferredUsername('bob')->setAccount('bob@mastodon.social');
+		$person->setIcon($icon);
+
+		$account = $person->exportAsLocal();
+
+		$this->assertSame('https://cloud.example.org/apps/social/img/social.svg', $account['avatar']);
+		$this->assertTrue($account['avatar_default']);
 	}
 
 	public function testNameAndDisplayNameFallBackToThePreferredUsername(): void {

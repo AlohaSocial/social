@@ -115,7 +115,18 @@ back as if it were a banner; clients drew the face as the banner over an empty
 circle. The Account entity now always carries a URL in all four picture fields:
 the avatar is the account's own or, for a local account, Nextcloud's generated
 one; the header is the banner or a plain placeholder picture
-(`img/header-missing.svg`), as Mastodon's `missing.png`, never the avatar.
+(`img/header-missing.png`), a PNG as Mastodon's `missing.png` so that clients
+which decode only raster images draw it too, never the avatar.
+
+Fixed in #2487: the avatars the old fallback had already stored as the header
+of cached local actors are removed by the `ClearAvatarHeaders` repair step, and
+read as no header until it has run. `GET /api/v1/accounts/{id}` read the actor
+without its cached icon and answered the placeholder avatar where
+`verify_credentials` answered the uploaded picture; it joins the icon in like
+every other lookup. Every Account entity also carries `avatar_default` and
+`header_default`, `true` when the picture is a placeholder, so a client can
+tell one from a picture the account set without matching URLs — something
+Mastodon itself has no flag for.
 
 ### 3.2 Fixed — one access token per registered app
 

@@ -244,10 +244,12 @@ class ApiContractTest extends TestCase {
 		// spellings people write them in. They are always present, `''` when
 		// nothing was written, because a key that comes and goes is worse for
 		// a client than an empty one
+		// — and so are `avatar_default` and `header_default`, which say whether
+		// either picture is a placeholder rather than one the account set
 		$expected = [
-			'acct', 'avatar', 'avatar_static', 'bot', 'created_at', 'discoverable',
+			'acct', 'avatar', 'avatar_default', 'avatar_static', 'bot', 'created_at', 'discoverable',
 			'display_name', 'emojis', 'fields', 'followers_count', 'following_count',
-			'group', 'header', 'header_static', 'id', 'indexable', 'last_status_at', 'locked',
+			'group', 'header', 'header_default', 'header_static', 'id', 'indexable', 'last_status_at', 'locked',
 			'nid', 'note', 'pronouns', 'statuses_count', 'support_link', 'url', 'username',
 		];
 		$actual = array_keys($account);

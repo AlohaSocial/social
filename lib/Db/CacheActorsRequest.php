@@ -827,17 +827,20 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
-	 * As of today, returned format is not important. Remove this line if this method
-	 * is used somewhere else with the need of a specific format
+	 * The cached actors behind a set of numeric ids, with their cached icon
+	 * joined in: without it the avatar has no local copy to name, and the
+	 * account read by id was given its placeholder while every other route
+	 * gave its picture.
 	 *
 	 * @param array $ids
 	 *
-	 * @return array
+	 * @return Person[]
 	 */
 	public function getFromNids(array $ids): array {
 		$qb = $this->getCacheActorsSelectSql();
 
 		$qb->limitInArray('nid', $ids);
+		$qb->leftJoinCacheDocuments('icon_id');
 
 		return $this->getCacheActorsFromRequest($qb);
 	}
