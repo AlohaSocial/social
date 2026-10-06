@@ -314,6 +314,17 @@ jobs:
           ]);
           $response = $kernel->handle($request);
           echo $response->getStatusCode(), ' ', substr((string)$response->getContent(), 0, 300), "\n";
+          try {
+            $factory = new Nyholm\Psr7\Factory\Psr17Factory();
+            $psr = (new Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory($factory, $factory, $factory, $factory))->createRequest($request);
+            $validated = $app->make(League\OAuth2\Server\ResourceServer::class)->validateAuthenticatedRequest($psr);
+            echo json_encode($validated->getAttributes()), "\n";
+            $client = Laravel\Passport\Passport::client()->find($validated->getAttribute('oauth_client_id'));
+            echo 'client: ', json_encode($client?->only(['id', 'provider', 'revoked', 'grant_types'])), "\n";
+            echo 'user: ', json_encode(App\Models\User::find($validated->getAttribute('oauth_user_id'))?->only(['id', 'status', 'username'])), "\n";
+          } catch (Throwable $e) {
+            echo get_class($e), ': ', $e->getMessage(), ' ', method_exists($e, 'getHint') ? $e->getHint() : '', "\n";
+          }
           PHP
           docker exec -i -e PF_TOKEN="$TOKEN" pixelfed php < /tmp/probe.php || true
           docker exec pixelfed ls -la storage | grep -i oauth || true
