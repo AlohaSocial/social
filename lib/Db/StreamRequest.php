@@ -114,6 +114,13 @@ class StreamRequest extends StreamRequestBuilder {
 	private const SEARCH_OVERREAD = 5;
 	private const SEARCH_OVERREAD_MAX = 200;
 
+	/**
+	 * How deep a content search pages by `offset`. Every row skipped is a row
+	 * read, so a page past this answers with nothing; `max_id` is the way
+	 * further back.
+	 */
+	public const SEARCH_MAX_OFFSET = 400;
+
 	/** Whether the recipient rows carry their post's nid yet; asked once per request. */
 	private ?bool $recipientNidsFilled = null;
 
@@ -729,14 +736,25 @@ class StreamRequest extends StreamRequestBuilder {
 	 * plain (case-insensitive) substring match — fine at the instance sizes
 	 * this app targets; no external search engine required.
 	 *
+	 * `$authorId` narrows the answers to one account's posts, still within
+	 * what the viewer may see. `$offset` skips that many answers, up to
+	 * SEARCH_MAX_OFFSET; `$maxId` and `$minId` bound the status nid, leaving
+	 * the newest-first order as it is.
+	 *
 	 * @return Stream[]
 	 */
-	public function searchContent(string $term, int $limit = 20): array {
-		if (strlen($term) < 3) {
+	public function searchContent(
+		string $term, int $limit = 20, int $offset = 0, string $authorId = '',
+		int|string $maxId = 0, int|string $minId = 0,
+	): array {
+		$offset = max(0, $offset);
+		if (strlen($term) < 3 || $offset > self::SEARCH_MAX_OFFSET) {
 			return [];
 		}
 
-		$window = min(self::SEARCH_OVERREAD_MAX, max($limit, $limit * self::SEARCH_OVERREAD));
+		// candidates, not answers, are what the database is asked for, so the
+		// rows an offset skips are read on top of the over-read page
+		$window = min(self::SEARCH_OVERREAD_MAX, max($limit, $limit * self::SEARCH_OVERREAD)) + $offset;
 
 		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
 		$qb->limitToStatusTypes();
@@ -745,6 +763,16 @@ class StreamRequest extends StreamRequestBuilder {
 			's.content',
 			$qb->createNamedParameter('%' . $this->dbConnection->escapeLikeParameter($term) . '%')
 		));
+
+		if ($authorId !== '') {
+			$qb->andWhere($expr->eq('s.attributed_to_prim', $qb->createNamedParameter($qb->prim($authorId))));
+		}
+		if (Nid::compare($maxId, 0) > 0) {
+			$qb->andWhere($expr->lt('s.nid', $qb->createNamedParameter(Nid::fromStorage($maxId))));
+		}
+		if (Nid::compare($minId, 0) > 0) {
+			$qb->andWhere($expr->gt('s.nid', $qb->createNamedParameter(Nid::fromStorage($minId))));
+		}
 
 		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
 		$qb->leftJoinStreamAction();
@@ -773,7 +801,7 @@ class StreamRequest extends StreamRequestBuilder {
 			));
 		}
 
-		return array_slice($this->whoseTextCarries($this->getStreamsFromRequest($qb), $term), 0, $limit);
+		return array_slice($this->whoseTextCarries($this->getStreamsFromRequest($qb), $term), $offset, $limit);
 	}
 
 	/**

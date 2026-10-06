@@ -152,6 +152,17 @@ class InstanceTest extends TestCase {
 	}
 
 	/**
+	 * What older versions of this app did not do cannot be told from
+	 * `mastodon`, which they reported as well; a client gates on this app's
+	 * own generation instead.
+	 */
+	public function testTheV2EntityNamesThisAppsOwnApiGeneration(): void {
+		$v2 = json_decode((string)json_encode($this->populated()->asV2()), false);
+
+		$this->assertSame(1, $v2->api_versions->aloha_social, 'account-scoped status search');
+	}
+
+	/**
 	 * What it does *not* have, it says so rather than letting a client find
 	 * out by calling: translation off, and no streaming URL to connect to.
 	 */

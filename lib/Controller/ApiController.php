@@ -22,6 +22,7 @@ use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -180,26 +181,34 @@ class ApiController extends MastodonApiController {
 	#[AnonRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/search')]
-	public function search(string $q = '', string $type = '', int $limit = 20, bool $resolve = false): DataResponse {
-		return $this->searchV2($q, $type, $limit, $resolve);
+	public function search(
+		string $q = '', string $type = '', int $limit = 20, bool $resolve = false,
+		string $account_id = '', int $offset = 0, int|string $max_id = 0, int|string $min_id = 0,
+	): DataResponse {
+		return $this->searchV2($q, $type, $limit, $resolve, $account_id, $offset, $max_id, $min_id);
 	}
 
 	/**
 	 * Mastodon's search endpoint: accounts, statuses (the viewer-bounded
 	 * full-text search) and hashtags, optionally narrowed with `type`.
 	 *
-	 * `resolve` is accepted and ignored on purpose: it asks the server to go
-	 * and fetch an account or status it has never seen, and every account
-	 * search here is already `LIKE '%term%'` over the actor cache. Following an
-	 * unknown handle up remotely on an anonymous request would make this route
-	 * an outbound-fetch amplifier.
+	 * `account_id` narrows `statuses` to that account's posts and leaves
+	 * `accounts` and `hashtags` alone, as Mastodon does. An account this
+	 * instance does not know finds no posts rather than an error, and is not
+	 * looked up elsewhere. `offset`, `max_id` and `min_id` page `statuses`.
+	 *
+	 * `resolve` fetches a post named by its address, only on the first page of
+	 * an unnarrowed search that found nothing here.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[AnonRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v2/search')]
-	public function searchV2(string $q = '', string $type = '', int $limit = 20, bool $resolve = false): DataResponse {
+	public function searchV2(
+		string $q = '', string $type = '', int $limit = 20, bool $resolve = false,
+		string $account_id = '', int $offset = 0, int|string $max_id = 0, int|string $min_id = 0,
+	): DataResponse {
 		try {
 			$this->initViewer(true);
 			$q = trim($q);
@@ -220,14 +229,20 @@ class ApiController extends MastodonApiController {
 
 			$statuses = [];
 			if ($type === '' || $type === 'statuses') {
-				$statuses = array_slice($this->searchService->searchStreamContent($q), 0, $limit);
+				$author = $this->searchAuthor($account_id);
+				$maxId = $this->searchBound($max_id);
+				$minId = $this->searchBound($min_id);
+				if ($account_id === '' || $author !== '') {
+					$statuses = $this->searchService->searchStreamContent($q, $limit, $offset, $author, $maxId, $minId);
+				}
+				$firstPage = ($offset <= 0 && $maxId === 0 && $minId === 0);
 
 				// `resolve` is the reader saying "I have a link, go and get
 				// it". Without it a post found in a browser cannot be replied
 				// to or boosted here, because nothing has ever had a reason to
 				// ask its server for it. Only on the reader's say-so: this
 				// fetches an address they chose.
-				if ($resolve && $statuses === []) {
+				if ($resolve && $statuses === [] && $account_id === '' && $firstPage) {
 					// as the reader: the content search above is viewer-scoped,
 					// so a post they may not see finds nothing there and falls
 					// through to here — which used to hand it over in full
@@ -259,6 +274,34 @@ class ApiController extends MastodonApiController {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * The actor id of the account a search is narrowed to, '' for none or for
+	 * one this instance does not hold.
+	 */
+	private function searchAuthor(string $accountId): string {
+		if ($accountId === '') {
+			return '';
+		}
+
+		// a handle that cannot be parsed is as unknown as one nobody holds
+		try {
+			return $this->cacheActorService->resolve($accountId)->getId();
+		} catch (\Exception) {
+			return '';
+		}
+	}
+
+	/** A status id a search is bounded by, 0 for none or for one that is not a number. */
+	private function searchBound(int|string $nid): int|string {
+		if (!ctype_digit((string)$nid)) {
+			return 0;
+		}
+
+		$nid = Nid::fromStorage((string)$nid);
+
+		return (Nid::compare($nid, 0) > 0) ? $nid : 0;
 	}
 
 	/**
