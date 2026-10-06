@@ -138,7 +138,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	 */
 	private function getStoredForAuthor(ACore $activity, string $id): Stream {
 		$stored = $this->streamRequest->getStreamById($id);
-		if ($stored->getAttributedTo() !== $activity->getActorId()) {
+		if ($stored->getAttributedTo() !== $activity->getActorId()
+			&& !$this->ownsChannel($activity->getActorId(), $stored->getAttributedTo())) {
 			throw new InvalidOriginException(
 				'NoteInterface::getStoredForAuthor - actor: ' . $activity->getActorId()
 				. ' - attributedTo: ' . $stored->getAttributedTo()
@@ -146,6 +147,35 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		}
 
 		return $stored;
+	}
+
+	/**
+	 * Whether `$actorId` is the account behind the channel `$authorId`.
+	 *
+	 * PeerTube files a video under its channel, a `Group`, and sends the
+	 * video's `Update` and `Delete` as the account that owns the channel. The
+	 * channel's own document names that account in its `attributedTo`, and
+	 * only an account on the channel's own server is taken at its word.
+	 */
+	private function ownsChannel(string $actorId, string $authorId): bool {
+		$actorHost = parse_url($actorId, PHP_URL_HOST);
+		if (!is_string($actorHost) || $actorHost === '' || $actorHost !== parse_url($authorId, PHP_URL_HOST)) {
+			return false;
+		}
+
+		try {
+			$channel = $this->cacheActorsRequest->getFromId($authorId);
+		} catch (CacheActorDoesNotExistException $e) {
+			return false;
+		}
+
+		foreach ($channel->getAttributedToActors() as $owner) {
+			if ($owner['id'] === $actorId) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function isKnown(string $id): bool {
