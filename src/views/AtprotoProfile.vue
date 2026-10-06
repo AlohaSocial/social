@@ -3,135 +3,171 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section class="atproto-profile">
-		<header class="atproto-profile__card">
-			<img
-				v-if="profile.banner"
-				class="atproto-profile__banner"
-				:src="profile.banner"
-				:alt="t('social', 'Bluesky profile banner')"
-				loading="lazy">
-			<div v-else class="atproto-profile__banner-placeholder" aria-hidden="true" />
-			<div class="atproto-profile__content">
-				<div class="atproto-profile__avatar-frame">
-					<img
-						v-if="profile.avatar"
-						class="atproto-profile__avatar"
-						:src="profile.avatar"
-						:alt="profile.displayName || shownHandle"
-						loading="lazy">
-					<span v-else class="atproto-profile__avatar-fallback" aria-hidden="true">{{ initials }}</span>
+	<section class="atproto-profile" :class="{ 'atproto-profile--page': !embedded }">
+		<!-- the same card the Fediverse profile draws: one page, one design,
+		     and behind it either half of the reader's identity -->
+		<div v-if="cardVisible" class="user-profile">
+			<div
+				class="user-profile__banner"
+				aria-hidden="true"
+				:class="{ 'user-profile__banner--visible': !!profile.banner }"
+				:style="bannerStyle" />
+			<div class="user-profile__content">
+				<NcAvatar
+					v-if="profile.avatar"
+					:url="profile.avatar"
+					:disableMenu="true"
+					:disableTooltip="true"
+					:size="128" />
+				<div v-else class="atproto-profile__avatar-fallback" aria-hidden="true">
+					{{ initials }}
 				</div>
-				<h2 class="atproto-profile__name">
-					{{ profile.displayName || '@' + shownHandle }}
+				<h2>
+					{{ displayName }}<span v-if="profile.displayName && profile.handle" class="user-profile__pronouns"> @{{ profile.handle }}</span>
 				</h2>
-				<p v-if="profile.displayName" class="atproto-profile__handle">
-					@{{ shownHandle }}
-				</p>
-				<p v-if="profile.description" class="atproto-profile__description">
-					{{ profile.description }}
-				</p>
-				<ul v-if="hasCounts" class="atproto-profile__stats">
+				<!-- the same three counters the Fediverse profile carries, in the
+				     same words: a Bluesky profile has no lists of the people
+				     behind them here, so they are counts rather than links -->
+				<ul class="user-profile__info user-profile__sections">
 					<li>
-						<strong>{{ profile.postsCount || 0 }}</strong>
-						{{ t('social', 'Posts') }}
+						<span class="user-profile__count">{{ postsLabel }}</span>
 					</li>
 					<li>
-						<strong>{{ profile.followsCount || 0 }}</strong>
-						{{ t('social', 'Following') }}
+						<span class="user-profile__count">{{ followingLabel }}</span>
 					</li>
 					<li>
-						<strong>{{ profile.followersCount || 0 }}</strong>
-						{{ t('social', 'Followers') }}
+						<span class="user-profile__count">{{ followersLabel }}</span>
 					</li>
 				</ul>
-				<div class="atproto-profile__actions">
+				<div class="user-profile__actions">
 					<AtprotoFollowButton
-						v-if="profile.did && viewerCanFollow"
+						v-if="canFollow"
 						:handle="shownHandle"
 						:initialFollowing="dataFollowing" />
 					<NcButton
 						v-if="viewerCanEdit"
-						type="button"
 						variant="tertiary"
-						:aria-expanded="editing ? 'true' : 'false'"
-						@click="editing = !editing">
-						{{ editing ? t('social', 'Close') : t('social', 'Edit Bluesky profile') }}
+						:disabled="savingProfile"
+						@click="openProfileModal">
+						<template #icon>
+							<TableEdit :size="20" />
+						</template>
+						{{ t('social', 'Edit profile') }}
 					</NcButton>
 					<a
 						v-if="shownHandle"
+						class="user-profile__protocol-link"
 						:href="blueskyProfileUrl"
 						target="_blank"
 						rel="noreferrer">
 						{{ t('social', 'Open on Bluesky') }}
 					</a>
-					<a v-if="viewerCanEdit && fediverseProfileUrl" :href="fediverseProfileUrl">
+					<a
+						v-if="viewerCanEdit && fediverseProfileUrl"
+						class="user-profile__protocol-link"
+						:href="fediverseProfileUrl">
 						{{ t('social', 'Open Fediverse profile') }}
 					</a>
-					<a v-if="!viewerCanFollow" class="atproto-profile__connect" :href="settingsUrl">
+					<a
+						v-if="!viewerCanFollow"
+						class="user-profile__protocol-link"
+						:href="settingsUrl">
 						{{ t('social', 'Connect your Bluesky account to like, reply or repost') }}
 					</a>
 				</div>
-				<form v-if="viewerCanEdit && editing" class="atproto-profile__editor" @submit.prevent="saveProfile">
-					<NcTextField
-						v-model="editProfile.displayName"
-						:label="t('social', 'Bluesky display name')"
-						:disabled="savingProfile" />
-					<NcTextArea
-						v-model="editProfile.description"
-						:label="t('social', 'Bluesky profile description')"
-						:disabled="savingProfile" />
-					<label class="atproto-profile__upload">
-						{{ t('social', 'Bluesky avatar') }}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/gif,image/webp"
-							:disabled="savingProfile"
-							@change="selectProfileImage($event, 'avatar')">
-						<NcButton
-							type="button"
-							variant="tertiary"
-							:disabled="savingProfile"
-							@click="profileImages.removeAvatar = true">
-							{{ t('social', 'Remove Bluesky avatar') }}
-						</NcButton>
-					</label>
-					<label class="atproto-profile__upload">
-						{{ t('social', 'Bluesky banner') }}
-						<input
-							type="file"
-							accept="image/jpeg,image/png,image/gif,image/webp"
-							:disabled="savingProfile"
-							@change="selectProfileImage($event, 'banner')">
-						<NcButton
-							type="button"
-							variant="tertiary"
-							:disabled="savingProfile"
-							@click="profileImages.removeBanner = true">
-							{{ t('social', 'Remove Bluesky banner') }}
-						</NcButton>
-					</label>
-					<div class="atproto-profile__editor-actions">
-						<NcButton
-							type="button"
-							variant="tertiary"
-							:disabled="savingProfile"
-							@click="editing = false">
-							{{ t('social', 'Cancel') }}
-						</NcButton>
-						<NcButton type="submit" variant="primary" :disabled="savingProfile">
-							{{ savingProfile ? t('social', 'Saving…') : t('social', 'Save Bluesky profile') }}
-						</NcButton>
+				<!-- a bio rather than markup: a Bluesky description is plain
+				     text, and it is written here, not federated -->
+				<p v-if="profile.description" class="user-profile__note">
+					{{ profile.description }}
+				</p>
+
+				<NcModal
+					v-if="showProfileModal"
+					:name="t('social', 'Edit profile')"
+					@close="showProfileModal = false">
+					<div class="user-profile__fields-modal">
+						<h3>{{ t('social', 'Edit profile') }}</h3>
+						<div class="user-profile__bio">
+							<label class="user-profile__bio-label" for="social-atproto-display-name">
+								{{ t('social', 'Display name') }}
+							</label>
+							<input
+								id="social-atproto-display-name"
+								v-model="editProfile.displayName"
+								class="user-profile__bio-input"
+								type="text"
+								:disabled="savingProfile">
+						</div>
+						<div class="user-profile__bio">
+							<label class="user-profile__bio-label" for="social-atproto-bio">
+								{{ t('social', 'Bio') }}
+							</label>
+							<textarea
+								id="social-atproto-bio"
+								v-model="editProfile.description"
+								class="user-profile__bio-input"
+								rows="5"
+								aria-describedby="social-atproto-bio-count"
+								:aria-invalid="bioTooLong ? 'true' : 'false'"
+								:disabled="savingProfile" />
+							<span
+								id="social-atproto-bio-count"
+								class="user-profile__bio-count"
+								:class="{ 'user-profile__bio-count--over': bioTooLong }"
+								role="status">
+								{{ bioCharactersLeftLabel }}
+							</span>
+						</div>
+						<div class="user-profile__banner-edit">
+							<span class="user-profile__banner-edit-label">{{ t('social', 'Avatar') }}</span>
+							<div class="user-profile__banner-edit-url">
+								<input
+									type="file"
+									accept="image/jpeg,image/png,image/gif,image/webp"
+									:disabled="savingProfile"
+									@change="selectProfileImage($event, 'avatar')">
+								<NcButton
+									variant="tertiary"
+									:disabled="!profile.avatar || savingProfile"
+									@click="profileImages.removeAvatar = true">
+									{{ t('social', 'Remove') }}
+								</NcButton>
+							</div>
+						</div>
+						<div class="user-profile__banner-edit">
+							<span class="user-profile__banner-edit-label">{{ t('social', 'Banner') }}</span>
+							<div class="user-profile__banner-edit-url">
+								<input
+									type="file"
+									accept="image/jpeg,image/png,image/gif,image/webp"
+									:disabled="savingProfile"
+									@change="selectProfileImage($event, 'banner')">
+								<NcButton
+									variant="tertiary"
+									:disabled="!profile.banner || savingProfile"
+									@click="profileImages.removeBanner = true">
+									{{ t('social', 'Remove') }}
+								</NcButton>
+							</div>
+						</div>
+						<p v-if="profileError" class="atproto-profile__error" role="alert">
+							{{ profileError }}
+						</p>
+						<div class="user-profile__fields-modal-actions">
+							<NcButton variant="tertiary" :disabled="savingProfile" @click="showProfileModal = false">
+								{{ t('social', 'Cancel') }}
+							</NcButton>
+							<NcButton variant="primary" :disabled="savingProfile || bioTooLong" @click="saveProfile">
+								{{ savingProfile ? t('social', 'Saving…') : t('social', 'Save') }}
+							</NcButton>
+						</div>
 					</div>
-					<p v-if="profileError" class="atproto-profile__error" role="alert">
-						{{ profileError }}
-					</p>
-				</form>
+				</NcModal>
 			</div>
-		</header>
+		</div>
 
 		<Composer
-			v-if="viewerCanFollow && (replyTo !== null || (viewerCanEdit && !embedded))"
+			v-if="viewerCanFollow && (replyTo !== null || viewerCanEdit)"
 			:inReplyTo="replyTo"
 			:startExpanded="replyTo !== null"
 			@posted="replyTo = null" />
@@ -180,25 +216,49 @@
 <script>
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import { translate as t } from '@nextcloud/l10n'
+import { translate, translatePlural } from '@nextcloud/l10n'
 import { getCurrentUser } from '@nextcloud/auth'
+import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcModal from '@nextcloud/vue/components/NcModal'
+import TableEdit from 'vue-material-design-icons/TableEdit.vue'
 import ProfileStatusCard from '../components/ProfileStatusCard.vue'
 import AtprotoFollowButton from '../components/AtprotoFollowButton.vue'
 import Composer from '../components/Composer/Composer.vue'
+import { formatCount } from '../utils/number.js'
+
+/** Mirrors the length `app.bsky.actor.profile.description` is capped at. */
+const BIO_MAX_LENGTH = 300
 
 export default {
 	name: 'AtprotoProfile',
-	components: { AtprotoFollowButton, Composer, NcButton, NcTextArea, NcTextField, ProfileStatusCard },
+	components: { AtprotoFollowButton, Composer, NcAvatar, NcButton, NcModal, ProfileStatusCard, TableEdit },
 	props: {
 		handle: { type: String, required: true },
 		/** whether a surrounding profile already offers its own composer */
 		embedded: { type: Boolean, default: false },
 	},
 
-	data: () => ({ account: {}, profile: {}, statuses: [], nextCursor: '', following: false, viewerCanFollow: false, viewerCanEdit: false, replyTo: null, loading: true, loadingMore: false, error: '', loadMoreError: '', profileError: '', savingProfile: false, editing: false, editProfile: { displayName: '', description: '' }, profileImages: { avatar: null, banner: null, removeAvatar: false, removeBanner: false } }),
+	data: () => ({
+		account: {},
+		profile: {},
+		statuses: [],
+		nextCursor: '',
+		following: false,
+		viewerCanFollow: false,
+		viewerCanEdit: false,
+		replyTo: null,
+		loading: true,
+		loadingMore: false,
+		error: '',
+		loadMoreError: '',
+		profileError: '',
+		savingProfile: false,
+		showProfileModal: false,
+		editProfile: { displayName: '', description: '' },
+		profileImages: { avatar: null, banner: null, removeAvatar: false, removeBanner: false },
+	}),
+
 	computed: {
 		fediverseProfileUrl() {
 			const uid = getCurrentUser()?.uid ?? window.OC?.getCurrentUser?.()?.uid ?? ''
@@ -213,15 +273,77 @@ export default {
 			return this.profile.handle || this.handle
 		},
 
+		displayName() {
+			return this.profile.displayName || this.profile.handle || this.handle
+		},
+
 		initials() {
-			const source = (this.profile.displayName || this.shownHandle || '').replace(/^@/, '')
+			const source = (this.displayName || '').replace(/^@/, '')
 			return source.charAt(0).toUpperCase() || '?'
 		},
 
-		hasCounts() {
-			return this.profile.followersCount !== undefined
-				|| this.profile.followsCount !== undefined
-				|| this.profile.postsCount !== undefined
+		/**
+		 * The card appears once there is a profile to draw, the way the
+		 * Fediverse one waits for its account.
+		 *
+		 * @return {boolean}
+		 */
+		cardVisible() {
+			return !this.loading && !this.error && !!this.shownHandle
+		},
+
+		/**
+		 * Following oneself is not offered on the Fediverse profile, and is
+		 * not offered here either: the same account owns both.
+		 *
+		 * @return {boolean}
+		 */
+		canFollow() {
+			return this.viewerCanFollow && !this.viewerCanEdit && !!this.profile.did
+		},
+
+		bannerStyle() {
+			return this.profile.banner
+				? { backgroundImage: `url(${JSON.stringify(String(this.profile.banner))})` }
+				: {}
+		},
+
+		/** @return {string} */
+		postsLabel() {
+			const count = Number(this.profile.postsCount) || 0
+
+			return translatePlural('social', '{count} post', '{count} posts', count, { count: formatCount(count) })
+		},
+
+		/** @return {string} */
+		followingLabel() {
+			const count = Number(this.profile.followsCount) || 0
+
+			return translatePlural('social', '{count} following', '{count} following', count, { count: formatCount(count) })
+		},
+
+		/** @return {string} */
+		followersLabel() {
+			const count = Number(this.profile.followersCount) || 0
+
+			return translatePlural('social', '{count} follower', '{count} followers', count, { count: formatCount(count) })
+		},
+
+		/** @return {number} how many characters the bio has left */
+		bioCharsLeft() {
+			return BIO_MAX_LENGTH - [...(this.editProfile.description ?? '')].length
+		},
+
+		/** @return {boolean} */
+		bioTooLong() {
+			return this.bioCharsLeft < 0
+		},
+
+		/** @return {string} */
+		bioCharactersLeftLabel() {
+			return this.bioTooLong
+				? this.n('social', '%n character too many', '%n characters too many', -this.bioCharsLeft)
+				: this.n('social', '%n character left', '%n characters left', this.bioCharsLeft)
 		},
 
 		settingsUrl() {
@@ -238,7 +360,9 @@ export default {
 	},
 
 	methods: {
-		t,
+		t: translate,
+		n: translatePlural,
+
 		async loadProfile() {
 			this.loading = true
 			this.error = ''
@@ -258,7 +382,7 @@ export default {
 					description: this.profile.description ?? '',
 				}
 			} catch (error) {
-				this.error = error?.response?.data?.message ?? t('social', 'Could not load this Bluesky profile')
+				this.error = error?.response?.data?.message ?? translate('social', 'Could not load this Bluesky profile')
 			} finally {
 				this.loading = false
 			}
@@ -276,14 +400,29 @@ export default {
 				this.statuses = this.statuses.concat((data.statuses ?? []).filter((status) => !known.has(status.id)))
 				this.nextCursor = data.nextCursor ?? ''
 			} catch (error) {
-				this.loadMoreError = error?.response?.data?.message ?? t('social', 'Could not load more Bluesky posts')
+				this.loadMoreError = error?.response?.data?.message ?? translate('social', 'Could not load more Bluesky posts')
 			} finally {
 				this.loadingMore = false
 			}
 		},
 
+		/**
+		 * Opens the editor on the profile already on screen: there is nothing
+		 * to fetch, which is why the Fediverse dialog is the only part of this
+		 * page that ever waits.
+		 */
+		openProfileModal() {
+			this.editProfile = {
+				displayName: this.profile.displayName ?? '',
+				description: this.profile.description ?? '',
+			}
+			this.profileImages = { avatar: null, banner: null, removeAvatar: false, removeBanner: false }
+			this.profileError = ''
+			this.showProfileModal = true
+		},
+
 		async saveProfile() {
-			if (this.savingProfile) {
+			if (this.savingProfile || this.bioTooLong) {
 				return
 			}
 			this.savingProfile = true
@@ -313,12 +452,13 @@ export default {
 					displayName: this.profile.displayName ?? '',
 					description: this.profile.description ?? '',
 				}
+				this.showProfileModal = false
 				// The PDS assigns a new blob reference (and therefore a new public
 				// URL) for uploads. Re-read the profile so replacement/removal is
 				// visible immediately rather than after a manual page reload.
 				await this.loadProfile()
 			} catch (error) {
-				this.profileError = error?.response?.data?.message ?? t('social', 'Could not save your Bluesky profile')
+				this.profileError = error?.response?.data?.message ?? translate('social', 'Could not save your Bluesky profile')
 			} finally {
 				this.savingProfile = false
 			}
@@ -330,7 +470,7 @@ export default {
 				return
 			}
 			if (file.size > 1 * 1024 * 1024) {
-				this.profileError = t('social', 'Profile images must be 1 MiB or smaller')
+				this.profileError = translate('social', 'Profile images must be 1 MiB or smaller')
 				if (event.target) {
 					event.target.value = ''
 				}
@@ -344,161 +484,39 @@ export default {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@use '../components/ProfileInfo.scss';
+
 .atproto-profile {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	width: 100%;
+
+	/* the standalone page draws inside the column the Fediverse profile page
+	   draws inside; an embedded one is already inside it */
+	&--page {
+		max-width: var(--social-column);
+		margin: 0 auto;
+		padding: calc(var(--default-grid-baseline) * 4);
+	}
 }
 
-.atproto-profile__card {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 100%;
-	max-width: var(--social-column);
-	margin-block-end: calc(var(--default-grid-baseline) * 3);
-	text-align: center;
-	background: var(--color-main-background);
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	overflow: hidden;
-	position: relative;
-}
-
-.atproto-profile__banner,
-.atproto-profile__banner-placeholder {
-	display: block;
-	width: 100%;
-	min-height: 120px;
-	max-height: 200px;
-	object-fit: cover;
-	background-color: var(--color-background-dark);
-}
-
-.atproto-profile__content {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	width: 100%;
-	padding: 56px calc(var(--default-grid-baseline) * 4) calc(var(--default-grid-baseline) * 4);
-	position: relative;
-	z-index: 1;
-}
-
-.atproto-profile__avatar-frame {
+/* where the account has no avatar at all, a letter in the same place the
+   Fediverse avatar hangs from the banner */
+.atproto-profile__avatar-fallback {
 	position: absolute;
 	top: -48px;
-}
-
-.atproto-profile__avatar,
-.atproto-profile__avatar-fallback {
-	box-sizing: border-box;
-	width: 96px;
-	height: 96px;
-	border: 4px solid var(--color-main-background);
-	border-radius: 50%;
-	object-fit: cover;
-}
-
-.atproto-profile__avatar-fallback {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	width: 128px;
+	height: 128px;
+	border-radius: 50%;
 	background: var(--color-background-dark);
 	color: var(--color-text-maxcontrast);
-	font-size: 36px;
+	font-size: 40px;
 	font-weight: 700;
-}
-
-.atproto-profile__name {
-	margin: 0 0 4px;
-	font-size: 26px;
-	font-weight: 700;
-	letter-spacing: -.02em;
-}
-
-.atproto-profile__handle {
-	margin: 0 0 8px;
-	color: var(--color-text-maxcontrast);
-}
-
-.atproto-profile__description {
-	max-width: 60ch;
-	margin: 0 0 calc(var(--default-grid-baseline) * 2);
-	white-space: pre-wrap;
-}
-
-.atproto-profile__stats {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 20px;
-	justify-content: center;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	color: var(--color-text-lighter);
-	font-size: 13px;
-}
-
-.atproto-profile__stats strong {
-	color: var(--color-main-text);
-	font-weight: 700;
-}
-
-.atproto-profile__stats li {
-	display: flex;
-	align-items: baseline;
-	gap: 4px;
-}
-
-.atproto-profile__actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 10px;
-	align-items: center;
-	justify-content: center;
-	margin-block-start: calc(var(--default-grid-baseline) * 3);
-}
-
-.atproto-profile__actions a {
-	color: var(--color-main-text);
-	font-size: 13px;
-	text-decoration: none;
-}
-
-.atproto-profile__actions a:hover {
-	color: var(--color-primary-element);
-	text-decoration: underline;
-}
-
-.atproto-profile__actions .atproto-profile__connect {
-	color: var(--color-text-maxcontrast);
-}
-
-.atproto-profile__editor {
-	display: grid;
-	gap: calc(var(--default-grid-baseline) * 2);
-	width: 100%;
-	max-width: 480px;
-	margin-block-start: calc(var(--default-grid-baseline) * 3);
-	padding-block-start: calc(var(--default-grid-baseline) * 3);
-	border-block-start: 1px solid var(--color-border);
-	text-align: start;
-}
-
-.atproto-profile__upload {
-	display: grid;
-	gap: 4px;
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-}
-
-.atproto-profile__editor-actions {
-	display: flex;
-	gap: calc(var(--default-grid-baseline) * 2);
-	justify-content: flex-end;
 }
 
 .atproto-profile__posts {

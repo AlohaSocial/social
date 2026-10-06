@@ -4,12 +4,8 @@
 -->
 <template>
 	<div :class="{'icon-loading': !accountLoaded}" class="social__wrapper">
-		<ProfileInfo v-if="accountLoaded && accountInfo" :uid="uid" />
-
-		<!-- your own profile is a page you post from, the way the home
-		     timeline is. Somebody else's is a page you read -->
-		<Composer v-if="isOwnProfile" />
-
+		<!-- one page, two halves of the reader's identity: the switch picks
+		     which of them is on screen, and both are drawn the same way -->
 		<nav
 			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle"
 			class="social__profile-network-switch"
@@ -27,16 +23,21 @@
 				{{ t('social', 'Bluesky') }}
 			</button>
 		</nav>
+
+		<ProfileInfo
+			v-if="accountLoaded && accountInfo && profileNetwork === 'fediverse'"
+			:uid="uid" />
+
+		<!-- your own profile is a page you post from, the way the home
+		     timeline is. Somebody else's is a page you read. The Bluesky half
+		     brings its own composer with it, in the same place -->
+		<Composer v-if="isOwnProfile && profileNetwork === 'fediverse'" />
+
 		<router-view v-if="accountLoaded && accountInfo && profileNetwork === 'fediverse'" name="details" />
-		<section
+		<AtprotoProfile
 			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle && profileNetwork === 'atproto'"
-			class="social__atproto-profile"
-			aria-labelledby="social-atproto-profile-heading">
-			<h2 id="social-atproto-profile-heading">
-				{{ t('social', 'Bluesky profile') }}
-			</h2>
-			<AtprotoProfile :handle="atprotoHandle" :embedded="true" />
-		</section>
+			:handle="atprotoHandle"
+			:embedded="true" />
 		<!-- the lookup is what says an account is missing: `accountLoaded` only
 		     says the store has it (see useAccount), so it cannot say it has not -->
 		<NcEmptyContent
@@ -239,12 +240,6 @@ export default {
 	&.icon-loading {
 		margin-top: 50vh;
 	}
-}
-
-.social__atproto-profile {
-	margin-block-start: calc(var(--default-grid-baseline) * 4);
-	padding-block-start: calc(var(--default-grid-baseline) * 2);
-	border-block-start: 1px solid var(--color-border);
 }
 
 .social__profile-network-switch {
