@@ -128,7 +128,6 @@ function quoteOf(account = bob, overrides = {}) {
 	return {
 		id: '77',
 		visibility: 'public',
-		publication_target: 'both',
 		content: '<p>The post being quoted</p>',
 		mentions: [],
 		tags: [],
@@ -556,17 +555,6 @@ describe('Composer', () => {
 			await nextTick()
 
 			expect(currentVisibility(wrapper)).toBe('unlisted')
-		})
-
-		it('targets ATProto when opened on an imported Bluesky post', () => {
-			const { wrapper } = mountComposer({ inReplyTo: {
-				...replyTo(),
-				id: 'https://cloud.example.org/ap/bluesky/did:plc:bob/app.bsky.feed.post/3abc',
-				visibility: 'public',
-			} })
-
-			expect(wrapper.vm.publicationTarget).toBe('atproto')
-			expect(currentVisibility(wrapper)).toBe('public')
 		})
 
 		it('defaults to followers only', () => {
@@ -1889,9 +1877,6 @@ describe('Composer', () => {
 				quote_id: undefined,
 				sensitive: false,
 				spoiler_text: '',
-				// no Bluesky account is linked in this harness, so the composer
-				// must not offer a both-network post it cannot honour
-				publication_target: 'fediverse',
 				language: 'en',
 			})
 		})

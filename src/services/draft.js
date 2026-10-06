@@ -59,7 +59,6 @@ const MAX_AGE_MS = 7 * 24 * 3600 * 1000
  * @property {string} text what was typed, as plain text
  * @property {string} spoilerText the content warning, '' when there is none
  * @property {string} visibility who it was going to
- * @property {'fediverse'|'atproto'|'both'} publicationTarget where it was going to be published
  * @property {string} postAs the team account it was being written as, '' for
  *   the reader's own
  * @property {number} savedAt when it was last written, epoch milliseconds
@@ -73,11 +72,10 @@ const MAX_AGE_MS = 7 * 24 * 3600 * 1000
  * @param {string} [draft.spoilerText] the content warning
  * @param {string} [draft.visibility] who it is going to
  * @param {string} [draft.postAs] the team account it is being written as
- * @param {'fediverse'|'atproto'|'both'} [draft.publicationTarget] where it is published
  * @param {string} [context] what it belongs to — see `key()`
  * @return {boolean} whether it could be stored
  */
-export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '', publicationTarget = 'both' }, context = '') {
+export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '' }, context = '') {
 	if ((text ?? '').trim() === '' && spoilerText.trim() === '') {
 		return clearDraft(context)
 	}
@@ -87,7 +85,6 @@ export function saveDraft({ text, spoilerText = '', visibility = '', postAs = ''
 			text,
 			spoilerText,
 			visibility,
-			publicationTarget,
 			// the composer has always sent this and this function has always
 			// dropped it, so the line it has that reads it back — "a reload
 			// does not quietly turn a team post back into a personal one" —
@@ -148,9 +145,6 @@ export function loadDraft(context = '') {
 		text: draft.text,
 		spoilerText: typeof draft.spoilerText === 'string' ? draft.spoilerText : '',
 		visibility: typeof draft.visibility === 'string' ? draft.visibility : '',
-		publicationTarget: ['fediverse', 'atproto', 'both'].includes(draft.publicationTarget)
-			? draft.publicationTarget
-			: 'both',
 		postAs: typeof draft.postAs === 'string' ? draft.postAs : '',
 		savedAt: typeof draft.savedAt === 'number' ? draft.savedAt : 0,
 	}

@@ -5,7 +5,6 @@
 
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import axios from '@nextcloud/axios'
 
 import pinia, {
 	useAccountStore,
@@ -49,10 +48,6 @@ describe('root store', () => {
 	it('lets one store call another', async () => {
 		const errors = useErrorsStore()
 		vi.spyOn(errors, 'addAppError')
-		// Keep this test independent of whichever Nextcloud instance happens to
-		// be running while the suite is executed. A failed remote lookup is the
-		// branch that should flow through the errors store.
-		vi.spyOn(axios, 'get').mockRejectedValueOnce(new Error('remote lookup failed'))
 
 		// the account store reports a lookup failure through the errors store
 		await useAccountStore().fetchAccountInfo('bob@remote.tld')

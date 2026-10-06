@@ -31,7 +31,6 @@ class BackgroundJobsRegisteredTest extends TestCase {
 	 */
 	private const QUEUED_ONLY = [
 		'OCA\\Social\\Cron\\ActorCleanup',
-		'OCA\\Social\\Cron\\AtprotoMirrorJob',
 		'OCA\\Social\\Cron\\DomainPurge',
 		'OCA\\Social\\Cron\\ExternalPromoted',
 		'OCA\\Social\\Cron\\RunImport',

@@ -90,9 +90,6 @@ final class Details {
 	public const REPLY_POLICY = 'reply_policy';
 	public const REPLY_STATE = 'reply_state';
 
-	/** Where a locally authored post was requested to be published. */
-	public const PUBLICATION_TARGET = 'publication_target';
-
 	/**
 	 * Everything a `Video` says that a `Note` has nowhere to put: the category,
 	 * the licence, the language, the chapters, the captions, the counters and

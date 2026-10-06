@@ -79,14 +79,6 @@ describe('router', () => {
 		expect(Object.keys(route.matched[1].components)).toEqual(['details'])
 	})
 
-	it('routes a bare Bluesky handle to the shared ATProto profile view', () => {
-		const route = router.resolve('/@bob.schaechner.dpdns.org')
-
-		expect(route.name).toBe('atproto-profile-handle')
-		expect(route.params.handle).toBe('bob.schaechner.dpdns.org')
-		expect(route.matched[0].path).toBe('/@:handle([^@]+\\.[^@]+)')
-	})
-
 	it('routes an account\'s collections under the account, and one collection to its own page', () => {
 		expect(router.resolve({ name: 'profile.collections', params: { account: 'bob@remote.tld' } }).fullPath)
 			.toBe('/@bob@remote.tld/collections')

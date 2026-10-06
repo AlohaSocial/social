@@ -192,17 +192,6 @@ class StatusAssemblyServiceTest extends TestCase {
 		$this->assertSame('https://cloud.example/apps/social/@bob/42', $post->getReplyTo());
 	}
 
-	public function testAStoredAtprotoReplyFindsItsImportedParent(): void {
-		$reference = 'https://cloud.example/apps/social/ap/bluesky/did:plc:bob/app.bsky.feed.post/3xyz';
-		$parent = new Stream();
-		$parent->setId($reference);
-		$this->streamService->expects($this->once())->method('getStreamById')->with($reference, true)->willReturn($parent);
-
-		$post = $this->service->fromParams($this->actor(), $this->params(['in_reply_to_id' => $reference]));
-
-		$this->assertSame($reference, $post->getReplyTo());
-	}
-
 	/**
 	 * Likelier here than on an immediate post: the post being replied to can
 	 * be deleted while this one waits. The reply still goes out, as a post of

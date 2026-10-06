@@ -111,7 +111,6 @@ class StatusApiController extends MastodonApiController {
 		private WatchService $watchService,
 		private IFactory $l10nFactory,
 		private DurableCache $durableCache,
-		private ?\OCA\Social\Db\AtprotoRequest $atprotoRequest = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -188,18 +187,6 @@ class StatusApiController extends MastodonApiController {
 			$post->setSpoilerText($status->getSpoilerText());
 			$post->setSensitive($status->isSensitive());
 			$post->setType($this->visibilityOf($status));
-			$post->setPublicationTarget($status->getPublicationTarget());
-			if ($post->getPublicationTarget() === 'atproto') {
-				if ($post->getType() !== Stream::TYPE_PUBLIC) {
-					throw new InvalidActionException('AT Protocol posts must use public visibility');
-				}
-				if ($this->atprotoRequest !== null) {
-					$linked = $this->atprotoRequest->getAccount($this->currentSession());
-					if ($linked === null || $linked->getState() !== \OCA\Social\Model\Atproto\AtprotoAccount::STATE_LINKED) {
-						throw new InvalidActionException('Connect your Bluesky account in settings to publish there');
-					}
-				}
-			}
 			$post->setLanguage($status->getLanguage());
 			$post->setPlaceId(
 				$this->placeService->resolve(
@@ -214,12 +201,9 @@ class StatusApiController extends MastodonApiController {
 			// before the media is scoped: a reply to a direct message is a
 			// direct message whatever `visibility` says, and its attachments
 			// must not be made world-readable on the strength of the request
-			$replyReference = $status->getInReplyToReference();
-			if ($replyReference !== '') {
+			if ($status->getInReplyToId() > 0) {
 				try {
-					$replyTo = ctype_digit($replyReference)
-						? $this->streamService->getStreamByNid((int)$replyReference)
-						: $this->streamService->getStreamById($replyReference, true);
+					$replyTo = $this->streamService->getStreamByNid($status->getInReplyToId());
 					$post->setReplyTo($replyTo->getId());
 					$post->setType(PostService::visibilityOfReply($post->getType(), $replyTo));
 				} catch (StreamNotFoundException $e) {

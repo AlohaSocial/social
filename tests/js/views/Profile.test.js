@@ -10,20 +10,10 @@ import Profile from '../../../src/views/Profile.vue'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
-const reader = vi.hoisted(() => ({ value: { uid: 'alice', displayName: 'Alice' } }))
-
 vi.hoisted(() => {
 	document.head.dataset.user = 'alice'
 	document.head.dataset.userDisplayname = 'Alice'
 })
-
-// The profile asks Nextcloud who is signed in before it falls back to the app's
-// own account store, because that store hydrates late. The document head is
-// read once per module, so the tests say who the reader is through this.
-vi.mock('@nextcloud/auth', async (importOriginal) => ({
-	...(await importOriginal()),
-	getCurrentUser: () => reader.value,
-}))
 
 const ProfileInfoStub = { name: 'ProfileInfo', props: ['uid'], template: '<section class="profile-info-stub" />' }
 const ComposerStub = { name: 'Composer', props: ['initialMention', 'defaultVisibility'], template: '<div class="composer-stub" />' }
@@ -193,19 +183,9 @@ describe('Profile', () => {
 
 		it('is hidden while no current account is known', async () => {
 			accountStore.setCurrentAccount('')
-			// neither source of "whose profile is this" has an answer: not the
-			// app account store, and not the signed-in Nextcloud identity either
-			const identity = vi.spyOn(globalThis.OC, 'getCurrentUser').mockReturnValue(null)
-			const readerBefore = reader.value
-			reader.value = null
-			try {
-				const wrapper = mountProfile({ name: 'profile', params: { account: 'alice' } })
-				await flushPromises()
-				expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
-			} finally {
-				reader.value = readerBefore
-				identity.mockRestore()
-			}
+			const wrapper = mountProfile({ name: 'profile', params: { account: 'alice' } })
+			await flushPromises()
+			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		})
 	})
 

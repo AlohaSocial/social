@@ -15,9 +15,7 @@ use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
-use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
-use OCA\Social\Service\Atproto\AtprotoEngagementService;
 use OCA\Social\Tools\Traits\TStringTools;
 
 class ActionService {
@@ -62,7 +60,6 @@ class ActionService {
 		private ConversationsRequest $conversationsRequest,
 		private DislikeService $dislikeService,
 		private InterestService $interestService,
-		private ?AtprotoEngagementService $atprotoEngagementService = null,
 	) {
 	}
 
@@ -165,37 +162,6 @@ class ActionService {
 
 		$post = $this->streamService->getStreamByNid($nid);
 		$this->assertAllowedByAuthor($post, $action);
-		$target = $post->getDetailsAll()[Details::PUBLICATION_TARGET] ?? 'both';
-		$isAtprotoPost = str_contains($post->getId(), '/ap/bluesky/') || $target === 'atproto';
-		$hasAtprotoMirror = $this->atprotoEngagementService !== null && $this->atprotoEngagementService->hasRecord($post);
-		$atprotoAction = in_array($action, [self::FAVOURITE, self::UNFAVOURITE, self::REBLOG, self::UNREBLOG], true);
-		$linkedForAtproto = $this->atprotoEngagementService?->isLinked($actor->getUserId()) ?? false;
-		if ($this->atprotoEngagementService !== null && $isAtprotoPost && !$linkedForAtproto && $atprotoAction) {
-			// Let the native service return its precise "link an account" error.
-			$this->atprotoEngagementService->setLiked($actor->getUserId(), $post, false);
-		}
-		if ($this->atprotoEngagementService !== null
-			&& ($isAtprotoPost || ($target === 'both' && $hasAtprotoMirror))
-			&& $atprotoAction
-			&& ($isAtprotoPost || $linkedForAtproto)) {
-			$isLike = in_array($action, [self::FAVOURITE, self::UNFAVOURITE], true);
-			$enabled = in_array($action, [self::FAVOURITE, self::REBLOG], true);
-			if ($isLike) {
-				$this->atprotoEngagementService->setLiked(
-					$actor->getUserId(), $post, $enabled
-				);
-			} else {
-				$this->atprotoEngagementService->setReposted(
-					$actor->getUserId(), $post, $enabled
-				);
-			}
-			$this->streamActionService->setActionBool(
-				$actor->getId(), $post->getId(), $isLike ? StreamAction::LIKED : StreamAction::BOOSTED, $enabled
-			);
-			if ($isAtprotoPost) {
-				return null;
-			}
-		}
 
 		switch ($action) {
 			case self::FAVOURITE:

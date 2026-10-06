@@ -1153,17 +1153,9 @@ describe('TimelinePost', () => {
 		})
 
 		it('are withheld while the current account is unknown', () => {
-			// the signed-in Nextcloud identity is the other way the menu finds out
-			// a post is the reader's own, so it has to be unknown as well for
-			// "we cannot tell whose post this is" to hold
-			const identity = vi.spyOn(globalThis.OC, 'getCurrentUser').mockReturnValue(null)
-			try {
-				const { wrapper } = mountPost({ currentAccount: null })
-				expect(menuItem(wrapper, 'Edit')).toBeUndefined()
-				expect(menuItem(wrapper, 'Delete')).toBeUndefined()
-			} finally {
-				identity.mockRestore()
-			}
+			const { wrapper } = mountPost({ currentAccount: null })
+			expect(menuItem(wrapper, 'Edit')).toBeUndefined()
+			expect(menuItem(wrapper, 'Delete')).toBeUndefined()
 		})
 
 		it('says where a post was taken, and only when the poster said', () => {

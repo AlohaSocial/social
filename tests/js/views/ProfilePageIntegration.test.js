@@ -12,16 +12,7 @@ vi.hoisted(() => {
 	document.head.dataset.userDisplayname = 'Alice'
 })
 
-const ProfileStatusCardStub = {
-	name: 'ProfileStatusCard',
-	props: ['status', 'canDelete', 'nativeDelete', 'canEdit', 'nativeEdit'],
-	template: '<li class="profile-status-card-stub" />',
-}
-const ComposerStub = {
-	name: 'Composer',
-	props: ['inReplyTo', 'startExpanded'],
-	template: '<div class="composer-reply-stub" />',
-}
+const ProfileStatusCardStub = { name: 'ProfileStatusCard', props: ['status'], template: '<li class="profile-status-card-stub" />' }
 const TimelineSwitcherStub = {
 	props: ['options', 'value', 'label'],
 	emits: ['update:value'],
@@ -43,18 +34,14 @@ let get
 function mountSection(userId) {
 	return mount(ProfilePageIntegration, {
 		props: { userId },
-		global: { stubs: { Composer: ComposerStub, ProfileStatusCard: ProfileStatusCardStub, TimelineSwitcher: TimelineSwitcherStub, NcButton: true } },
+		global: { stubs: { ProfileStatusCard: ProfileStatusCardStub, TimelineSwitcher: TimelineSwitcherStub, NcButton: true } },
 	})
 }
 
 describe('ProfilePageIntegration', () => {
 	beforeEach(() => {
 		get = vi.spyOn(axios, 'get').mockImplementation(async (url) => ({
-			data: url.endsWith('/timelines/home')
-				? homeStatuses
-				: url.endsWith('/atproto/profile')
-					? [{ id: 'at://did:plc:alice/app.bsky.feed.post/1', content: '<p>native</p>', account: bob }]
-					: url.endsWith('/statuses') ? statuses : bob,
+			data: url.endsWith('/timelines/home') ? homeStatuses : url.endsWith('/statuses') ? statuses : bob,
 		}))
 	})
 
@@ -104,56 +91,6 @@ describe('ProfilePageIntegration', () => {
 		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/timelines/home', { params: { limit: 20 } })
 		expect(wrapper.find('.composer-stub').exists()).toBe(false)
 		expect(wrapper.findAllComponents(ProfileStatusCardStub).map((entry) => entry.props('status').id)).toEqual(['2', 'home-1'])
-	})
-
-	it('routes Bluesky profile actions to native post handlers', async () => {
-		const wrapper = mountSection('alice')
-		await flushPromises()
-		await wrapper.findAll('.feed-switcher button').find((button) => button.text() === 'Bluesky').trigger('click')
-		await flushPromises()
-		const card = wrapper.findComponent(ProfileStatusCardStub)
-		expect(card.props('canDelete')).toBe(true)
-		expect(card.props('nativeDelete')).toBe(true)
-		expect(card.props('canEdit')).toBe(true)
-		expect(card.props('nativeEdit')).toBe(true)
-	})
-
-	it('loads subsequent own Bluesky pages with the returned cursor', async () => {
-		const firstPage = Array.from({ length: 20 }, (_, index) => ({
-			id: `at://did:plc:alice/app.bsky.feed.post/${index}`,
-			content: `<p>native ${index}</p>`,
-			account: bob,
-		}))
-		const secondPage = [{ id: 'at://did:plc:alice/app.bsky.feed.post/20', content: '<p>native 20</p>', account: bob }]
-		get.mockImplementation(async (url, options = {}) => {
-			if (url.endsWith('/atproto/profile')) {
-				return options.params?.cursor
-					? { data: { statuses: secondPage, nextCursor: '' } }
-					: { data: { statuses: firstPage, nextCursor: '20' } }
-			}
-			return { data: url.endsWith('/statuses') ? statuses : bob }
-		})
-
-		const wrapper = mountSection('alice')
-		await flushPromises()
-		await wrapper.findAll('.feed-switcher button').find((button) => button.text() === 'Bluesky').trigger('click')
-		await flushPromises()
-		await wrapper.find('.social-profile__load-more').trigger('click')
-		await flushPromises()
-
-		expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/atproto/profile', { params: { limit: 20, cursor: 20 } })
-		expect(wrapper.findAllComponents(ProfileStatusCardStub)).toHaveLength(21)
-	})
-
-	it('opens the shared composer with the selected native parent', async () => {
-		const wrapper = mountSection('alice')
-		await flushPromises()
-		await wrapper.findComponent(ProfileStatusCardStub).vm.$emit('reply', statuses[0])
-		await flushPromises()
-		const composer = wrapper.findComponent(ComposerStub)
-		expect(composer.exists()).toBe(true)
-		expect(composer.props('inReplyTo')).toEqual(statuses[0])
-		expect(composer.props('startExpanded')).toBe(true)
 	})
 
 	it('loads local and global public timelines from their Aloha Social API scopes', async () => {

@@ -18,7 +18,6 @@
  * @param {string} [post.inReplyToId] the post this answers
  * @param {string} [post.quoteId] the post this quotes
  * @param {string} post.visibility who it is for
- * @param {'fediverse'|'atproto'|'both'} post.publicationTarget where it is published
  * @param {string} post.postAs the team it is written as, '' for oneself
  * @param {string} post.language what it is written in
  * @param {{title: string, category: string, licence: string}|null} post.video what the poster said about the video, null when it is not a video post
@@ -39,7 +38,6 @@ export function statusPayload(post) {
 		in_reply_to_id: post.inReplyToId,
 		quote_id: post.quoteId,
 		visibility: post.visibility,
-		publication_target: post.publicationTarget ?? 'both',
 		...(post.postAs === '' ? {} : { post_as: post.postAs }),
 		// always, so the post is never without one: the server would fill in
 		// the same default, but what the poster saw is what goes

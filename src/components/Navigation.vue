@@ -412,8 +412,6 @@ export default {
 			trending: [],
 			/** the reader's lists, the group-bound ones first */
 			lists: [],
-			/** linked Bluesky identity, when the optional protocol is enabled */
-			atprotoAccount: null,
 			/** the hashtags the reader follows, as the server orders them */
 			followedTags: [],
 			/** whether the Explore entry is open; remembered per reader */
@@ -706,14 +704,6 @@ export default {
 								to: { name: 'profile', params: { account: this.currentAccount.acct } },
 							}]
 						: []),
-					...(this.atprotoAccount?.handle
-						? [{
-								key: 'social-atproto-profile',
-								icon: IconAccountCircle,
-								title: t('social', 'Bluesky profile'),
-								to: { name: 'atproto-profile-handle', params: { handle: this.atprotoAccount.handle } },
-							}]
-						: []),
 					// Under the reader's own name, beside their profile: what
 					// happened to *them* -- a mention, a like, a follow -- is
 					// about the account, where the sidebar above is places to
@@ -836,7 +826,6 @@ export default {
 			this.fetchTrending()
 			this.fetchLists()
 			this.fetchFollowedTags()
-			this.fetchAtprotoStatus()
 			this.notificationsStore.fetchUnreadNotifications()
 			this.notificationsStore.fetchUnreadDirectMessages()
 		})
@@ -1060,18 +1049,6 @@ export default {
 				this.followedTags = Array.isArray(data) ? data : []
 			} catch {
 				this.followedTags = []
-			}
-		},
-
-		/** Keep the account menu's protocol-specific profile link in sync. */
-		async fetchAtprotoStatus() {
-			try {
-				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
-				this.atprotoAccount = data?.account ?? null
-			} catch {
-				// ATProto is optional; a disabled server or a signed-out shell
-				// must not make the ordinary Fediverse navigation disappear.
-				this.atprotoAccount = null
 			}
 		},
 
