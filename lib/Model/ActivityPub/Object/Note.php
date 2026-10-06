@@ -100,6 +100,24 @@ class Note extends Stream implements JsonSerializable {
 
 		$this->fillHashtags();
 		$this->fillMentions();
+		$this->setName($this->voteOption($data));
+	}
+
+	/**
+	 * The option a poll vote chose: Mastodon votes with a `Note` that has a
+	 * `name`, an `inReplyTo` and no `content`. Anything else with a `name` — a
+	 * PeerTube video's title, say — is not a vote and keeps none here.
+	 */
+	private function voteOption(array $data): string {
+		if (($data['type'] ?? '') !== self::TYPE
+			|| ($data['content'] ?? '') !== ''
+			|| ($data['inReplyTo'] ?? '') === '') {
+			return '';
+		}
+
+		$name = $data['name'] ?? '';
+
+		return is_string($name) ? trim($name) : '';
 	}
 
 	#[\Override]
