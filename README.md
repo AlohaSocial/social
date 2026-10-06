@@ -874,6 +874,7 @@ occ social:reset
   configuration key with its meaning and default, the sections of the
   administration page, how moderation is recorded, and the occ commands by task.
 - [docs/Mastodon-Compatibility.md](docs/Mastodon-Compatibility.md)
+- [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) — the specification for native Bluesky / AT Protocol identities (not yet implemented)
   answers how close this is to Mastodon in the three senses that can mean —
   whether its clients work, whether peers can tell the difference, and whether an
   instance could move onto it. Its last section is the backlog that follows:
@@ -913,7 +914,8 @@ See the repository's license files in the `LICENSES/` directory.
 **[API](docs/API.md)** ·
 **[occ commands](docs/OCC-Commands.md)** ·
 **[Architecture](docs/Architecture.md)** ·
-**[Mastodon compatibility](docs/Mastodon-Compatibility.md)**
+**[Mastodon compatibility](docs/Mastodon-Compatibility.md)** ·
+**[Bluesky specification](docs/Atproto-Compatibility.md)**
 
 Screenshots are of a development instance with seeded demo accounts.
 
