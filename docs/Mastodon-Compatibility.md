@@ -207,9 +207,17 @@ private as the post.
 
 `Instance::COMPAT_VERSION = '4.3.0'`. It said `3.5.0` until #2126 and `4.2.0` until
 the 4.3 surface was whole, which is what it announces now — with `api_versions`
-(`{"mastodon": 3}`) beside it, which is what a 4.3 client reads *instead of*
-parsing a string that, on a fork, says nothing about which Mastodon API is
-implemented. This was
+(`{"mastodon": 3, "aloha_social": 1}`) beside it, which is what a 4.3 client
+reads *instead of* parsing a string that, on a fork, says nothing about which
+Mastodon API is implemented. `aloha_social` is this app's own generation, for
+behaviour a client cannot infer from `mastodon` because older versions of the
+app reported the same number without it; a client gates on `>=`. Generation 1
+(#2481): `/api/v2/search` honours `account_id`, narrowing `statuses` to that
+account's posts the viewer may see while `accounts` and `hashtags` stay as they
+are, as in Mastodon; an account this instance does not know finds no posts
+rather than an error. `offset` pages the posts up to 400 deep, and `max_id` /
+`min_id` bound them by status id without changing the newest-first order.
+This was
 right when it was written and had stopped being: clients gate features on this
 string, so they were hiding edit and history, calling the v1 filter routes that
 404 instead of v2, and never asking for `/api/v2/instance` or

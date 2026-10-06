@@ -2907,6 +2907,63 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame([$status], $data['statuses']);
 	}
 
+	/**
+	 * Mastodon's `account_id` narrows the posts and nothing else: a client that
+	 * wants the posts alone sends `type=statuses` as well.
+	 */
+	public function testSearchV2NarrowsThePostsToTheNamedAccount(): void {
+		$this->loggedInAs();
+		$alice = $this->createStub(Person::class);
+		$alice->method('getId')->willReturn('https://cloud.example/users/alice');
+		$alice->method('setExportFormat')->willReturnSelf();
+		$this->cacheActorService->method('getFromNids')->with([42])->willReturn([$alice]);
+		$this->searchService->method('searchUri')->willReturn([]);
+		$this->searchService->method('searchAccounts')->with('fox')->willReturn([$alice]);
+		$this->searchService->method('searchHashtags')->with('fox')
+			->willReturn([['hashtag' => 'foxes', 'trend' => []]]);
+		$status = $this->createStub(Stream::class);
+		$this->searchService->expects($this->once())->method('searchStreamContent')
+			->with('fox', 20, 0, 'https://cloud.example/users/alice', 0, 0)
+			->willReturn([$status]);
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/tags/foxes');
+
+		$data = $this->controller()->searchV2('fox', '', 20, false, '42')->getData();
+
+		$this->assertSame([$status], $data['statuses']);
+		$this->assertCount(1, $data['accounts'], 'accounts are not narrowed');
+		$this->assertSame('foxes', $data['hashtags'][0]['name'], 'hashtags are not narrowed');
+	}
+
+	public function testSearchV2FindsNoPostsOfAnAccountItDoesNotKnow(): void {
+		$this->loggedInAs();
+		$this->cacheActorService->method('getFromNids')->willReturn([]);
+		$this->searchService->expects($this->never())->method('searchStreamContent');
+		$this->searchService->expects($this->never())->method('resolveStatus');
+
+		$response = $this->controller()->searchV2('https://remote.example/notes/1', 'statuses', 20, true, '999');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([], $response->getData()['statuses']);
+	}
+
+	public function testSearchV2PagesThePosts(): void {
+		$this->loggedInAs();
+		$this->searchService->expects($this->once())->method('searchStreamContent')
+			->with('fox', 10, 30, '', '1791284215592836068', 0)
+			->willReturn([]);
+
+		$this->controller()->searchV2('fox', 'statuses', 10, false, '', 30, '1791284215592836068', 'not-an-id');
+	}
+
+	/** A later page that found nothing is the end of the answer, not a link to fetch. */
+	public function testSearchV2ResolvesOnlyOnTheFirstPage(): void {
+		$this->loggedInAs();
+		$this->searchService->method('searchStreamContent')->willReturn([]);
+		$this->searchService->expects($this->never())->method('resolveStatus');
+
+		$this->controller()->searchV2('https://remote.example/notes/1', 'statuses', 20, true, '', 20);
+	}
+
 	public function testSearchV2RequiresAViewer(): void {
 		$this->searchService->expects($this->never())->method('searchAccounts');
 
