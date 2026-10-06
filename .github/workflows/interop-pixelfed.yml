@@ -235,6 +235,8 @@ jobs:
           AP_OUTBOX=true
           AP_SHAREDINBOX=true
           AP_LOGGER_ENABLED=true
+          # its federation jobs say why they dropped something only with this
+          PIXELFED_DEV_LOG=true
           STORIES_ENABLED=true
           INSTANCE_DISCOVER_PUBLIC=true
           PF_OPTIMIZE_IMAGES=false
@@ -345,13 +347,14 @@ jobs:
           echo '--- our delivery queue ---'
           sqlite3 -header data/nextcloud.db \
             "select id, token, status, tries, priority, substr(instance,1,90) as instance, substr(activity,1,80) as activity from oc_social_req_queue order by id" 2>&1 | tail -80 || true
-          echo '--- every request through the proxy, but the reads ---'
+          echo '--- every request through the proxy: the writes, and what the servers fetch from each other ---'
           docker logs proxy 2>&1 | python3 -c 'import json,sys,datetime
           for l in sys.stdin:
               try: d=json.loads(l)
               except Exception: continue
               r=d.get("request")
-              if not r or r["method"]=="GET" and "webfinger" not in r["uri"]: continue
+              ua=(r or {}).get("headers",{}).get("User-Agent") or [""]
+              if not r or r["method"]=="GET" and "webfinger" not in r["uri"] and not ua[0].startswith(("(Pixelfed","Aloha")): continue
               print(datetime.datetime.utcfromtimestamp(d["ts"]).strftime("%H:%M:%S"), d.get("status"), r["method"], r["host"], r["uri"][:90], (r.get("headers",{}).get("User-Agent") or [""])[0][:30])' | tail -200 || true
           echo '--- Pixelfed, its failures ---'
           docker logs pixelfed 2>&1 | grep -i -E "error|exception|fail|refus|invalid|warning" \
