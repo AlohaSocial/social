@@ -2,7 +2,7 @@
   - SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
-# Interop tests (this app talking to a real Mastodon and a real PeerTube)
+# Interop tests (this app talking to a real Mastodon, PeerTube and Pixelfed)
 
 The unit suite proves this app emits the document it meant to. The integration
 suite proves the database and the migrations hold what it thinks they hold.
@@ -203,3 +203,56 @@ third-party images whose startup this repository does not control, so a red
 run is worth reading for which side failed before blaming the change under
 review; a newer push to the same pull request cancels the run still going for
 the old one. One run takes about twenty minutes.
+## Against Pixelfed
+
+`.github/workflows/interop-pixelfed.yml` is a job of its own, so it runs
+beside the Mastodon one rather than after it, and it runs on **every pull
+request** as well as on pushes to master, weekly and on demand. It stands up
+the official Pixelfed image (`ghcr.io/pixelfed/pixelfed`, pinned by tag and
+digest) with MySQL, Redis and a second container running Horizon — every
+delivery, fetch and fan-out on Pixelfed is a queued job, so without Horizon
+nothing leaves it.
+
+Two things are different from the Mastodon job:
+
+- **Pixelfed refuses to federate with a private address**, and nothing in its
+  configuration says otherwise. `nextcloud.test` and `pixelfed.test` both
+  resolve to one globally routed address that the job puts on the runner's
+  loopback, so Pixelfed's check passes and nothing leaves the machine.
+- **Our side is driven through this app's own client API over HTTP**, signed
+  in as `admin` with basic auth and `OCS-APIRequest`, not through the
+  services: a photo goes through the real upload, the Exif strip and the
+  `Create` the API builds, and what is asserted on our side is what the
+  Photos page, a thread or the notifications would show. Only the delivery
+  queue is drained in-process, as in the other suites.
+
+`PixelfedDeliveryTest` covers what we send: our `Follow` accepted, a photo
+with its description, an album whole and in order, caption hashtags, a
+content warning, a like counted and notified, a comment threaded, a story on
+Pixelfed's story bar (fetched through the bearcap), a profile `Update`, a
+direct message landing in the conversation and not on a profile, a delete
+and an unfollow. `PixelfedInboundTest` covers what Pixelfed sends: its
+`Follow` accepted, a photo on our Photos timeline with its description, an
+album, hashtags, a content warning, a like counted and notified, a comment
+threaded under our post, a profile update, a direct message arriving as
+direct, a delete and an unfollow. Every test writes words and pictures of its
+own, polls with a bound instead of sleeping, and makes both follows again
+itself when an earlier test took one away.
+
+Skipped, with the reason in the test: **collections** (Pixelfed neither sends
+nor ingests them) and **a Pixelfed story arriving here** (Pixelfed fans a
+story out only to servers whose nodeinfo says `pixelfed`). Pixelfed sends no
+`Update` when a profile is edited; the inbound profile test runs the one
+command that does send it, `ap:update-actors`, through `docker exec`, and
+skips where `PIXELFED_CONTAINER` is not set.
+
+It found one defect on this side so far: a `Follow` for a follow this side
+already counted was ignored, so a follower whose own record was lost stayed
+pending for ever. A repeated `Follow` is now answered with the `Accept` again.
+
+To run it by hand: `PIXELFED_BASE_URL`, `PIXELFED_TOKEN`, `NEXTCLOUD_URL`,
+`NEXTCLOUD_USER` and `NEXTCLOUD_PASSWORD` (and optionally
+`PIXELFED_CONTAINER`), then `composer run test:interop -- --filter Pixelfed`.
+When a run fails, its last step prints Pixelfed's Horizon log, its follow
+tables, every request through the proxy including what each side fetched,
+and our delivery queue.
