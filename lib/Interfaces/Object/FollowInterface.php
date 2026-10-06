@@ -139,6 +139,14 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 			return;
 		}
 
+		$this->sendAccept($follow);
+	}
+
+	/**
+	 * Delivers an `Accept` of `$follow` to the follower's inbox. A failure is
+	 * logged and left to the delivery queue.
+	 */
+	private function sendAccept(Follow $follow): void {
 		try {
 			$remoteActor = $this->cacheActorService->getFromId($follow->getActorId());
 			if ($remoteActor->isLocal()) {
@@ -213,7 +221,12 @@ class FollowInterface extends AbstractActivityPubInterface implements IActivityP
 
 		try {
 			$knownFollow = $this->followsRequest->getByPersons($follow->getActorId(), $follow->getObjectId());
-			if (!$knownFollow->isAccepted()) {
+			if ($knownFollow->isAccepted()) {
+				// the follower asks again for a follow this side already
+				// counts: its own record is pending, or gone. It hears the
+				// Accept again, and nothing here changes.
+				$this->sendAccept($follow);
+			} else {
 				$actor = $this->cacheActorService->getFromId($follow->getObjectId());
 				if (!$this->isLockedLocalActor($actor)) {
 					// a re-sent Follow of an unlocked account: (re-)send the Accept.
