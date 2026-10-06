@@ -315,8 +315,7 @@ jobs:
           $response = $kernel->handle($request);
           echo $response->getStatusCode(), ' ', substr((string)$response->getContent(), 0, 300), "\n";
           try {
-            $factory = new Nyholm\Psr7\Factory\Psr17Factory();
-            $psr = (new Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory($factory, $factory, $factory, $factory))->createRequest($request);
+            $psr = new GuzzleHttp\Psr7\ServerRequest('GET', 'https://pixelfed.test/api/v1/accounts/verify_credentials', ['Authorization' => 'Bearer ' . getenv('PF_TOKEN')]);
             $validated = $app->make(League\OAuth2\Server\ResourceServer::class)->validateAuthenticatedRequest($psr);
             echo json_encode($validated->getAttributes()), "\n";
             $client = Laravel\Passport\Passport::client()->find($validated->getAttribute('oauth_client_id'));
