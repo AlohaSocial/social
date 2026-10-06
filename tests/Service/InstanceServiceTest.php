@@ -23,6 +23,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\TranslationService;
+use OCA\Social\Tests\Helper\PhpIni;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IURLGenerator;
@@ -74,6 +75,10 @@ class InstanceServiceTest extends TestCase {
 			$this->translationService,
 			$this->accountService,
 		);
+	}
+
+	protected function tearDown(): void {
+		\OC::$server->reset();
 	}
 
 	/** Only the mime types the cache service actually accepts. */
@@ -295,6 +300,67 @@ class InstanceServiceTest extends TestCase {
 		$this->assertSame(
 			2048 * 1048576, $configuration['media_attachments']['video_size_limit']
 		);
+	}
+
+	/**
+	 * PHP refuses a file over its own limit before the app sees it, so a
+	 * client told the app's larger value would send a file only to have it
+	 * thrown away. Both instance entities carry the lower one.
+	 */
+	public function testTheAdvertisedSizeLimitsAreCappedByPhpsUploadLimit(): void {
+		\OC::$server->register(PhpIni::SERVICE, new PhpIni([
+			'upload_max_filesize' => '2M',
+			'post_max_size' => '8M',
+		]));
+		$this->theming([]);
+		$this->configService->method('getAppValueInt')->willReturnMap([
+			[ConfigService::SOCIAL_MAX_SIZE, 10],
+			[ConfigService::SOCIAL_MAX_VIDEO_SIZE, 2048],
+		]);
+		$this->allowMimeTypes(['image/png', 'video/mp4']);
+
+		$instance = $this->service->createLocal();
+		$v1 = $instance->getConfiguration()['media_attachments'];
+		$v2 = json_decode((string)json_encode($instance->asV2()), true)['configuration']['media_attachments'];
+
+		$this->assertSame(2 * 1048576, $v1['image_size_limit']);
+		$this->assertSame(2 * 1048576, $v1['video_size_limit']);
+		$this->assertSame(2 * 1048576, $v2['image_size_limit']);
+		$this->assertSame(2 * 1048576, $v2['video_size_limit']);
+	}
+
+	public function testTheAppsOwnLimitStandsWhenPhpAcceptsMore(): void {
+		\OC::$server->register(PhpIni::SERVICE, new PhpIni([
+			'upload_max_filesize' => '512M',
+			'post_max_size' => '512M',
+		]));
+		$this->configService->method('getAppValueInt')->willReturnMap([
+			[ConfigService::SOCIAL_MAX_SIZE, 10],
+			[ConfigService::SOCIAL_MAX_VIDEO_SIZE, 2048],
+		]);
+
+		$this->assertSame(10 * 1048576, $this->service->imageSizeLimit());
+		$this->assertSame(512 * 1048576, $this->service->videoSizeLimit());
+	}
+
+	public function testPhpsUploadLimitIsTheSmallerOfItsTwoSettings(): void {
+		\OC::$server->register(PhpIni::SERVICE, new PhpIni([
+			'upload_max_filesize' => '64M',
+			'post_max_size' => '16M',
+		]));
+
+		$this->assertSame(16 * 1048576, $this->service->phpUploadLimit());
+	}
+
+	public function testNoPhpUploadLimitLeavesTheAppsOwn(): void {
+		$this->configService->method('getAppValueInt')->willReturnMap([
+			[ConfigService::SOCIAL_MAX_SIZE, 10],
+			[ConfigService::SOCIAL_MAX_VIDEO_SIZE, 2048],
+		]);
+
+		$this->assertSame(PHP_INT_MAX, $this->service->phpUploadLimit());
+		$this->assertSame(10 * 1048576, $this->service->imageSizeLimit());
+		$this->assertSame(2048 * 1048576, $this->service->videoSizeLimit());
 	}
 
 	public function testTheSupportedMimeTypesAreTheOnesTheCacheServiceAccepts(): void {

@@ -68,12 +68,15 @@ a deployment script can run it. `--offline` leaves out the WebFinger probe, the
 only one that goes out on the network.
 
 **Aloha Social: upload size.** Whether PHP will accept the uploads this app promises
-to. Aloha Social's `max_size` is in `/api/v1/instance` and in the composer's refusal
-message; PHP's `upload_max_filesize` and `post_max_size` are enforced before a
-byte reaches this app's code. When the app's number is the larger one, an
-upload between the two is refused with **nothing in the log** — the request
-never reaches PHP — and the person is told nothing useful. Raise both PHP
-values, or lower the app's own in Administration → Aloha Social → Server.
+to. PHP's `upload_max_filesize` and `post_max_size` are enforced before a byte
+reaches this app's code, so `/api/v1/instance` and `/api/v2/instance` advertise
+`image_size_limit` and `video_size_limit` as the smaller of the app's own
+(`max_size`, `max_video_size`) and PHP's. When PHP's is the smaller, every
+client is held to it: an upload over it is refused with a 422 naming the limit
+(`the file is larger than this server accepts (2 MB)`), and a warning in the
+Nextcloud log names the setting it went over. To let the app's own ceiling
+apply, raise both PHP values; see
+[Raising the upload limit](#raising-the-upload-limit).
 
 **Aloha Social: video conversion.** Whether the videos posted here will play
 anywhere else. A warning when **ffmpeg is missing**: iPhone `.mov` videos and
@@ -355,6 +358,32 @@ Nothing needs restarting. Videos uploaded before ffmpeg was there are picked up
 by the background sweep, one every quarter of an hour, or all at once with
 `occ social:media:transcode`. Posts that already went out with the old file are
 not sent again.
+
+### Raising the upload limit
+
+A client is told, and held to, the smaller of Aloha Social's own ceilings and
+PHP's. PHP's is the smaller of `upload_max_filesize` and `post_max_size`; its
+own default is 2 MB and 8 MB. A refused upload leaves a warning in the
+Nextcloud log saying which of the two it went over (`file upload refused:
+larger than this server accepts, over upload_max_filesize`, or `… the request
+body is over post_max_size`).
+
+Raise both, with `post_max_size` a little above `upload_max_filesize` so the
+rest of the form fits beside the file, wherever this PHP reads its settings:
+the `php.ini` of the PHP-FPM pool or Apache module, a `.user.ini` in
+Nextcloud's directory (PHP-FPM, picked up within five minutes), or
+`php_value` lines in Nextcloud's `.htaccess` (Apache with `mod_php`). For
+videos up to 2 GB:
+
+```ini
+upload_max_filesize = 2G
+post_max_size = 2050M
+```
+
+Restart PHP-FPM or Apache after editing `php.ini`. A reverse proxy or web
+server in front has a body limit of its own (`client_max_body_size` in nginx,
+`LimitRequestBody` in Apache) that refuses a larger request before PHP sees
+it. A refusal there never reaches Nextcloud's log.
 
 ---
 

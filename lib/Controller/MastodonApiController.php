@@ -37,6 +37,7 @@ use OCA\Social\Exceptions\TooManyRequestsException;
 use OCA\Social\Exceptions\TranslationUnavailableException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Exceptions\UnknownProbeException;
+use OCA\Social\Exceptions\UploadFailedException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\Filter;
@@ -67,6 +68,7 @@ use OCP\Files\NotFoundException;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
+use OCP\Util;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -488,6 +490,8 @@ abstract class MastodonApiController extends Controller {
 		// the edit is committed locally but its Update could not be queued; the
 		// client should show the saved text and may try the delivery again later
 		[FederationDeliveryException::class, Http::STATUS_SERVICE_UNAVAILABLE],
+		// an upload this server failed to receive; the file itself was fine
+		[UploadFailedException::class, Http::STATUS_INTERNAL_SERVER_ERROR],
 		// somebody else's server let us down
 		[RequestContentException::class, Http::STATUS_NOT_FOUND],
 		[RequestNetworkException::class, Http::STATUS_BAD_GATEWAY],
@@ -532,6 +536,71 @@ abstract class MastodonApiController extends Controller {
 		return new DataResponse(
 			['error' => 'internal server error'], Http::STATUS_INTERNAL_SERVER_ERROR
 		);
+	}
+
+	/**
+	 * Whether a file arrived in this `$_FILES`-shaped entry: true for a file,
+	 * false for none sent, and a refusal saying why for one PHP did not
+	 * deliver. The reason is logged at warning level, since only an admin can
+	 * raise the limit or fix the server behind it.
+	 *
+	 * @param string $what what the file is, as the refusal names it
+	 * @param int $limit the size the refusal of a too-large file names, in bytes
+	 *
+	 * @throws InvalidActionException the file was too large, or arrived only in part (422)
+	 * @throws UploadFailedException the server could not receive it (500)
+	 */
+	protected function uploadArrived(array $upload, string $what, int $limit): bool {
+		$error = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+
+		switch ($error) {
+			case UPLOAD_ERR_OK:
+				return true;
+			case UPLOAD_ERR_NO_FILE:
+				return false;
+			case UPLOAD_ERR_INI_SIZE:
+				throw $this->uploadTooLarge($what, $limit, 'over upload_max_filesize');
+			case UPLOAD_ERR_FORM_SIZE:
+				throw $this->uploadTooLarge($what, $limit, 'over the MAX_FILE_SIZE the client sent');
+			case UPLOAD_ERR_PARTIAL:
+				$this->logUploadRefusal($what, 'the upload was interrupted', $error);
+				throw new InvalidActionException('the ' . $what . ' upload was interrupted, try again');
+		}
+
+		$reason = match ($error) {
+			UPLOAD_ERR_NO_TMP_DIR => 'PHP has no temporary directory for uploads',
+			UPLOAD_ERR_CANT_WRITE => 'PHP could not write the upload to disk',
+			UPLOAD_ERR_EXTENSION => 'a PHP extension stopped the upload',
+			default => 'PHP upload error ' . $error,
+		};
+		$this->logUploadRefusal($what, $reason, $error);
+
+		throw new UploadFailedException(
+			'the ' . $what . ' could not be received because of a problem on this server (' . $reason . ')'
+		);
+	}
+
+	/**
+	 * The refusal of a file over this server's size limit, logged with the
+	 * PHP settings an admin would raise.
+	 *
+	 * @param int $limit the size the refusal names, in bytes
+	 * @param string $reason which limit it went over, for the log
+	 */
+	protected function uploadTooLarge(string $what, int $limit, string $reason): InvalidActionException {
+		$this->logUploadRefusal($what, 'larger than this server accepts, ' . $reason, null);
+
+		return new InvalidActionException(
+			'the ' . $what . ' is larger than this server accepts (' . Util::humanFileSize($limit) . ')'
+		);
+	}
+
+	private function logUploadRefusal(string $what, string $reason, ?int $error): void {
+		$this->logger->warning('[' . static::class . '] ' . $what . ' upload refused: ' . $reason, [
+			'error' => $error,
+			'upload_max_filesize' => (string)ini_get('upload_max_filesize'),
+			'post_max_size' => (string)ini_get('post_max_size'),
+		]);
 	}
 
 	/**

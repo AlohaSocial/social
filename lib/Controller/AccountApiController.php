@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidActionException;
+use OCA\Social\Exceptions\UploadFailedException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -32,6 +33,7 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MultipartBodyService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationService;
@@ -91,6 +93,7 @@ class AccountApiController extends MastodonApiController {
 		private MultipartBodyService $multipartBodyService,
 		private AdminApiService $adminApiService,
 		private AiContentService $aiContentService,
+		private InstanceService $instanceService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -238,17 +241,10 @@ class AccountApiController extends MastodonApiController {
 	 * answered 200 over the old picture.
 	 *
 	 * @throws InvalidActionException
-	 * @throws Exception the upload failed on this side
+	 * @throws UploadFailedException the upload failed on this side
 	 */
 	private function wasUploaded(array $upload, string $field): bool {
-		return match ($upload['error'] ?? UPLOAD_ERR_NO_FILE) {
-			UPLOAD_ERR_OK => true,
-			UPLOAD_ERR_NO_FILE => false,
-			UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE
-				=> throw new InvalidActionException('the ' . $field . ' is larger than this server accepts'),
-			UPLOAD_ERR_PARTIAL => throw new InvalidActionException('the ' . $field . ' upload did not finish'),
-			default => throw new Exception('the ' . $field . ' upload failed on the server, error ' . $upload['error']),
-		};
+		return $this->uploadArrived($upload, $field, $this->instanceService->imageSizeLimit());
 	}
 
 	/**
