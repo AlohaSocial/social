@@ -1311,6 +1311,64 @@ class AccountServiceTest extends TestCase {
 		$this->addToAssertionCount(1);
 	}
 
+	// what the followers are told
+
+	/**
+	 * Only the bio used to send an `Update{Person}`: a new display name,
+	 * profile fields, a lock or a directory flag stayed on this server until
+	 * a peer happened to fetch the actor again.
+	 */
+	#[DataProvider('profileChanges')]
+	public function testAProfileChangeTellsTheFollowers(string $change): void {
+		$alice = $this->alice();
+		$user = $this->user('alice');
+		$user->method('canChangeDisplayName')->willReturn(true);
+		$this->userManager->method('get')->with('alice')->willReturn($user);
+		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($alice);
+		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		$this->withDisplayName('Alice Liddell', IAccountManager::SCOPE_FEDERATED);
+
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->willReturnCallback(function (Person $actor, Person $item) use ($change): string {
+				$this->assertSame(self::ALICE, $actor->getId());
+				$this->assertSame('Alice Liddell', $item->getName(), 'the Update names the account as it is shown');
+				if ($change === 'fields') {
+					$this->assertSame('https://alice.example', $item->getFields()[0]['value'] ?? '');
+				}
+				$paths = $item->getInstancePaths();
+				$this->assertCount(1, $paths);
+				$this->assertSame(InstancePath::TYPE_FOLLOWERS, $paths[0]->getType());
+
+				return 'token';
+			});
+
+		match ($change) {
+			'display name' => $this->service->setDisplayName('alice', 'Alice Liddell'),
+			'fields' => $this->service->setFields('alice', [['name' => 'Web', 'value' => 'https://alice.example']]),
+			'locked' => $this->service->setLocked('alice', true),
+			'flags' => $this->service->setActorFlags('alice', ['discoverable' => true]),
+		};
+	}
+
+	/** @return iterable<string, array{string}> */
+	public static function profileChanges(): iterable {
+		yield 'a display name' => ['display name'];
+		yield 'profile fields' => ['fields'];
+		yield 'a lock' => ['locked'];
+		yield 'a directory flag' => ['flags'];
+	}
+
+	public function testAProfileChangeIsStoredEvenIfNobodyCanBeTold(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->method('updateActivity')->willThrowException(new Exception('no route to host'));
+		$this->actorsRequest->expects($this->once())->method('updateLocked');
+
+		$this->service->setLocked('alice', true);
+
+		$this->assertTrue($alice->isLocked());
+	}
+
 	// setDisplayName()
 
 	/**
