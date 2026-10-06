@@ -35,7 +35,7 @@
 			<h2 id="social-atproto-profile-heading">
 				{{ t('social', 'Bluesky profile') }}
 			</h2>
-			<AtprotoProfile :handle="atprotoHandle" />
+			<AtprotoProfile :handle="atprotoHandle" :embedded="true" />
 		</section>
 		<!-- the lookup is what says an account is missing: `accountLoaded` only
 		     says the store has it (see useAccount), so it cannot say it has not -->
