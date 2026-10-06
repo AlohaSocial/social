@@ -12,7 +12,6 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\AP;
 use OCA\Social\Db\ActorRelationRequest;
-use OCA\Social\Db\AtprotoRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FollowLimitException;
@@ -33,11 +32,9 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\OrderedCollectionPage;
 use OCA\Social\Model\ActorRelation;
-use OCA\Social\Model\Atproto\AtprotoWatch;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Relationship;
-use OCA\Social\Service\Atproto\AtprotoIdentity;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -80,8 +77,6 @@ class FollowService {
 		private AccountService $accountService,
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
-		private ?AtprotoRequest $atprotoRequest = null,
-		private ?AtprotoIdentity $atprotoIdentity = null,
 	) {
 	}
 
@@ -305,13 +300,7 @@ class FollowService {
 				'object' => $remoteActor->getId(),
 			]);
 
-			// An AT-Proto actor is neither: their id is this instance's, and
-			// there is no peer to send a Follow to — the record that would
-			// answer it lives on a PDS, not behind that inbox. Handled the way
-			// a local follow is, and watched so the sync starts reading them.
-			$isBluesky = $this->atprotoIdentity?->isBlueskyId($remoteActor->getId()) === true;
-
-			if ($remoteActor->isLocal() || $isBluesky) {
+			if ($remoteActor->isLocal()) {
 				// Both sides live in this database, and a delivery addressed to
 				// this instance is dropped before it is sent (see
 				// ActivityService::isOurs()) — the server would otherwise have
@@ -335,10 +324,6 @@ class FollowService {
 				);
 				$this->followInterface->processIncomingRequest($follow);
 				$this->logger->info('FollowService::followAccount - local follow handled in process');
-
-				if ($isBluesky) {
-					$this->startWatching($remoteActor);
-				}
 
 				return true;
 			}
@@ -390,7 +375,6 @@ class FollowService {
 			$follow = $this->followsRequest->getByPersons($actor->getId(), $remoteActor->getId());
 			$this->followsRequest->delete($follow);
 			$this->timelineRevisionService->bumpForActor($actor->getId());
-			$this->stopWatching($remoteActor);
 			if ($follow->isAccepted()) {
 				// the account they left has one follower fewer. The Accept is
 				// what counted it up — locally handled or delivered, see
@@ -431,60 +415,6 @@ class FollowService {
 		} catch (FollowNotFoundException $e) {
 			return false;
 		}
-	}
-
-	/**
-	 * The row the sync reads a followed AT-Proto actor through.
-	 *
-	 * One per did rather than per follower: two local accounts following the
-	 * same Bluesky profile is one repository to read, and the cursor is the
-	 * actor's — it says where *this instance* has read to, not where one
-	 * follower's interest ended. Due at once, so the first posts arrive with
-	 * the next cron pass rather than a full interval after the follow.
-	 */
-	private function startWatching(Person $remoteActor): void {
-		$did = $this->didOf($remoteActor);
-		if ($did === '' || $this->atprotoRequest === null) {
-			return;
-		}
-
-		$watch = $this->atprotoRequest->getWatch($did) ?? new AtprotoWatch();
-		$watch->setDid($did);
-		$watch->setHandle($remoteActor->getPreferredUsername());
-		if ($watch->getNextSync() <= 0) {
-			$watch->setNextSync(time());
-		}
-
-		$this->atprotoRequest->saveWatch($watch);
-		$this->logger->info('FollowService - watching an AT-Proto actor', [
-			'did' => $did,
-			'handle' => $watch->getHandle(),
-		]);
-	}
-
-	/**
-	 * Stops reading an AT-Proto actor once nothing here follows them any
-	 * more. The watch is shared by every follower of the did, so this is the
-	 * *last* one leaving that ends it: the others, if there are any, still
-	 * have the posts arriving.
-	 */
-	private function stopWatching(Person $remoteActor): void {
-		$did = $this->didOf($remoteActor);
-		if ($did === '' || $this->atprotoRequest === null) {
-			return;
-		}
-
-		if ($this->followsRequest->countFollowers($remoteActor->getId()) > 0) {
-			return;
-		}
-
-		$this->atprotoRequest->deleteWatch($did);
-		$this->logger->info('FollowService - stopped watching an AT-Proto actor', ['did' => $did]);
-	}
-
-	/** The did an AT-Proto actor's id carries, or `''` for any other actor. */
-	private function didOf(Person $remoteActor): string {
-		return $this->atprotoIdentity?->didOf($remoteActor->getId()) ?? '';
 	}
 
 	/**

@@ -473,11 +473,6 @@
 				</select>
 				<LanguageSelect :language="language" @update:language="language = $event" />
 				<VisibilitySelect :visibility="visibility" @update:visibility="chooseVisibility" />
-				<PublicationTargetSelect
-					:target="publicationTarget"
-					:available="atprotoAvailable"
-					:settingsUrl="atprotoSettingsUrl"
-					@update:target="publicationTarget = $event" />
 				<div class="emptySpace" />
 				<span
 					v-if="statusText.length > 0"
@@ -535,7 +530,6 @@ import PreviewGrid from './PreviewGrid.vue'
 import ComposerPreview from './ComposerPreview.vue'
 import LanguageSelect from './LanguageSelect.vue'
 import VisibilitySelect from '../Visibility/VisibilitySelect.vue'
-import PublicationTargetSelect from './PublicationTargetSelect.vue'
 import { isKnownVisibility } from '../Visibility/VisibilitiesInfos.js'
 import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
@@ -642,7 +636,6 @@ export default {
 		FileGifBox,
 		LanguageSelect,
 		VisibilitySelect,
-		PublicationTargetSelect,
 		SubmitStatusButton,
 		MessageContent,
 	},
@@ -788,9 +781,6 @@ export default {
 			 * late leaves it alone.
 			 */
 			visibilityChosen: Boolean(this.defaultVisibility || this.inReplyTo?.visibility),
-			/** @type {'fediverse'|'atproto'|'both'} */
-			publicationTarget: String(this.inReplyTo?.id ?? '').includes('/ap/bluesky/') ? 'atproto' : 'both',
-			atprotoStatus: null,
 
 			// what the last post went out in, else what Nextcloud is set to:
 			// the server would guess the same, but a guess the poster can see
@@ -1057,14 +1047,6 @@ export default {
 			return gradientCss(this.cardGradient)
 		},
 
-		atprotoAvailable() {
-			return Boolean(this.atprotoStatus?.enabled && this.atprotoStatus?.account)
-		},
-
-		atprotoSettingsUrl() {
-			return generateUrl('apps/social/settings') + '#bluesky'
-		},
-
 		/** @return {string[]} the games typed into the box, for the hint under it */
 		gamesInPost() {
 			return commandsIn(this.statusText)
@@ -1105,18 +1087,12 @@ export default {
 		 */
 		inReplyTo(post) {
 			this.replyTo = post
-			if (String(post?.id ?? '').includes('/ap/bluesky/')) {
-				this.publicationTarget = 'atproto'
-				this.visibility = 'public'
-				this.visibilityChosen = true
-			}
 		},
 
 		// the warning is part of the draft, and it has its own field
 		spoilerText: 'rememberDraft',
 		showWarning: 'rememberDraft',
 		visibility: 'rememberDraft',
-		publicationTarget: 'rememberDraft',
 
 		/**
 		 * The words stay in the box when it is pointed at another post, or
@@ -1152,7 +1128,6 @@ export default {
 		// answered from the first call on this page, whoever made it
 		this.instanceStore.load()
 		this.loadTeams()
-		this.loadAtprotoStatus()
 
 		// tributejs is a plain DOM library, not a component: it attaches to the
 		// contenteditable and appends its menu to the body, which the unscoped
@@ -1171,16 +1146,7 @@ export default {
 			// being answered: a reply that named one of three people reached
 			// one of three people
 			this.prefillMessageWithMentions(participantsOf(data, this.currentUser.uid, this.hostname))
-			// A Bluesky reply must be authored by the linked ATProto account and
-			// written to the same public protocol thread. Imported records carry
-			// the stable local `/ap/bluesky/` id, so this remains independent of
-			// how the profile was opened.
-			if (String(data?.id ?? '').includes('/ap/bluesky/')) {
-				this.publicationTarget = 'atproto'
-				this.visibility = 'public'
-			} else {
-				this.visibility = data.visibility
-			}
+			this.visibility = data.visibility
 			this.visibilityChosen = true
 			// somebody pressed reply, which is a request to write one — including
 			// on the post this box is anchored under, where the target does not
@@ -1447,31 +1413,12 @@ export default {
 			}
 		},
 
-		async loadAtprotoStatus() {
-			try {
-				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
-				this.atprotoStatus = data ?? null
-				if (!this.atprotoAvailable && (this.publicationTarget === 'atproto' || this.publicationTarget === 'both')) {
-					this.publicationTarget = 'fediverse'
-				}
-			} catch (error) {
-				// ATProto is optional. A missing endpoint must never break the
-				// Fediverse composer; the selector remains a clear connect affordance.
-				logger.debug('could not load ATProto publishing status', { error })
-				this.atprotoStatus = null
-				if (this.publicationTarget === 'atproto' || this.publicationTarget === 'both') {
-					this.publicationTarget = 'fediverse'
-				}
-			}
-		},
-
 		/** Keeps what is in the box, so a failed post or a reload cannot eat it. */
 		rememberDraft() {
 			saveDraft({
 				text: this.statusText,
 				spoilerText: this.showWarning ? this.spoilerText : '',
 				visibility: this.visibility,
-				publicationTarget: this.publicationTarget,
 				// who it was being written as, so a reload does not quietly
 				// turn a team post back into a personal one
 				postAs: this.postAs,
@@ -1501,10 +1448,6 @@ export default {
 			if (isKnownVisibility(draft.visibility) && this.defaultVisibility === undefined) {
 				this.visibility = draft.visibility
 				this.visibilityChosen = true
-			}
-			if (['fediverse', 'atproto', 'both'].includes(draft.publicationTarget)
-				&& (draft.publicationTarget !== 'atproto' || this.atprotoAvailable)) {
-				this.publicationTarget = draft.publicationTarget
 			}
 			// only a team this account is actually in: a draft can outlive
 			// leaving one, and a handle the server would refuse is worse than
@@ -1680,7 +1623,6 @@ export default {
 				inReplyToId: this.replyTo?.id,
 				quoteId: this.quoteOf?.id,
 				visibility: this.visibility,
-				publicationTarget: this.publicationTarget,
 				postAs: this.postAs,
 				language: this.language,
 				video: this.isVideoPost

@@ -923,24 +923,6 @@ describe('Navigation', () => {
 		})
 	})
 
-	it('adds the linked Bluesky profile beside the Fediverse profile', async () => {
-		axios.get.mockImplementation((url) => {
-			if (url.endsWith('/api/v1/atproto')) {
-				return Promise.resolve({ data: { account: { handle: 'alice.bsky.social' } } })
-			}
-			return Promise.resolve({ data: [] })
-		})
-
-		const wrapper = mountNavigation()
-		await flushPromises()
-
-		expect(moreNames(wrapper)).toContain('Bluesky profile')
-		expect(wrapper.vm.menu.more.find(({ title }) => title === 'Bluesky profile').to).toEqual({
-			name: 'atproto-profile-handle',
-			params: { handle: 'alice.bsky.social' },
-		})
-	})
-
 	/**
 	 * And no entry at all before there is an account to have a profile on:
 	 * the route needs a handle, and somebody who has not finished the setup

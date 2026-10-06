@@ -4,40 +4,13 @@
 -->
 <template>
 	<div :class="{'icon-loading': !accountLoaded}" class="social__wrapper">
-		<!-- one page, two halves of the reader's identity: the switch picks
-		     which of them is on screen, and both are drawn the same way -->
-		<nav
-			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle"
-			class="social__profile-network-switch"
-			:aria-label="t('social', 'Profile network')">
-			<button
-				type="button"
-				:class="{ 'social__profile-network-switch--active': profileNetwork === 'fediverse' }"
-				@click="profileNetwork = 'fediverse'">
-				{{ t('social', 'Fediverse') }}
-			</button>
-			<button
-				type="button"
-				:class="{ 'social__profile-network-switch--active': profileNetwork === 'atproto' }"
-				@click="profileNetwork = 'atproto'">
-				{{ t('social', 'Bluesky') }}
-			</button>
-		</nav>
-
-		<ProfileInfo
-			v-if="accountLoaded && accountInfo && profileNetwork === 'fediverse'"
-			:uid="uid" />
+		<ProfileInfo v-if="accountLoaded && accountInfo" :uid="uid" />
 
 		<!-- your own profile is a page you post from, the way the home
-		     timeline is. Somebody else's is a page you read. The Bluesky half
-		     brings its own composer with it, in the same place -->
-		<Composer v-if="isOwnProfile && profileNetwork === 'fediverse'" />
+		     timeline is. Somebody else's is a page you read -->
+		<Composer v-if="isOwnProfile" />
 
-		<router-view v-if="accountLoaded && accountInfo && profileNetwork === 'fediverse'" name="details" />
-		<AtprotoProfile
-			v-if="accountLoaded && accountInfo && isOwnProfile && atprotoHandle && profileNetwork === 'atproto'"
-			:handle="atprotoHandle"
-			:embedded="true" />
+		<router-view v-if="accountLoaded && accountInfo" name="details" />
 		<!-- the lookup is what says an account is missing: `accountLoaded` only
 		     says the store has it (see useAccount), so it cannot say it has not -->
 		<NcEmptyContent
@@ -56,9 +29,7 @@
 
 <script>
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import { generateFilePath, generateUrl } from '@nextcloud/router'
-import axios from '@nextcloud/axios'
-import { getCurrentUser } from '@nextcloud/auth'
+import { generateFilePath } from '@nextcloud/router'
 import ProfileInfo from './../components/ProfileInfo.vue'
 import { defineAsyncComponent, ref } from 'vue'
 import logger from '../services/logger.js'
@@ -69,7 +40,6 @@ import { useAccount } from '../composables/useAccount.js'
 import { useServerData } from '../composables/useServerData.js'
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
-const AtprotoProfile = defineAsyncComponent(() => import(/* webpackChunkName: "profile" */'./AtprotoProfile.vue'))
 
 export default {
 	name: 'Profile',
@@ -77,7 +47,6 @@ export default {
 		NcEmptyContent,
 		ProfileInfo,
 		Composer,
-		AtprotoProfile,
 	},
 
 	setup() {
@@ -92,9 +61,6 @@ export default {
 	data() {
 		return {
 			state: [],
-			profileNetwork: 'fediverse',
-			atprotoHandle: '',
-			atprotoLoading: false,
 			/** whether a lookup for the handle on screen has come back, either way */
 			lookupFinished: false,
 		}
@@ -132,37 +98,10 @@ export default {
 		 * @return {boolean}
 		 */
 		isOwnProfile() {
-			if (!this.accountInfo || this.$route.name !== 'profile') {
-				return false
-			}
-
-			// The app account store is populated asynchronously. Direct profile
-			// navigation can therefore render before verify_credentials has
-			// returned; Nextcloud's signed-in identity is already available in
-			// the page and is authoritative for a local /@username route.
-			const nextcloudUser = getCurrentUser() ?? window.OC?.getCurrentUser?.()
-			const localPart = (value) => String(value ?? '').split('@', 1)[0]
-			const routePart = localPart(this.$route.params.account)
-			if (nextcloudUser?.uid && routePart
-				&& routePart.toLowerCase() === String(nextcloudUser.uid).toLowerCase()) {
-				return true
-			}
-
-			if (!this.currentAccount) {
-				return false
-			}
-
-			// A local account can be exported as either `admin2` or
-			// `admin2@cloud.example`. The profile route must still be the
-			// reader's own profile in both forms; otherwise `/@admin2` loses the
-			// composer and the Edit profile action even though the account is ours.
-			if (this.accountInfo.id && this.currentAccount.id
-				&& this.accountInfo.id === this.currentAccount.id) {
-				return true
-			}
-
-			return localPart(this.accountInfo.acct || this.accountInfo.username)
-				=== localPart(this.currentAccount.acct || this.currentAccount.username)
+			return Boolean(this.accountInfo)
+				&& Boolean(this.currentAccount)
+				&& this.accountInfo.acct === this.currentAccount.acct
+				&& this.$route.name === 'profile'
 		},
 	},
 
@@ -178,7 +117,6 @@ export default {
 	methods: {
 		async fetchProfileData() {
 			this.uid = this.$route.params.account || this.serverData.account
-			this.profileNetwork = 'fediverse'
 			this.lookupFinished = false
 
 			if (!this.uid) {
@@ -195,7 +133,6 @@ export default {
 
 			const response = await this.accountStore[fetchMethod](this.profileAccount)
 			this.lookupFinished = true
-			await this.loadAtprotoHandle()
 			if (response) {
 				this.uid = response.acct
 				const infoId = this.accountInfo?.nid || this.accountInfo?.id
@@ -204,27 +141,6 @@ export default {
 				} else {
 					logger.debug('Not asking for a relationship', { known: Boolean(infoId), isPublic: this.serverData.public })
 				}
-			}
-		},
-
-		/** Load the signed-in person's linked Bluesky handle for the combined profile. */
-		async loadAtprotoHandle() {
-			this.atprotoHandle = ''
-			if (!this.isOwnProfile || this.atprotoLoading) {
-				return
-			}
-			this.atprotoLoading = true
-			try {
-				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
-				if (data?.account?.state === 'linked' && data.account.handle) {
-					this.atprotoHandle = data.account.handle
-				}
-			} catch (error) {
-				// A missing or temporarily unavailable Bluesky link must never hide
-				// the ordinary Fediverse profile.
-				logger.debug('Could not load linked Bluesky profile', { error })
-			} finally {
-				this.atprotoLoading = false
 			}
 		},
 	},
@@ -240,27 +156,5 @@ export default {
 	&.icon-loading {
 		margin-top: 50vh;
 	}
-}
-
-.social__profile-network-switch {
-	display: flex;
-	gap: calc(var(--default-grid-baseline) / 2);
-	margin-block: calc(var(--default-grid-baseline) * 2);
-	border-block-end: 1px solid var(--color-border);
-}
-
-.social__profile-network-switch button {
-	padding: calc(var(--default-grid-baseline) * 1.5) calc(var(--default-grid-baseline) * 2);
-	border: 0;
-	border-block-end: 2px solid transparent;
-	background: transparent;
-	color: var(--color-text-maxcontrast);
-	cursor: pointer;
-}
-
-.social__profile-network-switch button:hover,
-.social__profile-network-switch--active {
-	color: var(--color-main-text);
-	border-block-end-color: var(--color-primary-element);
 }
 </style>

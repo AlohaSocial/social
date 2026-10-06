@@ -96,7 +96,7 @@ describe('Settings', () => {
 	})
 
 	/**
-	 * The frame is a list of sections, and Bluesky is the second.
+	 * The frame is a list of sections, and Migration was the second.
 	 *
 	 * The shortcuts are reference rather than a setting — nothing there is
 	 * changed, it is a list to look something up in — so they sit at the end,
@@ -109,7 +109,7 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(wrapper.findAll('.settings__section-heading').map((h) => h.text()))
-			.toEqual(['Your account', 'Bluesky', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
 	})
 
 	/**

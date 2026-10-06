@@ -107,12 +107,6 @@
 					</template>
 					{{ t('social', 'Edit profile') }}
 				</NcButton>
-				<a
-					v-if="isOwnProfile && atprotoAccount?.handle"
-					class="user-profile__protocol-link"
-					:href="atprotoProfileUrl">
-					{{ t('social', 'Open Bluesky profile') }}
-				</a>
 				<NcActions v-if="canModerate" forceMenu>
 					<NcActionButton
 						v-if="!relationship.blocking"
@@ -615,8 +609,6 @@ export default {
 			/** the note as the relationship last reported it */
 			noteStored: '',
 			savingNote: false,
-			/** linked native protocol identity used by the profile switcher */
-			atprotoAccount: null,
 		}
 	},
 
@@ -830,12 +822,6 @@ export default {
 		bannerStyle() {
 			return this.bannerUrl || bannerOf(this.accountInfo)
 		},
-
-		atprotoProfileUrl() {
-			return this.atprotoAccount?.handle
-				? generateUrl('/apps/social/@' + encodeURIComponent(this.atprotoAccount.handle))
-				: ''
-		},
 	},
 
 	watch: {
@@ -863,18 +849,6 @@ export default {
 			handler(url) {
 				this.applyBanner(url)
 				this.readAccent(url)
-			},
-
-			immediate: true,
-		},
-
-		isOwnProfile: {
-			handler(own) {
-				if (own) {
-					this.loadAtprotoAccount()
-				} else {
-					this.atprotoAccount = null
-				}
 			},
 
 			immediate: true,
@@ -919,18 +893,6 @@ export default {
 				this.familiar = Array.isArray(entry?.accounts) ? entry.accounts.slice(0, 3) : []
 			} catch {
 				this.familiar = []
-			}
-		},
-
-		async loadAtprotoAccount() {
-			try {
-				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
-				this.atprotoAccount = data?.account ?? null
-			} catch (error) {
-				// The protocol is optional; a failed status request must never
-				// hide or delay the Fediverse profile.
-				this.atprotoAccount = null
-				logger.debug('Could not read the linked Bluesky profile', { error })
 			}
 		},
 
@@ -1361,5 +1323,536 @@ export default {
 </script>
 
 <style scoped lang="scss">
-@use './ProfileInfo.scss';
+/**
+ * "Followed by Hugo, Aiko and one other you follow."
+ *
+ * The faces overlap into a small stack, the way a shared thing is drawn
+ * everywhere: three 20px circles in a row would read as three separate people
+ * to click on, and they are not links -- the sentence is what is being read.
+ */
+.user-profile__familiar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin: 8px 0 0;
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+	text-align: center;
+}
+
+.user-profile__familiar-faces {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	// the avatars inside are the hover-card wrapper and a link, neither of
+	// which lays itself out, so the stack is built on what they contain
+}
+
+.user-profile__familiar-face {
+	inline-size: 20px;
+	block-size: 20px;
+	border-radius: 50%;
+	object-fit: cover;
+	margin-inline-start: -6px;
+	box-shadow: 0 0 0 2px var(--color-main-background);
+	background: var(--color-background-dark);
+
+	&:first-child {
+		margin-inline-start: 0;
+	}
+}
+
+/**
+ * The private note folds away.
+ *
+ * It was the loudest thing on somebody else's profile: an open textarea above
+ * their bio, their links and their posts, whether or not a note had ever been
+ * written. The summary is a quiet line under the follow button; it opens by
+ * itself when there is a note to read.
+ */
+.user-profile__private-note-fold {
+	margin: 6px 0 0;
+	text-align: center;
+}
+
+.user-profile__private-note-summary {
+	display: inline-block;
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+	cursor: pointer;
+
+	&:hover,
+	&:focus-visible {
+		color: var(--color-main-text);
+	}
+}
+
+.user-profile {
+	display: flex;
+	flex-direction: column;
+	/* a profile arrives as a card rather than appearing */
+	animation: profile-settle .4s cubic-bezier(.22, 1, .36, 1) both;
+	align-items: center;
+	width: 100%;
+	max-width: var(--social-column);
+	margin: 0 auto calc(var(--default-grid-baseline) * 6);
+	text-align: center;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	overflow: hidden;
+	position: relative;
+
+	&__banner {
+		/* the card centres its children, and this one has no content of its
+		   own — only a background — so without a width of its own it collapses
+		   to nothing and the banner is loaded, applied and never seen */
+		width: 100%;
+		min-height: 120px;
+		max-height: 200px;
+		/* the banner drifts a little slower than the page it is on */
+		will-change: transform;
+		background-size: cover;
+		background-position: center 0%;
+		background-repeat: no-repeat;
+		background-color: var(--color-background-dark);
+
+		&--editable {
+			cursor: pointer;
+		}
+	}
+
+	&__content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 100%;
+		padding: 56px calc(var(--default-grid-baseline) * 4) calc(var(--default-grid-baseline) * 4);
+		background: var(--color-main-background);
+		position: relative;
+		z-index: 1;
+
+		:deep(.avatardiv) {
+			position: absolute;
+			top: -48px;
+		}
+	}
+
+	h2 {
+		margin-top: 28px;
+		font-size: 26px;
+		font-weight: 700;
+		letter-spacing: -.02em;
+	}
+
+	&__pronouns {
+		font-size: 0.6em;
+		font-weight: normal;
+		color: var(--color-text-maxcontrast);
+		white-space: nowrap;
+	}
+
+	&__support {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin-block-start: 8px;
+		text-decoration: none;
+	}
+
+	&__moved {
+		margin: 4px 0 8px;
+		padding: 8px 12px;
+		border-radius: var(--border-radius-element, 8px);
+		background: var(--color-primary-element-light);
+		color: var(--color-primary-element-light-text, var(--color-main-text));
+
+		a {
+			margin-inline-start: 4px;
+			font-weight: bold;
+			text-decoration: underline;
+		}
+	}
+
+	&__blocked-hint {
+		margin-top: 4px;
+		padding: 2px 10px;
+		border-radius: var(--border-radius-pill, 12px);
+		background: var(--color-background-dark);
+		color: var(--color-text-lighter);
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	&__info {
+		margin-bottom: 14px;
+		display: flex;
+		gap: 20px;
+		justify-content: center;
+		color: var(--color-text-lighter);
+
+		a {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			font-size: 13px;
+			color: var(--color-text-lighter);
+
+			&:hover {
+				color: var(--color-primary-element);
+				text-decoration: none;
+			}
+		}
+	}
+
+	&__actions {
+		display: flex;
+		gap: 10px;
+		margin-top: 12px;
+	}
+
+	&__note {
+		text-align: start;
+		width: 100%;
+		margin: 18px 0 0;
+		padding: 18px 0 0;
+		border-top: 1px solid var(--color-border);
+		font-size: 14px;
+		line-height: 1.7;
+		overflow-wrap: break-word;
+		white-space: pre-wrap;
+	}
+
+	&__sections {
+		display: flex;
+		gap: 24px;
+		margin: 14px 0;
+
+		li {
+			a {
+				padding: 8px 12px;
+				font-size: 14px;
+				font-weight: 600;
+				border-radius: 8px;
+
+				/* the profile's own colour, where the banner yielded one */
+				&.router-link-exact-active {
+					background: var(--profile-accent, var(--color-background-hover));
+					color: var(--profile-accent-text, inherit);
+				}
+
+				/* focus does not borrow the banner's colour: an indicator whose
+				   contrast depends on somebody's uploaded picture is not one */
+				&:focus-visible {
+					outline: 2px solid var(--color-primary-element);
+					outline-offset: 1px;
+					background: var(--color-background-hover);
+					color: inherit;
+				}
+
+				&.disabled {
+					text-decoration: none;
+					cursor: auto;
+					pointer-events: none;
+				}
+			}
+		}
+	}
+
+	&__fields {
+		width: 100%;
+		margin: 12px 0 0;
+		padding: 12px calc(var(--default-grid-baseline) * 4) 0;
+		border-top: 1px solid var(--color-border);
+		background: var(--color-main-background);
+		text-align: start;
+	}
+
+	&__field {
+		display: flex;
+		gap: 12px;
+		padding: 6px 0;
+		font-size: 14px;
+
+		dt {
+			flex: 0 0 30%;
+			font-weight: 600;
+			color: var(--color-text-lighter);
+			overflow-wrap: break-word;
+		}
+
+		dd {
+			flex: 1;
+			overflow-wrap: anywhere;
+
+			a {
+				color: var(--color-primary-element);
+
+				&:hover {
+					text-decoration: underline;
+				}
+			}
+		}
+	}
+
+	&__fields-known {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+		margin-block-end: 8px;
+
+		input {
+			flex: 1 1 200px;
+		}
+	}
+
+	&__fields-modal {
+		padding: 32px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+
+		h3 {
+			margin: 0;
+			font-size: 18px;
+			font-weight: 700;
+		}
+
+		p {
+			color: var(--color-text-lighter);
+		}
+	}
+
+	&__fields-entry {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	&__fields-status {
+		font-size: 13px;
+
+		// a row with nothing to say about it must not leave a gap between the
+		// rows above and below it
+		&:empty {
+			display: none;
+		}
+	}
+
+	&__fields-verify {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-large, 12px);
+		background: var(--color-background-hover);
+		font-size: 13px;
+
+		p {
+			margin: 0;
+		}
+	}
+
+	&__fields-verify-heading {
+		font-weight: 600;
+		color: var(--color-main-text);
+	}
+
+	&__fields-snippet {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		code {
+			// a long profile address wraps rather than widening the dialog
+			flex: 1 1 auto;
+			min-width: 0;
+			overflow-wrap: anywhere;
+			padding: 4px 6px;
+			border-radius: var(--border-radius);
+			background: var(--color-background-dark);
+			font-family: monospace;
+		}
+	}
+
+	&__fields-row {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+
+		input {
+			flex: 1;
+			padding: 8px 10px;
+			border: 1px solid var(--color-border);
+			border-radius: 8px;
+			font-size: 14px;
+			background: var(--color-main-background);
+			color: var(--color-main-text);
+
+			&:focus-visible {
+				border-color: var(--color-primary-element);
+				outline: 2px solid var(--color-primary-element);
+				outline-offset: 1px;
+			}
+		}
+	}
+
+	&__private-note {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+		max-width: 420px;
+		margin-block: 8px 12px;
+	}
+
+	&__private-note-label {
+		color: var(--color-text-maxcontrast);
+		font-size: 13px;
+	}
+
+	&__private-note-input {
+		width: 100%;
+		padding: 8px 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		font-size: 14px;
+		line-height: 1.5;
+		resize: vertical;
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+	}
+
+	&__private-note-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 4px;
+	}
+
+	&__bio {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	&__bio-label {
+		font-weight: 600;
+	}
+
+	&__bio-input {
+		width: 100%;
+		padding: 8px 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		font-size: 14px;
+		line-height: 1.5;
+		resize: vertical;
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+
+		&:focus-visible {
+			border-color: var(--color-primary-element);
+			outline: 2px solid var(--color-primary-element);
+			outline-offset: 1px;
+		}
+	}
+
+	&__bio-count {
+		align-self: flex-end;
+		font-size: 13px;
+		color: var(--color-text-lighter);
+
+		&--over {
+			color: var(--color-error-text, var(--color-error));
+			font-weight: 600;
+		}
+	}
+
+	&__fields-modal-actions {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	&__banner-edit {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding-bottom: 16px;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	&__banner-edit-label {
+		font-weight: 600;
+	}
+
+	&__banner-edit-or {
+		color: var(--color-text-maxcontrast);
+		font-size: 13px;
+	}
+
+	&__banner-edit-url {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+
+		input {
+			// the Apply button takes what it needs; the address takes the rest
+			flex: 1 1 auto;
+			min-width: 0;
+			padding: 10px 12px;
+			border: 1px solid var(--color-border);
+			border-radius: 8px;
+			font-size: 14px;
+			background: var(--color-main-background);
+			color: var(--color-main-text);
+
+			&:focus-visible {
+				border-color: var(--color-primary-element);
+				outline: 2px solid var(--color-primary-element);
+				outline-offset: 1px;
+			}
+		}
+	}
+
+}
+
+/**
+ * A profile arrives as a card rather than appearing: the banner settles, and
+ * the avatar and name follow it a beat later.
+ */
+@keyframes profile-settle {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@supports (animation-timeline: view()) {
+	@media (prefers-reduced-motion: no-preference) {
+		@keyframes banner-drift {
+			from { transform: translateY(-6%) scale(1.06); }
+			to { transform: translateY(2%) scale(1.06); }
+		}
+
+		.user-profile__banner--visible {
+			animation: banner-drift linear both;
+			animation-timeline: view();
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.user-profile {
+		animation: none;
+	}
+}
 </style>

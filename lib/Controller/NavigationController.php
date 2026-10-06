@@ -124,19 +124,6 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
 	#[FrontpageRoute(verb: 'GET', url: '/search', postfix: 'search')]
 	#[FrontpageRoute(verb: 'GET', url: '/search/{term}', postfix: 'searchterm')]
-	// Local and remote Fediverse profiles use the same app shell as the
-	// protocol-specific profile view. Keep the @ prefix in the URL so a direct
-	// reload of /apps/social/@admin2 reaches the Vue profile route. The .rss
-	// exclusion belongs to ActivityPubController's feed URL, which is a single
-	// segment too: whichever of the two routes the router reads first would
-	// otherwise win, and that order is not ours to set.
-	#[FrontpageRoute(verb: 'GET', url: '/@{path}', postfix: 'atprefixprofile', requirements: ['path' => '(?![A-Za-z0-9@._-]*\\.rss$)[A-Za-z0-9][A-Za-z0-9@._-]*'])]
-	// ATProto handles are domain-shaped. This server-side shell route is what
-	// makes a direct reload of /apps/social/<handle> reach Vue instead of a
-	// Nextcloud 404; the narrow requirement leaves all named Social pages and
-	// Fediverse /@account routes to their existing handlers, and a handle never
-	// carries the @ of a Fediverse account.
-	#[FrontpageRoute(verb: 'GET', url: '/{path}', postfix: 'atprotohandle', requirements: ['path' => '[A-Za-z0-9][A-Za-z0-9-]*\\.[A-Za-z0-9.-]+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/collections/{id}', postfix: 'collection', requirements: ['id' => '\\d+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/places/{id}', postfix: 'place', requirements: ['id' => '\\d+'])]
 	public function navigate(string $path = ''): TemplateResponse {

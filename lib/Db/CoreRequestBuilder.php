@@ -30,9 +30,6 @@ use Psr\Log\LoggerInterface;
  * @package OCA\Social\Db
  */
 class CoreRequestBuilder {
-	public const TABLE_ATPROTO_ACCOUNTS = 'social_atproto_account';
-	public const TABLE_ATPROTO_LINKS = 'social_atproto_link';
-	public const TABLE_ATPROTO_WATCHES = 'social_atproto_watch';
 	public const TABLE_ACTIONS = 'social_action';
 	public const TABLE_ACTORS = 'social_actor';
 	public const TABLE_ACTOR_RELATION = 'social_actor_relation';
@@ -104,43 +101,6 @@ class CoreRequestBuilder {
 	public const TABLE_IMPORTS = 'social_import';
 
 	public static array $tables = [
-		self::TABLE_ATPROTO_ACCOUNTS => [
-			'nid',
-			'user_id',
-			'handle',
-			'did',
-			'pds',
-			'app_password',
-			'state',
-			'last_error',
-			'last_sync',
-			'creation',
-			'updated'
-		],
-		self::TABLE_ATPROTO_LINKS => [
-			'nid',
-			'local_id',
-			'local_id_prim',
-			'at_uri',
-			'cid',
-			'did',
-			'collection',
-			'rkey',
-			'handle',
-			'creation'
-		],
-		self::TABLE_ATPROTO_WATCHES => [
-			'nid',
-			'did',
-			'handle',
-			'cursor',
-			'last_sync',
-			'next_sync',
-			'failures',
-			'imported',
-			'last_error',
-			'creation'
-		],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',
