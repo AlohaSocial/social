@@ -33,10 +33,41 @@ Nothing is stubbed. For each test the suite:
    its serialiser refuses to render has not arrived either, and the API is the
    same answer a Mastodon user would get.
 
-Covered against **Mastodon**: `Create` (a public post, and a post with a
-content warning — `summary` is the field most likely to be quietly dropped),
-`Update` (an edit has to carry `updated`, or the other side takes the edit in
-and goes on showing the words that were replaced), `Delete`, and `Announce`.
+Covered against **Mastodon**, from here to there (`MastodonDeliveryTest`):
+`Create` (a public post, and a post with a content warning — `summary` is the
+field most likely to be quietly dropped), `Update` (an edit has to carry
+`updated`, or the other side takes the edit in and goes on showing the words
+that were replaced), `Delete`, and `Announce`.
+
+Written through this app's own **client API** rather than its services
+(`MastodonOutboundTest`), the way a phone app writes: a follow and Mastodon's
+`Accept` of it; a follow of a locked Mastodon account, which waits until that
+account says yes; a locked account here, whose follow request from Mastodon
+waits for an answer given here; a picture with its description; a poll, and a
+vote cast on Mastodon coming back to the count here; a reply threaded under
+the Mastodon post it answers; a favourite and a boost counted there, and both
+undone; a followers-only post read by a follower and by nobody else there; a
+direct message read by its addressee and by nobody else there; a hashtag and
+a mention arriving as a tag and a mention, links included; a name, bio and
+profile fields edited here and shown there; and an account deleted here gone
+there.
+
+And from there to here (`MastodonInboundTest`), each read back through the
+same client API our `admin` would use: a post on the home timeline of a
+follower, with its content warning; an edit applied and a delete honoured; a
+mention notified; a direct message that reaches its addressee and neither the
+public timeline nor another account here; a reply threaded under the post
+here it answers; a favourite and a boost counted and notified; a poll that can
+be read and voted on, the vote counted on Mastodon; a picture with its
+description; a hashtag post on that tag's timeline; a profile change (name,
+bio, avatar) refreshing the copy held here; an unfollow ending the follow
+here; and a block ending both follows. A quote is written only by Mastodon 4.4
+and later, so against the 4.3 the workflow pins that test skips and says why.
+
+The tests on this side talk to this app over HTTPS, at the address the other
+servers know it by, with a token minted the way `/oauth/token` mints one
+(`Here`); the same client class (`ClientApi`) reads Mastodon, so "it arrived"
+means the same thing at both ends.
 
 Covered for **moving**, both ways. Our `mover` moves to Mastodon's `landing`
 (which the workflow made name `mover` in its `alsoKnownAs`, as Mastodon's own
@@ -66,7 +97,17 @@ sense of **silently and on its own side**: *"Cannot find associated video
 channel"* goes into its log, the delivery from here answers 204, and nothing
 here is any the wiser. Reading its validator told us what it wants; only this
 tells us whether we send it. Its own log is printed when the job fails, because
-that is where the refusal is.
+that is where the refusal is. An edit of the video reaches PeerTube as one, its
+title following the text.
+
+And the other way round (`PeerTubeInboundTest`): PeerTube's account uploads a
+real video — a few seconds made by PeerTube's own ffmpeg in the workflow — to
+the channel our `admin` follows, and it arrives on the videos timeline here
+with its title, description, duration and poster. A reply written here
+becomes a comment on the video there; PeerTube's answer to that comment
+notifies its author here; a like from here is counted there; and following a
+channel puts our account among its followers there, unfollowing takes it out
+again.
 
 ## What it found
 
@@ -95,11 +136,20 @@ Every test **skips with a reason** when `MASTODON_BASE_URL` and
 that says so rather than a failure.
 
 ```
-MASTODON_BASE_URL=https://mastodon.test MASTODON_TOKEN=... \
-PEERTUBE_BASE_URL=http://localhost:9000 \
+MASTODON_BASE_URL=https://mastodon.test MASTODON_HOST=mastodon.test \
+MASTODON_TOKEN=... MASTODON_TOKEN_STRANGER=... MASTODON_TOKEN_GUARDED=... \
+PEERTUBE_BASE_URL=http://localhost:9000 PEERTUBE_HOST=localhost:9000 \
 PEERTUBE_USER=interop PEERTUBE_PASSWORD=... \
+PEERTUBE_SAMPLE_VIDEO=/tmp/interop-sample.mp4 \
 composer run test:interop
 ```
+
+`MASTODON_TOKEN` is Mastodon's `interop`; `MASTODON_TOKEN_STRANGER` an account
+that follows nobody here, and `MASTODON_TOKEN_GUARDED` a locked one. A test that
+needs one of those two, or the sample video, skips without it. On this side the
+tests act as `admin`, and as `shy`, `profile`, `goner`, `watcher` and
+`bystander` where a test changes its own account or needs a second reader;
+those have to exist.
 
 Each peer is independent: setting only the Mastodon variables runs the Mastodon
 tests and skips the PeerTube ones, and the other way round.
