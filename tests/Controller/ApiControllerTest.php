@@ -274,6 +274,10 @@ class ApiControllerTest extends TestCase {
 		$this->accountService->method('getDefaultPrivacy')->willReturnCallback(
 			fn (): string => $this->defaultPrivacy
 		);
+		// the profile parts are written inside it, as the real one does
+		$this->accountService->method('changingProfile')->willReturnCallback(
+			static fn (string $userId, callable $changes): mixed => $changes()
+		);
 		$this->cacheActorService = $this->cacheActorServiceMock();
 		$this->cacheDocumentService = $this->createMock(CacheDocumentService::class);
 		$this->documentService = $this->createMock(DocumentService::class);

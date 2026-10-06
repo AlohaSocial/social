@@ -92,6 +92,10 @@ class AccountService {
 	 */
 	public const KEY_PAIR_LIFESPAN = 60;
 
+	/** whether `changingProfile()` is collecting changes to tell about once */
+	private bool $holdingProfileUpdates = false;
+	private bool $profileChanged = false;
+
 	public function __construct(
 		private IUserManager $userManager,
 		private IUserSession $userSession,
@@ -664,7 +668,7 @@ class AccountService {
 		$actor->setSummary($this->plainSummary($summary));
 		$this->actorsRequest->updateSummary($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
-		$this->federateActorUpdate($actor);
+		$this->federateProfile($userId);
 	}
 
 	/**
@@ -715,10 +719,42 @@ class AccountService {
 	}
 
 	/**
+	 * Applies several changes to one profile and tells the followers once.
+	 *
+	 * Each setter tells them on its own, and a peer handed several `Update`s
+	 * of one actor at the same moment may keep any one of them: Mastodon
+	 * processes them in parallel under a lock per actor, and an `Update` that
+	 * loses the race is the change that never shows.
+	 *
+	 * @template T
+	 * @param callable(): T $changes
+	 * @return T
+	 */
+	public function changingProfile(string $userId, callable $changes): mixed {
+		$this->holdingProfileUpdates = true;
+		$this->profileChanged = false;
+		try {
+			return $changes();
+		} finally {
+			$this->holdingProfileUpdates = false;
+			if ($this->profileChanged) {
+				$this->profileChanged = false;
+				$this->federateProfile($userId);
+			}
+		}
+	}
+
+	/**
 	 * Tells the followers about a profile change, with the display name the
 	 * actor document is served with: the stored actor row does not carry it.
 	 */
 	private function federateProfile(string $userId): void {
+		if ($this->holdingProfileUpdates) {
+			$this->profileChanged = true;
+
+			return;
+		}
+
 		try {
 			$actor = $this->getActorFromUserId($userId);
 			$this->updateCacheLocalActorName($actor);
