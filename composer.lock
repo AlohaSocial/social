@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "cd2161c89aaed1d24a64c8021bf540a1",
+    "content-hash": "a67fca034aad279e8a0fed8238b3f1cf",
     "packages": [
         {
             "name": "friendica/json-ld",
