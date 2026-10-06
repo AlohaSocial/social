@@ -34,10 +34,10 @@ function serve({ reblogged_by: boosted = [], favourited_by: favourited = [] } = 
 	}))
 }
 
-function mountReactions(status) {
+function mountReactions(status, serverData = {}) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
-	useSettingsStore().setServerData({ public: false })
+	useSettingsStore().setServerData({ public: false, ...serverData })
 
 	return mount(PostReactedBy, {
 		props: { status },
@@ -63,6 +63,19 @@ describe('PostReactedBy', () => {
 		// find out that both counts are zero
 		expect(axios.get).not.toHaveBeenCalled()
 		expect(wrapper.find('.reacted-by').exists()).toBe(false)
+	})
+
+	/** The server sends zero for every post then, so a zero cannot mean "nobody". */
+	it('asks who reacted even at zero, and names the rows without a number, for a reader who hides the numbers', async () => {
+		serve({ reblogged_by: [account('bob')], favourited_by: [account('carol')] })
+		const wrapper = mountReactions(post(), { hideCounts: true })
+		await flushPromises()
+
+		expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42/reblogged_by`, expect.anything())
+		expect(axios.get).toHaveBeenCalledWith(`${API}/statuses/42/favourited_by`, expect.anything())
+		expect(wrapper.text()).toContain('Boosted by')
+		expect(wrapper.text()).toContain('Favourited by')
+		expect(wrapper.text()).not.toMatch(/by \d/)
 	})
 
 	it('names the two counts and shows the faces behind them', async () => {

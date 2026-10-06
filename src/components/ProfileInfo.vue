@@ -658,6 +658,9 @@ export default {
 
 		/** @return {string} */
 		followersLabel() {
+			if (this.serverData.hideCounts === true) {
+				return translate('social', 'Followers')
+			}
 			const count = Number(this.accountInfo.followers_count) || 0
 
 			return translatePlural('social', '{count} follower', '{count} followers', count, { count: formatCount(count) })

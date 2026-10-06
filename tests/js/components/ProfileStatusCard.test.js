@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { flushPromises, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
 import ProfileStatusCard from '../../../src/components/ProfileStatusCard.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 const status = {
 	id: '42',
@@ -24,7 +26,20 @@ const stubs = {
 }
 
 describe('ProfileStatusCard', () => {
+	beforeEach(() => {
+		setActivePinia(createPinia())
+	})
+
 	afterEach(() => vi.restoreAllMocks())
+
+	it('names the likes without their number for a reader who hides the numbers', () => {
+		useSettingsStore().setServerData({ hideCounts: true })
+		const wrapper = mount(ProfileStatusCard, { props: { status }, global: { stubs } })
+
+		expect(wrapper.text()).toContain('Likes')
+		expect(wrapper.text()).not.toContain('Likes (3)')
+		expect(wrapper.text()).toContain('Comments (2)')
+	})
 
 	it('provides a real post link, counts, and lazy like details', async () => {
 		const wrapper = mount(ProfileStatusCard, { props: { status }, global: { stubs } })

@@ -9,6 +9,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import VideoHeader from '../../../src/components/VideoHeader.vue'
 import { useTimelineStore } from '../../../src/store/timeline.js'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
@@ -41,8 +42,9 @@ function status(video = {}, overrides = {}) {
  * @param {object} theStatus the post to draw
  * @return {object} the mounted page
  */
-function mountHeader(theStatus = status()) {
+function mountHeader(theStatus = status(), serverData = {}) {
 	setActivePinia(createPinia())
+	useSettingsStore().setServerData(serverData)
 
 	return mount(VideoHeader, {
 		props: { status: theStatus },
@@ -137,6 +139,10 @@ describe('the video page', () => {
 			expect(facts(mountHeader(status({ dislikes: 9 }, { dislikes_count: 2 }))))
 				.toEqual(['2 dislikes'])
 			expect(facts(mountHeader(status({ dislikes: 9 })))).toEqual(['9 dislikes'])
+		})
+
+		it('says nothing about dislikes to a reader who hides the numbers', () => {
+			expect(facts(mountHeader(status({ dislikes: 9 }, { dislikes_count: 2 }), { hideCounts: true }))).toEqual([])
 		})
 	})
 

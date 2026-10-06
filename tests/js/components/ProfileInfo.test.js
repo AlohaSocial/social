@@ -212,6 +212,12 @@ describe('ProfileInfo', () => {
 		expect(linkTexts(wrapper)).toEqual(['12 posts', '3 following', '5 followers'])
 	})
 
+	it('keeps the followers link but not its number for a reader who hides the numbers', () => {
+		makeStore({ hideCounts: true })
+
+		expect(linkTexts(mountProfile('bob@remote.example'))).toEqual(['12 posts', '3 following', 'Followers'])
+	})
+
 	it('counts one post as a post, and one follower as a follower', () => {
 		// "1 posts" is not English, and three labels glued to a bare number
 		// cannot be pluralised in any language at all

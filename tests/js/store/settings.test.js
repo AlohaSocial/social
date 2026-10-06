@@ -54,4 +54,15 @@ describe('settings store', () => {
 		expect(before).toEqual({})
 		expect(store.getServerData).toEqual({ firstrun: false })
 	})
+
+	it('says the numbers are hidden only when the page says so', () => {
+		const store = useSettingsStore()
+		expect(store.hidesCounts).toBe(false)
+
+		store.setServerData({ hideCounts: true })
+		expect(store.hidesCounts).toBe(true)
+
+		store.setServerDataEntry({ key: 'hideCounts', value: false })
+		expect(store.hidesCounts).toBe(false)
+	})
 })

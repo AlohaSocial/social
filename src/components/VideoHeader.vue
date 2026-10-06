@@ -23,7 +23,7 @@
 			<span v-if="video.likes !== undefined">
 				{{ n('social', '%n like', '%n likes', video.likes) }}
 			</span>
-			<span v-if="dislikes">
+			<span v-if="dislikes && !hidesCounts">
 				{{ n('social', '%n dislike', '%n dislikes', dislikes) }}
 			</span>
 			<span v-if="video.category">{{ video.category }}</span>
@@ -93,6 +93,7 @@ import ActorAvatar from './ActorAvatar.vue'
 import FollowButton from './FollowButton.vue'
 import PostAttachment from './PostAttachment.vue'
 import { useTimelineStore } from '../store/timeline.js'
+import { useSettingsStore } from '../store/settings.js'
 
 /**
  * A video's own page, rather than a post with a rectangle in it.
@@ -138,6 +139,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether the reader has the like, boost and follower numbers hidden */
+		hidesCounts() {
+			return useSettingsStore().hidesCounts
+		},
+
 		/** @return {object} what the post said about the video */
 		video() {
 			return this.status.video ?? {}

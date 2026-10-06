@@ -97,6 +97,7 @@ import IconRecap from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
 import IconScheduled from 'vue-material-design-icons/ClockOutline.vue'
 import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
+import IconCounts from 'vue-material-design-icons/HeartOffOutline.vue'
 import IconStorage from 'vue-material-design-icons/Harddisk.vue'
 import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
@@ -119,6 +120,7 @@ const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkNa
 const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InterestsSettings.vue'))
 // and again: two switches and a button, only ever drawn on this page
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
+const CountsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/CountsSettings.vue'))
 // and again: a radio pair, a few switches and some time fields, only ever
 // drawn on this page
 const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
@@ -169,6 +171,7 @@ export default {
 		IconRecap,
 		IconReview,
 		IconScheduled,
+		IconCounts,
 		IconSenses,
 		IconStorage,
 		IconTags,
@@ -176,6 +179,7 @@ export default {
 		NotificationDeliverySettings,
 		PortfolioSettings,
 		RecapSettings,
+		CountsSettings,
 		SensesSettings,
 		ScheduledPosts,
 		ShortcutList,
@@ -288,6 +292,13 @@ export default {
 					component: 'RecapSettings',
 					title: t('social', 'Looking back'),
 					lede: t('social', 'Posts you wrote on this day in earlier years appear at the top of your feed on their own. This is the other half: a note about the week just gone, if you want one.'),
+				},
+				{
+					id: 'counts',
+					icon: 'IconCounts',
+					component: 'CountsSettings',
+					title: t('social', 'Likes and followers'),
+					lede: t('social', 'Whether you see how many likes, boosts and followers things have. Hidden unless you turn the numbers on: a number next to a post is a score, and a score is pressure.'),
 				},
 				{
 					id: 'senses',

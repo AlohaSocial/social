@@ -19,11 +19,12 @@
 <script>
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import { translatePlural as n } from '@nextcloud/l10n'
+import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import Heart from 'vue-material-design-icons/Heart.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import ActorAvatar from './ActorAvatar.vue'
 import logger from '../services/logger.js'
+import { useSettingsStore } from '../store/settings.js'
 
 /** How many faces are worth showing; the count says how many there are in all. */
 const FACES = 12
@@ -51,6 +52,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether the reader has the like, boost and follower numbers hidden */
+		hidesCounts() {
+			return useSettingsStore().hidesCounts
+		},
+
 		/**
 		 * The rows to draw, each one a kind of reaction that happened at least
 		 * once and whose accounts have arrived. A count with no faces under it
@@ -64,13 +70,17 @@ export default {
 					key: 'boosts',
 					icon: 'Repeat',
 					accounts: this.boosted,
-					label: n('social', 'Boosted by %n person', 'Boosted by %n people', this.status.reblogs_count ?? 0),
+					label: this.hidesCounts
+						? t('social', 'Boosted by')
+						: n('social', 'Boosted by %n person', 'Boosted by %n people', this.status.reblogs_count ?? 0),
 				},
 				{
 					key: 'favourites',
 					icon: 'Heart',
 					accounts: this.favourited,
-					label: n('social', 'Favourited by %n person', 'Favourited by %n people', this.status.favourites_count ?? 0),
+					label: this.hidesCounts
+						? t('social', 'Favourited by')
+						: n('social', 'Favourited by %n person', 'Favourited by %n people', this.status.favourites_count ?? 0),
 				},
 			].filter((group) => group.accounts.length > 0)
 		},
@@ -116,11 +126,13 @@ export default {
 		 * counts are still on the post, and this row is the elaboration.
 		 *
 		 * @param {string} path the endpoint under the status, Mastodon's name for it
-		 * @param {number} count how many the post says there are
+		 * @param {number} count how many the post says there are; ignored while the numbers are hidden
 		 * @return {Promise<object[]>} the accounts, newest first
 		 */
 		async fetch(path, count) {
-			if (!(count > 0)) {
+			// with the numbers hidden the server sends 0 for every post, so
+			// the count says nothing about whether anybody is there to show
+			if (!this.hidesCounts && !(count > 0)) {
 				return []
 			}
 
