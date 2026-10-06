@@ -111,6 +111,7 @@ class StatusApiController extends MastodonApiController {
 		private WatchService $watchService,
 		private IFactory $l10nFactory,
 		private DurableCache $durableCache,
+		private ?\OCA\Social\Db\AtprotoRequest $atprotoRequest = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -188,8 +189,16 @@ class StatusApiController extends MastodonApiController {
 			$post->setSensitive($status->isSensitive());
 			$post->setType($this->visibilityOf($status));
 			$post->setPublicationTarget($status->getPublicationTarget());
-			if ($post->getPublicationTarget() === 'atproto' && $post->getType() !== Stream::TYPE_PUBLIC) {
-				throw new InvalidActionException('AT Protocol posts must use public visibility');
+			if ($post->getPublicationTarget() === 'atproto') {
+				if ($post->getType() !== Stream::TYPE_PUBLIC) {
+					throw new InvalidActionException('AT Protocol posts must use public visibility');
+				}
+				if ($this->atprotoRequest !== null) {
+					$linked = $this->atprotoRequest->getAccount($this->currentSession());
+					if ($linked === null || $linked->getState() !== \OCA\Social\Model\Atproto\AtprotoAccount::STATE_LINKED) {
+						throw new InvalidActionException('Connect your Bluesky account in settings to publish there');
+					}
+				}
 			}
 			$post->setLanguage($status->getLanguage());
 			$post->setPlaceId(

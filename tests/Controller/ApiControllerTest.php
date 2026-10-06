@@ -446,6 +446,9 @@ class ApiControllerTest extends TestCase {
 			'quoteService' => $this->quoteService,
 			'annualReportService' => $this->annualReportService,
 			'watchService' => $this->createMock(\OCA\Social\Service\WatchService::class),
+			// what a Bluesky publication target asks for its link; the tests
+			// that post never name atproto, so an unanswered row is enough
+			'atprotoRequest' => $this->createMock(\OCA\Social\Db\AtprotoRequest::class),
 			'l10nFactory' => $this->l10nFactory,
 			'timelineRevisionService' => $this->timelineRevisionService,
 			'durableCache' => $this->durableCache(),

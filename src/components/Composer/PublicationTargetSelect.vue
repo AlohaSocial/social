@@ -10,7 +10,7 @@
 			:value="target"
 			:aria-label="t('social', 'Where to publish')"
 			@change="changeTarget">
-			<option value="both">
+			<option value="both" :disabled="!available">
 				{{ t('social', 'Fediverse + Bluesky') }}
 			</option>
 			<option value="fediverse">

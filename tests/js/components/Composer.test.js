@@ -1889,7 +1889,9 @@ describe('Composer', () => {
 				quote_id: undefined,
 				sensitive: false,
 				spoiler_text: '',
-				publication_target: 'both',
+				// no Bluesky account is linked in this harness, so the composer
+				// must not offer a both-network post it cannot honour
+				publication_target: 'fediverse',
 				language: 'en',
 			})
 		})

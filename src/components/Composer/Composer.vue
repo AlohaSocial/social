@@ -1451,14 +1451,17 @@ export default {
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/atproto'))
 				this.atprotoStatus = data ?? null
-				if (!this.atprotoAvailable && this.publicationTarget === 'atproto') {
-					this.publicationTarget = 'both'
+				if (!this.atprotoAvailable && (this.publicationTarget === 'atproto' || this.publicationTarget === 'both')) {
+					this.publicationTarget = 'fediverse'
 				}
 			} catch (error) {
 				// ATProto is optional. A missing endpoint must never break the
 				// Fediverse composer; the selector remains a clear connect affordance.
 				logger.debug('could not load ATProto publishing status', { error })
 				this.atprotoStatus = null
+				if (this.publicationTarget === 'atproto' || this.publicationTarget === 'both') {
+					this.publicationTarget = 'fediverse'
+				}
 			}
 		},
 
