@@ -507,10 +507,53 @@ class AccountService {
 	 * name it shows afterwards would be the old one either way, and only one of
 	 * those two outcomes tells the user why.
 	 *
+	 * Nextcloud stores the name with the user backend first and only then
+	 * tells its listeners. Core's own listener re-validates the whole profile
+	 * and throws when it cannot verify the `fediverse` property, which it does
+	 * by fetching that handle's WebFinger over HTTPS — from this very server,
+	 * for the handle this app writes there, which fails wherever the server
+	 * cannot reach itself by its own name. A name the backend stored is kept
+	 * and the listener's failure logged; only a name that was not stored is
+	 * an error.
+	 *
 	 * @throws InvalidActionException when the user's backend owns the name
 	 * @throws NoUserException
 	 */
 	public function setDisplayName(string $userId, string $displayName): void {
+		$user = $this->displayNameOwner($userId);
+
+		try {
+			$user->setDisplayName($displayName);
+		} catch (Exception $e) {
+			if ($user->getDisplayName() !== trim($displayName)) {
+				throw $e;
+			}
+
+			$this->logger->warning(
+				'the display name is stored, but a listener failed on the change; the Nextcloud profile may show the old one until it is saved again',
+				['userId' => $userId, 'exception' => $e]
+			);
+		}
+
+		$this->cacheLocalActorByUsername($this->getActorFromUserId($userId)->getPreferredUsername());
+	}
+
+	/**
+	 * Refuses, without writing anything, a display name change the account's
+	 * backend would refuse.
+	 *
+	 * @throws InvalidActionException when the user's backend owns the name
+	 * @throws NoUserException
+	 */
+	public function assertDisplayNameWritable(string $userId): void {
+		$this->displayNameOwner($userId);
+	}
+
+	/**
+	 * @throws InvalidActionException when the user's backend owns the name
+	 * @throws NoUserException
+	 */
+	private function displayNameOwner(string $userId): IUser {
 		$user = $this->userManager->get($userId);
 		if ($user === null) {
 			throw new NoUserException();
@@ -522,8 +565,7 @@ class AccountService {
 			);
 		}
 
-		$user->setDisplayName($displayName);
-		$this->cacheLocalActorByUsername($this->getActorFromUserId($userId)->getPreferredUsername());
+		return $user;
 	}
 
 	/** A bool from whatever form a client put in a JSON or form body. */
@@ -637,6 +679,17 @@ class AccountService {
 	 * @throws InvalidActionException when it is not a visibility a post can have
 	 */
 	public function setDefaultPrivacy(string $userId, string $privacy): void {
+		$this->assertDefaultPrivacy($privacy);
+		$this->configService->setValueForUser($userId, self::DEFAULT_PRIVACY, strtolower(trim($privacy)));
+	}
+
+	/**
+	 * Refuses, without writing anything, a visibility `setDefaultPrivacy()`
+	 * would refuse.
+	 *
+	 * @throws InvalidActionException when it is not a visibility a post can have
+	 */
+	public function assertDefaultPrivacy(string $privacy): void {
 		$privacy = strtolower(trim($privacy));
 		if (!Stream::isKnownClientVisibility($privacy)) {
 			throw new InvalidActionException(
@@ -644,8 +697,6 @@ class AccountService {
 				. implode(', ', Stream::clientVisibilities()) . ')'
 			);
 		}
-
-		$this->configService->setValueForUser($userId, self::DEFAULT_PRIVACY, $privacy);
 	}
 
 	/** A bio as it is stored: as typed, normalised newlines, length-capped. */
