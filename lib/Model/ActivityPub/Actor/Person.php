@@ -587,6 +587,26 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		return $this;
 	}
 
+	/**
+	 * Whether `$actorId` is the account this actor belongs to: named in its
+	 * `attributedTo` and on its own server, the way a PeerTube channel names
+	 * the account behind it. Only the channel's server can speak for it.
+	 */
+	public function isRunBy(string $actorId): bool {
+		$host = parse_url($actorId, PHP_URL_HOST);
+		if (!is_string($host) || $host === '' || $host !== parse_url($this->getId(), PHP_URL_HOST)) {
+			return false;
+		}
+
+		foreach ($this->getAttributedToActors() as $owner) {
+			if ($owner['id'] === $actorId) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public function storedActorType(): string {
 		$type = $this->getType();
 

@@ -1314,4 +1314,24 @@ class PersonTest extends TestCase {
 			$person->exportAsActivityPub()['attachment'][0]['value']
 		);
 	}
+
+	/** @return iterable<string, array{string, bool}> */
+	public static function channelOwners(): iterable {
+		yield 'the account the channel names' => ['https://video.example/accounts/owner', true];
+		yield 'another account of the same server' => ['https://video.example/accounts/mallory', false];
+		yield 'the same name on another server' => ['https://other.example/accounts/owner', false];
+		yield 'nobody' => ['', false];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('channelOwners')]
+	public function testAChannelIsRunByTheAccountItNamesOnItsOwnServer(string $actorId, bool $runs): void {
+		$channel = new Person();
+		$channel->setId('https://video.example/video-channels/films');
+		$channel->setAttributedToActors([
+			['type' => Person::TYPE, 'id' => 'https://video.example/accounts/owner'],
+			['type' => Person::TYPE, 'id' => 'https://other.example/accounts/owner'],
+		]);
+
+		$this->assertSame($runs, $channel->isRunBy($actorId));
+	}
 }
