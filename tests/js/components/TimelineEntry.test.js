@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TimelineEntry from '../../../src/components/TimelineEntry.vue'
@@ -480,5 +482,23 @@ describe('the stagger on the way in', () => {
 		const { wrapper } = mountEntry(storedPost, { index: 2, immediate: true })
 		await wrapper.setProps({ immediate: false })
 		expect(wrapper.attributes('style') ?? '').not.toContain('--stagger-delay')
+	})
+})
+
+/**
+ * With a pointer, the controls float over the timestamp while they are out of
+ * sight. A post whose counts are drawn at rest must not float them, or the
+ * numbers sit across the post's age.
+ */
+describe('the floating controls', () => {
+	const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+	const hoverBlock = source.slice(source.indexOf('@media (hover: hover)'))
+
+	it('keep their row on a post that shows a count', () => {
+		expect(hoverBlock).toMatch(/\.post-footer:not\(:has\(\.reaction-bar, \.post-action-count\)\)\) \{\s*height: 0;/)
+	})
+
+	it('leave a given like or boost in that row rather than beside the timestamp', () => {
+		expect(hoverBlock).toMatch(/\.post-content:not\(:has\(\.reaction-bar, \.post-action-count\)\)\) \{\s*\.post-given \{\s*display: inline-flex;/)
 	})
 })

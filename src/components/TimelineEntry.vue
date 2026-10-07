@@ -973,10 +973,11 @@ export default {
  * under every post was a band of empty space down the page. The pill floats
  * over the top end of the row, across the timestamp, when the post is
  * pointed at or focused. A post that shows something in that row at rest —
- * reactions, or a like or boost the reader gave — keeps it in its place.
+ * reactions, or a count where the reader has the numbers on — keeps the
+ * row, since a pill over the timestamp would draw its numbers across it.
  */
 @media (hover: hover) {
-	.timeline-entry:not(.notification) .wrapper :deep(.post-footer:not(:has(.reaction-bar))) {
+	.timeline-entry:not(.notification) .wrapper :deep(.post-footer:not(:has(.reaction-bar, .post-action-count))) {
 		height: 0;
 		margin: 0;
 
@@ -991,7 +992,7 @@ export default {
 	// a like or boost already given shows as a small mark by the timestamp,
 	// so it never needs a row of its own under the words; its button keeps
 	// to the pill, which only shows when the post is pointed at
-	.timeline-entry:not(.notification) .wrapper :deep(.post-content:not(:has(.reaction-bar))) {
+	.timeline-entry:not(.notification) .wrapper :deep(.post-content:not(:has(.reaction-bar, .post-action-count))) {
 		.post-given {
 			display: inline-flex;
 		}
