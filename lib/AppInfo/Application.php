@@ -22,6 +22,9 @@ use OCA\Social\Dashboard\SocialReportsWidget;
 use OCA\Social\Dashboard\SocialTimelineWidget;
 use OCA\Social\Dashboard\SocialTrendingWidget;
 use OCA\Social\Dashboard\SocialWidget;
+use OCA\Social\Events\PostDeletedEvent;
+use OCA\Social\Events\PostEditedEvent;
+use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\External\ExternalDavGuard;
 use OCA\Social\External\ExternalGroupBackend;
 use OCA\Social\External\ExternalUserBackend;
@@ -32,6 +35,7 @@ use OCA\Social\Listeners\ExternalFirstLoginListener;
 use OCA\Social\Listeners\ExternalNavigationListener;
 use OCA\Social\Listeners\ExternalPageListener;
 use OCA\Social\Listeners\ExternalUserStatusListener;
+use OCA\Social\Listeners\FileCommentsListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
 use OCA\Social\Listeners\ProfileSectionListener;
@@ -63,6 +67,9 @@ use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent as PageRenderedEvent;
+use OCP\Comments\Events\CommentAddedEvent;
+use OCP\Comments\Events\CommentDeletedEvent;
+use OCP\Comments\Events\CommentUpdatedEvent;
 use OCP\Group\Events\GroupChangedEvent;
 use OCP\Group\Events\GroupDeletedEvent;
 use OCP\Group\Events\UserAddedEvent;
@@ -116,6 +123,14 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(UserRemovedEvent::class, GroupListListener::class);
 		$context->registerEventListener(GroupDeletedEvent::class, GroupListListener::class);
 		$context->registerEventListener(GroupChangedEvent::class, GroupListListener::class);
+		// replies to a post made from Files, as comments on the file, and the
+		// author's comments there as replies
+		$context->registerEventListener(PostPublishedEvent::class, FileCommentsListener::class);
+		$context->registerEventListener(PostEditedEvent::class, FileCommentsListener::class);
+		$context->registerEventListener(PostDeletedEvent::class, FileCommentsListener::class);
+		$context->registerEventListener(CommentAddedEvent::class, FileCommentsListener::class);
+		$context->registerEventListener(CommentUpdatedEvent::class, FileCommentsListener::class);
+		$context->registerEventListener(CommentDeletedEvent::class, FileCommentsListener::class);
 		// self-registered external users: kept out of the system address
 		// book, the user lists, other apps' first-login setup, the page
 		// chrome, the navigation and WebDAV

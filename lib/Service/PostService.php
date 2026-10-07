@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -335,6 +336,7 @@ class PostService {
 			);
 		}
 		$this->streamService->addChannelFollowers($updated);
+		$this->eventDispatcher->dispatchTyped(new PostEditedEvent($updated));
 
 		// Local subscribers must learn about the edit even when the remote
 		// request cannot be queued. The saved revision and source are already

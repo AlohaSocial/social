@@ -29,6 +29,7 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\ForwardService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PollService;
@@ -64,6 +65,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 
 	private Person $alice;
 	private StatusRevisionService|MockObject $revisionService;
+	private FileCommentsService|MockObject $fileCommentsService;
 	private Person $bob;
 	private Person $carol;
 
@@ -79,6 +81,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->linkPreviewService = $this->createMock(LinkPreviewService::class);
 		$this->forwardService = $this->createMock(ForwardService::class);
 		$this->revisionService = $this->createMock(StatusRevisionService::class);
+		$this->fileCommentsService = $this->createMock(FileCommentsService::class);
 		$this->handler = new NoteInterface(
 			$this->streamRequest,
 			$this->cacheActorsRequest,
@@ -88,7 +91,8 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 			$this->linkPreviewService,
 			$this->forwardService,
 			$this->createStub(\OCA\Social\Service\NotificationService::class),
-			$this->revisionService
+			$this->revisionService,
+			$this->fileCommentsService
 		);
 
 		$this->alice = $this->person(self::LOCAL_URL . '/users/alice', true);
@@ -578,6 +582,43 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->expectException(InvalidOriginException::class);
 
 		$this->handler->activity($this->wrap(Delete::TYPE, $note, 'evil.example'), $note);
+	}
+
+	public function testANewNoteIsOfferedToTheFilesItMayAnswer(): void {
+		$this->nothingStored();
+		$note = $this->incomingNote();
+		$note->setInReplyTo(self::PARENT);
+
+		$this->fileCommentsService->expects($this->once())->method('onReply')->with($this->identicalTo($note));
+
+		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
+	}
+
+	public function testANoteWeAlreadyHadIsNotOfferedToTheFilesAgain(): void {
+		$note = $this->incomingNote();
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($this->storedCopy());
+
+		$this->fileCommentsService->expects($this->never())->method('onReply');
+
+		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
+	}
+
+	public function testAnUpdateRewritesTheCommentsThatStandForTheNote(): void {
+		$note = $this->incomingNote();
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($this->storedCopy());
+
+		$this->fileCommentsService->expects($this->once())->method('onReplyUpdated')->with($this->identicalTo($note));
+
+		$this->handler->activity($this->wrap(Update::TYPE, $note), $note);
+	}
+
+	public function testADeleteRemovesTheCommentsThatStandForTheNote(): void {
+		$note = $this->incomingNote();
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($this->storedCopy());
+
+		$this->fileCommentsService->expects($this->once())->method('onDeleted')->with($this->identicalTo($note));
+
+		$this->handler->activity($this->wrap(Delete::TYPE, $note), $note);
 	}
 
 	public function testUpdateRewritesTheStoredNote(): void {
