@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TimelinePost from '../../../src/components/TimelinePost.vue'
@@ -928,6 +930,17 @@ describe('TimelinePost', () => {
 
 			expect(wrapper.findAll('.post-action-count')).toHaveLength(0)
 		})
+	})
+
+	/**
+	 * The glyphs are gone at rest, but a number alone does not say what it
+	 * counts: a control with a count beside it keeps a faint glyph.
+	 */
+	it('keeps a faint glyph at rest beside a count', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+
+		expect(source).toMatch(/:deep\(\.button-vue__icon\) \{\s*opacity: var\(--post-action-rest, 0\);/)
+		expect(source).toMatch(/\.post-action-group:has\(\.post-action-count\) \{\s*--post-action-rest: \.38;/)
 	})
 
 	describe('rolling counters', () => {

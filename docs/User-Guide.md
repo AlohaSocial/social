@@ -452,7 +452,9 @@ direct posts, nothing for public ones.
 The reply, boost and like buttons stay out of sight until you point at a post
 or reach it with the keyboard, so a page of posts is a page of words; a like
 or boost you have given shows as a small heart or arrows beside the post's age.
-On a phone they are always there. The
+With the numbers turned on, a post that has replies, boosts or likes keeps
+them in a row under its words, each beside a faint icon, and your own like or
+boost is shown there instead. On a phone they are always there. The
 three are on every post in the same place; one that cannot be used — a boost
 of a followers-only post, a reply the author does not take — is greyed out and
 says why. To react with an emoji, hold the heart (or right-click it), or choose

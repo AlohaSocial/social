@@ -2138,8 +2138,14 @@ export default {
 		   at is the one that is pointed at. A touch screen keeps them (see the
 		   `hover: none` block below), since it cannot point first */
 		:deep(.button-vue__icon) {
-			opacity: 0;
+			opacity: var(--post-action-rest, 0);
 			transition: opacity .2s ease;
+		}
+
+		/* a number needs its glyph to say what it counts, so a control with
+		   a count beside it keeps a hairline at rest */
+		.post-action-group:has(.post-action-count) {
+			--post-action-rest: .38;
 		}
 
 		/* except a like or a boost this reader has already given. That is the
