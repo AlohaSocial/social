@@ -15,13 +15,11 @@
 		     says the store has it (see useAccount), so it cannot say it has not -->
 		<NcEmptyContent
 			v-if="lookupFinished && !accountInfo"
+			class="profile-missing"
 			:name="t('social', 'User not found')"
 			:description="t('social', 'Sorry, we could not find the account of {userId}', { userId: uid })">
 			<template #icon>
-				<img
-					:src="emptyContentImage"
-					class="icon-illustration"
-					alt="">
+				<AlohaScene scene="tracks" class="profile-missing__scene" />
 			</template>
 		</NcEmptyContent>
 	</div>
@@ -29,7 +27,7 @@
 
 <script>
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import { generateFilePath } from '@nextcloud/router'
+import AlohaScene from '../components/illustrations/AlohaScene.vue'
 import ProfileInfo from './../components/ProfileInfo.vue'
 import { defineAsyncComponent, ref } from 'vue'
 import logger from '../services/logger.js'
@@ -44,6 +42,7 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 export default {
 	name: 'Profile',
 	components: {
+		AlohaScene,
 		NcEmptyContent,
 		ProfileInfo,
 		Composer,
@@ -71,11 +70,6 @@ export default {
 		/** @return {import('../types/Mastodon').Status[]} */
 		timeline() {
 			return this.timelineStore.getTimeline
-		},
-
-		/** @return {string} */
-		emptyContentImage() {
-			return generateFilePath('social', 'img', 'undraw/profile.svg')
 		},
 
 		/** @return {import('../types/Mastodon.js').Account} */
@@ -156,5 +150,20 @@ export default {
 	&.icon-loading {
 		margin-top: 50vh;
 	}
+}
+
+/* NcEmptyContent pins any svg in its icon slot to 64px, with !important */
+.profile-missing :deep(.empty-content__icon) {
+	width: auto;
+	height: auto;
+	opacity: 1;
+	margin-bottom: 20px;
+}
+
+.profile-missing .profile-missing__scene {
+	width: 256px !important;
+	height: auto !important;
+	max-width: 100% !important;
+	max-height: none !important;
 }
 </style>

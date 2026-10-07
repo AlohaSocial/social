@@ -4,75 +4,60 @@
 -->
 <template>
 	<!--
-		Drawn here rather than shipped as a file, for the reason NoReplies
-		gives: the images in img/undraw are licensed for the eight that were
-		already in the app, they are drawn in colours this app uses nowhere
-		else, and a component this small costs less than another asset to
-		fetch. Two envelopes, the near one open, in `currentColor` so it
-		follows the theme rather than being corrected by a filter.
+		Nothing private yet: a message in a bottle on the water. Markup in
+		`currentColor` with the page's own background inside the bottle, like
+		NoReplies; the full-size bottle is a scene in AlohaScene.
 	-->
 	<svg
 		class="no-messages"
-		viewBox="0 0 64 56"
-		width="64"
+		viewBox="0 0 72 56"
+		width="72"
 		height="56"
 		fill="none"
 		aria-hidden="true"
 		focusable="false">
-		<g stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-			<rect
-				class="no-messages__far"
-				x="4"
-				y="8"
-				width="38"
-				height="26"
-				rx="4" />
-			<path class="no-messages__far" d="M4 13l19 12 19-12" />
-			<rect
-				class="no-messages__near"
-				x="22"
-				y="22"
-				width="38"
-				height="26"
-				rx="4" />
-			<path class="no-messages__near" d="M22 27l19 12 19-12" />
-		</g>
-		<g class="no-messages__spark" fill="currentColor">
-			<circle cx="52" cy="12" r="2" />
-			<circle cx="58" cy="6" r="1.5" />
-			<circle cx="46" cy="5" r="1.5" />
+		<g
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			stroke-linejoin="round">
+			<g transform="rotate(-22 36 28)">
+				<rect
+					class="no-messages__bottle"
+					x="12"
+					y="20"
+					width="34"
+					height="18"
+					rx="7" />
+				<path class="no-messages__bottle" d="M46 25h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-8" />
+				<path d="M56 26h4v6h-4" />
+				<path class="no-messages__note" d="M19 27h18M19 31h12" />
+			</g>
+			<path class="no-messages__water" d="M6 48q5-3 10 0t10 0t10 0t10 0t10 0t10 0" />
 		</g>
 	</svg>
 </template>
 
 <script>
-/**
- * Nobody has written to you yet.
- *
- * Its own drawing rather than the stock illustration that was here: that one
- * is two people whispering, in a pink and a blue this app uses nowhere else,
- * and an empty state is the app talking about itself.
- */
 export default {
 	name: 'NoMessages',
 }
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .no-messages {
 	color: var(--color-text-maxcontrast);
 }
 
-/* the far envelope sits behind, so it is quieter; the near one is the subject */
-.no-messages__far {
-	opacity: .45;
-}
-
-.no-messages__near {
+.no-messages__bottle {
 	fill: var(--color-main-background);
 }
 
-.no-messages__spark {
-	opacity: .7;
+.no-messages__note {
+	opacity: .55;
+}
+
+.no-messages__water {
+	opacity: .4;
 }
 </style>

@@ -373,16 +373,16 @@
 							:title="refusedBecause.like || undefined">
 							<template v-if="celebrate === 'like'">
 								<span class="post-action__burst" aria-hidden="true" />
-								<!-- six sparks rather than one ring: a ring says
-								     "pressed", sparks say "yes". They are the
-								     author's colour, which is the same colour
-								     their avatar, their story ring and their
-								     messages are. -->
+								<!-- a plumeria opening rather than one ring: a ring
+								     says "pressed", a flower says "yes". The petals
+								     are the author's colour, which is the same
+								     colour their avatar, their story ring and
+								     their messages are. -->
 								<span
-									v-for="spark in SPARKS"
-									:key="spark"
-									class="post-action__spark"
-									:style="{ '--spark': spark }"
+									v-for="petal in PETALS"
+									:key="petal"
+									class="post-action__petal"
+									:style="{ '--petal': petal }"
 									aria-hidden="true" />
 							</template>
 							<!-- one button whose label changes, not two swapped by v-if:
@@ -622,8 +622,8 @@ export default {
 	data() {
 		return {
 			isEditing: false,
-			/** the spark directions, so the template does not build a list per render */
-			SPARKS: [0, 1, 2, 3, 4, 5],
+			/** the petal directions, so the template does not build a list per render */
+			PETALS: [0, 1, 2, 3, 4],
 			/** the press-and-hold timer on the heart, null when nothing is held */
 			holdTimer: null,
 			/** set by a hold, so the click it ends with does not also like the post */
@@ -1059,7 +1059,7 @@ export default {
 		 * The card's own colour, which everything inside it can use.
 		 *
 		 * The author's, not the reader's: a post is the author speaking, and the
-		 * sparks a like throws are theirs. See services/accountColour.js.
+		 * petals a like opens are theirs. See services/accountColour.js.
 		 *
 		 * @return {object} a style binding carrying `--account-hue`
 		 */
@@ -1599,11 +1599,12 @@ export default {
 				this.celebrate = name
 				// heard and felt as well as seen, where the reader allows it
 				feel(name)
+				// long enough for the like's petals to fall away
 				window.setTimeout(() => {
 					if (this.celebrate === name) {
 						this.celebrate = ''
 					}
-				}, 600)
+				}, 1000)
 			}
 
 			const response = await this.timelineStore[action]({ status: this.item })
@@ -1638,10 +1639,11 @@ export default {
 	100% { transform: scale(2.4); opacity: 0; }
 }
 
-/* the sparks: out and a little up, shrinking as they go */
-@keyframes post-spark {
-	0% { transform: rotate(var(--angle)) translateY(0) scale(1); opacity: 1; }
-	100% { transform: rotate(var(--angle)) translateY(-18px) scale(.2); opacity: 0; }
+/* the petals: they open out of the heart, then drift on and fall away */
+@keyframes post-petal {
+	0% { transform: rotate(var(--angle)) translateY(2px) scale(.2); opacity: 0; }
+	30% { transform: rotate(var(--angle)) translateY(-6px) scale(1); opacity: 1; }
+	100% { transform: translateY(8px) rotate(calc(var(--angle) + 35deg)) translateY(-18px) scale(.7); opacity: 0; }
 }
 
 @keyframes post-spin {
@@ -2208,30 +2210,30 @@ export default {
 }
 
 /**
- * Six sparks around the heart, in the author's colour.
+ * Five petals around the heart, in the author's colour: a plumeria that opens
+ * and lets go.
  *
- * The ring above says "pressed"; these say "yes". The colour comes from
- * `--account-hue`, which the card carries for its author, so a like on Maya's
- * post throws Maya's colour -- the same one her avatar, her story ring and her
- * messages are. A card that somehow has no hue falls back to the heart's own
- * red rather than to black.
+ * The colour comes from `--account-hue`, which the card carries for its
+ * author, so a like on Maya's post opens in Maya's colour -- the same one her
+ * avatar, her story ring and her messages are. Each petal is gold at its base,
+ * the way a plumeria is. A card that somehow has no hue falls back to the
+ * heart's own red.
  */
-.post-action__spark {
+.post-action__petal {
 	position: absolute;
 	top: 50%;
 	inset-inline-start: 22px;
-	width: 5px;
-	height: 5px;
-	margin: -2px 0 0 -2px;
-	border-radius: 50%;
-	background: hsl(var(--account-hue, 355) 75% 55%);
+	width: 8px;
+	height: 13px;
+	/* the petal's foot sits on the middle of the heart, and it turns there */
+	margin: -13px 0 0 -4px;
+	border-radius: 50% 50% 50% 50% / 65% 65% 35% 35%;
+	background: linear-gradient(to top, #f0b23c 0 22%, hsl(var(--account-hue, 355) 78% 64%) 70%);
 	pointer-events: none;
-	/* each spark is turned a sixth of the way round, and the odd ones start
-	   fractionally later so the six do not read as a single expanding ring */
-	--angle: calc(var(--spark) * 60deg);
-	transform-origin: center;
-	animation: post-spark .52s cubic-bezier(.2, .7, .3, 1) forwards;
-	animation-delay: calc(var(--spark) * 12ms);
+	--angle: calc(var(--petal) * 72deg);
+	transform-origin: 50% 100%;
+	animation: post-petal .9s cubic-bezier(.2, .7, .3, 1) both;
+	animation-delay: calc(var(--petal) * 18ms);
 }
 
 .post-pinned {
@@ -2252,7 +2254,7 @@ export default {
 	}
 
 	.post-action__burst,
-	.post-action__spark {
+	.post-action__petal {
 		display: none;
 	}
 }

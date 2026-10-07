@@ -156,6 +156,16 @@
 			-->
 			<section class="discover__section">
 				<h3 class="discover__section-title">
+					{{ t('social', 'Your island and its neighbours') }}
+				</h3>
+				<p class="discover__section-hint">
+					{{ t('social', 'Every server in the fediverse is an island. Following somebody on another one opens a canoe route to it, and their posts travel to you along that route.') }}
+				</p>
+				<FederationIslands />
+			</section>
+
+			<section class="discover__section">
+				<h3 class="discover__section-title">
 					{{ t('social', 'Search the fediverse') }}
 				</h3>
 				<p class="discover__section-hint">
@@ -226,6 +236,7 @@ import Pound from 'vue-material-design-icons/Pound.vue'
 import ProfileMediaGrid from '../components/ProfileMediaGrid.vue'
 import TimelineSwitcher from '../components/TimelineSwitcher.vue'
 import DiscoverCategories from '../components/DiscoverCategories.vue'
+import FederationIslands from '../components/FederationIslands.vue'
 import FediverseSearch from '../components/FediverseSearch.vue'
 import PersonCard from '../components/PersonCard.vue'
 import { useFollowByHandle } from '../composables/useFollowByHandle.js'
@@ -270,6 +281,7 @@ export default {
 		ProfileMediaGrid,
 		TimelineSwitcher,
 		DiscoverCategories,
+		FederationIslands,
 		FediverseSearch,
 		FollowGraphSuggestions,
 		PersonCard,

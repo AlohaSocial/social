@@ -94,7 +94,7 @@
 			</NcButton>
 		</div>
 		<div ref="sentinel" class="list-sentinel">
-			<div v-if="loading && timeline.length > 0" class="icon-loading" />
+			<WaveLoading v-if="loading && timeline.length > 0" class="list-loading" />
 			<div v-else-if="!loading && !allLoaded" class="list-end" />
 			<!-- in both views: the grid used to carry an empty state of its own
 			     that said "No photos yet" whatever the tab was, so an account
@@ -116,6 +116,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import ProfileMediaGrid from './ProfileMediaGrid.vue'
 import TimelineEntry from './TimelineEntry.vue'
 import TimelineSkeleton from './TimelineSkeleton.vue'
+import WaveLoading from './WaveLoading.vue'
 
 /**
  * How long a list counts as swapping after a held-over list is replaced, in
@@ -203,6 +204,7 @@ export default {
 		NcButton,
 		TimelineEntry,
 		TimelineSkeleton,
+		WaveLoading,
 		EmptyContent,
 	},
 
@@ -354,7 +356,7 @@ export default {
 				},
 
 				direct: {
-					illustration: 'no-messages',
+					scene: 'bottle',
 					title: t('social', 'Nothing private yet'),
 					description: t('social', 'A post addressed to you and nobody else arrives here. Start one by writing a post and choosing Direct.'),
 					action: {
@@ -364,19 +366,19 @@ export default {
 				},
 
 				timeline: {
-					image: 'img/undraw/local.svg',
+					scene: 'tide',
 					title: t('social', 'No local posts found'),
 					description: t('social', 'Posts from other people on this instance will show up here'),
 				},
 
 				notifications: {
-					image: 'img/undraw/notifications.svg',
+					scene: 'hammock',
 					title: t('social', 'No notifications found'),
 					description: t('social', 'You have not received any notifications yet'),
 				},
 
 				federated: {
-					image: 'img/undraw/global.svg',
+					scene: 'islands',
 					title: t('social', 'No global posts found'),
 					description: t('social', 'Posts from federated instances will show up here'),
 					action: {
@@ -386,41 +388,41 @@ export default {
 				},
 
 				favourites: {
-					image: 'img/undraw/likes.svg',
+					scene: 'plumeria',
 					title: t('social', 'No liked posts found'),
 					description: t('social', 'Posts you like are kept here, for you alone to see'),
 				},
 
 				profile: {
-					image: 'img/undraw/profile.svg',
+					scene: 'board',
 					title: t('social', 'You have not tooted yet'),
 				},
 
 				tags: {
-					image: 'img/undraw/profile.svg',
+					scene: 'tracks',
 					title: t('social', 'No posts found for this tag'),
 				},
 
 				videos: {
-					image: 'img/undraw/posts.svg',
+					scene: 'wave',
 					title: t('social', 'No videos found'),
 					description: t('social', 'Videos posted here, and videos from the PeerTube channels you follow, will show up here'),
 				},
 
 				photos: {
-					image: 'img/undraw/profile.svg',
+					scene: 'tide',
 					title: t('social', 'No photos found'),
 					description: t('social', 'Posts with pictures will show up here'),
 				},
 
 				link: {
-					image: 'img/undraw/posts.svg',
+					scene: 'tracks',
 					title: t('social', 'Nothing said about this link'),
 					description: t('social', 'Nobody here has posted this link since, or the link is not one this instance has seen.'),
 				},
 
 				bookmarks: {
-					image: 'img/undraw/likes.svg',
+					scene: 'plumeria',
 					title: t('social', 'No bookmarks yet'),
 					description: t('social', 'Posts you bookmark are kept here, for you alone to see'),
 				},
@@ -526,7 +528,7 @@ export default {
 		 * component data during evaluation and left the mutation behind for
 		 * every later route.
 		 *
-		 * @return {object} an image, a title and a description
+		 * @return {object} a drawing, a title and a description
 		 */
 		emptyContentData() {
 			// a filtered tab of a profile is empty for a different reason than
@@ -535,13 +537,13 @@ export default {
 			const media = String(this.$route.query?.media ?? '')
 			const emptyTab = {
 				image: {
-					image: 'img/undraw/profile.svg',
+					scene: 'tide',
 					title: t('social', 'No photos yet'),
 					description: t('social', 'Posts with pictures appear here.'),
 				},
 
 				video: {
-					image: 'img/undraw/profile.svg',
+					scene: 'wave',
 					title: t('social', 'No videos yet'),
 					description: t('social', 'Posts with videos appear here.'),
 				},
@@ -1605,11 +1607,6 @@ export default {
 		   positioned ancestor; without this that is the whole content area,
 		   and the entry is drawn at the width of the page while it fades */
 		position: relative;
-	}
-
-	.icon-loading {
-		height: 44px;
-		margin: 20px auto;
 	}
 
 	.list-end {

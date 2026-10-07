@@ -10,23 +10,33 @@ const mountEmpty = (item) => mount(EmptyContent, { props: { item } })
 
 describe('EmptyContent', () => {
 	it('renders the description', () => {
-		const wrapper = mountEmpty({ title: 'No posts', description: 'Follow somebody to fill your timeline', image: 'img/undraw/posts.svg' })
+		const wrapper = mountEmpty({ title: 'No posts', description: 'Follow somebody to fill your timeline', scene: 'tide' })
 		expect(wrapper.find('.empty-content__description').text()).toBe('Follow somebody to fill your timeline')
 	})
 
 	it('passes the title through as the name heading of NcEmptyContent', () => {
-		const wrapper = mountEmpty({ title: 'No posts', description: 'x', image: 'img/undraw/posts.svg' })
+		const wrapper = mountEmpty({ title: 'No posts', description: 'x', scene: 'tide' })
 		// NcEmptyContent 9 renamed the prop to `name`; the text must reach the heading,
 		// not leak onto the root as a `title=` attribute.
 		expect(wrapper.find('.empty-content__name').text()).toBe('No posts')
 		expect(wrapper.find('.empty-content').attributes('title')).toBeUndefined()
 	})
 
-	it('resolves the illustration relative to the app root', () => {
-		const img = mountEmpty({ description: 'x', image: 'img/undraw/posts.svg' }).find('img.timeline-empty__image')
-		expect(img.attributes('src')).toBe('/apps/social/img/undraw/posts.svg')
-		expect(img.attributes('alt')).toBe('')
-		expect(img.element.closest('.empty-content__icon')).not.toBeNull()
+	it('draws the scene a state asks for, in the icon area and drawn rather than fetched', () => {
+		const wrapper = mountEmpty({ description: 'x', scene: 'tide' })
+		const scene = wrapper.findComponent({ name: 'AlohaScene' })
+
+		expect(scene.exists()).toBe(true)
+		expect(scene.props('scene')).toBe('tide')
+		expect(scene.element.closest('.empty-content__icon')).not.toBeNull()
+		expect(wrapper.find('img').exists()).toBe(false)
+	})
+
+	it('draws nothing for a scene it does not know', () => {
+		const wrapper = mountEmpty({ title: 'No posts', scene: 'not-a-scene' })
+
+		expect(wrapper.findComponent({ name: 'AlohaScene' }).exists()).toBe(false)
+		expect(wrapper.find('.empty-content__icon').exists()).toBe(false)
 	})
 
 	it('is a line of text rather than a screenful when there is no illustration', () => {
@@ -34,13 +44,13 @@ describe('EmptyContent', () => {
 		// every post with no replies held 60% of the window open and read as a
 		// page still loading
 		const bare = mountEmpty({ title: 'No replies yet' })
-		const illustrated = mountEmpty({ title: 'No posts', image: 'img/undraw/posts.svg' })
+		const illustrated = mountEmpty({ title: 'No posts', scene: 'tide' })
 
 		expect(bare.classes()).toContain('timeline-empty--bare')
 		expect(illustrated.classes()).not.toContain('timeline-empty--bare')
 	})
 
-	it('omits the icon area when the item has no image', () => {
+	it('omits the icon area when the item has no drawing', () => {
 		const wrapper = mountEmpty({ description: 'Nothing here' })
 		expect(wrapper.find('img').exists()).toBe(false)
 		expect(wrapper.find('.empty-content__icon').exists()).toBe(false)
@@ -48,7 +58,7 @@ describe('EmptyContent', () => {
 	})
 
 	it('omits the description paragraph when there is none', () => {
-		const wrapper = mountEmpty({ image: 'img/x.svg' })
+		const wrapper = mountEmpty({ scene: 'tide' })
 		expect(wrapper.find('.empty-content__description').exists()).toBe(false)
 	})
 
@@ -70,6 +80,7 @@ describe('EmptyContent', () => {
 	it.each([
 		['quiet-timeline', 'QuietTimeline'],
 		['nobody-yet', 'NobodyYet'],
+		['no-messages', 'NoMessages'],
 	])('knows the drawing named %s', (name, component) => {
 		const wrapper = mountEmpty({ title: 'Nothing here', illustration: name })
 

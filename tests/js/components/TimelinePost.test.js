@@ -1104,6 +1104,11 @@ describe('TimelinePost', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.post-action__burst').exists()).toBe(true)
+			// a plumeria: five petals, a fifth of a turn apart
+			const petals = wrapper.findAll('.post-action__petal')
+			expect(petals).toHaveLength(5)
+			expect(petals.map((petal) => petal.attributes('style'))).toEqual([0, 1, 2, 3, 4].map((index) => `--petal: ${index};`))
+			expect(petals.every((petal) => petal.attributes('aria-hidden') === 'true')).toBe(true)
 
 			// undoing is not something to celebrate
 			const undoing = mountPost({ item: makeItem({ favourited: true }) })

@@ -578,7 +578,7 @@ export default {
 		/** @return {object} the pane beside the inbox before a conversation is open */
 		welcome() {
 			return {
-				illustration: 'no-messages',
+				scene: 'bottle',
 				title: t('social', 'Start a private chat'),
 				description: t('social', 'Choose a conversation or find someone to message.'),
 				action: { label: t('social', 'New message') },

@@ -180,6 +180,8 @@ describe('DirectMessages', () => {
 		await flushPromises()
 
 		expect(wrapper.find('.direct-messages__welcome').text()).toContain('Start a private chat')
+		// a message in a bottle, the same drawing the empty Direct timeline has
+		expect(wrapper.findComponent({ name: 'AlohaScene' }).props('scene')).toBe('bottle')
 		await wrapper.find('.direct-messages__welcome button').trigger('click')
 		expect(wrapper.find('.direct-messages__new-message-panel').exists()).toBe(true)
 	})

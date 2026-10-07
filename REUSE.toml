@@ -70,13 +70,6 @@ SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
-path = "img/undraw/**"
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Katerina Limpitsouni"
-SPDX-License-Identifier = "AGPL-3.0-or-later"
-SPDX-FileComment = "The undraw illustrations are released with a non-free license and thus not AGPL-compatible but we have the illustrators permissions to use these 8 images in this project. See https://github.com/alohasocial/social/issues/277#issuecomment-508480655 and below."
-
-[[annotations]]
 path = ["js/*", "js-backup/*"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Nextcloud GmbH and Nextcloud contributors"

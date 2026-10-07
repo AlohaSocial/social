@@ -4,45 +4,26 @@
 -->
 <template>
 	<!--
-		Markup rather than a file, for the reason given in NoReplies: the
-		img/undraw images are licensed for the eight already in the app.
-
-		Nobody here yet: two faces at the edge of a circle with room in the
-		middle for more.
+		Nobody here yet: an outrigger canoe with room for people in it.
+		Markup in `currentColor`, like NoReplies.
 	-->
 	<svg
 		class="nobody-yet"
-		viewBox="0 0 64 56"
-		width="64"
+		viewBox="0 0 72 56"
+		width="72"
 		height="56"
 		fill="none"
 		aria-hidden="true"
 		focusable="false">
-		<circle
-			class="nobody-yet__ring"
-			cx="32"
-			cy="28"
-			r="22"
+		<g
 			stroke="currentColor"
 			stroke-width="2"
-			stroke-dasharray="5 6" />
-		<g stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-			<g class="nobody-yet__person">
-				<circle
-					class="nobody-yet__head"
-					cx="23"
-					cy="23"
-					r="5" />
-				<path class="nobody-yet__body" d="M14 38a9 9 0 0 1 18 0Z" />
-			</g>
-			<g class="nobody-yet__person nobody-yet__person--far">
-				<circle
-					class="nobody-yet__head"
-					cx="42"
-					cy="26"
-					r="4" />
-				<path class="nobody-yet__body" d="M35 38a7 7 0 0 1 14 0Z" />
-			</g>
+			stroke-linecap="round"
+			stroke-linejoin="round">
+			<path class="nobody-yet__hull" d="M6 32Q36 44 66 32Q61 40 36 41Q11 40 6 32Z" />
+			<path class="nobody-yet__float" d="M14 16Q36 12 58 16Q36 20 14 16Z" />
+			<path class="nobody-yet__float" d="M24 18V35M48 18V35" />
+			<path class="nobody-yet__water" d="M8 50q5-3 10 0t10 0t10 0t10 0t10 0" />
 		</g>
 	</svg>
 </template>
@@ -58,18 +39,15 @@ export default {
 	color: var(--color-text-maxcontrast);
 }
 
-/* a dashed ring rather than a solid one: the circle is not closed yet */
-.nobody-yet__ring {
-	opacity: .4;
-}
-
-.nobody-yet__head,
-.nobody-yet__body {
+.nobody-yet__hull {
 	fill: var(--color-main-background);
 }
 
-/* the second figure stands behind the first */
-.nobody-yet__person--far {
-	opacity: .55;
+.nobody-yet__float {
+	opacity: .7;
+}
+
+.nobody-yet__water {
+	opacity: .4;
 }
 </style>

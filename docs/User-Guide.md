@@ -79,7 +79,12 @@ people** makes an invitation link: it works once and for a week.
   fediverse listed first under *On your Nextcloud*), **Starter packs**,
   **Pictures** and **Videos** being looked at, and **Hashtags** that are
   trending, ranked over a window you pick.
-- **Find people across the fediverse** sits at the top of the People tab. Type a
+- **Your island and its neighbours** opens the People tab: a map of the
+  fediverse as islands. Your own server is in the middle, with your picture on
+  it. Around it is an island for each server you follow people on (up to
+  eight, larger where you follow more people), each joined to yours by a canoe
+  route, and the sentence under the map says how many there are.
+- **Find people across the fediverse** comes next on the People tab. Type a
   name, a handle or a subject and this server asks several directories at once —
   its own first, then the ones its administrator configured — and offers a
   **Follow** on every row. Pick one directory with the buttons under the box to
@@ -114,7 +119,8 @@ people** makes an invitation link: it works once and for a week.
 ## Writing a post
 
 **New post** at the top of the sidebar, or `n`, puts the caret in the
-composer; the composer also sits above most timelines. A post may be up to
+composer; the composer also sits above most timelines. An empty composer greets
+you by first name: "Aloha, Frank. What’s new?" A post may be up to
 5,000 characters, content warning included. What you type is kept as a draft
 across a failed post, a reload or a navigation, so nothing is lost to a
 network hiccup. A reply keeps its own draft, under the post it answers, so

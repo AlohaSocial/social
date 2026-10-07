@@ -1342,7 +1342,7 @@ describe('Composer', () => {
 		it('reads as a caption box only once there is something to caption', async () => {
 			const { wrapper } = mountComposer()
 			expect(mediaFirst(wrapper)).toBe(false)
-			expect(input(wrapper).attributes('placeholder')).toBe('What would you like to share?')
+			expect(input(wrapper).attributes('placeholder')).toBe('Aloha, Alice. What’s new?')
 
 			await attachFile(wrapper, new File(['x'], 'cat.png', { type: 'image/png' }))
 			await flushPromises()
@@ -1372,7 +1372,7 @@ describe('Composer', () => {
 			await wrapper.findComponent(PreviewGridItem).find('button').trigger('click')
 
 			expect(mediaFirst(wrapper)).toBe(false)
-			expect(input(wrapper).attributes('placeholder')).toBe('What would you like to share?')
+			expect(input(wrapper).attributes('placeholder')).toBe('Aloha, Alice. What’s new?')
 		})
 	})
 
@@ -2244,6 +2244,16 @@ describe('Composer', () => {
 	})
 
 	describe('quoting', () => {
+		it('asks for the quote plainly rather than greeting the writer', async () => {
+			const { wrapper } = mountComposer()
+			expect(input(wrapper).attributes('placeholder')).toBe('Aloha, Alice. What’s new?')
+
+			eventBus.emit('composer-quote', quoteOf(bob))
+			await flushPromises()
+
+			expect(input(wrapper).attributes('placeholder')).toBe('What would you like to share?')
+		})
+
 		it('shows which post is being quoted', async () => {
 			const { wrapper } = mountComposer()
 
