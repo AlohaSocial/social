@@ -476,6 +476,18 @@ class StreamService {
 		$author = $this->cacheActorService->getFromId($parent->getAttributedTo());
 		$note->setInReplyTo($replyTo);
 
+		// Named in the reply as well as sent to: a server that hands what its
+		// shared inbox receives to the accounts the activity addresses (Loops)
+		// has nobody to give a reply that names only the public and our
+		// followers. Mastodon addresses the author of the parent the same way.
+		if ($author->getId() !== $note->getAttributedTo()) {
+			if ($note->getVisibility() === Stream::TYPE_DIRECT) {
+				$note->addToArray($author->getId());
+			} else {
+				$note->addCc($author->getId());
+			}
+		}
+
 		// A PeerTube video whose comments need approving takes a reply in and
 		// shows it to nobody until a human has looked. Saying so here is what
 		// stops the reply looking posted when it is waiting: the state moves to

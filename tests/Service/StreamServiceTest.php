@@ -725,6 +725,55 @@ class StreamServiceTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Delivered to the author and named in the reply too: Loops hands what
+	 * its shared inbox receives to the accounts an activity addresses, and a
+	 * reply naming only the public and our followers reached nobody there.
+	 */
+	public function testAReplyNamesTheAuthorItAnswers(): void {
+		$parentId = 'https://remote.example/notes/parent';
+		$bob = $this->remoteActor();
+		$this->streamRequest->method('getStreamById')->willReturn($this->note($parentId, $bob->getId()));
+		$this->cacheActorService->method('getFromId')->willReturn($bob);
+
+		$note = new Note();
+		$note->setAttributedTo(self::ACTOR_ID);
+		$note->setVisibility(Stream::TYPE_PUBLIC);
+		$this->service->replyTo($note, $parentId);
+
+		$this->assertContains($bob->getId(), $note->getCcArray());
+		$this->assertNotContains($bob->getId(), $note->getToArray());
+	}
+
+	public function testADirectReplyNamesTheAuthorAsARecipient(): void {
+		$parentId = 'https://remote.example/notes/parent';
+		$bob = $this->remoteActor();
+		$this->streamRequest->method('getStreamById')->willReturn($this->note($parentId, $bob->getId()));
+		$this->cacheActorService->method('getFromId')->willReturn($bob);
+
+		$note = new Note();
+		$note->setAttributedTo(self::ACTOR_ID);
+		$note->setVisibility(Stream::TYPE_DIRECT);
+		$this->service->replyTo($note, $parentId);
+
+		$this->assertContains($bob->getId(), $note->getToArray());
+		$this->assertNotContains($bob->getId(), $note->getCcArray());
+	}
+
+	public function testAReplyToOneselfDoesNotNameItsOwnAuthor(): void {
+		$parentId = 'https://social.example/@alice/1';
+		$alice = $this->actor();
+		$this->streamRequest->method('getStreamById')->willReturn($this->note($parentId, $alice->getId()));
+		$this->cacheActorService->method('getFromId')->willReturn($alice);
+
+		$note = new Note();
+		$note->setAttributedTo($alice->getId());
+		$note->setVisibility(Stream::TYPE_PUBLIC);
+		$this->service->replyTo($note, $parentId);
+
+		$this->assertNotContains($alice->getId(), $note->getCcArray());
+	}
+
 	public function testReplyToWithoutParentIsANoop(): void {
 		$this->streamRequest->expects($this->never())->method('getStreamById');
 

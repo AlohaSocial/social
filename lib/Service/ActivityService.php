@@ -169,6 +169,9 @@ class ActivityService {
 		$update->setId($item->getId() . '#updates/' . $this->updateSerial($item));
 		$update->setInstancePaths($item->getInstancePaths());
 		$this->copyAudience($item, $update);
+		if ($item instanceof Person) {
+			$this->addressActorUpdate($item, $update);
+		}
 
 		$update->setActor($actor);
 		$this->signatureService->signObject($actor, $update);
@@ -337,6 +340,25 @@ class ActivityService {
 	 * place — including this server, whose relay fan-out asks the activity
 	 * whether it is public.
 	 */
+	/**
+	 * An actor has no audience of its own, so an `Update` of one copied none
+	 * and went out naming no recipient at all. A server that routes its shared
+	 * inbox by `to` and `cc` — Loops does — has nobody to hand such an
+	 * activity to and drops it. Addressed the way Mastodon addresses its own:
+	 * to the public, since a profile is public, and copied to the followers,
+	 * who are the ones holding a copy of it.
+	 */
+	private function addressActorUpdate(Person $actor, Update $update): void {
+		if (array_filter($update->getToAll()) !== [] || $update->getCcArray() !== []) {
+			return;
+		}
+
+		$update->setTo(ACore::CONTEXT_PUBLIC);
+		if ($actor->getFollowers() !== '') {
+			$update->setCcArray([$actor->getFollowers()]);
+		}
+	}
+
 	private function copyAudience(ACore $item, ACore $activity): void {
 		$activity->setTo($item->getTo());
 		$activity->setToArray($item->getToArray());
