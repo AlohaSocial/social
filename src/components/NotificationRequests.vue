@@ -83,9 +83,9 @@ import { htmlToPlainText } from '../utils/plainText.js'
  * The API has had this since the 4.3 policy landed and there was no page for
  * it, so somebody with a policy stricter than the default lost mentions with
  * no way to see that anything had been held — which is worse than not having
- * the policy at all. It is a card on the Blocking page rather than a page of
- * its own: it is one more thing the reader is not being shown, and it was a
- * sidebar entry that stayed empty for most people.
+ * the policy at all. It unfolds at the top of Activities, under the line
+ * that says how many people are waiting, which is where somebody looks
+ * when a mention never arrived.
  *
  * One row per *sender*, which is the shape the API answers in and the shape
  * the decision has: accepting settles everything that account has sent and
@@ -101,6 +101,9 @@ export default {
 		NcEmptyContent,
 		NcLoadingIcon,
 	},
+
+	/** `changed` carries how many senders are left, whenever the list changes. */
+	emits: ['changed'],
 
 	data() {
 		return {
@@ -135,6 +138,7 @@ export default {
 				const url = generateUrl('apps/social/api/v1/notifications/requests')
 				const { data } = await axios.get(url)
 				this.requests = Array.isArray(data) ? data : []
+				this.$emit('changed', this.requests.length)
 			} catch (error) {
 				logger.error('could not load the held notifications', { error })
 				showError(t('social', 'Could not load what is waiting'))
@@ -171,6 +175,7 @@ export default {
 				const url = generateUrl(path, { id: request.id, what })
 				await axios.post(url)
 				this.requests = this.requests.filter((one) => one.id !== request.id)
+				this.$emit('changed', this.requests.length)
 			} catch (error) {
 				logger.error('could not decide about a sender', { error })
 				showError(t('social', 'Could not do that'))
@@ -204,6 +209,7 @@ export default {
 				const url = generateUrl('apps/social/api/v1/notifications/requests/{what}', { what })
 				await axios.post(url, { id: ids })
 				this.requests = []
+				this.$emit('changed', 0)
 			} catch (error) {
 				logger.error('could not decide about every sender', { error })
 				showError(t('social', 'Could not do that'))

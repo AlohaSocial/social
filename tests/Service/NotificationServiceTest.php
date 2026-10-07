@@ -15,6 +15,7 @@ use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
@@ -41,6 +42,7 @@ use OCA\Social\Model\Client\StoryInteraction as ClientStoryInteraction;
 use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Service\AccountRelationService;
 use OCA\Social\Service\NotificationDeliveryService;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
@@ -117,6 +119,14 @@ class NotificationServiceTest extends TestCase {
 	private bool $bellFails = false;
 	/** the cached icon of the remote account, when the test gives it one */
 	private ?Image $bobIcon = null;
+	/** @var string[] senders the recipient's notification policy holds */
+	private array $heldSenders = [];
+	/** @var array<int, array> every question put to the policy: viewer user, sender, creation, direct */
+	private array $policyAsked = [];
+	/** @var string[] roots of the threads the recipient muted */
+	private array $mutedRoots = [];
+	/** @var array<string, string> post id => the root of its thread, where it is not its own */
+	private array $roots = [];
 
 	protected function setUp(): void {
 		$this->local = [self::ALICE => 'alice', self::CAROL => 'carol'];
@@ -245,7 +255,24 @@ class NotificationServiceTest extends TestCase {
 			}
 		);
 
-		$this->service = new NotificationService(
+		$this->service = $this->build();
+	}
+
+	private function build(): NotificationService {
+		$policy = $this->createStub(NotificationPolicyService::class);
+		$policy->method('isHeldFor')->willReturnCallback(
+			function (Person $viewer, string $senderId, int $creation, bool $direct): bool {
+				$this->policyAsked[] = [$viewer->getUserId(), $senderId, $creation, $direct];
+
+				return in_array($senderId, $this->heldSenders, true);
+			}
+		);
+
+		$conversations = $this->createStub(ConversationsRequest::class);
+		$conversations->method('getMutedRoots')->willReturnCallback(fn (): array => $this->mutedRoots);
+		$conversations->method('rootOf')->willReturnCallback(fn (string $id): string => $this->roots[$id] ?? $id);
+
+		return new NotificationService(
 			$this->streamRequest,
 			$this->streamService,
 			$this->actorsRequest,
@@ -258,7 +285,9 @@ class NotificationServiceTest extends TestCase {
 			$this->notificationManager,
 			$this->activityPublisher,
 			new NullLogger(),
-			$this->urlGenerator()
+			$this->urlGenerator(),
+			$policy,
+			$conversations
 		);
 	}
 
@@ -370,6 +399,99 @@ class NotificationServiceTest extends TestCase {
 			->setNotifications($notifications);
 
 		return $relation;
+	}
+
+	// held by the policy, or from a muted thread: stored, never raised
+
+	/** @return array<string, array{string}> */
+	public static function everySubType(): array {
+		return [
+			'a mention' => [Mention::TYPE],
+			'a favourite' => [Like::TYPE],
+			'a boost' => [Announce::TYPE],
+			'a follow' => [Follow::TYPE],
+			'a follow request' => [Follow::TYPE_REQUEST],
+		];
+	}
+
+	/** Everything a held sender does waits together: no bell, no push, no mail, no Activity entry. */
+	#[\PHPUnit\Framework\Attributes\DataProvider('everySubType')]
+	public function testAHeldSenderRaisesNothing(string $subType): void {
+		$this->heldSenders = [self::BOB];
+
+		$this->service->onNotification(
+			($subType === Mention::TYPE)
+				? $this->mention(self::ALICE, $this->post())
+				: $this->row($subType, self::ALICE, self::BOB)
+		);
+
+		$this->assertSame([], $this->raised);
+		$this->assertSame([], $this->activities);
+	}
+
+	/** The policy is asked about the sender, with what its rules need, for the recipient. */
+	public function testThePolicyIsAskedAboutTheSender(): void {
+		$this->postVisibility = Stream::TYPE_DIRECT;
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertSame([['alice', self::BOB, 0, true]], $this->policyAsked);
+	}
+
+	/** A sender the reader accepted is not held, so the bell rings as before. */
+	public function testASenderThePolicyDoesNotHoldIsRaised(): void {
+		$this->heldSenders = ['https://elsewhere.example/users/carol'];
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertCount(1, $this->raised);
+	}
+
+	/** Held comes before the digest: what is held is never counted as waiting for one. */
+	public function testAHeldSenderIsNotAskedAboutForTheDigest(): void {
+		$this->heldSenders = [self::BOB];
+		$asked = false;
+		$this->deliveryService = $this->createStub(NotificationDeliveryService::class);
+		$this->deliveryService->method('holds')->willReturnCallback(function () use (&$asked): bool {
+			$asked = true;
+
+			return false;
+		});
+		$this->service = $this->build();
+
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertFalse($asked);
+	}
+
+	public function testAReplyInAMutedThreadRaisesNothing(): void {
+		$this->mutedRoots = ['https://cloud.example/@alice/root'];
+		$this->roots[self::POST] = 'https://cloud.example/@alice/root';
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
+
+		$this->assertSame([], $this->raised);
+		$this->assertSame([], $this->activities);
+	}
+
+	public function testAnotherThreadIsNotMuted(): void {
+		$this->mutedRoots = ['https://cloud.example/@alice/other-root'];
+
+		$this->service->onNotification($this->mention(self::ALICE, $this->post()));
+
+		$this->assertCount(1, $this->raised);
+	}
+
+	/** A follow is about no post, so no thread can mute it. */
+	public function testAFollowIsNeverInAMutedThread(): void {
+		$this->mutedRoots = [self::POST];
+
+		$follow = $this->row(Follow::TYPE, self::ALICE, self::BOB);
+		$follow->setObjectId('');
+		$this->service->onNotification($follow);
+
+		$this->assertCount(1, $this->raised);
 	}
 
 	public function testAMentionTellsTheMentionedUser(): void {
@@ -642,12 +764,7 @@ class NotificationServiceTest extends TestCase {
 				return false;
 			}
 		);
-		$this->service = new NotificationService(
-			$this->streamRequest, $this->streamService, $this->actorsRequest, $this->cacheActorsRequest,
-			$this->actorRelationRequest, $this->actionsRequest, $this->accountRelationService,
-			$this->followsRequest, $this->deliveryService, $this->notificationManager,
-			$this->activityPublisher, new NullLogger(), $this->urlGenerator()
-		);
+		$this->service = $this->build();
 
 		$this->service->onNotification($this->row(Like::TYPE, self::ALICE, self::BOB));
 

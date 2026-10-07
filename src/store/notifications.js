@@ -21,6 +21,7 @@ import { isNewerId, newerId } from '../utils/snowflake.js'
  * @property {number} unreadDirect how many conversations have something unread in them
  * @property {boolean} directCounted whether the direct message count has been read once
  * @property {string} lastReadId the row the reader had read up to, '0' while unknown
+ * @property {number} pendingRequests how many senders the notification policy is holding back
  */
 
 /**
@@ -45,6 +46,10 @@ export const useNotificationsStore = defineStore('notifications', {
 		unreadDirect: 0,
 		/** whether the count has been read once, so a rise can be told from a first answer */
 		directCounted: false,
+		/** how many senders the notification policy is holding back, from the policy's summary */
+		pendingRequests: 0,
+		/** whether the one-time notice about choosing who may reach you is due, as the policy says */
+		policyNotice: false,
 		/**
 		 * The row id the reader had read up to, the last time the server was
 		 * asked; '0' while unknown or when nothing has ever been read. What
@@ -63,6 +68,18 @@ export const useNotificationsStore = defineStore('notifications', {
 		 */
 		unreadNotifications(state) {
 			return state.unread
+		},
+
+		/**
+		 * The count on Activities in the sidebar: what is unread, and the
+		 * people waiting for a decision. Requests never ring the bell, so
+		 * they are part of the number rather than a badge of their own.
+		 *
+		 * @param {NotificationState} state the store state
+		 * @return {number} what the Activities badge shows
+		 */
+		activitiesCount(state) {
+			return state.unread + state.pendingRequests
 		},
 
 		/**
@@ -121,6 +138,44 @@ export const useNotificationsStore = defineStore('notifications', {
 				logger.error('Failed to mark the direct messages read', { error })
 				// put back whatever the server actually thinks
 				this.fetchUnreadDirectMessages()
+			}
+		},
+
+		setPendingRequests(count) {
+			this.pendingRequests = Math.max(0, Number(count) || 0)
+		},
+
+		/** @param {boolean} due whether the one-time notice is to be shown */
+		setPolicyNotice(due) {
+			this.policyNotice = due === true
+		},
+
+		/**
+		 * Reads how many senders the policy is holding back, off the policy's
+		 * own summary — the count Mastodon's clients draw their banner from —
+		 * and whether the one-time notice is due. Silent on failure: the line
+		 * and the notice simply stay away.
+		 */
+		async fetchPendingRequests() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v2/notifications/policy'))
+				this.setPendingRequests(data?.summary?.pending_requests_count)
+				this.setPolicyNotice(data?.notice === true)
+			} catch (error) {
+				logger.error('Failed to read how many senders are held back', { error })
+			}
+		},
+
+		/**
+		 * Puts the one-time notice away for good. It goes at once; a failed
+		 * request only means it comes back on a later visit.
+		 */
+		async dismissPolicyNotice() {
+			this.setPolicyNotice(false)
+			try {
+				await axios.post(generateUrl('apps/social/api/v1/social/notifications/policy/notice/dismiss'))
+			} catch (error) {
+				logger.error('Failed to dismiss the notification policy notice', { error })
 			}
 		},
 

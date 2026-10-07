@@ -40,7 +40,9 @@ use Psr\Log\LoggerInterface;
  * notification with the counts of what the user has not read since the last
  * one, per kind. It counts rather than lists, because what was held is still
  * in the in-app list, and the bell's job is to say that there is something
- * there.
+ * there. What was never raised — held by the notification policy, or from a
+ * muted thread — is not counted; the senders waiting in the requests inbox are
+ * mentioned in a line of their own, and never make a digest by themselves.
  */
 class NotificationDeliveryService {
 	public const CONFIG_KEY = 'notification_delivery';
@@ -63,6 +65,7 @@ class NotificationDeliveryService {
 		private INotificationManager $notificationManager,
 		private IURLGenerator $urlGenerator,
 		private LoggerInterface $logger,
+		private NotificationInboxService $notificationInboxService,
 	) {
 	}
 
@@ -182,10 +185,11 @@ class NotificationDeliveryService {
 	 * time: a reader who ignores three in a row has three sets of counts in
 	 * the latest one anyway.
 	 *
-	 * Null when there was nothing to say; the clock still moves, since the
+	 * Null when there was nothing to say — senders waiting in the requests
+	 * inbox alone are not something to say; the clock still moves, since the
 	 * window was looked at.
 	 *
-	 * @return array{counts: array<string, int>, total: int, link: string}|null the digest's parameters
+	 * @return array{counts: array<string, int>, total: int, link: string, waiting?: int}|null the digest's parameters
 	 */
 	public function digestFor(string $userId, DateTimeImmutable $until): ?array {
 		try {
@@ -197,12 +201,16 @@ class NotificationDeliveryService {
 		}
 
 		$since = $this->lastDigestAt($userId);
+		$marker = $this->markerService->lastReadId($userId, self::TIMELINE);
 		$bySubType = $this->streamRequest->countNotificationsBySubType(
-			$actor,
-			$this->markerService->lastReadId($userId, self::TIMELINE),
-			$this->asStored($since),
-			$this->asStored($until->getTimestamp())
+			$actor, $marker, $this->asStored($since), $this->asStored($until->getTimestamp())
 		);
+		foreach ($this->notificationInboxService->held($actor, $marker) as $held) {
+			$at = $held->getPublishedTime();
+			if ($at > $since && $at <= $until->getTimestamp() && ($bySubType[$held->getSubType()] ?? 0) > 0) {
+				$bySubType[$held->getSubType()]--;
+			}
+		}
 		$this->setLastDigestAt($userId, $until->getTimestamp());
 
 		$counts = [];
@@ -226,6 +234,10 @@ class NotificationDeliveryService {
 			'link' => rtrim($this->urlGenerator->linkToRouteAbsolute('social.Navigation.navigate'), '/')
 				. '/timeline/notifications',
 		];
+		$waiting = count($this->notificationInboxService->requests($actor));
+		if ($waiting > 0) {
+			$parameters['waiting'] = $waiting;
+		}
 
 		try {
 			$older = $this->notificationManager->createNotification();

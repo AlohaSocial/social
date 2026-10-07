@@ -4,7 +4,7 @@
  */
 
 import axios from '@nextcloud/axios'
-import { showError, showInfo } from '../services/toast.js'
+import { showError, showInfo, showSuccess } from '../services/toast.js'
 import { translate as t } from '@nextcloud/l10n'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
@@ -732,6 +732,18 @@ export const useTimelineStore = defineStore('timeline', {
 				this.statuses[status.id] = { ...this.statuses[status.id], bookmarked }
 			}
 		},
+		/**
+		 * Flips the mute on the store's copy of a post, taking the post into
+		 * the store when it is not there yet: a notification's card draws the
+		 * store's copy where there is one, its own snapshot otherwise.
+		 *
+		 * @param {object} payload which post, and which way
+		 * @param {import('../types/Mastodon.js').Status} payload.status the post
+		 * @param {boolean} payload.muted whether its conversation is muted
+		 */
+		muteConversationOf({ status, muted }) {
+			this.statuses[status.id] = { ...(this.statuses[status.id] ?? status), muted }
+		},
 		pinStatus({ status, pinned }) {
 			if (this.statuses[status.id] !== undefined) {
 				this.statuses[status.id] = { ...this.statuses[status.id], pinned }
@@ -1162,6 +1174,39 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.error('Failed to delete the boost', { error })
 			}
 		},
+		/**
+		 * Mutes or unmutes the conversation a post belongs to, for this reader.
+		 *
+		 * The thread stays on every timeline; only what it would tell the
+		 * reader stops. The server keeps the mute against the thread's root,
+		 * so the flag the server answers with is the one to trust — a reply
+		 * elsewhere in the same thread is muted too, and this one copy is
+		 * what is flipped at once so the menu answers.
+		 *
+		 * @param {object} payload which post, and which way
+		 * @param {import('../types/Mastodon.js').Status} payload.status the post
+		 * @param {boolean} payload.muted whether the conversation is to be muted
+		 */
+		async postMuteConversation({ status, muted }) {
+			this.muteConversationOf({ status, muted })
+			try {
+				const action = muted ? 'mute' : 'unmute'
+				const response = await axios.post(generateUrl(`apps/social/api/v1/statuses/${status.id}/${action}`))
+				this.addToStatuses(response.data)
+				showSuccess(muted
+					? t('social', 'Conversation muted — you won\'t be notified about it')
+					: t('social', 'Conversation unmuted'))
+
+				return response
+			} catch (error) {
+				this.muteConversationOf({ status, muted: !muted })
+				showError(muted
+					? t('social', 'Could not mute the conversation')
+					: t('social', 'Could not unmute the conversation'))
+				logger.error('Failed to change the conversation mute', { error })
+			}
+		},
+
 		async postBookmark({ status, bookmarked }) {
 			// the flag flips first so the button answers at once, and is put back
 			// if the server refuses

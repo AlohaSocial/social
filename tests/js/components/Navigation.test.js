@@ -127,6 +127,7 @@ describe('Navigation', () => {
 			boot.immediate = false
 			axios.get.mockClear()
 			const fetchUnread = vi.spyOn(notificationsStore, 'fetchUnreadNotifications').mockResolvedValue(undefined)
+			const fetchRequests = vi.spyOn(notificationsStore, 'fetchPendingRequests').mockResolvedValue(undefined)
 
 			mountNavigation()
 			await flushPromises()
@@ -134,6 +135,7 @@ describe('Navigation', () => {
 			// trending, lists, the badge: all of them wait
 			expect(axios.get).not.toHaveBeenCalled()
 			expect(fetchUnread).not.toHaveBeenCalled()
+			expect(fetchRequests).not.toHaveBeenCalled()
 			expect(boot.held.length).toBeGreaterThan(0)
 
 			boot.held.forEach((release) => release())
@@ -142,6 +144,7 @@ describe('Navigation', () => {
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/trends/tags', expect.anything())
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/lists')
 			expect(fetchUnread).toHaveBeenCalledTimes(1)
+			expect(fetchRequests).toHaveBeenCalledTimes(1)
 		})
 	})
 
@@ -1070,6 +1073,14 @@ describe('Navigation', () => {
 		// badge never appeared at all
 		expect(item(mountNavigation(), 'Activities').find('.nc-counter').exists()).toBe(false)
 		expect(item(mountNavigation({ unread: 5 }), 'Activities').find('.nc-counter').attributes('data-count')).toBe('5')
+	})
+
+	it('counts the people waiting for a decision on Activities, in the same badge', () => {
+		notificationsStore.setPendingRequests(3)
+		expect(item(mountNavigation(), 'Activities').find('.nc-counter').attributes('data-count')).toBe('3')
+
+		const wrapper = mountNavigation({ unread: 2 })
+		expect(item(wrapper, 'Activities').findAll('.nc-counter').map((one) => one.attributes('data-count'))).toEqual(['5'])
 	})
 
 	// Routes come from the real router rather than being written out here: an

@@ -9,6 +9,7 @@ import TimelineEntry from '../../../src/components/TimelineEntry.vue'
 import AccountHoverCard from '../../../src/components/AccountHoverCard.vue'
 import ActorAvatar from '../../../src/components/ActorAvatar.vue'
 import { createPinia, setActivePinia } from 'pinia'
+import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
 // the phone query, under the test's control: what it answers and who listens
@@ -80,6 +81,12 @@ const TimelineAvatarStub = {
 	props: ['item', 'size'],
 	template: '<div class="timeline-avatar-stub" />',
 }
+const NcActionsStub = { name: 'NcActions', template: '<div class="actions-stub"><slot /></div>' }
+const NcActionButtonStub = {
+	name: 'NcActionButton',
+	emits: ['click'],
+	template: '<button class="action" @click="$emit(\'click\')"><slot /></button>',
+}
 const UserEntryStub = {
 	name: 'UserEntry',
 	props: ['item', 'displayFollowButton'],
@@ -113,6 +120,8 @@ function mountEntry(item, props = {}) {
 				TimelineAvatar: TimelineAvatarStub,
 				UserEntry: UserEntryStub,
 				RouterLink: RouterLinkStub,
+				NcActions: NcActionsStub,
+				NcActionButton: NcActionButtonStub,
 			},
 		},
 	})
@@ -206,9 +215,56 @@ describe('TimelineEntry', () => {
 			expect(wrapper.classes()).toContain('with-header')
 			const header = wrapper.find('.notification__header')
 			expect(header.findComponent(ActorAvatar).props('actor')).toEqual(bob)
-			expect(header.findAll('.material-design-icon')).toHaveLength(1)
-			expect(header.find('.material-design-icon').classes()).toContain(iconClass)
+			expect(header.find('.notification__summary').findAll('.material-design-icon')).toHaveLength(1)
+			expect(header.find('.notification__summary .material-design-icon').classes()).toContain(iconClass)
 			expect(header.find('.notification__summary').text()).toBe(summary)
+		})
+
+		describe('muting the conversation from the card', () => {
+			const actions = (wrapper) => wrapper.findAll('.notification__header .action').map((one) => one.text())
+
+			it('offers it on a mention or a reply, and on nothing else', () => {
+				expect(actions(mountEntry(notification('mention'), { type: 'notifications' }).wrapper)).toEqual(['Mute conversation'])
+				for (const type of ['favourite', 'reblog', 'status', 'update', 'poll']) {
+					expect(actions(mountEntry(notification(type), { type: 'notifications' }).wrapper)).toEqual([])
+				}
+			})
+
+			it('mutes the thread of the post the card is about', async () => {
+				const { wrapper, timelineStore } = mountEntry(notification('mention'), { type: 'notifications' })
+				const mute = vi.spyOn(timelineStore, 'postMuteConversation').mockResolvedValue(undefined)
+
+				await wrapper.find('.notification__header .action').trigger('click')
+
+				expect(mute).toHaveBeenCalledWith({ status: storedPost, muted: true })
+			})
+
+			it('offers to unmute a thread that is muted', async () => {
+				const { wrapper, timelineStore } = mountEntry(notification('mention'), { type: 'notifications' })
+				timelineStore.addToStatuses({ ...storedPost, muted: true })
+				await wrapper.vm.$nextTick()
+				const mute = vi.spyOn(timelineStore, 'postMuteConversation').mockResolvedValue(undefined)
+
+				expect(actions(wrapper)).toEqual(['Unmute conversation'])
+				await wrapper.find('.notification__header .action').trigger('click')
+				expect(mute).toHaveBeenCalledWith({ status: { ...storedPost, muted: true }, muted: false })
+			})
+
+			it('is not offered on a public page', () => {
+				const pinia = createPinia()
+				setActivePinia(pinia)
+				useSettingsStore().setServerData({ public: true })
+				const wrapper = mount(TimelineEntry, {
+					props: { item: notification('mention'), type: 'notifications' },
+					global: {
+						plugins: [pinia],
+						mocks: { $route: { name: 'timeline', params: { type: 'notifications' } } },
+						stubs: { TimelinePost: TimelinePostStub, RouterLink: RouterLinkStub, NcActions: NcActionsStub, NcActionButton: NcActionButtonStub },
+					},
+				})
+
+				expect(actions(wrapper)).toEqual([])
+			})
 		})
 
 		it('shows the faces of everyone a grouped card stands for, capped', () => {

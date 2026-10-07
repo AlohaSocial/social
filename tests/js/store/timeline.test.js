@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { toRaw } from 'vue'
 import axios from '@nextcloud/axios'
-import { showError } from '../../../src/services/toast.js'
+import { showError, showSuccess } from '../../../src/services/toast.js'
 
 import { isRanked, useTimelineStore } from '../../../src/store/timeline.js'
 import logger from '../../../src/services/logger.js'
@@ -15,7 +15,7 @@ import logger from '../../../src/services/logger.js'
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }))
-vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn() }))
+vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showInfo: vi.fn(), showSuccess: vi.fn() }))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -1010,6 +1010,56 @@ describe('timeline store actions', () => {
 			expect(tl().statuses['1']).toMatchObject({ [flag]: initialFlag, [counter]: 3 })
 			expect(tl().timeline).toEqual(['1'])
 			expect(showError).toHaveBeenCalledWith(errorMessage)
+		})
+	})
+
+	describe.each([
+		['mute', true, 'Could not mute the conversation', 'Conversation muted — you won\'t be notified about it'],
+		['unmute', false, 'Could not unmute the conversation', 'Conversation unmuted'],
+	])('postMuteConversation (%s)', (endpoint, muted, errorMessage, confirmation) => {
+		it(`flips the flag, POSTs to /statuses/:id/${endpoint} and stores the server copy`, async () => {
+			const status = makeStatus('1', { muted: !muted })
+			store.addToTimeline([status])
+			const serverCopy = makeStatus('1', { muted })
+			let duringRequest
+			axios.post.mockImplementation(async () => {
+				duringRequest = { ...tl().statuses['1'] }
+				return { data: serverCopy }
+			})
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(axios.post).toHaveBeenCalledWith(`${API}/statuses/1/${endpoint}`)
+			expect(duringRequest).toMatchObject({ muted })
+			expect(tl().statuses['1']).toEqual(serverCopy)
+			expect(showError).not.toHaveBeenCalled()
+			expect(showSuccess).toHaveBeenCalledWith(confirmation)
+		})
+
+		it('flips a post the store did not hold yet, such as one a notification card drew', async () => {
+			const status = makeStatus('7', { muted: !muted })
+			let duringRequest
+			axios.post.mockImplementation(async () => {
+				duringRequest = { ...tl().statuses['7'] }
+				return { data: makeStatus('7', { muted }) }
+			})
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(duringRequest).toMatchObject({ id: '7', muted })
+			expect(tl().statuses['7'].muted).toBe(muted)
+		})
+
+		it('puts the flag back and reports when the server refuses', async () => {
+			const status = makeStatus('1', { muted: !muted })
+			store.addToTimeline([status])
+			axios.post.mockRejectedValue(new Error('nope'))
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(tl().statuses['1'].muted).toBe(!muted)
+			expect(showError).toHaveBeenCalledWith(errorMessage)
+			expect(showSuccess).not.toHaveBeenCalled()
 		})
 	})
 

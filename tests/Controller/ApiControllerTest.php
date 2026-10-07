@@ -343,6 +343,7 @@ class ApiControllerTest extends TestCase {
 		$this->notificationPolicyService->method('partition')
 			->willReturnCallback(static fn (Person $viewer, array $page): array
 				=> ['shown' => $page, 'held' => []]);
+		$this->notificationPolicyService->method('of')->willReturn(new \OCA\Social\Model\Client\NotificationPolicy());
 		$this->l10nFactory = $this->createStub(IFactory::class);
 		$this->quoteService = $this->createMock(QuoteService::class);
 		$this->annualReportService = $this->createMock(AnnualReportService::class);
@@ -462,6 +463,15 @@ class ApiControllerTest extends TestCase {
 			'watchService' => $this->createMock(\OCA\Social\Service\WatchService::class),
 			'l10nFactory' => $this->l10nFactory,
 			'timelineRevisionService' => $this->timelineRevisionService,
+			// the real one over the doubles above, so the badge is counted by
+			// the query these tests assert on
+			'notificationInboxService' => new \OCA\Social\Service\NotificationInboxService(
+				$this->streamService,
+				$this->streamRequest,
+				$this->notificationPolicyService,
+				$this->markerService,
+				$this->createStub(\OCA\Social\Db\ConversationsRequest::class),
+			),
 			'durableCache' => $this->durableCache(),
 		]);
 	}

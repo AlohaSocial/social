@@ -116,14 +116,19 @@ describe('BlockedAccounts', () => {
 	})
 
 	/**
-	 * The senders a notification policy is holding are one more thing the
-	 * reader is not being shown, so they belong with the rest of it rather
-	 * than behind a sidebar entry that is empty for most people.
+	 * The senders a notification policy is holding wait at the top of
+	 * Activities; this page only keeps the way there.
 	 */
-	it('holds the senders a notification policy is keeping back', async () => {
+	it('links to the requests on Activities for the senders a notification policy is keeping back', async () => {
 		const { wrapper } = await mountView()
+		const card = wrapper.find('#filtered-notifications')
 
-		expect(wrapper.find('#filtered-notifications .notification-requests-stub').exists()).toBe(true)
+		expect(card.find('.notification-requests-stub').exists()).toBe(false)
+		expect(card.text()).toContain('top of Activities')
+		expect(card.findAllComponents(RouterLinkStub).map((link) => link.props('to'))).toEqual([
+			{ name: 'timeline', params: { type: 'notifications' }, query: { requests: '1' } },
+			{ name: 'settings', hash: '#notification-policy' },
+		])
 	})
 
 	it('links each account to its profile', async () => {

@@ -10,11 +10,14 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Db\ModerationRequest;
+use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Mention;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Client\NotificationRequest;
+use OCA\Social\Model\Moderation;
 
 /**
  * Mastodon 4.3's notification policy and the requests inbox it fills.
@@ -25,10 +28,12 @@ use OCA\Social\Model\Client\NotificationRequest;
  * *held* rather than shown or lost, gathered per sender, and the reader
  * decides about the sender once.
  *
- * Nothing is held by default. Every one of the five questions starts at
- * `accept`, which is exactly what every account had before this existed: a
- * policy that began by holding things back would swallow notifications for
- * accounts that never asked it to.
+ * An account that has never stored a policy holds nothing back: every one of
+ * the five questions answers `accept`, which is what every account had before
+ * this existed, so accounts from before new ones started calm keep receiving
+ * everything until their owner chooses. An account created here is given
+ * a stored policy at creation (`startCalm()`): the administrator's defaults,
+ * else `NotificationPolicy::CALM`.
  *
  * Held, not deleted. `drop` is Mastodon's third answer and this app treats it
  * as `filter` at read time for one reason: the notification row is written by
@@ -37,8 +42,13 @@ use OCA\Social\Model\Client\NotificationRequest;
  * not show what was refused on Monday. The reader sees the same thing either
  * way; what differs is whether the decision can be taken back.
  *
- * Reading is where the policy applies, not writing, and that has a cost worth
- * naming: `/api/v1/notifications` reads a page and then removes what is held,
+ * The policy applies in two places, with the same rules (`isHeld()`): when
+ * the list is read, so what is held is not listed, and when a notification is
+ * stored, so what is held raises no Nextcloud notification — no bell, push or
+ * mail (`isHeldFor()`, called from `NotificationService::emit()`).
+ *
+ * Reading is where the list is filtered, not writing, and that has a cost
+ * worth naming: `/api/v1/notifications` reads a page and then removes what is held,
  * so a page can come back short. It is the same trade `FilterService` makes,
  * and the paging cursor is taken from what the query returned rather than from
  * what survived, so a shortened page never ends the client's paging early.
@@ -46,6 +56,18 @@ use OCA\Social\Model\Client\NotificationRequest;
 class NotificationPolicyService {
 	/** Where the five decisions are stored, as JSON, per account. */
 	public const CONFIG_KEY = 'notification_policy';
+
+	/**
+	 * The administrator's choice of what a new account starts with, as JSON
+	 * with the same five keys; a key left out is `NotificationPolicy::CALM`'s.
+	 */
+	public const DEFAULTS_KEY = 'notification_policy_defaults';
+
+	/** Set to `1` once the reader has put away the one-time pointer to the policy. */
+	public const NOTICE_KEY = 'notification_policy_notice_dismissed';
+
+	/** The two answers an administrator may give for new accounts. */
+	public const DEFAULT_DECISIONS = [NotificationPolicy::ACCEPT, NotificationPolicy::FILTER];
 
 	/** Younger than this and an account is "new" for `for_new_accounts`. */
 	public const NEW_ACCOUNT_DAYS = 30;
@@ -67,16 +89,91 @@ class NotificationPolicyService {
 	public function __construct(
 		private ConfigService $configService,
 		private FollowsRequest $followsRequest,
-		private ModerationService $moderationService,
+		private ModerationRequest $moderationRequest,
 		private AccountRelationService $accountRelationService,
+		private TimelineRevisionService $timelineRevisionService,
 	) {
 	}
 
 	/** The account's policy, with nothing filled in for the summary. */
 	public function of(string $userId): NotificationPolicy {
-		$policy = new NotificationPolicy();
-
 		$stored = $this->configService->getUserValue(self::CONFIG_KEY, $userId);
+		$policy = $this->decode($stored);
+
+		return $policy->setNotice(
+			$stored === '' && $this->configService->getUserValue(self::NOTICE_KEY, $userId) !== '1'
+		);
+	}
+
+	/**
+	 * Stores the policy a new account starts with, unless the account already
+	 * has one — a Nextcloud user whose earlier account was deleted keeps what
+	 * they chose then.
+	 */
+	public function startCalm(string $userId): void {
+		if ($userId === '' || $this->configService->getUserValue(self::CONFIG_KEY, $userId) !== '') {
+			return;
+		}
+
+		$this->configService->setValueForUser(
+			$userId, self::CONFIG_KEY, (string)json_encode($this->defaults()->getDecisions())
+		);
+	}
+
+	/** What a new account starts with: the administrator's choice over `NotificationPolicy::CALM`. */
+	public function defaults(): NotificationPolicy {
+		$policy = new NotificationPolicy();
+		foreach (NotificationPolicy::CALM as $key => $decision) {
+			$policy->set($key, $decision);
+		}
+
+		$decoded = json_decode((string)$this->configService->getAppValue(self::DEFAULTS_KEY), true);
+		if (is_array($decoded)) {
+			foreach (NotificationPolicy::KEYS as $key) {
+				if (isset($decoded[$key]) && in_array($decoded[$key], self::DEFAULT_DECISIONS, true)) {
+					$policy->set($key, $decoded[$key]);
+				}
+			}
+		}
+
+		return $policy;
+	}
+
+	/**
+	 * Changes what new accounts start with. Only `accept` and `filter`: the
+	 * administrator decides whether something waits for review, never that it
+	 * is thrown away for somebody who has not chosen that. Accounts that exist
+	 * already are not touched.
+	 *
+	 * @param array<string, mixed> $changes
+	 *
+	 * @throws InvalidResourceException a named key with any other value; nothing is written
+	 */
+	public function saveDefaults(array $changes): NotificationPolicy {
+		$policy = $this->defaults();
+		foreach (NotificationPolicy::KEYS as $key) {
+			if (!array_key_exists($key, $changes)) {
+				continue;
+			}
+			if (!in_array($changes[$key], self::DEFAULT_DECISIONS, true)) {
+				throw new InvalidResourceException($key . ' must be accept or filter');
+			}
+
+			$policy->set($key, $changes[$key]);
+		}
+
+		$this->configService->setAppValue(self::DEFAULTS_KEY, (string)json_encode($policy->getDecisions()));
+
+		return $policy;
+	}
+
+	/** Puts the one-time pointer to the policy away for good. */
+	public function dismissNotice(string $userId): void {
+		$this->configService->setValueForUser($userId, self::NOTICE_KEY, '1');
+	}
+
+	private function decode(string $stored): NotificationPolicy {
+		$policy = new NotificationPolicy();
 		if ($stored === '') {
 			return $policy;
 		}
@@ -147,8 +244,12 @@ class NotificationPolicyService {
 		$shown = [];
 		$held = [];
 		foreach ($notifications as $notification) {
-			$senderId = $this->senderOf($notification)?->getId() ?? '';
-			if ($senderId === '' || !$this->isHeld($policy, $notification, $senderId, $facts)) {
+			$sender = $this->senderOf($notification);
+			$senderId = $sender?->getId() ?? '';
+			if ($senderId === ''
+				|| !$this->isHeld(
+					$policy, $senderId, $sender?->getCreation() ?? 0, $this->isPrivateMention($notification), $facts
+				)) {
 				$shown[] = $notification;
 
 				continue;
@@ -158,6 +259,29 @@ class NotificationPolicyService {
 		}
 
 		return ['shown' => $shown, 'held' => $held];
+	}
+
+	/**
+	 * Whether one notification, as it is being stored, is held: the rules
+	 * `partition()` applies to a page, asked about a single sender.
+	 *
+	 * @param Person $viewer the recipient, with the Nextcloud user it belongs to
+	 * @param int $senderCreation the sender's account creation as a unix time; 0 when unknown
+	 * @param bool $directMention a mention in a post addressed to its readers alone
+	 */
+	public function isHeldFor(Person $viewer, string $senderId, int $senderCreation, bool $directMention): bool {
+		if ($senderId === '') {
+			return false;
+		}
+
+		$policy = $this->of($viewer->getUserId());
+		if ($policy->isEverythingAccepted()) {
+			return false;
+		}
+
+		return $this->isHeld(
+			$policy, $senderId, $senderCreation, $directMention, $this->factsAbout($viewer, [$senderId])
+		);
 	}
 
 	/**
@@ -231,6 +355,7 @@ class NotificationPolicyService {
 	 */
 	public function accept(Person $viewer, Person $sender): void {
 		$this->accountRelationService->acceptNotifications($viewer, $sender);
+		$this->timelineRevisionService->bump($viewer->getUserId());
 	}
 
 	/**
@@ -243,6 +368,25 @@ class NotificationPolicyService {
 	 */
 	public function dismiss(Person $viewer, Person $sender): void {
 		$this->accountRelationService->dismissNotifications($viewer, $sender);
+		$this->timelineRevisionService->bump($viewer->getUserId());
+	}
+
+	/**
+	 * The senders this reader accepted from their requests: always allowed,
+	 * whatever the policy says, until the reader stops allowing them.
+	 *
+	 * @return Person[]
+	 */
+	public function allowed(Person $viewer, int $limit = self::REQUESTS_LIMIT): array {
+		return $this->accountRelationService->acceptedSenders(
+			$viewer, max(1, min(self::REQUESTS_MAX_LIMIT, $limit))
+		);
+	}
+
+	/** Returns an accepted sender to the policy. */
+	public function stopAllowing(Person $viewer, Person $sender): void {
+		$this->accountRelationService->forgetAcceptedSender($viewer, $sender);
+		$this->timelineRevisionService->bump($viewer->getUserId());
 	}
 
 	/**
@@ -292,7 +436,7 @@ class NotificationPolicyService {
 		$follows = $this->followsRequest->getBetweenMany($viewer->getId(), $senders);
 
 		$silenced = [];
-		foreach ($this->moderationService->silenced() as $actorId) {
+		foreach ($this->moderationRequest->getActorIdsAt(Moderation::SILENCE) as $actorId) {
 			$silenced[$actorId] = true;
 		}
 
@@ -312,8 +456,9 @@ class NotificationPolicyService {
 	 */
 	private function isHeld(
 		NotificationPolicy $policy,
-		Stream $notification,
 		string $senderId,
+		int $senderCreation,
+		bool $privateMention,
 		array $facts,
 	): bool {
 		// a decision the reader has already taken outranks the policy, in
@@ -331,8 +476,8 @@ class NotificationPolicyService {
 		foreach ([
 			NotificationPolicy::NOT_FOLLOWING => !$following,
 			NotificationPolicy::NOT_FOLLOWERS => !isset($facts['followers'][$senderId]),
-			NotificationPolicy::NEW_ACCOUNTS => $this->isNewAccount($notification),
-			NotificationPolicy::PRIVATE_MENTIONS => !$following && $this->isPrivateMention($notification),
+			NotificationPolicy::NEW_ACCOUNTS => $this->isNewAccount($senderCreation),
+			NotificationPolicy::PRIVATE_MENTIONS => !$following && $privateMention,
 			NotificationPolicy::LIMITED_ACCOUNTS => isset($facts['silenced'][$senderId]),
 		] as $key => $applies) {
 			if ($applies && $policy->get($key) !== NotificationPolicy::ACCEPT) {
@@ -343,10 +488,7 @@ class NotificationPolicyService {
 		return false;
 	}
 
-	private function isNewAccount(Stream $notification): bool {
-		$sender = $this->senderOf($notification);
-		$creation = $sender?->getCreation() ?? 0;
-
+	private function isNewAccount(int $creation): bool {
 		// an account this instance has no creation date for is not a new
 		// account: guessing "new" would hold back every remote account whose
 		// profile arrived without one

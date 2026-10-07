@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use InvalidArgumentException;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\ServerSettingsService;
 use OCP\AppFramework\Controller;
@@ -36,6 +37,7 @@ class ServerSettingsController extends Controller {
 		IRequest $request,
 		private ServerSettingsService $serverSettingsService,
 		private RelayService $relayService,
+		private NotificationPolicyService $notificationPolicyService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -101,6 +103,32 @@ class ServerSettingsController extends Controller {
 				$contactAccount,
 			));
 		} catch (InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * Who may reach an account created from now on: the notification policy
+	 * every new local account is given, five keys each `accept` or `filter`.
+	 */
+	#[FrontpageRoute(verb: 'GET', url: '/admin/notification-policy')]
+	public function notificationPolicy(): DataResponse {
+		return new DataResponse($this->notificationPolicyService->defaults()->getDecisions(), Http::STATUS_OK);
+	}
+
+	/**
+	 * Changes it. Any subset of the five keys may be sent; one with a value
+	 * other than `accept` or `filter` refuses the whole change with a 422 and
+	 * writes nothing. Accounts that exist already keep their policy.
+	 */
+	#[FrontpageRoute(verb: 'POST', url: '/admin/notification-policy')]
+	public function notificationPolicyUpdate(): DataResponse {
+		try {
+			return new DataResponse(
+				$this->notificationPolicyService->saveDefaults($this->request->getParams())->getDecisions(),
+				Http::STATUS_OK
+			);
+		} catch (InvalidResourceException $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}

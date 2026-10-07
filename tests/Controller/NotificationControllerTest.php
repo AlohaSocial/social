@@ -10,7 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\NotificationController;
+use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Db\ModerationRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
@@ -28,11 +31,14 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FilterService;
-use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\MarkerService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationGroupService;
+use OCA\Social\Service\NotificationInboxService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
+use OCA\Social\Service\StreamService;
+use OCA\Social\Service\TimelineRevisionService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\IUser;
@@ -74,6 +80,9 @@ class NotificationControllerTest extends TestCase {
 	/** @var array<int, array> [method, id] of every call that changes something */
 	private array $writes = [];
 	private bool $csrf = true;
+	/** @var Stream[] the page of notifications the stream service serves */
+	private array $page = [];
+	private MarkerService|MockObject $markerService;
 
 	protected function setUp(): void {
 		$this->request = $this->createStub(IRequest::class);
@@ -140,6 +149,7 @@ class NotificationControllerTest extends TestCase {
 		$this->filterService = $this->createStub(FilterService::class);
 		$this->filterService->method('applyToNotifications')->willReturnArgument(0);
 		$this->cacheActorService = $this->createStub(CacheActorService::class);
+		$this->markerService = $this->createMock(MarkerService::class);
 
 		// Response::getHeaders() asks the container for the request
 		\OC::$server->register(IRequest::class, $this->request);
@@ -166,7 +176,22 @@ class NotificationControllerTest extends TestCase {
 			$this->notificationPolicyService,
 			$this->notificationDeliveryService,
 			$this->filterService,
-			$this->cacheActorService
+			$this->cacheActorService,
+			$this->inbox()
+		);
+	}
+
+	/** The real inbox over a stream service that serves `$page`, and the policy double. */
+	private function inbox(): NotificationInboxService {
+		$streamService = $this->createStub(StreamService::class);
+		$streamService->method('getTimeline')->willReturnCallback(fn (): array => $this->page);
+
+		return new NotificationInboxService(
+			$streamService,
+			$this->createStub(StreamRequest::class),
+			$this->notificationPolicyService,
+			$this->markerService,
+			$this->createStub(ConversationsRequest::class)
 		);
 	}
 
@@ -322,7 +347,7 @@ class NotificationControllerTest extends TestCase {
 
 	/** A page of notifications the stubbed service will serve. */
 	private function timeline(array $notifications): void {
-		$this->notificationService->method('timeline')->willReturn($notifications);
+		$this->page = $notifications;
 	}
 
 	private function favourite(int $nid, int $senderNid, int $postNid): Stream {
@@ -508,8 +533,10 @@ class NotificationControllerTest extends TestCase {
 
 	public function testTheRequestsInboxIsOneRowPerHeldSender(): void {
 		$held = [$this->favourite(2, 200, 10), $this->favourite(1, 200, 11)];
-		$this->notificationService->method('timeline')->willReturn($held);
+		$this->page = $held;
 		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$this->notificationPolicyService->method('of')
+			->willReturn((new NotificationPolicy())->set(NotificationPolicy::NOT_FOLLOWING, NotificationPolicy::FILTER));
 		$this->notificationPolicyService->method('partition')
 			->willReturn(['shown' => [], 'held' => $held]);
 		$this->notificationPolicyService->method('decisionsAbout')
@@ -519,8 +546,9 @@ class NotificationControllerTest extends TestCase {
 				fn (array $rows, array $dismissed = []): array => (new NotificationPolicyService(
 					$this->createStub(ConfigService::class),
 					$this->createStub(FollowsRequest::class),
-					$this->createStub(ModerationService::class),
-					$this->createStub(AccountRelationService::class)
+					$this->createStub(ModerationRequest::class),
+					$this->createStub(AccountRelationService::class),
+					$this->createStub(TimelineRevisionService::class)
 				))->requestsFrom($rows, $dismissed)
 			);
 
@@ -574,4 +602,102 @@ class NotificationControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_UNAUTHORIZED, $this->controller()->requests()->getStatus());
 	}
 
+	// accepting releases without ringing; the always-allowed list; the notice
+
+	/** What the accepted sender sent while held is unread now, even behind the marker. */
+	public function testAcceptingMarksWhatWasHeldUnread(): void {
+		$held = [$this->favourite(31, 200, 10), $this->favourite(30, 200, 11), $this->favourite(29, 300, 12)];
+		$this->page = $held;
+		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$this->notificationPolicyService->method('of')
+			->willReturn((new NotificationPolicy())->set(NotificationPolicy::NOT_FOLLOWING, NotificationPolicy::FILTER));
+		$this->notificationPolicyService->method('partition')->willReturn(['shown' => [], 'held' => $held]);
+		$account = new Person();
+		$account->setId('https://cloud.example/users/200');
+		$this->cacheActorService->method('getFromNids')->willReturn([$account]);
+
+		$this->notificationPolicyService->expects($this->once())->method('accept');
+		$this->markerService->expects($this->once())->method('markUnread')
+			->with('alice', 'notifications', ['31', '30']);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->requestAccept(200)->getStatus());
+	}
+
+	/** Accepting rings nothing: no notification is raised, now or for what was held. */
+	public function testAcceptingRaisesNoNotification(): void {
+		$this->notificationService = $this->createMock(NotificationService::class);
+		$this->notificationService->expects($this->never())->method('onNotification');
+		$this->cacheActorService->method('getFromNids')->willReturn([new Person()]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->requestAccept(200)->getStatus());
+	}
+
+	public function testThePolicySaysWhetherToPointAtIt(): void {
+		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$this->notificationPolicyService->method('of')->willReturn((new NotificationPolicy())->setNotice(true));
+
+		$data = $this->controller()->policy()->getData()->jsonSerialize();
+
+		$this->assertTrue($data['notice']);
+	}
+
+	public function testDismissingTheNoticeIsStoredForTheViewer(): void {
+		$this->notificationPolicyService->expects($this->once())->method('dismissNotice')->with('alice');
+
+		$response = $this->controller()->policyNoticeDismiss();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertInstanceOf(NotificationPolicy::class, $response->getData());
+	}
+
+	public function testDismissingTheNoticeNeedsTheWriteScope(): void {
+		$this->withToken(['read:notifications']);
+		$this->notificationPolicyService->expects($this->never())->method('dismissNotice');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->policyNoticeDismiss()->getStatus());
+	}
+
+	public function testTheAlwaysAllowedAreAnsweredAsAccounts(): void {
+		$carol = new Person();
+		$carol->setId('https://elsewhere.example/users/carol');
+		$this->notificationPolicyService->expects($this->once())->method('allowed')
+			->with($this->anything(), 20)
+			->willReturn([$carol]);
+
+		$response = $this->controller()->allowed(20);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame([$carol], $response->getData());
+	}
+
+	public function testTheAlwaysAllowedNeedTheReadScope(): void {
+		$this->withToken(['write:notifications']);
+		$this->notificationPolicyService->expects($this->never())->method('allowed');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->allowed()->getStatus());
+	}
+
+	public function testStoppingToAllowASenderReturnsThemToThePolicy(): void {
+		$carol = new Person();
+		$this->cacheActorService->method('getFromNids')->willReturn([$carol]);
+		$this->notificationPolicyService->expects($this->once())->method('stopAllowing')
+			->with($this->anything(), $this->identicalTo($carol));
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->allowedRemove('200')->getStatus());
+	}
+
+	/** Nobody by that id is already not allowed: the state asked for holds. */
+	public function testStoppingToAllowNobodyIsNotAnError(): void {
+		$this->cacheActorService->method('getFromNids')->willReturn([]);
+		$this->notificationPolicyService->expects($this->never())->method('stopAllowing');
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->allowedRemove('999')->getStatus());
+	}
+
+	public function testStoppingToAllowNeedsTheWriteScope(): void {
+		$this->withToken(['read:notifications']);
+		$this->notificationPolicyService->expects($this->never())->method('stopAllowing');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->allowedRemove('200')->getStatus());
+	}
 }

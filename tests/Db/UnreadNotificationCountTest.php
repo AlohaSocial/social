@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Db;
 
+use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\SocialQueryBuilder;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -38,11 +39,15 @@ class UnreadNotificationCountTest extends TestCase {
 	private ?int $pageLimit = null;
 	/** @var array<string, mixed> */
 	private array $outer = [];
+	/** @var string[] the roots of the threads Alice muted */
+	private array $mutedRoots = [];
 
 	private function page(): SocialQueryBuilder&MockObject {
 		$page = $this->createMock(SocialQueryBuilder::class);
 		$page->method('expr')->willReturn(new FakeExpressions());
-		$page->method('createNamedParameter')->willReturnCallback(static fn ($value): string => ':' . $value);
+		$page->method('createNamedParameter')->willReturnCallback(
+			static fn ($value): string => ':' . (is_array($value) ? implode(',', $value) : $value)
+		);
 		$page->method('andWhere')->willReturnCallback(function ($predicate) use ($page) {
 			$this->pageWhere[] = (string)$predicate;
 
@@ -114,6 +119,13 @@ class UnreadNotificationCountTest extends TestCase {
 		(new ReflectionProperty(StreamRequest::class, 'configService'))->setValue($request, $config);
 		(new ReflectionProperty(StreamRequest::class, 'recipientNidsFilled'))->setValue($request, null);
 
+		$conversations = $this->createStub(ConversationsRequest::class);
+		$conversations->method('getMutedRoots')->willReturnCallback(fn (): array => $this->mutedRoots);
+		$conversations->method('getThread')->willReturnCallback(
+			static fn (string $root): array => [$root => ['id' => $root, 'idPrim' => 'prim-' . $root, 'nid' => 1, 'inReplyTo' => '']]
+		);
+		(new ReflectionProperty(StreamRequest::class, 'conversationsRequest'))->setValue($request, $conversations);
+
 		return $request;
 	}
 
@@ -145,5 +157,14 @@ class UnreadNotificationCountTest extends TestCase {
 		$this->request()->countNotificationsSince($this->alice(), '1790000000123456789');
 
 		$this->assertContains('sd.nid > :1790000000123456789', $this->pageWhere);
+	}
+
+	/** A muted thread's notifications are not listed, so they are not unread either. */
+	public function testAMutedThreadIsNotCounted(): void {
+		$this->mutedRoots = ['https://cloud.example/@alice/1'];
+
+		$this->request()->countNotificationsSince($this->alice(), '0');
+
+		$this->assertContains('(s.object_id_prim IS NULL OR s.object_id_prim NOT IN :prim-https://cloud.example/@alice/1)', $this->pageWhere);
 	}
 }

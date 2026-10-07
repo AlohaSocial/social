@@ -19,6 +19,7 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\NotificationDeliveryService;
 use OCA\Social\Service\NotificationGroupService;
+use OCA\Social\Service\NotificationInboxService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\NotificationService;
 use OCP\AppFramework\Controller;
@@ -61,6 +62,7 @@ class NotificationController extends ClientApiController {
 		private NotificationDeliveryService $notificationDeliveryService,
 		private FilterService $filterService,
 		private CacheActorService $cacheActorService,
+		private NotificationInboxService $notificationInboxService,
 	) {
 		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
 	}
@@ -447,7 +449,8 @@ class NotificationController extends ClientApiController {
 	 *
 	 * The decision is about the account, so it settles what they have already
 	 * sent and what they send later — which is why the request inbox is worth
-	 * having at all.
+	 * having at all. What they already sent joins the list as unread and
+	 * raises nothing now; the sender is always allowed from then on.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -472,6 +475,75 @@ class NotificationController extends ClientApiController {
 	}
 
 	/**
+	 * The senders this account accepted from its requests, as accounts, the
+	 * most recently accepted first. Not a Mastodon route: Mastodon keeps no
+	 * list of the senders it was told to let through, hence `/social/`.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/notifications/allowed')]
+	public function allowed(int $limit = NotificationPolicyService::REQUESTS_LIMIT): DataResponse {
+		try {
+			$this->initViewer(['read:notifications']);
+
+			$accounts = [];
+			foreach ($this->notificationPolicyService->allowed($this->viewer, $limit) as $account) {
+				$account->setExportFormat(ACore::FORMAT_LOCAL);
+				$accounts[] = $account;
+			}
+
+			return new DataResponse($accounts, Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Stops always allowing a sender: their next notification is judged by
+	 * the policy again. Answers `{}`; an account that was not allowed, or
+	 * that names nobody, is the state asked for already.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/notifications/allowed/{account_id}', requirements: ['account_id' => '\\d+'])]
+	public function allowedRemove(string $account_id): DataResponse {
+		try {
+			$this->initViewer(['write:notifications']);
+
+			if (\OCA\Social\Tools\Nid::compare($account_id, '0') > 0) {
+				$accounts = $this->cacheActorService->getFromNids([\OCA\Social\Tools\Nid::fromStorage($account_id)]);
+				if ($accounts !== []) {
+					$this->notificationPolicyService->stopAllowing($this->viewer, $accounts[0]);
+				}
+			}
+
+			return new DataResponse([], Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Puts away the one-time pointer to the policy that an account from
+	 * before new accounts started calm is shown (`notice` on the policy).
+	 * Saving the policy puts it away too. Answers the policy.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/notifications/policy/notice/dismiss')]
+	public function policyNoticeDismiss(): DataResponse {
+		try {
+			$this->initViewer(['write:notifications']);
+
+			$this->notificationPolicyService->dismissNotice($this->userId());
+
+			return new DataResponse($this->policyWithSummary(), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
 	 * The page of notifications this viewer is meant to see: what the query
 	 * returned, less what a keyword filter hides and what the policy holds.
 	 *
@@ -489,7 +561,7 @@ class NotificationController extends ClientApiController {
 		array $excludeTypes = [],
 		string $accountId = '',
 	): array {
-		$page = $this->notificationService->timeline(
+		$page = $this->notificationInboxService->timeline(
 			$this->viewer, $limit, $maxId, $minId, $sinceId, $types, $excludeTypes, $accountId
 		);
 
@@ -505,23 +577,7 @@ class NotificationController extends ClientApiController {
 	 * @return \OCA\Social\Model\Client\NotificationRequest[]
 	 */
 	private function heldRequests(): array {
-		$page = $this->notificationService->timeline(
-			$this->viewer, NotificationPolicyService::LOOKBACK
-		);
-		$held = $this->notificationPolicyService->partition($this->viewer, $page)['held'];
-
-		$senders = [];
-		foreach ($held as $notification) {
-			if ($notification->hasActor()) {
-				$senders[] = $notification->getActor()->getId();
-			}
-		}
-
-		$decided = $this->notificationPolicyService->decisionsAbout(
-			$this->viewer->getId(), array_values(array_unique($senders))
-		);
-
-		return $this->notificationPolicyService->requestsFrom($held, $decided['dismissed']);
+		return $this->notificationInboxService->requests($this->viewer);
 	}
 
 	/** The policy with the counts a client draws the badge from. */
@@ -562,7 +618,7 @@ class NotificationController extends ClientApiController {
 				}
 
 				if ($accept) {
-					$this->notificationPolicyService->accept($this->viewer, $accounts[0]);
+					$this->notificationInboxService->release($this->viewer, $accounts[0]);
 				} else {
 					$this->notificationPolicyService->dismiss($this->viewer, $accounts[0]);
 				}

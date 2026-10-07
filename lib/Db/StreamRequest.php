@@ -2069,7 +2069,8 @@ class StreamRequest extends StreamRequestBuilder {
 
 	/**
 	 * How many unread notifications of each sub-type a local account received
-	 * in a window: the rows the notifications page would list, with a nid past
+	 * in a window: the rows the notifications page would list (less the ones
+	 * from muted threads; the policy's holds are the caller's), with a nid past
 	 * the account's read marker and a creation inside `($since, $until]`.
 	 *
 	 * The page is chosen exactly as the badge's query chooses it, projected to
@@ -2091,6 +2092,8 @@ class StreamRequest extends StreamRequestBuilder {
 		$page->selectDestFollowing('sd', '');
 		$page->limitToDest($actor->getId(), 'notif', '', 'sd');
 		$page->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_NOTIFICATIONS);
+		// a muted thread raises nothing, and a digest is a count of what was raised late
+		$this->filterMutedConversations($page, $actor->getId());
 
 		$expr = $page->expr();
 		$page->andWhere($expr->gt('s.creation', $page->createNamedParameter($since, IQueryBuilder::PARAM_DATE)));

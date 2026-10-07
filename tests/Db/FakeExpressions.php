@@ -31,6 +31,10 @@ class FakeExpressions {
 		return $x . ' IN (' . $y . ')';
 	}
 
+	public function notIn($x, $y, $type = null): string {
+		return $x . ' NOT IN ' . $y;
+	}
+
 	public function gt($x, $y, $type = null): string {
 		return $x . ' > ' . $y;
 	}

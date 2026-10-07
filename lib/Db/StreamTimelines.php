@@ -1134,6 +1134,8 @@ trait StreamTimelines {
 		$page->selectDestFollowing('sd', '');
 		$page->limitToDest($actor->getId(), 'notif', '', 'sd');
 		$page->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_NOTIFICATIONS);
+		// a muted thread's notifications are not listed, so they are not unread
+		$this->filterMutedConversations($page, $actor->getId());
 
 		if (\OCA\Social\Tools\Nid::compare($sinceNid, '0') > 0) {
 			// on the recipient row's nid where it can be trusted, which makes

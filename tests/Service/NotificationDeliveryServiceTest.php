@@ -21,10 +21,12 @@ use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Mention;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\NotificationRequest;
 use OCA\Social\Model\NotificationDelivery;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MarkerService;
 use OCA\Social\Service\NotificationDeliveryService;
+use OCA\Social\Service\NotificationInboxService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Config\IUserConfig;
 use OCP\IURLGenerator;
@@ -72,6 +74,12 @@ class NotificationDeliveryServiceTest extends TestCase {
 	private array $withdrawn = [];
 	/** @var array<string, array> what each notification double was told */
 	private array $fields = [];
+	/** @var Stream[] what the notification policy holds past the marker */
+	private array $held = [];
+	/** @var array<int, array{string}> the markers the held notifications were asked past */
+	private array $heldAsked = [];
+	/** how many senders wait in the requests inbox */
+	private int $waiting = 0;
 
 	protected function setUp(): void {
 		$this->configService = $this->createStub(ConfigService::class);
@@ -149,8 +157,33 @@ class NotificationDeliveryServiceTest extends TestCase {
 			$this->markerService,
 			$this->notificationManager,
 			$urlGenerator,
-			new NullLogger()
+			new NullLogger(),
+			$this->inbox()
 		);
+	}
+
+	private function inbox(): NotificationInboxService {
+		$inbox = $this->createStub(NotificationInboxService::class);
+		$inbox->method('held')->willReturnCallback(function (Person $viewer, int|string $sinceId): array {
+			$this->heldAsked[] = [(string)$sinceId];
+
+			return $this->held;
+		});
+		$inbox->method('requests')->willReturnCallback(fn (): array => array_map(
+			static fn (int $i): NotificationRequest => new NotificationRequest(new Person(), 1, 0, 0),
+			($this->waiting > 0) ? range(1, $this->waiting) : []
+		));
+
+		return $inbox;
+	}
+
+	/** A notification the policy holds, received at a moment. */
+	private function heldAt(string $subType, int $at): Stream {
+		$row = new Stream();
+		$row->setSubType($subType);
+		$row->setPublishedTime($at);
+
+		return $row;
 	}
 
 	private function notification(): INotification {
@@ -341,6 +374,65 @@ class NotificationDeliveryServiceTest extends TestCase {
 		$this->assertSame(['notification', 'digest-' . (self::NOW + 3600)], $this->raised[0]['object']);
 		$this->assertSame(self::NOW + 3600, $this->raised[0]['at']);
 		$this->assertSame($digest, $this->raised[0]['parameters']);
+	}
+
+	/** What the policy held was never raised, so the digest does not count it. */
+	public function testADigestLeavesOutWhatThePolicyHeldInsideTheWindow(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->service->setLastDigestAt(self::ALICE, self::NOW - 7200);
+		$this->marker = '42';
+		$this->unread = [Like::TYPE => 3, Mention::TYPE => 1];
+		$this->held = [
+			$this->heldAt(Like::TYPE, self::NOW - 60),
+			$this->heldAt(Mention::TYPE, self::NOW - 60),
+			// before the window: the database did not count it either
+			$this->heldAt(Like::TYPE, self::NOW - 9000),
+		];
+
+		$digest = $this->service->digestFor(self::ALICE, $this->until(self::NOW));
+
+		$this->assertSame(['favourite' => 2], $digest['counts']);
+		$this->assertSame(2, $digest['total']);
+		$this->assertSame([['42']], $this->heldAsked, 'held past the same marker the count is past');
+	}
+
+	public function testADigestOfNothingButHeldNotificationsIsNotRaised(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->service->setLastDigestAt(self::ALICE, self::NOW - 7200);
+		$this->unread = [Like::TYPE => 1];
+		$this->held = [$this->heldAt(Like::TYPE, self::NOW - 60)];
+		$this->waiting = 1;
+
+		$this->assertNull($this->service->digestFor(self::ALICE, $this->until(self::NOW)));
+		$this->assertSame([], $this->raised);
+	}
+
+	public function testADigestSaysHowManyPeopleAreWaiting(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Like::TYPE => 1];
+		$this->waiting = 3;
+
+		$digest = $this->service->digestFor(self::ALICE, $this->until(self::NOW));
+
+		$this->assertSame(3, $digest['waiting']);
+		$this->assertSame(1, $digest['total'], 'the waiting are not notifications');
+		$this->assertSame($digest, $this->raised[0]['parameters']);
+	}
+
+	public function testADigestWithNobodyWaitingSaysNothingAboutIt(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->unread = [Like::TYPE => 1];
+
+		$this->assertArrayNotHasKey('waiting', $this->service->digestFor(self::ALICE, $this->until(self::NOW)));
+	}
+
+	/** Requests alone are no reason to ring: they never were a bell notification. */
+	public function testRequestsAloneRaiseNoDigest(): void {
+		$this->service->save(self::ALICE, ['mode' => 'digest']);
+		$this->waiting = 2;
+
+		$this->assertNull($this->service->digestFor(self::ALICE, $this->until(self::NOW)));
+		$this->assertSame([], $this->raised);
 	}
 
 	public function testADigestAsksForTheRowsPastTheMarkerAndInsideTheWindow(): void {
