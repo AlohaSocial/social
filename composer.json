@@ -36,7 +36,11 @@
 		"php": ">=8.3",
 		"gumlet/php-image-resize": "3.0.*",
 		"friendica/json-ld": "^1.0",
-		"kornrunner/blurhash": "^1.2"
+		"kornrunner/blurhash": "^1.2",
+		"spomky-labs/cbor-php": "^3.4",
+		"paragonie/ecc": "^2.6",
+		"ratchet/rfc6455": "^0.4",
+		"react/socket": "^1.17"
 	},
 	"require-dev": {
 		"phpunit/phpunit": "^12.5",
