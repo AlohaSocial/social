@@ -908,7 +908,8 @@ export default {
 
 		/**
 		 * What the box asks for. With a picture above it, the post is the
-		 * picture and the words underneath it are its caption.
+		 * picture and the words underneath it are its caption. A post of its
+		 * own is asked for by first name.
 		 *
 		 * @return {string}
 		 */
@@ -916,10 +917,25 @@ export default {
 			if (this.hasAttachments) {
 				return translate('social', 'Write a caption…')
 			}
+			if (this.replyTo !== null) {
+				return translate('social', 'Write a reply…')
+			}
+			if (this.quoteOf !== null || this.firstName === '') {
+				return translate('social', 'What would you like to share?')
+			}
 
-			return this.replyTo !== null
-				? translate('social', 'Write a reply…')
-				: translate('social', 'What would you like to share?')
+			return translate('social', 'Aloha, {name}. What’s new?', { name: this.firstName })
+		},
+
+		/**
+		 * The first word of the reader's display name, or their user id when
+		 * they have no display name.
+		 *
+		 * @return {string}
+		 */
+		firstName() {
+			const name = (this.currentUser?.displayName || this.currentUser?.uid || '').trim()
+			return name.split(/\s+/)[0]
 		},
 
 		/**

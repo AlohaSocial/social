@@ -48,6 +48,12 @@
 				<p class="first-run__hint">
 					{{ t('social', 'Give it to people the way you would an email address. Your profile, your avatar and your name come from your Nextcloud account and can be changed on your profile page.') }}
 				</p>
+				<div class="first-run__islands">
+					<AlohaScene scene="islands" class="first-run__islands-scene" />
+					<p class="first-run__hint">
+						{{ t('social', 'Every server in the fediverse is an island, and yours is {host}. Following somebody on another one opens a canoe route to theirs, and their posts travel to you along it.', { host: homeHost }) }}
+					</p>
+				</div>
 			</div>
 
 			<!-- 2. people -->
@@ -244,6 +250,7 @@ import IconContentCopy from 'vue-material-design-icons/ContentCopy.vue'
 import IconPencil from 'vue-material-design-icons/Pencil.vue'
 import IconUpload from 'vue-material-design-icons/Upload.vue'
 import ActorAvatar from './ActorAvatar.vue'
+import AlohaScene from './illustrations/AlohaScene.vue'
 import eventBus from '../services/eventBus.js'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
@@ -257,6 +264,7 @@ export default {
 	name: 'FirstRun',
 	components: {
 		ActorAvatar,
+		AlohaScene,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,
 		IconAccountPlus,
@@ -314,6 +322,16 @@ export default {
 
 	computed: {
 		...mapStores(useAccountStore),
+
+		/**
+		 * The reader's own server, as their address spells it.
+		 *
+		 * @return {string}
+		 */
+		homeHost() {
+			const at = String(this.socialId ?? '').lastIndexOf('@')
+			return at > 0 ? this.socialId.slice(at + 1) : window.location.host
+		},
 
 		followedAnything() {
 			return this.followed.length > 0 || this.followedPacks.length > 0 || this.followsResult !== '' || this.moveResult !== ''
@@ -640,6 +658,24 @@ export default {
 		margin: 0;
 		color: var(--color-text-maxcontrast);
 		line-height: 1.6;
+	}
+
+	/* the picture beside its sentence, and above it on a phone */
+	&__islands {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 16px;
+		margin-top: 8px;
+
+		p {
+			flex: 1 1 240px;
+		}
+	}
+
+	&__islands-scene {
+		flex: 0 0 auto;
+		width: 132px;
 	}
 
 	&__address {

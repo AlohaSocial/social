@@ -256,6 +256,21 @@ describe('TimelinePost', () => {
 			expect($router.push).not.toHaveBeenCalled()
 		})
 
+		it('does not open the post when the pressed icon is swapped out mid-press', async () => {
+			// pressing the heart replaces its outline icon with the filled one
+			// while the click is still on its way up; the detached icon is in
+			// no button any more, and the post used to open on top of the like
+			const { wrapper, $router, dispatch } = mountPost()
+			const icon = actionButton(wrapper, 'Like').find('svg').element
+			icon.addEventListener('click', () => icon.remove())
+
+			icon.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+			await flushPromises()
+
+			expect(dispatch).toHaveBeenCalled()
+			expect($router.push).not.toHaveBeenCalled()
+		})
+
 		it('leaves a press alone that ended a selection', async () => {
 			// dragging across a post to copy a sentence ends in a click, and
 			// navigating away from what was just highlighted is the worst
@@ -1104,6 +1119,11 @@ describe('TimelinePost', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.post-action__burst').exists()).toBe(true)
+			// a plumeria: five petals, a fifth of a turn apart
+			const petals = wrapper.findAll('.post-action__petal')
+			expect(petals).toHaveLength(5)
+			expect(petals.map((petal) => petal.attributes('style'))).toEqual([0, 1, 2, 3, 4].map((index) => `--petal: ${index};`))
+			expect(petals.every((petal) => petal.attributes('aria-hidden') === 'true')).toBe(true)
 
 			// undoing is not something to celebrate
 			const undoing = mountPost({ item: makeItem({ favourited: true }) })

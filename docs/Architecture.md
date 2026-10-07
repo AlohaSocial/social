@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.139
+**App version:** 0.26.140
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -2070,15 +2070,47 @@ is drawn only when `hasThread` holds, meaning there is a parent or a reply:
 beside a post with neither, it was a line from nothing to nothing.
 
 Under it, "No replies yet" is a small drawing over a line of muted text rather
-than a heading. `EmptyContent` takes an optional `illustration` name alongside
-the `image` the timelines use, resolved through a map of components that draw
-themselves in markup — `NoReplies` is two speech bubbles in `currentColor` over
-the page's own background, so it follows the theme with no filter to correct it
-on dark. It is a component and not another file in `img/undraw` because those
-eight illustrations are licensed for this app by permission covering those eight
-and nothing else (see `img/undraw/readme.md`); anything new has to be ours. A
-state with a small drawing keeps the compact layout — the 60vh of height is room
-for the full-size ones only.
+than a heading. `EmptyContent` takes either a `scene` or an `illustration` name,
+never both. Both are drawn in markup, not fetched as files. A `scene` is one of
+the eight full-size drawings in `illustrations/AlohaScene.vue`: `tide`,
+`islands`, `hammock`, `plumeria`, `bottle`, `board`, `wave` and `tracks`. Each
+sits in the same round window, painted in a sunset palette (coral, plumeria
+gold, lagoon teal, hibiscus). Every fill is that palette mixed in CSS with
+`--color-main-background`, so a dark theme gets a dimmed sunset without a
+filter. The sky is the exception: coral mixed into a dark page turns brown, so
+under a dark theme the sky is dusk blue instead. The direct-messages page has
+its own empty pane rather than a timeline, and shows the `bottle` scene there. An `illustration` is one of the small `currentColor` drawings
+(`NoReplies` a shell, `QuietTimeline` a drop on still water, `NobodyYet` an
+empty outrigger canoe, `NoMessages` a message in a bottle). A state with a small drawing keeps the compact layout;
+the 60vh of height is room for the scenes only. NcEmptyContent pins any SVG in
+its icon slot to 64px with `!important`, so `EmptyContent` overrides that for the
+scene. The stock undraw pictures these replaced were licensed to this app by
+permission and are gone; anything new has to be ours.
+
+**The Aloha look.** The same palette, used sparingly, in four more places:
+
+- **A like blooms.** `TimelinePost` opens five plumeria petals (`PETALS`, a
+  fifth of a turn apart) from the heart. They are gold at the base and the
+  author's `--account-hue` at the tip, and they drift and fall away within
+  0.9s. The `celebrate` flag is held for 1s so they finish before they unmount.
+  Pressing the card opens the post unless the press was meant for a control;
+  `pressedControl()` reads that from `event.composedPath()`, because the heart's
+  icon is swapped for the filled one while the click is still bubbling, and the
+  detached icon's `closest('button')` finds nothing.
+- **Loading rolls in.** At the foot of a timeline, the next page's wait is
+  `WaveLoading`: one wavelength-wide line slid by exactly one wavelength, so it
+  loops without a jump. The first page keeps `TimelineSkeleton`.
+- **The composer says Aloha.** A post of its own is asked for as "Aloha, {name}.
+  What’s new?", with the first word of the display name (or the user id). A
+  reply, a quote, a caption, or a user with no name keep their plain prompts.
+- **Federation is islands.** Discover's People tab opens with
+  `FederationIslands`. It reads the reader's following list (pages of 50, at
+  most six). `services/islands.js` groups it by server, keeps the eight
+  busiest, and places them around the home island, sized by the square root of
+  each count. A dashed route runs from each island home, its dashes moving
+  towards home. The summary sentence is the map's `aria-label` too. The
+  `islands` scene and one sentence carry the same picture into the first
+  step of `FirstRun` and onto the empty Global timeline.
 
 **A link to a post, opened cold.** `/@{username}` and `/@{username}/{token}` are
 ActivityPub addresses first, so `ActivityPubController` owns them; a request

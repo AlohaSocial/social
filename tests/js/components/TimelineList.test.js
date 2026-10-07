@@ -11,6 +11,7 @@ import TimelineList from '../../../src/components/TimelineList.vue'
 import eventBus, { NOTIFICATIONS_READ } from '../../../src/services/eventBus.js'
 import { offTimelinePush, onTimelinePush } from '../../../src/services/timelinePush.js'
 import EmptyContent from '../../../src/components/EmptyContent.vue'
+import { SCENES } from '../../../src/components/illustrations/AlohaScene.vue'
 import TimelineSkeleton from '../../../src/components/TimelineSkeleton.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useNotificationsStore } from '../../../src/store/notifications.js'
@@ -831,7 +832,7 @@ describe('TimelineList', () => {
 
 			// an empty page with a spinner says nothing about what is coming
 			expect(wrapper.findComponent(TimelineSkeleton).exists()).toBe(true)
-			expect(wrapper.find('.icon-loading').exists()).toBe(false)
+			expect(wrapper.find('.list-loading').exists()).toBe(false)
 			expect(wrapper.find('.list-end').exists()).toBe(false)
 
 			finish([status('1')])
@@ -842,7 +843,7 @@ describe('TimelineList', () => {
 			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
 		})
 
-		it('shows a spinner for a later page, where the posts are already on screen', async () => {
+		it('shows a rolling wave for a later page, where the posts are already on screen', async () => {
 			let finish
 			const { wrapper } = mountList({
 				timeline: [status('1')],
@@ -851,20 +852,20 @@ describe('TimelineList', () => {
 			await flushPromises()
 			await intersect()
 
-			expect(wrapper.find('.icon-loading').exists()).toBe(true)
+			expect(wrapper.find('.list-loading').exists()).toBe(true)
 			expect(wrapper.findComponent(TimelineSkeleton).exists()).toBe(false)
 
 			finish([status('22')])
 			await flushPromises()
 
-			expect(wrapper.find('.icon-loading').exists()).toBe(false)
+			expect(wrapper.find('.list-loading').exists()).toBe(false)
 		})
 
 		it('shows a failed first page as an error with a retry, not as an empty timeline', async () => {
 			const { wrapper } = mountList({ responses: [new Error('network')] })
 			await flushPromises()
 
-			expect(wrapper.find('.icon-loading').exists()).toBe(false)
+			expect(wrapper.find('.list-loading').exists()).toBe(false)
 			// "No posts found / Posts from people you follow will show up
 			// here" for a server error was the old answer
 			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
@@ -1234,9 +1235,26 @@ describe('TimelineList', () => {
 
 			const item = wrapper.findComponent(EmptyContent).props('item')
 			expect(item.action.to).toEqual({ name: 'discover' })
-			// its own drawing rather than the stock illustration that was here
-			expect(item.illustration).toBe('no-messages')
+			// a message in a bottle, drawn rather than a stock picture
+			expect(item.scene).toBe('bottle')
 			expect(item.image).toBeUndefined()
+		})
+
+		/**
+		 * The pictures are drawn by the app. The stock files that used to be
+		 * here were licensed for this project by permission and nothing else,
+		 * and they are gone.
+		 */
+		it('draws every empty page with a scene or a small drawing, never a file', async () => {
+			const { wrapper } = mountList()
+			await flushPromises()
+
+			for (const [type, item] of Object.entries(wrapper.vm.emptyContent)) {
+				expect(item.image, type).toBeUndefined()
+				if (item.scene !== undefined) {
+					expect(SCENES, type).toContain(item.scene)
+				}
+			}
 		})
 
 		it.each([

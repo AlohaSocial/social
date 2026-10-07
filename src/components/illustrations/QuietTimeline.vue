@@ -4,15 +4,9 @@
 -->
 <template>
 	<!--
-		Drawn here rather than shipped as a file, for the same reason as
-		NoReplies: the images in img/undraw are licensed for the eight that
-		were already in the app and nothing else. Markup also follows the
-		theme on its own — `currentColor` for the strokes and the page's own
-		background inside the shapes, so they read as overlapping on light and
-		on dark without a filter to correct either.
-
-		A timeline with nobody in it: three empty cards, the nearest one still
-		waiting to be written.
+		A timeline with nobody in it yet: one drop falling on still water,
+		the rings it makes fading as they spread. Markup in `currentColor`,
+		like NoReplies.
 	-->
 	<svg
 		class="quiet-timeline"
@@ -22,42 +16,25 @@
 		fill="none"
 		aria-hidden="true"
 		focusable="false">
-		<g stroke="currentColor" stroke-width="2" stroke-linejoin="round">
-			<rect
+		<g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+			<ellipse
 				class="quiet-timeline__far"
-				x="14"
-				y="3"
-				width="46"
-				height="14"
-				rx="4" />
-			<rect
+				cx="36"
+				cy="38"
+				rx="28"
+				ry="8" />
+			<ellipse
 				class="quiet-timeline__mid"
-				x="8"
-				y="20"
-				width="52"
-				height="14"
-				rx="4" />
-			<rect
-				class="quiet-timeline__near"
-				x="4"
-				y="37"
-				width="58"
-				height="16"
-				rx="4" />
-		</g>
-		<g class="quiet-timeline__lines" fill="currentColor">
-			<rect
-				x="10"
-				y="42"
-				width="26"
-				height="2.5"
-				rx="1.25" />
-			<rect
-				x="10"
-				y="47"
-				width="16"
-				height="2.5"
-				rx="1.25" />
+				cx="36"
+				cy="38"
+				rx="18"
+				ry="5" />
+			<ellipse
+				cx="36"
+				cy="38"
+				rx="7"
+				ry="2" />
+			<path class="quiet-timeline__drop" d="M36 10c-3 5-5 8-5 11a5 5 0 0 0 10 0c0-3-2-6-5-11z" />
 		</g>
 	</svg>
 </template>
@@ -73,21 +50,16 @@ export default {
 	color: var(--color-text-maxcontrast);
 }
 
-/* the ones behind sit back; the near card paints over them */
+/* the rings fade as they spread */
 .quiet-timeline__far {
 	opacity: .3;
 }
 
 .quiet-timeline__mid {
-	opacity: .5;
-	fill: var(--color-main-background);
+	opacity: .6;
 }
 
-.quiet-timeline__near {
+.quiet-timeline__drop {
 	fill: var(--color-main-background);
-}
-
-.quiet-timeline__lines {
-	opacity: .45;
 }
 </style>
