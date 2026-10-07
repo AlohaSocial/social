@@ -2116,6 +2116,13 @@ export default {
 			display: inline-flex;
 			align-items: center;
 			gap: 4px;
+
+			/* against its own glyph, across the button's padding, so it
+			   reads as that glyph's number and not the next one's */
+			.post-action-count {
+				margin-inline-start: -8px;
+				text-align: start;
+			}
 		}
 
 		.post-action-count {

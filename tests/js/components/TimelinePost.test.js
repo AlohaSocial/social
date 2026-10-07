@@ -943,6 +943,13 @@ describe('TimelinePost', () => {
 		expect(source).toMatch(/\.post-action-group:has\(\.post-action-count\) \{\s*--post-action-rest: \.38;/)
 	})
 
+	/** The button's padding stood between a glyph and its number, so the number read as the next control's. */
+	it('sets each count against its own glyph', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+
+		expect(source).toMatch(/\.post-action-group \{[^}]*\.post-action-count \{\s*margin-inline-start: -8px;\s*text-align: start;/)
+	})
+
 	describe('rolling counters', () => {
 		const counter = (wrapper) => wrapper.find('.post-action-group--like .post-action-count')
 
