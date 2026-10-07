@@ -62,20 +62,12 @@
 			@seen="markSeen"
 			@deleted="forget" />
 
-		<!-- a story starts where a short does: record or upload a video,
-		     trim it, pick its cover. A picture or a text story goes on to
-		     the story editor, which has the stickers and the cards -->
+		<!-- New short, opened on 24 hours: a picture or a card goes on to
+		     the picture editor from inside the dialog -->
 		<ShortComposerDialog
 			v-if="composing"
 			v-model:open="composing"
-			mode="story"
-			@posted="add"
-			@other="editPicture" />
-
-		<StoryComposerDialog
-			v-if="editing"
-			v-model:open="editing"
-			:initialFile="editingFile"
+			lifetime="day"
 			@posted="add" />
 	</section>
 </template>
@@ -99,7 +91,6 @@ import { accountStyle } from '../services/accountColour.js'
 // the viewer and the composer are the heavy halves and most visits open
 // neither; they are fetched when one is
 const StoryViewer = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./StoryViewer.vue'))
-const StoryComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./StoryComposerDialog.vue'))
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./ShortComposerDialog.vue'))
 
 /**
@@ -121,7 +112,6 @@ export default {
 		IconPlus,
 		NcButton,
 		ShortComposerDialog,
-		StoryComposerDialog,
 		StoryViewer,
 	},
 
@@ -132,10 +122,6 @@ export default {
 			/** which group the viewer is playing, or null while it is closed */
 			viewing: null,
 			composing: false,
-			/** the story editor is open, for a picture or a text story */
-			editing: false,
-			/** @type {File|null} the picture it was opened with, if any */
-			editingFile: null,
 		}
 	},
 
@@ -329,21 +315,10 @@ export default {
 		},
 
 		/**
-		 * A story the reader just posted goes to the front of their own place.
+		 * A 24-hour short the reader just posted goes into their own place.
 		 *
-		 * @param {object} story the new story
+		 * @param {object} story the new short
 		 */
-		/**
-		 * From the video dialog to the story editor.
-		 *
-		 * @param {File|null} file a picture chosen there, or null to start empty
-		 */
-		editPicture(file) {
-			this.editingFile = file
-			this.composing = false
-			this.editing = true
-		},
-
 		add(story) {
 			const own = this.ownGroup
 			if (own) {

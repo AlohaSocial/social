@@ -28,7 +28,7 @@ function story(id, account, seen = false) {
 
 const StoryViewerStub = { name: 'StoryViewer', props: ['groups', 'start'], emits: ['close', 'seen', 'deleted'], template: '<div class="viewer-stub" :data-start="start" />' }
 const StoryComposerStub = { name: 'StoryComposerDialog', props: ['open', 'initialFile'], emits: ['update:open', 'posted'], template: '<div class="composer-stub" />' }
-const ShortComposerStub = { name: 'ShortComposerDialog', props: ['open', 'mode'], emits: ['update:open', 'posted', 'other'], template: '<div class="short-stub" />' }
+const ShortComposerStub = { name: 'ShortComposerDialog', props: ['open', 'lifetime'], emits: ['update:open', 'posted'], template: '<div class="short-stub" />' }
 
 function mountBar(stories, { current = alice } = {}) {
 	get.mockResolvedValue({ data: stories })
@@ -76,23 +76,8 @@ describe('StoryBar', () => {
 
 		const composer = wrapper.findComponent({ name: 'ShortComposerDialog' })
 		expect(composer.exists()).toBe(true)
-		expect(composer.props('mode')).toBe('story')
-		expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).exists()).toBe(false)
+		expect(composer.props('lifetime')).toBe('day')
 		expect(wrapper.findComponent({ name: 'StoryViewer' }).exists()).toBe(false)
-	})
-
-	/** a picture or a text story is the story editor's, which has the stickers and the cards */
-	it('hands a picture on to the story editor', async () => {
-		const wrapper = mountBar([])
-		await flushPromises()
-		await wrapper.find('.story-bar__add').trigger('click')
-
-		const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
-		wrapper.findComponent({ name: 'ShortComposerDialog' }).vm.$emit('other', picture)
-		await flushPromises()
-
-		expect(wrapper.findComponent({ name: 'ShortComposerDialog' }).exists()).toBe(false)
-		expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).props('initialFile')).toBe(picture)
 	})
 
 	it('plays the tapped account\'s stories and lets the viewer\'s "seen" take the ring off', async () => {

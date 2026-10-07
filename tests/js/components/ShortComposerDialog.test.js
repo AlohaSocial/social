@@ -38,6 +38,7 @@ const stubs = {
 	NcModal: { props: ['name'], emits: ['close'], template: '<div class="modal-stub" :data-name="name"><slot /></div>' },
 	NcButton: { template: '<button class="nc-button" type="button"><slot name="icon" /><slot /></button>' },
 	NcLoadingIcon: true,
+	StoryComposerDialog: { name: 'StoryComposerDialog', props: ['open', 'initialFile'], emits: ['update:open', 'posted'], template: '<div class="editor-stub" />' },
 	NcCheckboxRadioSwitch: {
 		props: ['modelValue', 'type'],
 		emits: ['update:modelValue'],
@@ -209,7 +210,7 @@ describe('ShortComposerDialog', () => {
 		})
 		expect(feel).toHaveBeenCalledWith('post')
 		expect(showSuccess).toHaveBeenCalled()
-		expect(wrapper.emitted('posted')[0]).toEqual([{ id: 's1' }])
+		expect(wrapper.emitted('posted')[0]).toEqual([{ id: 's1' }, 'kept'])
 		expect(wrapper.emitted('update:open')[0]).toEqual([false])
 	})
 
@@ -295,31 +296,100 @@ describe('ShortComposerDialog', () => {
 		expect(wrapper.vm.caption).toBe('')
 	})
 
-	describe('as a story', () => {
-		it('says it is a story, and offers a picture or words beside the video', async () => {
-			const { wrapper } = mountDialog({ mode: 'story' })
+	describe('the lifetime', () => {
+		it('offers both lifetimes and starts on keeping it on the profile', async () => {
+			const { wrapper } = mountDialog()
 			await flushPromises()
 
-			expect(wrapper.find('.modal-stub').attributes('data-name')).toBe('Add to your story')
-			expect(axios.get).not.toHaveBeenCalled()
-			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
-			expect(wrapper.emitted('other')[0]).toEqual([null])
+			const choices = wrapper.findAll('.short__lifetimes [role="radio"]')
+			expect(choices.map((one) => one.text())).toEqual(['Keep it on my profile', 'Only for 24 hours, for my followers'])
+			expect(choices[0].attributes('aria-checked')).toBe('true')
+			expect(wrapper.find('.short__source--other').exists()).toBe(false)
 		})
 
-		it('passes a picture on rather than refusing it', async () => {
-			const { wrapper } = mountDialog({ mode: 'story' })
+		it('starts on 24 hours when it is opened for one, and asks for no hashtags', async () => {
+			const { wrapper } = mountDialog({ lifetime: 'day' })
+			await flushPromises()
+
+			expect(wrapper.find('.modal-stub').attributes('data-name')).toBe('New short')
+			expect(wrapper.findAll('.short__lifetimes [role="radio"]')[1].attributes('aria-checked')).toBe('true')
+			expect(axios.get).not.toHaveBeenCalled()
+		})
+
+		it('switches to 24 hours, which takes a picture or words as well as a video', async () => {
+			const { wrapper } = mountDialog()
+			const input = wrapper.find('input[type="file"]')
+			expect(input.attributes('accept')).not.toContain('image/*')
+
+			await wrapper.findAll('.short__lifetimes [role="radio"]')[1].trigger('click')
+
+			expect(wrapper.find('input[type="file"]').attributes('accept')).toContain('image/*')
+			expect(wrapper.find('.short__source--other').exists()).toBe(true)
+		})
+
+		it('goes back to the lifetime it was opened with once closed', async () => {
+			const { wrapper } = mountDialog()
+			await wrapper.findAll('.short__lifetimes [role="radio"]')[1].trigger('click')
+			await wrapper.setProps({ open: false })
+			await wrapper.setProps({ open: true })
+
+			expect(wrapper.vm.chosenLifetime).toBe('kept')
+		})
+
+		it('keeps the choice beside the video while it is edited', async () => {
+			const { wrapper } = mountDialog()
+			await withVideo(wrapper)
+
+			const choices = wrapper.findAll('.short__edit [role="radio"]').filter((one) => one.text().includes('24 hours'))
+			expect(choices).toHaveLength(1)
+			await choices[0].trigger('click')
+			expect(button(wrapper, 'Followers')).toBeUndefined()
+		})
+	})
+
+	describe('for 24 hours', () => {
+		it('opens the picture editor in its own place for a picture or words', async () => {
+			const { wrapper } = mountDialog({ lifetime: 'day' })
+			await flushPromises()
+
+			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
+			await flushPromises()
+
+			expect(wrapper.find('.modal-stub').exists()).toBe(false)
+			const editor = wrapper.findComponent({ name: 'StoryComposerDialog' })
+			expect(editor.exists()).toBe(true)
+			expect(editor.props('initialFile')).toBe(null)
+		})
+
+		it('passes a picture on to the editor rather than refusing it', async () => {
+			const { wrapper } = mountDialog({ lifetime: 'day' })
 			const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
 			const input = wrapper.find('input[type="file"]')
 			expect(input.attributes('accept')).toContain('image/*')
 			Object.defineProperty(input.element, 'files', { value: [picture] })
 			await input.trigger('change')
+			await flushPromises()
 
 			expect(showError).not.toHaveBeenCalled()
-			expect(wrapper.emitted('other')[0]).toEqual([picture])
+			expect(wrapper.findComponent({ name: 'StoryComposerDialog' }).props('initialFile')).toBe(picture)
 		})
 
-		it('adds the video to the story, not to a timeline', async () => {
-			const { wrapper, store } = mountDialog({ mode: 'story' })
+		it('says what the editor posted, as a 24-hour short, and closes with it', async () => {
+			const { wrapper } = mountDialog({ lifetime: 'day' })
+			await button(wrapper, 'Picture or wordswith stickers, or on a card').trigger('click')
+			await flushPromises()
+
+			const editor = wrapper.findComponent({ name: 'StoryComposerDialog' })
+			editor.vm.$emit('posted', { id: 'card1' })
+			editor.vm.$emit('update:open', false)
+			await flushPromises()
+
+			expect(wrapper.emitted('posted')[0]).toEqual([{ id: 'card1' }, 'day'])
+			expect(wrapper.emitted('update:open')[0]).toEqual([false])
+		})
+
+		it('posts the video through the stories API, not to a timeline', async () => {
+			const { wrapper, store } = mountDialog({ lifetime: 'day' })
 			await withVideo(wrapper)
 			await wrapper.find('textarea').setValue(' at the lake ')
 
@@ -332,9 +402,20 @@ describe('ShortComposerDialog', () => {
 			expect(store.createMedia).toHaveBeenCalled()
 			expect(store.post).not.toHaveBeenCalled()
 			expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories', { media_id: 'm1', caption: 'at the lake', duration: 5 })
-			expect(showSuccess).toHaveBeenCalledWith('Your story is up for a day')
-			expect(wrapper.emitted('posted')[0]).toEqual([{ id: 'story1' }])
+			expect(showSuccess).toHaveBeenCalledWith('Your short is up for 24 hours')
+			expect(wrapper.emitted('posted')[0]).toEqual([{ id: 'story1' }, 'day'])
 			expect(wrapper.emitted('update:open')[0]).toEqual([false])
+		})
+
+		it('says what the server said when it refused the short', async () => {
+			axios.post.mockRejectedValueOnce({ response: { data: { error: 'this account already has 40 live 24-hour shorts' } } })
+			const { wrapper } = mountDialog({ lifetime: 'day' })
+			await withVideo(wrapper)
+			await button(wrapper, 'Post').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('this account already has 40 live 24-hour shorts')
+			expect(wrapper.emitted('posted')).toBeUndefined()
 		})
 	})
 

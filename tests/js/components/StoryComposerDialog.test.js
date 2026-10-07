@@ -80,7 +80,14 @@ describe('StoryComposerDialog', () => {
 		expect(input.attributes('aria-hidden')).toBe('true')
 	})
 
-	/** the video dialog on the story bar hands a picture on to this one */
+	it('is called New short, like the dialog that opens it', () => {
+		const { wrapper } = mountDialog()
+
+		expect(wrapper.findComponent(NcDialogStub).props('name')).toBe('New short')
+		expect(wrapper.find('[role="radiogroup"]').attributes('aria-label')).toBe('What kind of short')
+	})
+
+	/** the video dialog hands a picture on to this one */
 	it('starts from a picture it was handed', async () => {
 		const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
 		const { wrapper } = mountDialog({ initialFile: picture })
@@ -98,7 +105,7 @@ describe('StoryComposerDialog', () => {
 		expect(wrapper.find('.story-composer__pick').exists()).toBe(true)
 	})
 
-	it('uploads the picture the way every attachment goes up, then makes the story of it', async () => {
+	it('uploads the picture the way every attachment goes up, then makes the 24-hour short of it', async () => {
 		const { wrapper, createMedia } = mountDialog()
 		post.mockResolvedValue({ data: { id: '5', caption: 'hello' } })
 
@@ -112,7 +119,7 @@ describe('StoryComposerDialog', () => {
 		expect(post).toHaveBeenCalledWith(expect.stringContaining('/apps/social/api/v1/stories'), { media_id: 'm1', caption: 'hello', duration: 5 })
 		expect(wrapper.emitted('posted')[0][0].id).toBe('5')
 		expect(wrapper.emitted('update:open')[0]).toEqual([false])
-		expect(showSuccess).toHaveBeenCalled()
+		expect(showSuccess).toHaveBeenCalledWith('Your short is up for 24 hours')
 	})
 
 	it('offers no seconds for a video, which runs for as long as it runs', async () => {
@@ -126,13 +133,13 @@ describe('StoryComposerDialog', () => {
 
 	it('says so when the server refused the story', async () => {
 		const { wrapper } = mountDialog()
-		post.mockRejectedValue({ response: { data: { error: 'this account already has 40 live stories' } } })
+		post.mockRejectedValue({ response: { data: { error: 'this account already has 40 live 24-hour shorts' } } })
 
 		await pick(wrapper, new File(['x'], 'sea.jpg', { type: 'image/jpeg' }))
 		await wrapper.find('.nc-dialog__button--1').trigger('click')
 		await flushPromises()
 
-		expect(showError).toHaveBeenCalledWith('this account already has 40 live stories')
+		expect(showError).toHaveBeenCalledWith('this account already has 40 live 24-hour shorts')
 		expect(wrapper.emitted('posted')).toBeUndefined()
 	})
 
@@ -187,7 +194,7 @@ describe('StoryComposerDialog', () => {
 			await wrapper.find('.nc-dialog__button--1').trigger('click')
 			await flushPromises()
 
-			expect(showError).toHaveBeenCalledWith('This browser could not draw the story')
+			expect(showError).toHaveBeenCalledWith('This browser could not draw the short')
 			expect(createMedia).not.toHaveBeenCalled()
 		})
 	})
