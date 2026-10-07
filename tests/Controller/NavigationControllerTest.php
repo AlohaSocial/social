@@ -410,6 +410,8 @@ class NavigationControllerTest extends TestCase {
 		yield 'migration' => ['/migration'];
 		yield 'statistics' => ['/statistics'];
 		yield 'settings' => ['/settings'];
+		yield 'shorts' => ['/shorts'];
+		yield 'the earlier address of shorts' => ['/reels'];
 		yield 'search' => ['/search'];
 		yield 'search with a term' => ['/search/{term}'];
 	}

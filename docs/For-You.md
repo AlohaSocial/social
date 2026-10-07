@@ -213,12 +213,14 @@ them from the stored post, so a client cannot inject tags):
 ```
 
 `kind` ∈ `dwell | skip | open | media | link`. `context` ∈ `home | local |
-federated | tag | explore | detail | interests | photos | videos | reels`.
+federated | tag | explore | detail | interests | photos | videos | shorts`
+(`reels`, which older cached bundles send for the Shorts stack, is accepted
+as `shorts`).
 
 In the Photos and Videos grids every tile is on screen at once, so time in
 view says nothing about any one of them: there only opening a tile counts,
-as `media`. The Shorts stack (`src/services/reelSignals.js`) measures the
-player instead of the screen, under `reels`: a slide left within 2 s that had
+as `media`. The Shorts stack (`src/services/shortSignals.js`) measures the
+player instead of the screen, under `shorts`: a slide left within 2 s that had
 not played through is a `skip`; otherwise a `dwell` whose `ms` is how much of
 the video played — all of it once it ended or looped. The server weighs that
 against the video's running time (6.1).
@@ -272,7 +274,7 @@ events (α = 0.05, starting at 1.0, stored per user):
 
 The baseline is updated only by `dwell` events, never by skips.
 
-A `dwell` from the Shorts stack (`context` `reels`) on a video that says how
+A `dwell` from the Shorts stack (`context` `shorts`) on a video that says how
 long it runs is watch time, not reading time, and is judged differently:
 
 ```
@@ -403,7 +405,7 @@ parameters ignore an unknown kind.
   posts. Those carry `reason` `popular` and no tags, and the chip says
   *Popular right now*, links nowhere and names no hashtag. The whole feed is
   never filled this way.
-- **Watching.** For a `reels` dwell the expected time is the video's running
+- **Watching.** For a `shorts` dwell the expected time is the video's running
   time, capped at the 30 s one look can be worth: 90 % of it or more is +1,
   half +0.3, less nothing, and the reading pace is left alone. A video whose
   running time is unknown is weighed as a post.

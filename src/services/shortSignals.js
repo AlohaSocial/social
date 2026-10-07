@@ -12,7 +12,7 @@ import { signalNow, VIEW_CAP } from './interestTracker.js'
  * so the measure is the player's, not the screen's: how far into the video
  * they got, whether they watched it through, and whether they swiped it away
  * at once. Each slide the reader leaves says one of two things, under the
- * context `reels`:
+ * context `shorts`:
  *
  *  - a **skip**, when it was left within `SKIP_WITHIN` of arriving and had not
  *    played through;
@@ -42,8 +42,8 @@ const MIN_WATCH = 250
  * @param {() => boolean} [options.enabled] whether anything may be learned right now
  * @return {object} the signals of one stack
  */
-export function createReelSignals({
-	context = 'reels',
+export function createShortSignals({
+	context = 'shorts',
 	isOwn = () => false,
 	now = () => Date.now(),
 	send = undefined,

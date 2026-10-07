@@ -3,24 +3,24 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="reels" role="region" :aria-label="t('social', 'Videos, one at a time')">
+	<div class="shorts" role="region" :aria-label="t('social', 'Videos, one at a time')">
 		<div
 			ref="track"
-			class="reels__track"
+			class="shorts__track"
 			tabindex="0"
 			@keydown="onKey"
 			@scroll.passive="onScroll">
 			<article
-				v-for="(entry, index) in reels"
+				v-for="(entry, index) in shorts"
 				:key="entry.key"
 				:ref="(el) => setSlide(el, index)"
-				class="reel"
+				class="short"
 				:data-index="index">
 				<!-- a still where the player is not: the one <video> below
 				     is over whichever slide is being watched -->
 				<img
 					v-if="entry.video.preview_url"
-					class="reel__poster"
+					class="short__poster"
 					:src="entry.video.preview_url"
 					:alt="index === playing ? '' : (entry.video.description || entry.text)"
 					loading="lazy">
@@ -29,12 +29,12 @@
 				     and a few rising up the edge, the way live video does it.
 				     Decoration only; the button below is what a screen reader
 				     is told about. -->
-				<div class="reel__hearts" aria-hidden="true">
+				<div class="short__hearts" aria-hidden="true">
 					<svg
 						v-for="heart in heartsOn(index)"
 						:key="heart.id"
-						class="reel__heart"
-						:class="heart.big ? 'reel__heart--burst' : 'reel__heart--float'"
+						class="short__heart"
+						:class="heart.big ? 'short__heart--burst' : 'short__heart--float'"
 						:style="heart.style"
 						viewBox="0 0 24 24">
 						<path fill="currentColor" :d="HEART_PATH" />
@@ -43,14 +43,14 @@
 
 				<button
 					type="button"
-					class="reel__like"
-					:class="{ 'reel__like--on': entry.status.favourited === true }"
+					class="short__like"
+					:class="{ 'short__like--on': entry.status.favourited === true }"
 					:aria-pressed="entry.status.favourited === true"
 					:aria-label="entry.status.favourited === true ? t('social', 'Unlike') : t('social', 'Like')"
 					@click.stop="toggleLike(index)">
 					<IconHeart v-if="entry.status.favourited === true" :size="24" />
 					<IconHeartOutline v-else :size="24" />
-					<span v-if="entry.status.favourites_count > 0 && !settingsStore.hidesCounts" class="reel__like-count">
+					<span v-if="entry.status.favourites_count > 0 && !settingsStore.hidesCounts" class="short__like-count">
 						{{ entry.status.favourites_count }}
 					</span>
 				</button>
@@ -58,40 +58,40 @@
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
 				<button
 					type="button"
-					class="reel__sound"
+					class="short__sound"
 					:aria-label="silent ? t('social', 'Unmute') : t('social', 'Mute')"
 					@click.stop="toggleSound">
 					<IconVolumeOff v-if="silent" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
 				<!-- the browser would not start with sound: say where it is -->
-				<span v-if="soundHeld && index === playing" class="reel__sound-hint" aria-hidden="true">
+				<span v-if="soundHeld && index === playing" class="short__sound-hint" aria-hidden="true">
 					{{ t('social', 'Tap for sound') }}
 				</span>
 
-				<div class="reel__caption">
+				<div class="short__caption">
 					<router-link
-						class="reel__author"
+						class="short__author"
 						:to="{ name: 'profile', params: { account: entry.status.account.acct } }">
 						<img
 							v-if="entry.status.account.avatar"
-							class="reel__avatar"
+							class="short__avatar"
 							:src="entry.status.account.avatar"
 							alt="">
-						<span class="reel__names">
-							<span class="reel__name">{{ entry.status.account.display_name || entry.status.account.username }}</span>
-							<span class="reel__handle">@{{ entry.status.account.acct }}</span>
+						<span class="short__names">
+							<span class="short__name">{{ entry.status.account.display_name || entry.status.account.username }}</span>
+							<span class="short__handle">@{{ entry.status.account.acct }}</span>
 						</span>
 					</router-link>
-					<p v-if="entry.text" class="reel__text">
+					<p v-if="entry.text" class="short__text">
 						{{ entry.text }}
 					</p>
 					<!-- why For you put it here, as the chip over a post says it -->
-					<p v-if="reasonOf(entry.status)" class="reel__reason" :aria-label="reasonOf(entry.status).label">
+					<p v-if="reasonOf(entry.status)" class="short__reason" :aria-label="reasonOf(entry.status).label">
 						{{ reasonOf(entry.status).text }}
 					</p>
 					<router-link
-						class="reel__open"
+						class="short__open"
 						:to="{ name: 'single-post', params: { account: entry.status.account.acct, id: entry.status.id } }">
 						{{ t('social', 'Open the post') }}
 					</router-link>
@@ -106,7 +106,7 @@
 			<video
 				v-if="current"
 				ref="player"
-				class="reel__video"
+				class="short__video"
 				:style="{ '--at': playing }"
 				:src="current.video.url"
 				:poster="current.video.preview_url || undefined"
@@ -114,17 +114,17 @@
 				playsinline
 				loop
 				preload="auto"
-				@timeupdate="reelSignals.progress(current.status, $event.target)"
-				@ended="reelSignals.ended(current.status)"
+				@timeupdate="shortSignals.progress(current.status, $event.target)"
+				@ended="shortSignals.ended(current.status)"
 				@click="onVideoTap(playing, $event)" />
 
-			<div v-if="reels.length === 0 && loading" class="reels__empty">
+			<div v-if="shorts.length === 0 && loading" class="shorts__empty">
 				<NcLoadingIcon :size="44" appearance="light" />
 				<p>{{ t('social', 'Loading videos …') }}</p>
 			</div>
 
 			<!-- a feed that could not be fetched is not a feed with nothing in it -->
-			<div v-else-if="reels.length === 0 && failed" class="reels__empty" role="alert">
+			<div v-else-if="shorts.length === 0 && failed" class="shorts__empty" role="alert">
 				<p>{{ t('social', 'The videos could not be loaded.') }}</p>
 				<NcButton @click="load">
 					<template #icon>
@@ -134,7 +134,7 @@
 				</NcButton>
 			</div>
 
-			<div v-else-if="reels.length === 0" class="reels__empty">
+			<div v-else-if="shorts.length === 0" class="shorts__empty">
 				<p>{{ t('social', 'No videos here yet.') }}</p>
 				<NcButton :to="{ name: 'timeline', params: { type: 'videos' } }">
 					{{ t('social', 'Back to Videos') }}
@@ -145,7 +145,7 @@
 		<!-- a new short: its own dialog, made for a video -->
 		<button
 			type="button"
-			class="reels__create"
+			class="shorts__create"
 			:title="t('social', 'New short')"
 			:aria-label="t('social', 'New short')"
 			@click="startShort">
@@ -156,14 +156,14 @@
 		<!-- whose videos: the three circles the Videos page is read at. Shorts
 		     is its own entry in the sidebar, so this page is where the choice
 		     is made rather than something carried over from the grid -->
-		<nav class="reels__scopes" :aria-label="t('social', 'Whose videos')">
+		<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
 			<router-link
 				v-for="option in scopes"
 				:key="option.value"
-				class="reels__scope"
-				:class="{ 'reels__scope--current': option.value === watching }"
+				class="shorts__scope"
+				:class="{ 'shorts__scope--current': option.value === watching }"
 				:aria-current="option.value === watching ? 'page' : undefined"
-				:to="{ name: 'reels', query: { scope: option.value } }">
+				:to="{ name: 'shorts', query: { scope: option.value } }">
 				{{ option.label }}
 			</router-link>
 		</nav>
@@ -215,7 +215,7 @@ import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { useSettingsStore } from '../store/settings.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
 import { hasInterestsFeed, isTracking } from '../services/interests.js'
-import { createReelSignals } from '../services/reelSignals.js'
+import { createShortSignals } from '../services/shortSignals.js'
 import { interestReason } from '../utils/interestReason.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
@@ -243,7 +243,7 @@ const HEART_PATH = 'M12,21.35L10.55,20.03C5.4,15.36 2,12.28 2,8.5C2,5.42 4.42,3 
 let heartSerial = 0
 
 export default {
-	name: 'VideoReels',
+	name: 'VideoShorts',
 	components: {
 		IconHeart,
 		IconHeartOutline,
@@ -295,8 +295,8 @@ export default {
 			lastTap: null,
 			/** the pause a single tap is waiting to do */
 			tapTimer: null,
-			/** what watching teaches For you (`reelSignals.js`) */
-			reelSignals: createReelSignals({
+			/** what watching teaches For you (`shortSignals.js`) */
+			shortSignals: createShortSignals({
 				enabled: () => {
 					const serverData = useSettingsStore().getServerData
 
@@ -362,7 +362,7 @@ export default {
 		 *
 		 * @return {object[]} the video, the post it is on, and its words
 		 */
-		reels() {
+		shorts() {
 			const entries = []
 
 			for (const status of this.timelineStore.getTimeline) {
@@ -385,7 +385,7 @@ export default {
 
 		/** @return {object|undefined} the slide the player is over */
 		current() {
-			return this.reels[this.playing]
+			return this.shorts[this.playing]
 		},
 	},
 
@@ -409,7 +409,7 @@ export default {
 	},
 
 	beforeUnmount() {
-		this.reelSignals.leave()
+		this.shortSignals.leave()
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
 		this.player()?.pause?.()
@@ -431,7 +431,7 @@ export default {
 
 		/** Points the store at the videos of this scope and fetches the first page. */
 		open() {
-			this.reelSignals.leave()
+			this.shortSignals.leave()
 			this.timelineStore.changeTimelineType({
 				type: 'videos',
 				params: { scope: this.watching },
@@ -490,8 +490,8 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async play(index) {
-			this.reelSignals.enter(this.reels[index]?.status)
-			if (index >= this.reels.length - LOOK_AHEAD) {
+			this.shortSignals.enter(this.shorts[index]?.status)
+			if (index >= this.shorts.length - LOOK_AHEAD) {
 				this.load()
 			}
 
@@ -547,7 +547,7 @@ export default {
 
 			this.addHeart(index, { big: true, x, y })
 			this.releaseHearts(index, 2)
-			if (this.reels[index]?.status?.favourited !== true) {
+			if (this.shorts[index]?.status?.favourited !== true) {
 				this.like(index)
 			}
 		},
@@ -559,7 +559,7 @@ export default {
 		 * @param {number} index the slide
 		 */
 		async toggleLike(index) {
-			const status = this.reels[index]?.status
+			const status = this.shorts[index]?.status
 			if (!status) {
 				return
 			}
@@ -576,7 +576,7 @@ export default {
 
 		/** @param {number} index the slide whose post to like */
 		async like(index) {
-			const status = this.reels[index]?.status
+			const status = this.shorts[index]?.status
 			if (!status) {
 				return
 			}
@@ -740,7 +740,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.reels {
+.shorts {
 	position: relative;
 	/* the app's own content area, not the window: the navigation stays where
 	   it is and the stack fills what is left of the page.
@@ -843,7 +843,7 @@ export default {
 	}
 }
 
-.reel {
+.short {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -907,7 +907,7 @@ export default {
 		font-size: 12px;
 		font-weight: 600;
 		pointer-events: none;
-		animation: reel-hint-in .4s ease-out both;
+		animation: short-hint-in .4s ease-out both;
 	}
 
 	/* above the sound button, the column every short-video app keeps its
@@ -976,14 +976,14 @@ export default {
 			/* stylelint-disable-next-line csstools/use-logical -- a point on the screen, not a side: where the finger landed is set inline as `left`, and the heart is centred on it with translate() */
 			left: 50%;
 			top: 45%;
-			animation: reel-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
+			animation: short-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
 		}
 
 		/* up the edge from the heart button, drifting as it goes */
 		&--float {
 			inset-inline-end: 24px;
 			inset-block-end: 120px;
-			animation: reel-heart-float 1.6s ease-out both;
+			animation: short-heart-float 1.6s ease-out both;
 		}
 	}
 
@@ -1056,7 +1056,7 @@ export default {
 	}
 }
 
-@keyframes reel-heart-burst {
+@keyframes short-heart-burst {
 	0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt)); }
 	25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt)); }
 	45% { transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt)); }
@@ -1064,33 +1064,33 @@ export default {
 	100% { opacity: 0; transform: translate(-50%, -140%) scale(.8) rotate(var(--tilt)); }
 }
 
-@keyframes reel-heart-float {
+@keyframes short-heart-float {
 	0% { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0); }
 	15% { opacity: 1; transform: translate(calc(var(--drift) * .2), -20px) scale(1) rotate(var(--tilt)); }
 	100% { opacity: 0; transform: translate(var(--drift), -45vh) scale(.8) rotate(calc(var(--tilt) * -1)); }
 }
 
-@keyframes reel-hint-in {
+@keyframes short-hint-in {
 	from { opacity: 0; transform: translateX(8px); }
 	to { opacity: 1; transform: none; }
 }
 
 /* the like still lands; only the flight is taken away */
 @media (prefers-reduced-motion: reduce) {
-	.reel__sound-hint {
+	.short__sound-hint {
 		animation: none;
 	}
 
-	.reels__create {
+	.shorts__create {
 		transition: none;
 	}
 
-	.reel__heart {
+	.short__heart {
 		animation: none;
 		display: none;
 	}
 
-	.reel__like {
+	.short__like {
 		transition: none;
 	}
 }

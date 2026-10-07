@@ -33,7 +33,7 @@ const SwitchWizard = () => import(/* webpackChunkName: "switch" */'./views/Switc
 const Settings = () => import(/* webpackChunkName: "settings" */'./views/Settings.vue')
 const Statistics = () => import(/* webpackChunkName: "statistics" */'./views/Statistics.vue')
 const Search = () => import('./components/Search.vue')
-const VideoReels = () => import(/* webpackChunkName: "reels" */'./views/VideoReels.vue')
+const VideoShorts = () => import(/* webpackChunkName: "shorts" */'./views/VideoShorts.vue')
 
 /**
  * The path the app is actually served from, which is what the history base has
@@ -348,14 +348,20 @@ const router = createRouter({
 			// the same videos as `/timeline/videos`, watched rather than
 			// chosen from. Its own route so that it can be left with Back,
 			// and so that a link to it is a link somebody can be sent.
-			path: '/reels',
+			path: '/shorts',
 			components: {
-				default: VideoReels,
+				default: VideoShorts,
 			},
 			// no scope asked for is '', which the view resolves: For you for a
 			// reader it has learned about, My Feed otherwise
 			props: { default: (route) => ({ scope: String(route.query.scope ?? '') }) },
-			name: 'reels',
+			name: 'shorts',
+		},
+		{
+			// the stack's earlier address: a bookmark or a link somebody was
+			// sent still lands on it, with the scope it asked for
+			path: '/reels',
+			redirect: (to) => ({ name: 'shorts', query: to.query, hash: to.hash }),
 		},
 		{
 			// The way in from another network. A page rather than a section of

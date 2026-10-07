@@ -4,7 +4,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { SKIP_WITHIN, createReelSignals } from '../../../src/services/reelSignals.js'
+import { SKIP_WITHIN, createShortSignals } from '../../../src/services/shortSignals.js'
 
 vi.mock('../../../src/services/interests.js', () => ({ sendSignals: vi.fn(() => Promise.resolve()) }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -21,7 +21,7 @@ describe('what watching the Shorts teaches', () => {
 	beforeEach(() => {
 		clock = 1000
 		send = vi.fn(() => Promise.resolve())
-		signals = createReelSignals({ now: () => clock, send })
+		signals = createShortSignals({ now: () => clock, send })
 	})
 
 	/** @return {object[]} every event sent, in order */
@@ -32,7 +32,7 @@ describe('what watching the Shorts teaches', () => {
 		clock += SKIP_WITHIN - 1
 		signals.enter(clip('2'))
 
-		expect(sent()).toEqual([{ status_id: '1', kind: 'skip', context: 'reels' }])
+		expect(sent()).toEqual([{ status_id: '1', kind: 'skip', context: 'shorts' }])
 	})
 
 	it('reports how much of the video was watched when the reader moves on', () => {
@@ -42,7 +42,7 @@ describe('what watching the Shorts teaches', () => {
 		clock += 5000
 		signals.leave()
 
-		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 4250, context: 'reels' }])
+		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 4250, context: 'shorts' }])
 	})
 
 	it('counts a video that ended as watched to the end, however quickly', () => {
@@ -52,7 +52,7 @@ describe('what watching the Shorts teaches', () => {
 		clock += 1900
 		signals.leave()
 
-		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 1800, context: 'reels' }])
+		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 1800, context: 'shorts' }])
 	})
 
 	it('reads a jump from the end back to the start as a loop, which is watched through', () => {
@@ -62,7 +62,7 @@ describe('what watching the Shorts teaches', () => {
 		clock += 12000
 		signals.leave()
 
-		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 10000, context: 'reels' }])
+		expect(sent()).toEqual([{ status_id: '1', kind: 'dwell', ms: 10000, context: 'shorts' }])
 	})
 
 	it('caps what one look can be worth, as the server does', () => {
@@ -95,18 +95,18 @@ describe('what watching the Shorts teaches', () => {
 		signals.leave()
 
 		expect(sent()).toEqual([
-			{ status_id: '1', kind: 'skip', context: 'reels' },
-			{ status_id: '2', kind: 'skip', context: 'reels' },
+			{ status_id: '1', kind: 'skip', context: 'shorts' },
+			{ status_id: '2', kind: 'skip', context: 'shorts' },
 		])
 	})
 
 	it('teaches nothing from an untagged post, one of the reader\'s own, or while learning is off', () => {
-		const off = createReelSignals({ now: () => clock, send, enabled: () => false })
+		const off = createShortSignals({ now: () => clock, send, enabled: () => false })
 		off.enter(clip('1'))
 		clock += 100
 		off.leave()
 
-		const own = createReelSignals({ now: () => clock, send, isOwn: (status) => status.account.acct === 'me' })
+		const own = createShortSignals({ now: () => clock, send, isOwn: (status) => status.account.acct === 'me' })
 		own.enter(clip('2', { account: { acct: 'me' } }))
 		clock += 100
 		own.enter(clip('3', { tags: [] }))
