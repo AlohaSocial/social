@@ -55,7 +55,7 @@ class IdentitiesCommand extends Command {
 				->leftJoin('sa', 'social_atproto_identity', 'ai', 'sa.id = ai.actor_id')
 				->where($qb->expr()->isNull('ai.actor_id'));
 			
-			$users = array_column($qb->executeQuery()->fetchAllAssociative(), 'id');
+			$users = array_map('intval', array_column($qb->executeQuery()->fetchAllAssociative(), 'id'));
 		}
 		
 		$io->text('Found ' . count($users) . ' users without identities');
