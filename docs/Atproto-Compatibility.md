@@ -998,3 +998,13 @@ before.
   (floor is 8.3); `socialweb/atproto` is a 2023 alpha — not used. Verify
   each against Packagist before adding to `composer.json`.
 - Interop vectors: github.com/bluesky-social/atproto-interop-tests.
+
+### Implementation verification, 2026-10-07
+
+The draft now vendors the official CC0 data-model, K256 signature and MST
+height fixtures under `tests/Atproto/fixtures`. The native protocol codec
+uses canonical DAG-CBOR, CIDv1, typed byte strings and tag-42 CID links;
+repository primitives include deterministic MST layers, CARv1 framing and
+monotonic sortable TIDs. Signing uses the installed `Mdanter\Ecc` API from
+`paragonie/ecc`, RFC 6979 nonces and raw 64-byte low-S signatures. This is
+unit-level evidence, not evidence of relay indexing or a complete PDS.

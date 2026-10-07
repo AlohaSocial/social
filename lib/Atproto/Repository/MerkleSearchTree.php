@@ -1,226 +1,64 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\Atproto\Repository;
-
-use CBOR\Encoder;
-
-class MstNode {
-	public const FANOUT = 4;
-	public const HASH_BITS_PER_LEVEL = 2;
-	
-	public function __construct(
-		public readonly ?string $cid = null,
-		public readonly array $children = [],
-		public readonly array $entries = [], // [key => [cid, value]]
-		public readonly int $level = 0
-	) {}
-	
-	public function isLeaf(): bool {
-		return $this->level === 0;
-	}
-	
-	public function getLayer(): int {
-		return $this->level;
-	}
-}
-
+use OCA\Social\Atproto\Protocol\Bytes;
+use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
+/** Deterministic AT Protocol MST, including intermediate empty layers. */
 class MerkleSearchTree {
-	private const FANOUT = 4;
-	private const HASH_BITS_PER_LEVEL = 2;
-	
-	/**
-	 * Build MST from records
-	 * @param array<string, array{cid: string, value: array}> $records Key is collection/rkey
-	 * @return string Root CID
-	 */
-	public static function build(array $records): string {
-		if (empty($records)) {
-			return self::emptyRootCid();
-		}
-		
-		// Sort records by key
-		ksort($records);
-		
-		// Build leaf layer (level 0)
-		$leaves = [];
+	public static function build(array $records): string { return self::exportCar($records)['root']; }
+	public static function exportCar(array $records): array {
+		ksort($records, SORT_STRING); $entries = [];
 		foreach ($records as $key => $record) {
-			$hash = hash('sha256', $key, true);
-			$leadingZeros = self::countLeadingZeroBits($hash);
-			$level = min($leadingZeros / self::HASH_BITS_PER_LEVEL, 54); // Max depth
-			
-			$leaves[] = [
-				'key' => $key,
-				'hash' => $hash,
-				'level' => (int)$level,
-				'cid' => $record['cid'],
-				'value' => $record['value']
-			];
+			if (!preg_match('#^[a-zA-Z0-9._~\-]+/[a-zA-Z0-9._~\-]+$#D', $key)) { throw new \InvalidArgumentException('Invalid repository path'); }
+			$entries[] = ['key' => $key, 'cid' => $record['cid'], 'layer' => self::layer($key)];
 		}
-		
-		// Group by level and build tree bottom-up
-		return self::buildTree($leaves);
+		$blocks = []; $layer = $entries === [] ? 0 : max(array_column($entries, 'layer'));
+		$root = self::node($entries, $layer, $blocks);
+		return ['root' => $root, 'blocks' => $blocks];
 	}
-	
-	/**
-	 * @param array<array{key: string, hash: string, level: int, cid: string, value: array}> $nodes
-	 */
-	private static function buildTree(array $nodes): string {
-		if (count($nodes) === 1) {
-			return self::nodeCid($nodes[0]);
-		}
-		
-		// Group nodes by their prefix (first N bits of hash)
-		$groups = [];
-		foreach ($nodes as $node) {
-			$prefixBits = $node['level'] * self::HASH_BITS_PER_LEVEL;
-			$prefix = substr($node['hash'], 0, (int)ceil($prefixBits / 8));
-			$groups[$prefix][] = $node;
-		}
-		
-		$parentNodes = [];
-		foreach ($groups as $groupNodes) {
-			if (count($groupNodes) === 1 && $groupNodes[0]['level'] > 0) {
-				$parentNodes[] = $groupNodes[0];
-			} else {
-				// Create parent node
-				$parentNodes[] = self::createParentNode($groupNodes);
+	public static function layer(string $key): int {
+		$zeros = 0;
+		foreach (str_split(hash('sha256', $key, true)) as $char) {
+			$byte = ord($char);
+			for ($bit = 7; $bit >= 0; $bit--) {
+				if (($byte & (1 << $bit)) !== 0) { return intdiv($zeros, 2); }
+				$zeros++;
 			}
 		}
-		
-		return self::buildTree($parentNodes);
+		return intdiv($zeros, 2);
 	}
-	
-	/**
-	 * @param array<array{key: string, hash: string, level: int, cid: string, value: array}> $childNodes
-	 */
-	private static function createParentNode(array $childNodes): array {
-		// Sort by hash
-		usort($childNodes, fn($a, $b) => strcmp($a['hash'], $b['hash']));
-		
-		$parentLevel = max(array_column($childNodes, 'level')) + 1;
-		$parentHash = hash('sha256', implode('', array_column($childNodes, 'hash')), true);
-		
-		$childrenCids = [];
-		$childrenKeys = [];
-		foreach ($childNodes as $child) {
-			$childrenCids[] = $child['cid'];
-			$childrenKeys[] = $child['key'];
+	private static function node(array $items, int $layer, array &$blocks): string {
+		$entries = []; $left = null; $pending = []; $previous = '';
+		foreach ($items as $item) {
+			if ($item['layer'] < $layer) { $pending[] = $item; continue; }
+			$child = $pending === [] ? null : new Cid(self::node($pending, $layer - 1, $blocks)); $pending = [];
+			if ($entries === []) { $left = $child; } else { $entries[count($entries) - 1]['t'] = $child; }
+			$prefix = 0; $key = $item['key'];
+			while ($prefix < min(strlen($key), strlen($previous)) && $key[$prefix] === $previous[$prefix]) { $prefix++; }
+			$entries[] = ['p' => $prefix, 'k' => new Bytes(substr($key, $prefix)), 'v' => new Cid($item['cid']), 't' => null];
+			$previous = $key;
 		}
-		
-		$parentValue = [
-			'children' => $childrenCids,
-			'keys' => $childrenKeys
-		];
-		
-		$parentCid = self::cidFromValue($parentValue);
-		
-		return [
-			'key' => $childNodes[0]['key'],
-			'hash' => $parentHash,
-			'level' => $parentLevel,
-			'cid' => $parentCid,
-			'value' => $parentValue
-		];
-	}
-	
-	private static function nodeCid(array $node): string {
-		if ($node['level'] === 0) {
-			return $node['cid'];
+		if ($pending !== []) {
+			$child = new Cid(self::node($pending, $layer - 1, $blocks));
+			if ($entries === []) { $left = $child; } else { $entries[count($entries) - 1]['t'] = $child; }
 		}
-		return self::cidFromValue($node['value']);
+		$bytes = DagCbor::encode(['l' => $left, 'e' => $entries]); $cid = Cid::hash($bytes); $blocks[$cid] = $bytes; return $cid;
 	}
-	
-	private static function cidFromValue(array $value): string {
-		$encoded = (new Encoder())->encode($value);
-		$hash = hash('sha256', $encoded, true);
-		// CIDv1 dag-cbor: multicodec 0x71 (dag-cbor) + multihash 0x12 (sha2-256) + length 0x20
-		$multicodec = hex2bin('0171'); // varint encoding of 0x71
-		$multihash = hex2bin('1220') . $hash; // sha2-256, 32 bytes
-		$cidBytes = $multicodec . $multihash;
-		return 'b' . self::base32Encode($cidBytes); // base32 encoding
-	}
-	
-	private static function countLeadingZeroBits(string $hash): int {
-		$bits = 0;
-		for ($i = 0; $i < strlen($hash); $i++) {
-			$byte = ord($hash[$i]);
-			if ($byte === 0) {
-				$bits += 8;
-			} else {
-				$bits += (int)log(($byte & -$byte), 2); // Count trailing zeros in byte
-				break;
-			}
-		}
-		return $bits;
-	}
-	
-	private static function emptyRootCid(): string {
-		// Empty tree CID
-		$emptyMap = [];
-		$encoded = (new Encoder())->encode($emptyMap);
-		$hash = hash('sha256', $encoded, true);
-		$multicodec = hex2bin('0171');
-		$multihash = hex2bin('1220') . $hash;
-		$cidBytes = $multicodec . $multihash;
-		return 'b' . self::base32Encode($cidBytes);
-	}
-	
-	public static function base32Encode(string $data): string {
-		$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-		$bits = '';
-		foreach (str_split($data) as $char) {
-			$bits .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
-		}
-
-		$bits = str_pad($bits, (int)ceil(strlen($bits) / 5) * 5, '0', STR_PAD_RIGHT);
-		$result = '';
-		for ($i = 0; $i < strlen($bits); $i += 5) {
-			$result .= $alphabet[bindec(substr($bits, $i, 5))];
-		}
-
-		return $result;
-	}
-
+	public static function base32Encode(string $bytes): string { return Cid::base32($bytes); }
 	public static function encodeVarint(int $value): string {
-		if ($value < 0) {
-			throw new \InvalidArgumentException('Varints must be non-negative');
-		}
-
-		$encoded = '';
-		do {
-			$byte = $value & 0x7f;
-			$value >>= 7;
-			$encoded .= chr($value > 0 ? ($byte | 0x80) : $byte);
-		} while ($value > 0);
-
-		return $encoded;
+		if ($value < 0) { throw new \InvalidArgumentException('Invalid varint'); }
+		$out = '';
+		do { $byte = $value & 127; $value >>= 7; $out .= chr($value > 0 ? $byte | 128 : $byte); } while ($value > 0);
+		return $out;
 	}
-
-	/**
-	 * Compute diff between two trees
-	 * @return array{added: array, removed: array, changed: array}
-	 */
 	public static function diff(string $oldRootCid, string $newRootCid, array $oldRecords, array $newRecords): array {
-		// Simplified diff - in practice would traverse both trees
-		$added = [];
-		$removed = [];
-		$changed = [];
-		
+		$added = []; $removed = []; $changed = [];
 		foreach ($newRecords as $key => $record) {
-			if (!isset($oldRecords[$key])) {
-				$added[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'create'];
-			} elseif ($oldRecords[$key]['cid'] !== $record['cid']) {
-				$changed[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'update'];
-			}
+			if (!isset($oldRecords[$key])) { $added[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'create']; }
+			elseif ($oldRecords[$key]['cid'] !== $record['cid']) { $changed[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'update']; }
 		}
-		
-		foreach ($oldRecords as $key => $record) {
-			if (!isset($newRecords[$key])) {
-				$removed[] = ['path' => $key, 'action' => 'delete'];
-			}
-		}
-		
+		foreach ($oldRecords as $key => $record) { if (!isset($newRecords[$key])) { $removed[] = ['path' => $key, 'action' => 'delete']; } }
 		return ['added' => $added, 'removed' => $removed, 'changed' => $changed];
 	}
 }
