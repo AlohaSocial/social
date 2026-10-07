@@ -13,6 +13,19 @@ use OCA\Social\Atproto\Repository\Commit;
 use PHPUnit\Framework\TestCase;
 
 class IdentityProtocolTest extends TestCase {
+	public function testNativeEndpointCanUseItsOwnHostname(): void {
+		$config = $this->createStub(\OCA\Social\Service\ConfigService::class);
+		$config->method('getAppValue')->willReturn('https://pds.example.org:8443/');
+		$handles = new \OCA\Social\Atproto\Identity\HandleMapper($config);
+		self::assertSame('alice.pds.example.org', $handles->mapUsernameToHandle('Alice'));
+		self::assertSame('https://pds.example.org:8443', $handles->getPdsEndpoint());
+	}
+	public function testNativeEndpointRejectsCredentialsAndNonHttps(): void {
+		$config = $this->createStub(\OCA\Social\Service\ConfigService::class);
+		$config->method('getAppValue')->willReturn('http://user:secret@pds.example.org/');
+		$this->expectException(\InvalidArgumentException::class);
+		(new \OCA\Social\Atproto\Identity\HandleMapper($config))->getPdsEndpoint();
+	}
 	public function testGenesisIsSignedBeforeDidIsDerived(): void {
 		$keys = new KeyManager(null, null);
 		$key = $keys->generateSigningKey();

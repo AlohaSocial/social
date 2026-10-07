@@ -24,13 +24,21 @@ class RepositoryTest extends TestCase {
 		$this->key = Server::get(KeyManager::class)->generateSigningKey();
 		$this->did = 'did:plc:' . substr(Cid::base32(random_bytes(32)), 0, 24);
 		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_repo')->values(['did' => $qb->createNamedParameter($this->did), 'updated' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
+		$qb->insert('social_atpds_repo')->values(['did' => $qb->createNamedParameter($this->did), 'updated' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
 	}
 	protected function tearDown(): void {
 		foreach (['event', 'block', 'record', 'repo'] as $table) {
 			$qb = $this->db->getQueryBuilder();
-			$qb->delete('social_atproto_' . $table)->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->executeStatement();
+			$qb->delete('social_atpds_' . $table)->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->executeStatement();
 		}
+	}
+	public function testPrunedEventsDoNotResetTheFirehoseCursor(): void {
+		$events = Server::get(\OCA\Social\Atproto\Firehose\EventStore::class);
+		$first = $events->append($this->did, 'account', ['did' => $this->did, 'active' => true]);
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete('social_atpds_event')->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->executeStatement();
+		self::assertSame($first, $events->latestSequence());
+		self::assertSame($first + 1, $events->append($this->did, 'account', ['did' => $this->did, 'active' => false]));
 	}
 	public function testCreateDeleteAndBinaryEventsVerifyAgainstPersistedHead(): void {
 		$collection = 'app.bsky.feed.post';
@@ -44,7 +52,7 @@ class RepositoryTest extends TestCase {
 		$this->repo->verify($this->did, $this->key['didKey']);
 		$first = $this->repo->getHead($this->did);
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('bytes')->from('social_atproto_event')->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)));
+		$qb->select('bytes')->from('social_atpds_event')->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)));
 		$event = DagCbor::decode(Repository::bytes($qb->executeQuery()->fetchOne()));
 		self::assertSame('create', $event['ops'][0]['action']);
 		self::assertSame($record->cid, $event['ops'][0]['cid']->value);

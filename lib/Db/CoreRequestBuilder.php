@@ -31,21 +31,22 @@ use Psr\Log\LoggerInterface;
  */
 class CoreRequestBuilder {
 	public const TABLE_ACTIONS = 'social_action';
-	public const TABLE_ATPROTO_OUTBOX = 'social_atproto_outbox';
-	public const TABLE_ATPROTO_IDENTITY = 'social_atproto_identity';
-	public const TABLE_ATPROTO_INSTANCE_KEY = 'social_atproto_instance_key';
-	public const TABLE_ATPROTO_REPO = 'social_atproto_repo';
-	public const TABLE_ATPROTO_RECORD = 'social_atproto_record';
-	public const TABLE_ATPROTO_BLOCK = 'social_atproto_block';
-	public const TABLE_ATPROTO_BLOB = 'social_atproto_blob';
-	public const TABLE_ATPROTO_EVENT = 'social_atproto_event';
-	public const TABLE_ATPROTO_PLC_LOG = 'social_atproto_plc_log';
-	public const TABLE_ATPROTO_WATCH = 'social_atproto_watch';
-	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atproto_notify_cursor';
-	public const TABLE_ATPROTO_LABELER = 'social_atproto_labeler';
-	public const TABLE_ATPROTO_BLOCKLIST = 'social_atproto_blocklist';
-	public const TABLE_ATPROTO_SESSION = 'social_atproto_session';
-	public const TABLE_ATPROTO_RECOVERY = 'social_atproto_recovery';
+	public const TABLE_ATPROTO_OUTBOX = 'social_atpds_outbox';
+	public const TABLE_ATPROTO_IDENTITY = 'social_atpds_identity';
+	public const TABLE_ATPROTO_INSTANCE_KEY = 'social_atpds_instance_key';
+	public const TABLE_ATPROTO_REPO = 'social_atpds_repo';
+	public const TABLE_ATPROTO_RECORD = 'social_atpds_record';
+	public const TABLE_ATPROTO_BLOCK = 'social_atpds_block';
+	public const TABLE_ATPROTO_BLOB = 'social_atpds_blob';
+	public const TABLE_ATPROTO_EVENT = 'social_atpds_event';
+	public const TABLE_ATPROTO_EVENT_CLOCK = 'social_atpds_event_clock';
+	public const TABLE_ATPROTO_PLC_LOG = 'social_atpds_plc_log';
+	public const TABLE_ATPROTO_WATCH = 'social_atpds_watch';
+	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atpds_notify_cursor';
+	public const TABLE_ATPROTO_LABELER = 'social_atpds_labeler';
+	public const TABLE_ATPROTO_BLOCKLIST = 'social_atpds_blocklist';
+	public const TABLE_ATPROTO_SESSION = 'social_atpds_session';
+	public const TABLE_ATPROTO_RECOVERY = 'social_atpds_recovery';
 	public const TABLE_ACTORS = 'social_actor';
 	public const TABLE_ACTOR_RELATION = 'social_actor_relation';
 	public const TABLE_CACHE_ACTORS = 'social_cache_actor';
@@ -116,21 +117,22 @@ class CoreRequestBuilder {
 	public const TABLE_IMPORTS = 'social_import';
 
 	public static array $tables = [
-		'social_atproto_outbox' => ['id', 'post_nid', 'action', 'attempts', 'next_try', 'last_error'],
-		'social_atproto_identity' => ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'created_at', 'updated_at'],
-		'social_atproto_instance_key' => ['id', 'kind', 'private_key', 'public_key', 'created'],
-		'social_atproto_repo' => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],
-		'social_atproto_record' => ['id', 'did', 'collection', 'rkey', 'cid', 'bytes', 'local_id', 'created'],
-		'social_atproto_block' => ['id', 'cid', 'did', 'bytes', 'kind'],
-		'social_atproto_blob' => ['id', 'did', 'cid', 'document_id', 'mime', 'size'],
-		'social_atproto_event' => ['seq', 'did', 'kind', 'bytes', 'time'],
-		'social_atproto_plc_log' => ['id', 'did', 'cid', 'operation', 'sent', 'confirmed'],
-		'social_atproto_watch' => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error'],
-		'social_atproto_notify_cursor' => ['id', 'did', 'cursor', 'last_sync', 'next_sync', 'failures'],
-		'social_atproto_labeler' => ['id', 'actor_id', 'labeler_did', 'settings', 'added'],
-		'social_atproto_blocklist' => ['id', 'kind', 'value', 'reason', 'created'],
-		'social_atproto_session' => ['id', 'did', 'jti', 'refresh_token_hash', 'expires', 'created'],
-		'social_atproto_recovery' => ['id', 'actor_id', 'recovery_phrase', 'created_at'],
+		'social_atpds_event_clock' => ['id', 'last_seq'],
+		'social_atpds_outbox' => ['id', 'post_nid', 'action', 'attempts', 'next_try', 'last_error'],
+		'social_atpds_identity' => ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'created_at', 'updated_at'],
+		'social_atpds_instance_key' => ['id', 'kind', 'private_key', 'public_key', 'created'],
+		'social_atpds_repo' => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],
+		'social_atpds_record' => ['id', 'did', 'collection', 'rkey', 'cid', 'bytes', 'local_id', 'created'],
+		'social_atpds_block' => ['id', 'cid', 'did', 'bytes', 'kind'],
+		'social_atpds_blob' => ['id', 'did', 'cid', 'document_id', 'mime', 'size'],
+		'social_atpds_event' => ['seq', 'did', 'kind', 'bytes', 'time'],
+		'social_atpds_plc_log' => ['id', 'did', 'cid', 'operation', 'sent', 'confirmed'],
+		'social_atpds_watch' => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error'],
+		'social_atpds_notify_cursor' => ['id', 'did', 'cursor', 'last_sync', 'next_sync', 'failures'],
+		'social_atpds_labeler' => ['id', 'actor_id', 'labeler_did', 'settings', 'added'],
+		'social_atpds_blocklist' => ['id', 'kind', 'value', 'reason', 'created'],
+		'social_atpds_session' => ['id', 'did', 'jti', 'refresh_token_hash', 'expires', 'created'],
+		'social_atpds_recovery' => ['id', 'actor_id', 'recovery_phrase', 'created_at'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',
@@ -1355,6 +1357,10 @@ class CoreRequestBuilder {
 	 */
 	public function emptyAll(): void {
 		foreach (array_keys(self::$tables) as $table) {
+			// A reset must not reuse sequence numbers already observed by relays.
+			if ($table === 'social_atpds_event_clock') {
+				continue;
+			}
 			if ($this->dbConnection->tableExists($table)) {
 				$qb = $this->getQueryBuilder();
 				$qb->delete($table);

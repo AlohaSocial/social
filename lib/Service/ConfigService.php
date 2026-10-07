@@ -61,6 +61,7 @@ class ConfigService {
 
 	/** AT Protocol (Bluesky) integration */
 	public const ATPROTO_ENABLED = 'atproto_enabled';
+	public const ATPROTO_PDS_URL = 'atproto_pds_url';
 	public const ATPROTO_RELAYS = 'atproto_relays';
 	public const ATPROTO_JETSTREAM = 'atproto_jetstream';
 	public const ATPROTO_SYNC_CEILING = 'atproto_sync_ceiling';

@@ -26,13 +26,14 @@ class IdentityService {
 		private readonly KeyManager $keyManager,
 		private readonly PlcClient $plcClient,
 		private readonly Repository $repository,
+		private readonly \OCA\Social\Atproto\Firehose\EventStore $events,
 	) {
 	}
 	public function isEnabled(): bool {
 		return in_array($this->configService->getAppValue(ConfigService::ATPROTO_ENABLED), ['1', 'true'], true);
 	}
 	public function getPdsEndpoint(): string {
-		return 'https://' . ConfigService::authorityOf($this->configService->getSocialUrl());
+		return $this->handleMapper->getPdsEndpoint();
 	}
 	public function getServiceDid(): string {
 		return 'did:web:' . str_replace(':', '%3A', ConfigService::authorityOf($this->getPdsEndpoint()));
@@ -71,10 +72,10 @@ class IdentityService {
 		try {
 			$identity = ['actor_id' => $actorId, 'did' => $did, 'handle' => $handle, 'signing_key' => $this->keyManager->sealPrivateKey($signing['private']),
 				'signing_public' => $signing['didKey'], 'recovery_public' => $recovery['didKey'], 'state' => self::STATE_DEACTIVATED, 'created_at' => $now, 'updated_at' => $now];
-			$this->insert('social_atproto_identity', $identity);
-			$this->insert('social_atproto_recovery', ['actor_id' => $actorId, 'recovery_phrase' => $this->keyManager->sealPrivateKey(RecoveryPhrase::encode($recovery['private'])), 'created_at' => $now]);
-			$this->insert('social_atproto_plc_log', ['did' => $did, 'cid' => Cid::hash(DagCbor::encode($operation)), 'operation' => json_encode($operation, JSON_THROW_ON_ERROR)]);
-			$this->insert('social_atproto_repo', ['did' => $did, 'record_count' => 0, 'blob_bytes' => 0, 'updated' => $now]);
+			$this->insert('social_atpds_identity', $identity);
+			$this->insert('social_atpds_recovery', ['actor_id' => $actorId, 'recovery_phrase' => $this->keyManager->sealPrivateKey(RecoveryPhrase::encode($recovery['private'])), 'created_at' => $now]);
+			$this->insert('social_atpds_plc_log', ['did' => $did, 'cid' => Cid::hash(DagCbor::encode($operation)), 'operation' => json_encode($operation, JSON_THROW_ON_ERROR)]);
+			$this->insert('social_atpds_repo', ['did' => $did, 'record_count' => 0, 'blob_bytes' => 0, 'updated' => $now]);
 			$this->repository->commit($did, $signing['private']);
 			$this->db->commit();
 		} catch (\Throwable $e) {
@@ -89,7 +90,7 @@ class IdentityService {
 			return false;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_plc_log')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->isNull('confirmed'))->orderBy('id', 'ASC');
+		$qb->select('*')->from('social_atpds_plc_log')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->isNull('confirmed'))->orderBy('id', 'ASC');
 		$rows = $qb->executeQuery()->fetchAllAssociative();
 		foreach ($rows as $row) {
 			if (!$this->plcClient->submitOperation($did, json_decode($row['operation'], true, 512, JSON_THROW_ON_ERROR))) {
@@ -97,7 +98,7 @@ class IdentityService {
 			}
 			$qb = $this->db->getQueryBuilder();
 			$now = gmdate('Y-m-d H:i:s');
-			$qb->update('social_atproto_plc_log')->set('sent', $qb->createNamedParameter($now))->set('confirmed', $qb->createNamedParameter($now))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->executeStatement();
+			$qb->update('social_atpds_plc_log')->set('sent', $qb->createNamedParameter($now))->set('confirmed', $qb->createNamedParameter($now))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->executeStatement();
 		}
 		if ($rows !== []) {
 			$this->setState($did, self::STATE_ACTIVE);
@@ -115,7 +116,7 @@ class IdentityService {
 	}
 	private function find(string $column, string $value): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_identity')->where($qb->expr()->eq($column, $qb->createNamedParameter($value)));
+		$qb->select('*')->from('social_atpds_identity')->where($qb->expr()->eq($column, $qb->createNamedParameter($value)));
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
 	public function handleExists(string $handle): bool {
@@ -129,7 +130,7 @@ class IdentityService {
 		$this->db->beginTransaction();
 		try {
 			$qb = $this->db->getQueryBuilder();
-			$qb->select('id', 'recovery_phrase')->from('social_atproto_recovery')->where($qb->expr()->eq('actor_id', $qb->createNamedParameter($actorId)));
+			$qb->select('id', 'recovery_phrase')->from('social_atpds_recovery')->where($qb->expr()->eq('actor_id', $qb->createNamedParameter($actorId)));
 			$row = $qb->executeQuery()->fetchAssociative();
 			if (!$row) {
 				$this->db->commit();
@@ -137,7 +138,7 @@ class IdentityService {
 			}
 			$phrase = $this->keyManager->unsealPrivateKey($row['recovery_phrase']);
 			$qb = $this->db->getQueryBuilder();
-			$deleted = $qb->delete('social_atproto_recovery')->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->executeStatement();
+			$deleted = $qb->delete('social_atpds_recovery')->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->executeStatement();
 			$this->db->commit();
 			return $deleted === 1 ? $phrase : null;
 		} catch (\Throwable $e) {
@@ -152,7 +153,7 @@ class IdentityService {
 		$this->updateOperation($actorId, ['alsoKnownAs' => ['at://' . $newHandle]]);
 		$identity = $this->getIdentityByActor($actorId);
 		$qb = $this->db->getQueryBuilder();
-		$qb->update('social_atproto_identity')->set('handle', $qb->createNamedParameter($newHandle))->where($qb->expr()->eq('did', $qb->createNamedParameter($identity['did'])))->executeStatement();
+		$qb->update('social_atpds_identity')->set('handle', $qb->createNamedParameter($newHandle))->where($qb->expr()->eq('did', $qb->createNamedParameter($identity['did'])))->executeStatement();
 		$this->event($identity['did'], '#identity', ['did' => $identity['did'], 'handle' => $newHandle, 'time' => gmdate('Y-m-d\TH:i:s\Z')]);
 	}
 	public function rotateKeys(string $actorId, bool $regenerateRecovery = false): void {
@@ -164,10 +165,10 @@ class IdentityService {
 		$this->updateOperation($actorId, ['rotationKeys' => [$instance['didKey'], $recovery['didKey']]]);
 		$identity = $this->getIdentityByActor($actorId);
 		$qb = $this->db->getQueryBuilder();
-		$qb->update('social_atproto_identity')->set('recovery_public', $qb->createNamedParameter($recovery['didKey']))->where($qb->expr()->eq('did', $qb->createNamedParameter($identity['did'])))->executeStatement();
+		$qb->update('social_atpds_identity')->set('recovery_public', $qb->createNamedParameter($recovery['didKey']))->where($qb->expr()->eq('did', $qb->createNamedParameter($identity['did'])))->executeStatement();
 		$qb = $this->db->getQueryBuilder();
-		$qb->delete('social_atproto_recovery')->where($qb->expr()->eq('actor_id', $qb->createNamedParameter($actorId)))->executeStatement();
-		$this->insert('social_atproto_recovery', ['actor_id' => $actorId, 'recovery_phrase' => $this->keyManager->sealPrivateKey(RecoveryPhrase::encode($recovery['private'])), 'created_at' => gmdate('Y-m-d H:i:s')]);
+		$qb->delete('social_atpds_recovery')->where($qb->expr()->eq('actor_id', $qb->createNamedParameter($actorId)))->executeStatement();
+		$this->insert('social_atpds_recovery', ['actor_id' => $actorId, 'recovery_phrase' => $this->keyManager->sealPrivateKey(RecoveryPhrase::encode($recovery['private'])), 'created_at' => gmdate('Y-m-d H:i:s')]);
 	}
 	private function updateOperation(string $actorId, array $changes): void {
 		$identity = $this->getIdentityByActor($actorId);
@@ -192,7 +193,7 @@ class IdentityService {
 		if (!$this->plcClient->submitOperation($identity['did'], $op)) {
 			throw new \RuntimeException('PLC rejected update');
 		}
-		$this->insert('social_atproto_plc_log', ['did' => $identity['did'], 'cid' => Cid::hash(DagCbor::encode($op)), 'operation' => json_encode($op), 'sent' => gmdate('Y-m-d H:i:s'), 'confirmed' => gmdate('Y-m-d H:i:s')]);
+		$this->insert('social_atpds_plc_log', ['did' => $identity['did'], 'cid' => Cid::hash(DagCbor::encode($op)), 'operation' => json_encode($op), 'sent' => gmdate('Y-m-d H:i:s'), 'confirmed' => gmdate('Y-m-d H:i:s')]);
 	}
 	public function deactivate(string $actorId): void {
 		$identity = $this->getIdentityByActor($actorId);
@@ -207,7 +208,7 @@ class IdentityService {
 				return;
 			}
 			$qb = $this->db->getQueryBuilder();
-			$qb->update('social_atproto_identity')->set('state', $qb->createNamedParameter($state))->set('updated_at', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->executeStatement();
+			$qb->update('social_atpds_identity')->set('state', $qb->createNamedParameter($state))->set('updated_at', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->executeStatement();
 			$active = $state === self::STATE_ACTIVE;
 			if ($active) {
 				$this->event($did, '#identity', ['did' => $did, 'handle' => $current['handle'], 'time' => gmdate('Y-m-d\TH:i:s\Z')]);
@@ -220,22 +221,20 @@ class IdentityService {
 		});
 	}
 	private function event(string $did, string $kind, array $body): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_event')->values(['did' => $qb->createNamedParameter($did), 'kind' => $qb->createNamedParameter($kind),
-			'bytes' => $qb->createNamedParameter(DagCbor::encode($body), IQueryBuilder::PARAM_LOB), 'time' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
+		$this->events->append($did, $kind, $body);
 	}
 	public function getInstanceKey(string $kind): array {
 		if (!in_array($kind, ['service', 'rotation'], true)) {
 			throw new \InvalidArgumentException('Invalid instance key kind');
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_instance_key')->where($qb->expr()->eq('kind', $qb->createNamedParameter($kind)))->orderBy('created', 'DESC')->setMaxResults(1);
+		$qb->select('*')->from('social_atpds_instance_key')->where($qb->expr()->eq('kind', $qb->createNamedParameter($kind)))->orderBy('created', 'DESC')->setMaxResults(1);
 		$row = $qb->executeQuery()->fetchAssociative();
 		if ($row) {
 			return ['private' => $this->keyManager->unsealPrivateKey($row['private_key']), 'didKey' => $row['public_key'], 'multibase' => substr($row['public_key'], 8)];
 		}
 		$key = $this->keyManager->generateSigningKey();
-		$this->insert('social_atproto_instance_key', ['kind' => $kind, 'private_key' => $this->keyManager->sealPrivateKey($key['private']), 'public_key' => $key['didKey'], 'created' => gmdate('Y-m-d H:i:s')]);
+		$this->insert('social_atpds_instance_key', ['kind' => $kind, 'private_key' => $this->keyManager->sealPrivateKey($key['private']), 'public_key' => $key['didKey'], 'created' => gmdate('Y-m-d H:i:s')]);
 		return $key;
 	}
 	private function insert(string $table, array $values): void {

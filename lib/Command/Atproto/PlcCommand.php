@@ -63,7 +63,7 @@ class PlcCommand extends Command {
 	private function showLog(SymfonyStyle $io, ?string $did): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
-			->from('social_atproto_plc_log')
+			->from('social_atpds_plc_log')
 			->orderBy('id', 'DESC')
 			->setMaxResults(50);
 

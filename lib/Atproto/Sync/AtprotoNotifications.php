@@ -37,7 +37,7 @@ class AtprotoNotifications {
 			return $stats;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('i.did', 'i.actor_id', 'c.cursor')->from('social_atproto_identity', 'i')->leftJoin('i', 'social_atproto_notify_cursor', 'c', 'c.did = i.did')
+		$qb->select('i.did', 'i.actor_id', 'c.cursor')->from('social_atpds_identity', 'i')->leftJoin('i', 'social_atpds_notify_cursor', 'c', 'c.did = i.did')
 			->where($qb->expr()->eq('i.state', $qb->createNamedParameter('active')))->andWhere($qb->expr()->orX($qb->expr()->isNull('c.next_sync'), $qb->expr()->lte('c.next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))))
 			->orderBy('c.next_sync', 'ASC')->setMaxResults(max(1, min(25, $batch)));
 		foreach ($qb->executeQuery()->fetchAllAssociative() as $account) {
@@ -109,16 +109,16 @@ class AtprotoNotifications {
 	private function schedule(string $did, string $cursor, bool $failed): void {
 		$values = ['cursor' => $cursor, 'last_sync' => gmdate('Y-m-d H:i:s'), 'next_sync' => gmdate('Y-m-d H:i:s', time() + ($failed ? 600 : 120)), 'failures' => $failed ? 1 : 0];
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('id')->from('social_atproto_notify_cursor')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->select('id')->from('social_atpds_notify_cursor')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		$id = $qb->executeQuery()->fetchOne();
 		$qb = $this->db->getQueryBuilder();
 		if ($id === false) {
 			$params = ['did' => $qb->createNamedParameter($did)];
 			foreach ($values as $key => $value) {
 				$params[$key] = $qb->createNamedParameter($value);
-			} $qb->insert('social_atproto_notify_cursor')->values($params);
+			} $qb->insert('social_atpds_notify_cursor')->values($params);
 		} else {
-			$qb->update('social_atproto_notify_cursor');
+			$qb->update('social_atpds_notify_cursor');
 			foreach ($values as $key => $value) {
 				$qb->set($key, $qb->createNamedParameter($value));
 			} $qb->where($qb->expr()->eq('id', $qb->createNamedParameter($id)));

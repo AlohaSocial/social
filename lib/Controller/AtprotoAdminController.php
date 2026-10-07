@@ -37,7 +37,7 @@ class AtprotoAdminController extends Controller {
 		$counts = [];
 		foreach (['identities' => 'identity', 'records' => 'record', 'blobs' => 'blob', 'events' => 'event', 'queued' => 'outbox'] as $key => $table) {
 			$qb = $this->db->getQueryBuilder();
-			$counts[$key] = (int)$qb->select($qb->func()->count('*'))->from('social_atproto_' . $table)->executeQuery()->fetchOne();
+			$counts[$key] = (int)$qb->select($qb->func()->count('*'))->from('social_atpds_' . $table)->executeQuery()->fetchOne();
 		}
 		return new DataResponse(['enabled' => $this->identities->isEnabled(), 'counts' => $counts]);
 	}

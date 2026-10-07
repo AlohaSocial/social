@@ -21,22 +21,22 @@ class OutboundWorker {
 			return;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_outbox')->where($qb->expr()->lte('next_try', $qb->createNamedParameter(time())))->orderBy('id', 'ASC')->setMaxResults(25);
+		$qb->select('*')->from('social_atpds_outbox')->where($qb->expr()->lte('next_try', $qb->createNamedParameter(time())))->orderBy('id', 'ASC')->setMaxResults(25);
 		foreach ($qb->executeQuery()->fetchAllAssociative() as $row) {
 			$lease = time() + 120;
 			$qb = $this->db->getQueryBuilder();
-			$claimed = $qb->update('social_atproto_outbox')->set('next_try', $qb->createNamedParameter($lease))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($row['next_try'])))->executeStatement();
+			$claimed = $qb->update('social_atpds_outbox')->set('next_try', $qb->createNamedParameter($lease))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($row['next_try'])))->executeStatement();
 			if ($claimed !== 1) {
 				continue;
 			}
 			try {
 				$row['action'] === 'delete' ? $this->publisher->deletePost($row['post_nid']) : $this->publisher->publishPost($row['post_nid']);
 				$qb = $this->db->getQueryBuilder();
-				$qb->delete('social_atproto_outbox')->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($lease)))->executeStatement();
+				$qb->delete('social_atpds_outbox')->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($lease)))->executeStatement();
 			} catch (\Throwable $e) {
 				$attempts = (int)$row['attempts'] + 1;
 				$qb = $this->db->getQueryBuilder();
-				$qb->update('social_atproto_outbox')->set('attempts', $qb->createNamedParameter($attempts))->set('last_error', $qb->createNamedParameter(substr($e->getMessage(), 0, 255)))
+				$qb->update('social_atpds_outbox')->set('attempts', $qb->createNamedParameter($attempts))->set('last_error', $qb->createNamedParameter(substr($e->getMessage(), 0, 255)))
 					->set('next_try', $qb->createNamedParameter(time() + min(3600, 30 * 2 ** min($attempts, 7))))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($lease)))->executeStatement();
 				$this->logger->warning('AT Protocol publishing will retry', ['exception' => $e, 'post_nid' => $row['post_nid']]);
 			}

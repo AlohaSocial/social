@@ -15,6 +15,7 @@ class FirehoseDaemon {
 		private readonly IDBConnection $db,
 		private readonly LoggerInterface $logger,
 		private readonly IdentityService $identities,
+		private readonly EventStore $events,
 	) {
 	}
 	public function run(string $host, int $port, bool $once = false, int $maxSeconds = 0): void {
@@ -28,7 +29,7 @@ class FirehoseDaemon {
 		if ($once) {
 			return;
 		}
-		$handler = new FirehoseHandler($this->db, $this->logger);
+		$handler = new FirehoseHandler($this->db, $this->logger, $this->events);
 		$server = BoundedIoServer::factory(new HttpServer(new WsServer($handler)), $port, $host);
 		$server->loop->addPeriodicTimer(0.25, function () use ($handler, $server) {
 			if (!$this->identities->isEnabled()) {
@@ -52,6 +53,6 @@ class FirehoseDaemon {
 	}
 	private function prune(): void {
 		$qb = $this->db->getQueryBuilder();
-		$qb->delete('social_atproto_event')->where($qb->expr()->lt('time', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() - 72 * 3600))))->executeStatement();
+		$qb->delete('social_atpds_event')->where($qb->expr()->lt('time', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() - 72 * 3600))))->executeStatement();
 	}
 }

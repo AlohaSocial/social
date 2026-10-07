@@ -18,6 +18,7 @@ class FirehoseHandler implements MessageComponentInterface {
 	public function __construct(
 		private readonly IDBConnection $db,
 		private readonly LoggerInterface $logger,
+		private readonly EventStore $events,
 	) {
 	}
 	public function onOpen(ConnectionInterface $conn): void {
@@ -34,9 +35,9 @@ class FirehoseHandler implements MessageComponentInterface {
 			return;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select($qb->func()->max('seq', 'last_seq'), $qb->func()->min('seq', 'first_seq'))->from('social_atproto_event');
+		$qb->select($qb->func()->max('seq', 'last_seq'), $qb->func()->min('seq', 'first_seq'))->from('social_atpds_event');
 		$range = $qb->executeQuery()->fetchAssociative();
-		$last = (int)($range['last_seq'] ?? 0);
+		$last = $this->events->latestSequence();
 		$first = (int)($range['first_seq'] ?? 0);
 		$cursor = $cursor === null ? $last : (int)$cursor;
 		if ($cursor > $last) {
@@ -44,7 +45,7 @@ class FirehoseHandler implements MessageComponentInterface {
 			$conn->close();
 			return;
 		}
-		if ($first > 0 && $cursor < $first - 1) {
+		if (($first > 0 && $cursor < $first - 1) || ($first === 0 && $cursor < $last)) {
 			$conn->send(self::errorFrame('ConsumerTooSlow', 'Cursor is outside the retained window; resync repositories'));
 			$conn->close();
 			return;
@@ -55,8 +56,8 @@ class FirehoseHandler implements MessageComponentInterface {
 		foreach ($this->connections as $id => &$client) {
 			try {
 				$qb = $this->db->getQueryBuilder();
-				$qb->select('e.seq', 'e.kind', 'e.bytes')->from('social_atproto_event', 'e')
-					->innerJoin('e', 'social_atproto_identity', 'i', 'i.did = e.did')->where($qb->expr()->gt('e.seq', $qb->createNamedParameter($client['cursor'], IQueryBuilder::PARAM_INT)))
+				$qb->select('e.seq', 'e.kind', 'e.bytes')->from('social_atpds_event', 'e')
+					->innerJoin('e', 'social_atpds_identity', 'i', 'i.did = e.did')->where($qb->expr()->gt('e.seq', $qb->createNamedParameter($client['cursor'], IQueryBuilder::PARAM_INT)))
 					->andWhere($qb->expr()->orX($qb->expr()->eq('i.state', $qb->createNamedParameter('active')), $qb->expr()->eq('e.kind', $qb->createNamedParameter('#account'))))->orderBy('e.seq', 'ASC')->setMaxResults(100);
 				foreach ($qb->executeQuery()->fetchAllAssociative() as $event) {
 					$client['conn']->send(self::frame($event));

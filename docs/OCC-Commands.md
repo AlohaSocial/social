@@ -1432,3 +1432,18 @@ The imported implementation still requires protocol integration validation; a su
 | --- | --- | --- |
 | `--batch` | 50 | Number of authors to sync per batch |
 | `--dry-run` | false | Show what would be synced without doing it |
+
+
+### `social:atproto:publish`
+
+Process one due batch (up to 25 entries) of native ATProto publications from the
+SQL outbox. Useful for local verification after using the ordinary Social composer:
+
+```sh
+php occ social:atproto:publish
+php occ social:atproto:repo USER_ID --verify
+```
+
+The command reports the remaining queue count. Failed entries stay queued with
+backoff; running it before their retry time does not force a retry. Normal
+Nextcloud cron runs the same worker automatically. The feature must be enabled.

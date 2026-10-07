@@ -156,7 +156,7 @@ class AtprotoXrpcController extends Controller {
 			return $error;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('r.did', 'r.commit_cid', 'r.rev')->from('social_atproto_repo', 'r')->innerJoin('r', 'social_atproto_identity', 'i', 'i.did = r.did')
+		$qb->select('r.did', 'r.commit_cid', 'r.rev')->from('social_atpds_repo', 'r')->innerJoin('r', 'social_atpds_identity', 'i', 'i.did = r.did')
 			->where($qb->expr()->eq('i.state', $qb->createNamedParameter(IdentityService::STATE_ACTIVE)))->andWhere($qb->expr()->gt('r.did', $qb->createNamedParameter($cursor ?? '')))
 			->orderBy('r.did', 'ASC')->setMaxResults(max(1, min(1000, $limit)));
 		$rows = $qb->executeQuery()->fetchAllAssociative();

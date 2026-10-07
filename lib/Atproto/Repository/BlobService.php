@@ -69,7 +69,7 @@ class BlobService {
 		}
 		if (!$this->getBlob($did, $cid)) {
 			$qb = $this->db->getQueryBuilder();
-			$qb->insert('social_atproto_blob')->values(['did' => $qb->createNamedParameter($did), 'cid' => $qb->createNamedParameter($cid),
+			$qb->insert('social_atpds_blob')->values(['did' => $qb->createNamedParameter($did), 'cid' => $qb->createNamedParameter($cid),
 				'document_id' => $qb->createNamedParameter($documentId, $documentId === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_STR),
 				'mime' => $qb->createNamedParameter('image/jpeg'), 'size' => $qb->createNamedParameter(strlen($bytes), IQueryBuilder::PARAM_INT)])->executeStatement();
 		}
@@ -77,7 +77,7 @@ class BlobService {
 	}
 	public function getBlob(string $did, string $cid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_blob')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
+		$qb->select('*')->from('social_atpds_blob')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
 	public function read(string $did, string $cid): ?array {
@@ -93,7 +93,7 @@ class BlobService {
 	}
 	public function listBlobs(string $did): array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('cid')->from('social_atproto_blob')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->orderBy('cid', 'ASC');
+		$qb->select('cid')->from('social_atpds_blob')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->orderBy('cid', 'ASC');
 		return $qb->executeQuery()->fetchAllAssociative();
 	}
 }

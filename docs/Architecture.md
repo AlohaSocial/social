@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.134
+**App version:** 0.27.0
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -2994,21 +2994,22 @@ table/column is registered in `CoreRequestBuilder::$tables` for reset.
 
 | Table | Purpose |
 | --- | --- |
-| `social_atproto_identity` | Local actor URI, issued handle, DID, sealed signing key and public recovery key |
-| `social_atproto_instance_key` | Sealed service and rotation keys |
-| `social_atproto_repo` | Signed head, monotonic revision and record/blob counters |
-| `social_atproto_record` | Current DAG-CBOR records, keyed by DID/collection/rkey |
-| `social_atproto_block` | Content-addressed commit, MST and record blocks |
-| `social_atproto_blob` | Media CID, owning DID and cached-document reference |
-| `social_atproto_event` | Durable binary firehose event bodies and database sequence |
-| `social_atproto_plc_log` | Signed PLC operations, submission/confirmation timestamps |
-| `social_atproto_watch` | Followed remote DIDs and poll/backoff state |
-| `social_atproto_notify_cursor` | Per-DID notification polling state |
-| `social_atproto_labeler` | User labeler preferences |
-| `social_atproto_blocklist` | Instance DID/PDS blocks |
-| `social_atproto_session` | Hashed refresh tokens (client authentication remains under development) |
-| `social_atproto_outbox` | Leased, retryable public-post publishing and deletion work |
-| `social_atproto_recovery` | Sealed one-time BIP-39 recovery phrase, deleted when consumed |
+| `social_atpds_identity` | Local actor URI, issued handle, DID, sealed signing key and public recovery key |
+| `social_atpds_instance_key` | Sealed service and rotation keys |
+| `social_atpds_repo` | Signed head, monotonic revision and record/blob counters |
+| `social_atpds_record` | Current DAG-CBOR records, keyed by DID/collection/rkey |
+| `social_atpds_block` | Content-addressed commit, MST and record blocks |
+| `social_atpds_blob` | Media CID, owning DID and cached-document reference |
+| `social_atpds_event` | Durable binary firehose event bodies and database sequence |
+| `social_atpds_event_clock` | Durable firehose sequence allocator; retained across event pruning and app data resets |
+| `social_atpds_plc_log` | Signed PLC operations, submission/confirmation timestamps |
+| `social_atpds_watch` | Followed remote DIDs and poll/backoff state |
+| `social_atpds_notify_cursor` | Per-DID notification polling state |
+| `social_atpds_labeler` | User labeler preferences |
+| `social_atpds_blocklist` | Instance DID/PDS blocks |
+| `social_atpds_session` | Hashed refresh tokens (client authentication remains under development) |
+| `social_atpds_outbox` | Leased, retryable public-post publishing and deletion work |
+| `social_atpds_recovery` | Sealed one-time BIP-39 recovery phrase, deleted when consumed |
 
 An account is stored deactivated before PLC submission so failed registration
 retains its original signing keys and signed genesis for retry. A successful

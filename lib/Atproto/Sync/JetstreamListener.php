@@ -45,7 +45,7 @@ class JetstreamListener {
 				return;
 			}
 			$qb = $this->db->getQueryBuilder();
-			$qb->select('did')->from('social_atproto_watch')->orderBy('id', 'ASC')->setMaxResults(100);
+			$qb->select('did')->from('social_atpds_watch')->orderBy('id', 'ASC')->setMaxResults(100);
 			$dids = array_column($qb->executeQuery()->fetchAllAssociative(), 'did');
 			if ($dids === []) {
 				$stopped = true;
@@ -139,7 +139,7 @@ class JetstreamListener {
 		}
 		$did = (string)($event['did'] ?? '');
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('id')->from('social_atproto_watch')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->select('id')->from('social_atpds_watch')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		if ($qb->executeQuery()->fetchOne() === false) {
 			return;
 		}

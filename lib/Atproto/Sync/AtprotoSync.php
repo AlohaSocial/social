@@ -32,7 +32,7 @@ class AtprotoSync {
 		$ceiling = max(1, min(200, (int)$this->config->getAppValue('social', 'atproto_sync_ceiling', '200')));
 		$batch = max(1, min($batch, $ceiling));
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_watch')->where($qb->expr()->lte('next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))))->orderBy('next_sync', 'ASC')->setMaxResults($batch);
+		$qb->select('*')->from('social_atpds_watch')->where($qb->expr()->lte('next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))))->orderBy('next_sync', 'ASC')->setMaxResults($batch);
 		foreach ($qb->executeQuery()->fetchAllAssociative() as $watch) {
 			$stats['authors_checked']++;
 			if ($dryRun) {
@@ -49,7 +49,7 @@ class AtprotoSync {
 				$this->logger->warning($error, ['did' => $watch['did'], 'exception' => $e]);
 			}
 			$qb = $this->db->getQueryBuilder();
-			$qb->update('social_atproto_watch')->set('last_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))
+			$qb->update('social_atpds_watch')->set('last_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))
 				->set('next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() + min(21600, 120 * (2 ** min($failures, 8))))))
 				->set('failures', $qb->createNamedParameter($failures, IQueryBuilder::PARAM_INT))->set('last_error', $qb->createNamedParameter($error))->where($qb->expr()->eq('did', $qb->createNamedParameter($watch['did'])))->executeStatement();
 		}

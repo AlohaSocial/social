@@ -41,7 +41,7 @@ class StrongRefResolver {
 			return null;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('local_id', $qb->createNamedParameter((string)$post->getNid())))
+		$qb->select('*')->from('social_atpds_record')->where($qb->expr()->eq('local_id', $qb->createNamedParameter((string)$post->getNid())))
 			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.post')));
 		$row = $qb->executeQuery()->fetchAssociative();
 		if (!$row) {

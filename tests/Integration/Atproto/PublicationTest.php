@@ -54,9 +54,9 @@ class PublicationTest extends TestCase {
 		$params = [];
 		foreach ($values as $k => $v) {
 			$params[$k] = $qb->createNamedParameter($v);
-		} $qb->insert('social_atproto_identity')->values($params)->executeStatement();
+		} $qb->insert('social_atpds_identity')->values($params)->executeStatement();
 		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_repo')->values(['did' => $qb->createNamedParameter($this->did), 'updated' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
+		$qb->insert('social_atpds_repo')->values(['did' => $qb->createNamedParameter($this->did), 'updated' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
 		Server::get(Repository::class)->commit($this->did, $key['private']);
 	}
 	protected function tearDown(): void {
@@ -110,6 +110,18 @@ class PublicationTest extends TestCase {
 	public function testEveryPrivateVisibilityStaysOutOfNativeRecords(): void {
 		foreach (['unlisted', 'followers', 'direct'] as $visibility) {
 			$this->publish('PRIVATE ' . $visibility, $visibility);
+		}
+		Server::get(OutboundWorker::class)->run();
+		self::assertSame([], Server::get(Repository::class)->getRecords($this->did, 'app.bsky.feed.post'));
+	}
+	public function testExplicitNativePublicationOfPrivatePostsIsAClientValidationError(): void {
+		foreach (['unlisted', 'followers', 'direct'] as $visibility) {
+			try {
+				$this->publish('Must never be saved as a native public post', $visibility, '', 'atproto');
+				self::fail('A private ATProto request must be rejected before saving');
+			} catch (\OCA\Social\Exceptions\InvalidResourceException $e) {
+				self::assertSame('Only public posts can be published through AT Protocol', $e->getMessage());
+			}
 		}
 		Server::get(OutboundWorker::class)->run();
 		self::assertSame([], Server::get(Repository::class)->getRecords($this->did, 'app.bsky.feed.post'));
@@ -217,7 +229,7 @@ class PublicationTest extends TestCase {
 
 	private function latestEvent(): array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_event')->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->orderBy('seq', 'DESC')->setMaxResults(1);
+		$qb->select('*')->from('social_atpds_event')->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->orderBy('seq', 'DESC')->setMaxResults(1);
 		return $qb->executeQuery()->fetchAssociative();
 	}
 

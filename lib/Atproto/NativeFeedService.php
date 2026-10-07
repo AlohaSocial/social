@@ -170,7 +170,7 @@ class NativeFeedService {
 			return null;
 		}
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('local_id')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($parts[1])))
+		$qb->select('local_id')->from('social_atpds_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($parts[1])))
 			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.post')))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($parts[2])));
 		$nid = $qb->executeQuery()->fetchOne();
 		if ($nid === false || $nid === null || $nid === '') {

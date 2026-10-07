@@ -49,7 +49,7 @@ class IdentitiesCommand extends Command {
 			$qb = $this->db->getQueryBuilder();
 			$qb->select('sa.id')
 				->from('social_actor', 'sa')
-				->leftJoin('sa', 'social_atproto_identity', 'ai', 'sa.id = ai.actor_id')
+				->leftJoin('sa', 'social_atpds_identity', 'ai', 'sa.id = ai.actor_id')
 				->where($qb->expr()->isNull('ai.actor_id'))->andWhere($qb->expr()->isNull('sa.deleted'));
 
 			$users = array_map('strval', array_column($qb->executeQuery()->fetchAllAssociative(), 'id'));

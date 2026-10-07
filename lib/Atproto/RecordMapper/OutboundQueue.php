@@ -25,13 +25,13 @@ class OutboundQueue {
 			return;
 		} $nid = Nid::normalize($nid);
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('id')->from('social_atproto_outbox')->where($qb->expr()->eq('post_nid', $qb->createNamedParameter($nid)));
+		$qb->select('id')->from('social_atpds_outbox')->where($qb->expr()->eq('post_nid', $qb->createNamedParameter($nid)));
 		$id = $qb->executeQuery()->fetchOne();
 		$qb = $this->db->getQueryBuilder();
 		if ($id !== false) {
-			$qb->update('social_atproto_outbox')->set('action', $qb->createNamedParameter($action))->set('next_try', $qb->createNamedParameter(time()))->set('attempts', $qb->createNamedParameter(0))->where($qb->expr()->eq('id', $qb->createNamedParameter($id)))->executeStatement();
+			$qb->update('social_atpds_outbox')->set('action', $qb->createNamedParameter($action))->set('next_try', $qb->createNamedParameter(time()))->set('attempts', $qb->createNamedParameter(0))->where($qb->expr()->eq('id', $qb->createNamedParameter($id)))->executeStatement();
 		} else {
-			$qb->insert('social_atproto_outbox')->values(['post_nid' => $qb->createNamedParameter($nid), 'action' => $qb->createNamedParameter($action), 'next_try' => $qb->createNamedParameter(time())])->executeStatement();
+			$qb->insert('social_atpds_outbox')->values(['post_nid' => $qb->createNamedParameter($nid), 'action' => $qb->createNamedParameter($action), 'next_try' => $qb->createNamedParameter(time())])->executeStatement();
 		}
 	}
 }

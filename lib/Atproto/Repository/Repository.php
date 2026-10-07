@@ -19,6 +19,7 @@ class Repository {
 		private readonly IDBConnection $db,
 		private readonly LoggerInterface $logger,
 		private readonly KeyManager $keyManager,
+		private readonly \OCA\Social\Atproto\Firehose\EventStore $events,
 	) {
 	}
 	public function createRecord(string $did, string $collection, string $rkey, array $value, int|string|null $localId = null): Record {
@@ -26,18 +27,18 @@ class Repository {
 			throw new \InvalidArgumentException('Record already exists');
 		}
 		$record = Record::create($did, $collection, $rkey, $value, $localId);
-		$this->insert('social_atproto_record', ['did' => $did, 'collection' => $collection, 'rkey' => $rkey, 'cid' => $record->cid,
+		$this->insert('social_atpds_record', ['did' => $did, 'collection' => $collection, 'rkey' => $rkey, 'cid' => $record->cid,
 			'bytes' => $record->bytes, 'local_id' => $record->localId, 'created' => $record->createdAt], ['bytes']);
 		return $record;
 	}
 	public function deleteRecord(string $did, string $collection, string $rkey): void {
 		$qb = $this->db->getQueryBuilder();
-		$qb->delete('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+		$qb->delete('social_atpds_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
 			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)))->executeStatement();
 	}
 	public function getRecord(string $did, string $collection, string $rkey): ?Record {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+		$qb->select('*')->from('social_atpds_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
 			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)));
 		$row = $qb->executeQuery()->fetchAssociative();
 		return $row ? $this->record($row) : null;
@@ -54,7 +55,7 @@ class Repository {
 	}
 	private function rows(string $did, ?string $collection = null): array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->select('*')->from('social_atpds_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		if ($collection !== null) {
 			$qb->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)));
 		}
@@ -98,11 +99,11 @@ class Repository {
 			$blocks = [$commitCid => $commit->toCbor()] + $blocks;
 			foreach ($blocks as $cid => $bytes) {
 				if ($this->getBlock($did, $cid) === null) {
-					$this->insert('social_atproto_block', ['did' => $did, 'cid' => $cid, 'bytes' => $bytes, 'kind' => $cid === $commitCid ? 'commit' : (isset($tree['blocks'][$cid]) ? 'mst' : 'record')], ['bytes']);
+					$this->insert('social_atpds_block', ['did' => $did, 'cid' => $cid, 'bytes' => $bytes, 'kind' => $cid === $commitCid ? 'commit' : (isset($tree['blocks'][$cid]) ? 'mst' : 'record')], ['bytes']);
 				}
 			}
 			$qb = $this->db->getQueryBuilder();
-			$qb->update('social_atproto_repo')->set('commit_cid', $qb->createNamedParameter($commitCid))->set('rev', $qb->createNamedParameter($rev))
+			$qb->update('social_atpds_repo')->set('commit_cid', $qb->createNamedParameter($commitCid))->set('rev', $qb->createNamedParameter($rev))
 				->set('record_count', $qb->createNamedParameter(count($records), IQueryBuilder::PARAM_INT))->set('updated', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))
 				->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 			$qb->andWhere($head['rev'] === null ? $qb->expr()->isNull('rev') : $qb->expr()->eq('rev', $qb->createNamedParameter($head['rev'])));
@@ -134,7 +135,7 @@ class Repository {
 				$kind = '#sync';
 				$body = ['did' => $did, 'rev' => $rev, 'blocks' => new Bytes(Car::encode($commitCid, [$commitCid => $commit->toCbor()])), 'time' => gmdate('Y-m-d\TH:i:s\Z')];
 			}
-			$this->insert('social_atproto_event', ['did' => $did, 'kind' => $kind, 'bytes' => DagCbor::encode($body), 'time' => gmdate('Y-m-d H:i:s')], ['bytes']);
+			$this->events->append($did, $kind, $body);
 			return $commit;
 		});
 	}
@@ -202,7 +203,7 @@ class Repository {
 
 	public function getHead(string $did): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_repo')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->select('*')->from('social_atpds_repo')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
 	public function exportCar(string $did): string {
@@ -239,7 +240,7 @@ class Repository {
 	}
 	public function getBlock(string $did, string $cid): ?string {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('bytes')->from('social_atproto_block')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
+		$qb->select('bytes')->from('social_atpds_block')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
 		$result = $qb->executeQuery()->fetchOne();
 		return $result === false ? null : self::bytes($result);
 	}

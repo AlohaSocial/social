@@ -25,7 +25,7 @@ class AtprotoTablesTest extends TestCase {
 			sort($expected);
 			self::assertSame($expected, $actual);
 		}
-		self::assertSame('string', $shape['social_atproto_identity']['columns']['actor_id']['type']);
-		self::assertSame('blob', $shape['social_atproto_event']['columns']['bytes']['type']);
+		self::assertSame('string', $shape['social_atpds_identity']['columns']['actor_id']['type']);
+		self::assertSame('blob', $shape['social_atpds_event']['columns']['bytes']['type']);
 	}
 }

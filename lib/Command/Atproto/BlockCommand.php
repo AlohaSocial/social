@@ -48,14 +48,14 @@ class BlockCommand extends Command {
 		$qb = $this->db->getQueryBuilder();
 
 		if ($unblock) {
-			$qb->delete('social_atproto_blocklist')
+			$qb->delete('social_atpds_blocklist')
 				->where($qb->expr()->eq('kind', $qb->createNamedParameter($type)))
 				->andWhere($qb->expr()->eq('value', $qb->createNamedParameter($value)))
 				->executeStatement();
 
 			$io->success("Removed $type '$value' from blocklist");
 		} else {
-			$qb->upsert('social_atproto_blocklist')
+			$qb->upsert('social_atpds_blocklist')
 				->set('kind', $qb->createNamedParameter($type))
 				->set('value', $qb->createNamedParameter($value))
 				->set('reason', $qb->createNamedParameter($reason))

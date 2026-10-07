@@ -19,31 +19,31 @@ class Version1000Date20261007000021 extends \OCP\Migration\SimpleMigrationStep {
 		// Add details.atproto column info - already JSON
 
 		// Add indexes for performance
-		if ($schema->hasTable('social_atproto_event')) {
-			$table = $schema->getTable('social_atproto_event');
-			if (!$table->hasIndex('social_at_event_time')) {
-				$table->addIndex(['time'], 'social_at_event_time');
+		if ($schema->hasTable('social_atpds_event')) {
+			$table = $schema->getTable('social_atpds_event');
+			if (!$table->hasIndex('social_pds_event_time')) {
+				$table->addIndex(['time'], 'social_pds_event_time');
 			}
 		}
 
-		if ($schema->hasTable('social_atproto_record')) {
-			$table = $schema->getTable('social_atproto_record');
-			if (!$table->hasIndex('social_at_record_created')) {
-				$table->addIndex(['created'], 'social_at_record_created');
+		if ($schema->hasTable('social_atpds_record')) {
+			$table = $schema->getTable('social_atpds_record');
+			if (!$table->hasIndex('social_pds_record_created')) {
+				$table->addIndex(['created'], 'social_pds_record_created');
 			}
 		}
 
-		if ($schema->hasTable('social_atproto_watch')) {
-			$table = $schema->getTable('social_atproto_watch');
-			if (!$table->hasIndex('social_at_watch_next')) {
-				$table->addIndex(['next_sync'], 'social_at_watch_next');
+		if ($schema->hasTable('social_atpds_watch')) {
+			$table = $schema->getTable('social_atpds_watch');
+			if (!$table->hasIndex('social_pds_watch_next')) {
+				$table->addIndex(['next_sync'], 'social_pds_watch_next');
 			}
 		}
 
-		if ($schema->hasTable('social_atproto_notify_cursor')) {
-			$table = $schema->getTable('social_atproto_notify_cursor');
-			if (!$table->hasIndex('social_at_notify_next')) {
-				$table->addIndex(['next_sync'], 'social_at_notify_next');
+		if ($schema->hasTable('social_atpds_notify_cursor')) {
+			$table = $schema->getTable('social_atpds_notify_cursor');
+			if (!$table->hasIndex('social_pds_notify_next')) {
+				$table->addIndex(['next_sync'], 'social_pds_notify_next');
 			}
 		}
 		return $schema;

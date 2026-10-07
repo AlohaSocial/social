@@ -53,7 +53,21 @@ class HandleMapper {
 	}
 
 	public function getHandleHost(): string {
-		return strtolower($this->config->getSocialAddress());
+		return strtolower((string)parse_url($this->getPdsEndpoint(), PHP_URL_HOST));
+	}
+
+	public function getPdsEndpoint(): string {
+		$url = $this->config->getAppValue(ConfigService::ATPROTO_PDS_URL);
+		if ($url === '') {
+			return 'https://' . ConfigService::authorityOf($this->config->getSocialUrl());
+		}
+		$parts = parse_url($url);
+		if ($parts === false || ($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
+			|| isset($parts['user'], $parts['pass']) || isset($parts['user']) || isset($parts['query']) || isset($parts['fragment'])
+			|| !in_array($parts['path'] ?? '', ['', '/'], true)) {
+			throw new \InvalidArgumentException('atproto_pds_url must be an HTTPS origin without credentials, path, query or fragment');
+		}
+		return 'https://' . ConfigService::authorityOf($url);
 	}
 
 	public function getWellKnownUrl(string $handle): string {

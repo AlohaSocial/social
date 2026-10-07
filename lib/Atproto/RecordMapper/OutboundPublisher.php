@@ -83,7 +83,7 @@ class OutboundPublisher {
 	}
 	private function localRecord(string $nid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('local_id', $qb->createNamedParameter($nid)))->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.post')));
+		$qb->select('*')->from('social_atpds_record')->where($qb->expr()->eq('local_id', $qb->createNamedParameter($nid)))->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.post')));
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
 }
