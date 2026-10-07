@@ -101,6 +101,20 @@ class CoreRequestBuilder {
 	public const TABLE_IMPORTS = 'social_import';
 
 	public static array $tables = [
+		'social_atproto_identity' => ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'created_at', 'updated_at'],
+		'social_atproto_instance_key' => ['id', 'kind', 'private_key', 'public_key', 'created'],
+		'social_atproto_repo' => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],
+		'social_atproto_record' => ['id', 'did', 'collection', 'rkey', 'cid', 'bytes', 'local_id', 'created'],
+		'social_atproto_block' => ['id', 'cid', 'did', 'bytes', 'kind'],
+		'social_atproto_blob' => ['id', 'did', 'cid', 'document_id', 'mime', 'size'],
+		'social_atproto_event' => ['seq', 'did', 'kind', 'bytes', 'time'],
+		'social_atproto_plc_log' => ['id', 'did', 'cid', 'operation', 'sent', 'confirmed'],
+		'social_atproto_watch' => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error'],
+		'social_atproto_notify_cursor' => ['id', 'did', 'cursor', 'last_sync', 'next_sync', 'failures'],
+		'social_atproto_labeler' => ['id', 'actor_id', 'labeler_did', 'settings', 'added'],
+		'social_atproto_blocklist' => ['id', 'kind', 'value', 'reason', 'created'],
+		'social_atproto_session' => ['id', 'did', 'jti', 'refresh_token_hash', 'expires', 'created'],
+		'social_atproto_recovery' => ['id', 'actor_id', 'recovery_phrase', 'created_at'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

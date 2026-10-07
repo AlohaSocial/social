@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Identity;
 
-use OCP\IConfig;
+use OCA\Social\Service\ConfigService;
 
 class HandleMapper {
 	public function __construct(
-		private readonly IConfig $config
+		private readonly ConfigService $config
 	) {}
 	
 	public function mapUsernameToHandle(string $username): string {
@@ -20,7 +20,7 @@ class HandleMapper {
 		// Lowercase
 		$localPart = strtolower($username);
 		// Replace dots and underscores with hyphens
-		$localPart = str_replace(['.', '_'], '-', $localPart);
+		$localPart = preg_replace('/[^a-z0-9-]/', '-', $localPart);
 		// Collapse multiple hyphens
 		$localPart = preg_replace('/-+/', '-', $localPart);
 		// Trim hyphens from start/end
@@ -43,18 +43,15 @@ class HandleMapper {
 		
 		while ($existsCheck($handle)) {
 			$suffix++;
-			$handle = $baseHandle . $suffix;
+			$dot = strpos($baseHandle, '.');
+			$handle = rtrim(substr($baseHandle, 0, min($dot, 63 - strlen((string)$suffix) - 1)), '-') . '-' . $suffix . substr($baseHandle, $dot);
 		}
 		
 		return $handle;
 	}
 	
 	public function getHandleHost(): string {
-		$socialUrl = $this->config->getSystemValue('social_url', '');
-		if (empty($socialUrl)) {
-			$socialUrl = $this->config->getSystemValue('overwrite.cli.url', '');
-		}
-		return parse_url($socialUrl, PHP_URL_HOST) ?? 'localhost';
+		return strtolower($this->config->getSocialAddress());
 	}
 	
 	public function getWellKnownUrl(string $handle): string {

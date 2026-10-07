@@ -1291,3 +1291,27 @@ Successful Mastodon-compatible responses are **not** wrapped: the client API con
 ## Numeric status identifiers
 
 Status `nid` values are exposed as decimal strings wherever the API carries IDs or pagination cursors. This preserves their exact value on 32-bit PHP, where generated IDs can be larger than `PHP_INT_MAX`; clients should keep IDs as strings and must not parse them through a fixed-width signed integer. Their numeric order is the timeline order, so `min_id`, `max_id`, and `since_id` continue to work as before.
+
+## Native AT Protocol PDS (draft)
+
+All routes below require the instance setting `atproto_enabled=1`. Disabled
+instances return `Unavailable` or 404 for discovery. Repository reads expose
+only active local identities. Errors use the XRPC `error`/`message` shape.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/.well-known/atproto-did` | Plain DID text for the exact issued request host; unknown hosts return 404 |
+| GET | `/.well-known/did.json` | Instance DID document and persisted service public key |
+| GET | `/xrpc/com.atproto.server.describeServer` | PDS identity and available handle domain |
+| GET | `/xrpc/com.atproto.identity.resolveHandle` | Local issued handle to DID |
+| GET | `/xrpc/com.atproto.sync.getLatestCommit` | Signed repository head CID and revision |
+| GET | `/xrpc/com.atproto.sync.getRepo` | CARv1 rooted at the signed commit, with all reachable MST and record blocks |
+| GET | `/xrpc/com.atproto.sync.getRecord` | CARv1 inclusion proof (currently full repository) |
+| GET | `/xrpc/com.atproto.sync.getBlocks` | Requested stored blocks in CARv1, maximum 100 |
+| GET | `/xrpc/com.atproto.sync.listRepos` | Active repositories, bounded limit and DID cursor |
+| GET | `/xrpc/com.atproto.repo.getRecord` | URI, CID and JSON record (`repo`, `collection`, `rkey`) |
+
+The relay WebSocket endpoint `com.atproto.sync.subscribeRepos` is served by
+`occ social:atproto:serve`, behind the documented reverse proxy, not by PHP's
+request worker. This read surface alone does not establish complete PDS or
+Bluesky client compatibility.

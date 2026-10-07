@@ -1,452 +1,112 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\Atproto\Repository;
-
-use CBOR\Decoder;
-use CBOR\Encoder;
-use CBOR\StringStream;
 use OCA\Social\Atproto\Identity\KeyManager;
+use OCA\Social\Atproto\Protocol\{Bytes, Cid, DagCbor, Car, Tid};
 use OCP\IDBConnection;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use Psr\Log\LoggerInterface;
-
-class Record {
-	public function __construct(
-		public readonly string $did,
-		public readonly string $collection,
-		public readonly string $rkey,
-		public readonly string $cid,
-		public readonly string $bytes, // DAG-CBOR encoded
-		public readonly ?int $localId = null,
-		public readonly string $createdAt = ''
-	) {}
-	
-	public static function create(string $did, string $collection, string $rkey, array $value, ?int $localId = null): self {
-		$encoded = (new Encoder())->encode($value);
-		$hash = hash('sha256', $encoded, true);
-		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
-		$multihash = hex2bin('1220') . $hash;
-		$cidBytes = $multicodec . $multihash;
-		$cid = 'b' . \OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($cidBytes);
-		
-		return new self(
-			did: $did,
-			collection: $collection,
-			rkey: $rkey,
-			cid: $cid,
-			bytes: $encoded,
-			localId: $localId,
-			createdAt: (new \DateTime())->format('Y-m-d H:i:s')
-		);
-	}
-	
-	public function getValue(): array {
-		return self::decodeCbor($this->bytes);
-	}
-
-	public static function decodeCbor(string $bytes): array {
-		$decoded = (new Decoder())->decode(StringStream::create($bytes))->normalize();
-		if (!is_array($decoded)) {
-			throw new \UnexpectedValueException('Expected a CBOR map');
-		}
-
-		return self::restoreIntegerValues($decoded);
-	}
-
-	private static function restoreIntegerValues(array $value): array {
-		foreach ($value as $key => $item) {
-			if (is_array($item)) {
-				$value[$key] = self::restoreIntegerValues($item);
-			} elseif (is_string($item) && preg_match('/^-?(?:0|[1-9][0-9]*)$/', $item) === 1) {
-				$integer = filter_var($item, FILTER_VALIDATE_INT);
-				if ($integer !== false) {
-					$value[$key] = $integer;
-				}
-			}
-		}
-
-		return $value;
-	}
-	
-	public function getAtUri(): string {
-		return "at://{$this->did}/{$this->collection}/{$this->rkey}";
-	}
-}
-
-class Commit {
-	public const VERSION = 3;
-	
-	public function __construct(
-		public readonly string $did,
-		public readonly string $dataCid, // Root MST CID
-		public readonly string $rev, // TID
-		public readonly ?string $prevCid,
-		public readonly string $sig // 64-byte low-S secp256k1 signature
-	) {}
-	
-	public static function create(string $did, string $dataCid, string $rev, ?string $prevCid, string $signingKey): self {
-		$unsignedCommit = [
-			'version' => self::VERSION,
-			'did' => $did,
-			'data' => $dataCid,
-			'rev' => $rev,
-			'prev' => $prevCid
-		];
-		
-		$encoded = (new Encoder())->encode($unsignedCommit);
-		
-		$keyManager = new KeyManager($this->config, $this->logger);
-		$sig = $keyManager->sign($encoded, $signingKey);
-		
-		return new self(
-			did: $did,
-			dataCid: $dataCid,
-			rev: $rev,
-			prevCid: $prevCid,
-			sig: $sig
-		);
-	}
-	
-	public function getCid(): string {
-		$commit = [
-			'version' => self::VERSION,
-			'did' => $this->did,
-			'data' => $this->dataCid,
-			'rev' => $this->rev,
-			'prev' => $this->prevCid,
-			'sig' => $this->sig
-		];
-		
-		$encoded = (new Encoder())->encode($commit);
-		$hash = hash('sha256', $encoded, true);
-		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
-		$multihash = hex2bin('1220') . $hash;
-		$cidBytes = $multicodec . $multihash;
-		return 'b' . \OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($cidBytes);
-	}
-	
-	public function toCbor(): string {
-		return (new Encoder())->encode([
-			'version' => self::VERSION,
-			'did' => $this->did,
-			'data' => $this->dataCid,
-			'rev' => $this->rev,
-			'prev' => $this->prevCid,
-			'sig' => $this->sig
-		]);
-	}
-}
-
 class Repository {
-	public function __construct(
-		private readonly IDBConnection $db,
-		private readonly LoggerInterface $logger,
-		private readonly KeyManager $keyManager,
-		private readonly \OCP\IConfig $config
-	) {}
-	
-	public function createRecord(string $did, string $collection, string $rkey, array $value, ?int $localId = null): Record {
+	public function __construct(private readonly IDBConnection $db, private readonly LoggerInterface $logger, private readonly KeyManager $keyManager) {}
+	public function createRecord(string $did, string $collection, string $rkey, array $value, int|string|null $localId = null): Record {
+		if ($this->getRecord($did, $collection, $rkey) !== null) { throw new \InvalidArgumentException('Record already exists'); }
 		$record = Record::create($did, $collection, $rkey, $value, $localId);
-		
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_record')
-			->values([
-				'did' => $qb->createNamedParameter($did),
-				'collection' => $qb->createNamedParameter($collection),
-				'rkey' => $qb->createNamedParameter($rkey),
-				'cid' => $qb->createNamedParameter($record->cid),
-				'bytes' => $qb->createNamedParameter($record->bytes),
-				'local_id' => $localId !== null ? $qb->createNamedParameter($localId, \PDO::PARAM_INT) : null,
-				'created' => $qb->createNamedParameter($record->createdAt)
-			])
-			->executeStatement();
-		
+		$this->insert('social_atproto_record', ['did' => $did, 'collection' => $collection, 'rkey' => $rkey, 'cid' => $record->cid,
+			'bytes' => $record->bytes, 'local_id' => $record->localId, 'created' => $record->createdAt], ['bytes']);
 		return $record;
 	}
-	
 	public function deleteRecord(string $did, string $collection, string $rkey): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->delete('social_atproto_record')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
-			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))
-			->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)))
-			->executeStatement();
+		$qb = $this->db->getQueryBuilder(); $qb->delete('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)))->executeStatement();
 	}
-	
 	public function getRecord(string $did, string $collection, string $rkey): ?Record {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_record')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
-			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))
-			->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)));
-		
-		$result = $qb->executeQuery()->fetchAssociative();
-		if (!$result) {
-			return null;
-		}
-		
-		return new Record(
-			did: $result['did'],
-			collection: $result['collection'],
-			rkey: $result['rkey'],
-			cid: $result['cid'],
-			bytes: $result['bytes'],
-			localId: $result['local_id'] ?? null,
-			createdAt: $result['created']
-		);
+		$qb = $this->db->getQueryBuilder(); $qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)));
+		$row = $qb->executeQuery()->fetchAssociative(); return $row ? $this->record($row) : null;
 	}
-	
 	public function getRecords(string $did, string $collection): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_record')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
-			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)));
-		
-		$results = $qb->executeQuery()->fetchAllAssociative();
-		$records = [];
-		foreach ($results as $result) {
-			$records[$result['rkey']] = new Record(
-				did: $result['did'],
-				collection: $result['collection'],
-				rkey: $result['rkey'],
-				cid: $result['cid'],
-				bytes: $result['bytes'],
-				localId: $result['local_id'] ?? null,
-				createdAt: $result['created']
-			);
-		}
-		return $records;
+		$records = []; foreach ($this->rows($did, $collection) as $row) { $records[$row['rkey']] = $this->record($row); } return $records;
 	}
-	
+	private function record(array $row): Record {
+		return new Record($row['did'], $row['collection'], $row['rkey'], $row['cid'], self::bytes($row['bytes']),
+			isset($row['local_id']) ? (string)$row['local_id'] : null, $row['created']);
+	}
+	private function rows(string $did, ?string $collection = null): array {
+		$qb = $this->db->getQueryBuilder(); $qb->select('*')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		if ($collection !== null) { $qb->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection))); }
+		return $qb->executeQuery()->fetchAllAssociative();
+	}
+	public function transaction(callable $write): mixed {
+		$this->db->beginTransaction();
+		try { $result = $write(); $this->db->commit(); return $result; } catch (\Throwable $e) { $this->db->rollBack(); throw $e; }
+	}
 	public function commit(string $did, string $signingKey, ?string $prevCommitCid = null): Commit {
-		// Get all records for this DID
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_record')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
-		
-		$results = $qb->executeQuery()->fetchAllAssociative();
-		
-		// Build records array for MST
-		$records = [];
-		foreach ($results as $result) {
-			$key = $result['collection'] . '/' . $result['rkey'];
-			$records[$key] = [
-				'cid' => $result['cid'],
-				'value' => Record::decodeCbor($result['bytes'])
-			];
-		}
-		
-		// Build MST and get root CID + blocks
-		$mstResult = MerkleSearchTree::exportCar($records);
-		$dataCid = $mstResult['root'];
-		$mstBlocks = $mstResult['blocks'];
-		
-		// Generate TID for rev
-		$rev = $this->generateTid();
-		
-		// Create commit
-		$commit = Commit::create($did, $dataCid, $rev, $prevCommitCid, $signingKey);
-		$commitCid = $commit->getCid();
-		$commitCbor = $commit->toCbor();
-		
-		// Store commit block
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_block')
-			->values([
-				'cid' => $qb->createNamedParameter($commitCid),
-				'did' => $qb->createNamedParameter($did),
-				'bytes' => $qb->createNamedParameter($commitCbor),
-				'kind' => $qb->createNamedParameter('commit')
-			])
-			->executeStatement();
-		
-		// Store MST blocks
-		foreach ($mstBlocks as $cid => $blockBytes) {
-			$qb->insert('social_atproto_block')
-				->values([
-					'cid' => $qb->createNamedParameter($cid),
-					'did' => $qb->createNamedParameter($did),
-					'bytes' => $qb->createNamedParameter($blockBytes),
-					'kind' => $qb->createNamedParameter('mst')
-				])
-				->onConflict(['did', 'cid'])
-				->doNothing()
-				->executeStatement();
-		}
-		
-		// Update repo head
-		$qb = $this->db->getQueryBuilder();
-		$qb->update('social_atproto_repo')
-			->set('commit_cid', $qb->createNamedParameter($commitCid))
-			->set('rev', $qb->createNamedParameter($rev))
-			->set('record_count', $qb->createNamedParameter(count($records), \PDO::PARAM_INT))
-			->set('updated', $qb->createNamedParameter((new \DateTime())->format('Y-m-d H:i:s')))
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
-			->executeStatement();
-		
-		// Create firehose event with proper CAR blocks
-		$this->createFirehoseEvent($did, $commit, $records, $mstBlocks, $commitCbor);
-		
-		return $commit;
+		return $this->transaction(function () use ($did, $signingKey) {
+			$head = $this->getHead($did); if ($head === null) { throw new \InvalidArgumentException('Repository not found'); }
+			$old = [];
+			if (!empty($head['commit_cid'])) {
+				$previous = DagCbor::decode($this->getBlock($did, $head['commit_cid']) ?? throw new \RuntimeException('Missing commit'));
+				$this->walk($did, $previous['data']->value, $old);
+			}
+			$records = []; $blocks = [];
+			foreach ($this->rows($did) as $row) { $path = $row['collection'] . '/' . $row['rkey']; $records[$path] = ['cid' => $row['cid']]; $blocks[$row['cid']] = self::bytes($row['bytes']); }
+			$tree = MerkleSearchTree::exportCar($records); $blocks += $tree['blocks'];
+			$rev = Tid::next($head['rev']); $commit = Commit::create($did, $tree['root'], $rev, null, $signingKey, $this->keyManager);
+			$commitCid = $commit->getCid(); $blocks = [$commitCid => $commit->toCbor()] + $blocks;
+			foreach ($blocks as $cid => $bytes) {
+				if ($this->getBlock($did, $cid) === null) {
+					$this->insert('social_atproto_block', ['did' => $did, 'cid' => $cid, 'bytes' => $bytes, 'kind' => $cid === $commitCid ? 'commit' : (isset($tree['blocks'][$cid]) ? 'mst' : 'record')], ['bytes']);
+				}
+			}
+			$qb = $this->db->getQueryBuilder();
+			$qb->update('social_atproto_repo')->set('commit_cid', $qb->createNamedParameter($commitCid))->set('rev', $qb->createNamedParameter($rev))
+				->set('record_count', $qb->createNamedParameter(count($records), IQueryBuilder::PARAM_INT))->set('updated', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))
+				->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+			$qb->andWhere($head['rev'] === null ? $qb->expr()->isNull('rev') : $qb->expr()->eq('rev', $qb->createNamedParameter($head['rev'])));
+			if ($qb->executeStatement() !== 1) { throw new \RuntimeException('Concurrent repository write; retry required'); }
+			$diff = MerkleSearchTree::diff('', $tree['root'], $old, $records); $ops = array_merge($diff['added'], $diff['changed'], $diff['removed']);
+			foreach ($ops as &$op) { $op['cid'] = isset($op['cid']) ? new Cid($op['cid']) : null; } unset($op);
+			$body = ['repo' => $did, 'commit' => new Cid($commitCid), 'rev' => $rev, 'since' => $head['rev'],
+				'rebase' => false, 'tooBig' => false, 'blocks' => new Bytes(Car::encode($commitCid, $blocks)), 'ops' => $ops, 'blobs' => [], 'time' => gmdate('Y-m-d\TH:i:s\Z')];
+			$this->insert('social_atproto_event', ['did' => $did, 'kind' => '#commit', 'bytes' => DagCbor::encode($body), 'time' => gmdate('Y-m-d H:i:s')], ['bytes']);
+			return $commit;
+		});
 	}
-	
+	private function walk(string $did, string $cid, array &$records, int $depth = 0): void {
+		if ($depth > 128) { throw new \RuntimeException('Invalid MST depth'); }
+		$node = DagCbor::decode($this->getBlock($did, $cid) ?? throw new \RuntimeException('Missing MST block')); $key = '';
+		if ($node['l'] !== null) { $this->walk($did, $node['l']->value, $records, $depth + 1); }
+		foreach ($node['e'] as $entry) {
+			$key = substr($key, 0, $entry['p']) . $entry['k']->value; $records[$key] = ['cid' => $entry['v']->value];
+			if ($entry['t'] !== null) { $this->walk($did, $entry['t']->value, $records, $depth + 1); }
+		}
+	}
 	public function getHead(string $did): ?array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_repo')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
-		
+		$qb = $this->db->getQueryBuilder(); $qb->select('*')->from('social_atproto_repo')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
-	
-	/**
-	 * Export repository as CAR file
-	 */
 	public function exportCar(string $did): string {
-		// Get all records
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_record')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
-		
-		$results = $qb->executeQuery()->fetchAllAssociative();
-		
-		$records = [];
-		foreach ($results as $result) {
-			$key = $result['collection'] . '/' . $result['rkey'];
-			$records[$key] = [
-				'cid' => $result['cid'],
-				'value' => Record::decodeCbor($result['bytes'])
-			];
+		$head = $this->getHead($did); if (empty($head['commit_cid'])) { throw new \InvalidArgumentException('Repository has no commit'); }
+		$root = $head['commit_cid']; $commit = $this->getBlock($did, $root) ?? throw new \RuntimeException('Missing commit');
+		$blocks = [$root => $commit]; $pending = [DagCbor::decode($commit)['data']->value];
+		while ($pending !== []) {
+			$cid = array_pop($pending); if (isset($blocks[$cid])) { continue; }
+			$bytes = $this->getBlock($did, $cid) ?? throw new \RuntimeException('Missing repo block'); $blocks[$cid] = $bytes;
+			$node = DagCbor::decode($bytes);
+			if (!isset($node['e'])) { continue; }
+			if ($node['l'] !== null) { $pending[] = $node['l']->value; }
+			foreach ($node['e'] as $entry) { $pending[] = $entry['v']->value; if ($entry['t'] !== null) { $pending[] = $entry['t']->value; } }
 		}
-		
-		// Build MST and get blocks
-		$mstResult = MerkleSearchTree::exportCar($records);
-		$blocks = $mstResult['blocks'];
-		
-		// Add commit block
-		$head = $this->getHead($did);
-		if ($head && $head['commit_cid']) {
-			$commitBlock = $this->getBlock($did, $head['commit_cid']);
-			if ($commitBlock) {
-				$blocks[$head['commit_cid']] = $commitBlock;
-			}
-		}
-		
-		// Build CAR file
-		return $this->buildCar($mstResult['root'], $blocks);
+		return Car::encode($root, $blocks);
 	}
-	
-	private function buildCar(string $rootCid, array $blocks): string {
-		// CARv1 header: 
-		// - version (varint): 1
-		// - roots (array of CIDs): [rootCid]
-		// - blocks: concatenated CBOR blocks
-		
-		$header = '';
-		$header .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(1); // version
-		$header .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(1); // roots array length
-		$header .= $this->encodeCid($rootCid);
-		
-		// Blocks
-		$blockData = '';
-		foreach ($blocks as $cid => $block) {
-			$blockData .= $this->encodeCid($cid);
-			$blockData .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(strlen($block));
-			$blockData .= $block;
-		}
-		
-		return $header . $blockData;
+	public function getBlock(string $did, string $cid): ?string {
+		$qb = $this->db->getQueryBuilder(); $qb->select('bytes')->from('social_atproto_block')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
+		$result = $qb->executeQuery()->fetchOne(); return $result === false ? null : self::bytes($result);
 	}
-	
-	private function encodeCid(string $cid): string {
-		// Decode base32 CID back to bytes
-		$cid = substr($cid, 1); // Remove 'b' prefix
-		$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-		$bits = '';
-		foreach (str_split($cid) as $char) {
-			$idx = strpos($alphabet, $char);
-			if ($idx !== false) {
-				$bits .= str_pad(decbin($idx), 5, '0', STR_PAD_LEFT);
-			}
-		}
-		// Convert bits to bytes
-		$bytes = '';
-		for ($i = 0; $i < strlen($bits); $i += 8) {
-			$chunk = substr($bits, $i, 8);
-			if (strlen($chunk) === 8) {
-				$bytes .= chr(bindec($chunk));
-			}
-		}
-		return $bytes;
-	}
-	
-	private function generateTid(): string {
-		$microtime = (int)(microtime(true) * 1000000);
-		$bytes = '';
-		for ($i = 5; $i >= 0; $i--) {
-			$bytes .= chr(($microtime >> ($i * 8)) & 0xFF);
-		}
-		$bytes = str_pad($bytes, 8, "\0", STR_PAD_LEFT);
-		return substr(\OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($bytes), 0, 13);
-	}
-	
-	private function storeCommitBlocks(string $did, string $dataCid, Commit $commit): void {
-		// Now handled in commit() method
-	}
-	
-	private function createFirehoseEvent(string $did, Commit $commit, array $records, array $mstBlocks, string $commitCbor): void {
-		$ops = [];
-		foreach ($records as $path => $record) {
-			$ops[] = [
-				'action' => 'create',
-				'path' => $path,
-				'cid' => $record['cid']
-			];
-		}
-		
-		// Build CAR for this commit
-		$carBlocks = $mstBlocks;
-		$carBlocks[$commit->getCid()] = $commitCbor;
-		
-		$carData = $this->buildCar($commit->dataCid, $carBlocks);
-		
-		$event = [
-			'did' => $did,
-			'kind' => '#commit',
-			'bytes' => json_encode([
-				'seq' => 0, // Will be set by event service
-				'did' => $did,
-				'rev' => $commit->rev,
-				'commit' => $commit->getCid(),
-				'ops' => $ops,
-				'blocks' => base64_encode($carData), // CAR as base64 for JSON storage
-				'time' => (new \DateTime())->format('Y-m-d H:i:s')
-			]),
-			'time' => (new \DateTime())->format('Y-m-d H:i:s')
-		];
-		
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_event')
-			->values([
-				'did' => $qb->createNamedParameter($did),
-				'kind' => $qb->createNamedParameter('#commit'),
-				'bytes' => $qb->createNamedParameter($event['bytes']),
-				'time' => $qb->createNamedParameter($event['time'])
-			])
-			->executeStatement();
-	}
-	
-	private function getBlock(string $did, string $cid): ?string {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('bytes')
-			->from('social_atproto_block')
-			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
-			->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
-		
-		return $qb->executeQuery()->fetchOne() ?: null;
+	public static function bytes(mixed $value): string { return is_resource($value) ? stream_get_contents($value) : (string)$value; }
+	private function insert(string $table, array $values, array $binary = []): void {
+		$qb = $this->db->getQueryBuilder(); $params = [];
+		foreach ($values as $key => $value) { $params[$key] = $qb->createNamedParameter($value, in_array($key, $binary, true) ? IQueryBuilder::PARAM_LOB : ($value === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_STR)); }
+		$qb->insert($table)->values($params)->executeStatement();
 	}
 }

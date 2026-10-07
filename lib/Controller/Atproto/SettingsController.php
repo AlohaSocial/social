@@ -23,7 +23,7 @@ class SettingsController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function getSettings(): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
@@ -31,9 +31,9 @@ class SettingsController extends Controller {
 		$prefix = 'social_atproto_user_' . $userId . '_';
 		
 		return new JsonResponse([
-			'syncPosts' => $this->config->getUserValue($userId, 'social', $prefix . 'sync_posts', true),
-			'syncInteractions' => $this->config->getUserValue($userId, 'social', $prefix . 'sync_interactions', true),
-			'showBadge' => $this->config->getUserValue($userId, 'social', $prefix . 'show_badge', true)
+			'syncPosts' => $this->config->getUserValue($userId, 'social', $prefix . 'sync_posts', '1') === '1',
+			'syncInteractions' => $this->config->getUserValue($userId, 'social', $prefix . 'sync_interactions', '1') === '1',
+			'showBadge' => $this->config->getUserValue($userId, 'social', $prefix . 'show_badge', '1') === '1'
 		]);
 	}
 	
@@ -45,16 +45,16 @@ class SettingsController extends Controller {
 		bool $syncInteractions = true,
 		bool $showBadge = true
 	): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
 		
 		$prefix = 'social_atproto_user_' . $userId . '_';
 		
-		$this->config->setUserValue($userId, 'social', $prefix . 'sync_posts', $syncPosts);
-		$this->config->setUserValue($userId, 'social', $prefix . 'sync_interactions', $syncInteractions);
-		$this->config->setUserValue($userId, 'social', $prefix . 'show_badge', $showBadge);
+		$this->config->setUserValue($userId, 'social', $prefix . 'sync_posts', $syncPosts ? '1' : '0');
+		$this->config->setUserValue($userId, 'social', $prefix . 'sync_interactions', $syncInteractions ? '1' : '0');
+		$this->config->setUserValue($userId, 'social', $prefix . 'show_badge', $showBadge ? '1' : '0');
 		
 		return new JsonResponse(['success' => true]);
 	}

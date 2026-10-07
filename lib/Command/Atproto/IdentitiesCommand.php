@@ -46,16 +46,17 @@ class IdentitiesCommand extends Command {
 		}
 		
 		if ($userId) {
-			$users = [(int)$userId];
+			$actor = $this->identityService->actorIdForUser((string)$userId);
+			$users = $actor === null ? [] : [$actor];
 		} else {
 			// Get all local actors without identities
 			$qb = $this->db->getQueryBuilder();
 			$qb->select('sa.id')
 				->from('social_actor', 'sa')
 				->leftJoin('sa', 'social_atproto_identity', 'ai', 'sa.id = ai.actor_id')
-				->where($qb->expr()->isNull('ai.actor_id'));
+				->where($qb->expr()->isNull('ai.actor_id'))->andWhere($qb->expr()->isNull('sa.deleted'));
 			
-			$users = array_map('intval', array_column($qb->executeQuery()->fetchAllAssociative(), 'id'));
+			$users = array_map('strval', array_column($qb->executeQuery()->fetchAllAssociative(), 'id'));
 		}
 		
 		$io->text('Found ' . count($users) . ' users without identities');

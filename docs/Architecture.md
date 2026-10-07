@@ -2966,3 +2966,40 @@ This file, `docs/API.md` and `docs/OCC-Commands.md` describe the current impleme
 - two claims of *absence*, which is the direction the rest of it is blind in: a sentence saying there is no `/some/route` must be true, and a symbol the docs call "commented out" may not be called by live code. The false claim that key-pair rotation was unavailable, published six lines after the flag that performs it, is what these were written for.
 
 Everything else is on the author of the change. In particular nothing can check a paragraph of prose against the behaviour it describes, so a feature described in words the "not implemented" guard does not recognise, or a mechanism described plausibly and wrongly, still gets through.
+
+### Native AT Protocol storage (draft)
+
+The dated `Version1000Date20261007000020` migration creates the PDS tables;
+`Version1000Date20261007000021` adds due-work/event indexes. They use the
+Nextcloud migration signature, explicit app-prefixed index names, and every
+table/column is registered in `CoreRequestBuilder::$tables` for reset.
+
+| Table | Purpose |
+| --- | --- |
+| `social_atproto_identity` | Local actor URI, issued handle, DID, sealed signing key and public recovery key |
+| `social_atproto_instance_key` | Sealed service and rotation keys |
+| `social_atproto_repo` | Signed head, monotonic revision and record/blob counters |
+| `social_atproto_record` | Current DAG-CBOR records, keyed by DID/collection/rkey |
+| `social_atproto_block` | Content-addressed commit, MST and record blocks |
+| `social_atproto_blob` | Media CID, owning DID and cached-document reference |
+| `social_atproto_event` | Durable binary firehose event bodies and database sequence |
+| `social_atproto_plc_log` | Signed PLC operations, submission/confirmation timestamps |
+| `social_atproto_watch` | Followed remote DIDs and poll/backoff state |
+| `social_atproto_notify_cursor` | Per-DID notification polling state |
+| `social_atproto_labeler` | User labeler preferences |
+| `social_atproto_blocklist` | Instance DID/PDS blocks |
+| `social_atproto_session` | Hashed refresh tokens (client authentication remains under development) |
+| `social_atproto_recovery` | Sealed one-time BIP-39 recovery phrase, deleted when consumed |
+
+An account is stored deactivated before PLC submission so failed registration
+retains its original signing keys and signed genesis for retry. A successful
+submission activates it. Deactivation is reversible and does not tombstone
+the DID. Recovery uses 24 words for the full 256-bit private scalar; the
+previous specification's twelve words could encode only 128 bits.
+
+Repository commits serialize CID links and signatures with explicit CBOR
+types. The CAR root is the signed commit. Export walks that commit's stored
+MST rather than reconstructing a possibly different tree from current rows.
+Head updates compare the previous revision and roll back on a concurrent
+write. Record mutation callers must use `Repository::transaction` to include
+record changes in the same transaction as their commit.

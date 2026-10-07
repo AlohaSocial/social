@@ -23,7 +23,7 @@ class IdentityController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function getIdentity(): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
@@ -50,7 +50,7 @@ class IdentityController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function createIdentity(): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
@@ -76,7 +76,7 @@ class IdentityController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function getRecoveryPhrase(): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
@@ -97,8 +97,9 @@ class IdentityController extends Controller {
 	/**
 	 * @NoAdminRequired
 	 */
+	#[\OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired]
 	public function regenerateRecovery(): JsonResponse {
-		$userId = $this->userSession->getUserId();
+		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
 		}
@@ -114,9 +115,7 @@ class IdentityController extends Controller {
 		return new JsonResponse(['recoveryPhrase' => $phrase]);
 	}
 	
-	private function getActorId(string $userId): ?int {
-		// This would need to be implemented to map Nextcloud user ID to Social actor ID
-		// For now, return a placeholder
-		return 1;
+	private function getActorId(string $userId): ?string {
+		return $this->identityService->actorIdForUser($userId);
 	}
 }
