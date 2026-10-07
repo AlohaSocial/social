@@ -88,6 +88,47 @@ describe('notifications store', () => {
 		})
 	})
 
+	describe('the Activities count', () => {
+		it('is the unread activities and the people waiting, together', () => {
+			store.setUnreadNotifications(4)
+			store.setPendingRequests(3)
+
+			expect(store.activitiesCount).toBe(7)
+			expect(store.unreadNotifications).toBe(4)
+		})
+	})
+
+	describe('the one-time notice', () => {
+		it('is due when the policy says so, and not otherwise', async () => {
+			axios.get.mockResolvedValue({ data: { notice: true, summary: { pending_requests_count: 0 } } })
+			await store.fetchPendingRequests()
+			expect(store.policyNotice).toBe(true)
+
+			axios.get.mockResolvedValue({ data: { summary: { pending_requests_count: 0 } } })
+			await store.fetchPendingRequests()
+			expect(store.policyNotice).toBe(false)
+		})
+
+		it('is put away at once and the server is told', async () => {
+			store.setPolicyNotice(true)
+			axios.post.mockResolvedValue({ data: {} })
+
+			await store.dismissPolicyNotice()
+
+			expect(store.policyNotice).toBe(false)
+			expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/social/notifications/policy/notice/dismiss')
+		})
+
+		it('stays away for now when the server does not answer', async () => {
+			store.setPolicyNotice(true)
+			axios.post.mockRejectedValue(new Error('offline'))
+
+			await store.dismissPolicyNotice()
+
+			expect(store.policyNotice).toBe(false)
+		})
+	})
+
 	describe('fetchUnreadNotifications', () => {
 		it('reads the count the server keeps', async () => {
 			axios.get.mockResolvedValue({ data: { count: 5 } })

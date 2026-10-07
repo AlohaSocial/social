@@ -110,7 +110,17 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(wrapper.findAll('.settings__section-heading').map((h) => h.text()))
-			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Sound and touch', 'Notifications', 'Who may reach you', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+	})
+
+	/** Everything about being interrupted is in one place: when, and who. */
+	it('puts who may reach you inside Notifications, after the digests and quiet hours', async () => {
+		const wrapper = mount(Settings, { global: { stubs: asyncStubs } })
+		await flushPromises()
+
+		const parts = wrapper.find('#notifications .settings__section-body').findAll('section')
+		expect(parts.map((part) => part.classes()[0])).toEqual(['notification-delivery-settings-stub', 'notification-policy-settings-stub'])
+		expect(wrapper.find('section.settings__section#notification-policy').exists()).toBe(false)
 	})
 
 	/**

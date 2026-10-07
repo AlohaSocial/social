@@ -66,6 +66,8 @@
 
 					<div class="settings__section-body">
 						<component :is="section.component" />
+						<!-- a second part of the same subject, under a rule -->
+						<component :is="section.more" v-if="section.more" class="settings__section-more" />
 					</div>
 				</section>
 			</div>
@@ -313,15 +315,9 @@ export default {
 					id: 'notifications',
 					icon: 'IconNotifications',
 					component: 'NotificationDeliverySettings',
+					more: 'NotificationPolicySettings',
 					title: t('social', 'Notifications'),
-					lede: t('social', 'When Aloha Social is allowed to interrupt you. Everything still lands in your notifications here; this is only about the bell, the phone and the mail.'),
-				},
-				{
-					id: 'notification-policy',
-					icon: 'IconNotifications',
-					component: 'NotificationPolicySettings',
-					title: t('social', 'Who may reach you'),
-					lede: t('social', 'Whether people you have no relationship with — strangers, brand-new accounts, people who do not follow you — may notify you at all, or wait for your say-so first. What they send is kept either way.'),
+					lede: t('social', 'When Aloha Social is allowed to interrupt you, and who may reach you at all. Everything for interruptions is in this one place.'),
 				},
 				{
 					id: 'apps',
@@ -590,6 +586,12 @@ $gutter: calc(var(--default-grid-baseline) * 4);
 
 	&__section-body {
 		min-width: 0;
+	}
+
+	&__section-more {
+		margin-top: calc(var(--default-grid-baseline) * 6);
+		padding-top: calc(var(--default-grid-baseline) * 6);
+		border-top: 1px solid var(--color-border);
 	}
 }
 
