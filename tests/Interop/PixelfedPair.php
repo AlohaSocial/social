@@ -71,6 +71,7 @@ trait PixelfedPair {
 		$this->actor = Server::get(AccountService::class)->getActorFromUserId($aloha->user(), true);
 		// counts are hidden by default; these tests assert what was counted
 		Server::get(CountsService::class)->setHides($aloha->user(), false);
+		Here::acceptEverybody($aloha->user());
 		$this->ourHandle = $this->actor->getPreferredUsername() . '@'
 			. Server::get(ConfigService::class)->getCloudAuthority();
 		$this->theirHandle = $this->pixelfed->selfHandle();
