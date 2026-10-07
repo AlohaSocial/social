@@ -10,18 +10,18 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useBlueskyBadge } from './useBlueskyBadge.js'
+import { useBlueskyBadge } from '../composables/useBlueskyBadge.js'
 
 const props = defineProps({
 	actor: {
 		type: Object,
-		required: true
+		required: true,
 	},
 	size: {
 		type: String,
 		default: 'normal',
-		validator: (value) => ['small', 'normal', 'large'].includes(value)
-	}
+		validator: (value) => ['small', 'normal', 'large'].includes(String(value)),
+	},
 })
 
 const { showBadge, getBadgeProps, blueskyIcon } = useBlueskyBadge()
@@ -29,10 +29,9 @@ const { showBadge, getBadgeProps, blueskyIcon } = useBlueskyBadge()
 const badgeProps = computed(() => getBadgeProps(props.actor))
 const handle = computed(() => badgeProps.value.handle)
 const title = computed(() => badgeProps.value.title)
-const profileUrl = computed(() => badgeProps.value.profileUrl)
 
 const BlueskyIcon = {
-	template: blueskyIcon
+	template: blueskyIcon,
 }
 </script>
 

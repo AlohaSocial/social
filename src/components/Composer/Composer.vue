@@ -375,19 +375,7 @@
 						<CardTextOutline :size="22" decorative title="" />
 					</template>
 				</NcButton>
-				<!-- AT Protocol (Bluesky) toggle -->
-				<NcButton
-					v-if="atprotoAvailable"
-					:title="atprotoEnabled ? t('social', 'Post to Fediverse only') : t('social', 'Also post to Bluesky')"
-					variant="tertiary"
-					class="atproto-toggle"
-					:aria-label="atprotoEnabled ? t('social', 'Post to Fediverse only') : t('social', 'Also post to Bluesky')"
-					:aria-pressed="atprotoEnabled"
-					@click.prevent="atprotoEnabled = !atprotoEnabled">
-					<template #icon>
-						<BlueskyIcon :size="22" decorative title="" />
-					</template>
-				</NcButton>
+
 				<NcButton
 					:title="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
 					variant="tertiary"
@@ -532,9 +520,6 @@ import PlacePicker from './PlacePicker.vue'
 import SchedulePicker from './SchedulePicker.vue'
 import { computed, defineAsyncComponent, getCurrentInstance, ref } from 'vue'
 
-const BlueskyIcon = {
-	template: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13c0-.55-.45-1-1-1s-1 .45-1 1v4c0 .55.45 1 1 1s1-.45 1-1v-4zm0 6c0 .55-.45 1-1 1s-1-.45-1-1v-2c0-.55.45-1 1-1s1 .45 1 1v2z"/></svg>`
-}
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError, showSuccess } from '../../services/toast.js'
 import FocusOnCreate from '../../directives/focusOnCreate.js'
@@ -647,7 +632,6 @@ export default {
 		PollIcon,
 		CardTextOutline,
 		CreationOutline,
-		BlueskyIcon,
 		PollEditor,
 		PreviewGrid,
 		ComposerPreview,
@@ -846,8 +830,6 @@ export default {
 			/** the post this one quotes, as the timeline handed it over */
 			quoteOf: null,
 			tributeOptions: mentionTributeOptions(),
-			/** whether to publish to Bluesky (atproto) in addition to Fediverse */
-			atprotoEnabled: false,
 
 			// the eventBus and document handlers mounted() adds, kept so that
 			// unmounted() removes only these and not other components' listeners
@@ -870,12 +852,6 @@ export default {
 		/** @return {boolean} whether the words carry the author's mark for a post made with AI */
 		madeWithAi() {
 			return hasAiMark(this.statusText)
-		},
-
-		/** @return {boolean} whether atproto (Bluesky) is available for this account */
-		atprotoAvailable() {
-			return this.serverData?.atproto?.enabled === true && 
-			       this.currentUser?.details?.atproto?.did
 		},
 
 		/**

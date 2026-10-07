@@ -103,6 +103,7 @@
 								:addresses="state.accessList" />
 							<BlocklistSection v-else-if="card.id === 'blocklist'" @changed="onListChanged" />
 							<RelaysSection v-else-if="card.id === 'relays'" />
+							<AtprotoAdmin v-else-if="card.id === 'atproto'" />
 							<ServerSection v-else-if="card.id === 'server'" :settings="state.server" />
 						</div>
 					</div>
@@ -137,6 +138,7 @@ import RulesSection from './RulesSection.vue'
 import ReviewSection from './ReviewSection.vue'
 import SectionsSection from './SectionsSection.vue'
 import ServerSection from './ServerSection.vue'
+import AtprotoAdmin from '../../views/AtprotoAdmin.vue'
 import StorageSection from './StorageSection.vue'
 import TrendsSection from './TrendsSection.vue'
 
@@ -224,6 +226,7 @@ export default {
 		ReviewSection,
 		SectionsSection,
 		ServerSection,
+		AtprotoAdmin,
 		StorageSection,
 		TrendsSection,
 	},
@@ -316,7 +319,7 @@ export default {
 				},
 				{
 					name: t('social', 'Server'),
-					cards: administrator ? [{ id: 'server', title: t('social', 'Server') }] : [],
+					cards: administrator ? [{ id: 'server', title: t('social', 'Server') }, { id: 'atproto', title: t('social', 'Bluesky (AT Protocol)') }] : [],
 				},
 			]
 		},

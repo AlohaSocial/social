@@ -1,368 +1,80 @@
 <!-- SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors -->
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-
 <template>
-	<div class="atproto-settings">
-		<h2>{{ $t('Bluesky (AT Protocol)') }}</h2>
-		
-		<div class="setting-card" v-if="identity">
-			<h3>{{ $t('Your Bluesky Identity') }}</h3>
-			
-			<div class="identity-info">
-				<div class="info-row">
-					<label>{{ $t('Handle') }}</label>
-					<div class="value-with-copy">
-						<span>@{{ identity.handle }}</span>
-						<button class="btn btn-icon btn-sm" @click="copyToClipboard(identity.handle)">
-							<icon name="copy" />
-						</button>
-					</div>
-				</div>
-				<div class="info-row">
-					<label>{{ $t('DID') }}</label>
-					<div class="value-with-copy">
-						<code>{{ identity.did }}</code>
-						<button class="btn btn-icon btn-sm" @click="copyToClipboard(identity.did)">
-							<icon name="copy" />
-						</button>
-					</div>
-				</div>
-				<div class="info-row">
-					<label>{{ $t('Profile') }}</label>
-					<a :href="blueskyProfileUrl" target="_blank" class="btn btn-secondary btn-sm">
-						{{ $t('View on Bluesky') }}
-					</a>
-				</div>
-			</div>
-			
-			<div class="recovery-section" v-if="showRecovery">
-				<h4>{{ $t('Recovery Phrase') }}</h4>
-				<p class="warning">{{ $t('Save this recovery phrase in a safe place. It can be used to recover your Bluesky identity if this server becomes unavailable.') }}</p>
-				<div class="recovery-phrase">
-					<code>{{ recoveryPhrase }}</code>
-					<button class="btn btn-icon btn-sm" @click="copyToClipboard(recoveryPhrase)">
-						<icon name="copy" />
-					</button>
-				</div>
-				<button class="btn btn-secondary btn-sm" @click="regenerateRecovery">
-					{{ $t('Regenerate (requires password)') }}
-				</button>
-			</div>
-			
-			<button class="btn btn-secondary" @click="showRecovery = !showRecovery">
-				{{ showRecovery ? $t('Hide recovery phrase') : $t('Show recovery phrase') }}
-			</button>
-		</div>
-		
-		<div class="setting-card" v-else>
-			<p>{{ $t('Your Bluesky identity will be created automatically when you make your first public post or follow a Bluesky account.') }}</p>
-		</div>
-		
-		<div class="setting-card">
-			<h3>{{ $t('Bluesky Settings') }}</h3>
-			
-			<div class="setting-toggle">
-				<label>
-					<input type="checkbox" v-model="settings.syncPosts" />
-					{{ $t('Sync public posts to Bluesky') }}
-				</label>
-				<p class="setting-hint">{{ $t('Your public posts will be automatically published to Bluesky. Unlisted, followers-only, and direct posts are never synced.') }}</p>
-			</div>
-			
-			<div class="setting-toggle">
-				<label>
-					<input type="checkbox" v-model="settings.syncInteractions" />
-					{{ $t('Sync likes and reposts to Bluesky') }}
-				</label>
-				<p class="setting-hint">{{ $t('When you like or repost a Bluesky post, the action is recorded on Bluesky.') }}</p>
-			</div>
-			
-			<div class="setting-toggle">
-				<label>
-					<input type="checkbox" v-model="settings.showBadge" />
-					{{ $t('Show Bluesky badge on profile') }}
-				</label>
-				<p class="setting-hint">{{ $t('Display a Bluesky badge next to your name on your profile and posts.') }}</p>
-			</div>
-		</div>
-		
-		<div class="setting-card">
-			<h3>{{ $t('Labelers (Content Filtering)') }}</h3>
-			<p>{{ $t('Subscribe to moderation labelers to filter content on Bluesky.') }}</p>
-			
-			<div class="labelers-list">
-				<div class="labeler-item" v-for="labeler in labelers" :key="labeler.did">
-					<div class="labeler-info">
-						<label>
-							<input type="checkbox" v-model="labeler.subscribed" @change="updateLabeler(labeler)" />
-							<span class="labeler-name">{{ labeler.name || labeler.did }}</span>
-						</label>
-						<span class="labeler-did">{{ labeler.did }}</span>
-					</div>
-					<div class="labeler-settings" v-if="labeler.subscribed">
-						<select v-model="labeler.setting" @change="updateLabeler(labeler)">
-							<option value="ignore">{{ $t('Ignore') }}</option>
-							<option value="warn">{{ $t('Warn') }}</option>
-							<option value="hide">{{ $t('Hide') }}</option>
-						</select>
-					</div>
-				</div>
-			</div>
-			
-			<div class="add-labeler">
-				<input type="text" v-model="newLabelerDid" placeholder="did:plc:... or handle" />
-				<button class="btn btn-secondary btn-sm" @click="addLabeler">{{ $t('Add labeler') }}</button>
-			</div>
-		</div>
-	</div>
+	<section class="atproto-settings">
+		<h2>{{ t('social', 'Bluesky (AT Protocol)') }}</h2>
+		<p>{{ t('social', 'When your administrator enables AT Protocol, public posts are published automatically. Unlisted, followers-only and direct posts stay private.') }}</p>
+		<p v-if="error" role="alert">
+			{{ error }}
+		</p>
+		<p v-if="loading">
+			{{ t('social', 'Loading …') }}
+		</p>
+		<template v-else-if="identity?.did">
+			<dl>
+				<dt>{{ t('social', 'Handle') }}</dt><dd>@{{ identity.handle }}</dd>
+				<dt>{{ t('social', 'DID') }}</dt><dd><code>{{ identity.did }}</code></dd>
+				<dt>{{ t('social', 'Status') }}</dt><dd>{{ identity.state }}</dd>
+			</dl>
+			<a
+				v-if="identity.state === 'active'"
+				:href="identity.profileUrl"
+				target="_blank"
+				rel="noopener noreferrer">{{ t('social', 'View on Bluesky') }}</a>
+			<p>{{ t('social', 'Your recovery phrase can be retrieved once. Store all 24 words securely before closing this page.') }}</p>
+			<NcButton :disabled="busy || Boolean(recoveryPhrase)" @click="retrieveRecovery">
+				{{ t('social', 'Retrieve recovery phrase') }}
+			</NcButton>
+			<p v-if="recoveryPhrase" class="recovery-phrase">
+				<code>{{ recoveryPhrase }}</code>
+			</p>
+		</template>
+		<p v-else>
+			{{ t('social', 'Your identity is created when your first public post is processed. Registration may take a few minutes.') }}
+		</p>
+	</section>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
+import { translate as t } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import { useApi } from '../composables/useApi.js'
-import { useCurrentUser } from '../composables/useCurrentUser.js'
-
-const { currentUser } = useCurrentUser()
 const api = useApi()
-
+/** @type {import('vue').Ref<{did?: string, handle?: string, state?: string, profileUrl?: string}|null>} */
 const identity = ref(null)
+const loading = ref(true)
+const busy = ref(false)
+const error = ref('')
 const recoveryPhrase = ref('')
-const showRecovery = ref(false)
-const settings = reactive({
-	syncPosts: true,
-	syncInteractions: true,
-	showBadge: true
-})
-const labelers = ref([])
-const newLabelerDid = ref('')
-
-const blueskyProfileUrl = computed(() => identity.value ? `https://bsky.app/profile/${identity.value.handle}` : '')
-
 onMounted(async () => {
-	await loadIdentity()
-	await loadSettings()
-	await loadLabelers()
-})
-
-async function loadIdentity() {
 	try {
 		const response = await api.get('/api/atproto/identity')
 		identity.value = response.data
-	} catch (error) {
-		// No identity yet
+	} catch {
+		error.value = t('social', 'Could not load your AT Protocol identity.')
+	} finally {
+		loading.value = false
 	}
-}
-
-async function loadSettings() {
+})
+/** Retrieve the one-time phrase only after an explicit user action. */
+async function retrieveRecovery() {
+	busy.value = true
+	error.value = ''
 	try {
-		const response = await api.get('/api/atproto/settings')
-		Object.assign(settings, response.data)
-	} catch (error) {
-		// Use defaults
+		const response = await api.post('/api/atproto/identity/recovery', {})
+		recoveryPhrase.value = response.data.recoveryPhrase
+	} catch {
+		error.value = t('social', 'The recovery phrase is unavailable or has already been retrieved.')
+	} finally {
+		busy.value = false
 	}
-}
-
-async function loadLabelers() {
-	try {
-		const response = await api.get('/api/atproto/labelers')
-		labelers.value = response.data
-	} catch (error) {
-		// Default labeler
-		labelers.value = [
-			{ did: 'did:plc:ar7c4by46qjdydhdevvrndac', name: 'Bluesky Moderation', subscribed: true, setting: 'warn' }
-		]
-	}
-}
-
-async function updateLabeler(labeler) {
-	try {
-		await api.post('/api/atproto/labelers', labeler)
-	} catch (error) {
-		console.error('Failed to update labeler:', error)
-	}
-}
-
-async function addLabeler() {
-	if (!newLabelerDid.value) return
-	try {
-		const response = await api.post('/api/atproto/labelers/add', { did: newLabelerDid.value })
-		labelers.value.push({ ...response.data, subscribed: true, setting: 'warn' })
-		newLabelerDid.value = ''
-	} catch (error) {
-		console.error('Failed to add labeler:', error)
-	}
-}
-
-const copyToClipboard = async (text) => {
-	await navigator.clipboard.writeText(text)
-	// Show toast
-}
-
-async function regenerateRecovery() {
-	// Would require password confirmation
 }
 </script>
 
 <style scoped>
-.atproto-settings {
-	max-width: 600px;
-	margin: 0 auto;
-	padding: 1rem;
-}
-
-.setting-card {
-	background: var(--card-bg);
-	border: 1px solid var(--border-color);
-	border-radius: 8px;
-	padding: 1.5rem;
-	margin-bottom: 1.5rem;
-}
-
-.setting-card h3 {
-	margin: 0 0 1rem 0;
-	font-size: 1rem;
-}
-
-.setting-card h4 {
-	margin: 1rem 0 0.5rem 0;
-	font-size: 0.875rem;
-}
-
-.identity-info {
-	display: flex;
-	flex-direction: column;
-	gap: 0.75rem;
-}
-
-.info-row {
-	display: flex;
-	align-items: center;
-	gap: 1rem;
-}
-
-.info-row label {
-	min-width: 120px;
-	font-weight: 500;
-	color: var(--text-secondary);
-}
-
-.value-with-copy {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	flex: 1;
-}
-
-.value-with-copy code {
-	background: var(--bg-secondary);
-	padding: 0.25rem 0.5rem;
-	border-radius: 4px;
-	font-size: 0.8125rem;
-	word-break: break-all;
-}
-
-.recovery-section {
-	margin-top: 1.5rem;
-	padding-top: 1.5rem;
-	border-top: 1px solid var(--border-color);
-}
-
-.warning {
-	background: #fff3cd;
-	border: 1px solid #ffc107;
-	color: #856404;
-	padding: 0.75rem;
-	border-radius: 4px;
-	font-size: 0.8125rem;
-	margin-bottom: 1rem;
-}
-
-.recovery-phrase {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	background: var(--bg-secondary);
-	padding: 0.75rem;
-	border-radius: 4px;
-	font-size: 0.8125rem;
-	word-break: break-all;
-}
-
-.setting-toggle {
-	margin-bottom: 1rem;
-}
-
-.setting-toggle label {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	cursor: pointer;
-}
-
-.setting-hint {
-	margin: 0.25rem 0 0 1.5rem;
-	font-size: 0.8125rem;
-	color: var(--text-muted);
-}
-
-.labelers-list {
-	margin-bottom: 1rem;
-}
-
-.labeler-item {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0.75rem;
-	background: var(--bg-secondary);
-	border-radius: 4px;
-	margin-bottom: 0.5rem;
-}
-
-.labeler-info {
-	display: flex;
-	align-items: center;
-	gap: 0.75rem;
-}
-
-.labeler-info label {
-	display: flex;
-	align-items: center;
-	gap: 0.5rem;
-	cursor: pointer;
-}
-
-.labeler-name {
-	font-weight: 500;
-}
-
-.labeler-did {
-	font-size: 0.75rem;
-	color: var(--text-muted);
-	font-family: monospace;
-}
-
-.labeler-settings {
-	margin-left: 2rem;
-}
-
-.labeler-settings select {
-	padding: 0.25rem 0.5rem;
-	border: 1px solid var(--border-color);
-	border-radius: 4px;
-	font-size: 0.8125rem;
-}
-
-.add-labeler {
-	display: flex;
-	gap: 0.5rem;
-}
-
-.add-labeler input {
-	flex: 1;
-	padding: 0.5rem;
-	border: 1px solid var(--border-color);
-	border-radius: 4px;
-	font-family: monospace;
-}
+.atproto-settings { max-width: 700px; padding: 24px; }
+dd { margin-bottom: 12px; overflow-wrap: anywhere; }
+dt { font-weight: bold; }
+.recovery-phrase { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }
 </style>

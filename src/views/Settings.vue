@@ -75,7 +75,6 @@
 
 <script>
 import ArchivedPosts from '../components/ArchivedPosts.vue'
-import AtprotoSettings from '../views/AtprotoSettings.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
 import HeldPosts from '../components/HeldPosts.vue'
@@ -149,7 +148,7 @@ const AtprotoSettings = defineAsyncComponent(() => import(/* webpackChunkName: "
 export default {
 	name: 'Settings',
 
-components: {
+	components: {
 		AccountSettings,
 		ArchivedPosts,
 		AtprotoSettings,
@@ -325,13 +324,15 @@ components: {
 					title: t('social', 'Authorized apps'),
 					lede: t('social', 'The apps you have signed in to with this account — a phone client, a cross-poster, anything that asked. Each one holds a key to your account until you take it back, so this is the page to open after losing a phone.'),
 				},
-				{
-					id: 'atproto',
-					icon: 'IconApps',
-					component: 'AtprotoSettings',
-					title: t('social', 'Bluesky (AT Protocol)'),
-					lede: t('social', 'Your Bluesky identity, recovery phrase, sync settings, and labelers.'),
-				},
+				...(this.serverData?.atprotoEnabled === true
+					? [{
+							id: 'atproto',
+							icon: 'IconApps',
+							component: 'AtprotoSettings',
+							title: t('social', 'Bluesky (AT Protocol)'),
+							lede: t('social', 'Your Bluesky identity and one-time recovery phrase.'),
+						}]
+					: []),
 				// where the administrator lets people invite others to register
 				...(this.serverData?.externalInvites === true
 					? [{

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+import axios from '@nextcloud/axios'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -49,7 +50,8 @@ describe('root store', () => {
 		const errors = useErrorsStore()
 		vi.spyOn(errors, 'addAppError')
 
-		// the account store reports a lookup failure through the errors store
+		// A server failure is an app error; an unknown account (404) is intentionally quiet.
+		vi.spyOn(axios, 'get').mockRejectedValueOnce({ response: { status: 503 } })
 		await useAccountStore().fetchAccountInfo('bob@remote.tld')
 
 		expect(errors.addAppError).toHaveBeenCalled()

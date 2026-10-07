@@ -86,7 +86,7 @@ describe('the administration page', () => {
 	 * are grouped by what they are for. The order inside a group is the order
 	 * they were in; the groups are what changed.
 	 */
-	it('is the nineteen cards, grouped by what they are for', async () => {
+	it('is the twenty cards, grouped by what they are for', async () => {
 		const wrapper = await mountPage(STATE)
 		const headings = wrapper.findAll('h2').map((heading) => heading.text())
 
@@ -110,6 +110,7 @@ describe('the administration page', () => {
 			'Block lists',
 			'Relays',
 			'Server',
+			'Bluesky (AT Protocol)',
 		])
 	})
 
@@ -119,7 +120,7 @@ describe('the administration page', () => {
 		expect(wrapper.findAll('.social-admin__group-name').map((h) => h.text()))
 			.toEqual(['Overview', 'Moderation', 'What people see', 'What is kept', 'Federation', 'Server'])
 		// the rail is the same list, so it cannot drift from the page
-		expect(wrapper.findAll('.social-admin__rail-link')).toHaveLength(19)
+		expect(wrapper.findAll('.social-admin__rail-link')).toHaveLength(20)
 		expect(wrapper.findAll('.social-admin__card').map((card) => card.attributes('id')))
 			.toEqual(wrapper.findAll('.social-admin__rail-link').map((link) => link.attributes('href').slice(1)))
 	})

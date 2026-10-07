@@ -29,6 +29,7 @@ import { useSettingsStore } from '../store/settings.js'
 
 /**
  * @typedef {object} ServerData
+ * @property {boolean} [atprotoEnabled] - Instance-wide native AT Protocol enablement
  * @property {string} account - The account that the user wants to follow (Only in 'OStatus.vue')
  * @property {SetupChecks} [checks] - The setup checks, only for an administrator
  * @property {{enabled: boolean, learning: boolean, paused: boolean, noticeAcknowledged: boolean, profile?: boolean}} [interests] - For you: whether the feature is on for this instance, whether this

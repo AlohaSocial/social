@@ -71,8 +71,8 @@ export interface AtprotoFacetFeature {
 }
 
 export interface AtprotoReplyRef {
-	root: { uri: string; cid: string }
-	parent: { uri: string; cid: string }
+	root: { uri: string, cid: string }
+	parent: { uri: string, cid: string }
 }
 
 export interface AtprotoEmbed {
@@ -85,7 +85,7 @@ export interface AtprotoEmbed {
 
 export interface AtprotoImage {
 	alt: string
-	aspectRatio?: { width: number; height: number }
+	aspectRatio?: { width: number, height: number }
 	image: {
 		$type: 'blob'
 		ref: { $link: string }

@@ -1,66 +1,76 @@
 // SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useApi } from './useApi.js'
 
 /**
  * Composable for AT Protocol (Bluesky) related functionality
  */
 export function useAtproto() {
-	const api = useApi()
-	
 	// Check if current actor has Bluesky identity
 	const hasAtprotoIdentity = (actor) => {
-		if (!actor?.details?.atproto) return false
+		if (!actor?.details?.atproto) {
+			return false
+		}
 		return actor.details.atproto.did && actor.details.atproto.handle
 	}
-	
+
 	// Get Bluesky handle from actor
 	const getAtprotoHandle = (actor) => {
-		if (!hasAtprotoIdentity(actor)) return null
+		if (!hasAtprotoIdentity(actor)) {
+			return null
+		}
 		return actor.details.atproto.handle
 	}
-	
+
 	// Get Bluesky DID from actor
 	const getAtprotoDid = (actor) => {
-		if (!hasAtprotoIdentity(actor)) return null
+		if (!hasAtprotoIdentity(actor)) {
+			return null
+		}
 		return actor.details.atproto.did
 	}
-	
+
 	// Get Bluesky profile URL
 	const getAtprotoProfileUrl = (actor) => {
 		const handle = getAtprotoHandle(actor)
-		if (!handle) return null
+		if (!handle) {
+			return null
+		}
 		return `https://bsky.app/profile/${handle}`
 	}
-	
+
 	// Get Bluesky post URL
 	const getAtprotoPostUrl = (post) => {
-		if (!post?.details?.atproto?.uri) return null
+		if (!post?.details?.atproto?.uri) {
+			return null
+		}
 		const uri = post.details.atproto.uri
 		// at://did:plc:xyz/app.bsky.feed.post/abc
-		const match = uri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.post\/([^\/]+)/)
+		const match = uri.match(/at:\/\/([^/]+)\/app\.bsky\.feed\.post\/([^/]+)/)
 		if (match) {
-			const handle = getAtprotoHandle({ details: { atproto: { did: match[1] } } })
+			const handle = match[1]
 			if (handle) {
 				return `https://bsky.app/profile/${handle}/post/${match[2]}`
 			}
 		}
 		return null
 	}
-	
+
 	// Check if a post is from Bluesky
 	const isBlueskyPost = (post) => {
 		return post?.details?.atproto?.uri?.startsWith('at://')
 	}
-	
+
 	// Format Bluesky handle for display (@handle)
 	const formatAtprotoHandle = (handle) => {
-		if (!handle) return ''
+		if (!handle) {
+			return ''
+		}
 		return `@${handle}`
 	}
-	
+
 	return {
 		hasAtprotoIdentity,
 		getAtprotoHandle,
@@ -68,7 +78,7 @@ export function useAtproto() {
 		getAtprotoProfileUrl,
 		getAtprotoPostUrl,
 		isBlueskyPost,
-		formatAtprotoHandle
+		formatAtprotoHandle,
 	}
 }
 
@@ -78,9 +88,9 @@ export function useAtproto() {
 export function useAtprotoActions() {
 	const api = useApi()
 	const loading = ref(new Set())
-	
+
 	const isLoading = (actionId) => loading.value.has(actionId)
-	
+
 	const setLoading = (actionId, value) => {
 		if (value) {
 			loading.value.add(actionId)
@@ -88,9 +98,12 @@ export function useAtprotoActions() {
 			loading.value.delete(actionId)
 		}
 	}
-	
+
 	/**
 	 * Follow a Bluesky account
+	 *
+	 * @param actorId
+	 * @param targetDid
 	 */
 	const followBluesky = async (actorId, targetDid) => {
 		const actionId = `follow-${targetDid}`
@@ -104,9 +117,12 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Unfollow a Bluesky account
+	 *
+	 * @param actorId
+	 * @param targetDid
 	 */
 	const unfollowBluesky = async (actorId, targetDid) => {
 		const actionId = `unfollow-${targetDid}`
@@ -120,9 +136,12 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Like a Bluesky post
+	 *
+	 * @param postUri
+	 * @param postCid
 	 */
 	const likeBluesky = async (postUri, postCid) => {
 		const actionId = `like-${postUri}`
@@ -136,15 +155,17 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Unlike a Bluesky post
+	 *
+	 * @param postUri
 	 */
 	const unlikeBluesky = async (postUri) => {
 		const actionId = `unlike-${postUri}`
 		setLoading(actionId, true)
 		try {
-			await api.post('/api/atproto/unlike', { uri: postUri })
+			await api.post('/api/atproto/unlike', { params: { uri: postUri } })
 			return { success: true }
 		} catch (error) {
 			return { success: false, error }
@@ -152,9 +173,12 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Repost (boost) a Bluesky post
+	 *
+	 * @param postUri
+	 * @param postCid
 	 */
 	const repostBluesky = async (postUri, postCid) => {
 		const actionId = `repost-${postUri}`
@@ -168,15 +192,17 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Undo repost a Bluesky post
+	 *
+	 * @param postUri
 	 */
 	const undoRepostBluesky = async (postUri) => {
 		const actionId = `undorepost-${postUri}`
 		setLoading(actionId, true)
 		try {
-			await api.post('/api/atproto/undorepost', { uri: postUri })
+			await api.post('/api/atproto/undorepost', { params: { uri: postUri } })
 			return { success: true }
 		} catch (error) {
 			return { success: false, error }
@@ -184,9 +210,15 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Reply to a Bluesky post
+	 *
+	 * @param text
+	 * @param rootUri
+	 * @param rootCid
+	 * @param parentUri
+	 * @param parentCid
 	 */
 	const replyBluesky = async (text, rootUri, rootCid, parentUri, parentCid) => {
 		const actionId = `reply-${rootUri}`
@@ -195,7 +227,7 @@ export function useAtprotoActions() {
 			await api.post('/api/atproto/reply', {
 				text,
 				root: { uri: rootUri, cid: rootCid },
-				parent: { uri: parentUri, cid: parentCid }
+				parent: { uri: parentUri, cid: parentCid },
 			})
 			return { success: true }
 		} catch (error) {
@@ -204,9 +236,13 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Quote a Bluesky post
+	 *
+	 * @param text
+	 * @param quoteUri
+	 * @param quoteCid
 	 */
 	const quoteBluesky = async (text, quoteUri, quoteCid) => {
 		const actionId = `quote-${quoteUri}`
@@ -214,7 +250,7 @@ export function useAtprotoActions() {
 		try {
 			await api.post('/api/atproto/quote', {
 				text,
-				quote: { uri: quoteUri, cid: quoteCid }
+				quote: { uri: quoteUri, cid: quoteCid },
 			})
 			return { success: true }
 		} catch (error) {
@@ -223,15 +259,17 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Search Bluesky actors
+	 *
+	 * @param query
 	 */
 	const searchBlueskyActors = async (query) => {
 		const actionId = `search-${query}`
 		setLoading(actionId, true)
 		try {
-			const response = await api.get('/api/atproto/search/actors', { q: query })
+			const response = await api.get('/api/atproto/search/actors', { params: { q: query } })
 			return response.data
 		} catch (error) {
 			return { actors: [], error }
@@ -239,15 +277,17 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Get Bluesky profile
+	 *
+	 * @param handleOrDid
 	 */
 	const getBlueskyProfile = async (handleOrDid) => {
 		const actionId = `profile-${handleOrDid}`
 		setLoading(actionId, true)
 		try {
-			const response = await api.get('/api/atproto/profile', { actor: handleOrDid })
+			const response = await api.get('/api/atproto/profile', { params: { actor: handleOrDid } })
 			return response.data
 		} catch (error) {
 			return { profile: null, error }
@@ -255,15 +295,17 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	/**
 	 * Get Bluesky post thread
+	 *
+	 * @param postUri
 	 */
 	const getBlueskyThread = async (postUri) => {
 		const actionId = `thread-${postUri}`
 		setLoading(actionId, true)
 		try {
-			const response = await api.get('/api/atproto/thread', { uri: postUri })
+			const response = await api.get('/api/atproto/thread', { params: { uri: postUri } })
 			return response.data
 		} catch (error) {
 			return { thread: null, error }
@@ -271,7 +313,7 @@ export function useAtprotoActions() {
 			setLoading(actionId, false)
 		}
 	}
-	
+
 	return {
 		isLoading,
 		followBluesky,
@@ -284,6 +326,6 @@ export function useAtprotoActions() {
 		quoteBluesky,
 		searchBlueskyActors,
 		getBlueskyProfile,
-		getBlueskyThread
+		getBlueskyThread,
 	}
 }
