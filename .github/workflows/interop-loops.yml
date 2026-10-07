@@ -166,6 +166,13 @@ jobs:
           # and DNS asked directly (dns_get_record), which systemd-resolved
           # answers from /etc/hosts
           php -r 'var_dump(gethostbynamel("nextcloud.test"), array_column(dns_get_record("nextcloud.test", DNS_A) ?: [], "ip"));'
+          # systemd-resolved reads /etc/hosts lazily, so DNS asked directly can
+          # answer nothing for a moment after the line above is added
+          sudo resolvectl flush-caches 2>/dev/null || true
+          for i in $(seq 1 30); do
+            [ "$(php -r 'echo dns_get_record("nextcloud.test", DNS_A)[0]["ip"] ?? "";')" = "$INTEROP_ADDRESS" ] && break
+            sleep 1
+          done
           test "$(php -r 'echo dns_get_record("nextcloud.test", DNS_A)[0]["ip"] ?? "";')" = "$INTEROP_ADDRESS"
 
       - name: Set up Nextcloud
