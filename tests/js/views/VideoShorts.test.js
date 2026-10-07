@@ -11,6 +11,16 @@ import VideoShorts from '../../../src/views/VideoShorts.vue'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 
+const { get, post, del } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn() }))
+vi.mock('@nextcloud/axios', () => ({ default: { get, post, delete: del } }))
+const { showError, showSuccess } = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }))
+vi.mock('../../../src/services/toast.js', () => ({ showError, showSuccess }))
+// signed out unless a test signs somebody in: 24-hour shorts are for a session
+const session = vi.hoisted(() => ({ user: null }))
+vi.mock('@nextcloud/auth', async (importOriginal) => ({
+	...(await importOriginal()),
+	getCurrentUser: () => session.user,
+}))
 vi.mock('../../../src/services/logger.js', () => ({
 	default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -61,6 +71,7 @@ async function mountShorts(statuses = [video('1'), video('2')], { props = {}, se
 			NcButton: true,
 			RouterLink: RouterLinkStub,
 			ShortComposerDialog: {
+				name: 'ShortComposerDialog',
 				props: ['open'],
 				emits: ['update:open', 'posted'],
 				template: '<div class="short-stub" :data-open="String(open)" @click="$emit(\'posted\')" />',
@@ -723,6 +734,261 @@ describe('VideoShorts', () => {
 			wrapper.unmount()
 
 			expect(sendSignals).not.toHaveBeenCalled()
+		})
+	})
+
+	describe('24-hour shorts', () => {
+		const alice = { id: '7', acct: 'alice', username: 'alice', display_name: 'Alice', avatar: '' }
+		const bob = { id: '9', acct: 'bob@remote.example', username: 'bob', display_name: 'Bob', avatar: '' }
+		const carol = { id: '11', acct: 'carol@remote.example', username: 'carol', display_name: 'Carol', avatar: '' }
+
+		function day(id, account, overrides = {}) {
+			return {
+				id,
+				account,
+				seen: false,
+				duration: 5,
+				caption: '',
+				view_count: 0,
+				created_at: new Date().toISOString(),
+				expires_at: new Date(Date.now() + 5.5 * 3600 * 1000).toISOString(),
+				media: { type: 'image', url: `https://cloud.example/${id}.jpg` },
+				...overrides,
+			}
+		}
+
+		const clip = (id, account, overrides = {}) => day(id, account, { media: { type: 'video', url: `https://cloud.example/${id}.mp4`, preview_url: '' }, ...overrides })
+
+		/**
+		 * @param {object[]} carousel what the stories carousel answers
+		 * @param {object} [options] passed on to mountShorts
+		 */
+		async function mountDay(carousel, options = {}) {
+			get.mockResolvedValue({ data: carousel })
+
+			return mountShorts(options.statuses ?? [video('1')], options)
+		}
+
+		beforeEach(() => {
+			session.user = { uid: 'alice', displayName: 'Alice', isAdmin: false }
+			get.mockReset()
+			post.mockReset().mockResolvedValue({ data: {} })
+			del.mockReset().mockResolvedValue({ data: {} })
+			showError.mockReset()
+			showSuccess.mockReset()
+		})
+
+		afterEach(() => {
+			session.user = null
+			vi.useRealTimers()
+		})
+
+		const keys = (wrapper) => wrapper.findAll('article.short').map((slide) => slide.element.__vnode.key)
+
+		it('comes before the kept shorts, one person after another, unseen first and the reader\'s own last', async () => {
+			const { wrapper } = await mountDay([day('1', alice), day('2', bob, { seen: true }), day('3', carol), day('4', carol)])
+
+			expect(get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories/carousel')
+			expect(keys(wrapper)).toEqual(['day:3', 'day:4', 'day:2', 'day:1', '1:1-1'])
+		})
+
+		it('opens at the person asked for', async () => {
+			const { wrapper } = await mountDay([day('1', alice), day('2', bob), day('3', carol)], { props: { account: 'carol@remote.example' } })
+
+			expect(keys(wrapper)[0]).toBe('day:3')
+			expect(wrapper.vm.playing).toBe(0)
+		})
+
+		it('moves to a person asked for while the stack is open', async () => {
+			const { wrapper } = await mountDay([day('2', bob), day('3', carol)])
+			expect(keys(wrapper)[0]).toBe('day:2')
+
+			await wrapper.setProps({ account: 'carol@remote.example' })
+			await flushPromises()
+
+			expect(keys(wrapper)[0]).toBe('day:3')
+		})
+
+		it('waits for them before showing anything, so nothing arrives above the slide being watched', async () => {
+			let answer
+			get.mockImplementation(() => new Promise((resolve) => {
+				answer = resolve
+			}))
+			const { wrapper } = await mountShorts([video('1')])
+
+			expect(wrapper.findAll('article.short')).toHaveLength(0)
+			answer({ data: [day('2', bob)] })
+			await flushPromises()
+
+			expect(keys(wrapper)).toEqual(['day:2', '1:1-1'])
+		})
+
+		it('is not asked for by a reader without a session, or where the admin turned it off', async () => {
+			session.user = null
+			await mountDay([day('2', bob)])
+			expect(get).not.toHaveBeenCalled()
+
+			session.user = { uid: 'alice' }
+			await mountDay([day('2', bob)], { serverData: { sections: { stories: false } } })
+			expect(get).not.toHaveBeenCalled()
+		})
+
+		it('still shows the kept shorts when the 24-hour ones could not be loaded', async () => {
+			get.mockRejectedValue(new Error('nope'))
+			const { wrapper } = await mountShorts([video('1')])
+
+			expect(keys(wrapper)).toEqual(['1:1-1'])
+		})
+
+		it('carries the 24h mark and the hours left', async () => {
+			const { wrapper } = await mountDay([day('2', bob)])
+
+			const slide = wrapper.find('article.short')
+			expect(slide.classes()).toContain('short--day')
+			expect(slide.find('.day-short__mark').text()).toBe('24h')
+			expect(slide.find('.day-short__left').text()).toBe('6h left')
+			// a kept short has neither
+			expect(wrapper.findAll('article.short')[1].find('.day-short__mark').exists()).toBe(false)
+		})
+
+		it('marks the one on screen seen, once', async () => {
+			const { wrapper } = await mountDay([day('2', bob), day('3', bob, { seen: true })])
+
+			expect(post).toHaveBeenCalledTimes(1)
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories/2/seen')
+			expect(wrapper.vm.dayShorts[0].seen).toBe(true)
+		})
+
+		it('gives the poster who has seen it, what was said, and a delete; no reactions', async () => {
+			get.mockImplementation(async (url) => url.includes('reactions')
+				? { data: { reactions: [{ id: 'r1', type: 'reply', content: 'lovely light', account: bob }] } }
+				: { data: [day('1', alice, { view_count: 12, seen: true })] })
+			const { wrapper } = await mountShorts([video('1')])
+			await flushPromises()
+
+			const slide = wrapper.find('article.short')
+			expect(slide.find('.day-short__views').attributes('title')).toBe('Who has seen it')
+			expect(slide.find('.day-short__views').text()).toContain('12')
+			expect(slide.find('.day-short__delete').attributes('aria-label')).toBe('Delete this short')
+			expect(slide.find('.day-short__answers').text()).toContain('lovely light')
+			expect(slide.find('.day-short__reaction').exists()).toBe(false)
+			// the poster's own is not marked seen: the server would refuse
+			expect(post).not.toHaveBeenCalled()
+		})
+
+		it('deletes the poster\'s own through the API, and the next slide takes its place', async () => {
+			const { wrapper } = await mountDay([day('1', alice, { seen: true })], { props: { account: 'alice' } })
+
+			await wrapper.findComponent({ name: 'DayShortPanel' }).vm.remove()
+			await flushPromises()
+
+			expect(del).toHaveBeenCalledWith('/index.php/apps/social/api/v1/stories/1')
+			expect(showSuccess).toHaveBeenCalledWith('Short deleted')
+			expect(keys(wrapper)).toEqual(['1:1-1'])
+			expect(wrapper.vm.playing).toBe(0)
+		})
+
+		it('lets everybody else react and reply, and has no like for it', async () => {
+			const { wrapper } = await mountDay([day('2', bob)])
+			post.mockClear()
+			const slide = wrapper.find('article.short')
+			expect(slide.find('.short__like').exists()).toBe(false)
+			expect(slide.find('.day-short__delete').exists()).toBe(false)
+
+			await slide.find('.day-short__reaction').trigger('click')
+			await flushPromises()
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1.2/stories/react', { sid: '2', reaction: '❤️' })
+
+			const field = slide.find('.day-short__reply-field')
+			expect(field.attributes('placeholder')).toBe('Reply to this short…')
+			await field.setValue('  lovely light  ')
+			await slide.find('.day-short__reply').trigger('submit')
+			await flushPromises()
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1.2/stories/comment', { sid: '2', caption: 'lovely light' })
+			expect(field.element.value).toBe('')
+		})
+
+		it('does not page while a reply is being written', async () => {
+			const { wrapper } = await mountDay([day('2', bob)])
+			const scrolled = []
+			wrapper.vm.slides.forEach((slide, at) => {
+				slide.scrollIntoView = () => scrolled.push(at)
+			})
+
+			await wrapper.find('.day-short__reply-field').trigger('keydown', { key: 'ArrowDown' })
+			await wrapper.find('.day-short__reply-field').trigger('keydown', { key: ' ' })
+
+			expect(scrolled).toEqual([])
+			expect(wrapper.vm.held).toBe(false)
+		})
+
+		it('moves a picture on when its seconds are up, and holds it while held', async () => {
+			vi.useFakeTimers()
+			const { wrapper } = await mountDay([day('2', bob, { duration: 3 }), day('3', bob)])
+			const scrolled = []
+			wrapper.vm.slides.forEach((slide, at) => {
+				slide.scrollIntoView = () => scrolled.push(at)
+			})
+
+			await wrapper.find('.short__picture').trigger('click')
+			expect(wrapper.vm.held).toBe(true)
+			vi.advanceTimersByTime(5000)
+			expect(scrolled).toEqual([])
+
+			await wrapper.find('.short__picture').trigger('click')
+			vi.advanceTimersByTime(3200)
+			expect(scrolled).toEqual([1])
+		})
+
+		it('plays a picture with the one player hidden and stopped, not a second element', async () => {
+			const { wrapper } = await mountDay([day('2', bob)])
+
+			expect(wrapper.findAll('video')).toHaveLength(1)
+			expect(wrapper.find('video').attributes('style')).toContain('display: none')
+			expect(wrapper.find('video').attributes('src')).toBeUndefined()
+			expect(wrapper.find('.short__picture').attributes('src')).toBe('https://cloud.example/2.jpg')
+			expect(wrapper.find('article.short').find('.short__sound').exists()).toBe(false)
+		})
+
+		it('plays a 24-hour video in the one player, once, and moves on when it ends', async () => {
+			const { wrapper } = await mountDay([clip('2', bob), day('3', bob)])
+			const player = wrapper.find('video')
+			expect(player.attributes('src')).toBe('https://cloud.example/2.mp4')
+			expect(player.element.loop).toBe(false)
+			const scrolled = []
+			wrapper.vm.slides.forEach((slide, at) => {
+				slide.scrollIntoView = () => scrolled.push(at)
+			})
+
+			await player.trigger('ended')
+
+			expect(scrolled).toEqual([1])
+		})
+
+		it('stops a 24-hour video while a reply is written, and lets it run again after', async () => {
+			const { wrapper } = await mountDay([clip('2', bob)])
+			const element = wrapper.find('video').element
+			const pause = vi.fn(() => Object.defineProperty(element, 'paused', { value: true, configurable: true }))
+			const play = vi.fn(() => Promise.resolve())
+			Object.defineProperty(element, 'pause', { value: pause, configurable: true })
+			Object.defineProperty(element, 'play', { value: play, configurable: true })
+
+			await wrapper.find('.day-short__reply-field').trigger('focus')
+			expect(pause).toHaveBeenCalled()
+
+			await wrapper.find('.day-short__reply-field').trigger('blur')
+			await flushPromises()
+			expect(play).toHaveBeenCalled()
+		})
+
+		it('shows a 24-hour short the reader just posted from here first', async () => {
+			const { wrapper } = await mountDay([day('2', bob)])
+			get.mockResolvedValue({ data: [day('2', bob), day('5', alice)] })
+
+			wrapper.findComponent({ name: 'ShortComposerDialog' }).vm.$emit('posted', { id: '5' }, 'day')
+			await flushPromises()
+
+			expect(keys(wrapper)[0]).toBe('day:5')
 		})
 	})
 })

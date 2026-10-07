@@ -353,8 +353,9 @@ const router = createRouter({
 				default: VideoShorts,
 			},
 			// no scope asked for is '', which the view resolves: For you for a
-			// reader it has learned about, My Feed otherwise
-			props: { default: (route) => ({ scope: String(route.query.scope ?? '') }) },
+			// reader it has learned about, My Feed otherwise. `account` is whose
+			// 24-hour shorts to start at, from a face in the Home bar.
+			props: { default: (route) => ({ scope: String(route.query.scope ?? ''), account: String(route.query.account ?? '') }) },
 			name: 'shorts',
 		},
 		{

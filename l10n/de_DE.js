@@ -1,6 +1,15 @@
 OC.L10N.register(
     "social",
     {
+    "React with {emoji}" : "Mit {emoji} reagieren",
+    "The picture of this short is gone." : "Das Bild dieses Shorts ist nicht mehr da.",
+    "Could not delete the short" : "Der Short konnte nicht gelöscht werden",
+    "Short deleted" : "Short gelöscht",
+    "Reply to this short…" : "Auf diesen Short antworten …",
+    "Delete this short" : "Diesen Short löschen",
+    "Who has seen it" : "Wer ihn gesehen hat",
+    "{hours}h left" : "noch {hours} Std.",
+    "24h" : "24 Std.",
     "This browser could not draw the short" : "Dieser Browser konnte den Short nicht zeichnen",
     "What kind of short" : "Was für ein Short",
     "The short could not be posted" : "Der Short konnte nicht veröffentlicht werden",

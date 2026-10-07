@@ -157,7 +157,13 @@ describe('router', () => {
 		const route = router.resolve('/shorts?scope=local')
 
 		expect(route.name).toBe('shorts')
-		expect(route.matched[0].props.default(route)).toEqual({ scope: 'local' })
+		expect(route.matched[0].props.default(route)).toEqual({ scope: 'local', account: '' })
+	})
+
+	it('passes whose 24-hour shorts to start at, from a face in the Home bar', () => {
+		const route = router.resolve('/shorts?account=bob@remote.example')
+
+		expect(route.matched[0].props.default(route)).toEqual({ scope: '', account: 'bob@remote.example' })
 	})
 
 	it('sends the earlier /reels address on to /shorts, keeping the scope', async () => {
