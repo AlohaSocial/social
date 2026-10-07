@@ -17,6 +17,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Service\VideoDeliveryHold;
@@ -59,6 +60,8 @@ class LocalAccount {
 		}
 
 		$actor = Server::get(AccountService::class)->getActorFromUserId($userId, true);
+		// counts are hidden by default; these tests assert what was counted
+		Server::get(CountsService::class)->setHides($userId, false);
 
 		$clients = Server::get(ClientService::class);
 		$client = new SocialClient();
