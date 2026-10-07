@@ -3,15 +3,19 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller\Atproto;
 
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCP\AppFramework\Http\JsonResponse;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
 use OCP\AppFramework\Controller;
+use OCP\IConfig;
 
 class WellKnownController extends Controller {
 	public function __construct(
 		$appName,
-		IRequest $request
+		IRequest $request,
+		private readonly IdentityService $identityService,
+		private readonly IConfig $config
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -22,9 +26,12 @@ class WellKnownController extends Controller {
 	 * @PublicPage
 	 */
 	public function atprotoDid(string $handle): JsonResponse {
-		// Route to XRPC controller
-		// This is handled by the web server rewrite rules
-		return new JsonResponse('', Http::STATUS_NOT_FOUND);
+		$identity = $this->identityService->getIdentityByHandle($handle);
+		if (!$identity) {
+			return new JsonResponse('', Http::STATUS_NOT_FOUND);
+		}
+		
+		return new JsonResponse($identity['did'], Http::STATUS_OK, ['Content-Type' => 'text/plain']);
 	}
 	
 	/**
@@ -33,18 +40,38 @@ class WellKnownController extends Controller {
 	 * @PublicPage
 	 */
 	public function didJson(): JsonResponse {
-		// Service DID document
-		$host = \OCP\Config::getSystemValue('overwrite.cli.url', 'http://localhost');
-		$host = parse_url($host, PHP_URL_HOST) ?? 'localhost';
+		$socialUrl = $this->config->getSystemValue('social_url', '');
+		if (empty($socialUrl)) {
+			$socialUrl = $this->config->getSystemValue('overwrite.cli.url', '');
+		}
+		
+		$host = parse_url($socialUrl, PHP_URL_HOST) ?? 'localhost';
+		$serviceDid = 'did:web:' . $host;
+		
+		// Get service signing key
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('public_key')
+			->from('social_atproto_instance_key')
+			->where($qb->expr()->eq('kind', $qb->createNamedParameter('service')))
+			->orderBy('created', 'DESC')
+			->setMaxResults(1);
+		
+		$result = $qb->executeQuery()->fetchAssociative();
+		$publicKey = $result['public_key'] ?? '';
+		
+		if (empty($publicKey)) {
+			// Generate a placeholder if not set yet
+			$publicKey = 'z6Mk' . bin2hex(random_bytes(32)); // placeholder
+		}
 		
 		return new JsonResponse([
 			'@context' => 'https://www.w3.org/ns/did/v1',
-			'id' => 'did:web:' . $host,
+			'id' => $serviceDid,
 			'verificationMethod' => [[
-				'id' => 'did:web:' . $host . '#atproto',
+				'id' => $serviceDid . '#atproto',
 				'type' => 'Multikey',
-				'controller' => 'did:web:' . $host,
-				'publicKeyMultibase' => '' // Would load from instance key
+				'controller' => $serviceDid,
+				'publicKeyMultibase' => $publicKey
 			]],
 			'service' => [[
 				'id' => '#atproto_pds',

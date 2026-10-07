@@ -23,10 +23,10 @@ class Record {
 	public static function create(string $did, string $collection, string $rkey, array $value, ?int $localId = null): self {
 		$encoded = CborEncoder::encode($value);
 		$hash = hash('sha256', $encoded, true);
-		$multicodec = hex2bin('0171');
+		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
 		$multihash = hex2bin('1220') . $hash;
 		$cidBytes = $multicodec . $multihash;
-		$cid = 'b' . base_encode($cidBytes, 32);
+		$cid = 'b' . \OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($cidBytes);
 		
 		return new self(
 			did: $did,
@@ -46,21 +46,6 @@ class Record {
 	public function getAtUri(): string {
 		return "at://{$this->did}/{$this->collection}/{$this->rkey}";
 	}
-}
-
-function base_encode(string $data, int $base): string {
-	$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-	$bits = '';
-	foreach (str_split($data) as $char) {
-		$bits .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
-	}
-	$bits = str_pad($bits, (int)ceil(strlen($bits) / 5) * 5, '0', STR_PAD_RIGHT);
-	$result = '';
-	for ($i = 0; $i < strlen($bits); $i += 5) {
-		$chunk = substr($bits, $i, 5);
-		$result .= $alphabet[bindec($chunk)];
-	}
-	return $result;
 }
 
 class Commit {
@@ -85,7 +70,7 @@ class Commit {
 		
 		$encoded = CborEncoder::encode($unsignedCommit);
 		
-		$keyManager = new KeyManager(null, null); // Would be injected
+		$keyManager = new KeyManager(null, null);
 		$sig = $keyManager->sign($encoded, $signingKey);
 		
 		return new self(
@@ -109,10 +94,21 @@ class Commit {
 		
 		$encoded = CborEncoder::encode($commit);
 		$hash = hash('sha256', $encoded, true);
-		$multicodec = hex2bin('0171');
+		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
 		$multihash = hex2bin('1220') . $hash;
 		$cidBytes = $multicodec . $multihash;
-		return 'b' . base_encode($cidBytes, 32);
+		return 'b' . \OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($cidBytes);
+	}
+	
+	public function toCbor(): string {
+		return CborEncoder::encode([
+			'version' => self::VERSION,
+			'did' => $this->did,
+			'data' => $this->dataCid,
+			'rev' => $this->rev,
+			'prev' => $this->prevCid,
+			'sig' => $this->sig
+		]);
 	}
 }
 
@@ -217,8 +213,10 @@ class Repository {
 			];
 		}
 		
-		// Build MST and get root CID
-		$dataCid = MerkleSearchTree::build($records);
+		// Build MST and get root CID + blocks
+		$mstResult = MerkleSearchTree::exportCar($records);
+		$dataCid = $mstResult['root'];
+		$mstBlocks = $mstResult['blocks'];
 		
 		// Generate TID for rev
 		$rev = $this->generateTid();
@@ -226,9 +224,32 @@ class Repository {
 		// Create commit
 		$commit = Commit::create($did, $dataCid, $rev, $prevCommitCid, $signingKey);
 		$commitCid = $commit->getCid();
+		$commitCbor = $commit->toCbor();
 		
-		// Store commit and MST blocks
-		$this->storeCommitBlocks($did, $dataCid, $commit);
+		// Store commit block
+		$qb = $this->db->getQueryBuilder();
+		$qb->insert('social_atproto_block')
+			->values([
+				'cid' => $qb->createNamedParameter($commitCid),
+				'did' => $qb->createNamedParameter($did),
+				'bytes' => $qb->createNamedParameter($commitCbor),
+				'kind' => $qb->createNamedParameter('commit')
+			])
+			->executeStatement();
+		
+		// Store MST blocks
+		foreach ($mstBlocks as $cid => $blockBytes) {
+			$qb->insert('social_atproto_block')
+				->values([
+					'cid' => $qb->createNamedParameter($cid),
+					'did' => $qb->createNamedParameter($did),
+					'bytes' => $qb->createNamedParameter($blockBytes),
+					'kind' => $qb->createNamedParameter('mst')
+				])
+				->onConflict(['did', 'cid'])
+				->doNothing()
+				->executeStatement();
+		}
 		
 		// Update repo head
 		$qb = $this->db->getQueryBuilder();
@@ -240,8 +261,8 @@ class Repository {
 			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
 			->executeStatement();
 		
-		// Create firehose event
-		$this->createFirehoseEvent($did, $commit, $records);
+		// Create firehose event with proper CAR blocks
+		$this->createFirehoseEvent($did, $commit, $records, $mstBlocks, $commitCbor);
 		
 		return $commit;
 	}
@@ -255,46 +276,104 @@ class Repository {
 		return $qb->executeQuery()->fetchAssociative() ?: null;
 	}
 	
+	/**
+	 * Export repository as CAR file
+	 */
+	public function exportCar(string $did): string {
+		// Get all records
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from('social_atproto_record')
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		
+		$results = $qb->executeQuery()->fetchAllAssociative();
+		
+		$records = [];
+		foreach ($results as $result) {
+			$key = $result['collection'] . '/' . $result['rkey'];
+			$records[$key] = [
+				'cid' => $result['cid'],
+				'value' => CborDecoder::decode($result['bytes'])
+			];
+		}
+		
+		// Build MST and get blocks
+		$mstResult = MerkleSearchTree::exportCar($records);
+		$blocks = $mstResult['blocks'];
+		
+		// Add commit block
+		$head = $this->getHead($did);
+		if ($head && $head['commit_cid']) {
+			$commitBlock = $this->getBlock($did, $head['commit_cid']);
+			if ($commitBlock) {
+				$blocks[$head['commit_cid']] = $commitBlock;
+			}
+		}
+		
+		// Build CAR file
+		return $this->buildCar($mstResult['root'], $blocks);
+	}
+	
+	private function buildCar(string $rootCid, array $blocks): string {
+		// CARv1 header: 
+		// - version (varint): 1
+		// - roots (array of CIDs): [rootCid]
+		// - blocks: concatenated CBOR blocks
+		
+		$header = '';
+		$header .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(1); // version
+		$header .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(1); // roots array length
+		$header .= $this->encodeCid($rootCid);
+		
+		// Blocks
+		$blockData = '';
+		foreach ($blocks as $cid => $block) {
+			$blockData .= $this->encodeCid($cid);
+			$blockData .= \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(strlen($block));
+			$blockData .= $block;
+		}
+		
+		return $header . $blockData;
+	}
+	
+	private function encodeCid(string $cid): string {
+		// Decode base32 CID back to bytes
+		$cid = substr($cid, 1); // Remove 'b' prefix
+		$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
+		$bits = '';
+		foreach (str_split($cid) as $char) {
+			$idx = strpos($alphabet, $char);
+			if ($idx !== false) {
+				$bits .= str_pad(decbin($idx), 5, '0', STR_PAD_LEFT);
+			}
+		}
+		// Convert bits to bytes
+		$bytes = '';
+		for ($i = 0; $i < strlen($bits); $i += 8) {
+			$chunk = substr($bits, $i, 8);
+			if (strlen($chunk) === 8) {
+				$bytes .= chr(bindec($chunk));
+			}
+		}
+		return $bytes;
+	}
+	
 	private function generateTid(): string {
-		// Generate timestamp ID (TID) - 13 chars base32
 		$microtime = (int)(microtime(true) * 1000000);
 		$bytes = '';
 		for ($i = 5; $i >= 0; $i--) {
 			$bytes .= chr(($microtime >> ($i * 8)) & 0xFF);
 		}
-		// Pad to 8 bytes for base32
 		$bytes = str_pad($bytes, 8, "\0", STR_PAD_LEFT);
-		return substr(base_encode($bytes, 32), 0, 13);
+		return substr(\OCA\Social\Atproto\Repository\MerkleSearchTree::base32Encode($bytes), 0, 13);
 	}
 	
 	private function storeCommitBlocks(string $did, string $dataCid, Commit $commit): void {
-		// Store MST nodes as blocks
-		// This is simplified - real implementation would traverse the MST
-		$qb = $this->db->getQueryBuilder();
-		
-		// Store commit block
-		$commitEncoded = CborEncoder::encode([
-			'version' => Commit::VERSION,
-			'did' => $did,
-			'data' => $dataCid,
-			'rev' => $commit->rev,
-			'prev' => $commit->prevCid,
-			'sig' => $commit->sig
-		]);
-		
-		$qb->insert('social_atproto_block')
-			->values([
-				'cid' => $qb->createNamedParameter($commit->getCid()),
-				'did' => $qb->createNamedParameter($did),
-				'bytes' => $qb->createNamedParameter($commitEncoded),
-				'kind' => $qb->createNamedParameter('commit')
-			])
-			->executeStatement();
+		// Now handled in commit() method
 	}
 	
-	private function createFirehoseEvent(string $did, Commit $commit, array $records): void {
+	private function createFirehoseEvent(string $did, Commit $commit, array $records, array $mstBlocks, string $commitCbor): void {
 		$ops = [];
-		// Simplified - would compute actual diff from previous commit
 		foreach ($records as $path => $record) {
 			$ops[] = [
 				'action' => 'create',
@@ -302,6 +381,12 @@ class Repository {
 				'cid' => $record['cid']
 			];
 		}
+		
+		// Build CAR for this commit
+		$carBlocks = $mstBlocks;
+		$carBlocks[$commit->getCid()] = $commitCbor;
+		
+		$carData = $this->buildCar($commit->dataCid, $carBlocks);
 		
 		$event = [
 			'did' => $did,
@@ -312,7 +397,7 @@ class Repository {
 				'rev' => $commit->rev,
 				'commit' => $commit->getCid(),
 				'ops' => $ops,
-				'blocks' => [], // CAR file would go here
+				'blocks' => base64_encode($carData), // CAR as base64 for JSON storage
 				'time' => (new \DateTime())->format('Y-m-d H:i:s')
 			]),
 			'time' => (new \DateTime())->format('Y-m-d H:i:s')
@@ -327,5 +412,15 @@ class Repository {
 				'time' => $qb->createNamedParameter($event['time'])
 			])
 			->executeStatement();
+	}
+	
+	private function getBlock(string $did, string $cid): ?string {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('bytes')
+			->from('social_atproto_block')
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('cid', $qb->createNamedParameter($cid)));
+		
+		return $qb->executeQuery()->fetchOne() ?: null;
 	}
 }

@@ -10,6 +10,7 @@ use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
+use SpomkyLabs\Cbor\CborEncoder;
 
 class FirehoseDaemon {
 	private const EVENT_WINDOW_HOURS = 72;
@@ -34,12 +35,10 @@ class FirehoseDaemon {
 		$startTime = time();
 		
 		if ($once) {
-			// Drain events once and exit
 			$this->drainEvents();
 			return;
 		}
 		
-		// Run event poller in background
 		$lastEventId = $this->getLastEventId();
 		
 		while (true) {
@@ -48,10 +47,8 @@ class FirehoseDaemon {
 				break;
 			}
 			
-			// Poll for new events
 			$lastEventId = $this->pollEvents($lastEventId);
 			
-			// Run one tick of the WebSocket server
 			$server->loop->runOne();
 			
 			usleep(self::POLL_INTERVAL_MS * 1000);
@@ -76,12 +73,10 @@ class FirehoseDaemon {
 		$events = $qb->executeQuery()->fetchAllAssociative();
 		
 		foreach ($events as $event) {
-			// Broadcast to connected WebSocket clients
 			FirehoseHandler::broadcast($event);
 			$lastEventId = $event['seq'];
 		}
 		
-		// Clean up old events beyond window
 		$cutoff = (new \DateTime())->modify('-' . self::EVENT_WINDOW_HOURS . ' hours')->format('Y-m-d H:i:s');
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('social_atproto_event')
@@ -120,17 +115,15 @@ class FirehoseHandler implements MessageComponentInterface {
 		
 		$this->logger->info('Firehose client connected', ['cursor' => $cursor, 'total' => count(self::$connections)]);
 		
-		// Replay from cursor if provided
 		if ($cursor !== null) {
 			$this->replayFromCursor($conn, $cursor);
 		} else {
-			// Send info frame
 			$this->sendInfoFrame($conn, 'Connected to firehose');
 		}
 	}
 	
 	public function onMessage(ConnectionInterface $conn, \Ratchet\RFC6455\Messaging\MessageInterface $msg): void {
-		// Firehose is server-to-client only; clients don't send messages
+		// Firehose is server-to-client only
 	}
 	
 	public function onClose(ConnectionInterface $conn): void {
@@ -144,13 +137,20 @@ class FirehoseHandler implements MessageComponentInterface {
 	}
 	
 	public static function broadcast(array $event): void {
-		$frame = json_encode($event);
+		// Extract the frame data from the event
+		$frameData = json_decode($event['bytes'], true);
+		if (!$frameData) return;
+		
+		$frameData['seq'] = (int)($event['seq'] ?? 0);
+		
+		// Encode frame as CBOR for wire format
+		$frameCbor = CborEncoder::encode($frameData);
 		
 		foreach (self::$connections as $id => $client) {
 			try {
-				$client['conn']->send($frame);
+				// Send binary frame (CBOR)
+				$client['conn']->send($frameCbor, true); // true = binary
 			} catch (\Throwable $e) {
-				// Client may have disconnected
 				unset(self::$connections[$id]);
 			}
 		}
@@ -166,7 +166,12 @@ class FirehoseHandler implements MessageComponentInterface {
 		$events = $qb->executeQuery()->fetchAllAssociative();
 		
 		foreach ($events as $event) {
-			$conn->send(json_encode($event));
+			$frameData = json_decode($event['bytes'], true);
+			if ($frameData) {
+				$frameData['seq'] = (int)$event['seq'];
+				$frameCbor = CborEncoder::encode($frameData);
+				$conn->send($frameCbor, true);
+			}
 		}
 		
 		$this->sendInfoFrame($conn, 'Replay complete, now live');
@@ -174,10 +179,11 @@ class FirehoseHandler implements MessageComponentInterface {
 	
 	private function sendInfoFrame(ConnectionInterface $conn, string $message): void {
 		$frame = [
-			'kind' => '#info',
+			'type' => 'info',
 			'seq' => ++self::$sequenceCounter,
 			'message' => $message
 		];
-		$conn->send(json_encode($frame));
+		$frameCbor = CborEncoder::encode($frame);
+		$conn->send($frameCbor, true);
 	}
 }

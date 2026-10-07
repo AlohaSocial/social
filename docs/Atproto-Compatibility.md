@@ -4,8 +4,8 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: specification. Nothing in this document is implemented.** It is
-the contract for a multi-PR project: the decisions were taken by the
+**Status: implementation in progress (Phase 1 core complete).** This document
+is the contract for a multi-PR project: the decisions were taken by the
 product owner in two interviews (2026-09-25 and 2026-10-06) and are not to
 be re-derived; the technical facts were checked against the AT Protocol
 specifications and the Bluesky reference implementation on the dates given

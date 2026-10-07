@@ -203,7 +203,95 @@ class OutboundPublisher {
 	}
 	
 	public function publishRepost(int $actorId, int $postId): void {
-		// Similar to publishLike but for app.bsky.feed.repost
+		$post = $this->getPost($postId);
+		if (!$post) return;
+		
+		$postRecord = $this->findBlueskyRecord($postId);
+		if (!$postRecord) {
+			$streamItem = $this->getStreamItem($postId);
+			if (!$streamItem || !str_starts_with($streamItem['id'], 'at://')) {
+				return;
+			}
+			
+			$postRecord = [
+				'did' => $this->extractDidFromAtUri($streamItem['id']),
+				'collection' => 'app.bsky.feed.post',
+				'rkey' => $this->extractRkeyFromAtUri($streamItem['id']),
+				'uri' => $streamItem['id'],
+				'cid' => $streamItem['details']['atproto']['cid'] ?? ''
+			];
+		}
+		
+		$identity = $this->identityService->getIdentityByActor($actorId);
+		if (!$identity) return;
+		
+		$signingKey = $this->identityService->getSigningKey($actorId);
+		if (!$signingKey) return;
+		
+		$repostRecord = [
+			'$type' => 'app.bsky.feed.repost',
+			'subject' => [
+				'uri' => $postRecord['uri'],
+				'cid' => $postRecord['cid']
+			],
+			'createdAt' => (new \DateTime())->format('c')
+		];
+		
+		$rkey = $this->generateTid();
+		$this->repository->createRecord(
+			$identity['did'],
+			'app.bsky.feed.repost',
+			$rkey,
+			$repostRecord
+		);
+		
+		$this->repository->commit($identity['did'], $signingKey);
+	}
+	
+	public function deleteRepost(int $actorId, int $postId): void {
+		$postRecord = $this->findBlueskyRecord($postId);
+		if (!$postRecord) {
+			$streamItem = $this->getStreamItem($postId);
+			if (!$streamItem || !str_starts_with($streamItem['id'], 'at://')) {
+				return;
+			}
+			$postRecord = [
+				'did' => $this->extractDidFromAtUri($streamItem['id']),
+				'collection' => 'app.bsky.feed.post',
+				'rkey' => $this->extractRkeyFromAtUri($streamItem['id'])
+			];
+		}
+		
+		$identity = $this->identityService->getIdentityByActor($actorId);
+		if (!$identity) return;
+		
+		$signingKey = $this->identityService->getSigningKey($actorId);
+		if (!$signingKey) return;
+		
+		$repostRecord = $this->findRepostRecord($identity['did'], $postRecord['uri']);
+		if ($repostRecord) {
+			$this->repository->deleteRecord($identity['did'], 'app.bsky.feed.repost', $repostRecord['rkey']);
+			$this->repository->commit($identity['did'], $signingKey);
+		}
+	}
+	
+	private function findRepostRecord(string $did, string $subjectUri): ?array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from('social_atproto_record')
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.repost')));
+		
+		$results = $qb->executeQuery()->fetchAllAssociative();
+		
+		foreach ($results as $record) {
+			$value = json_decode($record['bytes'], true);
+			if (($value['subject']['uri'] ?? '') === $subjectUri) {
+				return $record;
+			}
+		}
+		
+		return null;
 	}
 	
 	public function publishFollow(int $actorId, string $targetDid): void {
