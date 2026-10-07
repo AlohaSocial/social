@@ -66,8 +66,9 @@ class Repository {
 			if ($qb->executeStatement() !== 1) { throw new \RuntimeException('Concurrent repository write; retry required'); }
 			$diff = MerkleSearchTree::diff('', $tree['root'], $old, $records); $ops = array_merge($diff['added'], $diff['changed'], $diff['removed']);
 			foreach ($ops as &$op) { $op['cid'] = isset($op['cid']) ? new Cid($op['cid']) : null; } unset($op);
+			$car = Car::encode($commitCid, $blocks); $tooBig = strlen($car) > 512 * 1024 || count($ops) > 200;
 			$body = ['repo' => $did, 'commit' => new Cid($commitCid), 'rev' => $rev, 'since' => $head['rev'],
-				'rebase' => false, 'tooBig' => false, 'blocks' => new Bytes(Car::encode($commitCid, $blocks)), 'ops' => $ops, 'blobs' => [], 'time' => gmdate('Y-m-d\TH:i:s\Z')];
+				'rebase' => false, 'tooBig' => $tooBig, 'blocks' => new Bytes($tooBig ? '' : $car), 'ops' => $tooBig ? [] : $ops, 'blobs' => [], 'time' => gmdate('Y-m-d\TH:i:s\Z')];
 			$this->insert('social_atproto_event', ['did' => $did, 'kind' => '#commit', 'bytes' => DagCbor::encode($body), 'time' => gmdate('Y-m-d H:i:s')], ['bytes']);
 			return $commit;
 		});
@@ -81,6 +82,33 @@ class Repository {
 			if ($entry['t'] !== null) { $this->walk($did, $entry['t']->value, $records, $depth + 1); }
 		}
 	}
+	/** Validate the published head, signature and deterministic MST against stored records. */
+	public function verify(string $did, string $publicKey): void {
+		$head = $this->getHead($did);
+		if (empty($head['commit_cid'])) { throw new \RuntimeException('Repository has no signed head'); }
+		$bytes = $this->getBlock($did, $head['commit_cid']) ?? throw new \RuntimeException('Missing commit');
+		if (Cid::hash($bytes) !== $head['commit_cid']) { throw new \RuntimeException('Commit CID mismatch'); }
+		$commit = DagCbor::decode($bytes);
+		if ($commit['did'] !== $did || $commit['rev'] !== $head['rev'] || $commit['version'] !== 3 || $commit['prev'] !== null) { throw new \RuntimeException('Invalid repository head'); }
+		$signature = $commit['sig']->value; unset($commit['sig']);
+		if (!$this->keyManager->verify(DagCbor::encode($commit), $signature, $publicKey)) { throw new \RuntimeException('Invalid commit signature'); }
+		$records = []; $published = [];
+		foreach ($this->rows($did) as $row) {
+			if (Cid::hash(self::bytes($row['bytes'])) !== $row['cid']) { throw new \RuntimeException('Record CID mismatch'); }
+			$records[$row['collection'] . '/' . $row['rkey']] = ['cid' => $row['cid']];
+		}
+		$tree = MerkleSearchTree::exportCar($records);
+		if ($tree['root'] !== $commit['data']->value) { throw new \RuntimeException('Stored records differ from committed MST'); }
+		foreach ($tree['blocks'] as $cid => $expected) {
+			if ($this->getBlock($did, $cid) !== $expected) { throw new \RuntimeException('Missing or corrupt MST block'); }
+		}
+		$this->walk($did, $tree['root'], $published);
+		foreach ($published as $entry) {
+			$block = $this->getBlock($did, $entry['cid']);
+			if ($block === null || Cid::hash($block) !== $entry['cid']) { throw new \RuntimeException('Missing or corrupt record block'); }
+		}
+	}
+
 	public function getHead(string $did): ?array {
 		$qb = $this->db->getQueryBuilder(); $qb->select('*')->from('social_atproto_repo')->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		return $qb->executeQuery()->fetchAssociative() ?: null;

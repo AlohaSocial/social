@@ -1307,3 +1307,128 @@ the last three are queued on demand instead:
 | Domain purge | `OCA\Social\Cron\DomainPurge` | Queued with a domain when one is added to the deny list — not registered in `appinfo/info.xml`, because a job listed there is added once at install time with no argument. Does 10 batches of 50 accounts per run and re-queues itself while anything of the domain is left. |
 | External promotion | `OCA\Social\Cron\ExternalPromoted` | Queued with a user id when an external user is promoted to a local one — not in `appinfo/info.xml`, for the same reason as the domain purge. Writes the user's system address book card, which external users do not have, in a request that sees them on their new backend. |
 | Actor cleanup | `OCA\Social\Cron\ActorCleanup` | Queued with an actor id when a deleted account is addressed by more posts than one inbox request should rewrite — not in `appinfo/info.xml`, for the same reason as the domain purge. Rewrites 2000 posts per run and re-queues itself while any remain. Without it, the rewrite ran inline in the request a peer was waiting on for its `Delete`, so the peer timed out, re-sent, and the work started over. |
+
+## Native AT Protocol commands (draft)
+
+AT Protocol stays disabled by default. PLC registration contacts the configured directory. The relay/AppView acceptance tests remain outstanding.
+
+### `social:atproto:block`
+
+Manage AT Protocol blocklist.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--unblock` | false | Remove from blocklist |
+| `--reason` | none | Reason for blocking |
+
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `type` | Yes | Type: host or did |
+| `value` | Yes | Host or DID to block |
+
+### `social:atproto:crawl`
+
+Request relay crawl for all or specific repositories.
+
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `did` | No | Specific DID to request crawl for |
+
+### `social:atproto:identities`
+
+Create missing AT Protocol identities for local accounts.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--user` | none | Specific user ID to create identity for |
+| `--dry-run` | false | Show what would be done without doing it |
+
+### `social:atproto:listen`
+
+Run the AT Protocol Jetstream listener for real-time updates.
+
+The imported implementation still requires protocol integration validation; a successful exit alone does not prove network compatibility.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--once` | false | Process events once and exit |
+| `--max-seconds` | 0 | Maximum seconds to run |
+
+### `social:atproto:notifications`
+
+Fetch Bluesky notifications for local accounts.
+
+The imported implementation still requires protocol integration validation; a successful exit alone does not prove network compatibility.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--batch` | 50 | Number of accounts to process per batch |
+| `--dry-run` | false | Show what would be fetched without doing it |
+
+### `social:atproto:plc`
+
+Manage PLC operations.
+
+The imported implementation still requires protocol integration validation; a successful exit alone does not prove network compatibility.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--repair` | false | Repair discrepancies between log and directory |
+
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `action` | Yes | Action: log, view, repair |
+| `did` | No | DID to operate on |
+
+### `social:atproto:repo`
+
+Inspect an AT Protocol repository.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--verify` | false | Recompute MST and compare with stored head |
+
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `user` | Yes | User ID or DID |
+
+### `social:atproto:resolve`
+
+Resolve a Bluesky handle or DID.
+
+| Argument | Required | Meaning |
+| --- | --- | --- |
+| `identifier` | Yes | Handle (alice.bsky.social) or DID (did:plc:...) |
+
+### `social:atproto:rotate-key`
+
+Rotate instance rotation key and update all DIDs via PLC.
+
+The imported implementation still requires protocol integration validation; a successful exit alone does not prove network compatibility.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--dry-run` | false | Show what would be done without doing it |
+| `--batch` | 50 | Number of DIDs to process per batch |
+
+### `social:atproto:serve`
+
+Run the AT Protocol firehose WebSocket server.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--once` | false | Drain event queue and exit (for testing) |
+| `--max-seconds` | 0 | Maximum seconds to run |
+| `--port` | 8080 | Port to bind to |
+| `--host` | 127.0.0.1 | Host to bind to |
+
+### `social:atproto:sync`
+
+Sync Bluesky posts from followed authors.
+
+The imported implementation still requires protocol integration validation; a successful exit alone does not prove network compatibility.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--batch` | 50 | Number of authors to sync per batch |
+| `--dry-run` | false | Show what would be synced without doing it |

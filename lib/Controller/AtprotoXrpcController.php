@@ -10,7 +10,7 @@ use OCP\AppFramework\Http\Attribute\{FrontpageRoute, PublicPage, NoCSRFRequired,
 use OCP\IRequest;
 /** Public PDS read surface. Client writes are registered separately with token authentication. */
 class AtprotoXrpcController extends Controller {
-	public function __construct(string $appName, IRequest $request, private readonly IdentityService $identities, private readonly Repository $repository, private readonly \OCP\IDBConnection $db) { parent::__construct($appName, $request); }
+	public function __construct(string $appName, IRequest $request, private readonly IdentityService $identities, private readonly Repository $repository, private readonly \OCP\IDBConnection $db, private readonly \OCA\Social\Atproto\Repository\BlobService $blobs) { parent::__construct($appName, $request); }
 	private function error(string $error, string $message, int $status = 400): JsonResponse { return new JsonResponse(['error' => $error, 'message' => $message], $status); }
 	private function unavailable(?string $did = null): ?JsonResponse {
 		if (!$this->identities->isEnabled()) { return $this->error('Unavailable', 'AT Protocol is disabled', 503); }
@@ -52,6 +52,7 @@ class AtprotoXrpcController extends Controller {
 	#[PublicPage] #[NoCSRFRequired] #[AnonRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/xrpc/com.atproto.repo.getRecord')]
 	public function getRecord(string $repo, string $collection, string $rkey): JsonResponse {
+		if ($error = $this->unavailable()) { return $error; }
 		$identity = str_starts_with($repo, 'did:') ? $this->identities->getIdentityByDid($repo) : $this->identities->getIdentityByHandle($repo);
 		if (!$this->identities->isEnabled()) { return $this->unavailable(); }
 		if (!$identity) { return $this->error('RepoNotFound', 'Repository not found', 404); }
@@ -92,4 +93,21 @@ class AtprotoXrpcController extends Controller {
 		$repos = array_map(static fn ($row) => ['did' => $row['did'], 'head' => $row['commit_cid'], 'rev' => $row['rev'], 'active' => true], $rows);
 		$data = ['repos' => $repos]; if ($rows !== []) { $data['cursor'] = end($rows)['did']; } return new JsonResponse($data);
 	}
+	#[PublicPage] #[NoCSRFRequired] #[AnonRateLimit(limit: 60, period: 60)]
+	#[FrontpageRoute(verb: 'GET', url: '/xrpc/com.atproto.sync.getBlob')]
+	public function getBlob(string $did, string $cid): JsonResponse|DataDisplayResponse {
+		if ($error = $this->unavailable($did)) { return $error; }
+		$blob = $this->blobs->read($did, $cid);
+		return $blob === null ? $this->error('BlobNotFound', 'Blob not found', 404) : new DataDisplayResponse($blob['bytes'], 200, ['Content-Type' => $blob['mime']]);
+	}
+	#[PublicPage] #[NoCSRFRequired] #[AnonRateLimit(limit: 60, period: 60)]
+	#[FrontpageRoute(verb: 'GET', url: '/xrpc/com.atproto.sync.listBlobs')]
+	public function listBlobs(string $did, int $limit = 500, ?string $cursor = null): JsonResponse {
+		if ($error = $this->unavailable($did)) { return $error; }
+		$all = array_column($this->blobs->listBlobs($did), 'cid');
+		$all = array_values(array_filter($all, static fn ($cid) => strcmp($cid, $cursor ?? '') > 0));
+		$cids = array_slice($all, 0, max(1, min(1000, $limit))); $data = ['cids' => $cids];
+		if ($cids !== []) { $data['cursor'] = end($cids); } return new JsonResponse($data);
+	}
+
 }

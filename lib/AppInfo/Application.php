@@ -106,6 +106,8 @@ class Application extends App implements IBootstrap {
 		$context->registerReferenceProvider(PostReferenceProvider::class);
 		$context->registerWellKnownHandler(WebfingerHandler::class);
 		$context->registerEventListener(BeforeTemplateRenderedEvent::class, ProfileSectionListener::class);
+		$context->registerEventListener(\OCA\Social\Events\PostPublishedEvent::class, \OCA\Social\Listeners\AtprotoPostListener::class);
+		$context->registerEventListener(\OCA\Social\Events\PostDeletedEvent::class, \OCA\Social\Listeners\AtprotoPostListener::class);
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 		// the class is the Files app's, not OCP's; the name is a string here and

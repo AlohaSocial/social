@@ -16,7 +16,8 @@ class RepoCommand extends Command {
 	
 	public function __construct(
 		private readonly Repository $repository,
-		private readonly LoggerInterface $logger
+		private readonly LoggerInterface $logger,
+		private readonly \OCA\Social\Atproto\Identity\IdentityService $identities
 	) {
 		parent::__construct();
 	}
@@ -59,15 +60,24 @@ class RepoCommand extends Command {
 		
 		if ($verify) {
 			$io->text('Verifying MST...');
-			// Would recompute MST from records and compare
-			$io->success('MST verification not yet implemented');
+			try {
+				$identity = $this->identities->getIdentityByDid($did);
+				$this->repository->verify($did, $identity['signing_public']);
+				$io->success('Commit signature, CIDs, MST and record blocks verified');
+			} catch (\Throwable $e) {
+				$io->error($e->getMessage());
+				return Command::FAILURE;
+			}
 		}
 		
 		return Command::SUCCESS;
 	}
 	
 	private function resolveDid(string $user): ?string {
-		// Would query database to resolve user ID/handle to DID
-		return $user; // Simplified
+		if (str_starts_with($user, 'did:')) { return $user; }
+		$identity = $this->identities->getIdentityByHandle($user);
+		if ($identity) { return $identity['did']; }
+		$actor = $this->identities->actorIdForUser($user);
+		return $actor === null ? null : ($this->identities->getIdentityByActor($actor)['did'] ?? null);
 	}
 }

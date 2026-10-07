@@ -87,7 +87,7 @@ class ApplicationTest extends TestCase {
 
 		$listeners = [];
 		$priorities = [];
-		$context->expects($this->exactly(15))->method('registerEventListener')
+		$context->expects($this->exactly(17))->method('registerEventListener')
 			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$priorities): void {
 				$listeners[$event] = $listener;
 				$priorities[$event] = $priority;
@@ -102,6 +102,8 @@ class ApplicationTest extends TestCase {
 
 		$this->assertSame([
 			BeforeTemplateRenderedEvent::class => ProfileSectionListener::class,
+			\OCA\Social\Events\PostPublishedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,
+			\OCA\Social\Events\PostDeletedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,
 			UserUpdatedEvent::class => UserAccountListener::class,
 			// without this one a deleted user keeps a live Fediverse account
 			UserDeletedEvent::class => UserDeletedListener::class,

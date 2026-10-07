@@ -1,73 +1,17 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\Cron;
-
-use OCA\Social\Atproto\RecordMapper\OutboundQueue;
-use OCA\Social\Atproto\RecordMapper\OutboundWorker;
-use OCA\Social\Db\QueueRequest;
-use OCP\ILogger;
-
-class AtprotoOutboundWorker {
-	public function __construct(
-		private readonly OutboundQueue $queue,
-		private readonly OutboundWorker $worker,
-		private readonly QueueRequest $queueRequest,
-		private readonly ILogger $logger
-	) {}
-	
-	/**
-	 * Process the outbound queue - called by cron
-	 */
-	public function run(): void {
-		$processed = 0;
-		$failed = 0;
-		
-		while (true) {
-			$item = $this->queueRequest->takeItem(OutboundQueue::QUEUE_NAME, 10);
-			if (!$item) {
-				break; // Queue is empty
-			}
-			
-			$payload = json_decode($item['payload'], true);
-			$action = $payload['action'] ?? '';
-			
-			if (!$action) {
-				$this->queueRequest->removeItem($item['id']);
-				$failed++;
-				continue;
-			}
-			
-			$success = $this->worker->process($action, $payload);
-			
-			if ($success) {
-				$this->queueRequest->removeItem($item['id']);
-				$processed++;
-			} else {
-				$attempts = ($item['attempts'] ?? 0) + 1;
-				if ($attempts >= OutboundWorker::MAX_RETRIES) {
-					$this->logger->error('Atproto outbound action failed permanently', [
-						'action' => $payload['action'] ?? 'unknown',
-						'payload' => $payload,
-						'attempts' => $attempts
-					]);
-					$this->queueRequest->removeItem($item['id']);
-					$failed++;
-				} else {
-					$this->queueRequest->updateItem($item['id'], [
-						'attempts' => $attempts,
-						'last_attempt' => (new \DateTime())->format('Y-m-d H:i:s')
-					]);
-					$failed++;
-				}
-			}
-		}
-		
-		if ($processed > 0 || $failed > 0) {
-			$this->logger->debug('Atproto outbound worker completed', [
-				'processed' => $processed,
-				'failed' => $failed
-			]);
-		}
+use OCP\BackgroundJob\TimedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\RecordMapper\OutboundWorker as Worker;
+use Psr\Log\LoggerInterface;
+class AtprotoOutboundWorker extends TimedJob {
+	public function __construct(ITimeFactory $time, private readonly Worker $worker, private readonly IdentityService $identities, private readonly LoggerInterface $logger) {
+		parent::__construct($time); $this->setInterval(60); $this->setTimeSensitivity(self::TIME_INSENSITIVE);
+	}
+	protected function run($argument): void {
+		if (!$this->identities->isEnabled()) { return; }
+		try { $this->worker->run(); } catch (\Throwable $e) { $this->logger->error('AT Protocol background work failed', ['exception' => $e]); }
 	}
 }

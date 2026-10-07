@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace OCA\Social\Controller\Atproto;
+namespace OCA\Social\Controller;
 
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JsonResponse;
@@ -9,7 +9,7 @@ use OCP\IRequest;
 use OCP\IUserSession;
 use OCA\Social\Atproto\Identity\IdentityService;
 
-class IdentityController extends Controller {
+class AtprotoIdentityController extends Controller {
 	public function __construct(
 		$appName,
 		IRequest $request,
@@ -22,6 +22,7 @@ class IdentityController extends Controller {
 	/**
 	 * @NoAdminRequired
 	 */
+	#[\OCP\AppFramework\Http\Attribute\FrontpageRoute(verb: 'GET', url: '/api/atproto/identity')]
 	public function getIdentity(): JsonResponse {
 		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
@@ -42,13 +43,14 @@ class IdentityController extends Controller {
 			'did' => $identity['did'],
 			'handle' => $identity['handle'],
 			'state' => $identity['state'],
-			'profileUrl' => 'https://bsky.app/profile/' . $identity['handle']
+			'profileUrl' => 'https://bsky.app/profile/' . $identity['did']
 		]);
 	}
 	
 	/**
 	 * @NoAdminRequired
 	 */
+	#[\OCP\AppFramework\Http\Attribute\FrontpageRoute(verb: 'POST', url: '/api/atproto/identity')]
 	public function createIdentity(): JsonResponse {
 		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
@@ -75,7 +77,11 @@ class IdentityController extends Controller {
 	/**
 	 * @NoAdminRequired
 	 */
+	#[\OCP\AppFramework\Http\Attribute\FrontpageRoute(verb: 'POST', url: '/api/atproto/identity/recovery')]
 	public function getRecoveryPhrase(): JsonResponse {
+		if (!$this->identityService->isEnabled()) {
+			return new JsonResponse(['error' => 'AT Protocol is disabled'], 503);
+		}
 		$userId = $this->userSession->getUser()?->getUID();
 		if (!$userId) {
 			return new JsonResponse(['error' => 'Not logged in'], 401);
@@ -91,27 +97,6 @@ class IdentityController extends Controller {
 			return new JsonResponse(['error' => 'Recovery phrase not available'], 404);
 		}
 		
-		return new JsonResponse(['recoveryPhrase' => $phrase]);
-	}
-	
-	/**
-	 * @NoAdminRequired
-	 */
-	#[\OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired]
-	public function regenerateRecovery(): JsonResponse {
-		$userId = $this->userSession->getUser()?->getUID();
-		if (!$userId) {
-			return new JsonResponse(['error' => 'Not logged in'], 401);
-		}
-		
-		$actorId = $this->getActorId($userId);
-		if (!$actorId) {
-			return new JsonResponse(['error' => 'No Social actor found'], 404);
-		}
-		
-		$this->identityService->rotateKeys($actorId, true);
-		
-		$phrase = $this->identityService->getRecoveryPhrase($actorId);
 		return new JsonResponse(['recoveryPhrase' => $phrase]);
 	}
 	

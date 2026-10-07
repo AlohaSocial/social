@@ -92,7 +92,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addColumn('id', 'bigint', ['autoincrement' => true, 'notnull' => true]);
 			$table->addColumn('did', 'string', ['length' => 255, 'notnull' => true]);
 			$table->addColumn('cid', 'string', ['length' => 255, 'notnull' => true]);
-			$table->addColumn('document_id', 'bigint', ['notnull' => true]);
+			$table->addColumn('document_id', 'string', ['length' => 255, 'notnull' => false]);
 			$table->addColumn('mime', 'string', ['length' => 255, 'notnull' => true]);
 			$table->addColumn('size', 'bigint', ['notnull' => true]);
 			$table->setPrimaryKey(['id']);

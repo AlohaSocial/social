@@ -29,14 +29,12 @@ class IdentitiesCommand extends Command {
 		$this->setName('social:atproto:identities')
 			->setDescription('Create missing AT Protocol identities for local accounts')
 			->addOption('user', null, InputOption::VALUE_REQUIRED, 'Specific user ID to create identity for')
-			->addOption('force', null, InputOption::VALUE_NONE, 'Recreate identity even if exists')
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be done without doing it');
 	}
 	
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$userId = $input->getOption('user');
-		$force = $input->getOption('force');
 		$dryRun = $input->getOption('dry-run');
 		
 		$io->title('AT Protocol Identity Creation');

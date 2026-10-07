@@ -1308,6 +1308,8 @@ only active local identities. Errors use the XRPC `error`/`message` shape.
 | GET | `/xrpc/com.atproto.sync.getRepo` | CARv1 rooted at the signed commit, with all reachable MST and record blocks |
 | GET | `/xrpc/com.atproto.sync.getRecord` | CARv1 inclusion proof (currently full repository) |
 | GET | `/xrpc/com.atproto.sync.getBlocks` | Requested stored blocks in CARv1, maximum 100 |
+| GET | `/xrpc/com.atproto.sync.getBlob` | CID-verified image bytes for an active owning DID |
+| GET | `/xrpc/com.atproto.sync.listBlobs` | Blob CIDs with limit and cursor |
 | GET | `/xrpc/com.atproto.sync.listRepos` | Active repositories, bounded limit and DID cursor |
 | GET | `/xrpc/com.atproto.repo.getRecord` | URI, CID and JSON record (`repo`, `collection`, `rkey`) |
 
@@ -1315,3 +1317,28 @@ The relay WebSocket endpoint `com.atproto.sync.subscribeRepos` is served by
 `occ social:atproto:serve`, behind the documented reverse proxy, not by PHP's
 request worker. This read surface alone does not establish complete PDS or
 Bluesky client compatibility.
+
+### Signed-in AT Protocol identity
+
+These endpoints require the Nextcloud session. POST requests also require its
+CSRF token. Identity creation additionally requires instance-wide AT Protocol
+enablement. Recovery retrieval deletes the sealed phrase atomically after its
+first successful read; it does not generate or rotate a key.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/atproto/identity` | Current user's native DID, handle and state, or null identity |
+| POST | `/api/atproto/identity` | Create or retry registration for the current user's Social actor |
+| POST | `/api/atproto/identity/recovery` | Retrieve the current user's one-time 24-word recovery phrase |
+
+### AT Protocol administration
+
+All endpoints require a signed-in Nextcloud administrator. Configuration changes
+require the session CSRF token. Counts reflect persisted rows, not daemon health
+or confirmation that a relay has indexed the instance.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/admin/atproto/settings` | Enablement and public PDS endpoint |
+| POST | `/api/admin/atproto/settings` | Persist instance-wide enablement |
+| GET | `/api/admin/atproto/status` | Actual identity, record, blob, event and queue counts |

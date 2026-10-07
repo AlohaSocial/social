@@ -20,6 +20,8 @@ declare(strict_types=1);
 // dependency, not our code, so keep it out of the test output.
 $previous = error_reporting(E_ALL & ~E_DEPRECATED);
 require_once __DIR__ . '/../vendor/autoload.php';
+// Ratchet's distributed RFC6455 constructor predates PHP 8.4 nullable syntax.
+class_exists(\Ratchet\RFC6455\Messaging\Frame::class);
 error_reporting($previous);
 
 /**

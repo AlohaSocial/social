@@ -50,7 +50,7 @@ class ServeCommand extends Command {
 		}
 		
 		// Check if Atproto is enabled
-		if (!$this->config->getAppValue('social', 'atproto_enabled', false)) {
+		if (!in_array($this->config->getAppValue('social', 'atproto_enabled', '0'), ['1', 'true'], true)) {
 			$io->error('AT Protocol is not enabled for this instance');
 			return Command::FAILURE;
 		}

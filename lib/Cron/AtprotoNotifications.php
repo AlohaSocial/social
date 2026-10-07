@@ -1,22 +1,17 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\Cron;
-
-use OCA\Social\Atproto\Sync\AtprotoNotifications;
+use OCP\BackgroundJob\TimedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Sync\AtprotoNotifications as Worker;
 use Psr\Log\LoggerInterface;
-
-class AtprotoNotificationsJob {
-	public function __construct(
-		private readonly AtprotoNotifications $notifications,
-		private readonly LoggerInterface $logger
-	) {}
-	
-	public function run(): void {
-		try {
-			$this->notifications->run();
-		} catch (\Throwable $e) {
-			$this->logger->error('AtprotoNotifications cron job failed', ['error' => $e->getMessage()]);
-		}
+class AtprotoNotifications extends TimedJob {
+	public function __construct(ITimeFactory $time, private readonly Worker $worker, private readonly IdentityService $identities, private readonly LoggerInterface $logger) {
+		parent::__construct($time); $this->setInterval(60); $this->setTimeSensitivity(self::TIME_INSENSITIVE);
+	}
+	protected function run($argument): void {
+		if (!$this->identities->isEnabled()) { return; }
+		try { $this->worker->run(); } catch (\Throwable $e) { $this->logger->error('AT Protocol background work failed', ['exception' => $e]); }
 	}
 }

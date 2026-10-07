@@ -2989,6 +2989,7 @@ table/column is registered in `CoreRequestBuilder::$tables` for reset.
 | `social_atproto_labeler` | User labeler preferences |
 | `social_atproto_blocklist` | Instance DID/PDS blocks |
 | `social_atproto_session` | Hashed refresh tokens (client authentication remains under development) |
+| `social_atproto_outbox` | Leased, retryable public-post publishing and deletion work |
 | `social_atproto_recovery` | Sealed one-time BIP-39 recovery phrase, deleted when consumed |
 
 An account is stored deactivated before PLC submission so failed registration

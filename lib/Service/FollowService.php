@@ -11,7 +11,6 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
-use OCA\Social\Atproto\RecordMapper\OutboundPublisher;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -78,7 +77,6 @@ class FollowService {
 		private AccountService $accountService,
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
-		private OutboundPublisher $outboundPublisher,
 	) {
 	}
 
@@ -302,13 +300,6 @@ class FollowService {
 				'object' => $remoteActor->getId(),
 			]);
 
-			// Publish to Bluesky if the target is a Bluesky account
-			if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
-				$remoteActor->getDetails()?->get('atproto')?->get('did')) {
-				$targetDid = $remoteActor->getDetails()->get('atproto')->get('did');
-				$this->outboundPublisher->publishFollow($actor->getId(), $targetDid);
-			}
-
 			if ($remoteActor->isLocal()) {
 				// Both sides live in this database, and a delivery addressed to
 				// this instance is dropped before it is sent (see
@@ -392,13 +383,6 @@ class FollowService {
 				$this->accountService->bumpActorCount(
 					$remoteActor->getId(), 'count_followers', -1
 				);
-			}
-
-			// Delete Bluesky follow if target was a Bluesky account
-			if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
-				$remoteActor->getDetails()?->get('atproto')?->get('did')) {
-				$targetDid = $remoteActor->getDetails()->get('atproto')->get('did');
-				$this->outboundPublisher->deleteFollow($actor->getId(), $targetDid);
 			}
 
 			$undo = AP::instance()->getItemFromType(Undo::TYPE);

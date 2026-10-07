@@ -31,6 +31,21 @@ use Psr\Log\LoggerInterface;
  */
 class CoreRequestBuilder {
 	public const TABLE_ACTIONS = 'social_action';
+	public const TABLE_ATPROTO_OUTBOX = 'social_atproto_outbox';
+	public const TABLE_ATPROTO_IDENTITY = 'social_atproto_identity';
+	public const TABLE_ATPROTO_INSTANCE_KEY = 'social_atproto_instance_key';
+	public const TABLE_ATPROTO_REPO = 'social_atproto_repo';
+	public const TABLE_ATPROTO_RECORD = 'social_atproto_record';
+	public const TABLE_ATPROTO_BLOCK = 'social_atproto_block';
+	public const TABLE_ATPROTO_BLOB = 'social_atproto_blob';
+	public const TABLE_ATPROTO_EVENT = 'social_atproto_event';
+	public const TABLE_ATPROTO_PLC_LOG = 'social_atproto_plc_log';
+	public const TABLE_ATPROTO_WATCH = 'social_atproto_watch';
+	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atproto_notify_cursor';
+	public const TABLE_ATPROTO_LABELER = 'social_atproto_labeler';
+	public const TABLE_ATPROTO_BLOCKLIST = 'social_atproto_blocklist';
+	public const TABLE_ATPROTO_SESSION = 'social_atproto_session';
+	public const TABLE_ATPROTO_RECOVERY = 'social_atproto_recovery';
 	public const TABLE_ACTORS = 'social_actor';
 	public const TABLE_ACTOR_RELATION = 'social_actor_relation';
 	public const TABLE_CACHE_ACTORS = 'social_cache_actor';
@@ -101,6 +116,7 @@ class CoreRequestBuilder {
 	public const TABLE_IMPORTS = 'social_import';
 
 	public static array $tables = [
+		'social_atproto_outbox' => ['id', 'post_nid', 'action', 'attempts', 'next_try', 'last_error'],
 		'social_atproto_identity' => ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'created_at', 'updated_at'],
 		'social_atproto_instance_key' => ['id', 'kind', 'private_key', 'public_key', 'created'],
 		'social_atproto_repo' => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],

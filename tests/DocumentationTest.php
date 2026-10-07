@@ -771,7 +771,8 @@ class DocumentationTest extends TestCase {
 				continue;
 			}
 
-			$classes[] = 'OCA\\Social\\Command\\' . basename($file, '.php');
+			preg_match('/namespace\\s+([^;]+);/', $code, $namespace);
+			$classes[] = trim($namespace[1]) . '\\' . basename($file, '.php');
 		}
 
 		return $this->normalise($classes);
@@ -808,7 +809,7 @@ class DocumentationTest extends TestCase {
 
 	/** @return array<string, string> file path => file contents */
 	private function commandFiles(): array {
-		$files = glob(__DIR__ . '/../lib/Command/*.php');
+		$files = array_merge(glob(__DIR__ . '/../lib/Command/*.php'), glob(__DIR__ . '/../lib/Command/Atproto/*.php'));
 		$this->assertNotEmpty($files, 'No command classes found in lib/Command/.');
 
 		$contents = [];

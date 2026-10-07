@@ -11,7 +11,6 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
-use OCA\Social\Atproto\RecordMapper\OutboundPublisher;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -44,8 +43,6 @@ class LikeService {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ModerationService $moderationService,
-		private ConfigService $configService,
-		private OutboundPublisher $outboundPublisher,
 	) {
 	}
 
@@ -114,14 +111,6 @@ class LikeService {
 			'token' => $token,
 		]);
 
-		// Publish to Bluesky if the post is on Bluesky
-		if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
-			$note->getDetails()?->get('atproto')?->get('uri')) {
-			$postUri = $note->getDetails()->get('atproto')->get('uri');
-			$postCid = $note->getDetails()->get('atproto')->get('cid') ?? '';
-			$this->outboundPublisher->publishLike($actor->getId(), $postUri, $postCid);
-		}
-
 		return $like;
 	}
 
@@ -177,13 +166,6 @@ class LikeService {
 		}
 
 		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::LIKED, false);
-
-		// Delete Bluesky like if the post was on Bluesky
-		if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
-			$note->getDetails()?->get('atproto')?->get('uri')) {
-			$postUri = $note->getDetails()->get('atproto')->get('uri');
-			$this->outboundPublisher->deleteLike($actor->getId(), $postUri);
-		}
 
 		return $undo;
 	}

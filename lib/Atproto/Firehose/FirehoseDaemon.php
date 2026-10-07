@@ -1,186 +1,26 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\Atproto\Firehose;
-
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCP\IDBConnection;
-use Psr\Log\LoggerInterface;
-use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
-use Ratchet\MessageComponentInterface;
-use Ratchet\ConnectionInterface;
-use CBOR\Encoder;
-
+use Psr\Log\LoggerInterface;
 class FirehoseDaemon {
-	private const EVENT_WINDOW_HOURS = 72;
-	private const POLL_INTERVAL_MS = 250;
-	
-	public function __construct(
-		private readonly IDBConnection $db,
-		private readonly LoggerInterface $logger
-	) {}
-	
+	public function __construct(private readonly IDBConnection $db, private readonly LoggerInterface $logger, private readonly IdentityService $identities) {}
 	public function run(string $host, int $port, bool $once = false, int $maxSeconds = 0): void {
-		if ($once) {
-			$this->drainEvents();
-			return;
-		}
-
-		$server = IoServer::factory(
-			new HttpServer(
-				new WsServer(
-					new FirehoseHandler($this->db, $this->logger)
-				)
-			),
-			$port,
-			$host
-		);
-		
-		$startTime = time();
-		
-		$lastEventId = $this->getLastEventId();
-		
-		while (true) {
-			if ($maxSeconds > 0 && (time() - $startTime) >= $maxSeconds) {
-				$this->logger->info('Firehose daemon max runtime reached');
-				break;
-			}
-
-			$lastEventId = $this->pollEvents($lastEventId);
-			usleep(self::POLL_INTERVAL_MS * 1000);
-		}
+		if (!$this->identities->isEnabled()) { throw new \RuntimeException('AT Protocol is disabled'); }
+		if ($port < 1 || $port > 65535) { throw new \InvalidArgumentException('Invalid port'); }
+		$this->prune(); if ($once) { return; }
+		$handler = new FirehoseHandler($this->db, $this->logger); $server = BoundedIoServer::factory(new HttpServer(new WsServer($handler)), $port, $host);
+		$server->loop->addPeriodicTimer(0.25, function () use ($handler, $server) {
+			if (!$this->identities->isEnabled()) { $handler->closeAll(); $server->loop->stop(); return; } $handler->tick();
+		});
+		$server->loop->addPeriodicTimer(3600, $this->prune(...));
+		if ($maxSeconds > 0) { $server->loop->addTimer($maxSeconds, static function () use ($server) { $server->loop->stop(); }); }
+		try { $server->run(); } finally { $handler->closeAll(); $server->socket->close(); }
 	}
-	
-	private function drainEvents(): void {
-		$lastEventId = 0;
-		do {
-			$lastEventId = $this->pollEvents($lastEventId);
-		} while ($lastEventId > 0);
-	}
-	
-	private function pollEvents(int $lastEventId): int {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_event')
-			->where($qb->expr()->gt('seq', $qb->createNamedParameter($lastEventId, \PDO::PARAM_INT)))
-			->orderBy('seq', 'ASC')
-			->setMaxResults(100);
-		
-		$events = $qb->executeQuery()->fetchAllAssociative();
-		
-		foreach ($events as $event) {
-			FirehoseHandler::broadcast($event);
-			$lastEventId = $event['seq'];
-		}
-		
-		$cutoff = (new \DateTime())->modify('-' . self::EVENT_WINDOW_HOURS . ' hours')->format('Y-m-d H:i:s');
-		$qb = $this->db->getQueryBuilder();
-		$qb->delete('social_atproto_event')
-			->where($qb->expr()->lt('time', $qb->createNamedParameter($cutoff)))
-			->executeStatement();
-		
-		return $lastEventId;
-	}
-	
-	private function getLastEventId(): int {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('MAX(seq) as max_seq')
-			->from('social_atproto_event');
-		$result = $qb->executeQuery()->fetchOne();
-		return (int)($result ?? 0);
-	}
-}
-
-class FirehoseHandler implements MessageComponentInterface {
-	private static array $connections = [];
-	private static int $sequenceCounter = 0;
-	
-	public function __construct(
-		private readonly IDBConnection $db,
-		private readonly LoggerInterface $logger
-	) {}
-	
-	public function onOpen(ConnectionInterface $conn): void {
-		$query = $conn->WebSocket->request->getQuery();
-		$cursor = isset($query['cursor']) ? (int)$query['cursor'] : null;
-		
-		self::$connections[(int)$conn->resourceId] = [
-			'conn' => $conn,
-			'cursor' => $cursor
-		];
-		
-		$this->logger->info('Firehose client connected', ['cursor' => $cursor, 'total' => count(self::$connections)]);
-		
-		if ($cursor !== null) {
-			$this->replayFromCursor($conn, $cursor);
-		} else {
-			$this->sendInfoFrame($conn, 'Connected to firehose');
-		}
-	}
-	
-	public function onMessage(ConnectionInterface $conn, $msg): void {
-		// Firehose is server-to-client only
-	}
-	
-	public function onClose(ConnectionInterface $conn): void {
-		unset(self::$connections[(int)$conn->resourceId]);
-		$this->logger->info('Firehose client disconnected', ['total' => count(self::$connections)]);
-	}
-	
-	public function onError(ConnectionInterface $conn, \Exception $e): void {
-		$this->logger->error('Firehose connection error', ['error' => $e->getMessage()]);
-		$conn->close();
-	}
-	
-	public static function broadcast(array $event): void {
-		// Extract the frame data from the event
-		$frameData = json_decode($event['bytes'], true);
-		if (!$frameData) return;
-		
-		$frameData['seq'] = (int)($event['seq'] ?? 0);
-		
-		// Encode frame as CBOR for wire format
-		$frameCbor = (new Encoder())->encode($frameData);
-		
-		foreach (self::$connections as $id => $client) {
-			try {
-				// Send binary frame (CBOR)
-				$client['conn']->send($frameCbor, true); // true = binary
-			} catch (\Throwable $e) {
-				unset(self::$connections[$id]);
-			}
-		}
-	}
-	
-	private function replayFromCursor(ConnectionInterface $conn, int $cursor): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')
-			->from('social_atproto_event')
-			->where($qb->expr()->gt('seq', $qb->createNamedParameter($cursor, \PDO::PARAM_INT)))
-			->orderBy('seq', 'ASC');
-		
-		$events = $qb->executeQuery()->fetchAllAssociative();
-		
-		foreach ($events as $event) {
-			$frameData = json_decode($event['bytes'], true);
-			if ($frameData) {
-				$frameData['seq'] = (int)$event['seq'];
-				$frameCbor = (new Encoder())->encode($frameData);
-				$conn->send($frameCbor, true);
-			}
-		}
-		
-		$this->sendInfoFrame($conn, 'Replay complete, now live');
-	}
-	
-	private function sendInfoFrame(ConnectionInterface $conn, string $message): void {
-		$frame = [
-			'type' => 'info',
-			'seq' => ++self::$sequenceCounter,
-			'message' => $message
-		];
-		$frameCbor = (new Encoder())->encode($frame);
-		$conn->send($frameCbor, true);
+	private function prune(): void {
+		$qb = $this->db->getQueryBuilder(); $qb->delete('social_atproto_event')->where($qb->expr()->lt('time', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() - 72 * 3600))))->executeStatement();
 	}
 }
