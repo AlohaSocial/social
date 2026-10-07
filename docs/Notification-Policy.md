@@ -2,7 +2,7 @@
 
 Specification for [#2463](https://github.com/AlohaSocial/social/issues/2463): the notification policy and conversation muting in the Aloha Social web app. It records the product decisions, what the server already does, and what has to be built. The implementation follows this document; where they disagree, the document is fixed first.
 
-Status: agreed 2026-10-07, not yet implemented. A first implementation of parts of it exists on the unmerged branch `feat/notification-policy-web` (built at 0.26.118); it is the starting point, not the reference.
+Status: agreed 2026-10-07 and implemented. Where the implementation chose differently from the first draft — its own routes for the always-allowed list, the notice and the admin defaults; dismiss and drop keeping their earlier meaning — this document says what was built.
 
 ## 1. Why
 
@@ -18,7 +18,7 @@ Negative interactions on social media go with more depressive symptoms. Being re
 | What is held | **Everything a held sender does** — mentions, replies, direct messages, likes, boosts, follows, poll results — waits together. |
 | A "new account" | **Younger than 30 days**, from the account's published creation date (remote accounts included). |
 | Accept | **Releases what was waiting and always allows that person** from then on, until revoked in Settings. Accepting does not follow them. |
-| Dismiss | Discards what was waiting from that person. Their next interaction is judged again by the policy. |
+| Dismiss | Discards what was waiting from that person; they stay held from then on (as before this change). |
 | Finding out someone waits | A **line at the top of Activities**, a mention **in the digest**, and the **count on Activities in the sidebar**. No bell notification. |
 | Mute a conversation | **Stops notifications only** (as Mastodon): the thread stays on the timelines. |
 | Mute duration | **Until unmuted.** |
@@ -61,7 +61,7 @@ Negative interactions on social media go with more depressive symptoms. Being re
 
 ### 5.2 What is held, and where
 
-- A notification is held when **any** policy key that is `filter` applies to its sender (or the notification, for `for_private_mentions`), and the sender is not on the viewer's accepted list. `drop` discards it at storage time, as today.
+- A notification is held when **any** policy key that is `filter` applies to its sender (or the notification, for `for_private_mentions`), and the sender is not on the viewer's accepted list. `drop` (API only) holds it for good, as today; neither ever rings.
 - Held applies to **every notification type** from that sender.
 - **A held notification is stored, never raised:** `emit()` checks the policy (the same rules as `partition()`, shared code, not a copy) before the digest/quiet-hours check; a held notification raises nothing — no bell, no push, no mail, and it is not counted in a digest's notification total.
 - The Activities list and `/api/v1/notifications` keep excluding held notifications (as today); `/api/v1/notifications/requests` lists the waiting senders.
@@ -103,11 +103,13 @@ Accounts that existed before this release see one dismissible notice at the top 
 
 ## 6. API
 
-No new routes. Changes visible to clients:
+Changes visible to clients:
 
 - `muted` on statuses is real (was always `false`).
 - New accounts have a stored policy with the calm values (`GET /api/v2/notifications/policy` shows them).
 - Held senders no longer cause Nextcloud push notifications to phone apps either, because those come from the same `emit()`.
+- Routes of this app's own: `GET /api/v1/social/notifications/allowed` and `DELETE /api/v1/social/notifications/allowed/{account_id}` (the always-allowed list), `POST /api/v1/social/notifications/policy/notice/dismiss` (the one-time notice; the policy answer carries `notice`), and `GET`/`POST /admin/notification-policy` (the defaults for new accounts).
+- `/api/v1/notifications/unread_count` leaves held and muted notifications out.
 - `docs/API.md` and `docs/Mastodon-Compatibility.md` describe these; the "drop is API-only" rule is stated.
 
 ## 7. Strings (English; German in all four catalogues in the same commit)
@@ -122,7 +124,7 @@ No new routes. Changes visible to clients:
 
 ## 9. Out of scope
 
-Muting hides nothing from timelines (decided: notifications only). Timed conversation mutes. A bell notification for requests. Changing existing accounts' policies. New API routes.
+Muting hides nothing from timelines (decided: notifications only). Timed conversation mutes. A bell notification for requests. Changing existing accounts' policies. An admin settings card for the new-account defaults (the route exists; the card is a follow-up).
 
 ## 10. Implementation order
 
