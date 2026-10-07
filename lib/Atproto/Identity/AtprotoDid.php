@@ -30,10 +30,7 @@ class AtprotoDid {
 		];
 		
 		// DID is hash of genesis operation
-		$operationBytes = \Sodium::base642bin(
-			\SpomkyLabs\Cbor\CborEncoder::encode($genesisOp),
-			SODIUM_BASE64_VARIANT_ORIGINAL
-		);
+		$operationBytes = (new \CBOR\Encoder())->encode($genesisOp);
 		$hash = \Sodium::crypto_generichash($operationBytes, '', 32);
 		$didSuffix = \Sodium::bin2base32($hash);
 		

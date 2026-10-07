@@ -4,24 +4,25 @@ declare(strict_types=1);
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Sync\AtprotoNotifications;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class NotificationsCommand extends Command {
-	protected static $defaultName = 'social:atproto:notifications';
 	
 	public function __construct(
 		private readonly AtprotoNotifications $notifications,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Fetch Bluesky notifications for local accounts')
+		$this->setName('social:atproto:notifications')
+			->setDescription('Fetch Bluesky notifications for local accounts')
 			->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Number of accounts to process per batch', 50)
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be fetched without doing it');
 	}

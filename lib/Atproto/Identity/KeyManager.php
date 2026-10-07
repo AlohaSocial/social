@@ -4,15 +4,15 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Identity;
 
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use ParagonIE\ECC\ECCFactory;
 use ParagonIE\ConstantTime\Base32;
 use ParagonIE\ConstantTime\Hex;
 
 class KeyManager {
 	public function __construct(
-		private readonly IConfig $config,
-		private readonly ILogger $logger
+		private readonly ?IConfig $config,
+		private readonly ?LoggerInterface $logger
 	) {}
 	
 	public function generateSigningKey(): array {
@@ -61,7 +61,7 @@ class KeyManager {
 	
 	public function sealPrivateKey(string $privateKey): string {
 		// Use instance secret to seal (similar to PrivateKeyCipher)
-		$instanceSecret = $this->config->getSystemValue('secret', '');
+		$instanceSecret = $this->getInstanceSecret();
 		if (empty($instanceSecret)) {
 			throw new \RuntimeException('Instance secret not configured');
 		}
@@ -79,7 +79,7 @@ class KeyManager {
 	}
 	
 	public function unsealPrivateKey(string $sealedKey): string {
-		$instanceSecret = $this->config->getSystemValue('secret', '');
+		$instanceSecret = $this->getInstanceSecret();
 		if (empty($instanceSecret)) {
 			throw new \RuntimeException('Instance secret not configured');
 		}
@@ -118,6 +118,14 @@ class KeyManager {
 		return $key->verify($data, $signature);
 	}
 	
+	private function getInstanceSecret(): string {
+		if ($this->config === null) {
+			throw new \RuntimeException('Instance configuration is unavailable');
+		}
+
+		return $this->config->getSystemValue('secret', '');
+	}
+
 	private function normalizeSignature(string $signature): string {
 		// Ensure low-S per RFC 6979
 		$ecc = ECCFactory::getInstance()->getECC('secp256k1');

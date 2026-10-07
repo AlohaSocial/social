@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Firehose;
 
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Ratchet\Server\IoServer;
 use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
-use SpomkyLabs\Cbor\CborEncoder;
+use CBOR\Encoder;
 
 class FirehoseDaemon {
 	private const EVENT_WINDOW_HOURS = 72;
@@ -18,10 +18,15 @@ class FirehoseDaemon {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {}
 	
 	public function run(string $host, int $port, bool $once = false, int $maxSeconds = 0): void {
+		if ($once) {
+			$this->drainEvents();
+			return;
+		}
+
 		$server = IoServer::factory(
 			new HttpServer(
 				new WsServer(
@@ -34,11 +39,6 @@ class FirehoseDaemon {
 		
 		$startTime = time();
 		
-		if ($once) {
-			$this->drainEvents();
-			return;
-		}
-		
 		$lastEventId = $this->getLastEventId();
 		
 		while (true) {
@@ -46,11 +46,8 @@ class FirehoseDaemon {
 				$this->logger->info('Firehose daemon max runtime reached');
 				break;
 			}
-			
+
 			$lastEventId = $this->pollEvents($lastEventId);
-			
-			$server->loop->runOne();
-			
 			usleep(self::POLL_INTERVAL_MS * 1000);
 		}
 	}
@@ -101,7 +98,7 @@ class FirehoseHandler implements MessageComponentInterface {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {}
 	
 	public function onOpen(ConnectionInterface $conn): void {
@@ -122,7 +119,7 @@ class FirehoseHandler implements MessageComponentInterface {
 		}
 	}
 	
-	public function onMessage(ConnectionInterface $conn, \Ratchet\RFC6455\Messaging\MessageInterface $msg): void {
+	public function onMessage(ConnectionInterface $conn, $msg): void {
 		// Firehose is server-to-client only
 	}
 	
@@ -144,7 +141,7 @@ class FirehoseHandler implements MessageComponentInterface {
 		$frameData['seq'] = (int)($event['seq'] ?? 0);
 		
 		// Encode frame as CBOR for wire format
-		$frameCbor = CborEncoder::encode($frameData);
+		$frameCbor = (new Encoder())->encode($frameData);
 		
 		foreach (self::$connections as $id => $client) {
 			try {
@@ -169,7 +166,7 @@ class FirehoseHandler implements MessageComponentInterface {
 			$frameData = json_decode($event['bytes'], true);
 			if ($frameData) {
 				$frameData['seq'] = (int)$event['seq'];
-				$frameCbor = CborEncoder::encode($frameData);
+				$frameCbor = (new Encoder())->encode($frameData);
 				$conn->send($frameCbor, true);
 			}
 		}
@@ -183,7 +180,7 @@ class FirehoseHandler implements MessageComponentInterface {
 			'seq' => ++self::$sequenceCounter,
 			'message' => $message
 		];
-		$frameCbor = CborEncoder::encode($frame);
+		$frameCbor = (new Encoder())->encode($frame);
 		$conn->send($frameCbor, true);
 	}
 }

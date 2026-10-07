@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Identity;
 
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use OCA\Social\Service\ConfigService;
 
 class IdentityService {
@@ -15,7 +15,7 @@ class IdentityService {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly ConfigService $configService,
 		private readonly AtprotoDid $atprotoDid,
 		private readonly HandleMapper $handleMapper,
@@ -65,7 +65,9 @@ class IdentityService {
 		);
 		
 		// Submit to PLC directory
-		$this->plcClient->submitOperation($did, $operation);
+		if (!$this->plcClient->submitOperation($did, $operation)) {
+			throw new \RuntimeException('Could not register DID with PLC directory');
+		}
 		
 		// Store identity
 		$identity = [
@@ -283,7 +285,7 @@ class IdentityService {
 				'rev' => $qb->createNamedParameter(''),
 				'record_count' => $qb->createNamedParameter(0, \PDO::PARAM_INT),
 				'blob_bytes' => $qb->createNamedParameter(0, \PDO::PARAM_INT),
-				'updated_at' => $qb->createNamedParameter((new \DateTime())->format('Y-m-d H:i:s'))
+				'updated' => $qb->createNamedParameter((new \DateTime())->format('Y-m-d H:i:s'))
 			])
 			->executeStatement();
 	}

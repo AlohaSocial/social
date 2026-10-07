@@ -5,13 +5,13 @@ namespace OCA\Social\SetupChecks;
 
 use OCP\SetupCheckResult;
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use OCP\IServerContainer;
 
 class AtprotoEnabledCheck extends \OCA\Social\SetupChecks\CheckBase {
 	public function __construct(
 		private readonly IConfig $config,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IServerContainer $serverContainer
 	) {
 		parent::__construct($config, $logger, $serverContainer);

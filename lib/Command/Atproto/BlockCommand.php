@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace OCA\Social\Command\Atproto;
 
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -13,17 +13,17 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class BlockCommand extends Command {
-	protected static $defaultName = 'social:atproto:block';
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Manage AT Protocol blocklist')
+		$this->setName('social:atproto:block')
+			->setDescription('Manage AT Protocol blocklist')
 			->addArgument('type', InputArgument::REQUIRED, 'Type: host or did')
 			->addArgument('value', InputArgument::REQUIRED, 'Host or DID to block')
 			->addOption('unblock', null, InputOption::VALUE_NONE, 'Remove from blocklist')

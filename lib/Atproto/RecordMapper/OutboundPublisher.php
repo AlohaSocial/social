@@ -6,12 +6,12 @@ namespace OCA\Social\Atproto\RecordMapper;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Repository\Repository;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class OutboundPublisher {
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IdentityService $identityService,
 		private readonly Repository $repository,
 		private readonly RecordMapper $recordMapper

@@ -3,11 +3,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Repository;
 
+use CBOR\Decoder;
+use CBOR\Encoder;
+use CBOR\StringStream;
 use OCA\Social\Atproto\Identity\KeyManager;
 use OCP\IDBConnection;
-use OCP\ILogger;
-use SpomkyLabs\Cbor\CborEncoder;
-use SpomkyLabs\Cbor\CborDecoder;
+use Psr\Log\LoggerInterface;
 
 class Record {
 	public function __construct(
@@ -21,7 +22,7 @@ class Record {
 	) {}
 	
 	public static function create(string $did, string $collection, string $rkey, array $value, ?int $localId = null): self {
-		$encoded = CborEncoder::encode($value);
+		$encoded = (new Encoder())->encode($value);
 		$hash = hash('sha256', $encoded, true);
 		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
 		$multihash = hex2bin('1220') . $hash;
@@ -40,7 +41,31 @@ class Record {
 	}
 	
 	public function getValue(): array {
-		return CborDecoder::decode($this->bytes);
+		return self::decodeCbor($this->bytes);
+	}
+
+	public static function decodeCbor(string $bytes): array {
+		$decoded = (new Decoder())->decode(StringStream::create($bytes))->normalize();
+		if (!is_array($decoded)) {
+			throw new \UnexpectedValueException('Expected a CBOR map');
+		}
+
+		return self::restoreIntegerValues($decoded);
+	}
+
+	private static function restoreIntegerValues(array $value): array {
+		foreach ($value as $key => $item) {
+			if (is_array($item)) {
+				$value[$key] = self::restoreIntegerValues($item);
+			} elseif (is_string($item) && preg_match('/^-?(?:0|[1-9][0-9]*)$/', $item) === 1) {
+				$integer = filter_var($item, FILTER_VALIDATE_INT);
+				if ($integer !== false) {
+					$value[$key] = $integer;
+				}
+			}
+		}
+
+		return $value;
 	}
 	
 	public function getAtUri(): string {
@@ -68,9 +93,9 @@ class Commit {
 			'prev' => $prevCid
 		];
 		
-		$encoded = CborEncoder::encode($unsignedCommit);
+		$encoded = (new Encoder())->encode($unsignedCommit);
 		
-		$keyManager = new KeyManager(null, null);
+		$keyManager = new KeyManager($this->config, $this->logger);
 		$sig = $keyManager->sign($encoded, $signingKey);
 		
 		return new self(
@@ -92,7 +117,7 @@ class Commit {
 			'sig' => $this->sig
 		];
 		
-		$encoded = CborEncoder::encode($commit);
+		$encoded = (new Encoder())->encode($commit);
 		$hash = hash('sha256', $encoded, true);
 		$multicodec = \OCA\Social\Atproto\Repository\MerkleSearchTree::encodeVarint(0x71);
 		$multihash = hex2bin('1220') . $hash;
@@ -101,7 +126,7 @@ class Commit {
 	}
 	
 	public function toCbor(): string {
-		return CborEncoder::encode([
+		return (new Encoder())->encode([
 			'version' => self::VERSION,
 			'did' => $this->did,
 			'data' => $this->dataCid,
@@ -115,8 +140,9 @@ class Commit {
 class Repository {
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
-		private readonly KeyManager $keyManager
+		private readonly LoggerInterface $logger,
+		private readonly KeyManager $keyManager,
+		private readonly \OCP\IConfig $config
 	) {}
 	
 	public function createRecord(string $did, string $collection, string $rkey, array $value, ?int $localId = null): Record {
@@ -209,7 +235,7 @@ class Repository {
 			$key = $result['collection'] . '/' . $result['rkey'];
 			$records[$key] = [
 				'cid' => $result['cid'],
-				'value' => CborDecoder::decode($result['bytes'])
+				'value' => Record::decodeCbor($result['bytes'])
 			];
 		}
 		
@@ -293,7 +319,7 @@ class Repository {
 			$key = $result['collection'] . '/' . $result['rkey'];
 			$records[$key] = [
 				'cid' => $result['cid'],
-				'value' => CborDecoder::decode($result['bytes'])
+				'value' => Record::decodeCbor($result['bytes'])
 			];
 		}
 		

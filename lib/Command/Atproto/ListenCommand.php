@@ -5,7 +5,7 @@ namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Sync\JetstreamListener;
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -13,18 +13,18 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class ListenCommand extends Command {
-	protected static $defaultName = 'social:atproto:listen';
 	
 	public function __construct(
 		private readonly JetstreamListener $listener,
 		private readonly IConfig $config,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Run the AT Protocol Jetstream listener for real-time updates')
+		$this->setName('social:atproto:listen')
+			->setDescription('Run the AT Protocol Jetstream listener for real-time updates')
 			->addOption('once', null, InputOption::VALUE_NONE, 'Process events once and exit')
 			->addOption('max-seconds', null, InputOption::VALUE_REQUIRED, 'Maximum seconds to run', 0);
 	}

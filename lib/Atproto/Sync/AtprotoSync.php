@@ -8,7 +8,7 @@ use OCA\Social\Atproto\Repository\Repository;
 use OCA\Social\Atproto\RecordMapper\RecordMapper;
 use OCA\Social\Service\CurlService;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use OCP\IConfig;
 
 class AtprotoSync {
@@ -18,7 +18,7 @@ class AtprotoSync {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IConfig $config,
 		private readonly CurlService $curlService,
 		private readonly IdentityService $identityService,

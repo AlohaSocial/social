@@ -7,7 +7,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Repository\Repository;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -16,18 +16,18 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class IdentitiesCommand extends Command {
-	protected static $defaultName = 'social:atproto:identities';
 	
 	public function __construct(
 		private readonly IdentityService $identityService,
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Create missing AT Protocol identities for local accounts')
+		$this->setName('social:atproto:identities')
+			->setDescription('Create missing AT Protocol identities for local accounts')
 			->addOption('user', null, InputOption::VALUE_REQUIRED, 'Specific user ID to create identity for')
 			->addOption('force', null, InputOption::VALUE_NONE, 'Recreate identity even if exists')
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be done without doing it');

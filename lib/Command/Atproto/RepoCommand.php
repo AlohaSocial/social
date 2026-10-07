@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Repository\Repository;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -13,17 +13,17 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class RepoCommand extends Command {
-	protected static $defaultName = 'social:atproto:repo';
 	
 	public function __construct(
 		private readonly Repository $repository,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Inspect an AT Protocol repository')
+		$this->setName('social:atproto:repo')
+			->setDescription('Inspect an AT Protocol repository')
 			->addArgument('user', InputArgument::REQUIRED, 'User ID or DID')
 			->addOption('verify', null, InputOption::VALUE_NONE, 'Recompute MST and compare with stored head');
 	}

@@ -90,7 +90,7 @@ class AtprotoAdminController extends Controller {
 		$relayLag = $this->getRelayLag();
 		
 		// Get blocklist
-		$blocklist = $this->getBlocklist();
+		$blocklist = $this->getBlocklistItems();
 		
 		return new JsonResponse([
 			'enabled' => true,
@@ -166,7 +166,7 @@ class AtprotoAdminController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function getBlocklist(): JsonResponse {
-		return new JsonResponse(['blocklist' => $this->getBlocklist()]);
+		return new JsonResponse(['blocklist' => $this->getBlocklistItems()]);
 	}
 	
 	private function getHandleHost(): string {
@@ -216,7 +216,7 @@ class AtprotoAdminController extends Controller {
 		return [];
 	}
 	
-	private function getBlocklist(): array {
+	private function getBlocklistItems(): array {
 		// Query social_atproto_blocklist table
 		return [];
 	}

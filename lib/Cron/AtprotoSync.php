@@ -4,12 +4,12 @@ declare(strict_types=1);
 namespace OCA\Social\Cron;
 
 use OCA\Social\Atproto\Sync\AtprotoSync;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class AtprotoSyncJob {
 	public function __construct(
 		private readonly AtprotoSync $sync,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {}
 	
 	public function run(): void {

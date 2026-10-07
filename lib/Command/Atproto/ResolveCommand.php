@@ -8,7 +8,7 @@ use OCA\Social\Atproto\Identity\HandleMapper;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -16,7 +16,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class ResolveCommand extends Command {
-	protected static $defaultName = 'social:atproto:resolve';
 	
 	public function __construct(
 		private readonly AtprotoDid $atprotoDid,
@@ -24,13 +23,14 @@ class ResolveCommand extends Command {
 		private readonly IdentityService $identityService,
 		private readonly PlcClient $plcClient,
 		private readonly IConfig $config,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Resolve a Bluesky handle or DID')
+		$this->setName('social:atproto:resolve')
+			->setDescription('Resolve a Bluesky handle or DID')
 			->addArgument('identifier', InputArgument::REQUIRED, 'Handle (alice.bsky.social) or DID (did:plc:...)');
 	}
 	

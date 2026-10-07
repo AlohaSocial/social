@@ -6,7 +6,7 @@ namespace OCA\Social\Atproto\Repository;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Atproto\Identity\KeyManager;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class BlobService {
 	public const MAX_IMAGE_SIZE = 2_000_000; // 2MB per Bluesky spec
@@ -14,7 +14,7 @@ class BlobService {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly DocumentService $documentService,
 		private readonly KeyManager $keyManager
 	) {}
@@ -54,7 +54,7 @@ class BlobService {
 		$multicodec = hex2bin('55'); // raw multicodec
 		$multihash = hex2bin('1220') . $hash;
 		$cidBytes = $multicodec . $multihash;
-		$cid = 'b' . base_encode($cidBytes, 32);
+		$cid = 'b' . MerkleSearchTree::base32Encode($cidBytes);
 		
 		// Store blob reference
 		$qb = $this->db->getQueryBuilder();
@@ -118,19 +118,4 @@ class BlobService {
 		// Simplified for now
 		return [];
 	}
-}
-
-function base_encode(string $data, int $base): string {
-	$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-	$bits = '';
-	foreach (str_split($data) as $char) {
-		$bits .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
-	}
-	$bits = str_pad($bits, (int)ceil(strlen($bits) / 5) * 5, '0', STR_PAD_RIGHT);
-	$result = '';
-	for ($i = 0; $i < strlen($bits); $i += 5) {
-		$chunk = substr($bits, $i, 5);
-		$result .= $alphabet[bindec($chunk)];
-	}
-	return $result;
 }

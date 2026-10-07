@@ -4,24 +4,25 @@ declare(strict_types=1);
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Sync\AtprotoSync;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class SyncCommand extends Command {
-	protected static $defaultName = 'social:atproto:sync';
 	
 	public function __construct(
 		private readonly AtprotoSync $sync,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Sync Bluesky posts from followed authors')
+		$this->setName('social:atproto:sync')
+			->setDescription('Sync Bluesky posts from followed authors')
 			->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Number of authors to sync per batch', 50)
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be synced without doing it');
 	}

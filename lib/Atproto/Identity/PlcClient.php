@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Identity;
 
 use OCP\IConfig;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use GuzzleHttp\Client as HttpClient;
 
 class PlcClient {
 	public function __construct(
 		private readonly IConfig $config,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {}
 	
 	public function submitOperation(string $did, array $operation): bool {

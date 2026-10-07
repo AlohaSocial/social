@@ -3,8 +3,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Repository;
 
-use SpomkyLabs\Cbor\CborEncoder;
-use SpomkyLabs\Cbor\CborDecoder;
+use CBOR\Encoder;
 
 class MstNode {
 	public const FANOUT = 4;
@@ -133,13 +132,13 @@ class MerkleSearchTree {
 	}
 	
 	private static function cidFromValue(array $value): string {
-		$encoded = CborEncoder::encode($value);
+		$encoded = (new Encoder())->encode($value);
 		$hash = hash('sha256', $encoded, true);
 		// CIDv1 dag-cbor: multicodec 0x71 (dag-cbor) + multihash 0x12 (sha2-256) + length 0x20
 		$multicodec = hex2bin('0171'); // varint encoding of 0x71
 		$multihash = hex2bin('1220') . $hash; // sha2-256, 32 bytes
 		$cidBytes = $multicodec . $multihash;
-		return 'b' . base_encode($cidBytes, 32); // base32 encoding
+		return 'b' . self::base32Encode($cidBytes); // base32 encoding
 	}
 	
 	private static function countLeadingZeroBits(string $hash): int {
@@ -159,14 +158,45 @@ class MerkleSearchTree {
 	private static function emptyRootCid(): string {
 		// Empty tree CID
 		$emptyMap = [];
-		$encoded = CborEncoder::encode($emptyMap);
+		$encoded = (new Encoder())->encode($emptyMap);
 		$hash = hash('sha256', $encoded, true);
 		$multicodec = hex2bin('0171');
 		$multihash = hex2bin('1220') . $hash;
 		$cidBytes = $multicodec . $multihash;
-		return 'b' . base_encode($cidBytes, 32);
+		return 'b' . self::base32Encode($cidBytes);
 	}
 	
+	public static function base32Encode(string $data): string {
+		$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
+		$bits = '';
+		foreach (str_split($data) as $char) {
+			$bits .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
+		}
+
+		$bits = str_pad($bits, (int)ceil(strlen($bits) / 5) * 5, '0', STR_PAD_RIGHT);
+		$result = '';
+		for ($i = 0; $i < strlen($bits); $i += 5) {
+			$result .= $alphabet[bindec(substr($bits, $i, 5))];
+		}
+
+		return $result;
+	}
+
+	public static function encodeVarint(int $value): string {
+		if ($value < 0) {
+			throw new \InvalidArgumentException('Varints must be non-negative');
+		}
+
+		$encoded = '';
+		do {
+			$byte = $value & 0x7f;
+			$value >>= 7;
+			$encoded .= chr($value > 0 ? ($byte | 0x80) : $byte);
+		} while ($value > 0);
+
+		return $encoded;
+	}
+
 	/**
 	 * Compute diff between two trees
 	 * @return array{added: array, removed: array, changed: array}
@@ -193,23 +223,4 @@ class MerkleSearchTree {
 		
 		return ['added' => $added, 'removed' => $removed, 'changed' => $changed];
 	}
-}
-
-function base_encode(string $data, int $base): string {
-	// Simplified base32 encoding - use proper implementation
-	$alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-	$bits = '';
-	foreach (str_split($data) as $char) {
-		$bits .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
-	}
-	
-	$bits = str_pad($bits, (int)ceil(strlen($bits) / 5) * 5, '0', STR_PAD_RIGHT);
-	
-	$result = '';
-	for ($i = 0; $i < strlen($bits); $i += 5) {
-		$chunk = substr($bits, $i, 5);
-		$result .= $alphabet[bindec($chunk)];
-	}
-	
-	return $result;
 }

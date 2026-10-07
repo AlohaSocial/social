@@ -9,7 +9,7 @@ use OCA\Social\Atproto\Repository\Repository;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\ConfigService;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 
 class RecordMapper {
 	public const BLUESKY_MAX_GRAPHEMES = 300;
@@ -20,7 +20,7 @@ class RecordMapper {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IdentityService $identityService,
 		private readonly Repository $repository,
 		private readonly BlobService $blobService,

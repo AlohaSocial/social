@@ -6,7 +6,7 @@ namespace OCA\Social\Atproto\Sync;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Service\CurlService;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use OCP\IConfig;
 
 class AtprotoNotifications {
@@ -16,7 +16,7 @@ class AtprotoNotifications {
 	
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IConfig $config,
 		private readonly CurlService $curlService,
 		private readonly IdentityService $identityService

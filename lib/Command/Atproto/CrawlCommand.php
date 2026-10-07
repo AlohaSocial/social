@@ -7,27 +7,30 @@ use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Repository\Repository;
 use OCP\IConfig;
-use OCP\ILogger;
+use OCP\IDBConnection;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class CrawlCommand extends Command {
-	protected static $defaultName = 'social:atproto:crawl';
 	
 	public function __construct(
 		private readonly PlcClient $plcClient,
 		private readonly IdentityService $identityService,
 		private readonly Repository $repository,
+		private readonly IDBConnection $db,
 		private readonly IConfig $config,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Request relay crawl for all or specific repositories')
+		$this->setName('social:atproto:crawl')
+			->setDescription('Request relay crawl for all or specific repositories')
 			->addArgument('did', InputArgument::OPTIONAL, 'Specific DID to request crawl for');
 	}
 	

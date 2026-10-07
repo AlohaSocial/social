@@ -7,7 +7,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Repository\Repository;
 use OCA\Social\Service\CurlService;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use OCP\IConfig;
 use Ratchet\Client\WebSocketClient;
 use Ratchet\RFC6455\Messaging\MessageInterface;
@@ -17,7 +17,7 @@ use React\Socket\Connector;
 class JetstreamListener {
 	public function __construct(
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger,
+		private readonly LoggerInterface $logger,
 		private readonly IConfig $config,
 		private readonly CurlService $curlService,
 		private readonly IdentityService $identityService,

@@ -6,7 +6,7 @@ namespace OCA\Social\Command\Atproto;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCP\IDBConnection;
-use OCP\ILogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputArgument;
@@ -15,19 +15,19 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 class PlcCommand extends Command {
-	protected static $defaultName = 'social:atproto:plc';
 	
 	public function __construct(
 		private readonly PlcClient $plcClient,
 		private readonly IdentityService $identityService,
 		private readonly IDBConnection $db,
-		private readonly ILogger $logger
+		private readonly LoggerInterface $logger
 	) {
 		parent::__construct();
 	}
 	
 	protected function configure(): void {
-		$this->setDescription('Manage PLC operations')
+		$this->setName('social:atproto:plc')
+			->setDescription('Manage PLC operations')
 			->addArgument('action', InputArgument::REQUIRED, 'Action: log, view, repair')
 			->addArgument('did', InputArgument::OPTIONAL, 'DID to operate on')
 			->addOption('repair', null, InputOption::VALUE_NONE, 'Repair discrepancies between log and directory');
