@@ -298,6 +298,30 @@ passing through and optional quiet hours. A Mastodon client never sees the
 difference: `/api/v1/notifications` and the markers read the stored rows, and
 the setting only decides when the bell is told about them.
 
+The notification policy goes further than Mastodon's in one respect and
+starts differently in another. **A held notification raises nothing**: the
+Nextcloud notification is the only push there is here (the bell, the mobile
+apps, mail), and `NotificationService::emit()` asks the policy — the same
+rules `/api/v1/notifications` applies to the list — before raising it, so a
+held sender does not reach a phone app either. The same goes for a post in a
+conversation the reader muted (`POST /api/v1/statuses/{id}/mute`, recorded
+against the thread's root). Accepting a request releases what was held into
+the list without raising it; it counts as unread. And **a new account starts
+calm**: an account created here gets a stored policy that holds people it does
+not follow, new accounts, unsolicited private mentions and limited accounts
+(the administrator may choose otherwise for new accounts), while every account
+that existed before keeps Mastodon's all-`accept` until its owner chooses. A
+client reading `GET /api/v2/notifications/policy` sees the stored values, not
+a default. `drop` is accepted from Mastodon apps and behaves as `filter`; the
+web app never writes it. Three additions sit beside the Mastodon routes:
+`GET /api/v1/social/notifications/allowed` and `DELETE …/allowed/{account_id}`
+(the senders accepted from requests, which Mastodon keeps no list of), and
+`POST /api/v1/social/notifications/policy/notice/dismiss` for the `notice`
+flag the policy entity carries.
+
+A status's `muted` is real for the viewer, where it used to be a constant
+`false`; a client can show and toggle the conversation mute from it.
+
 `showing_reblogs` is no longer among them either: `POST /accounts/{id}/follow`
 takes `reblogs` as well as `notify`, a "no" is stored as a row in
 `social_actor_relation`, and the home and list timelines drop that account's
