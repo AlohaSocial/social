@@ -59,6 +59,7 @@ use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\FediverseService;
+use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GifService;
@@ -194,6 +195,7 @@ class ApiControllerTest extends TestCase {
 	private ReactionService|Stub $reactionService;
 	private ReactionSummaryService|Stub $reactionSummaryService;
 	private GifService|Stub $gifService;
+	private FileCommentsService|MockObject $fileCommentsService;
 	private NotificationService|Stub $notificationService;
 	private TranslationService|MockObject $translationService;
 	private NotificationPolicyService|Stub $notificationPolicyService;
@@ -337,6 +339,7 @@ class ApiControllerTest extends TestCase {
 		$this->reactionService = $this->createStub(ReactionService::class);
 		$this->reactionSummaryService = $this->createStub(ReactionSummaryService::class);
 		$this->gifService = $this->createStub(GifService::class);
+		$this->fileCommentsService = $this->createMock(FileCommentsService::class);
 		$this->notificationService = $this->createStub(NotificationService::class);
 		$this->translationService = $this->createMock(TranslationService::class);
 		$this->notificationPolicyService = $this->createStub(NotificationPolicyService::class);
@@ -455,6 +458,7 @@ class ApiControllerTest extends TestCase {
 			'reactionService' => $this->reactionService,
 			'reactionSummaryService' => $this->reactionSummaryService,
 			'gifService' => $this->gifService,
+			'fileCommentsService' => $this->fileCommentsService,
 			'notificationService' => $this->notificationService,
 			'translationService' => $this->translationService,
 			'notificationPolicyService' => $this->notificationPolicyService,
@@ -4512,6 +4516,24 @@ class ApiControllerTest extends TestCase {
 		// serves only what this flag allows, and a post sets it later
 		$this->assertFalse($saved->isPublic());
 		$this->assertSame('alice', $saved->getAccount());
+	}
+
+	/** So that replies to the post can be shown on the file it was made from. */
+	public function testMediaFromFileRemembersWhichFileItCameFrom(): void {
+		$this->loggedInAs();
+		$this->configService->method('getCloudUrl')->willReturn('https://cloud.example');
+		$this->pathParam = '/Photos/beach.jpg';
+		$file = $this->userFolderHolding('/Photos/beach.jpg');
+		$file->method('getId')->willReturn(4711);
+		$this->temporaryFile();
+		$this->expectDocumentSaved($saved, $tmpSeen);
+
+		$this->fileCommentsService->expects($this->once())->method('rememberAttachment')
+			->with('alice', 4711, $this->isString());
+
+		$response = $this->controller()->mediaFromFile();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 	}
 
 	public function testMediaFromFileCarriesTheAltText(): void {

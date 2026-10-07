@@ -78,6 +78,8 @@ class CoreRequestBuilder {
 	public const TABLE_STORY_VIEWS = 'social_story_view';
 	public const TABLE_STORY_REACTS = 'social_story_react';
 	public const TABLE_MEDIA_TAGS = 'social_media_tag';
+	public const TABLE_FILE_POSTS = 'social_file_post';
+	public const TABLE_FILE_COMMENTS = 'social_file_comment';
 	public const TABLE_PORTFOLIOS = 'social_portfolio';
 	public const TABLE_TEAMS = 'social_team';
 	public const TABLE_TEAM_POSTS = 'social_team_post';
@@ -360,6 +362,26 @@ class CoreRequestBuilder {
 			'actor_id',
 			'actor_id_prim',
 			'tagger_id_prim',
+			'creation'
+		],
+		self::TABLE_FILE_POSTS => [
+			'id',
+			'file_id',
+			'user_id',
+			'doc_nid',
+			'post_id',
+			'post_id_prim',
+			'creation'
+		],
+		self::TABLE_FILE_COMMENTS => [
+			'id',
+			'file_id',
+			'user_id',
+			'comment_id',
+			'post_id_prim',
+			'reply_id',
+			'reply_id_prim',
+			'outbound',
 			'creation'
 		],
 		self::TABLE_PORTFOLIOS => [

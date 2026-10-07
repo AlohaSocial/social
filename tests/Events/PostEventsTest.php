@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Events;
 
 use OCA\Social\Events\PostDeletedEvent;
+use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCP\EventDispatcher\Event;
@@ -53,6 +54,16 @@ class PostEventsTest extends TestCase {
 		$event = new PostDeletedEvent($post);
 
 		$this->assertSame('https://cloud.example/apps/social/@alice/1', $event->getPost()->getId());
+		$this->assertSame('https://cloud.example/apps/social/@alice', $event->getAuthorId());
+	}
+
+	public function testAnEditedPostCarriesItselfAndItsAuthor(): void {
+		$post = $this->post();
+
+		$event = new PostEditedEvent($post);
+
+		$this->assertInstanceOf(Event::class, $event);
+		$this->assertSame($post, $event->getPost());
 		$this->assertSame('https://cloud.example/apps/social/@alice', $event->getAuthorId());
 	}
 }

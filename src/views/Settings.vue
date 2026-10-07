@@ -100,6 +100,7 @@ import IconReview from 'vue-material-design-icons/ShieldAlertOutline.vue'
 import IconScheduled from 'vue-material-design-icons/ClockOutline.vue'
 import IconSenses from 'vue-material-design-icons/VolumeHigh.vue'
 import IconCounts from 'vue-material-design-icons/HeartOffOutline.vue'
+import IconFilesComments from 'vue-material-design-icons/CommentTextMultipleOutline.vue'
 import IconStorage from 'vue-material-design-icons/Harddisk.vue'
 import IconTags from 'vue-material-design-icons/Pound.vue'
 import { defineAsyncComponent } from 'vue'
@@ -123,6 +124,7 @@ const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName:
 // and again: two switches and a button, only ever drawn on this page
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
 const CountsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/CountsSettings.vue'))
+const FilesCommentsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FilesCommentsSettings.vue'))
 // and again: a radio pair, a few switches and some time fields, only ever
 // drawn on this page
 const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/NotificationDeliverySettings.vue'))
@@ -175,6 +177,7 @@ export default {
 		IconReview,
 		IconScheduled,
 		IconCounts,
+		IconFilesComments,
 		IconSenses,
 		IconStorage,
 		IconTags,
@@ -184,6 +187,7 @@ export default {
 		PortfolioSettings,
 		RecapSettings,
 		CountsSettings,
+		FilesCommentsSettings,
 		SensesSettings,
 		ScheduledPosts,
 		ShortcutList,
@@ -304,6 +308,16 @@ export default {
 					title: t('social', 'Likes and followers'),
 					lede: t('social', 'Whether you see how many likes, boosts, replies and followers things have. Hidden unless you turn the numbers on: a number next to a post is a score, and a score is pressure.'),
 				},
+				// Files is not open to a self-registered external user
+				...(this.serverData?.externalMedia
+					? []
+					: [{
+							id: 'files-comments',
+							icon: 'IconFilesComments',
+							component: 'FilesCommentsSettings',
+							title: t('social', 'Replies in Files'),
+							lede: t('social', 'A picture you post from Files keeps a link to its file. Replies to the post can be read in the file\'s Comments tab, next to the picture they are about.'),
+						}]),
 				{
 					id: 'senses',
 					icon: 'IconSenses',

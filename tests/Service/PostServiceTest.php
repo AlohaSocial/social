@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use DateTime;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FederationDeliveryException;
@@ -917,6 +918,21 @@ class PostServiceTest extends TestCase {
 		$note->setLocal(true);
 
 		return $note;
+	}
+
+	/** Whatever copied the post somewhere else has to show the new text. */
+	public function testAnEditIsAnnouncedWithThePostAsEdited(): void {
+		$reloaded = $this->storedNote();
+		$reloaded->setContent('new');
+		$this->streamRequest->method('getStreamByNid')->with(7)
+			->willReturnOnConsecutiveCalls($this->storedNote(), $reloaded);
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$this->service->editPost(7, $this->actor(), 'new');
+
+		$edited = array_values(array_filter($this->dispatched, static fn (object $e): bool => $e instanceof PostEditedEvent));
+		$this->assertCount(1, $edited);
+		$this->assertSame($reloaded, $edited[0]->getPost());
 	}
 
 	public function testAnEditLongerThanTheAdvertisedLimitIsRefused(): void {

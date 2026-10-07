@@ -42,6 +42,8 @@ const asyncStubs = {
 	// reads the delivery settings on mount
 	NotificationDeliverySettings: { name: 'NotificationDeliverySettings', template: '<section class="notification-delivery-settings-stub" />' },
 	NotificationPolicySettings: { name: 'NotificationPolicySettings', template: '<section class="notification-policy-settings-stub" />' },
+	// reads its switch on mount
+	FilesCommentsSettings: { name: 'FilesCommentsSettings', template: '<section class="files-comments-settings-stub" />' },
 }
 
 describe('Settings', () => {
@@ -110,7 +112,16 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(wrapper.findAll('.settings__section-heading').map((h) => h.text()))
-			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Replies in Files', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+	})
+
+	/** A self-registered external user has no Files to read replies in. */
+	it('offers replies in Files only to somebody who has Files', async () => {
+		useSettingsStore().setServerData({ externalMedia: { quota: 10, used: 0 } })
+		const wrapper = mount(Settings, { global: { stubs: asyncStubs } })
+		await flushPromises()
+
+		expect(wrapper.find('section.settings__section#files-comments').exists()).toBe(false)
 	})
 
 	/** Everything about being interrupted is in one place: when, and who. */

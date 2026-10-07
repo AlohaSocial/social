@@ -28,6 +28,7 @@ use OCA\Social\Model\InstancePath;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\ForwardService;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Service\LinkPreviewService;
@@ -175,6 +176,7 @@ class SocialDeleteRoundTripTest extends TestCase {
 			$this->createStub(ForwardService::class),
 			$this->createStub(NotificationService::class),
 			$this->createStub(StatusRevisionService::class),
+			$this->createStub(FileCommentsService::class),
 		);
 		$this->boot(self::RECEIVER, [
 			DeleteInterface::class => new DeleteInterface(),

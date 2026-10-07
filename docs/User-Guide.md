@@ -239,6 +239,23 @@ If it is approved, it goes out as an ordinary post, dated the moment it was
 approved rather than when you wrote it. If it is refused, it is deleted and
 you are told.
 
+### Replies in Files
+
+A picture or video you post from Files — with **Share to Aloha Social** or
+**Add from Files** — keeps a link to its file. Public and unlisted replies to
+the post then appear in that file's **Comments** tab in Files, each one naming
+who wrote it, so the conversation sits next to the picture it is about. Replies
+from people or servers you blocked or muted are left out, and a reply with a
+content warning shows only the warning there.
+
+A comment **you** write on that file is posted as your reply, to everyone who
+can see the post. Comments from anybody else who can open the file stay on this
+server, as they always did. Editing or deleting your comment edits or deletes
+the reply.
+
+This is on unless you turn it off: **Settings → Replies in Files**. Followers-only
+posts and direct messages are never linked.
+
 ### Where it was taken
 
 The pin in the composer's toolbar says where a post was taken. It offers the

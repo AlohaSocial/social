@@ -176,6 +176,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_channel` | The `Group` actors an account publishes videos under: one row per channel, binding it to the account that owns it |
 | `social_watch` | Where a reader stopped watching a video: one row per (post, viewer), never federated |
 | `social_video_rendition` | The rungs of a local video's ladder: one row per (video, height), each naming one fragmented MP4 and the playlist that addresses it |
+| `social_file_post` | Which Nextcloud file a post was made from: one row per (file, post), written with the attachment's nid when the file is copied in and given its post when the post is published; a row still without a post after two days is cleared |
+| `social_file_comment` | Which comment on a file stands for which reply: one row per (reply, file), marked `outbound` when the comment was written in Files and went out as the reply |
 
 | `social_quote_grant` | The permissions this instance has given out to quote its posts: one row per (quoted post, quoting post), with the `QuoteRequest` it answered so the grant can be taken back |
 | `social_team` | The accounts a Nextcloud group posts from: one row per team account, bound to the group whose members may speak as it |
@@ -2582,7 +2584,44 @@ unchanged, and mentions later in the message still render normally.
 | User migration | `UserMigration\SocialMigrator` | `Application::register()` | Puts the user's Aloha Social data in a Nextcloud account export, and reads it back on import. See "Account export and import" below |
 | Profile Page | `ProfileSectionListener` | `Application::register()` (on `BeforeTemplateRenderedEvent`) | Adds the `social-profilePage` script to the user profile page |
 | Files | `FilesScriptsListener` | `Application::register()` (on `OCA\Files\Event\LoadAdditionalScriptsEvent`) | Adds the self-contained `social-filesAction` init script, which registers "Share to Aloha Social" on pictures and videos |
+| Files comments | `FileCommentsListener` | `Application::register()` (on `PostPublishedEvent`, `PostEditedEvent`, `PostDeletedEvent`, `CommentAddedEvent`, `CommentUpdatedEvent`, `CommentDeletedEvent`) and `NoteInterface` (incoming replies, edits and deletes) | Replies to a post made from Files as comments on the file, and the author's comments there as replies. See "Replies as comments in Files" below |
 | User Events | `UserAccountListener` | `Application::register()` (on `UserUpdatedEvent`) | Re-caches the local actor when the NC account changes |
+
+### Replies as comments in Files
+
+A picture posted from Files keeps a link to the file it was copied from, and
+the conversation about it can be read in the file's Comments tab
+(`FileCommentsService`, tables `social_file_post` and `social_file_comment`).
+
+1. `POST /api/v1/media/from-file` records the file id against the new
+   attachment's nid (`rememberAttachment()`).
+2. `PostPublishedEvent` gives the post its files: the attachments it carries
+   that are still waiting are linked to it, if the post is public or unlisted.
+3. A reply to a linked post — written here (`PostPublishedEvent`) or arriving
+   in the inbox (`NoteInterface::save()`) — is copied onto each linked file as
+   a comment, if it is public or unlisted and the author has not blocked or
+   muted the replier or their server. Somebody else's reply is a comment of
+   actor type `social_fediverse`, credited in its first line, because the
+   Files sidebar only names Nextcloud users; the author's own reply is their
+   own comment. Every `@` that would start a Nextcloud mention gets a word
+   joiner after it, so a remote reply cannot notify a user here. An `Update`
+   or a local edit (`PostEditedEvent`) rewrites the comment, a `Delete` or
+   `PostDeletedEvent` removes it.
+4. A comment the **post's author** writes on the file (`CommentAddedEvent`)
+   is sent as their reply through `PostService::createPost()`, with the post's
+   visibility and after `PostReviewService::assess()`; a comment the review
+   would hold stays a comment. A mention of a user here becomes a mention
+   of their account, or their name when they have none.
+   Editing or deleting that comment edits or deletes the reply. Everybody
+   else's comments stay on this server.
+
+The class marks its own comment writes and the reply it is sending, so the
+events those cause are not answered a second time. It reads the post services
+from the container when it needs them, because `NoteInterface` depends on it
+and they reach `NoteInterface`. Every entry point from the inbox or an upload
+logs a failure instead of throwing. The per-user switch is `files_comments`
+(`GET`/`PATCH /api/v1/social/files_comments`), on unless turned off; nothing
+happens while the Comments app is disabled.
 
 ### Events this app publishes
 
@@ -2595,9 +2634,10 @@ from inside the same server to find out.
 | Event | Dispatched from | Carries | When |
 |-------|-----------------|---------|------|
 | `OCA\Social\Events\PostPublishedEvent` | `PostService::createPost()` | the `Stream` as stored, and `getAuthorId()` | after the post is stored and addressed, **before** it is delivered |
+| `OCA\Social\Events\PostEditedEvent` | `PostService::editPost()` | the `Stream` as edited, and `getAuthorId()` | after the edit and its revision are stored, **before** the `Update` is delivered |
 | `OCA\Social\Events\PostDeletedEvent` | `StreamService::deleteLocalItem()` | the post as it last was | after the row is gone and the `Delete` is queued |
 
-Both are **local posts only**. Everything that arrives from elsewhere arrives
+All three are **local posts only**. Everything that arrives from elsewhere arrives
 through the inbox, in volume, and an event per federated post would be a
 firehose nobody asked for — that is a separate event with a separate name if
 anybody ever wants one.

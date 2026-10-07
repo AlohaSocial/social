@@ -560,6 +560,9 @@ are synthesised in the browser, so there is nothing to download.
 - **Share to Aloha Social, from Files.** Select a picture or a video — up to ten — pick
   *Share to Aloha Social* from the menu, and the composer opens with them already attached.
   Nothing is uploaded a second time.
+- **Replies show up in Files.** Public replies to a picture you posted from Files appear
+  in the file's Comments tab, and a comment you write there goes out as your reply.
+  Other people's comments on the file stay on your server.
 - **Links unfurl.** Paste a link to a post or a profile into a Talk message, a Text
   document or a Deck card and it becomes a card with the author, the text and the first
   picture. Only what anybody could read is rendered, because the card is cached once

@@ -23,6 +23,9 @@ use OCA\Social\Dashboard\SocialReportsWidget;
 use OCA\Social\Dashboard\SocialTimelineWidget;
 use OCA\Social\Dashboard\SocialTrendingWidget;
 use OCA\Social\Dashboard\SocialWidget;
+use OCA\Social\Events\PostDeletedEvent;
+use OCA\Social\Events\PostEditedEvent;
+use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\External\SignupLoginProvider;
 use OCA\Social\Listeners\ExternalAddressBookListener;
 use OCA\Social\Listeners\ExternalDavListener;
@@ -30,6 +33,7 @@ use OCA\Social\Listeners\ExternalFirstLoginListener;
 use OCA\Social\Listeners\ExternalNavigationListener;
 use OCA\Social\Listeners\ExternalPageListener;
 use OCA\Social\Listeners\ExternalUserStatusListener;
+use OCA\Social\Listeners\FileCommentsListener;
 use OCA\Social\Listeners\FilesScriptsListener;
 use OCA\Social\Listeners\GroupListListener;
 use OCA\Social\Listeners\ProfileSectionListener;
@@ -49,6 +53,9 @@ use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent as PageRenderedEvent;
+use OCP\Comments\Events\CommentAddedEvent;
+use OCP\Comments\Events\CommentDeletedEvent;
+use OCP\Comments\Events\CommentUpdatedEvent;
 use OCP\Group\Events\GroupChangedEvent;
 use OCP\Group\Events\GroupDeletedEvent;
 use OCP\Group\Events\UserAddedEvent;
@@ -86,9 +93,15 @@ class ApplicationTest extends TestCase {
 		$context->expects($this->once())->method('registerAlternativeLoginProvider')->with(SignupLoginProvider::class);
 
 		$listeners = [];
+		$all = [];
 		$priorities = [];
-		$context->expects($this->exactly(15))->method('registerEventListener')
-			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$priorities): void {
+		$context->expects($this->exactly(21))->method('registerEventListener')
+			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$all, &$priorities): void {
+				if ($listener === FileCommentsListener::class) {
+					$all[] = $event;
+
+					return;
+				}
 				$listeners[$event] = $listener;
 				$priorities[$event] = $priority;
 			});
@@ -123,6 +136,15 @@ class ApplicationTest extends TestCase {
 			ExternalNavigationListener::EVENT => ExternalNavigationListener::class,
 			SabrePluginAddEvent::class => ExternalDavListener::class,
 		], $listeners);
+		// replies to a post made from Files, as comments on the file, both ways
+		$this->assertSame([
+			PostPublishedEvent::class,
+			PostEditedEvent::class,
+			PostDeletedEvent::class,
+			CommentAddedEvent::class,
+			CommentUpdatedEvent::class,
+			CommentDeletedEvent::class,
+		], $all);
 		// ahead of Files, which copies the skeleton on the same event
 		$this->assertSame(ExternalFirstLoginListener::PRIORITY, $priorities[UserFirstTimeLoggedInEvent::class]);
 		$this->assertGreaterThan(0, ExternalFirstLoginListener::PRIORITY);

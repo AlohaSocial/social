@@ -25,6 +25,7 @@ use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GifService;
 use OCA\Social\Service\InstanceService;
@@ -89,6 +90,7 @@ class MediaApiController extends MastodonApiController {
 		private IRootFolder $rootFolder,
 		private ITempManager $tempManager,
 		private GifService $gifService,
+		private FileCommentsService $fileCommentsService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -220,7 +222,11 @@ class MediaApiController extends MastodonApiController {
 				fclose($handle);
 			}
 
-			return new DataResponse($this->storeAttachment($tmpPath, $description, '', $file->getName()), Http::STATUS_OK);
+			$attachment = $this->storeAttachment($tmpPath, $description, '', $file->getName());
+			// the file the post is made from, so its replies can be shown on it
+			$this->fileCommentsService->rememberAttachment($this->currentSession(), (int)$file->getId(), $attachment->getId());
+
+			return new DataResponse($attachment, Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

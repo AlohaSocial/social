@@ -56,7 +56,8 @@ class NoteInterfaceQuoteTest extends ActivityPubTestCase {
 			$this->createStub(LinkPreviewService::class),
 			$this->createStub(ForwardService::class),
 			$this->createStub(\OCA\Social\Service\NotificationService::class),
-			$this->createStub(\OCA\Social\Service\StatusRevisionService::class)
+			$this->createStub(\OCA\Social\Service\StatusRevisionService::class),
+			$this->createStub(\OCA\Social\Service\FileCommentsService::class)
 		);
 	}
 

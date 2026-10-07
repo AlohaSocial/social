@@ -31,6 +31,7 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\ForwardService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\NotificationService;
@@ -53,6 +54,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		private ForwardService $forwardService,
 		private NotificationService $notificationService,
 		private StatusRevisionService $revisionService,
+		private FileCommentsService $fileCommentsService,
 	) {
 	}
 
@@ -121,6 +123,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			// "edited" dialog had nothing to compare
 			$this->revisionService->recordEdit($stored, $item);
 			$this->notificationService->onStatusEdited($item);
+			$this->fileCommentsService->onReplyUpdated($item);
 		}
 	}
 
@@ -205,6 +208,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			$this->notificationService->onNewStatus($note);
 			$this->pushService->onNewStream($note->getId());
 			$this->queueLinkPreview($note);
+			$this->fileCommentsService->onReply($note);
 			if ($fetchParent || $fetchQuote) {
 				$this->streamQueueService->generateStreamQueue(
 					$note->getRequestToken(), StreamQueue::TYPE_CACHE, $note->getId()
@@ -320,6 +324,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		$type = ($item->getType() === Question::TYPE) ? Question::TYPE : Note::TYPE;
 		$this->streamRequest->deleteById($item->getId(), $type);
 		$this->linkPreviewService->deleteCard($item->getId());
+		$this->fileCommentsService->onDeleted($item);
 		// the post it answered counts one reply fewer now. `updateDetails()`
 		// recounts rather than decrements, so it has to run after the row has
 		// gone — and a delete that never called it left the parent claiming a
