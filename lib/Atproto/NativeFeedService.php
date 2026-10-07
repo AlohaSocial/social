@@ -10,7 +10,7 @@ use OCA\Social\Model\Details;
 use OCA\Social\Exceptions\StreamNotFoundException;
 /** Import AT Protocol data into the same actor cache and stream used by the common UI. */
 class NativeFeedService {
-	public function __construct(private readonly AppViewClient $appview, private readonly IdentityService $identities, private readonly CacheActorsRequest $actors, private readonly StreamRequest $streams) {}
+	public function __construct(private readonly AppViewClient $appview, private readonly IdentityService $identities, private readonly CacheActorsRequest $actors, private readonly StreamRequest $streams, private readonly \OCP\IDBConnection $db) {}
 	public function discover(string $query): void {
 		if (!$this->identities->isEnabled()) { return; }
 		$data = $this->appview->get('app.bsky.actor.searchActors', ['q' => mb_substr($query, 0, 100), 'limit' => 10]);
@@ -25,6 +25,8 @@ class NativeFeedService {
 		return self::actorUrl($parts[1]) . '/post/' . $parts[2];
 	}
 	public function cacheProfile(array $profile): Person {
+		$owned = $this->identities->getIdentityByDid($profile['did']);
+		if ($owned !== null) { return $this->actors->getFromId($owned['actor_id']); }
 		$id = self::actorUrl($profile['did']);
 		$person = new Person(); $person->setId($id)->setUrl($id)->setLocal(false);
 		$person->setPreferredUsername($profile['handle'])->setAccount($profile['handle'] . '@bsky.app')
@@ -52,7 +54,15 @@ class NativeFeedService {
 	}
 	public function importPost(array $post): bool {
 		if (!$this->identities->isEnabled()) { throw new \RuntimeException('AT Protocol is disabled'); }
-		$note = self::note($post); $this->cacheProfile($post['author']);
+		$note = self::note($post);
+		// Owned repositories are represented by the original Social post, including after
+		// withdrawal. Never re-import an AppView's stale public copy as a remote note.
+		if ($this->identities->getIdentityByDid($post['author']['did']) !== null) { return false; }
+		if ($note->getInReplyTo() !== '') {
+			$parent = $this->localPost($post['record']['reply']['parent']['uri'] ?? '');
+			if ($parent !== null) { $note->setInReplyTo($parent->getId()); }
+		}
+		$this->cacheProfile($post['author']);
 		try {
 			$existing = $this->streams->getStreamById($note->getId());
 			if (($existing->getDetails(Details::ATPROTO)['cid'] ?? '') === $post['cid']) { return false; }
@@ -66,17 +76,27 @@ class NativeFeedService {
 			if (!preg_match('#^https://bsky\.app/profile/([^/?\#]+)/post/([a-zA-Z0-9._~:-]{1,255})$#D', $address, $parts)) { return null; }
 			$address = 'at://' . rawurldecode($parts[1]) . '/app.bsky.feed.post/' . $parts[2];
 		}
+		$local = $this->localPost($address); if ($local !== null) { return $local; }
+		if (preg_match('#^at://([^/]+)/#', $address, $owner) && $this->identities->getIdentityByDid($owner[1]) !== null) { return null; }
 		$data = $this->appview->get('app.bsky.feed.getPostThread', ['uri' => $address, 'depth' => 3, 'parentHeight' => 6]);
 		$pending = [$data['thread'] ?? []]; $seen = []; $main = null;
 		while ($pending !== [] && count($seen) < 50) {
 			$thread = array_shift($pending); $post = $thread['post'] ?? null;
 			if ($post === null || isset($seen[$post['uri']])) { continue; }
 			$seen[$post['uri']] = true; $this->importPost($post);
-			$main ??= self::postUrl($post['uri']);
+			$main ??= $this->localPost($post['uri'])?->getId() ?? ($this->identities->getIdentityByDid($post['author']['did']) === null ? self::postUrl($post['uri']) : null);
 			if (isset($thread['parent'])) { $pending[] = $thread['parent']; }
 			foreach ($thread['replies'] ?? [] as $reply) { $pending[] = $reply; }
 		}
 		return $main === null ? null : $this->streams->getStreamById($main, $asViewer);
+	}
+
+	private function localPost(string $uri): ?\OCA\Social\Model\ActivityPub\Stream {
+		if (!preg_match('#^at://([^/]+)/app\.bsky\.feed\.post/([^/]+)$#D', $uri, $parts)) { return null; }
+		$qb = $this->db->getQueryBuilder(); $qb->select('local_id')->from('social_atproto_record')->where($qb->expr()->eq('did', $qb->createNamedParameter($parts[1])))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.post')))->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($parts[2])));
+		$nid = $qb->executeQuery()->fetchOne(); if ($nid === false || $nid === null || $nid === '') { return null; }
+		try { $post = $this->streams->getStreamByNid((string)$nid); return $post->getVisibility() === 'public' && $post->addressesPublic() ? $post : null; } catch (\OCA\Social\Exceptions\ItemUnknownException) { return null; }
 	}
 
 	public function syncAuthor(string $did): int {

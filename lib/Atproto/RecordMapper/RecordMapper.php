@@ -12,7 +12,7 @@ class RecordMapper {
 	public const BLUESKY_MAX_BYTES = 3000;
 	public const BLUESKY_TRUNCATE_GRAPHEMES = 280;
 	public const MAX_IMAGES = 4;
-	public function __construct(private readonly BlobService $blobs, private readonly DocumentService $documents, private readonly LoggerInterface $logger) {}
+	public function __construct(private readonly BlobService $blobs, private readonly DocumentService $documents, private readonly LoggerInterface $logger, private readonly StrongRefResolver $references) {}
 	public function map(Stream $post, string $did): ?array {
 		if (!$post->isLocal() || $post->getVisibility() !== 'public' || !$post->addressesPublic()) { return null; }
 		$text = self::plainText($post->getContent()); $url = $post->getUrl() ?: $post->getId(); $mustLink = false;
@@ -31,11 +31,17 @@ class RecordMapper {
 				$images[] = ['alt' => grapheme_substr((string)($data['description'] ?? ''), 0, 2000), 'image' => $blob['blob'], 'aspectRatio' => $blob['aspectRatio']];
 			} catch (\Throwable $e) { $mustLink = true; $this->logger->warning('AT Protocol picture requires local fallback', ['exception' => $e]); }
 		}
-		if ($post instanceof \OCA\Social\Model\ActivityPub\Object\Question || $post->getQuote() !== '') { $mustLink = true; }
+		$parent = $this->references->resolve($post->getInReplyTo()); $quote = $this->references->resolve($post->getQuote());
+		if ($post instanceof \OCA\Social\Model\ActivityPub\Object\Question || ($post->getQuote() !== '' && $quote === null) || ($post->getInReplyTo() !== '' && $parent === null)) { $mustLink = true; }
 		$text = self::fitText($text, $url, $mustLink);
 		$record = ['$type' => 'app.bsky.feed.post', 'text' => $text, 'createdAt' => gmdate('Y-m-d\TH:i:s\Z', $post->getPublishedTime())];
 		$facets = self::facets($text); if ($facets !== []) { $record['facets'] = $facets; }
 		if ($images !== []) { $record['embed'] = ['$type' => 'app.bsky.embed.images', 'images' => $images]; }
+		if ($parent !== null) { $record['reply'] = ['root' => $parent['root'], 'parent' => $parent['ref']]; }
+		if ($quote !== null) {
+			$embed = ['$type' => 'app.bsky.embed.record', 'record' => $quote['ref']];
+			$record['embed'] = $images === [] ? $embed : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $embed, 'media' => $record['embed']];
+		}
 		if ($cw !== '') { $record['labels'] = ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => '!warn']]]; }
 		return ['collection' => 'app.bsky.feed.post', 'rkey' => Tid::next(), 'record' => $record];
 	}
