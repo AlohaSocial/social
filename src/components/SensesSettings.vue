@@ -39,7 +39,7 @@
 			{{ t('social', 'Start videos with sound') }}
 		</NcCheckboxRadioSwitch>
 		<p class="senses-settings__lede">
-			{{ t('social', 'Shorts and stories start with their sound on, where the browser allows it; otherwise one tap on the speaker turns it on. Muting one keeps the rest muted until you close the tab.') }}
+			{{ t('social', 'Shorts start with their sound on, where the browser allows it; otherwise one tap on the speaker turns it on. Muting one keeps the rest muted until you close the tab.') }}
 		</p>
 	</div>
 </template>

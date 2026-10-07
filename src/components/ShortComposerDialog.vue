@@ -16,6 +16,7 @@
 					{{ t('social', 'Post a short') }}
 				</h2>
 				<div
+					v-if="lifetimes.length > 1"
 					class="short__pills short__pills--wide short__lifetimes"
 					role="radiogroup"
 					:aria-label="t('social', 'How long it stays')">
@@ -272,7 +273,7 @@
 						</div>
 					</section>
 
-					<section class="short__section">
+					<section v-if="lifetimes.length > 1" class="short__section">
 						<h3 id="short-lifetime" class="short__heading">
 							{{ t('social', 'How long it stays') }}
 						</h3>
@@ -398,6 +399,7 @@ import { knownLimits } from '../services/instanceLimits.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
 import { showError, showSuccess } from '../services/toast.js'
+import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 import {
 	captureFrame,
@@ -487,7 +489,7 @@ export default {
 
 		return {
 			/** 'kept' or 'day', see the prop */
-			chosenLifetime: this.lifetime,
+			chosenLifetime: 'kept',
 			/** the picture editor is open in place of this dialog */
 			editing: false,
 			/** @type {File|null} the picture it was opened with, if any */
@@ -539,7 +541,7 @@ export default {
 	},
 
 	computed: {
-		...mapStores(useTimelineStore),
+		...mapStores(useSettingsStore, useTimelineStore),
 
 		/** @return {boolean} whether this browser can record from a camera */
 		canRecord() {
@@ -569,12 +571,24 @@ export default {
 			return this.chosenLifetime === 'day'
 		},
 
-		/** @return {object[]} the two lifetimes a short can have */
+		/** @return {boolean} whether this instance offers 24-hour shorts (the admin's `stories` section) */
+		dayOffered() {
+			return this.settingsStore.getServerData?.sections?.stories !== false
+		},
+
+		/** @return {object[]} the lifetimes a short can have here */
 		lifetimes() {
-			return [
-				{ value: 'kept', label: t('social', 'Keep it on my profile'), icon: IconAccountHeart },
-				{ value: 'day', label: t('social', 'Only for 24 hours, for my followers'), icon: IconClock },
-			]
+			const kept = { value: 'kept', label: t('social', 'Keep it on my profile'), icon: IconAccountHeart }
+			if (!this.dayOffered) {
+				return [kept]
+			}
+
+			return [kept, { value: 'day', label: t('social', 'Only for 24 hours, for my followers'), icon: IconClock }]
+		},
+
+		/** @return {string} the lifetime to start on: the one asked for, where it is offered */
+		startingLifetime() {
+			return this.lifetime === 'day' && this.dayOffered ? 'day' : 'kept'
 		},
 
 		/** @return {number} how long a caption may be */
@@ -609,7 +623,7 @@ export default {
 	watch: {
 		open(now) {
 			if (now) {
-				this.chosenLifetime = this.lifetime
+				this.chosenLifetime = this.startingLifetime
 				if (!this.forDay) {
 					this.loadSuggestions()
 				}
@@ -630,6 +644,10 @@ export default {
 				this.video('preview').muted = now
 			}
 		},
+	},
+
+	created() {
+		this.chosenLifetime = this.startingLifetime
 	},
 
 	mounted() {
@@ -1097,7 +1115,7 @@ export default {
 			this.release()
 			this.releaseVideo()
 			this.phase = 'choose'
-			this.chosenLifetime = this.lifetime
+			this.chosenLifetime = this.startingLifetime
 			this.editing = false
 			this.editingFile = null
 			this.caption = ''

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
 import ShortComposerDialog from '../../../src/components/ShortComposerDialog.vue'
+import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import { showError, showSuccess } from '../../../src/services/toast.js'
 import { feel } from '../../../src/services/senses.js'
@@ -46,9 +47,12 @@ const stubs = {
 	},
 }
 
-function mountDialog(props = {}) {
+function mountDialog(props = {}, serverData = null) {
 	const pinia = createPinia()
 	setActivePinia(pinia)
+	if (serverData !== null) {
+		useSettingsStore().setServerData(serverData)
+	}
 	const store = useTimelineStore()
 	store.createMedia = vi.fn(async () => ({ id: 'm1' }))
 	store.post = vi.fn(async () => ({ id: 's1' }))
@@ -334,6 +338,15 @@ describe('ShortComposerDialog', () => {
 			await wrapper.setProps({ open: true })
 
 			expect(wrapper.vm.chosenLifetime).toBe('kept')
+		})
+
+		it('offers only keeping it where the admin turned 24-hour shorts off', async () => {
+			const { wrapper } = mountDialog({ lifetime: 'day' }, { sections: { stories: false } })
+			await flushPromises()
+
+			expect(wrapper.find('.short__lifetimes').exists()).toBe(false)
+			expect(wrapper.vm.chosenLifetime).toBe('kept')
+			expect(wrapper.find('.short__source--other').exists()).toBe(false)
 		})
 
 		it('keeps the choice beside the video while it is edited', async () => {

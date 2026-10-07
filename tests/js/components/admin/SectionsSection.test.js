@@ -54,7 +54,7 @@ describe('the sections card', () => {
 	 */
 	it('shows everything as on when nothing was ever set', () => {
 		expect(state(mountCard())).toEqual({
-			Stories: true,
+			'24-hour shorts': true,
 			Photos: true,
 			Videos: true,
 		})
@@ -64,10 +64,17 @@ describe('the sections card', () => {
 		const settings = { stories: false, section_photos: false, section_videos: true }
 
 		expect(state(mountCard(settings))).toEqual({
-			Stories: false,
+			'24-hour shorts': false,
 			Photos: false,
 			Videos: true,
 		})
+	})
+
+	it('calls the switch 24-hour shorts and says nothing of stories', () => {
+		const wrapper = mountCard()
+
+		expect(wrapper.text()).toContain('gone after 24 hours')
+		expect(wrapper.text()).not.toMatch(/stor(y|ies)/i)
 	})
 
 	/**

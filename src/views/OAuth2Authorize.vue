@@ -211,7 +211,7 @@ export default {
 				'read:notifications': t('social', 'Read your notifications'),
 				'read:search': t('social', 'Search as you'),
 				'read:statuses': t('social', 'Read your posts and your timelines'),
-				'read:stories': t('social', 'See your stories'),
+				'read:stories': t('social', 'See your 24-hour shorts'),
 				'write:accounts': t('social', 'Change your profile'),
 				'write:blocks': t('social', 'Block and unblock accounts for you'),
 				'write:bookmarks': t('social', 'Add and remove your bookmarks'),
@@ -226,7 +226,7 @@ export default {
 				'write:notifications': t('social', 'Dismiss your notifications'),
 				'write:reports': t('social', 'Send reports as you'),
 				'write:statuses': t('social', 'Publish, edit and delete posts as you'),
-				'write:stories': t('social', 'Publish and delete stories as you'),
+				'write:stories': t('social', 'Publish and delete 24-hour shorts as you'),
 			}
 		},
 
