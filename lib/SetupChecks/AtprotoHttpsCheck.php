@@ -28,13 +28,13 @@ class AtprotoHttpsCheck implements ISetupCheck {
 			return SetupResult::success($this->l10n->t('AT Protocol is disabled.'));
 		}
 		try {
-			$url = $this->config->getSocialUrl();
+			$url = $this->identities->getPdsEndpoint();
 		} catch (\Throwable) {
 			$url = '';
 		}
 		if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
-			return SetupResult::error($this->l10n->t('AT Protocol requires a public HTTPS Social address.'), Docs::ADMIN_GUIDE);
+			return SetupResult::error($this->l10n->t('AT Protocol requires a public HTTPS PDS origin.'), Docs::ADMIN_GUIDE);
 		}
-		return SetupResult::success($this->l10n->t('The configured Social address uses HTTPS.'));
+		return SetupResult::success($this->l10n->t('The configured PDS origin uses HTTPS; public DNS, TLS and routing still need verification.'));
 	}
 }

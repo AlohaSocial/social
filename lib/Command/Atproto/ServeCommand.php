@@ -41,6 +41,7 @@ class ServeCommand extends Command {
 
 		$io->title('AT Protocol Firehose Server');
 		$io->text('Starting firehose server on ' . $host . ':' . $port);
+		$io->text('WebSocket endpoint: /xrpc/com.atproto.sync.subscribeRepos. Ordinary browser HTTP requests return 426; serve the other PDS endpoints through Nextcloud HTTPS.');
 
 		if ($once) {
 			$io->text('Running in --once mode (drain and exit)');

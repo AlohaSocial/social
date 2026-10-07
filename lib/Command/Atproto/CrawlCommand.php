@@ -43,6 +43,10 @@ class CrawlCommand extends Command {
 		$io->title('Request Relay Crawl');
 
 		$relays = json_decode($this->config->getAppValue('social', 'atproto_relays', '["https://bsky.network"]'), true);
+		if (!is_array($relays) || !array_is_list($relays) || $relays === [] || array_filter($relays, static fn ($relay): bool => !is_string($relay)) !== []) {
+			$io->error('No valid relay list is configured; no crawl has been requested. Set atproto_relays to a nonempty JSON list of HTTPS relay origins.');
+			return Command::FAILURE;
+		}
 
 		if ($did && !$this->identityService->getIdentityByDid($did)) {
 			$io->error('DID is not owned by this instance');
@@ -54,7 +58,7 @@ class CrawlCommand extends Command {
 		}
 		$failed = false;
 		foreach ($relays as $relay) {
-			$success = $this->requestCrawl($relay, (string)parse_url($this->identityService->getPdsEndpoint(), PHP_URL_HOST));
+			$success = $this->requestCrawl($relay, \OCA\Social\Service\ConfigService::authorityOf($this->identityService->getPdsEndpoint()));
 			$io->text($relay . ': ' . ($success ? 'Accepted' : 'FAILED'));
 			$failed = $failed || !$success;
 		}
