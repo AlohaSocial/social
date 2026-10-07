@@ -732,10 +732,17 @@ export const useTimelineStore = defineStore('timeline', {
 				this.statuses[status.id] = { ...this.statuses[status.id], bookmarked }
 			}
 		},
+		/**
+		 * Flips the mute on the store's copy of a post, taking the post into
+		 * the store when it is not there yet: a notification's card draws the
+		 * store's copy where there is one, its own snapshot otherwise.
+		 *
+		 * @param {object} payload which post, and which way
+		 * @param {import('../types/Mastodon.js').Status} payload.status the post
+		 * @param {boolean} payload.muted whether its conversation is muted
+		 */
 		muteConversationOf({ status, muted }) {
-			if (this.statuses[status.id] !== undefined) {
-				this.statuses[status.id] = { ...this.statuses[status.id], muted }
-			}
+			this.statuses[status.id] = { ...(this.statuses[status.id] ?? status), muted }
 		},
 		pinStatus({ status, pinned }) {
 			if (this.statuses[status.id] !== undefined) {

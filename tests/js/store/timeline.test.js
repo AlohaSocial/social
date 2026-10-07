@@ -1036,6 +1036,20 @@ describe('timeline store actions', () => {
 			expect(showSuccess).toHaveBeenCalledWith(confirmation)
 		})
 
+		it('flips a post the store did not hold yet, such as one a notification card drew', async () => {
+			const status = makeStatus('7', { muted: !muted })
+			let duringRequest
+			axios.post.mockImplementation(async () => {
+				duringRequest = { ...tl().statuses['7'] }
+				return { data: makeStatus('7', { muted }) }
+			})
+
+			await store.postMuteConversation({ status, muted })
+
+			expect(duringRequest).toMatchObject({ id: '7', muted })
+			expect(tl().statuses['7'].muted).toBe(muted)
+		})
+
 		it('puts the flag back and reports when the server refuses', async () => {
 			const status = makeStatus('1', { muted: !muted })
 			store.addToTimeline([status])
