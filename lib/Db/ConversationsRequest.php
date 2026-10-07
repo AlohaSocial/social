@@ -189,6 +189,10 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 	 * is saying "stop telling me", not "hide this".
 	 */
 	public function setMuted(string $actorId, string $rootId, bool $muted): void {
+		// the status entity's `muted` is read through a memo of these rows;
+		// dropped first, because the update below returns early
+		StreamRequestBuilder::forgetMutedRoots();
+
 		if ($this->getMarkers($actorId, [$rootId]) !== []) {
 			$this->updateMuted($actorId, $rootId, $muted);
 
@@ -241,7 +245,7 @@ class ConversationsRequest extends ConversationsRequestBuilder {
 		return in_array($rootId, $this->getMutedRoots($actorId), true);
 	}
 
-	private function updateMuted(string $actorId, string $rootId, bool $muted): void {
+	protected function updateMuted(string $actorId, string $rootId, bool $muted): void {
 		$qb = $this->getConversationStateUpdateSql();
 		$qb->set('muted', $qb->createNamedParameter($muted, IQueryBuilder::PARAM_BOOL));
 		$qb->where(
