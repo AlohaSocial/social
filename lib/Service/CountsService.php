@@ -27,8 +27,13 @@ class CountsService {
 	/** The per-user switch: `'1'` shows the numbers, anything else hides them. */
 	public const USER_KEY = 'show_counts';
 
-	/** On a status: the numbers that rank it. `dislikes_count` is null on anything but a video. */
-	private const STATUS_COUNTS = ['favourites_count', 'reblogs_count', 'dislikes_count'];
+	/**
+	 * On a status: the numbers that rank it, the reply count among them — a
+	 * reader who hides the numbers asked not to be shown how much attention a
+	 * post got, and a busy thread is that too. `dislikes_count` is null on
+	 * anything but a video.
+	 */
+	private const STATUS_COUNTS = ['favourites_count', 'reblogs_count', 'replies_count', 'dislikes_count'];
 
 	/** @var array<string, bool> user id => hides, read once per request */
 	private array $hides = [];

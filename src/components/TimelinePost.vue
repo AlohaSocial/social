@@ -334,7 +334,7 @@
 									<Reply :size="20" />
 								</template>
 							</NcButton>
-							<RollingCount :count="item.replies_count || 0" />
+							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
 						</div>
 						<div
 							class="post-action-group"

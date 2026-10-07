@@ -298,7 +298,7 @@ export default {
 					icon: 'IconCounts',
 					component: 'CountsSettings',
 					title: t('social', 'Likes and followers'),
-					lede: t('social', 'Whether you see how many likes, boosts and followers things have. Hidden unless you turn the numbers on: a number next to a post is a score, and a score is pressure.'),
+					lede: t('social', 'Whether you see how many likes, boosts, replies and followers things have. Hidden unless you turn the numbers on: a number next to a post is a score, and a score is pressure.'),
 				},
 				{
 					id: 'senses',

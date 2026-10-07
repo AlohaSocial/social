@@ -13,6 +13,7 @@ use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCP\Server;
 
 /**
@@ -40,6 +41,8 @@ class Here extends ClientApi {
 	/** A client acting as one local user. */
 	public static function forUser(string $userId): self {
 		$base = rtrim(Server::get(ConfigService::class)->getSocialUrl(), '/');
+		// counts are hidden by default; these tests assert what was counted
+		Server::get(CountsService::class)->setHides($userId, false);
 
 		return new self($base, self::$tokens[$userId] ??= self::mint($userId), $userId);
 	}
