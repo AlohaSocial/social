@@ -19,7 +19,7 @@
 			     posts, a search that found nothing — there is no button, and
 			     one invented for the sake of having one would be worse. -->
 			<template v-if="item.action" #action>
-				<NcButton variant="primary" :to="item.action.to">
+				<NcButton variant="primary" :to="item.action.to" @click="item.action.to ? undefined : $emit('action')">
 					{{ item.action.label }}
 				</NcButton>
 			</template>
@@ -65,6 +65,9 @@ export default {
 			default: () => {},
 		},
 	},
+
+	/** `action`: the button was pressed, for an action with no route of its own */
+	emits: ['action'],
 
 	computed: {
 		/** @return {string} */

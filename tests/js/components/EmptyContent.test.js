@@ -99,4 +99,11 @@ describe('EmptyContent', () => {
 			expect(wrapper.find('.empty-content__action').exists()).toBe(false)
 		})
 	})
+
+	it('hands an action with no route of its own back to the page', async () => {
+		const wrapper = mountEmpty({ title: 'Start a private chat', action: { label: 'New message' } })
+		await wrapper.find('.empty-content__action button').trigger('click')
+
+		expect(wrapper.emitted('action')).toHaveLength(1)
+	})
 })

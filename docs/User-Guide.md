@@ -326,11 +326,19 @@ The sidebar is the map:
   The new chat uses the same person header and message field as an existing
   conversation. Messages are sent privately to that person, so there is no
   public, follower-only or other audience to choose and no repeated mention to
-  type. The inbox shows a conversation preview and unread state; opening a chat
-  marks it read. The chat uses a single message area with incoming and outgoing
-  bubbles, date breaks and message times. Its search, conversation list and
-  message field stay in the same view without extra cards around them. On a
-  phone, the conversation list and chat open as separate screens.
+  type. The inbox lists conversations the way the feed lists posts — the
+  person's face and name, a line of the last message and how long ago it was
+  (*3h*, *2w*) — with **All** and **Unread** in the same switcher as My Feed
+  and Local. A search box joins them once there are more than a handful of
+  conversations, and **Remove conversation** is in a row's **…** menu, which
+  appears when you point at the row. Opening a chat marks it read. Your
+  messages are drawn in your own colour, the other person's in grey; a run of
+  messages carries its time under the last one, and you see the others' by
+  pointing at them. The message field is the feed composer's rounded line with
+  your face beside it, and the send button appears once you have written
+  something; **Ctrl+Enter** (**⌘+Enter** on a Mac) sends, Enter starts a new
+  line. A conversation keeps to the feed's reading width. On a phone, the
+  conversation list and chat open as separate screens, with a back arrow.
 - **Explore** — one collapsible entry holding everything there is to look at
   besides your own feed: the hashtags you follow, your **lists**, and the tags
   this server is busy with right now, in that order. Each list is a timeline of

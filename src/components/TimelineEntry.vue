@@ -13,6 +13,7 @@
 			'timeline-entry--continues': depth > 0 && continues,
 			'timeline-entry--unread': unread,
 			'timeline-entry--settled': !staggered,
+			'timeline-entry--direct': type === 'direct',
 		}"
 		:style="entryStyle"
 		:data-status-id="entryContent?.id"
@@ -778,7 +779,7 @@ export default {
 
 // in a list the arrows stand over the avatar column and the booster's face
 // starts where the post's name does
-.timeline-entry:not(.notification) .boost {
+.timeline-entry:not(.notification, .timeline-entry--direct) .boost {
 	gap: 10px;
 	padding-inline-start: 0;
 
@@ -856,11 +857,12 @@ export default {
  * whitespace and a hairline between one post and the next, and the avatar
  * beside the name inside the row. Ten boxed cards on a screen read as a
  * form. A notification keeps its frame — on Activities the frame is what
- * carries the "new" mark — and the post component keeps its own look
+ * carries the "new" mark — a direct message keeps its bubble, which
+ * DirectMessages.vue draws, and the post component keeps its own look
  * wherever it is drawn outside a list (a quote, the dashboard, a profile
  * card).
  */
-.timeline-entry:not(.notification) {
+.timeline-entry:not(.notification, .timeline-entry--direct) {
 	position: relative;
 	margin-bottom: 13px;
 	padding-block: 14px 13px;
@@ -977,7 +979,7 @@ export default {
  * row, since a pill over the timestamp would draw its numbers across it.
  */
 @media (hover: hover) {
-	.timeline-entry:not(.notification) .wrapper :deep(.post-footer:not(:has(.reaction-bar, .post-action-count))) {
+	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-footer:not(:has(.reaction-bar, .post-action-count))) {
 		height: 0;
 		margin: 0;
 
@@ -992,7 +994,7 @@ export default {
 	// a like or boost already given shows as a small mark by the timestamp,
 	// so it never needs a row of its own under the words; its button keeps
 	// to the pill, which only shows when the post is pointed at
-	.timeline-entry:not(.notification) .wrapper :deep(.post-content:not(:has(.reaction-bar, .post-action-count))) {
+	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper :deep(.post-content:not(:has(.reaction-bar, .post-action-count))) {
 		.post-given {
 			display: inline-flex;
 		}
@@ -1004,7 +1006,7 @@ export default {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.timeline-entry:not(.notification) {
+	.timeline-entry:not(.notification, .timeline-entry--direct) {
 		transition: none;
 	}
 }

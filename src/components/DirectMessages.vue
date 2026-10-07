@@ -11,40 +11,36 @@
 		}">
 		<aside class="direct-messages__list-panel" :aria-label="t('social', 'Direct message conversations')">
 			<header class="direct-messages__list-heading">
-				<h2>{{ t('social', 'Messages') }}</h2>
+				<h2>{{ t('social', 'Direct messages') }}</h2>
 				<NcButton
 					variant="tertiary"
 					class="direct-messages__new-button"
 					:aria-label="t('social', 'New message')"
+					:title="t('social', 'New message')"
 					@click="newMessageOpen = true">
 					<template #icon>
 						<MessagePlusOutline :size="20" />
 					</template>
 				</NcButton>
 			</header>
-			<div class="direct-messages__list-tools">
-				<NcTextField
-					v-model="searchQuery"
-					class="direct-messages__search"
-					:label="t('social', 'Search conversations')"
-					:placeholder="t('social', 'Search conversations')"
-					type="search" />
-				<nav class="direct-messages__filters" :aria-label="t('social', 'Filter conversations')">
-					<button
-						type="button"
-						:aria-pressed="filterMode === 'all'"
-						:class="{ 'direct-messages__filter--active': filterMode === 'all' }"
-						@click="filterMode = 'all'">
-						{{ t('social', 'All') }}
-					</button>
-					<button
-						type="button"
-						:aria-pressed="filterMode === 'unread'"
-						:class="{ 'direct-messages__filter--active': filterMode === 'unread' }"
-						@click="filterMode = 'unread'">
-						{{ t('social', 'Unread ({count})', { count: unreadCount }) }}
-					</button>
-				</nav>
+			<div v-if="conversations.length > 0" class="direct-messages__list-tools">
+				<!-- the feed's own switcher, so All and Unread are the same
+				     control as My Feed and Local -->
+				<TimelineSwitcher
+					class="direct-messages__filters"
+					:options="filterOptions"
+					:value="filterMode"
+					:label="t('social', 'Filter conversations')"
+					@update:value="filterMode = $event" />
+				<!-- only once there are enough conversations to look for one -->
+				<label v-if="offersSearch" class="direct-messages__search direct-messages__pill">
+					<Magnify :size="18" aria-hidden="true" />
+					<input
+						v-model="searchQuery"
+						type="search"
+						:aria-label="t('social', 'Search conversations')"
+						:placeholder="t('social', 'Search conversations')">
+				</label>
 			</div>
 
 			<!--
@@ -68,12 +64,16 @@
 					{{ t('social', 'Try again') }}
 				</NcButton>
 			</div>
+			<!-- beside the welcome pane a line is enough; on a phone, where this
+			     pane is the whole page, it is the page's empty state -->
 			<div v-else-if="conversations.length === 0" class="direct-messages__inbox-empty">
-				<MessageOutline :size="24" aria-hidden="true" />
-				<strong>{{ t('social', 'No conversations yet') }}</strong>
-				<NcButton class="direct-messages__mobile-start" variant="tertiary" @click="newMessageOpen = true">
-					{{ t('social', 'Start a conversation') }}
-				</NcButton>
+				<p class="direct-messages__inbox-empty-line">
+					{{ t('social', 'No conversations yet') }}
+				</p>
+				<EmptyContent
+					class="direct-messages__inbox-empty-page"
+					:item="inboxEmpty"
+					@action="newMessageOpen = true" />
 			</div>
 			<div v-else-if="filteredConversations.length === 0" class="direct-messages__state direct-messages__no-matches">
 				<p>{{ t('social', 'No conversations match your search') }}</p>
@@ -87,43 +87,60 @@
 			</div>
 
 			<ul v-else class="direct-messages__list">
-				<li v-for="conversation in filteredConversations" :key="conversation.id">
-					<NcListItem
+				<li
+					v-for="conversation in filteredConversations"
+					:key="conversation.id"
+					class="direct-messages__row"
+					:class="{
+						'direct-messages__row--active': String(conversation.id) === selectedConversationId,
+						'direct-messages__row--unread': conversation.unread,
+					}">
+					<button
+						type="button"
 						class="direct-messages__conversation"
-						:forceDisplayActions="true"
-						:name="conversationName(conversation)"
-						:details="formatTime(conversation.last_status?.created_at)"
-						:active="String(conversation.id) === selectedConversationId"
-						:bold="conversation.unread"
-						:actionsAriaLabel="t('social', 'Conversation actions')"
-						:linkAriaLabel="t('social', 'Conversation with {name}', { name: conversationName(conversation) })"
+						:aria-current="String(conversation.id) === selectedConversationId ? 'true' : undefined"
+						:aria-label="t('social', 'Conversation with {name}', { name: conversationName(conversation) })"
 						@click="selectConversation(String(conversation.id), $event)">
+						<ActorAvatar
+							v-if="conversationPeer(conversation)"
+							:actor="conversationPeer(conversation)"
+							:size="40"
+							:link="false"
+							class="direct-messages__face" />
+						<span class="direct-messages__row-text">
+							<span class="direct-messages__row-line">
+								<span class="direct-messages__name">{{ conversationName(conversation) }}</span>
+								<time
+									v-if="conversation.last_status?.created_at"
+									class="direct-messages__age"
+									:datetime="conversation.last_status.created_at"
+									:title="fullDate(conversation.last_status.created_at)">
+									{{ age(conversation.last_status.created_at) }}
+								</time>
+							</span>
+							<span class="direct-messages__row-line">
+								<span class="direct-messages__preview">{{ preview(conversation.last_status, conversation) || t('social', 'No messages yet') }}</span>
+								<span v-if="conversation.unread" class="direct-messages__unread-dot" :aria-label="t('social', 'Unread')" />
+							</span>
+						</span>
+					</button>
+					<NcActions
+						class="direct-messages__row-menu"
+						:forceMenu="true"
+						:aria-label="t('social', 'Conversation actions')">
 						<template #icon>
-							<ActorAvatar
-								v-if="conversationPeer(conversation)"
-								:actor="conversationPeer(conversation)"
-								:size="40"
-								:link="false"
-								class="direct-messages__conversation-avatar" />
+							<DotsHorizontal :size="20" />
 						</template>
-						<template #subname>
-							<span class="direct-messages__preview">{{ preview(conversation.last_status, conversation) || t('social', 'No messages yet') }}</span>
-						</template>
-						<template #indicator>
-							<span v-if="conversation.unread" class="direct-messages__unread-dot" :aria-label="t('social', 'Unread')" />
-						</template>
-						<template #actions>
-							<NcActionButton
-								:closeAfterClick="true"
-								:disabled="removingConversationId === String(conversation.id)"
-								@click.stop="removeConversation(conversation)">
-								<template #icon>
-									<DeleteOutline :size="20" />
-								</template>
-								{{ t('social', 'Remove conversation') }}
-							</NcActionButton>
-						</template>
-					</NcListItem>
+						<NcActionButton
+							:closeAfterClick="true"
+							:disabled="removingConversationId === String(conversation.id)"
+							@click.stop="removeConversation(conversation)">
+							<template #icon>
+								<DeleteOutline :size="20" />
+							</template>
+							{{ t('social', 'Remove conversation') }}
+						</NcActionButton>
+					</NcActions>
 				</li>
 				<li v-if="cursor" class="direct-messages__more">
 					<NcButton
@@ -138,8 +155,15 @@
 
 		<section v-if="newMessageOpen" class="direct-messages__thread-panel direct-messages__new-message-panel" :aria-label="t('social', 'New direct message')">
 			<header class="direct-messages__thread-heading">
-				<NcButton class="direct-messages__back" variant="tertiary" @click="newMessageOpen = false">
-					{{ t('social', 'Back to conversations') }}
+				<NcButton
+					class="direct-messages__back"
+					variant="tertiary"
+					:aria-label="t('social', 'Back to conversations')"
+					:title="t('social', 'Back to conversations')"
+					@click="newMessageOpen = false">
+					<template #icon>
+						<ArrowLeft :size="20" />
+					</template>
 				</NcButton>
 				<ActorAvatar
 					v-if="newRecipient"
@@ -148,7 +172,7 @@
 					:link="false" />
 				<div class="direct-messages__thread-person">
 					<h2>{{ newRecipient ? newRecipient.display_name || newRecipient.username || newRecipient.acct : t('social', 'New message') }}</h2>
-					<p>{{ newRecipient ? t('social', 'Private conversation') : t('social', 'Choose a person to start a private chat') }}</p>
+					<p>{{ newRecipient ? `@${newRecipient.acct}` : t('social', 'Choose a person to start a private chat') }}</p>
 				</div>
 				<NcButton
 					v-if="newRecipient"
@@ -162,13 +186,15 @@
 				<div class="direct-messages__recipient-intro">
 					<h3>{{ t('social', 'Who would you like to message?') }}</h3>
 				</div>
-				<NcTextField
-					v-model="recipientQuery"
-					class="direct-messages__recipient-search"
-					:label="t('social', 'Search for a person by name or @username')"
-					:placeholder="t('social', 'Search for a person by name or @username')"
-					autocomplete="off"
-					type="search" />
+				<label class="direct-messages__recipient-search direct-messages__pill">
+					<Magnify :size="20" aria-hidden="true" />
+					<input
+						v-model="recipientQuery"
+						type="search"
+						autocomplete="off"
+						:aria-label="t('social', 'Search for a person by name or @username')"
+						:placeholder="t('social', 'Search for a person by name or @username')">
+				</label>
 				<p v-if="searchError" class="direct-messages__state direct-messages__recipient-feedback" role="alert">
 					{{ t('social', 'Could not search for people. Please try again.') }}
 				</p>
@@ -182,19 +208,22 @@
 						class="direct-messages__recipient-results"
 						:class="`direct-messages__recipient-results--${group.key}`"
 						:aria-labelledby="`direct-messages-recipients-${group.key}`">
-						<li v-for="account in group.accounts" :key="account.id || account.acct">
-							<NcListItem
+						<li v-for="account in group.accounts" :key="account.id || account.acct" class="direct-messages__row">
+							<button
+								type="button"
 								class="direct-messages__recipient-option"
-								:name="account.display_name || account.username || account.acct"
-								:linkAriaLabel="t('social', 'Start a conversation with {name}', { name: account.display_name || account.acct })"
+								:aria-label="t('social', 'Start a conversation with {name}', { name: account.display_name || account.acct })"
 								@click="startConversation(account, $event)">
-								<template #icon>
-									<ActorAvatar :actor="account" :size="40" :link="false" />
-								</template>
-								<template #subname>
-									@{{ account.acct }}
-								</template>
-							</NcListItem>
+								<ActorAvatar
+									:actor="account"
+									:size="40"
+									:link="false"
+									class="direct-messages__face" />
+								<span class="direct-messages__row-text">
+									<span class="direct-messages__name">{{ account.display_name || account.username || account.acct }}</span>
+									<span class="direct-messages__preview">@{{ account.acct }}</span>
+								</span>
+							</button>
 						</li>
 					</ul>
 				</template>
@@ -209,23 +238,38 @@
 				</p>
 			</div>
 			<div v-else class="direct-messages__new-chat">
-				<div class="direct-messages__new-chat-intro">
-					<MessageOutline :size="36" aria-hidden="true" />
-					<h3>{{ t('social', 'Start a conversation with {name}', { name: newRecipient.display_name || newRecipient.username || newRecipient.acct }) }}</h3>
-					<p>{{ t('social', 'Private conversation') }}</p>
-				</div>
+				<EmptyContent class="direct-messages__new-chat-intro" :item="newChatIntro" />
 				<form class="direct-messages__message-form" @submit.prevent="sendMessage">
-					<NcTextArea
-						v-model="messageText"
-						class="direct-messages__message-input"
-						labelOutside
-						:aria-label="t('social', 'Write a message…')"
-						:disabled="sendingMessage"
-						:placeholder="t('social', 'Write a message…')"
-						resize="vertical" />
-					<NcButton variant="primary" type="submit" :disabled="sendingMessage || !messageText.trim()">
-						{{ t('social', 'Send') }}
-					</NcButton>
+					<ActorAvatar
+						v-if="ownAccount"
+						:actor="ownAccount"
+						:size="32"
+						:link="false"
+						class="direct-messages__own-face" />
+					<div class="direct-messages__message-box direct-messages__pill">
+						<textarea
+							ref="messageInput"
+							v-model="messageText"
+							class="direct-messages__message-input"
+							rows="1"
+							:aria-label="t('social', 'Write a message…')"
+							:disabled="sendingMessage"
+							:placeholder="t('social', 'Write a message…')"
+							@input="fitMessageInput"
+							@keydown.enter="onMessageEnter" />
+						<NcButton
+							v-show="messageText.trim()"
+							class="direct-messages__send"
+							variant="primary"
+							type="submit"
+							:aria-label="t('social', 'Send')"
+							:title="t('social', 'Send')"
+							:disabled="sendingMessage || !messageText.trim()">
+							<template #icon>
+								<Send :size="18" />
+							</template>
+						</NcButton>
+					</div>
 				</form>
 				<p v-if="sendError" class="direct-messages__send-error" role="alert">
 					{{ t('social', 'Could not send the message. Please try again.') }}
@@ -235,8 +279,15 @@
 
 		<section v-else-if="activeConversation" class="direct-messages__thread-panel" :aria-label="threadLabel">
 			<header class="direct-messages__thread-heading">
-				<NcButton class="direct-messages__back" variant="tertiary" @click="$emit('select', '')">
-					{{ t('social', 'Back to conversations') }}
+				<NcButton
+					class="direct-messages__back"
+					variant="tertiary"
+					:aria-label="t('social', 'Back to conversations')"
+					:title="t('social', 'Back to conversations')"
+					@click="$emit('select', '')">
+					<template #icon>
+						<ArrowLeft :size="20" />
+					</template>
 				</NcButton>
 				<ActorAvatar
 					v-if="conversationPeer(activeConversation)"
@@ -245,7 +296,7 @@
 					:link="false" />
 				<div class="direct-messages__thread-person">
 					<h2>{{ conversationName(activeConversation) }}</h2>
-					<p>{{ t('social', 'Private conversation') }}</p>
+					<p>{{ conversationPeer(activeConversation)?.acct ? `@${conversationPeer(activeConversation).acct}` : t('social', 'Private conversation') }}</p>
 				</div>
 			</header>
 
@@ -281,7 +332,13 @@
 							element="article"
 							:hideAvatar="true"
 							:hideAuthor="true" />
-						<time class="direct-messages__message-time" :datetime="message.created_at" :title="formatDay(message.created_at)">
+						<!-- under the last message of a run; beside the others,
+						     shown when the message is pointed at -->
+						<time
+							class="direct-messages__message-time"
+							:class="{ 'direct-messages__message-time--aside': !endsRun(message, index) }"
+							:datetime="message.created_at"
+							:title="formatDay(message.created_at)">
 							{{ formatMessageTime(message.created_at) }}
 						</time>
 					</div>
@@ -292,17 +349,36 @@
 			</div>
 
 			<form class="direct-messages__message-form" @submit.prevent="sendMessage">
-				<NcTextArea
-					v-model="messageText"
-					class="direct-messages__message-input"
-					labelOutside
-					:aria-label="t('social', 'Write a message…')"
-					:disabled="sendingMessage"
-					:placeholder="t('social', 'Write a message…')"
-					resize="vertical" />
-				<NcButton variant="primary" type="submit" :disabled="sendingMessage || !messageText.trim()">
-					{{ t('social', 'Send') }}
-				</NcButton>
+				<ActorAvatar
+					v-if="ownAccount"
+					:actor="ownAccount"
+					:size="32"
+					:link="false"
+					class="direct-messages__own-face" />
+				<div class="direct-messages__message-box direct-messages__pill">
+					<textarea
+						ref="messageInput"
+						v-model="messageText"
+						class="direct-messages__message-input"
+						rows="1"
+						:aria-label="t('social', 'Write a message…')"
+						:disabled="sendingMessage"
+						:placeholder="t('social', 'Write a message…')"
+						@input="fitMessageInput"
+						@keydown.enter="onMessageEnter" />
+					<NcButton
+						v-show="messageText.trim()"
+						class="direct-messages__send"
+						variant="primary"
+						type="submit"
+						:aria-label="t('social', 'Send')"
+						:title="t('social', 'Send')"
+						:disabled="sendingMessage || !messageText.trim()">
+						<template #icon>
+							<Send :size="18" />
+						</template>
+					</NcButton>
+				</div>
 			</form>
 			<p v-if="sendError" class="direct-messages__send-error" role="alert">
 				{{ t('social', 'Could not send the message. Please try again.') }}
@@ -310,16 +386,10 @@
 		</section>
 
 		<section v-else class="direct-messages__thread-panel direct-messages__thread-panel--empty">
-			<div class="direct-messages__welcome">
-				<div class="direct-messages__welcome-mark" aria-hidden="true">
-					<MessageOutline :size="32" />
-				</div>
-				<h2>{{ t('social', 'Start a private chat') }}</h2>
-				<p>{{ t('social', 'Choose a conversation or find someone to message.') }}</p>
-				<NcButton variant="primary" @click="newMessageOpen = true">
-					{{ t('social', 'New message') }}
-				</NcButton>
-			</div>
+			<EmptyContent
+				class="direct-messages__welcome"
+				:item="welcome"
+				@action="newMessageOpen = true" />
 		</section>
 	</section>
 </template>
@@ -327,23 +397,36 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import NcButton from '@nextcloud/vue/components/NcButton'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
-import NcListItem from '@nextcloud/vue/components/NcListItem'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import axios from '@nextcloud/axios'
-import ActorAvatar from './ActorAvatar.vue'
-import MessageOutline from 'vue-material-design-icons/MessageOutline.vue'
-import MessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
+import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import DeleteOutline from 'vue-material-design-icons/DeleteOutline.vue'
+import DotsHorizontal from 'vue-material-design-icons/DotsHorizontal.vue'
+import ForumOutline from 'vue-material-design-icons/ForumOutline.vue'
+import Magnify from 'vue-material-design-icons/Magnify.vue'
+import MessageBadgeOutline from 'vue-material-design-icons/MessageBadgeOutline.vue'
+import MessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
+import Send from 'vue-material-design-icons/Send.vue'
+import ActorAvatar from './ActorAvatar.vue'
+import EmptyContent from './EmptyContent.vue'
 import TimelineEntry from './TimelineEntry.vue'
+import TimelineSwitcher from './TimelineSwitcher.vue'
+import { useAccountStore } from '../store/account.js'
+import { fullDateTime, shortAgo } from '../utils/relativeTime.js'
 import { nextCursor } from '../utils/linkHeader.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 
 /** How many conversations one request asks for. */
 const PAGE_SIZE = 40
+
+/** How many conversations it takes before a search box is worth its room. */
+const SEARCH_FROM = 9
+
+/** How tall the message box grows before it scrolls, in pixels. */
+const MESSAGE_BOX_MAX = 112
 
 /**
  * A handle at the very start of a message, as the composer writes one.
@@ -396,15 +479,18 @@ export default {
 	name: 'DirectMessages',
 	components: {
 		ActorAvatar,
-		MessageOutline,
-		MessagePlusOutline,
+		ArrowLeft,
 		DeleteOutline,
+		DotsHorizontal,
+		EmptyContent,
+		Magnify,
+		MessagePlusOutline,
 		NcActionButton,
+		NcActions,
 		NcButton,
-		NcListItem,
-		NcTextArea,
-		NcTextField,
+		Send,
 		TimelineEntry,
+		TimelineSwitcher,
 	},
 
 	props: {
@@ -460,6 +546,53 @@ export default {
 
 		unreadCount() {
 			return this.conversations.filter((conversation) => conversation.unread).length
+		},
+
+		/** @return {object[]} All and Unread, as the feed's switcher takes them */
+		filterOptions() {
+			return [
+				{ value: 'all', label: t('social', 'All'), icon: ForumOutline },
+				{ value: 'unread', label: t('social', 'Unread ({count})', { count: this.unreadCount }), icon: MessageBadgeOutline },
+			]
+		},
+
+		/** @return {boolean} whether the inbox is long enough to search, or is being searched */
+		offersSearch() {
+			return this.conversations.length >= SEARCH_FROM || this.searchQuery !== ''
+		},
+
+		/** @return {object|null} the reader's own account, for the face beside the message box */
+		ownAccount() {
+			return useAccountStore().currentAccount ?? null
+		},
+
+		/** @return {object} the inbox with nothing in it, where it is the whole page */
+		inboxEmpty() {
+			return {
+				illustration: 'no-messages',
+				title: t('social', 'No conversations yet'),
+				action: { label: t('social', 'Start a conversation') },
+			}
+		},
+
+		/** @return {object} the pane beside the inbox before a conversation is open */
+		welcome() {
+			return {
+				illustration: 'no-messages',
+				title: t('social', 'Start a private chat'),
+				description: t('social', 'Choose a conversation or find someone to message.'),
+				action: { label: t('social', 'New message') },
+			}
+		},
+
+		/** @return {object} the empty thread above the first message to somebody new */
+		newChatIntro() {
+			const recipient = this.newRecipient ?? {}
+			return {
+				illustration: 'no-messages',
+				title: t('social', 'Start a conversation with {name}', { name: recipient.display_name || recipient.username || recipient.acct || '' }),
+				description: t('social', 'Private conversation'),
+			}
 		},
 
 		activeConversation() {
@@ -576,6 +709,12 @@ export default {
 				this.thread = { ancestors: [], descendants: [] }
 				this.loadingThread = false
 				this.threadError = false
+			}
+		},
+
+		messageText(text) {
+			if (text === '') {
+				this.$nextTick(() => this.fitMessageInput())
 			}
 		},
 
@@ -1032,15 +1171,50 @@ export default {
 			}
 		},
 
-		formatTime(value) {
-			const date = new Date(value)
-			if (Number.isNaN(date.getTime())) {
-				return ''
+		/**
+		 * How old the last message is, the way the feed says how old a post is.
+		 *
+		 * @param {string} value when it was written
+		 * @return {string} "3h", "2w", "Sep 3"
+		 */
+		age(value) {
+			return shortAgo(value)
+		},
+
+		/**
+		 * @param {string} value when it was written
+		 * @return {string} the full date and time, for the age's tooltip
+		 */
+		fullDate(value) {
+			return fullDateTime(value)
+		},
+
+		/**
+		 * The box grows with what is typed, up to a few lines, and shrinks
+		 * back once the message is sent.
+		 */
+		fitMessageInput() {
+			const box = /** @type {HTMLTextAreaElement|undefined} */ (this.$refs.messageInput)
+			if (!box) {
+				return
 			}
-			const now = new Date()
-			return date.toDateString() === now.toDateString()
-				? date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-				: date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+			box.style.height = 'auto'
+			if (box.value !== '') {
+				box.style.height = `${Math.min(box.scrollHeight, MESSAGE_BOX_MAX)}px`
+			}
+		},
+
+		/**
+		 * Enter is a new line, as in the post composer; Ctrl or Cmd with it
+		 * sends.
+		 *
+		 * @param {KeyboardEvent} event the key press
+		 */
+		onMessageEnter(event) {
+			if (event.ctrlKey || event.metaKey) {
+				event.preventDefault()
+				this.sendMessage()
+			}
 		},
 
 		formatDay(value) {
@@ -1071,6 +1245,21 @@ export default {
 				|| (account.username === this.currentUserId && !String(account.acct ?? '').includes('@'))
 		},
 
+		/**
+		 * Whether a message is the last of a run — the next one is from
+		 * somebody else or on another day — which is where its time is shown.
+		 *
+		 * @param {object} message the message
+		 * @param {number} index its place in the thread
+		 * @return {boolean}
+		 */
+		endsRun(message, index) {
+			const next = this.messages[index + 1]
+			return next === undefined
+				|| this.showMessageAuthor(next, index + 1)
+				|| this.showDaySeparator(next, index + 1)
+		},
+
 		showMessageAuthor(message, index) {
 			if (index === 0) {
 				return true
@@ -1096,8 +1285,10 @@ export default {
  * bottom edge.
  */
 .direct-messages {
+	/* the feed's reading column, which a conversation keeps to as well */
+	--direct-messages-column: 616px;
 	display: grid;
-	grid-template-columns: clamp(17.5rem, 23vw, 20rem) minmax(0, 1fr);
+	grid-template-columns: clamp(17.5rem, 23vw, 21rem) minmax(0, 1fr);
 	width: 100%;
 	height: calc(100dvh - var(--header-height, 50px) - 0.6rem - var(--social-toggle-clearance, 0px));
 	background: var(--color-main-background);
@@ -1119,10 +1310,11 @@ export default {
 .direct-messages__list-heading,
 .direct-messages__thread-heading {
 	display: flex;
-	min-height: 4.75rem;
+	flex: 0 0 auto;
+	min-height: 4.25rem;
 	align-items: center;
-	gap: 0.8rem;
-	padding: 0.75rem 1.25rem;
+	gap: 0.75rem;
+	padding: 0.6rem 1rem;
 	border-bottom: 1px solid var(--color-border);
 }
 
@@ -1134,7 +1326,7 @@ export default {
  * Room for Nextcloud's app-navigation toggle. Where the navigation is pinned
  * the toggle sits over the top-left corner of the content — that corner is
  * this heading, open or closed — and without the room it covers the first
- * letters of "Messages". Below `$folded` the page already starts beneath the
+ * letters of the heading. Below `$folded` the page already starts beneath the
  * toggle (Timeline.vue), so the room there would be empty.
  */
 @media (min-width: layout.$folded + 1px) {
@@ -1146,7 +1338,7 @@ export default {
 .direct-messages__list-heading h2,
 .direct-messages__thread-heading h2 {
 	margin: 0;
-	font-size: 1.2rem;
+	font-size: 1.15rem;
 	font-weight: 650;
 }
 
@@ -1154,91 +1346,180 @@ export default {
 	flex: 0 0 auto;
 }
 
+/* the composer's shape: a rounded field on the hover grey, no frame */
+.direct-messages__pill {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 6px 0 14px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: var(--color-background-hover);
+	color: var(--color-text-maxcontrast);
+	transition: border-color .15s ease;
+
+	// the ring is the pill's, round the whole field, rather than the
+	// square one the browser would draw round the text inside it
+	&:focus-within {
+		border-color: var(--color-primary-element);
+	}
+
+	input,
+	textarea {
+		flex: 1;
+		min-width: 0;
+		min-height: 0;
+		margin: 0;
+		padding: 9px 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+		color: var(--color-main-text);
+		font: inherit;
+		font-size: 14px;
+		line-height: 1.45;
+		outline: 0;
+	}
+}
+
 .direct-messages__list-tools {
-	padding: 0.8rem 1rem 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.6rem;
+	padding: 0.75rem 0.75rem 0.25rem;
 }
 
 .direct-messages__search {
-	display: block;
+	align-self: stretch;
 }
 
-.direct-messages__search :deep(.input-field__input) {
-	box-sizing: border-box;
-	width: 100%;
-	min-height: 2.3rem;
-	padding-block: 0.4rem;
-	border-radius: var(--border-radius-large);
-	background: var(--color-background-hover);
-}
-
-.direct-messages__search :deep(input) {
-	min-height: 2.3rem;
-	padding-block: 0.4rem;
-}
-
-.direct-messages__filters {
-	display: flex;
-	width: fit-content;
-	gap: 0.2rem;
-	margin-block-start: 0.5rem;
-	padding: 0.2rem;
-	border-radius: 999px;
-	background: var(--color-background-hover);
-}
-
-.direct-messages__filters button {
-	min-height: 1.9rem;
-	padding: 0.25rem 0.7rem;
-	border: 0;
-	border-radius: 999px;
-	background: transparent;
-	color: var(--color-text-maxcontrast);
-	font: inherit;
-	font-size: 0.82rem;
-	font-weight: 600;
-	line-height: 1.2;
-	cursor: pointer;
-}
-
-.direct-messages__filters button:hover,
-.direct-messages__filters .direct-messages__filter--active {
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-	box-shadow: 0 1px 3px var(--color-box-shadow);
-}
-
-.direct-messages__filters button:focus-visible {
-	outline: 2px solid var(--color-primary-element);
-	outline-offset: 1px;
+.direct-messages__list,
+.direct-messages__recipient-results {
+	margin: 0;
+	padding: 0.25rem 0.5rem 0.75rem;
+	list-style: none;
 }
 
 .direct-messages__list {
 	flex: 1;
 	min-height: 0;
-	margin: 0;
-	padding: 0.35rem 0;
-	list-style: none;
 	overflow-y: auto;
 }
 
-.direct-messages :deep(.direct-messages__conversation.list-item__wrapper) {
-	padding: 0;
-}
-
-.direct-messages :deep(.direct-messages__conversation .list-item__anchor) {
-	min-height: 4.75rem;
-	padding: 0.6rem 1rem;
-	border-radius: 0;
-}
-
-.direct-messages__more {
+/*
+ * A conversation is a feed row: the face beside the name, the age at the far
+ * end, a hover tint with the feed's radius and a hairline between one row and
+ * the next. The menu stays out of sight until the row is pointed at.
+ */
+.direct-messages__row {
+	position: relative;
 	display: flex;
-	justify-content: center;
-	padding: 0.5rem 1rem 1rem;
+	align-items: center;
+	border-radius: var(--border-radius-large, 8px);
+	transition: background-color .15s ease;
+
+	& + &::before {
+		content: '';
+		position: absolute;
+		inset-inline: 8px;
+		inset-block-start: 0;
+		block-size: 1px;
+		background: var(--color-border);
+		pointer-events: none;
+	}
+
+	&:hover,
+	&:focus-within {
+		background-color: var(--color-background-hover);
+	}
+
+	&:hover::before,
+	&:hover + &::before,
+	&--active::before,
+	&--active + &::before {
+		opacity: 0;
+	}
+}
+
+.direct-messages__row--active,
+.direct-messages__row--active:hover {
+	background-color: var(--color-primary-element-light);
+}
+
+.direct-messages__conversation,
+.direct-messages__recipient-option {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0;
+	padding: 10px 8px;
+	border: 0;
+	border-radius: inherit;
+	background: transparent;
+	color: var(--color-main-text);
+	font: inherit;
+	text-align: start;
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 2px solid var(--color-primary-element);
+		outline-offset: -2px;
+	}
+}
+
+/* the row carries the tint; core's own button grey on hover, focus or press
+   outranks a single class and drew a box inside it */
+.direct-messages__row .direct-messages__conversation,
+.direct-messages__row .direct-messages__recipient-option {
+	&:hover,
+	&:focus,
+	&:active {
+		background: transparent;
+	}
+}
+
+.direct-messages__face {
+	flex: 0 0 auto;
+}
+
+.direct-messages__row-text {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 1px;
+}
+
+.direct-messages__row-line {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.direct-messages__name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.direct-messages__age {
+	flex: 0 0 auto;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
 }
 
 .direct-messages__preview {
-	max-width: 100%;
+	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	color: var(--color-text-maxcontrast);
 	font-size: 0.86rem;
@@ -1246,11 +1527,46 @@ export default {
 	white-space: nowrap;
 }
 
+.direct-messages__row--unread {
+	.direct-messages__preview {
+		color: var(--color-main-text);
+		font-weight: 600;
+	}
+}
+
 .direct-messages__unread-dot {
+	flex: 0 0 auto;
+	align-self: center;
 	width: 0.5rem;
 	height: 0.5rem;
 	border-radius: 50%;
 	background: var(--color-primary-element);
+}
+
+.direct-messages__row-menu {
+	flex: 0 0 auto;
+	margin-inline-end: 2px;
+	opacity: 0;
+	transition: opacity .16s ease;
+}
+
+.direct-messages__row:hover .direct-messages__row-menu,
+.direct-messages__row:focus-within .direct-messages__row-menu,
+.direct-messages__row-menu:has([aria-expanded="true"]) {
+	opacity: 1;
+}
+
+/* a touch screen cannot point first, so the menu is always there */
+@media (hover: none) {
+	.direct-messages__row-menu {
+		opacity: 1;
+	}
+}
+
+.direct-messages__more {
+	display: flex;
+	justify-content: center;
+	padding: 0.5rem 1rem 1rem;
 }
 
 .direct-messages__state {
@@ -1287,27 +1603,15 @@ export default {
 	margin: 0;
 }
 
-.direct-messages__inbox-empty {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 0.65rem;
-	padding: 2.5rem 1rem;
+.direct-messages__inbox-empty-line {
+	margin: 0;
+	padding: 1.5rem 1rem;
 	color: var(--color-text-maxcontrast);
 	text-align: center;
 }
 
-.direct-messages__inbox-empty strong {
-	font-size: 0.9rem;
-	font-weight: 500;
-}
-
-.direct-messages__mobile-start {
+.direct-messages__inbox-empty-page {
 	display: none;
-}
-
-.direct-messages__thread-heading {
-	flex: 0 0 auto;
 }
 
 .direct-messages__thread-person {
@@ -1322,17 +1626,22 @@ export default {
 
 .direct-messages__thread-person p {
 	margin: 0.1rem 0 0;
+	overflow: hidden;
 	color: var(--color-text-maxcontrast);
 	font-size: 0.82rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
+/* the thread keeps to the feed's column, centred in whatever room it has */
 .direct-messages__thread {
 	display: flex;
 	flex: 1;
 	min-height: 0;
 	flex-direction: column;
 	gap: 0.9rem;
-	padding: 1.5rem clamp(1.25rem, 5vw, 4rem);
+	padding-block: 1.5rem;
+	padding-inline: max(1.25rem, calc((100% - var(--direct-messages-column)) / 2));
 	overflow-y: auto;
 	background: var(--color-main-background);
 }
@@ -1345,13 +1654,14 @@ export default {
 }
 
 .direct-messages__message--grouped {
-	margin-block-start: -0.55rem;
+	margin-block-start: -0.6rem;
 }
 
 .direct-messages__message {
+	position: relative;
 	display: flex;
 	width: fit-content;
-	max-width: min(76%, 42rem);
+	max-width: 80%;
 	flex-direction: column;
 	align-items: flex-start;
 }
@@ -1375,6 +1685,31 @@ export default {
 	line-height: 1.25;
 }
 
+/*
+ * A time inside a run stands beside its bubble, out of the flow, and only
+ * while the message is pointed at: the run reads as one block, and nothing
+ * moves when the time appears.
+ */
+.direct-messages__message-time--aside {
+	position: absolute;
+	inset-block-end: 0.35rem;
+	inset-inline-start: 100%;
+	margin: 0 0.5rem;
+	white-space: nowrap;
+	opacity: 0;
+	transition: opacity .15s ease;
+	pointer-events: none;
+}
+
+.direct-messages__message--outgoing .direct-messages__message-time--aside {
+	inset-inline: auto 100%;
+}
+
+.direct-messages__message:hover .direct-messages__message-time--aside,
+.direct-messages__message:focus-within .direct-messages__message-time--aside {
+	opacity: 1;
+}
+
 .direct-messages__thread :deep(.timeline-entry),
 .direct-messages__thread :deep(.wrapper),
 .direct-messages__thread :deep(.entry__content) {
@@ -1387,12 +1722,19 @@ export default {
 	animation: none;
 }
 
+/*
+ * The bubbles. An incoming one is the neutral grey; an outgoing one is the
+ * reader's own colour, the hue their avatar and their like sparks already use
+ * (`--account-hue`, which the post sets for its author — on an outgoing
+ * message, the reader). Mixed into the page background, so it is a light wash
+ * on a light theme and a deep one on a dark theme.
+ */
 .direct-messages__thread :deep(.post-content) {
 	width: 100%;
 	max-width: 100%;
-	padding: 0.7rem 1rem;
+	padding: 0.6rem 0.95rem;
 	border: 0;
-	border-radius: 1rem 1rem 1rem 0.3rem;
+	border-radius: 1.1rem 1.1rem 1.1rem 0.35rem;
 	background: var(--color-background-hover);
 	box-shadow: none;
 	font-size: 0.94rem;
@@ -1408,8 +1750,17 @@ export default {
 }
 
 .direct-messages__message--outgoing :deep(.post-content) {
-	border-radius: 1rem 1rem 0.3rem 1rem;
-	background: var(--color-primary-element-light);
+	border-radius: 1.1rem 1.1rem 0.35rem 1.1rem;
+	background: color-mix(in srgb, hsl(var(--account-hue, 210) 70% 50%) 18%, var(--color-main-background));
+}
+
+.direct-messages__message--grouped :deep(.post-content) {
+	border-start-start-radius: 0.35rem;
+}
+
+.direct-messages__message--outgoing.direct-messages__message--grouped :deep(.post-content) {
+	border-start-start-radius: 1.1rem;
+	border-start-end-radius: 0.35rem;
 }
 
 .direct-messages__thread :deep(.post-header) {
@@ -1423,74 +1774,36 @@ export default {
 .direct-messages__recipient-picker {
 	flex: 1;
 	min-height: 0;
-	padding: clamp(1.5rem, 4vw, 3rem) clamp(1.25rem, 5vw, 4rem);
+	padding-block: clamp(1.5rem, 4vw, 2.5rem);
+	padding-inline: max(1.25rem, calc((100% - var(--direct-messages-column)) / 2));
 	overflow-y: auto;
 }
 
-.direct-messages__recipient-intro {
-	max-width: 42rem;
-	margin: 0 auto 1.5rem;
-}
-
 .direct-messages__recipient-intro h3 {
-	margin: 0 0 0.25rem;
+	margin: 0 0 0.75rem;
 	color: var(--color-main-text);
-	font-size: 1.25rem;
+	font-size: 1.15rem;
 	font-weight: 650;
 }
 
-.direct-messages__recipient-search {
-	display: block;
-	max-width: 42rem;
-	margin: 0 auto;
-}
-
-.direct-messages__recipient-search :deep(.input-field__input) {
-	box-sizing: border-box;
-	width: 100%;
-	min-height: 3rem;
-	border-radius: var(--border-radius-large);
-	background: var(--color-background-hover);
-}
-
 .direct-messages__people-heading {
-	display: flex;
-	max-width: 42rem;
-	align-items: center;
-	justify-content: space-between;
-	gap: 1rem;
-	margin: 2rem auto 0.5rem;
+	margin: 1.5rem 0 0.25rem;
 	padding-inline: 0.5rem;
-	color: var(--color-text-maxcontrast);
 }
 
 .direct-messages__people-heading h3 {
 	margin: 0;
-	color: var(--color-main-text);
-	font-size: 0.9rem;
-	font-weight: 650;
+	color: var(--color-text-maxcontrast);
+	font-size: 0.82rem;
+	font-weight: 600;
 }
 
 .direct-messages__recipient-results {
-	max-width: 42rem;
-	margin: 0 auto;
-	padding: 0;
-	list-style: none;
-}
-
-.direct-messages :deep(.direct-messages__recipient-option.list-item__wrapper) {
-	padding: 0;
-}
-
-.direct-messages :deep(.direct-messages__recipient-option .list-item__anchor) {
-	min-height: 4.5rem;
-	padding: 0.6rem 0.75rem;
-	border-radius: var(--border-radius-large);
+	padding-inline: 0;
 }
 
 .direct-messages__recipient-feedback {
-	max-width: 42rem;
-	margin: 0 auto;
+	margin: 0;
 	padding: 1.25rem 0.5rem;
 	text-align: start;
 }
@@ -1509,62 +1822,51 @@ export default {
 .direct-messages__new-chat-intro {
 	display: flex;
 	flex: 1;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 0.45rem;
-	padding: 2rem;
-	color: var(--color-text-maxcontrast);
-	text-align: center;
 }
 
-.direct-messages__new-chat-intro h3 {
-	margin: 0.75rem 0 0;
-	color: var(--color-main-text);
-	font-size: 1.2rem;
-}
-
-.direct-messages__new-chat-intro p {
-	margin: 0;
-}
-
+/* the feed composer's shape: the reader's face and a rounded line to write on */
 .direct-messages__message-form {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: flex-end;
-	gap: 0.75rem;
-	padding: 0.85rem clamp(1rem, 3vw, 2rem);
+	gap: 10px;
+	padding-block: 0.75rem;
+	padding-inline: max(1rem, calc((100% - var(--direct-messages-column)) / 2));
 	border-top: 1px solid var(--color-border);
 	background: var(--color-main-background);
 }
 
-.direct-messages__message-input {
-	flex: 1;
-	min-width: 0;
+.direct-messages__own-face {
+	flex: 0 0 auto;
+	margin-block-end: 3px;
 }
 
-/*
- * The composer is a chat box, so it is shorter than a form field and the
- * placeholder is the whole of its label. `labelOutside` is what makes that
- * legal: without it `NcTextArea` draws a floating <label> absolutely
- * positioned 11px from the top of the input, and the padding below — which is
- * half what the component reserves — leaves it sitting on top of the text
- * somebody is typing.
- */
-.direct-messages__message-form :deep(.textarea__input) {
-	box-sizing: border-box;
-	width: 100%;
-	min-height: 2.3rem;
-	max-height: 7rem;
-	padding: 0.45rem 0.75rem;
-	border-radius: var(--border-radius-large);
-	background: var(--color-background-hover);
-	resize: vertical;
+.direct-messages__message-box {
+	flex: 1;
+	min-width: 0;
+	align-items: flex-end;
+	border-radius: 19px;
+}
+
+.direct-messages__message-input {
+	max-height: 112px;
+	resize: none;
+	overflow-y: auto;
+}
+
+.direct-messages__send {
+	flex: 0 0 auto;
+	margin-block: 3px;
+	border-radius: 50%;
 }
 
 .direct-messages__send-error {
 	margin: 0;
 	padding: 0 1rem 0.75rem;
 	color: var(--color-error);
+	text-align: center;
 }
 
 .direct-messages__back {
@@ -1572,33 +1874,15 @@ export default {
 }
 
 .direct-messages__thread-panel--empty {
-	color: var(--color-text-maxcontrast);
-}
-
-.direct-messages__welcome {
-	max-width: 28rem;
-	margin: auto;
-	padding: 2rem 1.5rem;
-	text-align: center;
-}
-
-.direct-messages__welcome-mark {
-	margin: 0 auto 1rem;
-	color: var(--color-primary-element);
-}
-
-.direct-messages__welcome h2 {
-	margin: 0 0 0.5rem;
-	color: var(--color-main-text);
-	font-size: 1.3rem;
-}
-
-.direct-messages__welcome p {
-	margin: 0 0 1.25rem;
-	line-height: 1.5;
+	align-items: center;
+	justify-content: center;
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.direct-messages__row,
+	.direct-messages__row-menu,
+	.direct-messages__pill,
+	.direct-messages__message-time--aside,
 	.direct-messages__thread :deep(.timeline-entry),
 	.direct-messages__thread :deep(.post-content) {
 		animation: none;
@@ -1628,13 +1912,19 @@ export default {
 
 	.direct-messages__back {
 		display: inline-flex;
+		margin-inline-start: -0.4rem;
 	}
 
-	.direct-messages__mobile-start {
-		display: inline-flex;
+	.direct-messages__inbox-empty-line {
+		display: none;
+	}
+
+	.direct-messages__inbox-empty-page {
+		display: block;
 	}
 
 	.direct-messages__thread-heading {
+		gap: 0.5rem;
 		padding-inline: 0.75rem;
 	}
 
