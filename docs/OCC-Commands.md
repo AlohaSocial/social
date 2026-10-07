@@ -1447,3 +1447,19 @@ php occ social:atproto:repo USER_ID --verify
 The command reports the remaining queue count. Failed entries stay queued with
 backoff; running it before their retry time does not force a retry. Normal
 Nextcloud cron runs the same worker automatically. The feature must be enabled.
+
+### `social:atproto:verify-publication`
+
+Checks a numeric Social post ID against its native signed repository and the
+**public** Bluesky AppView. Exit 0 requires a matching AT URI, author DID and CID,
+and prints the `bsky.app` URL. A missing record, pending identity, unavailable
+AppView, stale/mismatching record or not-yet-indexed post returns exit 1.
+Local queue completion and relay acceptance alone never report this check as passed.
+
+```sh
+php occ social:atproto:verify-publication SOCIAL_POST_ID
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `post` | Yes | Numeric Social post ID returned by the composer API; checked against the public Bluesky AppView |

@@ -73,6 +73,24 @@ class PublicationTest extends TestCase {
 		self::assertNotNull($result);
 		return Server::get(StreamRequest::class)->getStreamById($result->getObjectId());
 	}
+	public function testPublicVerificationCommandRequiresTheMatchingAppViewPost(): void {
+		$post = $this->publish('Public AppView verification', 'public', '', 'atproto');
+		Server::get(OutboundWorker::class)->run();
+		$repository = Server::get(Repository::class);
+		$records = $repository->getRecords($this->did, 'app.bsky.feed.post');
+		$record = reset($records);
+		$appview = $this->createMock(\OCA\Social\Atproto\AppViewClient::class);
+		$appview->expects(self::exactly(2))->method('get')->willReturnOnConsecutiveCalls(
+			['thread' => ['post' => ['uri' => $record->getAtUri(), 'cid' => $record->cid, 'author' => ['did' => $this->did]]]],
+			['thread' => ['$type' => 'app.bsky.feed.defs#notFoundPost']]
+		);
+		$command = new \OCA\Social\Command\Atproto\VerifyPublicationCommand($this->db, $repository, Server::get(IdentityService::class), new \OCA\Social\Atproto\PublicPublicationVerifier($appview));
+		$tester = new \Symfony\Component\Console\Tester\CommandTester($command);
+		self::assertSame(0, $tester->execute(['post' => (string)$post->getNid()]));
+		self::assertStringContainsString('https://bsky.app/profile/', $tester->getDisplay());
+		self::assertSame(1, $tester->execute(['post' => (string)$post->getNid()]));
+		self::assertStringContainsString('not indexed by public Bluesky yet', $tester->getDisplay());
+	}
 	public function testComposerPublicationRepliesAndDeletionReachTheNativeRepository(): void {
 		$parent = $this->publish('Grüße aus Social 😀 https://example.org/');
 		Server::get(OutboundWorker::class)->run();

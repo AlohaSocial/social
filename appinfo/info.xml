@@ -158,6 +158,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<command>OCA\Social\Command\ExternalUsers</command>
 		<command>OCA\Social\Command\Atproto\ServeCommand</command>
 		<command>OCA\Social\Command\Atproto\PublishCommand</command>
+		<command>OCA\Social\Command\Atproto\VerifyPublicationCommand</command>
 		<command>OCA\Social\Command\Atproto\SyncCommand</command>
 		<command>OCA\Social\Command\Atproto\NotificationsCommand</command>
 		<command>OCA\Social\Command\Atproto\IdentitiesCommand</command>

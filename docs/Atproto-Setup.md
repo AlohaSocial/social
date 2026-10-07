@@ -10,13 +10,25 @@ The publishing path has passed a real isolated Nextcloud → official PLC direct
 repository verification with the official JavaScript SDK. This does not establish
 public Bluesky AppView indexing or production deployment on your domain.
 
+## Required end-to-end result
+
+The supported publishing workflow is: install Social → configure and run its
+native PDS → connect a public domain and handle discovery → register the PDS with
+a relay → publish from the shared Social composer → view the indexed post on
+`bsky.app`. Viewing a public native post on Bluesky does not require signing in
+to Social with an external Bluesky account. The final acceptance criterion is
+public AppView indexing of the **matching post**, not just local storage or a
+relay's acceptance response.
+
 ## Requirements
 
 - Supported Nextcloud with PHP 8.3+, GMP, Sodium, Intl and GD.
 - Dependencies from the committed Composer lockfile; install into the running app using `composer install --no-dev`.
   Keep development/test dependencies in a separate checkout: they can conflict
   with other Nextcloud apps (for example different Amp versions in Mail).
-- Public HTTPS for the Social instance, e.g. `social.example.org`.
+- Public HTTPS on port **443** for the PDS origin, e.g. `pds.example.org`.
+  The reference Bluesky relay rejects explicit nonstandard ports on public
+  hostnames. The internal firehose port remains behind this HTTPS proxy.
 - Wildcard DNS and TLS for account handles, e.g. `alice.social.example.org`.
   Route their `/.well-known/atproto-did` requests to this same Nextcloud app,
   preserving the requested host. Include these hosts in Nextcloud's trusted domains.
@@ -98,9 +110,37 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+Port 8080 is a WebSocket listener, not the PDS homepage or HTTP API. Opening
+`http://localhost:8080` in a browser sends an ordinary HTTP request and returns
+`426 Upgrade header MUST be provided`. That response is expected from the
+WebSocket transport; it does not show that a repo was published or indexed.
+Use the public HTTPS root XRPC endpoints for HTTP checks and
+`wss://YOUR_PDS_HOST/xrpc/com.atproto.sync.subscribeRepos` for WebSocket clients.
+
 This command serves the app's database-backed WebSocket stream. It does not run
 an external Node PDS. Cursor retention is 72 hours; consumers outside that window
 must fetch current repositories again. Large commits use signed `#sync` events.
+
+## Register the public PDS with the relay before the first post
+
+After the HTTPS proxy and persistent firehose are running, configure production
+services explicitly. Do not carry a private local-test PLC or an empty relay list
+into a public deployment:
+
+```sh
+php occ config:app:set social atproto_plc_directory --value=https://plc.directory
+php occ config:app:set social atproto_relays --value='["https://bsky.network"]'
+php occ social:atproto:crawl
+```
+
+The crawl command requests subscription to the PDS **hostname**, not a DID or
+Nextcloud app path. An accepted crawl request is not proof of a connected relay
+or indexed account. Verify the incoming WebSocket connection in the proxy logs
+before creating the first native identity/post. A subscription without a cursor
+starts at the current stream position: a post made before subscription may not
+be discovered until subsequent account/repository activity.
+
+Reference: [Bluesky relay documentation](https://bsky.network/docs/relay/).
 
 ## Publish and verify
 
@@ -116,12 +156,18 @@ curl https://alice.social.example.org/.well-known/atproto-did
 curl 'https://social.example.org/xrpc/com.atproto.sync.getRepoStatus?did=YOUR_DID'
 php occ social:atproto:publish
 php occ social:atproto:repo alice --verify
-php occ social:atproto:crawl
+php occ social:atproto:verify-publication SOCIAL_POST_ID
 ```
 
 Verify from outside the server that DNS/TLS and root routing work, and that a
 relay connects to `wss://social.example.org/xrpc/com.atproto.sync.subscribeRepos`.
-Then verify the post through the public AppView or Bluesky. Repository acceptance
+The publication-verification command checks the local signature/MST, then queries
+`https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread` for the native AT
+URI. It exits successfully only if the public post has the same URI, author DID
+and CID. Open the printed `https://bsky.app/profile/DID/post/RKEY` URL to inspect
+it. Pending indexing, failures, hidden/deleted posts and CID mismatches are not
+reported as public success. Retry after an indexing delay; inspect DNS/TLS,
+public PLC registration and the relay connection if it remains unavailable. Repository acceptance
 by a relay and indexing by the public AppView are distinct checks.
 
 ## Local testing and missing OCC commands
