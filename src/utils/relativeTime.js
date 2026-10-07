@@ -64,6 +64,56 @@ export function fromNow(date, now = new Date()) {
 }
 
 /**
+ * Up to these, a post's age is a number and a unit; older, it is its date.
+ * Smallest first: the first unit the age counts fewer than `below` of is it.
+ *
+ * @type {Array<{unit: string, size: number, below: number}>}
+ */
+const SHORT_STEPS = [
+	{ unit: 'minute', size: 60, below: 60 },
+	{ unit: 'hour', size: 3600, below: 24 },
+	{ unit: 'day', size: 24 * 3600, below: 7 },
+	{ unit: 'week', size: 7 * 24 * 3600, below: 5 },
+]
+
+/**
+ * How old a post is, as briefly as it can be said: "now", "5m", "3h", "2d",
+ * "2w", then the date ("Sep 3", with the year once it is not this one).
+ *
+ * The units are the locale's own narrow forms (`Intl.NumberFormat` with
+ * `unitDisplay: 'narrow'`), so a German reader sees "3 Std." where an
+ * English one sees "3h", and no "ago": beside a name it is understood.
+ *
+ * @param {string|number|Date} date when the post was written
+ * @param {Date} now the moment it is read
+ * @return {string} the age, or '' for a date that cannot be read
+ */
+export function shortAgo(date, now = new Date()) {
+	const then = new Date(date)
+	if (Number.isNaN(then.getTime())) {
+		return ''
+	}
+
+	const seconds = Math.max(0, Math.round((now.getTime() - then.getTime()) / 1000))
+	if (seconds < 60) {
+		return new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' }).format(0, 'second')
+	}
+
+	for (const { unit, size, below } of SHORT_STEPS) {
+		const count = Math.floor(seconds / size)
+		if (count < below) {
+			return new Intl.NumberFormat(locale(), { style: 'unit', unit, unitDisplay: 'narrow' }).format(count)
+		}
+	}
+
+	return new Intl.DateTimeFormat(locale(), {
+		month: 'short',
+		day: 'numeric',
+		...(then.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+	}).format(then)
+}
+
+/**
  * The full date and time, as `moment`'s `LLL` showed it: a readable date with
  * the time, in the viewer's locale.
  *

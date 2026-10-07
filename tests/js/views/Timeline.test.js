@@ -30,7 +30,7 @@ vi.hoisted(() => {
 
 const ComposerStub = {
 	name: 'Composer',
-	props: ['defaultVisibility', 'initialMention'],
+	props: ['defaultVisibility', 'initialMention', 'offerShort'],
 	template: '<div class="composer-stub" />',
 }
 const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-stub" />' }
@@ -261,6 +261,17 @@ describe('Timeline', () => {
 		const wrapper = mountTimeline({ params: { type: 'direct' } })
 		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		expect(wrapper.findComponent(DirectMessagesStub).exists()).toBe(true)
+	})
+
+	/** A feed of text is read in a narrower column; a grid of pictures keeps the wide one. */
+	it('reads a list in the narrow column and shows a grid in the wide one', () => {
+		expect(mountTimeline({ params: { type: 'home' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
+		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).not.toContain('social__wrapper--reading')
+	})
+
+	it('offers the New short camera in the composer on the home feed only', () => {
+		expect(mountTimeline({ params: { type: 'home' } }).findComponent(ComposerStub).props('offerShort')).toBe(true)
+		expect(mountTimeline({ params: { type: 'timeline' } }).findComponent(ComposerStub).props('offerShort')).toBe(false)
 	})
 
 	it('hides the composer on the notifications timeline and titles it', () => {

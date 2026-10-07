@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { describe, expect, it } from 'vitest'
-import { fromNow, fullDateTime } from '../../../src/utils/relativeTime.js'
+import { fromNow, fullDateTime, shortAgo } from '../../../src/utils/relativeTime.js'
 
 const NOW = new Date('2026-09-08T12:00:00Z')
 const ago = (seconds) => new Date(NOW.getTime() - seconds * 1000).toISOString()
@@ -39,6 +39,32 @@ describe('fromNow', () => {
 	it('says nothing about a date it cannot read', () => {
 		expect(fromNow('not a date', NOW)).toBe('')
 		expect(fromNow(undefined, NOW)).toBe('')
+	})
+})
+
+describe('shortAgo', () => {
+	const now = new Date('2026-10-07T12:00:00Z')
+	const ago = (seconds) => new Date(now.getTime() - seconds * 1000)
+
+	it('says "now" for the last minute', () => {
+		expect(shortAgo(ago(20), now)).toBe('now')
+	})
+
+	it('counts minutes, hours, days and weeks in one narrow unit, with no "ago"', () => {
+		expect(shortAgo(ago(5 * 60), now)).toBe('5m')
+		expect(shortAgo(ago(3 * 3600), now)).toBe('3h')
+		expect(shortAgo(ago(2 * 86400), now)).toBe('2d')
+		expect(shortAgo(ago(15 * 86400), now)).toBe('2w')
+	})
+
+	it('gives the date once a post is a month old, and the year once it is not this one', () => {
+		expect(shortAgo(new Date('2026-08-01T12:00:00Z'), now)).toBe('Aug 1')
+		expect(shortAgo(new Date('2025-08-01T12:00:00Z'), now)).toBe('Aug 1, 2025')
+	})
+
+	it('says nothing for a date it cannot read, and treats a clock running ahead as now', () => {
+		expect(shortAgo('not a date', now)).toBe('')
+		expect(shortAgo(new Date(now.getTime() + 30000), now)).toBe('now')
 	})
 })
 
