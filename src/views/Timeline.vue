@@ -16,7 +16,7 @@
 		<!-- said once, on the pages where the reading it describes happens -->
 		<InterestsNotice v-if="showInterestsNotice" />
 
-		<Composer v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct'" />
+		<Composer v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct'" :offerShort="isHome && settingsStore.getServerData.sections?.stories !== false" />
 
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while

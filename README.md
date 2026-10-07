@@ -128,7 +128,9 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   followers see, gone after a day. Above your feed is the **Shorts** bar — your own
   tile first with a **+** to make one, then the people you follow who have a 24-hour
   short up, a ring on the face while there is something you have not seen, and an
-  **All shorts** tile at the end. One player plays both kinds (videos with sound, a
+  **All shorts** tile at the end. The bar is there only while somebody you follow has a
+  24-hour short up; the camera at the end of the post composer makes a **New short**
+  for 24 hours whether the bar is there or not. One player plays both kinds (videos with sound, a
   speaker to mute them, a "Tap for sound" hint where the browser will not start with
   it; a picture or a card for the seconds its poster gave it). On your own 24-hour
   short you see **Who has seen it** and what was said, and can take it down early;

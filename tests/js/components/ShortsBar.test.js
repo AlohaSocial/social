@@ -7,6 +7,7 @@ import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import ShortsBar from '../../../src/components/ShortsBar.vue'
+import eventBus, { SHORT_COMPOSE } from '../../../src/services/eventBus.js'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
@@ -44,6 +45,17 @@ function mountBar(shorts, { current = alice, serverData = null } = {}) {
 	}
 
 	return mount(ShortsBar, { global: { plugins: [pinia], stubs } })
+}
+
+/**
+ * @param {object[]} shorts what the carousel answers
+ * @return {Promise<object>} the mounted bar, once it has read the carousel
+ */
+async function mountBarAnd(shorts) {
+	const wrapper = mountBar(shorts)
+	await flushPromises()
+
+	return wrapper
 }
 
 const tiles = (wrapper) => wrapper.findAll('.shorts-bar__tile')
@@ -121,7 +133,7 @@ describe('ShortsBar', () => {
 	})
 
 	it('opens New short on 24 hours from the +', async () => {
-		const wrapper = mountBar([short('1', alice, true)])
+		const wrapper = mountBar([short('1', alice, true), short('2', bob)])
 		await flushPromises()
 
 		expect(wrapper.find('.shorts-bar__add').attributes('aria-label')).toBe('New short')
@@ -131,7 +143,7 @@ describe('ShortsBar', () => {
 	})
 
 	it('puts a 24-hour short the reader just posted into their own place, and not a kept one', async () => {
-		const wrapper = mountBar([])
+		const wrapper = mountBar([short('2', bob)])
 		await flushPromises()
 
 		await wrapper.find('.shorts-bar__add').trigger('click')
@@ -151,7 +163,7 @@ describe('ShortsBar', () => {
 		expect(tiles(wrapper).map((tile) => tile.text())).toEqual(['Your shorts', 'Bob', 'All shorts'])
 	})
 
-	it('draws only the reader\'s place and All shorts when the carousel could not be loaded', async () => {
+	it('draws no row when the carousel could not be loaded', async () => {
 		get.mockRejectedValue(new Error('nope'))
 		const pinia = createPinia()
 		setActivePinia(pinia)
@@ -161,7 +173,34 @@ describe('ShortsBar', () => {
 		const wrapper = mount(ShortsBar, { global: { plugins: [pinia], stubs } })
 		await flushPromises()
 
-		expect(tiles(wrapper).map((tile) => tile.text())).toEqual(['Your shorts', 'All shorts'])
+		// a carousel that did not load has nobody in it
+		expect(wrapper.find('.shorts-bar__list').exists()).toBe(false)
+	})
+
+	/** The row is for watching: a lone "Your shorts" is a place to make one, which the composer's camera is. */
+	it('draws no row until somebody the reader follows has a 24-hour short up', async () => {
+		const empty = await mountBarAnd([])
+		expect(empty.find('.shorts-bar__list').exists()).toBe(false)
+		expect(empty.find('.shorts-bar__heading').exists()).toBe(false)
+		expect(empty.find('.shorts-bar').classes()).toContain('shorts-bar--empty')
+		const ownOnly = await mountBarAnd([short('1', alice)])
+		expect(ownOnly.find('.shorts-bar__list').exists()).toBe(false)
+
+		const withOthers = await mountBarAnd([short('1', alice), short('2', bob)])
+		expect(withOthers.find('.shorts-bar__list').exists()).toBe(true)
+		expect(withOthers.find('.shorts-bar__heading').text()).toBe('Shorts')
+	})
+
+	it('opens New short on 24 hours when the post composer\'s camera asks, with or without a row', async () => {
+		const wrapper = await mountBarAnd([])
+
+		eventBus.emit(SHORT_COMPOSE)
+		await flushPromises()
+
+		expect(wrapper.findComponent({ name: 'ShortComposerDialog' }).props('lifetime')).toBe('day')
+
+		wrapper.unmount()
+		eventBus.emit(SHORT_COMPOSE)
 	})
 
 	it('is not drawn where the admin turned 24-hour shorts off', async () => {

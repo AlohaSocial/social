@@ -44,11 +44,6 @@
 				:disableMenu="true"
 				:disableTooltip="true"
 				:size="32" />
-			<div class="post-author">
-				<span class="post-author-name">
-					{{ currentUser.displayName }}
-				</span>
-			</div>
 			<!-- The way out. The box opens on a click and closes again when the
 			     reader clicks elsewhere — but only while it holds nothing worth
 			     keeping, so as soon as a word is typed the only way back to a
@@ -292,6 +287,16 @@
 
 			<div class="options">
 				<NcButton
+					v-if="offerShort"
+					:title="t('social', 'New short')"
+					variant="tertiary"
+					:aria-label="t('social', 'New short')"
+					@click.prevent="composeShort">
+					<template #icon>
+						<CameraOutline :size="22" decorative title="" />
+					</template>
+				</NcButton>
+				<NcButton
 					:title="t('social', 'Add attachment')"
 					variant="tertiary"
 					:aria-label="t('social', 'Add attachment')"
@@ -495,6 +500,19 @@
 					@click="createPost" />
 			</div>
 		</form>
+		<!-- the way to a 24-hour short on the one line the composer is at rest; open,
+		     the same button is in the toolbar above -->
+		<NcButton
+			v-if="offerShort && !expanded"
+			class="new-post__short"
+			variant="tertiary"
+			:title="t('social', 'New short')"
+			:aria-label="t('social', 'New short')"
+			@click="composeShort">
+			<template #icon>
+				<CameraOutline :size="22" />
+			</template>
+		</NcButton>
 	</div>
 </template>
 
@@ -503,6 +521,7 @@
 import EmoticonOutline from 'vue-material-design-icons/EmoticonOutline.vue'
 import ClockOutline from 'vue-material-design-icons/ClockOutline.vue'
 import MapMarkerOutline from 'vue-material-design-icons/MapMarkerOutline.vue'
+import CameraOutline from 'vue-material-design-icons/CameraOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import FolderImage from 'vue-material-design-icons/FolderImage.vue'
 import FileGifBox from 'vue-material-design-icons/FileGifBox.vue'
@@ -535,7 +554,7 @@ import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
 import Tribute from 'tributejs'
 import { mentionTributeOptions } from '../../utils/mentionTribute.js'
-import eventBus from '../../services/eventBus.js'
+import eventBus, { SHORT_COMPOSE } from '../../services/eventBus.js'
 import { emojiPickerModule } from '../../services/emojiPicker.js'
 import logger from '../../services/logger.js'
 import { feel } from '../../services/senses.js'
@@ -623,6 +642,7 @@ export default {
 		MapMarkerOutline,
 		PlacePicker,
 		SchedulePicker,
+		CameraOutline,
 		Close,
 		FolderImage,
 		AlertOutline,
@@ -645,6 +665,15 @@ export default {
 	},
 
 	props: {
+		/**
+		 * Whether the camera for a new 24-hour short is offered: only above
+		 * the home feed, where the Shorts bar that opens the dialog is.
+		 */
+		offerShort: {
+			type: Boolean,
+			default: false,
+		},
+
 		initialMention: {
 			type: Object,
 			default: null,
@@ -1209,6 +1238,11 @@ export default {
 	},
 
 	methods: {
+		/** Asks the Shorts bar for New short, on 24 hours. */
+		composeShort() {
+			eventBus.emit(SHORT_COMPOSE)
+		},
+
 		/** @return {HTMLElement} the element the post is written in */
 		inputElement() {
 			return /** @type {HTMLElement} */ (this.$refs.composerInput)
@@ -2080,17 +2114,10 @@ $composer-duration: 220ms;
 	&__close {
 		margin-inline-start: auto;
 	}
+}
 
-	.post-author {
-		display: flex;
-		align-items: center;
-
-		.post-author-name {
-			font-weight: 700;
-			font-size: 14px;
-			line-height: 1.3;
-		}
-	}
+.new-post__short {
+	flex-shrink: 0;
 }
 
 .reply-to {
