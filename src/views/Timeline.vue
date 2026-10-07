@@ -76,9 +76,9 @@
 		<!-- what the reader wrote on this day in years gone by, and how their
 		     week went if they asked to be told; only over their own home feed,
 		     which is the one page that is about them -->
-		<!-- whose stories are up: a row of faces above the reader's own
-		     feed, and only there — a story is for the people who follow -->
-		<StoryBar v-if="isHome" />
+		<!-- whose 24-hour shorts are up: a row of faces above the reader's
+		     own feed, and only there; they are for the people who follow -->
+		<ShortsBar v-if="isHome" />
 
 		<WeeklyRecap v-if="isHome" />
 		<OnThisDay v-if="isHome" />
@@ -122,7 +122,7 @@ import HashtagFollowButton from './../components/HashtagFollowButton.vue'
 import InterestsLearningBanner from './../components/InterestsLearningBanner.vue'
 import InterestsNotice from './../components/InterestsNotice.vue'
 import OnThisDay from './../components/OnThisDay.vue'
-import StoryBar from './../components/StoryBar.vue'
+import ShortsBar from './../components/ShortsBar.vue'
 import WeeklyRecap from './../components/WeeklyRecap.vue'
 import { tagStyle } from '../utils/tagColour.js'
 import HashtagFollowedList from './../components/HashtagFollowedList.vue'
@@ -155,7 +155,7 @@ export default {
 		InterestsLearningBanner,
 		InterestsNotice,
 		OnThisDay,
-		StoryBar,
+		ShortsBar,
 		WeeklyRecap,
 		TimelineList,
 		DirectMessages,
@@ -288,7 +288,7 @@ export default {
 		/**
 		 * Whether this is the reader's own feed.
 		 *
-		 * The memories, the recap and the story bar belong here and nowhere
+		 * The memories, the recap and the Shorts bar belong here and nowhere
 		 * else; on a tag page or a profile they would be an interruption from
 		 * another subject.
 		 *

@@ -21,7 +21,7 @@ import { useSettingsStore } from '../store/settings.js'
  * The sections this instance offers (`SectionsService::current()`).
  *
  * @typedef {object} Sections
- * @property {boolean} stories - Whether stories are offered
+ * @property {boolean} stories - Whether 24-hour shorts are offered
  * @property {boolean} section_photos - Whether the Photos section is offered
  * @property {boolean} section_videos - Whether the Videos section is offered
  * @property {string[]} group_lists - The groups offered as lists, by id

@@ -657,7 +657,7 @@ export default {
 						offered: this.offers('videos'),
 						icon: IconPlayCircleOutline,
 						title: t('social', 'Shorts'),
-						to: { name: 'reels' },
+						to: { name: 'shorts' },
 					},
 					{
 						key: 'social-direct',

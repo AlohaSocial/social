@@ -19,6 +19,7 @@ vi.mock('../../src/views/BlockedAccounts.vue', () => ({ default: { name: 'Blocke
 vi.mock('../../src/views/ProfileCollections.vue', () => ({ default: { name: 'ProfileCollections', render: () => null } }))
 vi.mock('../../src/views/CollectionPage.vue', () => ({ default: { name: 'CollectionPage', render: () => null } }))
 vi.mock('../../src/views/PlacePage.vue', () => ({ default: { name: 'PlacePage', render: () => null } }))
+vi.mock('../../src/views/VideoShorts.vue', () => ({ default: { name: 'VideoShorts', render: () => null } }))
 
 describe('router', () => {
 	it('is served under the app path and uses the "active" link class', () => {
@@ -150,6 +151,29 @@ describe('router', () => {
 		// `to.params.term ?? ''`. Asserted so the next person to see
 		// `undefined` here knows it is the router's answer and not a hole.
 		expect(router.resolve('/search').params.term).toBeUndefined()
+	})
+
+	it('resolves the Shorts stack, passing the scope to the view', () => {
+		const route = router.resolve('/shorts?scope=local')
+
+		expect(route.name).toBe('shorts')
+		expect(route.matched[0].props.default(route)).toEqual({ scope: 'local', account: '' })
+	})
+
+	it('passes whose 24-hour shorts to start at, from a face in the Home bar', () => {
+		const route = router.resolve('/shorts?account=bob@remote.example')
+
+		expect(route.matched[0].props.default(route)).toEqual({ scope: '', account: 'bob@remote.example' })
+	})
+
+	it('sends the earlier /reels address on to /shorts, keeping the scope', async () => {
+		await router.push('/reels?scope=local')
+
+		const route = router.currentRoute.value
+		expect(route.name).toBe('shorts')
+		expect(route.path).toBe('/shorts')
+		expect(route.query).toEqual({ scope: 'local' })
+		expect(route.redirectedFrom.path).toBe('/reels')
 	})
 
 	it('does not match unknown paths', () => {

@@ -97,7 +97,7 @@ export function setVibrationEnabled(on) {
 }
 
 /**
- * @return {boolean} whether Shorts and stories start with their sound on; on
+ * @return {boolean} whether Shorts start with their sound on; on
  *         unless turned off, because pressing play on a video is asking to hear it
  */
 export function videoSoundEnabled() {

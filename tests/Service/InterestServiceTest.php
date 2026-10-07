@@ -229,11 +229,11 @@ class InterestServiceTest extends TestCase {
 		$this->video('4', ['long'], 120.0);
 
 		$this->service()->recordEvents($this->actor(), [
-			['status_id' => '1', 'kind' => 'dwell', 'ms' => 10000, 'context' => 'reels'],
-			['status_id' => '2', 'kind' => 'dwell', 'ms' => 5000, 'context' => 'reels'],
-			['status_id' => '3', 'kind' => 'dwell', 'ms' => 2500, 'context' => 'reels'],
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 10000, 'context' => 'shorts'],
+			['status_id' => '2', 'kind' => 'dwell', 'ms' => 5000, 'context' => 'shorts'],
+			['status_id' => '3', 'kind' => 'dwell', 'ms' => 2500, 'context' => 'shorts'],
 			// the cap on one look is the cap on what a long video can expect
-			['status_id' => '4', 'kind' => 'dwell', 'ms' => 30000, 'context' => 'reels'],
+			['status_id' => '4', 'kind' => 'dwell', 'ms' => 30000, 'context' => 'shorts'],
 		]);
 
 		$this->assertSame(
@@ -259,17 +259,37 @@ class InterestServiceTest extends TestCase {
 		$note->setAttachments([(new MediaAttachment())->setType('video')]);
 
 		$this->service()->recordEvents($this->actor(), [
-			['status_id' => '1', 'kind' => 'dwell', 'ms' => 8000, 'context' => 'reels'],
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 8000, 'context' => 'shorts'],
 		]);
 
 		$this->assertSame(['cats' => InterestScorer::SIGNAL_LONG_DWELL], $this->scores());
 	}
 
+	/**
+	 * Older cached bundles name the Shorts stack `reels`; what they report
+	 * is watching all the same.
+	 */
+	public function testAWatchReportedUnderTheEarlierReelsNameCountsTheSame(): void {
+		$this->video('1', ['all'], 10.0);
+		$this->video('2', ['half'], 10.0);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '1', 'kind' => 'dwell', 'ms' => 10000, 'context' => 'reels'],
+			['status_id' => '2', 'kind' => 'dwell', 'ms' => 5000, 'context' => 'shorts'],
+		]);
+
+		$this->assertSame(
+			['all' => InterestScorer::SIGNAL_LONG_DWELL, 'half' => InterestScorer::SIGNAL_DWELL],
+			$this->scores()
+		);
+		$this->assertSame('1', $this->user['interests_baseline'] ?? '');
+	}
+
 	public function testTheShortsAndTheMediaPagesAreContexts(): void {
-		foreach (['photos', 'videos', 'reels'] as $context) {
+		foreach (['photos', 'videos', 'shorts', 'reels'] as $context) {
 			$this->assertContains($context, InterestService::CONTEXTS);
 		}
-		$this->assertSame(['reels'], InterestService::WATCH_CONTEXTS);
+		$this->assertSame(['shorts', 'reels'], InterestService::WATCH_CONTEXTS);
 	}
 
 	/** Hides reach as far back as the widest ranking, the photo and video one. */

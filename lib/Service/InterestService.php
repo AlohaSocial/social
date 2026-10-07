@@ -45,12 +45,13 @@ use Throwable;
 class InterestService {
 	/** What the web interface may report. */
 	public const KINDS = ['dwell', 'skip', 'open', 'media', 'link', 'mute'];
-	public const CONTEXTS = ['home', 'local', 'federated', 'tag', 'explore', 'detail', 'interests', 'photos', 'videos', 'reels'];
+	public const CONTEXTS = ['home', 'local', 'federated', 'tag', 'explore', 'detail', 'interests', 'photos', 'videos', 'shorts', 'reels'];
 	/**
 	 * Where a dwell is time spent watching the video rather than time the post
 	 * was on screen: the Shorts stack, which reports what its player played.
+	 * `reels` is what older bundles still send for it, and counts the same.
 	 */
-	public const WATCH_CONTEXTS = ['reels'];
+	public const WATCH_CONTEXTS = ['shorts', 'reels'];
 	public const MAX_EVENTS = 100;
 	/** One look is worth at most this much, however long the tab stayed open. */
 	public const MAX_DWELL_MS = 30000;

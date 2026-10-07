@@ -94,7 +94,7 @@ class StoryInteractionService {
 		if ($this->interactionsRequest->countByActor($storyId, $viewer->getId())
 			>= StoryInteraction::MAX_PER_ACTOR) {
 			throw new InvalidResourceException(
-				'this account has already answered this story '
+				'this account has already answered this short '
 				. StoryInteraction::MAX_PER_ACTOR . ' times'
 			);
 		}

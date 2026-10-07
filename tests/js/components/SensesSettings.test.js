@@ -44,6 +44,13 @@ describe('SensesSettings', () => {
 		expect(switches(wrapper)[2].props('modelValue')).toBe(true)
 	})
 
+	it('says Shorts start with their sound on, without a word about stories', () => {
+		const wrapper = mount(SensesSettings)
+
+		expect(wrapper.text()).toContain('Shorts start with their sound on')
+		expect(wrapper.text()).not.toMatch(/stor(y|ies)/i)
+	})
+
 	/** the switch has to win over a mute made earlier in this tab, or it seems to do nothing */
 	it('keeps whether videos start with sound, and forgets the tab\'s own mute', async () => {
 		window.sessionStorage.setItem('social.videoMuted', '1')

@@ -8,10 +8,10 @@
 		:description="t('social', 'What this instance offers the people using it. Turning a section off hides it and stops it being offered; it does not touch what is already there, and turning it back on shows it again.')">
 		<div class="sections">
 			<NcCheckboxRadioSwitch v-model="form.stories" type="switch">
-				{{ t('social', 'Stories') }}
+				{{ t('social', '24-hour shorts') }}
 			</NcCheckboxRadioSwitch>
 			<p class="sections__hint">
-				{{ t('social', 'A picture or a video that is gone in a day. Off means the bar goes from the timeline and nothing new is taken.') }}
+				{{ t('social', 'A video, a picture or a text card for followers, gone after 24 hours. Off means the Shorts bar goes from the home timeline, New short offers only keeping it on the profile, and nothing new is taken.') }}
 			</p>
 
 			<NcCheckboxRadioSwitch v-model="form.photos" type="switch">

@@ -120,7 +120,7 @@ class StoryService {
 
 		if ($this->storiesRequest->countLiveByActor($owner->getId()) >= Story::MAX_PER_ACTOR) {
 			throw new InvalidResourceException(
-				'this account already has ' . Story::MAX_PER_ACTOR . ' live stories'
+				'this account already has ' . Story::MAX_PER_ACTOR . ' live 24-hour shorts'
 			);
 		}
 

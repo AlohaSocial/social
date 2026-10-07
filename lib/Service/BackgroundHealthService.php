@@ -69,7 +69,7 @@ class BackgroundHealthService {
 		Queue::class => ['interval' => 720, 'label' => 'Delivery to other servers'],
 		ScheduledPosts::class => ['interval' => 300, 'label' => 'Posts scheduled for later'],
 		Cache::class => ['interval' => 720, 'label' => 'Reading what arrived'],
-		ExpiredStories::class => ['interval' => 3600, 'label' => 'Expiring stories'],
+		ExpiredStories::class => ['interval' => 3600, 'label' => 'Expiring 24-hour shorts'],
 		Transcode::class => ['interval' => 900, 'label' => 'Video transcoding'],
 		Ladder::class => ['interval' => 1800, 'label' => 'Video renditions'],
 		GifPack::class => ['interval' => 900, 'label' => 'The GIF pack'],
