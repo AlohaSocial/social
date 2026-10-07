@@ -20,17 +20,24 @@ class MarkerServiceTest extends TestCase {
 	private IUserConfig|Stub $userConfig;
 	private MarkerService $service;
 
-	/** in-memory stand-in for the user's stored config value */
+	/** in-memory stand-in for the user's stored markers */
 	private string $stored = '{}';
+	/** @var array<string, string> every other value the service stores, by key */
+	private array $others = [];
 
 	protected function setUp(): void {
 		$this->userConfig = $this->createStub(IUserConfig::class);
 		$this->userConfig->method('getValueString')->willReturnCallback(
-			fn (string $user, string $app, string $key, string $default = '') => $this->stored
+			fn (string $user, string $app, string $key, string $default = '')
+				=> ($key === 'markers') ? $this->stored : ($this->others[$key] ?? $default)
 		);
 		$this->userConfig->method('setValueString')->willReturnCallback(
 			function (string $user, string $app, string $key, string $value): bool {
-				$this->stored = $value;
+				if ($key === 'markers') {
+					$this->stored = $value;
+				} else {
+					$this->others[$key] = $value;
+				}
 
 				return true;
 			}
@@ -104,5 +111,45 @@ class MarkerServiceTest extends TestCase {
 
 		$this->stored = '{"notifications":{"last_read_id":"abc"}}';
 		$this->assertSame('0', $this->service->lastReadId(self::USER, 'notifications'));
+	}
+
+	/** A notification released behind the marker is unread until the reader looks again. */
+	public function testReleasedPositionsBehindTheMarkerCountAsUnread(): void {
+		$this->service->set(self::USER, 'notifications', '42');
+
+		$this->service->markUnread(self::USER, 'notifications', ['10', '30', '50']);
+
+		// 50 is past the marker and unread already
+		$this->assertSame(['10', '30'], $this->service->unreadBehind(self::USER, 'notifications'));
+		$this->assertSame([], $this->service->unreadBehind(self::USER, 'home'));
+	}
+
+	public function testMarkingUnreadTwiceKeepsOneOfEach(): void {
+		$this->service->set(self::USER, 'notifications', '42');
+
+		$this->service->markUnread(self::USER, 'notifications', ['10']);
+		$this->service->markUnread(self::USER, 'notifications', ['10', '20']);
+
+		$this->assertSame(['10', '20'], $this->service->unreadBehind(self::USER, 'notifications'));
+	}
+
+	/** Any report of a position reads them, even one that does not move the marker. */
+	public function testSettingTheMarkerReadsWhatWasReleased(): void {
+		$this->service->set(self::USER, 'notifications', '42');
+		$this->service->markUnread(self::USER, 'notifications', ['10']);
+
+		$this->service->set(self::USER, 'notifications', '42');
+
+		$this->assertSame([], $this->service->unreadBehind(self::USER, 'notifications'));
+		$this->assertSame('42', $this->service->lastReadId(self::USER, 'notifications'));
+	}
+
+	public function testSettingAnotherTimelineLeavesThemUnread(): void {
+		$this->service->set(self::USER, 'notifications', '42');
+		$this->service->markUnread(self::USER, 'notifications', ['10']);
+
+		$this->service->set(self::USER, 'home', '7');
+
+		$this->assertSame(['10'], $this->service->unreadBehind(self::USER, 'notifications'));
 	}
 }

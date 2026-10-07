@@ -17,6 +17,7 @@ use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
+use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
@@ -58,10 +59,13 @@ use Psr\Log\LoggerInterface;
  * happened: a row that was suppressed, or that was never written because the
  * post was not local, cannot produce a bell either.
  *
- * The bell is the one half the reader can turn down. `NotificationDelivery`
- * may hold it for a digest or for quiet hours; the stored row is written
- * regardless, because it is what the digest counts and what the in-app list
- * shows, and only the Nextcloud notification waits.
+ * The bell is the one half the reader can turn down. Nothing at all is raised
+ * for a notification the reader's policy holds for review, or for one about a
+ * post in a thread they muted: the row is stored all the same, because the
+ * requests inbox is built from it and unmuting lists it again. What is raised
+ * may then be held by `NotificationDelivery` for a digest or for quiet hours;
+ * the stored row is what the digest counts and what the in-app list shows,
+ * and only the Nextcloud notification waits.
  */
 class NotificationService {
 	/**
@@ -120,6 +124,8 @@ class NotificationService {
 		private ActivityPublisher $activityPublisher,
 		private LoggerInterface $logger,
 		private IURLGenerator $urlGenerator,
+		private NotificationPolicyService $notificationPolicyService,
+		private ConversationsRequest $conversationsRequest,
 	) {
 	}
 
@@ -437,57 +443,6 @@ class NotificationService {
 	}
 
 	/**
-	 * A page of the viewer's notifications, newest first, as
-	 * `/api/v1/notifications` serves them.
-	 *
-	 * Public because the v2 routes read the same list: grouping, the requests
-	 * inbox and the ungrouped list are three shapes of one query, and a second
-	 * query built somewhere else would be a second answer to "what are this
-	 * account's notifications".
-	 *
-	 * Notifications whose sub-type Mastodon has no name for are dropped here
-	 * rather than by each caller: they serialise as `"type": ""`, which a
-	 * client with a closed enum cannot decode, and one undecodable entry
-	 * loses the whole page.
-	 *
-	 * @param string[] $types
-	 * @param string[] $excludeTypes
-	 *
-	 * @return Stream[]
-	 */
-	public function timeline(
-		Person $viewer,
-		int $limit,
-		int|string $maxId = '0',
-		int|string $minId = 0,
-		int|string $sinceId = '0',
-		array $types = [],
-		array $excludeTypes = [],
-		string $accountId = '',
-	): array {
-		$options = new ProbeOptions();
-		$options->setFormat(ACore::FORMAT_LOCAL);
-		$options->setProbe(ProbeOptions::NOTIFICATIONS)
-			->setLimit($limit)
-			->setMaxId($maxId)
-			->setMinId($minId)
-			->setSince($sinceId)
-			->setTypes($types)
-			->setExcludeTypes($excludeTypes)
-			->setAccountId($accountId);
-
-		$this->streamService->setViewer($viewer);
-
-		return array_values(
-			array_filter(
-				$this->streamService->getTimeline($options),
-				static fn (Stream $post): bool
-					=> Stream::notificationTypeOfSubType($post->getSubType()) !== ''
-			)
-		);
-	}
-
-	/**
 	 * Dismisses one notification.
 	 *
 	 * The row is deleted, not marked: Mastodon's dismiss is final — the
@@ -582,6 +537,13 @@ class NotificationService {
 		}
 
 		$actor = $this->cachedActor($actorId);
+		if ($this->notificationPolicyService->isHeldFor(
+			$recipient, $actorId, $actor?->getCreation() ?? 0,
+			$subject === 'mention' && $this->isDirectMessage($notification)
+		) || $this->isInMutedThread($notification, $recipientId)) {
+			return;
+		}
+
 		$local = $this->localActor($actorId);
 		$parameters = [
 			'account' => ($actor === null) ? $actorId : $this->labelOf($actor),
@@ -643,6 +605,25 @@ class NotificationService {
 		$followed = ($kind === NotificationDelivery::SUBJECT_MENTION) && $this->follows($recipientId, $actorId);
 
 		return $this->deliveryService->holds($userId, $kind, $followed);
+	}
+
+	/**
+	 * Whether the post the notification is about belongs to a thread the
+	 * recipient muted. The walk up to the thread's root is made only for a
+	 * recipient who has muted something.
+	 */
+	private function isInMutedThread(SocialAppNotification $notification, string $recipientId): bool {
+		$post = $this->postOf($notification);
+		if ($post === null) {
+			return false;
+		}
+
+		$muted = $this->conversationsRequest->getMutedRoots($recipientId);
+		if ($muted === []) {
+			return false;
+		}
+
+		return in_array($this->conversationsRequest->rootOf($post->getId()), $muted, true);
 	}
 
 	/**

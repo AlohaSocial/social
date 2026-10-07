@@ -12,7 +12,9 @@ namespace OCA\Social\Tests\Controller;
 use InvalidArgumentException;
 use OCA\Social\Controller\ServerSettingsController;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Relay;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\RelayService;
 use OCA\Social\Service\ServerSettingsService;
 use OCP\AppFramework\Http;
@@ -37,14 +39,53 @@ use PHPUnit\Framework\TestCase;
 class ServerSettingsControllerTest extends TestCase {
 	private ServerSettingsService|MockObject $serverSettingsService;
 	private RelayService|MockObject $relayService;
+	private NotificationPolicyService|MockObject $notificationPolicyService;
 	private ServerSettingsController $controller;
+	/** @var array<string, mixed> the parameters the request carries */
+	private array $params = [];
 
 	protected function setUp(): void {
 		$this->serverSettingsService = $this->createMock(ServerSettingsService::class);
 		$this->relayService = $this->createMock(RelayService::class);
+		$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class);
+		$request = $this->createStub(IRequest::class);
+		$request->method('getParams')->willReturnCallback(fn (): array => $this->params);
 		$this->controller = new ServerSettingsController(
-			$this->createStub(IRequest::class), $this->serverSettingsService, $this->relayService
+			$request, $this->serverSettingsService, $this->relayService, $this->notificationPolicyService
 		);
+	}
+
+	public function testTheNewAccountPolicyIsAnsweredAsItsFiveKeys(): void {
+		$policy = new NotificationPolicy();
+		foreach (NotificationPolicy::CALM as $key => $decision) {
+			$policy->set($key, $decision);
+		}
+		$this->notificationPolicyService->method('defaults')->willReturn($policy);
+
+		$response = $this->controller->notificationPolicy();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(NotificationPolicy::CALM, $response->getData());
+	}
+
+	public function testTheNewAccountPolicyIsSavedFromTheRequest(): void {
+		$this->params = [NotificationPolicy::NOT_FOLLOWING => NotificationPolicy::ACCEPT];
+		$this->notificationPolicyService->expects($this->once())->method('saveDefaults')
+			->with($this->params)
+			->willReturn(new NotificationPolicy());
+
+		$this->assertSame(Http::STATUS_OK, $this->controller->notificationPolicyUpdate()->getStatus());
+	}
+
+	public function testARefusedNewAccountPolicyIsA422ThatSaysWhy(): void {
+		$this->params = [NotificationPolicy::NOT_FOLLOWING => NotificationPolicy::DROP];
+		$this->notificationPolicyService->method('saveDefaults')
+			->willThrowException(new InvalidResourceException('for_not_following must be accept or filter'));
+
+		$response = $this->controller->notificationPolicyUpdate();
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame(['error' => 'for_not_following must be accept or filter'], $response->getData());
 	}
 
 	public function testWhatTheCardSentReachesTheServiceUnchanged(): void {

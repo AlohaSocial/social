@@ -239,6 +239,27 @@ class AccountRelationService {
 	}
 
 	/**
+	 * The senders this reader accepted from their requests, newest decision
+	 * first, as the cached accounts they are.
+	 *
+	 * @return Person[]
+	 */
+	public function acceptedSenders(Person $viewer, int $limit): array {
+		return $this->relationshipService->getRelated($viewer, self::TYPE_NOTIFICATIONS_ACCEPTED, $limit);
+	}
+
+	/**
+	 * Takes back a "yes" to a notification request: the sender is judged by
+	 * the policy again, as if nobody had decided about them. A "no" is left
+	 * where it is; this undoes acceptance only.
+	 */
+	public function forgetAcceptedSender(Person $viewer, Person $sender): void {
+		$this->actorRelationRequest->delete(
+			$viewer->getId(), $sender->getId(), self::TYPE_NOTIFICATIONS_ACCEPTED
+		);
+	}
+
+	/**
 	 * What this reader has already decided about a set of senders.
 	 *
 	 * One query for the whole set: a page of notifications comes from a

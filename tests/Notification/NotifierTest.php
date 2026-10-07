@@ -340,4 +340,31 @@ class NotifierTest extends TestCase {
 
 		$this->notifier->prepare($notification, 'en');
 	}
+
+	public function testADigestEndsBySayingHowManyPeopleAreWaiting(): void {
+		$this->translationsFor('en');
+		$notification = $this->digest([
+			'counts' => ['favourite' => 2],
+			'total' => 2,
+			'waiting' => 3,
+			'link' => 'https://cloud.example/apps/social/timeline/notifications',
+		]);
+
+		$notification->expects($this->once())->method('setParsedSubject')
+			->with('2 new notifications in Aloha Social');
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with("2 favourites\n3 people are waiting to reach you");
+
+		$this->notifier->prepare($notification, 'en');
+	}
+
+	public function testOnePersonWaitingIsSingular(): void {
+		$this->translationsFor('en');
+		$notification = $this->digest(['counts' => ['mention' => 1], 'total' => 1, 'waiting' => 1, 'link' => '']);
+
+		$notification->expects($this->once())->method('setParsedMessage')
+			->with("1 mention\n1 person is waiting to reach you");
+
+		$this->notifier->prepare($notification, 'en');
+	}
 }
