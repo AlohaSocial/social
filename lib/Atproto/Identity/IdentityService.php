@@ -17,7 +17,8 @@ class IdentityService {
 		private readonly HandleMapper $handleMapper, private readonly KeyManager $keyManager,
 		private readonly PlcClient $plcClient, private readonly Repository $repository) {}
 	public function isEnabled(): bool { return in_array($this->configService->getAppValue(ConfigService::ATPROTO_ENABLED), ['1', 'true'], true); }
-	public function getPdsEndpoint(): string { return 'https://' . $this->configService->getSocialAddress(); }
+	public function getPdsEndpoint(): string { return 'https://' . ConfigService::authorityOf($this->configService->getSocialUrl()); }
+	public function getServiceDid(): string { return 'did:web:' . str_replace(':', '%3A', ConfigService::authorityOf($this->getPdsEndpoint())); }
 	public function actorIdForUser(string $userId): ?string {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id')->from('social_actor')->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))->andWhere($qb->expr()->isNull('deleted'));
@@ -91,6 +92,7 @@ class IdentityService {
 		$this->updateOperation($actorId, ['alsoKnownAs' => ['at://' . $newHandle]]);
 		$identity = $this->getIdentityByActor($actorId); $qb = $this->db->getQueryBuilder();
 		$qb->update('social_atproto_identity')->set('handle', $qb->createNamedParameter($newHandle))->where($qb->expr()->eq('did', $qb->createNamedParameter($identity['did'])))->executeStatement();
+		$this->event($identity['did'], '#identity', ['did' => $identity['did'], 'handle' => $newHandle, 'time' => gmdate('Y-m-d\TH:i:s\Z')]);
 	}
 	public function rotateKeys(string $actorId, bool $regenerateRecovery = false): void {
 		if (!$regenerateRecovery) { throw new \RuntimeException('Instance rotation requires a queued migration'); }
@@ -116,7 +118,21 @@ class IdentityService {
 		$identity = $this->getIdentityByActor($actorId); if ($identity) { $this->setState($identity['did'], self::STATE_DEACTIVATED); }
 	}
 	private function setState(string $did, string $state): void {
-		$qb = $this->db->getQueryBuilder(); $qb->update('social_atproto_identity')->set('state', $qb->createNamedParameter($state))->set('updated_at', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->executeStatement();
+		$this->repository->transaction(function () use ($did, $state) {
+			$current = $this->getIdentityByDid($did);
+			if ($current === null || $current['state'] === $state) { return; }
+			$qb = $this->db->getQueryBuilder(); $qb->update('social_atproto_identity')->set('state', $qb->createNamedParameter($state))->set('updated_at', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))->executeStatement();
+			$active = $state === self::STATE_ACTIVE;
+			if ($active) { $this->event($did, '#identity', ['did' => $did, 'handle' => $current['handle'], 'time' => gmdate('Y-m-d\TH:i:s\Z')]); }
+			$body = ['did' => $did, 'active' => $active, 'time' => gmdate('Y-m-d\TH:i:s\Z')];
+			if (!$active) { $body['status'] = 'deactivated'; }
+			$this->event($did, '#account', $body);
+		});
+	}
+	private function event(string $did, string $kind, array $body): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->insert('social_atproto_event')->values(['did' => $qb->createNamedParameter($did), 'kind' => $qb->createNamedParameter($kind),
+			'bytes' => $qb->createNamedParameter(DagCbor::encode($body), IQueryBuilder::PARAM_LOB), 'time' => $qb->createNamedParameter(gmdate('Y-m-d H:i:s'))])->executeStatement();
 	}
 	public function getInstanceKey(string $kind): array {
 		if (!in_array($kind, ['service', 'rotation'], true)) { throw new \InvalidArgumentException('Invalid instance key kind'); }

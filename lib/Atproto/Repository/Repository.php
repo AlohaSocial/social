@@ -43,7 +43,7 @@ class Repository {
 	public function commit(string $did, string $signingKey, ?string $prevCommitCid = null): Commit {
 		return $this->transaction(function () use ($did, $signingKey) {
 			$head = $this->getHead($did); if ($head === null) { throw new \InvalidArgumentException('Repository not found'); }
-			$old = [];
+			$old = []; $previous = null;
 			if (!empty($head['commit_cid'])) {
 				$previous = DagCbor::decode($this->getBlock($did, $head['commit_cid']) ?? throw new \RuntimeException('Missing commit'));
 				$this->walk($did, $previous['data']->value, $old);
@@ -65,11 +65,17 @@ class Repository {
 			$qb->andWhere($head['rev'] === null ? $qb->expr()->isNull('rev') : $qb->expr()->eq('rev', $qb->createNamedParameter($head['rev'])));
 			if ($qb->executeStatement() !== 1) { throw new \RuntimeException('Concurrent repository write; retry required'); }
 			$diff = MerkleSearchTree::diff('', $tree['root'], $old, $records); $ops = array_merge($diff['added'], $diff['changed'], $diff['removed']);
-			foreach ($ops as &$op) { $op['cid'] = isset($op['cid']) ? new Cid($op['cid']) : null; } unset($op);
-			$car = Car::encode($commitCid, $blocks); $tooBig = strlen($car) > 512 * 1024 || count($ops) > 200;
+			foreach ($ops as &$op) { $op['cid'] = isset($op['cid']) ? new Cid($op['cid']) : null; if (isset($op['prev'])) { $op['prev'] = new Cid($op['prev']); } } unset($op);
+			// Inductive firehose: current MST proofs plus only the changed records.
+			$eventBlocks = [$commitCid => $commit->toCbor()] + $tree['blocks'];
+			foreach ($ops as $op) { if ($op['cid'] !== null) { $eventBlocks[$op['cid']->value] = $blocks[$op['cid']->value]; } }
+			$car = Car::encode($commitCid, $eventBlocks); $tooBig = strlen($car) > 512 * 1024 || count($ops) > 200;
 			$body = ['repo' => $did, 'commit' => new Cid($commitCid), 'rev' => $rev, 'since' => $head['rev'],
+				'prevData' => $previous === null ? new Cid(MerkleSearchTree::exportCar([])['root']) : $previous['data'],
 				'rebase' => false, 'tooBig' => $tooBig, 'blocks' => new Bytes($tooBig ? '' : $car), 'ops' => $tooBig ? [] : $ops, 'blobs' => [], 'time' => gmdate('Y-m-d\TH:i:s\Z')];
-			$this->insert('social_atproto_event', ['did' => $did, 'kind' => '#commit', 'bytes' => DagCbor::encode($body), 'time' => gmdate('Y-m-d H:i:s')], ['bytes']);
+			$kind = '#commit';
+			if ($tooBig) { $kind = '#sync'; $body = ['did' => $did, 'rev' => $rev, 'blocks' => new Bytes(Car::encode($commitCid, [$commitCid => $commit->toCbor()])), 'time' => gmdate('Y-m-d\TH:i:s\Z')]; }
+			$this->insert('social_atproto_event', ['did' => $did, 'kind' => $kind, 'bytes' => DagCbor::encode($body), 'time' => gmdate('Y-m-d H:i:s')], ['bytes']);
 			return $commit;
 		});
 	}

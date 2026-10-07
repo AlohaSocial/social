@@ -71,6 +71,7 @@ class IdentitiesCommand extends Command {
 				}
 				
 				$identity = $this->identityService->createIdentity($actorId);
+				if ($identity['state'] !== \OCA\Social\Atproto\Identity\IdentityService::STATE_ACTIVE) { throw new \RuntimeException('PLC registration is pending; retry the same identity'); }
 				$io->success("Created identity for actor $actorId: {$identity['did']} ({$identity['handle']})");
 				$created++;
 			} catch (\Throwable $e) {

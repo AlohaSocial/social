@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http\{JsonResponse, DataDisplayResponse};
+use OCP\AppFramework\Http\{DataResponse, DataDisplayResponse};
 use OCP\AppFramework\Http\Attribute\{FrontpageRoute, PublicPage, NoCSRFRequired, AnonRateLimit};
 use OCP\IRequest;
 class AtprotoWellKnownController extends Controller {
@@ -17,10 +17,10 @@ class AtprotoWellKnownController extends Controller {
 	}
 	#[PublicPage] #[NoCSRFRequired] #[AnonRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/.well-known/did.json')]
-	public function didJson(): JsonResponse {
-		if (!$this->identities->isEnabled()) { return new JsonResponse(['error' => 'Unavailable'], 404); }
-		$endpoint = $this->identities->getPdsEndpoint(); $did = 'did:web:' . parse_url($endpoint, PHP_URL_HOST); $key = $this->identities->getInstanceKey('service');
-		return new JsonResponse(['@context' => ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/multikey/v1'], 'id' => $did,
+	public function didJson(): DataResponse {
+		if (!$this->identities->isEnabled()) { return new DataResponse(['error' => 'Unavailable'], 404); }
+		$endpoint = $this->identities->getPdsEndpoint(); $did = $this->identities->getServiceDid(); $key = $this->identities->getInstanceKey('service');
+		return new DataResponse(['@context' => ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/multikey/v1'], 'id' => $did,
 			'verificationMethod' => [['id' => $did . '#atproto', 'type' => 'Multikey', 'controller' => $did, 'publicKeyMultibase' => $key['multibase']]],
 			'service' => [['id' => $did . '#atproto_pds', 'type' => 'AtprotoPersonalDataServer', 'serviceEndpoint' => $endpoint]]]);
 	}

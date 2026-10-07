@@ -30,7 +30,7 @@ class FirehoseHandler implements MessageComponentInterface {
 			try {
 				$qb = $this->db->getQueryBuilder(); $qb->select('e.seq', 'e.kind', 'e.bytes')->from('social_atproto_event', 'e')
 					->innerJoin('e', 'social_atproto_identity', 'i', 'i.did = e.did')->where($qb->expr()->gt('e.seq', $qb->createNamedParameter($client['cursor'], IQueryBuilder::PARAM_INT)))
-					->andWhere($qb->expr()->eq('i.state', $qb->createNamedParameter('active')))->orderBy('e.seq', 'ASC')->setMaxResults(100);
+					->andWhere($qb->expr()->orX($qb->expr()->eq('i.state', $qb->createNamedParameter('active')), $qb->expr()->eq('e.kind', $qb->createNamedParameter('#account'))))->orderBy('e.seq', 'ASC')->setMaxResults(100);
 				foreach ($qb->executeQuery()->fetchAllAssociative() as $event) {
 					$client['conn']->send(self::frame($event)); $client['cursor'] = (int)$event['seq'];
 				}

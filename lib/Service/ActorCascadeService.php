@@ -95,6 +95,7 @@ class ActorCascadeService {
 		private CacheActorsRequest $cacheActorsRequest,
 		private CacheDocumentService $cacheDocumentService,
 		private LoggerInterface $logger,
+		private ?\OCA\Social\Atproto\Identity\IdentityService $nativeIdentities = null,
 	) {
 	}
 
@@ -121,6 +122,7 @@ class ActorCascadeService {
 	 */
 	private function steps(string $actorId, bool $reversible): array {
 		$steps = [
+			'nativeIdentity' => fn () => $this->nativeIdentities?->deactivate($actorId),
 			// what it did to other people's posts: its likes and boosts, its
 			// bookmarks and poll votes, its emoji reactions, and what it has
 			// watched — all of which went on counting on posts that are not

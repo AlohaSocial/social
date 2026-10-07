@@ -56,9 +56,9 @@ class MerkleSearchTree {
 		$added = []; $removed = []; $changed = [];
 		foreach ($newRecords as $key => $record) {
 			if (!isset($oldRecords[$key])) { $added[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'create']; }
-			elseif ($oldRecords[$key]['cid'] !== $record['cid']) { $changed[] = ['path' => $key, 'cid' => $record['cid'], 'action' => 'update']; }
+			elseif ($oldRecords[$key]['cid'] !== $record['cid']) { $changed[] = ['path' => $key, 'cid' => $record['cid'], 'prev' => $oldRecords[$key]['cid'], 'action' => 'update']; }
 		}
-		foreach ($oldRecords as $key => $record) { if (!isset($newRecords[$key])) { $removed[] = ['path' => $key, 'action' => 'delete']; } }
+		foreach ($oldRecords as $key => $record) { if (!isset($newRecords[$key])) { $removed[] = ['path' => $key, 'prev' => $record['cid'], 'action' => 'delete']; } }
 		return ['added' => $added, 'removed' => $removed, 'changed' => $changed];
 	}
 }
