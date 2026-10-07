@@ -2093,6 +2093,10 @@ permission and are gone; anything new has to be ours.
   fifth of a turn apart) from the heart. They are gold at the base and the
   author's `--account-hue` at the tip, and they drift and fall away within
   0.9s. The `celebrate` flag is held for 1s so they finish before they unmount.
+  Pressing the card opens the post unless the press was meant for a control;
+  `pressedControl()` reads that from `event.composedPath()`, because the heart's
+  icon is swapped for the filled one while the click is still bubbling, and the
+  detached icon's `closest('button')` finds nothing.
 - **Loading rolls in.** At the foot of a timeline, the next page's wait is
   `WaveLoading`: one wavelength-wide line slid by exactly one wavelength, so it
   loops without a jump. The first page keeps `TimelineSkeleton`.

@@ -553,6 +553,9 @@ const QuoteControlDialog = defineAsyncComponent(() => import(/* webpackChunkName
 /** How long the heart is held before it offers the reactions. */
 const HOLD_MS = 450
 
+/** what a press inside a post may be meant for instead of opening it */
+const CONTROLS = 'a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper'
+
 export default {
 	name: 'TimelinePost',
 	components: {
@@ -1299,9 +1302,8 @@ export default {
 		 * @param {MouseEvent} event the press
 		 */
 		onPostClick(event) {
-			const target = /** @type {Element|null} */ (event.target)
 			if (this.postHref && !event.defaultPrevented && event.button === 0
-				&& !target?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')
+				&& !this.pressedControl(event)
 				&& (window.getSelection?.()?.toString() ?? '') === '') {
 				if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 					return
@@ -1317,7 +1319,7 @@ export default {
 			if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
 				return
 			}
-			if (/** @type {Element|null} */ (event.target)?.closest?.('a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper')) {
+			if (this.pressedControl(event)) {
 				return
 			}
 			if ((window.getSelection?.()?.toString() ?? '') !== '') {
@@ -1325,6 +1327,23 @@ export default {
 			}
 
 			this.$router.push(this.postRoute)
+		},
+
+		/**
+		 * Whether a press was meant for something interactive inside the post.
+		 *
+		 * Read from the path the event took, not from where its target sits
+		 * now: pressing the heart swaps its outline icon for the filled one
+		 * while the click is still bubbling, and asking the detached icon
+		 * whether it is in a button says no -- so a like opened the post too.
+		 *
+		 * @param {MouseEvent} event the press
+		 * @return {boolean}
+		 */
+		pressedControl(event) {
+			const path = event.composedPath?.() ?? []
+			const nodes = path.length > 0 ? path : [event.target]
+			return nodes.some((node) => node instanceof Element && node.matches(CONTROLS))
 		},
 
 		getSinglePostTimeline() {
