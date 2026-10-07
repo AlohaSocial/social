@@ -222,9 +222,14 @@ onMounted(async () => {
 async function loadSettings() {
 	try {
 		const response = await api.get('/api/admin/atproto/settings')
-		Object.assign(settings, response.data)
-		settings.relaysJson = JSON.stringify(settings.relays || [], null, 2)
-		settings.handleHost = response.data.handle_host || ''
+		const data = response.data
+		settings.enabled = data.enabled
+		settings.relaysJson = JSON.stringify(data.relays || [], null, 2)
+		settings.jetstream = data.jetstream || ''
+		settings.syncCeiling = data.syncCeiling || 200
+		settings.plcDirectory = data.plcDirectory || 'https://plc.directory'
+		settings.appview = data.appview || 'https://public.api.bsky.app'
+		settings.handleHost = data.handle_host || ''
 	} catch (error) {
 		console.error('Failed to load settings:', error)
 	}
