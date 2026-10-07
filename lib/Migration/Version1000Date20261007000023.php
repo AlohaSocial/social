@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Migration;
 
 use Closure;
 use OCP\DB\ISchemaWrapper;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
@@ -16,6 +20,7 @@ class Version1000Date20261007000023 extends SimpleMigrationStep {
 		private readonly IDBConnection $db,
 	) {
 	}
+	#[\Override]
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 		$schema = $schemaClosure();
 		if ($schema->hasTable('social_atpds_event_clock')) {
@@ -27,14 +32,8 @@ class Version1000Date20261007000023 extends SimpleMigrationStep {
 		$table->setPrimaryKey(['id']);
 		return $schema;
 	}
+	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		$qb = $this->db->getQueryBuilder();
-		if ($qb->select('id')->from('social_atpds_event_clock')->where($qb->expr()->eq('id', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))->executeQuery()->fetchOne() !== false) {
-			return;
-		}
-		$qb = $this->db->getQueryBuilder();
-		$last = (int)$qb->select($qb->func()->max('seq'))->from('social_atpds_event')->executeQuery()->fetchOne();
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atpds_event_clock')->values(['id' => $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT), 'last_seq' => $qb->createNamedParameter($last, IQueryBuilder::PARAM_INT)])->executeStatement();
+		(new \OCA\Social\Atproto\Firehose\EventStore($this->db))->initialize();
 	}
 }

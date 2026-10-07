@@ -45,7 +45,8 @@ is required to decrypt the stored keys.
 
 Install the updated app and run the normal Nextcloud upgrade process (`occ upgrade`).
 The app migrations create the `social_atpds_*` native tables, preserving older
-`social_atproto_*` external-account connector data; do not manually execute nonexistent
+`social_atproto_*` external-account connector data. An install/upgrade repair step
+initializes the persistent firehose event counter, including fresh installations; do not manually execute nonexistent
 `Version000040` or `Version000041` migrations from earlier design notes.
 
 Configure Social's cloud/social address through its existing administration setup.

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCP\IDBConnection;
@@ -22,6 +27,7 @@ class BlockCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:block')
 			->setDescription('Manage AT Protocol blocklist')
@@ -31,6 +37,7 @@ class BlockCommand extends Command {
 			->addOption('reason', null, InputOption::VALUE_REQUIRED, 'Reason for blocking');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$type = $input->getArgument('type');
@@ -55,12 +62,10 @@ class BlockCommand extends Command {
 
 			$io->success("Removed $type '$value' from blocklist");
 		} else {
-			$qb->upsert('social_atpds_blocklist')
-				->set('kind', $qb->createNamedParameter($type))
-				->set('value', $qb->createNamedParameter($value))
-				->set('reason', $qb->createNamedParameter($reason))
-				->set('created', $qb->createNamedParameter((new \DateTime())->format('Y-m-d H:i:s')))
-				->executeStatement();
+			$this->db->setValues('*PREFIX*social_atpds_blocklist', ['kind' => $type, 'value' => $value], [
+				'reason' => $reason,
+				'created' => (new \DateTime())->format('Y-m-d H:i:s'),
+			]);
 
 			$io->success("Added $type '$value' to blocklist");
 		}

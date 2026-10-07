@@ -111,7 +111,11 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 	</background-jobs>
 
 	<repair-steps>
+		<install>
+			<step>OCA\Social\Migration\InitializeAtprotoClock</step>
+		</install>
 		<post-migration>
+			<step>OCA\Social\Migration\InitializeAtprotoClock</step>
 			<step>OCA\Social\Migration\EncryptPrivateKeys</step>
 			<step>OCA\Social\Migration\HashClientSecrets</step>
 			<step>OCA\Social\Migration\BackfillRemoteVisibility</step>

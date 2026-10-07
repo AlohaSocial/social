@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Tests\Integration\Atproto;
 
 use OCA\Social\Atproto\Identity\KeyManager;
@@ -30,6 +35,39 @@ class RepositoryTest extends TestCase {
 		foreach (['event', 'block', 'record', 'repo'] as $table) {
 			$qb = $this->db->getQueryBuilder();
 			$qb->delete('social_atpds_' . $table)->where($qb->expr()->eq('did', $qb->createNamedParameter($this->did)))->executeStatement();
+		}
+	}
+	public function testBlockCommandInsertsUpdatesAndRemovesANativeBlock(): void {
+		$command = new \OCA\Social\Command\Atproto\BlockCommand($this->db, $this->createStub(\Psr\Log\LoggerInterface::class));
+		$tester = new \Symfony\Component\Console\Tester\CommandTester($command);
+		try {
+			self::assertSame(0, $tester->execute(['type' => 'did', 'value' => $this->did, '--reason' => 'first']));
+			self::assertSame(0, $tester->execute(['type' => 'did', 'value' => $this->did, '--reason' => 'updated']));
+			$qb = $this->db->getQueryBuilder();
+			$reasons = $qb->select('reason')->from('social_atpds_blocklist')->where($qb->expr()->eq('value', $qb->createNamedParameter($this->did)))->executeQuery()->fetchAllAssociative();
+			self::assertSame([['reason' => 'updated']], $reasons);
+		} finally {
+			self::assertSame(0, $tester->execute(['type' => 'did', 'value' => $this->did, '--unblock' => true]));
+		}
+		$qb = $this->db->getQueryBuilder();
+		self::assertFalse($qb->select('reason')->from('social_atpds_blocklist')->where($qb->expr()->eq('value', $qb->createNamedParameter($this->did)))->executeQuery()->fetchOne());
+	}
+	public function testFreshInstallRepairInitializesTheMissingClock(): void {
+		$this->db->beginTransaction();
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$expected = (int)$qb->select($qb->func()->max('seq'))->from('social_atpds_event')->executeQuery()->fetchOne();
+			$qb = $this->db->getQueryBuilder();
+			$qb->delete('social_atpds_event_clock')->executeStatement();
+			$step = Server::get(\OCA\Social\Migration\InitializeAtprotoClock::class);
+			$step->run($this->createStub(\OCP\Migration\IOutput::class));
+			$events = Server::get(\OCA\Social\Atproto\Firehose\EventStore::class);
+			self::assertSame($expected, $events->latestSequence());
+			self::assertSame($expected + 1, $events->append($this->did, '#account', ['did' => $this->did, 'active' => true]));
+			$step->run($this->createStub(\OCP\Migration\IOutput::class));
+			self::assertSame($expected + 1, $events->latestSequence());
+		} finally {
+			$this->db->rollBack();
 		}
 	}
 	public function testPrunedEventsDoNotResetTheFirehoseCursor(): void {

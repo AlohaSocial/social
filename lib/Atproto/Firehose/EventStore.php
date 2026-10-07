@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Firehose;
 
 use OCA\Social\Atproto\Protocol\DagCbor;
@@ -13,6 +18,16 @@ class EventStore {
 	public function __construct(
 		private readonly IDBConnection $db,
 	) {
+	}
+	public function initialize(): void {
+		$qb = $this->db->getQueryBuilder();
+		if ($qb->select('id')->from('social_atpds_event_clock')->where($qb->expr()->eq('id', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))->executeQuery()->fetchOne() !== false) {
+			return;
+		}
+		$qb = $this->db->getQueryBuilder();
+		$last = (int)$qb->select($qb->func()->max('seq'))->from('social_atpds_event')->executeQuery()->fetchOne();
+		$qb = $this->db->getQueryBuilder();
+		$qb->insert('social_atpds_event_clock')->values(['id' => $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT), 'last_seq' => $qb->createNamedParameter($last, IQueryBuilder::PARAM_INT)])->executeStatement();
 	}
 	public function latestSequence(): int {
 		$qb = $this->db->getQueryBuilder();
