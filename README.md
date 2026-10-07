@@ -368,9 +368,10 @@ own unified search. No external search engine to run.
 - **Authorized apps** — every app holding a key to your account, with what it
   may do and when it was last used, and a button that signs one out. The page
   to open after losing a phone.
-- **Filtered notifications** — on the Blocking page, the senders your notification
-  policy is holding, one row each, with Show these and Dismiss. The policy has been
-  in the API since 4.3; this is what makes it usable.
+- **Requests** — at the top of Activities, "3 people are waiting — Review": the
+  people your notification policy is holding, one row each, with Show these and
+  Dismiss. The waiting people are part of the Activities count in the sidebar, and
+  never ring the bell.
 - **Hide a whole server** from yourself, beside the blocked and muted accounts.
 - **Edit history** — the "Edited" line under a post opens every version of it.
 - **A portfolio** — a page of your work with its own public address, to put on a
@@ -461,14 +462,20 @@ It marks itself read after it has been in front of you for two seconds, not the 
 it renders — so it stops clearing the badge on your phone for things nobody saw.
 
 **Who may reach you.** Five questions about whoever is writing to you — do I follow
-them, do they follow me, are they new here, is this a private mention, has this server
-limited them — each answered *accept*, *hold* or *drop*. What is held waits in a
-requests inbox, gathered one row per account, so you decide about the account once
-instead of about each notification in turn. Nothing is held unless you ask for it, and
-nothing held is ever deleted: a policy you loosen next week can still show what it
-caught this week. Clients read it as Mastodon 4.3's notification policy, and read the
-same notifications grouped — "eight people favourited your post" rather than eight
-rows.
+them, do they follow me, are they new here (less than 30 days), is this a private
+mention I didn't ask for, has this server limited them — each answered **Allow** or
+**Hold for review**, in Settings → Notifications next to the digests and quiet hours.
+A held person can still write to you: everything they do waits together at the top of
+Activities, and raises no bell, push or mail. You decide about the person once —
+accept, and they are always allowed until you stop allowing them; dismiss, and what
+they sent is gone. New accounts start calm (strangers, new accounts, unsolicited
+private mentions and limited accounts held); existing accounts keep accepting
+everybody until they choose. Clients read it as Mastodon 4.3's notification policy,
+where *drop* stays available, and read the same notifications grouped — "eight people
+favourited your post" rather than eight rows.
+
+**Mute a conversation**, from any post's menu or a mention in Activities: the thread
+stays on your timelines, and stops notifying you until you unmute it.
 
 **Nextcloud's own bell rings too.** Mentions, favourites, boosts, new followers, follow
 requests, edits of posts you boosted and polls you voted in all reach Nextcloud
@@ -586,7 +593,7 @@ are synthesised in the browser, so there is nothing to download.
   keeps what somebody passes on out of your timelines while leaving everything they
   write themselves.
 - **Per-user domain blocks** — **Blocking → Hidden servers** — and conversation
-  mute, which is through the API only.
+  mute, in the menu of any post.
 - **Nothing is sent to a third party.** No geocoder — a place on a post is one this
   instance has seen or one you name yourself, because sending somebody's location to a
   stranger at the moment they are deciding whether to publish it is exactly the failure

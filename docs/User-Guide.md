@@ -302,9 +302,12 @@ The sidebar is the map:
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
   It is in the sidebar, between Shorts and Direct messages. The badge
-  beside it counts what arrived since you last looked; the same
+  beside it counts what arrived since you last looked, plus the people
+  [waiting for your review](#who-may-reach-you-and-requests); the same
   events reach the Nextcloud bell and its mail digest; a follow request can be
-  accepted or declined from the bell itself. The page says how many that is at
+  accepted or declined from the bell itself. While anybody is waiting, the
+  first line of the page says so — *3 people are waiting — Review* — and
+  opens the list of them in place. The page says how many new activities there are at
   the top — *3 new activities*, with a **Mark all as read** button that clears
   the badge whichever filter you are looking at — and marks the activities
   themselves: each new one carries a **New** tag beside its timestamp, and a
@@ -592,22 +595,57 @@ Each profile has a **Tagged** tab: the photographs that account is named in,
 whoever took them. If you are named in one and would rather not be, **Remove me**
 under the post takes your name off, and needs nobody's permission.
 
-### Notifications your settings held back
+### Who may reach you, and requests
 
-**Settings → Blocking**, under **Filtered notifications**. Your notification
-settings can hold some notifications back rather than show them — from accounts
-nobody here follows, from brand-new accounts, from people you do not follow.
-They wait in that card, one row per sender with how many they have sent and the
-first words of their most recent post.
+**Settings → Notifications**, under **Who may reach you**, is one place for
+everything about being interrupted: the digests and quiet hours first, then
+who may reach you at all. Five rows, each answered **Allow** or **Hold for
+review**:
 
-You decide about the **person**, not about each notification: **Show these**
-settles everything that account has sent and will send, and **Dismiss** stops
-you being asked about them again while leaving what they sent hidden. There are
-buttons for the whole list too. Until this page existed the setting held things
-back with nowhere to see them, which is worse than not having the setting.
+- People you don't follow
+- People who don't follow you
+- New accounts (less than 30 days old, counted from the account's creation
+  date, on any server)
+- Private mentions you didn't ask for
+- Accounts this server limited
 
-**Digests and quiet hours.** The notifications above are about *whether* you
-are told; your notification delivery setting is about *when* the Nextcloud
+Held people can still write to you. Their posts, likes and follows wait in
+Activities until you look; they do not ring, push or mail. Everything a held
+person does waits together — mentions, replies, direct messages, likes,
+boosts, follows. A choice is saved the moment you make it; if the server
+refuses it, the row goes back and says why.
+
+A new account starts calm: people you don't follow, new accounts, private
+mentions you didn't ask for and accounts this server limited are held, and
+everybody else is allowed. An account that existed before this setting keeps
+accepting everybody until you choose, and sees one notice at the top of
+Activities pointing here; it goes away when you close it or save a choice.
+Mastodon apps can also set a row to discard instead of hold. The web app does
+not offer that: such a row shows as **Hold for review** with the note *An app
+set this to discard; choosing here replaces it*, and choosing either answer
+here replaces it.
+
+**Requests.** The people being held wait at the top of **Activities**: a line
+says how many — *2 people are waiting — Review* — and **Review** opens the
+list there, one row per person with how many notifications they sent and the
+first words of their most recent post. The count is part of the Activities
+badge in the sidebar; a request never rings the bell. If a digest is due while
+somebody waits, it ends with *2 people are waiting to reach you*; nobody
+waiting never raises a digest of its own. (**Filtered notifications** on the
+Blocking page links to the same list.)
+
+You decide about the **person**, not about each notification. **Show these**
+accepts them: what they sent moves into Activities — counted as unread, without
+ringing now — and they are always allowed from then on. Accepting does not
+follow them. **Dismiss** discards what they sent; whatever they do next is
+judged by your rows again. There are buttons for the whole list too.
+
+Under the rows, **Always allowed** lists everybody you accepted, each with
+**Stop allowing**, which hands that person back to your rows. Nobody is on it
+until you accept somebody.
+
+**Digests and quiet hours.** Who may reach you is about *whether* you are
+told; the first part of **Settings → Notifications** is about *when* the Nextcloud
 bell — and with it the mobile app and the notification mail — rings for what
 happens in Aloha Social. Left at **instant**, it rings the moment somebody
 mentions, favourites, boosts or follows you, as it always did. Set to
@@ -623,6 +661,18 @@ this changes the notifications page itself: everything is listed there the
 moment it happens, read or unread, and the digest only counts what you have
 not read yet. Switching a digest on does not deliver a backlog, and switching
 it off raises one last digest of what it was still holding.
+
+### Muting a conversation
+
+**Mute conversation** stops the notifications one thread would give you
+without muting anybody. It is in every post's menu, and in the menu of a
+mention or reply card in Activities. The mute covers the whole thread,
+replies that arrive later included: nothing from it rings the bell, pushes or
+mails, and nothing from it is listed in Activities. The posts stay on every
+timeline. The post menu reads **Unmute conversation** on any post of a muted
+thread; unmuting lists what arrived meanwhile without ringing for it. A mute
+lasts until you unmute it. Neither entry is offered to somebody not signed in
+or on a public page.
 
 ### Hiding a whole server
 
