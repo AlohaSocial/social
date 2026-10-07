@@ -379,6 +379,7 @@ OC.L10N.register(
     "Close player" : "Player schließen",
     "Which posts to show" : "Welche Beiträge angezeigt werden",
     "Mark all as read" : "Alle als gelesen markieren",
+    "Add to your story" : "Zu Ihrer Story hinzufügen",
     "Which activities to show" : "Welche Aktivitäten angezeigt werden",
     "List" : "Liste",
     "Link" : "Link",

@@ -14,7 +14,7 @@ import LanguageSelect from '../../../src/components/Composer/LanguageSelect.vue'
 import PreviewGridItem from '../../../src/components/Composer/PreviewGridItem.vue'
 import SubmitStatusButton from '../../../src/components/Composer/SubmitStatusButton.vue'
 import VisibilitySelect from '../../../src/components/Visibility/VisibilitySelect.vue'
-import eventBus from '../../../src/services/eventBus.js'
+import eventBus, { STORY_COMPOSE } from '../../../src/services/eventBus.js'
 import { createPinia, setActivePinia } from 'pinia'
 import { isProxy, nextTick } from 'vue'
 import { useAccountStore } from '../../../src/store/account.js'
@@ -464,15 +464,27 @@ describe('Composer', () => {
 	})
 
 	describe('author', () => {
-		it('names the author, and does not repeat their handle at them', () => {
-			// whose account it is was never in question here — the composer only
-			// ever writes as the reader — so the handle was a second line saying
-			// nothing the first did not
+		it('shows the reader\'s face and not their name: the composer only ever writes as them', () => {
 			const { wrapper } = mountComposer()
 
-			expect(wrapper.find('.post-author-name').text()).toBe('Alice')
+			expect(wrapper.find('.new-post-author').text()).not.toContain('Alice')
+			expect(wrapper.find('.post-author-name').exists()).toBe(false)
 			expect(wrapper.find('.post-author-id').exists()).toBe(false)
-			expect(wrapper.find('.new-post-author').text()).not.toContain('@alice')
+		})
+	})
+
+	describe('the camera for a story', () => {
+		it('is offered at rest and open only where it is asked for, and asks the story bar for its composer', async () => {
+			expect(mountComposer().wrapper.find('.new-post__story').exists()).toBe(false)
+
+			const { wrapper } = mountComposer({ offerStory: true })
+			const asked = vi.fn()
+			eventBus.on(STORY_COMPOSE, asked)
+
+			await wrapper.find('.new-post__story').trigger('click')
+
+			expect(asked).toHaveBeenCalledTimes(1)
+			eventBus.off(STORY_COMPOSE, asked)
 		})
 	})
 

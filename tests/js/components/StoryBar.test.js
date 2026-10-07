@@ -7,6 +7,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import StoryBar from '../../../src/components/StoryBar.vue'
+import eventBus, { STORY_COMPOSE } from '../../../src/services/eventBus.js'
 import { useAccountStore } from '../../../src/store/account.js'
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }))
@@ -29,6 +30,17 @@ function story(id, account, seen = false) {
 const StoryViewerStub = { name: 'StoryViewer', props: ['groups', 'start'], emits: ['close', 'seen', 'deleted'], template: '<div class="viewer-stub" :data-start="start" />' }
 const StoryComposerStub = { name: 'StoryComposerDialog', props: ['open', 'initialFile'], emits: ['update:open', 'posted'], template: '<div class="composer-stub" />' }
 const ShortComposerStub = { name: 'ShortComposerDialog', props: ['open', 'mode'], emits: ['update:open', 'posted', 'other'], template: '<div class="short-stub" />' }
+
+/**
+ * @param {object[]} stories what the carousel answers
+ * @return {Promise<object>} the mounted bar, once it has read the carousel
+ */
+async function mountBarAnd(stories) {
+	const wrapper = mountBar(stories)
+	await flushPromises()
+
+	return wrapper
+}
 
 function mountBar(stories, { current = alice } = {}) {
 	get.mockResolvedValue({ data: stories })
@@ -81,11 +93,35 @@ describe('StoryBar', () => {
 		expect(wrapper.findComponent({ name: 'StoryViewer' }).exists()).toBe(false)
 	})
 
+	/** The row is for watching: a lone "Your story" is a place to add one, which the composer's camera is. */
+	it('draws no row until somebody the reader follows has a story up', async () => {
+		const empty = await mountBarAnd([])
+		expect(empty.find('.story-bar__list').exists()).toBe(false)
+		const ownOnly = await mountBarAnd([story('1', alice)])
+		expect(ownOnly.find('.story-bar__list').exists()).toBe(false)
+
+		const withOthers = await mountBarAnd([story('1', alice), story('2', bob)])
+		expect(withOthers.find('.story-bar__list').exists()).toBe(true)
+	})
+
+	it('opens the story composer when the post composer\'s camera asks, with or without a row', async () => {
+		const wrapper = await mountBarAnd([])
+
+		eventBus.emit(STORY_COMPOSE)
+		await flushPromises()
+
+		expect(wrapper.findComponent({ name: 'ShortComposerDialog' }).props('mode')).toBe('story')
+
+		wrapper.unmount()
+		eventBus.emit(STORY_COMPOSE)
+	})
+
 	/** a picture or a text story is the story editor's, which has the stickers and the cards */
 	it('hands a picture on to the story editor', async () => {
 		const wrapper = mountBar([])
 		await flushPromises()
-		await wrapper.find('.story-bar__add').trigger('click')
+		eventBus.emit(STORY_COMPOSE)
+		await flushPromises()
 
 		const picture = new File(['p'], 'a.jpg', { type: 'image/jpeg' })
 		wrapper.findComponent({ name: 'ShortComposerDialog' }).vm.$emit('other', picture)
@@ -111,7 +147,7 @@ describe('StoryBar', () => {
 	})
 
 	it('puts a story the reader just posted into their own place', async () => {
-		const wrapper = mountBar([])
+		const wrapper = mountBar([story('2', bob)])
 		await flushPromises()
 
 		await wrapper.find('.story-bar__add').trigger('click')
@@ -147,6 +183,7 @@ describe('StoryBar', () => {
 		const wrapper = mount(StoryBar, { global: { plugins: [pinia], stubs: { StoryViewer: true, StoryComposerDialog: true, ShortComposerDialog: true, ActorAvatar: true } } })
 		await flushPromises()
 
-		expect(wrapper.findAll('.story-bar__tile')).toHaveLength(1)
+		// no row, and nothing else: a carousel that did not load has nobody in it
+		expect(wrapper.find('.story-bar__list').exists()).toBe(false)
 	})
 })

@@ -3,8 +3,15 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section v-if="viewer && offered" class="story-bar" :aria-label="t('social', 'Stories')">
-		<ul class="story-bar__list">
+	<section
+		v-if="viewer && offered"
+		class="story-bar"
+		:class="{ 'story-bar--empty': others.length === 0 }"
+		:aria-label="t('social', 'Stories')">
+		<!-- the row only while somebody the reader follows has a story up:
+		     a lone "Your story" is a place to add one, and that lives in the
+		     composer's camera; the dialogs below stay mounted for it -->
+		<ul v-if="others.length > 0" class="story-bar__list">
 			<!-- the reader's own place is always there, with or without a
 			     story in it: it is where a story is added from -->
 			<li class="story-bar__item story-bar__item--own">
@@ -90,6 +97,7 @@ import { mapStores } from 'pinia'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import ActorAvatar from './ActorAvatar.vue'
+import eventBus, { STORY_COMPOSE } from '../services/eventBus.js'
 import logger from '../services/logger.js'
 import { ownAvatarUrl } from '../services/avatar.js'
 import { useAccountStore } from '../store/account.js'
@@ -203,10 +211,20 @@ export default {
 
 	mounted() {
 		this.load()
+		eventBus.on(STORY_COMPOSE, this.compose)
+	},
+
+	beforeUnmount() {
+		eventBus.off(STORY_COMPOSE, this.compose)
 	},
 
 	methods: {
 		accountStyle,
+
+		/** The composer's camera asked for a story. */
+		compose() {
+			this.composing = true
+		},
 
 		/**
 		 * What to call somebody under their face.
@@ -465,5 +483,11 @@ export default {
 	padding: 0 !important;
 	border: 2px solid var(--color-main-background);
 	border-radius: 50%;
+}
+
+/* nothing to show: the section only holds the dialogs, and takes no room */
+.story-bar--empty {
+	margin: 0;
+	padding: 0;
 }
 </style>

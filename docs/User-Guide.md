@@ -294,10 +294,8 @@ The sidebar is the map:
     Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
-  It is in the account menu at the foot of the sidebar, under **My profile**,
-  because it is about you rather than a place to go and read. The badge
-  counts what arrived since you last looked, and sits on your name while the
-  menu is shut so it is never out of sight; the same
+  It is in the sidebar, between Shorts and Direct messages. The badge
+  beside it counts what arrived since you last looked; the same
   events reach the Nextcloud bell and its mail digest; a follow request can be
   accepted or declined from the bell itself. The page says how many that is at
   the top — *3 new activities*, with a **Mark all as read** button that clears
@@ -433,7 +431,9 @@ Administrators post and remove announcements in **Administration → Aloha Socia
 
 ### Stories
 
-Above your own feed is a row of faces: whose stories are up. A story is one
+Above your own feed is a row of faces while somebody you follow has a story
+up — and no row at all while nobody does. You add your own with the camera at
+the end of the box you write posts in. A story is one
 picture or video that the people who follow the account can see for a day,
 and then it is gone. A face with a coloured ring around it still holds
 something you have not seen; tap it and the stories play one after another,

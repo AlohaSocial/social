@@ -32,6 +32,12 @@ export const LISTS_CHANGED = 'social:lists-changed'
 export const REACTION_PICK = 'social:reaction-pick'
 
 /**
+ * Asks for the story composer: the camera in the post composer sends it, and
+ * the story bar, which owns the dialog and reloads the row afterwards, opens it.
+ */
+export const STORY_COMPOSE = 'social:story-compose'
+
+/**
  * The reader pressed "Mark all as read" on the Activities page.
  *
  * The payload is the id the marker was moved to. The page owns that button
