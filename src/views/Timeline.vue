@@ -46,6 +46,47 @@
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
+		<!-- said once to an account that existed before the policy did: it
+		     can now choose who reaches it. Gone for good when put away, or
+		     once the policy has been saved -->
+		<div v-if="type === 'notifications' && notificationsStore.policyNotice" class="policy-notice" role="note">
+			<IconBellCogOutline :size="20" class="policy-notice__icon" />
+			<p class="policy-notice__text">
+				{{ t('social', 'You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.') }}
+				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }">
+					{{ t('social', 'Choose in Settings') }}
+				</RouterLink>
+			</p>
+			<NcButton
+				variant="tertiary"
+				:aria-label="t('social', 'Close')"
+				@click="notificationsStore.dismissPolicyNotice()">
+				<template #icon>
+					<IconClose :size="20" />
+				</template>
+			</NcButton>
+		</div>
+
+		<!-- the people the notification policy is holding back: how many,
+		     and the list itself on Review. Here, because this is where
+		     somebody wonders why a mention never arrived -->
+		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests">
+			<div class="held-requests__row">
+				<IconInboxOutline :size="20" />
+				<button
+					type="button"
+					class="held-requests__toggle"
+					:aria-expanded="showRequests ? 'true' : 'false'"
+					@click="showRequests = !showRequests">
+					{{ n('social', '{count} person is waiting — Review', '{count} people are waiting — Review', pendingRequests, { count: pendingRequests }) }}
+				</button>
+				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }" class="held-requests__settings">
+					{{ t('social', 'Who may reach you') }}
+				</RouterLink>
+			</div>
+			<NotificationRequests v-if="showRequests" class="held-requests__list" @changed="onRequestsChanged" />
+		</div>
+
 		<!-- what the sidebar badge was counting, where pressing it lands.
 		     The page marks itself read after a dwell, which is something that
 		     happens rather than something anybody did: this says how much
@@ -61,25 +102,6 @@
 				</template>
 				{{ t('social', 'Mark all as read') }}
 			</NcButton>
-		</div>
-
-		<!-- the senders the notification policy is holding back: a count, and
-		     the list on request. Here rather than on the Blocking page, because
-		     this is where somebody wonders why a mention never arrived -->
-		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests">
-			<div class="held-requests__row">
-				<IconInboxOutline :size="20" />
-				<span class="held-requests__count">
-					{{ n('social', '%n person you have no relationship with is waiting to notify you', '%n people you have no relationship with are waiting to notify you', pendingRequests) }}
-				</span>
-				<NcButton variant="tertiary" @click="showRequests = !showRequests">
-					{{ showRequests ? t('social', 'Hide') : t('social', 'Review') }}
-				</NcButton>
-				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }" class="held-requests__settings">
-					{{ t('social', 'Who may reach you') }}
-				</RouterLink>
-			</div>
-			<NotificationRequests v-if="showRequests" class="held-requests__list" @changed="onRequestsChanged" />
 		</div>
 
 		<!-- which kinds of activity to show; the same control as the scopes
@@ -123,7 +145,9 @@ import IconAccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import IconAccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
 import IconAt from 'vue-material-design-icons/At.vue'
 import IconBell from 'vue-material-design-icons/Bell.vue'
+import IconBellCogOutline from 'vue-material-design-icons/BellCogOutline.vue'
 import IconCheckAll from 'vue-material-design-icons/CheckAll.vue'
+import IconClose from 'vue-material-design-icons/Close.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
@@ -135,7 +159,6 @@ import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
 import TimelineList from './../components/TimelineList.vue'
 import DirectMessages from './../components/DirectMessages.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
-import NotificationRequests from './../components/NotificationRequests.vue'
 import FirstPostCelebration from './../components/FirstPostCelebration.vue'
 import Announcements from './../components/Announcements.vue'
 import FirstRun from './../components/FirstRun.vue'
@@ -161,6 +184,8 @@ import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
+// only drawn when somebody asks to review who is waiting
+const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
 
 export default {
 	name: 'Timeline',
@@ -181,6 +206,8 @@ export default {
 		TimelineList,
 		DirectMessages,
 		TimelineSwitcher,
+		IconBellCogOutline,
+		IconClose,
 		IconInboxOutline,
 		NotificationRequests,
 	},
@@ -673,9 +700,13 @@ export default {
 			rememberFilter(filter)
 		},
 
-		/** Asks how many senders are held, on the one page that shows them. */
+		/**
+		 * Asks how many senders are held, on the one page that shows them.
+		 * The list starts folded, unless the address asks for it
+		 * (`?requests=1`, where the Blocking page links).
+		 */
 		fetchPendingRequests() {
-			this.showRequests = false
+			this.showRequests = this.type === 'notifications' && this.$route?.query?.requests === '1'
 			if (this.type === 'notifications') {
 				this.notificationsStore.fetchPendingRequests()
 			}
@@ -804,6 +835,77 @@ export default {
 	}
 }
 
+.policy-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border-radius: var(--border-radius-large);
+	background: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text);
+
+	&__icon {
+		margin-top: 2px;
+	}
+
+	&__text {
+		flex: 1 1 auto;
+		margin: 0;
+
+		a {
+			text-decoration: underline;
+		}
+	}
+}
+
+.held-requests {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-background-hover);
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	&__toggle {
+		flex: 1 1 200px;
+		min-height: var(--default-clickable-area);
+		margin: 0;
+		padding: 0 4px;
+		border: 0;
+		background: none;
+		color: var(--color-main-text);
+		font: inherit;
+		text-align: start;
+		cursor: pointer;
+
+		&:hover {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--color-main-text);
+			outline-offset: 2px;
+		}
+	}
+
+	&__settings {
+		font-size: var(--font-size-small, 13px);
+		color: var(--color-text-maxcontrast);
+		text-decoration: underline;
+	}
+
+	&__list {
+		margin-top: 8px;
+	}
+}
+
 /*
  * Seven options where the switcher was drawn for three.
  *
@@ -823,35 +925,6 @@ export default {
    it on the other. Tinted rather than bordered -- it is the page saying
    something, not another card to read -- and gone entirely at zero, so the
    list does not keep a permanent header it has no news for. */
-.held-requests {
-	margin: 0 0 12px;
-	padding: 10px 12px;
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large);
-	background: var(--color-background-hover);
-
-	&__row {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		flex-wrap: wrap;
-	}
-
-	&__count {
-		flex: 1 1 200px;
-	}
-
-	&__settings {
-		font-size: var(--font-size-small, 13px);
-		color: var(--color-text-maxcontrast);
-		text-decoration: underline;
-	}
-
-	&__list {
-		margin-top: 8px;
-	}
-}
-
 .new-activities {
 	display: flex;
 	align-items: center;

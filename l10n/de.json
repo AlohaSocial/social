@@ -1,4 +1,7 @@
 { "translations": {
+    "You can now choose who reaches your notifications — new accounts and people you don't follow can wait for your review." : "Du kannst jetzt wählen, wer deine Benachrichtigungen erreicht – neue Konten und Personen, denen du nicht folgst, können warten, bis du sie prüfst.",
+    "Choose in Settings" : "In den Einstellungen wählen",
+    "_{count} person is waiting — Review_::_{count} people are waiting — Review_" : ["{count} Person wartet – Ansehen", "{count} Personen warten – Ansehen"],
     "Held people can still write to you. Their posts, likes and follows wait in Activities until you look; they do not ring, push or mail." : "Zurückgehaltene Personen können dir weiterhin schreiben. Ihre Beiträge, „Gefällt mir“ und Follows warten in den Aktivitäten, bis du nachsiehst; sie klingeln nicht, senden keine Push-Benachrichtigung und keine E-Mail.",
     "People you don't follow" : "Personen, denen du nicht folgst",
     "People who don't follow you" : "Personen, die dir nicht folgen",

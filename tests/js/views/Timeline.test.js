@@ -716,26 +716,34 @@ describe('Timeline', () => {
 		})
 	})
 
-	// The badge in the sidebar says how many; until this there was nothing at
-	// the other end of it saying so, and no way to answer it except to look at
-	// the page for two seconds and let it mark itself.
-	describe('the senders the policy is holding back', () => {
+	describe('the people the policy is holding back', () => {
 		const strip = (wrapper) => wrapper.find('.held-requests')
+		const toggle = (wrapper) => wrapper.find('.held-requests__toggle')
 
 		const withHeld = (count) => {
 			useNotificationsStore().setPendingRequests(count)
 		}
 
-		it('says how many are waiting, above the activities, and offers to review them', async () => {
+		it('says how many are waiting, above the activities, and opens the list on Review', async () => {
 			withHeld(3)
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
 
-			expect(strip(wrapper).text()).toContain('3 people you have no relationship with are waiting to notify you')
+			expect(toggle(wrapper).text()).toBe('3 people are waiting — Review')
+			expect(toggle(wrapper).attributes('aria-expanded')).toBe('false')
 			expect(strip(wrapper).find('.notification-requests-stub').exists()).toBe(false)
+			const html = wrapper.html()
+			expect(html.indexOf('held-requests')).toBeLessThan(html.indexOf('timeline-list-stub'))
 
-			await strip(wrapper).findComponent({ name: 'NcButton' }).trigger('click')
+			await toggle(wrapper).trigger('click')
 
 			expect(strip(wrapper).find('.notification-requests-stub').exists()).toBe(true)
+			expect(toggle(wrapper).attributes('aria-expanded')).toBe('true')
+		})
+
+		it('says it in the singular for one', () => {
+			withHeld(1)
+
+			expect(toggle(mountTimeline({ params: { type: 'notifications' } })).text()).toBe('1 person is waiting — Review')
 		})
 
 		it('asks the server for the count when the activities open', () => {
@@ -751,10 +759,17 @@ describe('Timeline', () => {
 			expect(strip(mountTimeline({ params: { type: 'home' } })).exists()).toBe(false)
 		})
 
+		it('opens the list straight away when the address asks for it', () => {
+			withHeld(2)
+			const wrapper = mountTimeline({ params: { type: 'notifications' }, query: { requests: '1' } })
+
+			expect(strip(wrapper).find('.notification-requests-stub').exists()).toBe(true)
+		})
+
 		it('follows the list: an emptied list folds away with its count', async () => {
 			withHeld(1)
 			const wrapper = mountTimeline({ params: { type: 'notifications' } })
-			await strip(wrapper).findComponent({ name: 'NcButton' }).trigger('click')
+			await toggle(wrapper).trigger('click')
 
 			wrapper.findComponent(NotificationRequestsStub).vm.$emit('changed', 0)
 			await wrapper.vm.$nextTick()
@@ -763,14 +778,49 @@ describe('Timeline', () => {
 			expect(useNotificationsStore().pendingRequests).toBe(0)
 		})
 
-		it('links to where the policy is set', () => {
+		it('links to where the policy is set, inside Settings → Notifications', () => {
 			withHeld(2)
-			const links = mountTimeline({ params: { type: 'notifications' } }).find('.held-requests').findAllComponents(RouterLinkStub)
+			const links = strip(mountTimeline({ params: { type: 'notifications' } })).findAllComponents(RouterLinkStub)
 
 			expect(links.map((link) => link.props('to'))).toContainEqual({ name: 'settings', hash: '#notification-policy' })
 		})
 	})
 
+	describe('the one-time notice about who may reach you', () => {
+		const notice = (wrapper) => wrapper.find('.policy-notice')
+
+		it('is shown at the top of Activities when the server says it is due, with the way to Settings', () => {
+			useNotificationsStore().setPolicyNotice(true)
+			const wrapper = mountTimeline({ params: { type: 'notifications' } })
+
+			expect(notice(wrapper).text()).toContain('You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.')
+			expect(notice(wrapper).text()).toContain('Choose in Settings')
+			expect(notice(wrapper).findComponent(RouterLinkStub).props('to')).toEqual({ name: 'settings', hash: '#notification-policy' })
+		})
+
+		it('is not there when it is not due, nor on any other page', () => {
+			useNotificationsStore().setPolicyNotice(false)
+			expect(notice(mountTimeline({ params: { type: 'notifications' } })).exists()).toBe(false)
+			useNotificationsStore().setPolicyNotice(true)
+			expect(notice(mountTimeline({ params: { type: 'home' } })).exists()).toBe(false)
+		})
+
+		it('goes when it is dismissed, and the server is told', async () => {
+			const store = useNotificationsStore()
+			store.setPolicyNotice(true)
+			const dismiss = vi.spyOn(store, 'dismissPolicyNotice').mockImplementation(() => store.setPolicyNotice(false))
+			const wrapper = mountTimeline({ params: { type: 'notifications' } })
+
+			await notice(wrapper).findComponent({ name: 'NcButton' }).trigger('click')
+
+			expect(dismiss).toHaveBeenCalledTimes(1)
+			expect(notice(wrapper).exists()).toBe(false)
+		})
+	})
+
+	// The badge in the sidebar says how many; until this there was nothing at
+	// the other end of it saying so, and no way to answer it except to look at
+	// the page for two seconds and let it mark itself.
 	describe('the count above the activities', () => {
 		const header = (wrapper) => wrapper.find('.new-activities')
 

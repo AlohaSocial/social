@@ -203,7 +203,7 @@
 				{{ t('social', 'Your notification settings can hold notifications back instead of showing them — from accounts nobody here follows, from brand-new accounts, from people you do not follow. The senders wait at the top of Activities now, where you decide about the person once; which of them are held is set under Who may reach you.') }}
 			</p>
 			<p class="block-card__links">
-				<RouterLink :to="{ name: 'timeline', params: { type: 'notifications' } }">
+				<RouterLink :to="{ name: 'timeline', params: { type: 'notifications' }, query: { requests: '1' } }">
 					{{ t('social', 'Open Activities') }}
 				</RouterLink>
 				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }">

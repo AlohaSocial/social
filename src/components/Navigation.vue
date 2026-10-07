@@ -529,6 +529,11 @@ export default {
 			return this.notificationsStore.unreadNotifications
 		},
 
+		/** @return {number} unread activities and the people waiting for a decision */
+		activitiesCount() {
+			return this.notificationsStore.activitiesCount
+		},
+
 		/** @return {number} conversations with something unread in them */
 		unreadDirectMessages() {
 			return this.notificationsStore.unreadDirectMessages
@@ -648,7 +653,7 @@ export default {
 						icon: IconBell,
 						title: t('social', 'Activities'),
 						to: { name: 'timeline', params: { type: 'notifications' } },
-						counter: this.unreadNotifications,
+						counter: this.activitiesCount,
 					},
 					{
 						key: 'social-direct',
@@ -806,6 +811,7 @@ export default {
 			this.fetchFollowedTags()
 			this.notificationsStore.fetchUnreadNotifications()
 			this.notificationsStore.fetchUnreadDirectMessages()
+			this.notificationsStore.fetchPendingRequests()
 		})
 		// this one defers itself: the composer asks for it too, and it must
 		// wait whichever of the two asks first
@@ -831,12 +837,14 @@ export default {
 		this.stopListening = listen('social_timeline', () => {
 			this.notificationsStore.fetchUnreadNotifications()
 			this.notificationsStore.fetchUnreadDirectMessages()
+			this.notificationsStore.fetchPendingRequests()
 		})
 		if (!this.stopListening) {
 			this.pollTimer = setInterval(
 				() => {
 					this.notificationsStore.fetchUnreadNotifications()
 					this.notificationsStore.fetchUnreadDirectMessages()
+					this.notificationsStore.fetchPendingRequests()
 				},
 				UNREAD_POLL_MS,
 			)
