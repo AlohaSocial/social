@@ -75,6 +75,7 @@
 
 <script>
 import ArchivedPosts from '../components/ArchivedPosts.vue'
+import AtprotoSettings from '../views/AtprotoSettings.vue'
 import AuthorizedApps from '../components/AuthorizedApps.vue'
 import DeleteAccount from '../components/DeleteAccount.vue'
 import HeldPosts from '../components/HeldPosts.vue'
@@ -129,6 +130,8 @@ const NotificationDeliverySettings = defineAsyncComponent(() => import(/* webpac
 const ExternalStorage = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ExternalStorage.vue'))
 const InviteSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InviteSettings.vue'))
 
+const AtprotoSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../views/AtprotoSettings.vue'))
+
 /**
  * Settings: what this app holds about how the reader uses it.
  *
@@ -146,9 +149,10 @@ const InviteSettings = defineAsyncComponent(() => import(/* webpackChunkName: "s
 export default {
 	name: 'Settings',
 
-	components: {
+components: {
 		AccountSettings,
 		ArchivedPosts,
+		AtprotoSettings,
 		AuthorizedApps,
 		DeleteAccount,
 		ExternalStorage,
@@ -171,8 +175,8 @@ export default {
 		IconRecap,
 		IconReview,
 		IconScheduled,
-		IconCounts,
 		IconSenses,
+		IconCounts,
 		IconStorage,
 		IconTags,
 		ListsSettings,
@@ -320,6 +324,13 @@ export default {
 					component: 'AuthorizedApps',
 					title: t('social', 'Authorized apps'),
 					lede: t('social', 'The apps you have signed in to with this account — a phone client, a cross-poster, anything that asked. Each one holds a key to your account until you take it back, so this is the page to open after losing a phone.'),
+				},
+				{
+					id: 'atproto',
+					icon: 'IconApps',
+					component: 'AtprotoSettings',
+					title: t('social', 'Bluesky (AT Protocol)'),
+					lede: t('social', 'Your Bluesky identity, recovery phrase, sync settings, and labelers.'),
 				},
 				// where the administrator lets people invite others to register
 				...(this.serverData?.externalInvites === true

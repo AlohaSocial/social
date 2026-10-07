@@ -49,6 +49,7 @@
 				     every other network puts it; it is still a profile field and
 				     still federates as one -->
 				<span v-if="pronouns" class="user-profile__pronouns">{{ pronouns }}</span>
+				<BlueskyBadge v-if="showBlueskyBadge" :actor="accountInfo" size="normal" />
 			</h2>
 			<!-- the redirect every other server shows for a moved account; a
 			     local account that moved is the reader's own, and Settings →
@@ -485,6 +486,7 @@ import FollowButton from './FollowButton.vue'
 import FeaturedTags from './FeaturedTags.vue'
 import ProfileHighlights from './ProfileHighlights.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
 import { asAccent, dominantColour } from '../utils/dominantColour.js'
 import { formatCount } from '../utils/number.js'
 import { fieldLink, profileFields } from '../utils/profileFields.js'
@@ -551,6 +553,7 @@ export default {
 		VerifiedCheck,
 		VolumeHigh,
 		VolumeOff,
+		BlueskyBadge,
 	},
 
 	props: {
@@ -820,6 +823,11 @@ export default {
 		/** @return {boolean} whether the block/mute menu applies to this profile */
 		canModerate() {
 			return !this.serverData.public && !this.isOwnProfile && this.relationship !== undefined
+		},
+
+		/** @return {boolean} whether to show Bluesky badge */
+		showBlueskyBadge() {
+			return this.accountInfo?.details?.atproto?.did && this.accountInfo?.details?.atproto?.handle
 		},
 
 		bannerStyle() {
