@@ -74,7 +74,10 @@ async function retrieveRecovery() {
 
 <style scoped>
 .atproto-settings { max-width: 700px; padding: 24px; }
+
 dd { margin-bottom: 12px; overflow-wrap: anywhere; }
+
 dt { font-weight: bold; }
+
 .recovery-phrase { padding: 16px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); }
 </style>

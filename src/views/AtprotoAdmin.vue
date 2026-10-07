@@ -66,6 +66,8 @@ async function save() {
 
 <style scoped>
 .atproto-admin { max-width: 700px; padding: 24px; }
+
 dt { font-weight: bold; }
+
 dd { margin-bottom: 12px; }
 </style>

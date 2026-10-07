@@ -118,3 +118,21 @@ path = "tests/*"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Nextcloud GmbH and Nextcloud contributors"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["contrib/webserver/*", "src/types/Atproto.d.ts", "tests/Atproto/fixtures/README.md", "tests/Atproto/fixtures/mst-reference-roots.json", "tests/Interop/atproto/*"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Nextcloud GmbH and Nextcloud contributors"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["tests/Atproto/fixtures/data-model-fixtures.json", "tests/Atproto/fixtures/key_heights.json", "tests/Atproto/fixtures/signature-fixtures.json"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Bluesky PBC and AT Protocol contributors"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = "resources/atproto/bip39-english.txt"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "BIP39 authors: Marek Palatinus, Pavol Rusnak, Aaron Voisine and Sean Bowe"
+SPDX-License-Identifier = "MIT"
