@@ -62,6 +62,7 @@ class StatusAssemblyService {
 	public function paramsOf(Status $status, string $visibility): array {
 		return [
 			'text' => $status->getStatus(),
+			...($status->getPublishTarget() === '' ? [] : ['publish_target' => $status->getPublishTarget()]),
 			// strings, because every id Mastodon shows a client is a string,
 			// and this array is echoed back verbatim
 			'media_ids' => array_map('strval', $status->getMediaIds()),
@@ -87,6 +88,7 @@ class StatusAssemblyService {
 		$post->setSpoilerText($params->paramString('spoiler_text'));
 		$post->setSensitive($params->paramBool('sensitive'));
 		$post->setType($params->paramString('visibility'));
+		$post->setPublishTarget($params->paramString('publish_target'));
 		$post->setLanguage($params->paramString('language'));
 		$post->setQuotedId($params->paramString('quoted_status_id'));
 

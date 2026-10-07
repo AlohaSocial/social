@@ -12,6 +12,7 @@ class StrongRefResolver {
 	public function resolve(string $id): ?array {
 		if ($id === '') { return null; }
 		try { $post = $this->streams->getStreamById($id); } catch (StreamNotFoundException) { return null; }
+		if (($post->getDetails(Details::PUBLICATION)['atproto'] ?? true) === false) { return null; }
 		if ($post->getVisibility() !== 'public' || !$post->addressesPublic()) { return null; }
 		$native = $post->getDetails(Details::ATPROTO);
 		if (isset($native['uri'], $native['cid'])) { return ['ref' => ['uri' => $native['uri'], 'cid' => $native['cid']], 'root' => $native['reply']['root'] ?? ['uri' => $native['uri'], 'cid' => $native['cid']]]; }

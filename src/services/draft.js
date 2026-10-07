@@ -58,6 +58,7 @@ const MAX_AGE_MS = 7 * 24 * 3600 * 1000
  * @typedef {object} ComposerDraft
  * @property {string} text what was typed, as plain text
  * @property {string} spoilerText the content warning, '' when there is none
+ * @property {string} [publishTarget] transport selection
  * @property {string} visibility who it was going to
  * @property {string} postAs the team account it was being written as, '' for
  *   the reader's own
@@ -71,11 +72,12 @@ const MAX_AGE_MS = 7 * 24 * 3600 * 1000
  * @param {string} draft.text what was typed
  * @param {string} [draft.spoilerText] the content warning
  * @param {string} [draft.visibility] who it is going to
+ * @param {string} [draft.publishTarget] fediverse, atproto or both
  * @param {string} [draft.postAs] the team account it is being written as
  * @param {string} [context] what it belongs to — see `key()`
  * @return {boolean} whether it could be stored
  */
-export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '' }, context = '') {
+export function saveDraft({ text, spoilerText = '', visibility = '', postAs = '', publishTarget = '' }, context = '') {
 	if ((text ?? '').trim() === '' && spoilerText.trim() === '') {
 		return clearDraft(context)
 	}
@@ -90,6 +92,7 @@ export function saveDraft({ text, spoilerText = '', visibility = '', postAs = ''
 			// does not quietly turn a team post back into a personal one" —
 			// could never be true
 			postAs,
+			...(publishTarget ? { publishTarget } : {}),
 			savedAt: Date.now(),
 		}))
 		return true
@@ -146,6 +149,7 @@ export function loadDraft(context = '') {
 		spoilerText: typeof draft.spoilerText === 'string' ? draft.spoilerText : '',
 		visibility: typeof draft.visibility === 'string' ? draft.visibility : '',
 		postAs: typeof draft.postAs === 'string' ? draft.postAs : '',
+		...(['fediverse', 'atproto', 'both'].includes(draft.publishTarget) ? { publishTarget: draft.publishTarget } : {}),
 		savedAt: typeof draft.savedAt === 'number' ? draft.savedAt : 0,
 	}
 }

@@ -17,6 +17,7 @@
  * @param {string[]} post.mediaIds the uploads the server took
  * @param {string} [post.inReplyToId] the post this answers
  * @param {string} [post.quoteId] the post this quotes
+ * @param {string} [post.publishTarget] fediverse, atproto or both
  * @param {string} post.visibility who it is for
  * @param {string} post.postAs the team it is written as, '' for oneself
  * @param {string} post.language what it is written in
@@ -29,6 +30,7 @@
 export function statusPayload(post) {
 	const body = {
 		content_type: '',
+		...(post.publishTarget ? { publish_target: post.publishTarget } : {}),
 		media_ids: post.mediaIds,
 		// a warning means the body is hidden until asked for, which is what
 		// `sensitive` says about the post as a whole

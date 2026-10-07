@@ -151,6 +151,13 @@ class PostService {
 		$note->setSensitive($post->isSensitive());
 		$note->setAttachments($post->getMedias());
 		$note->setVisibility($post->getType());
+		$target = $post->getPublishTarget();
+		$atproto = in_array($this->configService->getAppValue(ConfigService::ATPROTO_ENABLED), ['1', 'true'], true);
+		if ($target !== '' || $atproto) {
+			$targets = \OCA\Social\Atproto\RecordMapper\PublicationPolicy::targets($target, $post->getType(), $atproto);
+			$note->setDetailArray(\OCA\Social\Model\Details::PUBLICATION, $targets);
+		}
+
 		$note->setLanguage($this->languageFor($post->getLanguage(), $actor));
 		$note->setPlaceId($post->getPlaceId());
 
@@ -210,7 +217,7 @@ class PostService {
 
 		// after the post exists: the request names it as the instrument, and
 		// the quoted author's server dereferences both before approving
-		if ($quotedAuthor !== null) {
+		if ($quotedAuthor !== null && ($note->getDetails(\OCA\Social\Model\Details::PUBLICATION)['fediverse'] ?? true)) {
 			$this->requestQuoteApproval($actor, $note, $quotedAuthor);
 		}
 

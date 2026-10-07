@@ -1858,6 +1858,30 @@ describe('Composer', () => {
 	})
 
 	describe('posting', () => {
+		it('selects ATProto in the common composer and sends the transport choice', async () => {
+			const { wrapper, store } = mountComposer({ defaultVisibility: 'public' })
+			useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', atprotoEnabled: true })
+			await flushPromises()
+			const selector = wrapper.find('.composer-publication-target select')
+			expect(selector.exists()).toBe(true)
+			await selector.setValue('atproto')
+			await setContent(wrapper, 'Through the native PDS')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(postedStatus(store)).toMatchObject({ publish_target: 'atproto', visibility: 'public', status: 'Through the native PDS' })
+		})
+
+		it('disables ATProto for a private audience and sends only Fediverse', async () => {
+			const { wrapper, store } = mountComposer({ defaultVisibility: 'followers' })
+			useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', atprotoEnabled: true })
+			await flushPromises()
+			expect(wrapper.find('.composer-publication-target select').attributes('disabled')).toBeDefined()
+			await setContent(wrapper, 'Private words')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+			expect(postedStatus(store)).toMatchObject({ publish_target: 'fediverse', visibility: 'followers' })
+		})
+
 		it('sends the plain text of the message with the attachments and visibility', async () => {
 			const { wrapper, store } = mountComposer({ defaultVisibility: 'public' })
 			await attachFile(wrapper, new File(['x'], 'cat.png', { type: 'image/png' }))
@@ -1870,6 +1894,7 @@ describe('Composer', () => {
 
 			expect(postedStatus(store)).toEqual({
 				content_type: '',
+				publish_target: 'fediverse',
 				status: '@bob@remote.example hello 😀 Tom & Jerry\nsecond line',
 				visibility: 'public',
 				media_ids: ['media-1'],

@@ -39,6 +39,9 @@ class Status implements \JsonSerializable {
 	private array $videoMeta = [];
 	/** the handle of a team account this post is written as, or '' */
 	private string $postAs = '';
+	private string $publishTarget = '';
+	public function setPublishTarget(string $target): void { $this->publishTarget = $target; }
+	public function getPublishTarget(): string { return $this->publishTarget; }
 	private string $status = '';
 	/** BCP 47 as the client sent it, normalised; empty for "whatever the poster's default is" */
 	private string $language = '';
@@ -230,6 +233,7 @@ class Status implements \JsonSerializable {
 		$this->setStatus($this->get('status', $data));
 		$this->setLanguage($this->get('language', $data));
 		$this->setPostAs($this->get('post_as', $data));
+		$this->setPublishTarget($this->get('publish_target', $data));
 
 		// Where the post was taken, if the client said. Either an id it got
 		// from /api/v1/places/search, or a name it already had.

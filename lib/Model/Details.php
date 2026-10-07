@@ -29,6 +29,8 @@ namespace OCA\Social\Model;
 final class Details {
 	/** Native protocol identity or strong reference on a shared actor or post. */
 	public const ATPROTO = 'atproto';
+	/** Explicit publication transports, kept with the post through edits and deletion. */
+	public const PUBLICATION = 'publication';
 	/**
 	 * Counts on a post.
 	 *

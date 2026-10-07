@@ -1,6 +1,11 @@
 OC.L10N.register(
     "social",
     {
+    "Publish via" : "Veröffentlichen über",
+    "Fediverse" : "Fediverse",
+    "ATProto (Bluesky)" : "ATProto (Bluesky)",
+    "Fediverse and ATProto" : "Fediverse und ATProto",
+    "ATProto supports public posts only." : "ATProto unterstützt nur öffentliche Beiträge.",
     "Made with AI" : "Mit KI erstellt",
     "Posts made with AI" : "Mit KI erstellte Beiträge",
     "Hide posts made with AI" : "Mit KI erstellte Beiträge ausblenden",

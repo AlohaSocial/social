@@ -249,6 +249,15 @@
 				@close="showGifs = false"
 				@chosen="attachGif" />
 
+			<label v-if="atprotoEnabled" class="composer-publication-target">
+				{{ t('social', 'Publish via') }}
+				<select v-model="publishTarget" :disabled="loading || visibility !== 'public'">
+					<option value="fediverse">{{ t('social', 'Fediverse') }}</option>
+					<option value="atproto">{{ t('social', 'ATProto (Bluesky)') }}</option>
+					<option value="both">{{ t('social', 'Fediverse and ATProto') }}</option>
+				</select>
+				<small v-if="visibility !== 'public'">{{ t('social', 'ATProto supports public posts only.') }}</small>
+			</label>
 			<!-- what the server will publish, once the writer asks to see it;
 			     under the box, above everything the post is being given -->
 			<ComposerPreview
@@ -716,6 +725,7 @@ export default {
 		const { hostname, serverData } = useServerData()
 		const { currentUser } = useCurrentUser()
 		// a self-registered external user has no Files to attach from
+		const atprotoEnabled = computed(() => serverData.value?.atprotoEnabled === true)
 		const hasFiles = computed(() => !serverData.value?.externalMedia)
 
 		// what a click into the box opens up; the composer is also expanded
@@ -734,6 +744,7 @@ export default {
 
 		return {
 			hostname,
+			atprotoEnabled,
 			hasFiles,
 			currentUser,
 			openedByHand,
@@ -798,6 +809,7 @@ export default {
 			 */
 			teams: [],
 			postAs: '',
+			publishTarget: 'both',
 			/** when the post is to go out, or null for now */
 			scheduledAt: null,
 			/** whether the clock is pressed: the picker is shown, Post reads Schedule */
@@ -1094,7 +1106,14 @@ export default {
 		// the warning is part of the draft, and it has its own field
 		spoilerText: 'rememberDraft',
 		showWarning: 'rememberDraft',
-		visibility: 'rememberDraft',
+		visibility() {
+			if (this.visibility !== 'public') {
+				this.publishTarget = 'fediverse'
+			}
+			this.rememberDraft()
+		},
+
+		publishTarget: 'rememberDraft',
 
 		/**
 		 * The words stay in the box when it is pointed at another post, or
@@ -1424,6 +1443,7 @@ export default {
 				// who it was being written as, so a reload does not quietly
 				// turn a team post back into a personal one
 				postAs: this.postAs,
+				publishTarget: this.publishTarget,
 			}, this.draftContext)
 		},
 
@@ -1437,6 +1457,9 @@ export default {
 				return false
 			}
 
+			if (['fediverse', 'atproto', 'both'].includes(draft.publishTarget)) {
+				this.publishTarget = draft.publishTarget
+			}
 			if (draft.text !== '') {
 				this.inputElement().innerText = draft.text
 			}
@@ -1617,6 +1640,7 @@ export default {
 			const warning = this.showWarning ? this.spoilerText.trim() : ''
 
 			const statusData = statusPayload({
+				publishTarget: this.atprotoEnabled && this.visibility === 'public' ? this.publishTarget : 'fediverse',
 				text: status,
 				warning,
 				// only uploads the server actually took: a failed one used to
@@ -1927,6 +1951,8 @@ function rememberedVisibility() {
 // together rather than each on its own schedule
 $composer-ease: cubic-bezier(0.25, 0.8, 0.35, 1);
 $composer-duration: 220ms;
+
+.composer-publication-target { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
 
 .new-post {
 	background: var(--color-main-background);

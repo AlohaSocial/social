@@ -38,6 +38,9 @@ class Post implements JsonSerializable {
 	/** what the composer said about the video: its title, category and licence */
 	private array $videoMeta = [];
 	private string $content = '';
+	private string $publishTarget = '';
+	public function setPublishTarget(string $target): void { $this->publishTarget = $target; }
+	public function getPublishTarget(): string { return $this->publishTarget; }
 	private string $type = '';
 	private array $hashtags = [];
 	private ?array $poll = null;

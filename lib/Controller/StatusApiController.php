@@ -183,6 +183,7 @@ class StatusApiController extends MastodonApiController {
 
 			$post = new Post($actor);
 			$post->setContent($status->getStatus());
+			$post->setPublishTarget($status->getPublishTarget());
 			$post->setPoll($status->getPoll());
 			$post->setSpoilerText($status->getSpoilerText());
 			$post->setSensitive($status->isSensitive());
