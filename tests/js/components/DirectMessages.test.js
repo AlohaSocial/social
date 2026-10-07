@@ -2,10 +2,14 @@
  * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import axios from '@nextcloud/axios'
+import { createPinia, setActivePinia } from 'pinia'
 import DirectMessages from '../../../src/components/DirectMessages.vue'
+import { shortAgo } from '../../../src/utils/relativeTime.js'
 
 const bob = { id: 'https://remote.example/users/bob', acct: 'bob@remote.example', display_name: 'Bob' }
 const latest = { id: '11', content: '<p>Latest reply</p>', created_at: '2026-09-23T12:00:00Z', account: bob }
@@ -19,25 +23,7 @@ const stubs = {
 	ActorAvatar: { props: ['actor', 'size', 'link'], template: '<span class="avatar-stub">{{ actor.display_name }}</span>' },
 	NcButton: { template: '<button v-bind="$attrs"><slot /></button>' },
 	NcActionButton: { template: '<button v-bind="$attrs"><slot name="icon" /><slot /></button>' },
-	NcListItem: {
-		props: ['name', 'details', 'active', 'bold', 'linkAriaLabel'],
-		template: '<button v-bind="$attrs" class="native-list-item-stub"><slot name="icon" /><span>{{ name }}</span><slot name="subname" /><slot name="indicator" /><span class="native-actions"><slot name="actions" /></span></button>',
-	},
-	NcTextField: {
-		props: ['modelValue', 'label', 'placeholder', 'type'],
-		emits: ['update:modelValue'],
-		template: '<label><span>{{ label }}</span><input :value="modelValue" :placeholder="placeholder" :type="type" @input="$emit(\'update:modelValue\', $event.target.value)"></label>',
-	},
-	// shaped like the real one: the textarea is the element, and `label` draws
-	// a floating one over it rather than a caption beside it
-	NcTextArea: {
-		name: 'NcTextArea',
-		// `labelOutside` is typed on the real component, so a bare attribute
-		// casts to true; untyped it would arrive as the empty string
-		props: { modelValue: {}, label: {}, placeholder: {}, labelOutside: { type: Boolean } },
-		emits: ['update:modelValue'],
-		template: '<div class="textarea"><span v-if="label && !labelOutside" class="textarea__label">{{ label }}</span><textarea class="textarea__input" :value="modelValue" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" /></div>',
-	},
+	NcActions: { template: '<div class="native-actions"><slot /></div>' },
 	TimelineEntry: { props: ['item', 'type', 'hideAuthor', 'hideAvatar'], template: '<article class="message-stub" :data-id="item.id" :data-hide-author="hideAuthor" :data-hide-avatar="hideAvatar">{{ item.content }}</article>' },
 }
 
@@ -60,6 +46,7 @@ describe('DirectMessages', () => {
 	let remove
 
 	beforeEach(() => {
+		setActivePinia(createPinia())
 		get = vi.spyOn(axios, 'get').mockImplementation(async (url) => {
 			if (url.endsWith('/conversations')) {
 				return { data: [structuredClone(conversation)] }
@@ -93,28 +80,38 @@ describe('DirectMessages', () => {
 	})
 
 	/**
-	 * The composer is a chat box: the placeholder is the whole of its label.
-	 *
-	 * Given a `label`, `NcTextArea` draws a floating one absolutely positioned
-	 * 11px from the top of the input — and this composer halves the padding
-	 * the component reserves for it, so the label sat on top of whatever was
-	 * being typed. `labelOutside` says there is no floating label to place,
-	 * and the field is named for a screen reader the other way.
+	 * The message box is the feed composer's pill: no label drawn over the
+	 * field, the placeholder says what it is for, and a screen reader is told
+	 * the same through `aria-label`.
 	 */
 	it('names the message box without drawing a label over it', async () => {
 		const wrapper = mountMessages('10')
 		await flushPromises()
 
-		const boxes = wrapper.findAllComponents({ name: 'NcTextArea' })
+		const box = wrapper.find('.direct-messages__message-form textarea')
+		expect(box.attributes('aria-label')).toBe('Write a message…')
+		expect(box.attributes('placeholder')).toBe('Write a message…')
+		expect(wrapper.find('.direct-messages__message-form label').exists()).toBe(false)
+	})
 
-		expect(boxes.length).toBeGreaterThan(0)
-		for (const box of boxes) {
-			expect(box.props('labelOutside')).toBe(true)
-			expect(box.props('label')).toBeFalsy()
-			expect(box.attributes('aria-label')).toBe('Write a message…')
-		}
-		// and so nothing is drawn over the field
-		expect(wrapper.find('.textarea__label').exists()).toBe(false)
+	it('offers Send only once something is written, and sends with Ctrl+Enter', async () => {
+		const wrapper = mountMessages('10')
+		await flushPromises()
+		const send = () => wrapper.find('.direct-messages__send')
+
+		expect(send().attributes('style')).toContain('display: none')
+		await wrapper.find('.direct-messages__message-form textarea').setValue('Hello')
+		expect(send().attributes('style') ?? '').not.toContain('display: none')
+
+		await wrapper.find('.direct-messages__message-form textarea').trigger('keydown.enter')
+		expect(post).not.toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', expect.anything())
+		await wrapper.find('.direct-messages__message-form textarea').trigger('keydown.enter', { ctrlKey: true })
+		await flushPromises()
+		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/statuses', {
+			status: '@bob@remote.example Hello',
+			visibility: 'direct',
+			in_reply_to_id: '11',
+		})
 	})
 
 	it('opens a recipient search with no social visibility controls', async () => {
@@ -129,7 +126,18 @@ describe('DirectMessages', () => {
 		expect(wrapper.find('.direct-messages__list-panel .composer-stub').exists()).toBe(false)
 	})
 
+	it('offers a search only once the inbox is long enough to need one', async () => {
+		const wrapper = mountMessages()
+		await flushPromises()
+
+		expect(wrapper.find('.direct-messages__search').exists()).toBe(false)
+	})
+
 	it('filters the inbox by the other participant and latest message', async () => {
+		get.mockResolvedValueOnce({ data: [
+			structuredClone(conversation),
+			...Array.from({ length: 8 }, (_, index) => ({ id: `3${index}`, unread: false, accounts: [{ ...bob, id: `other-${index}`, display_name: `Other ${index}` }], last_status: { id: `4${index}`, content: '<p>Hi</p>', created_at: '2026-09-20T09:00:00Z' } })),
+		] })
 		const wrapper = mountMessages()
 		await flushPromises()
 		await wrapper.find('.direct-messages__search input').setValue('nobody')
@@ -138,7 +146,7 @@ describe('DirectMessages', () => {
 		expect(wrapper.find('.direct-messages__state').text()).toBe('No conversations match your search')
 
 		await wrapper.find('.direct-messages__search input').setValue('latest')
-		expect(wrapper.find('.direct-messages__conversation').exists()).toBe(true)
+		expect(wrapper.findAll('.direct-messages__conversation')).toHaveLength(1)
 	})
 
 	it('filters unread conversations and updates the unread badge as they are read', async () => {
@@ -159,11 +167,11 @@ describe('DirectMessages', () => {
 		await flushPromises()
 		const [all, unread] = wrapper.findAll('.direct-messages__filters button')
 
-		expect(all.attributes('aria-pressed')).toBe('true')
-		expect(unread.attributes('aria-pressed')).toBe('false')
+		expect(all.attributes('aria-checked')).toBe('true')
+		expect(unread.attributes('aria-checked')).toBe('false')
 		await unread.trigger('click')
-		expect(all.attributes('aria-pressed')).toBe('false')
-		expect(unread.attributes('aria-pressed')).toBe('true')
+		expect(all.attributes('aria-checked')).toBe('false')
+		expect(unread.attributes('aria-checked')).toBe('true')
 	})
 
 	it('offers a clear empty inbox and a direct way to start a message', async () => {
@@ -191,6 +199,43 @@ describe('DirectMessages', () => {
 		expect(post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/conversations/10/read')
 		expect(wrapper.find('.direct-messages__unread-dot').exists()).toBe(false)
 		expect(wrapper.find('.direct-messages__message-form textarea').exists()).toBe(true)
+	})
+
+	it('dates a conversation the way the feed dates a post', async () => {
+		const wrapper = mountMessages()
+		await flushPromises()
+
+		expect(wrapper.find('.direct-messages__age').text()).toBe(shortAgo(latest.created_at))
+		expect(wrapper.find('.direct-messages__age').attributes('datetime')).toBe(latest.created_at)
+	})
+
+	it('names the other person by their handle above the thread', async () => {
+		const wrapper = mountMessages('10')
+		await flushPromises()
+
+		expect(wrapper.find('.direct-messages__thread-person p').text()).toBe('@bob@remote.example')
+	})
+
+	/**
+	 * A run of messages from one person on one day carries one time, under
+	 * its last message; the others keep theirs beside the bubble, shown when
+	 * the message is pointed at.
+	 */
+	it('shows a time under the last message of a run only', async () => {
+		get.mockImplementation(async (url) => url.endsWith('/conversations')
+			? { data: [structuredClone(conversation)] }
+			: { data: { ...context, ancestors: [{ id: '9', content: '<p>Earlier today</p>', created_at: '2026-09-23T11:50:00Z', account: bob }] } })
+		const wrapper = mountMessages('10')
+		await flushPromises()
+
+		expect(wrapper.findAll('.direct-messages__message-time').map((time) => time.classes().includes('direct-messages__message-time--aside')))
+			.toEqual([true, false, false])
+	})
+
+	it('draws an outgoing bubble in the reader\'s own colour', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/components/DirectMessages.vue'), 'utf8')
+
+		expect(source).toMatch(/\.direct-messages__message--outgoing :deep\(\.post-content\) \{[^}]*background: color-mix\(in srgb, hsl\(var\(--account-hue/)
 	})
 
 	it('searches for one recipient and starts an existing chat instead of duplicating it', async () => {
@@ -263,7 +308,7 @@ describe('DirectMessages', () => {
 			return wrapper
 		}
 
-		const names = (wrapper, group) => wrapper.findAll(`.direct-messages__recipient-results--${group} .native-list-item-stub > span:not(.native-actions):not(.avatar-stub)`)
+		const names = (wrapper, group) => wrapper.findAll(`.direct-messages__recipient-results--${group} .direct-messages__name`)
 			.map((item) => item.text())
 
 		it('lists the people the reader follows first and every other account under its own heading', async () => {

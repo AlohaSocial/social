@@ -502,3 +502,22 @@ describe('the floating controls', () => {
 		expect(hoverBlock).toMatch(/\.post-content:not\(:has\(\.reaction-bar, \.post-action-count\)\)\) \{\s*\.post-given \{\s*display: inline-flex;/)
 	})
 })
+
+/**
+ * A direct message is drawn as an entry too, inside a bubble DirectMessages
+ * draws. The feed's row rules (no padding, no background, a hairline, a hover
+ * tint) are more specific than the bubble's, so they must not reach it.
+ */
+describe('a direct message', () => {
+	it('is marked as one', () => {
+		expect(mountEntry(post, { type: 'direct' }).wrapper.classes()).toContain('timeline-entry--direct')
+		expect(mountEntry(post).wrapper.classes()).not.toContain('timeline-entry--direct')
+	})
+
+	it('is left out of every list-row rule', () => {
+		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+
+		expect(source).not.toMatch(/\.timeline-entry:not\(\.notification\)/)
+		expect(source.match(/\.timeline-entry:not\(\.notification, \.timeline-entry--direct\)/g)?.length).toBeGreaterThanOrEqual(4)
+	})
+})
