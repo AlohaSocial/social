@@ -40,6 +40,7 @@ use OCA\Social\Service\ActorService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\SignatureService;
 use OCP\Accounts\IAccount;
 use OCP\Accounts\IAccountManager;
@@ -75,6 +76,7 @@ class AccountServiceTest extends TestCase {
 	private CacheActorService|MockObject $cacheActorService;
 	private \OCA\Social\Db\CacheActorsRequest|MockObject $cacheActorsRequest;
 	private ModerationRequest|MockObject $moderationRequest;
+	private NotificationPolicyService|MockObject $notificationPolicyService;
 	private LoggerInterface|MockObject $logger;
 
 	/** @var string[] the addresses this instance gives no fediverse account to */
@@ -139,6 +141,7 @@ class AccountServiceTest extends TestCase {
 			$this->cacheActorsRequest,
 			$this->moderationRequest,
 			$this->logger = $this->createMock(LoggerInterface::class),
+			$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class),
 		);
 		error_reporting($this->errorReporting);
 	}
@@ -370,6 +373,35 @@ class AccountServiceTest extends TestCase {
 		$this->assertSame('alice', $created->getPreferredUsername());
 		$this->assertSame('PUB', $created->getPublicKey());
 		$this->assertSame('PRIV', $created->getPrivateKey());
+	}
+
+	/** Every path that makes a person's account comes through here, and it starts calm. */
+	public function testANewPersonsAccountStartsWithTheCalmPolicy(): void {
+		$this->userManager->method('get')->with('alice')->willReturn($this->user('alice'));
+		$this->actorsRequest->method('getFromUsername')->willThrowException(new ActorDoesNotExistException());
+		$this->actorsRequest->method('getFromUserId')->willThrowException(new ActorDoesNotExistException());
+		$this->notificationPolicyService->expects($this->once())->method('startCalm')->with('alice');
+
+		$this->service->createActor('alice', 'alice');
+	}
+
+	/** A team or a channel is nobody's inbox. */
+	public function testATeamAccountIsGivenNoPolicy(): void {
+		$this->actorsRequest->method('getFromUsername')->willThrowException(new ActorDoesNotExistException());
+		$this->actorsRequest->method('getFromUserId')->willThrowException(new ActorDoesNotExistException());
+		$this->notificationPolicyService->expects($this->never())->method('startCalm');
+
+		$this->service->createActor('team/crew', 'crew');
+	}
+
+	/** A refused account is given nothing either. */
+	public function testARefusedAccountIsGivenNoPolicy(): void {
+		$this->userManager->method('get')->willReturn($this->user('bob'));
+		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($this->alice());
+		$this->notificationPolicyService->expects($this->never())->method('startCalm');
+
+		$this->expectException(AccountAlreadyExistsException::class);
+		$this->service->createActor('bob', 'alice');
 	}
 
 	public function testCreateActorRefusesATakenUsername(): void {
@@ -638,6 +670,7 @@ class AccountServiceTest extends TestCase {
 			$this->cacheActorsRequest,
 			$this->moderationRequest,
 			$logger,
+			$this->notificationPolicyService,
 		);
 
 		$this->actorsRequest->method('getFromUsername')->willThrowException(new ActorDoesNotExistException());

@@ -61,6 +61,20 @@ describe('the filtered notifications page', () => {
 		expect(get).toHaveBeenCalledWith(expect.stringContaining('/api/v1/notifications/requests'))
 	})
 
+	it('tells the page how many are left, after reading and after every decision', async () => {
+		get.mockResolvedValue({ data: [{ id: 1, account: { acct: 'a@x.example', display_name: 'A' }, notifications_count: 2 }, { id: 2, account: { acct: 'b@x.example', display_name: 'B' }, notifications_count: 1 }] })
+		post.mockResolvedValue({ data: {} })
+		const wrapper = mountView()
+		await flushPromises()
+
+		expect(wrapper.emitted('changed')).toEqual([[2]])
+
+		await buttonByText(rows(wrapper)[0], 'Show these').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.emitted('changed')).toEqual([[2], [1]])
+	})
+
 	it('says so plainly when nothing is waiting', async () => {
 		const wrapper = mountView()
 		await flushPromises()

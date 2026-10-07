@@ -67,6 +67,18 @@
 					:title="notificationFormattedDate">
 					{{ notificationRelativeTimestamp }}
 				</span>
+				<!-- a mention or a reply is where an unwanted thread reaches
+				     the reader; its post has no menu on this page, so the one
+				     thing to do about the thread is offered here -->
+				<NcActions v-if="canMuteConversation" class="notification__menu" :forceMenu="true">
+					<NcActionButton :closeAfterClick="true" @click="toggleConversationMute">
+						<template #icon>
+							<BellOutline v-if="entryContent.muted" :size="20" />
+							<BellOffOutline v-else :size="20" />
+						</template>
+						{{ entryContent.muted ? t('social', 'Unmute conversation') : t('social', 'Mute conversation') }}
+					</NcActionButton>
+				</NcActions>
 			</span>
 		</div>
 		<template v-else-if="isBoost">
@@ -128,6 +140,10 @@
 <script>
 import { fromNow, fullDateTime } from '../utils/relativeTime.js'
 import Bell from 'vue-material-design-icons/Bell.vue'
+import BellOffOutline from 'vue-material-design-icons/BellOffOutline.vue'
+import BellOutline from 'vue-material-design-icons/BellOutline.vue'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Heart from 'vue-material-design-icons/Heart.vue'
 import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
@@ -148,6 +164,7 @@ import { interestReason } from '../utils/interestReason.js'
 import { onTick } from '../services/clock.js'
 import { isPhone, onPhoneChange } from '../services/phone.js'
 import { mapStores } from 'pinia'
+import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 
 /** the face's size inside the card, on a phone */
@@ -179,6 +196,10 @@ export default {
 		TimelineAvatar,
 		UserEntry,
 		Bell,
+		BellOffOutline,
+		BellOutline,
+		NcActionButton,
+		NcActions,
 		Repeat,
 		Heart,
 		AccountPlusOutline,
@@ -326,7 +347,21 @@ export default {
 			return Object.keys(style).length > 0 ? style : undefined
 		},
 
-		...mapStores(useTimelineStore),
+		...mapStores(useSettingsStore, useTimelineStore),
+
+		/**
+		 * Whether the card offers to mute its thread: a mention (a reply
+		 * is one) about a post, for a signed-in reader.
+		 *
+		 * @return {boolean}
+		 */
+		canMuteConversation() {
+			return this.isNotification
+				&& this.notification.type === 'mention'
+				&& Boolean(this.entryContent?.id)
+				&& this.settingsStore.getServerData?.public !== true
+		},
+
 		/**
 		 * @return {import('../types/Mastodon.js').Status}
 		 */
@@ -432,6 +467,10 @@ export default {
 
 	methods: {
 		t: translate,
+
+		toggleConversationMute() {
+			this.timelineStore.postMuteConversation({ status: this.entryContent, muted: !this.entryContent.muted })
+		},
 	},
 }
 </script>

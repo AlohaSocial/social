@@ -9,11 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interop;
 
+use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CountsService;
+use OCA\Social\Service\NotificationPolicyService;
 use OCP\Server;
 
 /**
@@ -38,13 +40,36 @@ class Here extends ClientApi {
 		parent::__construct($baseUrl);
 	}
 
-	/** A client acting as one local user. */
-	public static function forUser(string $userId): self {
+	/**
+	 * A client acting as one local user.
+	 *
+	 * @param bool $calm keep the notification policy the account was created
+	 *                   with; otherwise everybody is let through, which is what
+	 *                   the tests asserting notifications from Mastodon's
+	 *                   brand-new `interop` account need
+	 */
+	public static function forUser(string $userId, bool $calm = false): self {
 		$base = rtrim(Server::get(ConfigService::class)->getSocialUrl(), '/');
 		// counts are hidden by default; these tests assert what was counted
 		Server::get(CountsService::class)->setHides($userId, false);
 
-		return new self($base, self::$tokens[$userId] ??= self::mint($userId), $userId);
+		$token = self::$tokens[$userId] ??= self::mint($userId);
+		if (!$calm) {
+			self::acceptEverybody($userId);
+		}
+
+		return new self($base, $token, $userId);
+	}
+
+	/**
+	 * A new account here starts with a policy that holds strangers and new
+	 * accounts for review; the tests written before that assert notifications
+	 * from both.
+	 */
+	public static function acceptEverybody(string $userId): void {
+		Server::get(NotificationPolicyService::class)->save(
+			$userId, array_fill_keys(NotificationPolicy::KEYS, NotificationPolicy::ACCEPT)
+		);
 	}
 
 	#[\Override]

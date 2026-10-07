@@ -21,6 +21,7 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MarkerService;
+use OCA\Social\Service\NotificationInboxService;
 use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TimelineRevisionService;
@@ -61,6 +62,7 @@ class TimelineApiController extends MastodonApiController {
 		private NotificationPolicyService $notificationPolicyService,
 		private WatchService $watchService,
 		private TimelineRevisionService $timelineRevisionService,
+		private NotificationInboxService $notificationInboxService,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -432,7 +434,10 @@ class TimelineApiController extends MastodonApiController {
 	 * How many notifications have arrived since the reader last looked.
 	 *
 	 * The sidebar badge asks for this; a client that keeps markers gets the
-	 * same answer from the same place.
+	 * same answer from the same place. Only what the list shows counts: not
+	 * what the notification policy holds, nor a muted thread's. Notifications
+	 * released by accepting a request count even behind the marker, until the
+	 * reader next sets it (`NotificationInboxService::unreadCount()`).
 	 *
 	 * @return Response
 	 */
@@ -445,18 +450,23 @@ class TimelineApiController extends MastodonApiController {
 			$userId = $this->currentSession();
 			$marker = $this->markerService->lastReadId($userId, 'notifications');
 
-			// the count changes when a notification arrives or the marker
-			// moves, and nothing else; both are in the tag
+			// the count changes when a notification arrives, the marker
+			// moves, the reader decides about a sender (the revision), or the
+			// policy, what was released behind the marker or the muted
+			// threads change (the inbox state); all of them are in the tag
 			$newest = $this->streamRequest->newestNidFor(
 				[md5($this->viewer->getId())], 'notif'
 			);
-			$notModified = $this->notModified($newest . '-' . $marker);
+			$notModified = $this->notModified(
+				$newest . '-' . $marker . '-' . $this->timelineRevisionService->of($userId)
+				. '-' . $this->notificationInboxService->unreadState($this->viewer, $userId)
+			);
 			if ($notModified !== null) {
 				return $notModified;
 			}
 
 			return $this->tagged(new DataResponse([
-				'count' => $this->streamRequest->countNotificationsSince($this->viewer, $marker),
+				'count' => $this->notificationInboxService->unreadCount($this->viewer, $userId),
 			], Http::STATUS_OK));
 		} catch (Throwable $e) {
 			return $this->error($e);

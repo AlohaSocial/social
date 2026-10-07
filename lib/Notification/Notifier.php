@@ -293,8 +293,10 @@ class Notifier implements INotifier {
 	 * the order `NotificationService::SUBJECTS` declares them. Kinds the
 	 * digest has no words for are left out of the sentence and stay in the
 	 * total, so the headline never says less than the list behind the link.
+	 * When senders are waiting in the requests inbox, the message ends with a
+	 * line saying how many.
 	 *
-	 * @param array<string, mixed> $params `counts`, `total`, `link`
+	 * @param array<string, mixed> $params `counts`, `total`, `link`, and `waiting` when anyone is
 	 */
 	private function digest(INotification $notification, array $params, IL10N $l10n): void {
 		$total = max(0, (int)($params['total'] ?? 0));
@@ -311,8 +313,14 @@ class Notifier implements INotifier {
 				$parts[] = $l10n->n($one, $many, $count);
 			}
 		}
-		if ($parts !== []) {
-			$notification->setParsedMessage(implode(', ', $parts));
+		$message = implode(', ', $parts);
+		$waiting = max(0, (int)($params['waiting'] ?? 0));
+		if ($waiting > 0) {
+			$line = $l10n->n('%n person is waiting to reach you', '%n people are waiting to reach you', $waiting);
+			$message = ($message === '') ? $line : $message . "\n" . $line;
+		}
+		if ($message !== '') {
+			$notification->setParsedMessage($message);
 		}
 
 		$link = (string)($params['link'] ?? '');

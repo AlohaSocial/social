@@ -52,10 +52,29 @@ class NotificationPolicy implements JsonSerializable {
 		self::LIMITED_ACCOUNTS,
 	];
 
+	/**
+	 * What an account created here starts with, unless an administrator chose
+	 * otherwise: strangers, new accounts, unsolicited private mentions and
+	 * limited accounts wait for review; people the reader follows, and anyone
+	 * merely not following them back, reach them as before.
+	 *
+	 * Not the constructor's defaults. Those are what an account *without* a
+	 * stored policy has, which is every account that existed before new ones
+	 * started calm, and those accounts keep receiving everything.
+	 */
+	public const CALM = [
+		self::NOT_FOLLOWING => self::FILTER,
+		self::NOT_FOLLOWERS => self::ACCEPT,
+		self::NEW_ACCOUNTS => self::FILTER,
+		self::PRIVATE_MENTIONS => self::FILTER,
+		self::LIMITED_ACCOUNTS => self::FILTER,
+	];
+
 	/** @var array<string, string> key => decision */
 	private array $decisions = [];
 	private int $pendingRequests = 0;
 	private int $pendingNotifications = 0;
+	private bool $notice = false;
 
 	public function __construct() {
 		$this->decisions = array_fill_keys(self::KEYS, self::ACCEPT);
@@ -97,6 +116,21 @@ class NotificationPolicy implements JsonSerializable {
 		return $this;
 	}
 
+	/**
+	 * Whether the reader should be pointed at the policy once: an account
+	 * from before new accounts started calm, which has neither chosen a
+	 * policy nor put the pointer away. Not a Mastodon field.
+	 */
+	public function setNotice(bool $notice): self {
+		$this->notice = $notice;
+
+		return $this;
+	}
+
+	public function hasNotice(): bool {
+		return $this->notice;
+	}
+
 	/** @return array<string, string> */
 	public function getDecisions(): array {
 		return $this->decisions;
@@ -111,6 +145,7 @@ class NotificationPolicy implements JsonSerializable {
 					'pending_requests_count' => $this->pendingRequests,
 					'pending_notifications_count' => $this->pendingNotifications,
 				],
+				'notice' => $this->notice,
 			]
 		);
 	}

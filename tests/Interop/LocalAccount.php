@@ -62,6 +62,7 @@ class LocalAccount {
 		$actor = Server::get(AccountService::class)->getActorFromUserId($userId, true);
 		// counts are hidden by default; these tests assert what was counted
 		Server::get(CountsService::class)->setHides($userId, false);
+		Here::acceptEverybody($userId);
 
 		$clients = Server::get(ClientService::class);
 		$client = new SocialClient();

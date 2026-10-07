@@ -19,6 +19,7 @@ use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\InterestService;
 use OCA\Social\Service\MediaUsageService;
 use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\NotificationPolicyService;
 use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\SectionsService;
@@ -82,6 +83,7 @@ class AdminSettings implements IDelegatedSettings {
 		private IGroupManager $groupManager,
 		private IInitialState $initialState,
 		private ExternalAdminState $externalAdminState,
+		private NotificationPolicyService $notificationPolicyService,
 	) {
 	}
 
@@ -162,6 +164,10 @@ class AdminSettings implements IDelegatedSettings {
 			// self-registered external users: who may have an account on
 			// this server is a decision for an administrator proper
 			'external' => $this->isAdministrator() ? $this->externalAdminState->current() : null,
+			// what a new account's notification policy starts as: a decision
+			// about the instance, for an administrator proper
+			'notificationPolicyDefaults' => $this->isAdministrator()
+				? $this->notificationPolicyService->defaults()->getDecisions() : null,
 		]);
 
 		return new TemplateResponse('social', 'settings/admin');

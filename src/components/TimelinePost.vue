@@ -325,6 +325,7 @@
 						@delivery="showDeliveryDialog = true"
 						@bookmark="toggleBookmark"
 						@react="askForReaction"
+						@muteConversation="toggleConversationMute"
 						@collect="showCollectionDialog = true"
 						@pin="togglePin"
 						@lessLikeThis="lessLikeThis"
@@ -1521,6 +1522,10 @@ export default {
 
 		toggleBookmark() {
 			this.timelineStore.postBookmark({ status: this.item, bookmarked: !this.item.bookmarked })
+		},
+
+		toggleConversationMute() {
+			this.timelineStore.postMuteConversation({ status: this.item, muted: !this.item.muted })
 		},
 
 		togglePin() {

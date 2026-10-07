@@ -115,6 +115,7 @@ class AccountService {
 		private CacheActorsRequest $cacheActorsRequest,
 		private ModerationRequest $moderationRequest,
 		private LoggerInterface $logger,
+		private NotificationPolicyService $notificationPolicyService,
 	) {
 	}
 
@@ -325,6 +326,12 @@ class AccountService {
 
 		// generate loopback
 		$this->followsRequest->generateLoopbackAccount($actor);
+
+		// a person's account starts calm: strangers and new accounts wait for
+		// review instead of ringing. A team or a channel is nobody's inbox.
+		if (!str_starts_with($userId, 'team/') && !str_starts_with($userId, 'channel/')) {
+			$this->notificationPolicyService->startCalm($userId);
+		}
 	}
 
 	/**
