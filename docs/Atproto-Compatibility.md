@@ -1017,3 +1017,18 @@ Bluesky application inside Social. Protocol-specific identity, recovery and
 administration settings remain separate. Native imported profiles are stored
 in the ordinary actor cache; posts are Notes in the ordinary stream, with
 AT Protocol strong references retained as internal metadata.
+
+## Aktuelle Produktentscheidung: gemeinsame Oberfläche und Transportwahl (2026-10-07)
+
+Die aktuelle Nutzerentscheidung ersetzt die vorherige Vorgabe ohne Auswahl pro
+Beitrag: Im gemeinsamen Composer werden **Fediverse**, **ATProto (Bluesky)** und
+**beides** angeboten. ATProto ist nur für öffentliche Beiträge verfügbar.
+Die Auswahl muss auf dem Server gespeichert und bei Veröffentlichung, Bearbeitung,
+Löschung, geplanten Beiträgen und Moderationsfreigaben eingehalten werden.
+Ein ATProto-only Beitrag wird lokal in Social gespeichert, aber nicht über die
+ActivityPub-Zustellwarteschlange versendet. Ein Fediverse-only Beitrag wird nicht
+ins native ATProto-Repository aufgenommen.
+
+Vorrang hat ein tatsächlich funktionierender nativer PDS in Nextcloud mit
+Veröffentlichung über Social und nachgewiesener PLC/Relay-Verarbeitung. OAuth und
+Anmeldung mit einem bestehenden externen Bluesky-Konto haben derzeit keine Priorität.

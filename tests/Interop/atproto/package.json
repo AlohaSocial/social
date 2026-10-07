@@ -1,0 +1,1 @@
+{"name":"social-atproto-reference-check","private":true,"type":"module","dependencies":{"@atproto/repo":"0.11.0","@atproto/crypto":"0.5.7"}}

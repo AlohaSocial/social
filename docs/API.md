@@ -1304,6 +1304,7 @@ only active local identities. Errors use the XRPC `error`/`message` shape.
 | GET | `/.well-known/did.json` | Instance DID document and persisted service public key |
 | GET | `/xrpc/com.atproto.server.describeServer` | PDS identity and available handle domain |
 | GET | `/xrpc/com.atproto.identity.resolveHandle` | Local issued handle to DID |
+| GET | `/xrpc/com.atproto.sync.getRepoStatus` | DID, hosting state and latest revision |
 | GET | `/xrpc/com.atproto.sync.getLatestCommit` | Signed repository head CID and revision |
 | GET | `/xrpc/com.atproto.sync.getRepo` | CARv1 rooted at the signed commit, with all reachable MST and record blocks |
 | GET | `/xrpc/com.atproto.sync.getRecord` | CARv1 inclusion proof (currently full repository) |
@@ -1363,3 +1364,13 @@ asynchronous, so a committed action is not an AppView indexing confirmation.
 | POST | `/api/atproto/unlike` | Remove owned matching likes (`uri`) |
 | POST | `/api/atproto/repost` | Commit native repost (`uri`, `cid`) |
 | POST | `/api/atproto/undorepost` | Remove owned matching reposts (`uri`) |
+
+### Publication transport selection
+
+`POST /api/v1/statuses` accepts `publish_target`: `fediverse`, `atproto`, or
+`both`. The shared composer sends this field. `POST /api/v1/post` accepts the
+same choice as `publishTarget`. ATProto requires instance enablement and public
+visibility; invalid or private ATProto requests are refused. The choice is stored
+with the post and retained by scheduled/reviewed posts, edits and deletion.
+ATProto-only posts remain visible in Social and never enter its ActivityPub
+delivery queue. Fediverse-only posts never create native post records.

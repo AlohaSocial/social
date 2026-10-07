@@ -115,7 +115,7 @@ jobs:
         with:
           php-version: ${{ matrix.php-versions }}
           # https://docs.nextcloud.com/server/stable/admin_manual/installation/source_installation.html#prerequisites-for-manual-installation
-          extensions: bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, xmlreader, xmlwriter, zip, zlib, sqlite, pdo_sqlite
+          extensions: gmp, sodium, bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, xmlreader, xmlwriter, zip, zlib, sqlite, pdo_sqlite
           coverage: none
           ini-file: development
         env:
@@ -174,7 +174,22 @@ jobs:
         # Only run if phpunit integration config file exists
         if: steps.php_check.outputs.skip != 'true' && steps.check_integration.outcome == 'success'
         working-directory: apps/${{ env.APP_NAME }}
+        env:
+          ATPROTO_INTEROP_EXPORT_DIR: ${{ runner.temp }}/social-atproto-public-export
         run: composer run test:integration
+
+      - name: Set up Node for native repository interoperability
+        if: steps.php_check.outputs.skip != 'true' && steps.check_integration.outcome == 'success'
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: '22'
+
+      - name: Verify the actual native SQL repository using the reference SDK
+        if: steps.php_check.outputs.skip != 'true' && steps.check_integration.outcome == 'success'
+        working-directory: apps/${{ env.APP_NAME }}
+        run: |
+          npm ci --prefix tests/Interop/atproto
+          node tests/Interop/atproto/verify-publication.mjs "${{ runner.temp }}/social-atproto-public-export"
 
       - name: Print logs
         # always(), so the log is there to read when a test failed
