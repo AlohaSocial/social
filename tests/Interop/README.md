@@ -203,6 +203,7 @@ third-party images whose startup this repository does not control, so a red
 run is worth reading for which side failed before blaming the change under
 review; a newer push to the same pull request cancels the run still going for
 the old one. One run takes about twenty minutes.
+
 ## Against Pixelfed
 
 `.github/workflows/interop-pixelfed.yml` is a job of its own, so it runs
@@ -256,3 +257,28 @@ To run it by hand: `PIXELFED_BASE_URL`, `PIXELFED_TOKEN`, `NEXTCLOUD_URL`,
 When a run fails, its last step prints Pixelfed's Horizon log, its follow
 tables, every request through the proxy including what each side fetched,
 and our delivery queue.
+
+## Against Loops
+
+`.github/workflows/interop-loops.yml` is a job of its own, run on every pull
+request, on pushes to master, weekly and on demand. It builds Loops
+(v1.0.0-beta.14) from its own repository with its queue workers and its
+federation switch on, behind the same Caddy and job-made CA as the other jobs;
+the test video is made with ffmpeg in the job.
+
+`LoopsDeliveryTest` covers what we send and `LoopsInboundTest` what Loops
+sends: follows both ways, videos with caption and poster, likes and unlikes,
+comments threaded under the video, hashtags, edits, deletes and unfollows.
+Skipped, with the reason in the test: a remote answer to a comment (Loops files
+it as a new comment on the video) and a Loops profile update (Loops never
+delivers an `Update` for a profile).
+
+It found four defects on this side: an actor `Update` not addressed to the
+public and the followers, a reply that did not name the author it answers
+among its recipients, a document's transcode and ladder state not read back,
+and posts going out with no `url` — Loops keeps a remote video's address only
+from `url`, so likes and comments on our videos failed there.
+
+When a run fails, its last step prints our log, our delivery queue and
+uploads, every request through the proxy, Loops' log, failed jobs and queue
+worker, and what Loops' own validators make of our last activities.

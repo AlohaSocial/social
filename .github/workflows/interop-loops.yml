@@ -1,0 +1,495 @@
+# SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Interop: this app and a real Loops (the short-video server, joinloops), in
+# both directions, read back out of each side's own API. See
+# tests/Interop/README.md for what it covers and what it cannot prove.
+#
+# Loops publishes no public container image, so it runs from a pinned commit
+# of its source on the runner itself, next to the Nextcloud: the same PHP, a
+# MySQL and a Redis as services, Horizon for its queues (federation in both
+# directions is queue-driven) and the distribution's ffmpeg for its video
+# pipeline.
+
+name: Interop against Loops
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+  schedule:
+    # Tuesdays, early: a week is the right cadence for "has the other end moved"
+    - cron: '41 4 * * 2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interop-loops-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  interop-loops:
+    runs-on: ubuntu-latest
+    name: Nextcloud Social ↔ Loops
+    timeout-minutes: 45
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: loops
+          MYSQL_DATABASE: loops
+          MYSQL_USER: loops
+          MYSQL_PASSWORD: loops
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -ploops"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 3306:3306
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 6379:6379
+
+    env:
+      APP_NAME: social
+      # v1.0.0-beta.14, the version loops.video itself announced when this
+      # job was written; bump it on purpose, never by floating to a branch
+      LOOPS_REF: 899e11530aa1ff45b1ad131dfd8f529a332dc760
+      LOOPS_BASE_URL: https://loops.test
+      NEXTCLOUD_URL: https://nextcloud.test
+      LOOPS_VIDEO: /tmp/interop/loops.mp4
+      # Loops refuses to fetch from, or accept an object id on, any host whose
+      # address is private or reserved, and it asks DNS directly as well as
+      # the resolver. Both host names therefore point at a public address,
+      # held by this runner's own loopback, so every check passes on the same
+      # answer it would give for a real server and nothing leaves the runner.
+      INTEROP_ADDRESS: 11.22.33.44
+
+    steps:
+      - name: Checkout server
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: true
+          repository: nextcloud/server
+          # see e2e.yml: the newest version info.xml claims
+          ref: master
+
+      - name: Checkout app
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: apps/social
+
+      - name: Checkout Loops
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: joinloops/loops-server
+          ref: ${{ env.LOOPS_REF }}
+          path: loops-server
+
+      - name: Set up php
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.3'
+          # Nextcloud's set and Loops' together: bcmath, pcntl, posix, sodium
+          # and pdo_mysql are Loops' (Horizon needs the first two of the last)
+          extensions: bcmath, bz2, ctype, curl, dom, fileinfo, gd, iconv, intl, json, libxml, mbstring, openssl, pcntl, posix, session, simplexml, sodium, xmlreader, xmlwriter, zip, zlib, sqlite, pdo_sqlite, pdo_mysql
+          coverage: none
+          ini-file: development
+
+      - name: Let PHP handle signals
+        # the runner's php.ini disables the pcntl functions, and Horizon (Loops'
+        # queue runner) will not start without them
+        run: |
+          echo 'disable_functions =' | sudo tee "$(php -r 'echo PHP_CONFIG_FILE_SCAN_DIR;')/99-interop.ini"
+          php -r 'exit(function_exists("pcntl_async_signals") ? 0 : 1);'
+
+      - name: Install ffmpeg
+        # Loops' pipeline probes, thumbnails and transcodes every video, ours
+        # and its own; and the test video is made with it below
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Make the test video
+        # a vertical H.264/AAC MP4, the shape Loops is for, and comfortably
+        # over the 250 KB Loops' upload validator insists on. Made here so no
+        # binary has to live in the repository
+        run: |
+          mkdir -p /tmp/interop
+          ffmpeg -loglevel error -y \
+            -f lavfi -i "testsrc2=size=720x1280:rate=30" \
+            -f lavfi -i "sine=frequency=440:sample_rate=44100" \
+            -t 6 -c:v libx264 -preset veryfast -pix_fmt yuv420p -b:v 1500k \
+            -c:a aac -b:a 96k -shortest -movflags +faststart "$LOOPS_VIDEO"
+          ls -l "$LOOPS_VIDEO"
+
+      - name: Set up the app's PHP dependencies
+        working-directory: apps/social
+        # without the dev ones, as the app store ships it: the app's autoloader
+        # is prepended to the server's, so a dev-only package the server also
+        # carries (symfony/console) is served in place of the server's own
+        run: composer i --no-dev
+
+      - name: Give both servers a name, an address and a certificate
+        # Loops fetches another server's webfinger, actor and media over https
+        # only, and so does this app; a CA made here is trusted by the runner,
+        # which is where both of them run, and by Nextcloud's own bundle
+        run: |
+          set -euo pipefail
+          sudo ip addr add "$INTEROP_ADDRESS/32" dev lo
+          echo "$INTEROP_ADDRESS nextcloud.test loops.test" | sudo tee -a /etc/hosts
+          mkdir -p /tmp/tls && cd /tmp/tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=Interop CA' \
+            -keyout ca.key -out ca.crt \
+            -addext 'basicConstraints=critical,CA:true' -addext 'keyUsage=critical,keyCertSign,cRLSign'
+          openssl req -newkey rsa:2048 -nodes -subj '/CN=nextcloud.test' -keyout nc.key -out nc.csr
+          printf 'subjectAltName=DNS:nextcloud.test,DNS:loops.test\nextendedKeyUsage=serverAuth\n' > nc.ext
+          openssl x509 -req -in nc.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 \
+            -extfile nc.ext -out nc.crt
+          chmod 644 nc.key
+          sudo cp ca.crt /usr/local/share/ca-certificates/interop-ca.crt
+          sudo update-ca-certificates
+          # what Loops' own SSRF checks will see: the resolver (gethostbyname)
+          # and DNS asked directly (dns_get_record), which systemd-resolved
+          # answers from /etc/hosts
+          php -r 'var_dump(gethostbynamel("nextcloud.test"), array_column(dns_get_record("nextcloud.test", DNS_A) ?: [], "ip"));'
+          test "$(php -r 'echo dns_get_record("nextcloud.test", DNS_A)[0]["ip"] ?? "";')" = "$INTEROP_ADDRESS"
+
+      - name: Set up Nextcloud
+        run: |
+          mkdir data
+          ./occ maintenance:install --verbose --database=sqlite --database-name=nextcloud \
+            --admin-user admin --admin-pass admin
+          ./occ app:enable --force social
+          ./occ config:system:set trusted_domains 1 --value localhost:8080
+          ./occ config:system:set trusted_domains 2 --value nextcloud.test
+          ./occ config:system:set overwriteprotocol --value https
+          ./occ config:system:set overwritehost --value nextcloud.test
+          # Nextcloud's own HTTP client keeps its own CA bundle
+          ./occ security:certificates:import /tmp/tls/ca.crt
+          ./occ config:system:set overwrite.cli.url --value "$NEXTCLOUD_URL"
+          ./occ config:app:set social cloud_url --value "$NEXTCLOUD_URL"
+          ./occ config:app:set social social_url --value "$NEXTCLOUD_URL/index.php/apps/social/"
+          ./occ config:system:set allow_local_remote_servers --value true --type boolean
+          # info, not warning: a delivery that fails or is held back is a notice
+          ./occ log:manage --level=info
+
+      - name: Restore Loops' PHP dependencies
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: loops-server/vendor
+          key: loops-vendor-${{ env.LOOPS_REF }}-php8.3
+
+      - name: Set up Loops
+        working-directory: loops-server
+        run: |
+          set -euo pipefail
+          cat > .env <<ENV
+          APP_NAME=Loops
+          APP_ENV=production
+          APP_KEY=
+          APP_DEBUG=true
+          APP_URL=${LOOPS_BASE_URL}
+          DB_CONNECTION=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=loops
+          DB_USERNAME=loops
+          DB_PASSWORD=loops
+          REDIS_CLIENT=predis
+          REDIS_HOST=127.0.0.1
+          REDIS_PORT=6379
+          QUEUE_CONNECTION=redis
+          CACHE_STORE=redis
+          SESSION_DRIVER=database
+          FILESYSTEM_DISK=local
+          MAIL_MAILER=log
+          LOG_CHANNEL=single
+          LOG_LEVEL=debug
+          LOG_DEV_LEVEL=true
+          BROADCAST_CONNECTION=log
+          # behind the proxy below, which is what terminates https. Not
+          # FORCE_HTTPS: it calls a facade before the console kernel has one,
+          # and every Horizon worker dies on boot
+          TRUST_PROXIES_ENABLED=true
+          FFMPEG_BINARIES=/usr/bin/ffmpeg
+          FFPROBE_BINARIES=/usr/bin/ffprobe
+          # the transcode is not under test; its speed is
+          LOOPS_TRANSCODE_PRESET=ultrafast
+          LOOPS_API_RATE_LIMITS_ENABLED=false
+          ENV
+          if [ ! -f vendor/autoload.php ]; then
+            composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
+          else
+            composer dump-autoload --optimize --no-interaction
+          fi
+          php artisan key:generate --force
+          # Loops' own documented way to keep media on the local disk rather
+          # than in a bucket: the disk keeps the name `s3` and becomes local,
+          # served from APP_URL/storage (INSTALLATION.md, "Using Local Storage")
+          python3 - <<'PY'
+          import re
+          path = 'config/filesystems.php'
+          src = open(path).read()
+          local = """'s3' => [
+                      'driver' => 'local',
+                      'root' => storage_path('app/public'),
+                      'url' => env('APP_URL').'/storage',
+                      'visibility' => 'public',
+                      'throw' => false,
+                  ],
+
+                  'backupS3' => ["""
+          src, n = re.subn(r"'s3' => \[.*?'backupS3' => \[", local, src, count=1, flags=re.S)
+          assert n == 1, 'the s3 disk was not where it was expected'
+          open(path, 'w').write(src)
+          PY
+          php artisan migrate --force
+          php artisan db:seed --class=AdminSettingsSeeder --force
+          php artisan passport:keys --force
+          php artisan passport:client --personal --name=interop --provider=users --no-interaction
+          php artisan storage:link
+          # the API and ActivityPub routes need no built front end, but the
+          # error pages render through Vite and would answer 500 for a 404
+          # without a manifest; a dev-server marker stands in for one
+          echo 'http://localhost:5173' > public/hot
+          php artisan app:ensure-boottime
+          # admins, because Loops exempts them from the remote-search limits
+          # the suite would otherwise run into
+          for name in interop fan; do
+            php artisan create-admin-account --name="Interop $name" --username="$name" \
+              --email="$name@example.com" --password='Interop-Test-2026!' --force > /dev/null
+          done
+          cat > /tmp/loops-setup.php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $app = require 'bootstrap/app.php';
+          $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+          // what the admin's federation switch writes
+          $federation = App\Models\AdminSetting::where('key', 'federation.enableFederation')->firstOrFail();
+          $federation->value = true;
+          $federation->save();
+          // Loops refuses videos from every remote instance until its admin
+          // allows that instance by name: the one setting the suite has to
+          // make to see a video of ours arrive at all
+          App\Models\Instance::updateOrCreate(['domain' => 'nextcloud.test'], ['allow_video_posts' => true]);
+          Illuminate\Support\Facades\Cache::flush();
+          app(App\Services\SettingsFileService::class)->flush();
+          echo 'federation: ', var_export(app(App\Services\ConfigService::class)->federation(true), true), "\n";
+
+          foreach (['interop' => 'LOOPS_TOKEN', 'fan' => 'LOOPS_FAN_TOKEN'] as $username => $name) {
+              $user = App\Models\User::where('username', $username)->firstOrFail();
+              $token = $user->createToken('interop')->accessToken;
+              file_put_contents(getenv('GITHUB_ENV'), "$name=$token\n", FILE_APPEND);
+              echo "$username: profile ", $user->profile_id, "\n";
+          }
+          PHP
+          php /tmp/loops-setup.php
+          # Laravel's exception handler can end a failed script with status 0
+          grep -q '^LOOPS_FAN_TOKEN=' "$GITHUB_ENV"
+
+      - name: Run Nextcloud, Loops and the proxy in front of both
+        run: |
+          set -euo pipefail
+          # several workers: rendering or fetching anything makes the server ask
+          # itself over HTTP, and a single-worker built-in server deadlocks on that
+          PHP_CLI_SERVER_WORKERS=8 php -S localhost:8080 > /tmp/nextcloud-server.log 2>&1 &
+          # what `artisan serve` runs: Laravel's router script, from public/
+          (cd loops-server/public && PHP_CLI_SERVER_WORKERS=8 php -d upload_max_filesize=100M -d post_max_size=100M \
+            -S localhost:8081 ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php \
+            > /tmp/loops-server.log 2>&1 &)
+          (cd loops-server && php artisan horizon > /tmp/loops-horizon.log 2>&1 &)
+          cat > /tmp/tls/Caddyfile <<'CADDY'
+          {
+            admin off
+            auto_https disable_redirects
+          }
+          nextcloud.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            # what Nextcloud's .htaccess does under Apache: the built-in
+            # server only serves files, and webfinger, nodeinfo and host-meta
+            # are routes of index.php
+            @wellknown path /.well-known/*
+            rewrite @wellknown /index.php{path}
+            reverse_proxy localhost:8080
+          }
+          loops.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            log
+            request_body {
+              max_size 100MB
+            }
+            reverse_proxy localhost:8081
+          }
+          CADDY
+          docker run -d --name proxy --network host -v /tmp/tls:/tls:ro caddy:2 \
+            caddy run --config /tls/Caddyfile --adapter caddyfile
+          for attempt in $(seq 1 30); do
+            # nodeinfo proves the /.well-known rewrite as well as the proxy
+            if curl -sf https://nextcloud.test/status.php > /dev/null \
+              && curl -sf https://nextcloud.test/.well-known/nodeinfo > /dev/null \
+              && curl -sf "https://loops.test/.well-known/webfinger?resource=acct:interop@loops.test" > /dev/null; then
+              echo "both are up"
+              curl -s "https://loops.test/.well-known/webfinger?resource=acct:interop@loops.test"; echo
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs proxy 2>&1 | tail -20
+          tail -40 /tmp/loops-server.log
+          tail -40 loops-server/storage/logs/laravel.log || true
+          exit 1
+
+      - name: What the transcoder sees from inside a web request
+        # the upload path probes the video inside the web server, not the CLI
+        run: |
+          cp "$LOOPS_VIDEO" /tmp/phpProbe1
+          cat > interop-probe.php <<'PHP'
+          <?php
+          require __DIR__ . '/lib/base.php';
+          \OC_App::loadApp('social');
+          $t = \OCP\Server::get(\OCA\Social\Service\VideoTranscodeService::class);
+          $path = '/tmp/phpProbe1';
+          echo json_encode([
+              'enabled' => $t->isEnabled(), 'probe' => $t->canProbe(), 'codec' => $t->videoCodec($path),
+              'needs' => $t->needsConversion((string)mime_content_type($path), $path), 'mime' => mime_content_type($path),
+              'path' => getenv('PATH'), 'sapi' => PHP_SAPI,
+          ]), "\n";
+          // the upload's own path, on a copy of the same file
+          copy($path, '/tmp/phpProbe2');
+          $document = new \OCA\Social\Model\ActivityPub\Object\Document();
+          $document->setLocal(true);
+          $document->setAccount('admin');
+          \OCP\Server::get(\OCA\Social\Service\CacheDocumentService::class)->saveFromTempToCache($document, '/tmp/phpProbe2');
+          echo json_encode(['saveFromTempToCache transcoded' => $document->getTranscoded(), 'mediaType' => $document->getMediaType()]), "\n";
+          PHP
+          curl -s http://localhost:8080/interop-probe.php; echo
+          rm -f interop-probe.php
+
+      - name: Interop tests
+        working-directory: apps/social
+        # the suite needs phpunit; installed only now, once the server is up
+        # and the app enabled with what ships
+        run: |
+          composer i
+          status=0
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter LoopsDeliveryTest || status=1
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter LoopsInboundTest || status=1
+          exit $status
+
+      - name: What each side saw, when it went wrong
+        if: failure()
+        run: |
+          echo '--- Nextcloud log, notices and worse ---'
+          python3 -c 'import json,sys
+          for l in open("data/nextcloud.log"):
+              try: d=json.loads(l)
+              except Exception: continue
+              m=d.get("message","")
+              if d.get("level",0)>=1 and "headers already sent" not in m: print(d.get("time"),d.get("level"),d.get("app"),m[:400])' | tail -150 || true
+          echo '--- our delivery queue ---'
+          sqlite3 -header data/nextcloud.db \
+            "select id, status, tries, priority, last, substr(instance,1,60) as instance, json_extract(activity, '$.type') as type, substr(json_extract(activity, '$.object.id'),1,90) as object from oc_social_req_queue order by id" 2>&1 | tail -60 || true
+          echo '--- our uploaded videos, and what the transcoder says about them ---'
+          sqlite3 -header data/nextcloud.db \
+            "select nid, media_type, mime_type, transcoded, length(local_copy) as copy, substr(id,1,80) as id from oc_social_cache_doc where media_type like 'video/%' order by nid" 2>&1 | tail -20 || true
+          cat > /tmp/nc-transcode.php <<'PHP'
+          <?php
+          require 'lib/base.php';
+          \OC_App::loadApp('social');
+          $t = \OCP\Server::get(\OCA\Social\Service\VideoTranscodeService::class);
+          $video = (string)getenv('LOOPS_VIDEO');
+          echo 'enabled ', var_export($t->isEnabled(), true), ' available ', var_export($t->isAvailable(), true),
+            ' probe ', var_export($t->canProbe(), true), ' codec ', var_export($t->videoCodec($video), true),
+            ' needs ', var_export($t->needsConversion('video/mp4', $video), true),
+            ' mime ', mime_content_type($video), "\n";
+          PHP
+          php /tmp/nc-transcode.php 2>&1 | tail -5 || true
+          echo '--- every request through the proxy ---'
+          docker logs proxy 2>&1 | python3 -c 'import json,sys,datetime
+          for l in sys.stdin:
+              try: d=json.loads(l)
+              except Exception: continue
+              r=d.get("request")
+              if not r: continue
+              print(datetime.datetime.utcfromtimestamp(d["ts"]).strftime("%H:%M:%S"), d.get("status"), r["method"], r["host"], r["uri"][:100], (r.get("headers",{}).get("User-Agent") or [""])[0][:24])' | tail -250 || true
+          echo '--- Loops log ---'
+          grep -v -E '^#[0-9]+ |^\[stacktrace\]|^"\}' loops-server/storage/logs/laravel.log | cut -c1-700 | tail -150 || true
+          echo '--- Loops failed jobs ---'
+          mysql -h 127.0.0.1 -uloops -ploops loops -e "select id, queue, substr(exception,1,500) as exception, failed_at from failed_jobs order by id desc limit 20" 2>&1 || true
+          echo '--- what Loops holds ---'
+          mysql -h 127.0.0.1 -uloops -ploops loops -e "
+            select id, username, local, substr(uri,1,90) as uri from profiles order by id;
+            select id, profile_id, status, visibility, is_local, comment_state, substr(caption,1,40) as caption, substr(ap_id,1,90) as ap_id, substr(uri,1,90) as uri from videos order by id;
+            select * from follow_requests order by id desc limit 10;
+            select id, profile_id, following_id from followers order by id desc limit 10;" 2>&1 | tail -80 || true
+          echo '--- our last activities to Loops, and what Loops validators make of them ---'
+          for type in Follow Create Update Like; do
+            sqlite3 data/nextcloud.db \
+              "select activity from oc_social_req_queue where instance like '%loops.test%' and json_extract(activity, '$.type') = '$type' order by id desc limit 1" \
+              > "/tmp/last-$type.json" || true
+            echo "-- $type: $(head -c 1500 "/tmp/last-$type.json")"
+          done
+          cat > /tmp/loops-validate.php <<'PHP'
+          <?php
+          require 'vendor/autoload.php';
+          $app = require 'bootstrap/app.php';
+          $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+          $map = app(App\Services\ActivityService::class)->activityMap();
+          foreach (['Follow', 'Create', 'Update', 'Like'] as $type) {
+              $raw = trim((string)@file_get_contents("/tmp/last-$type.json"));
+              if ($raw === '') {
+                  echo "$type: none sent\n";
+                  continue;
+              }
+              try {
+                  app($map[$type]['validator'])->validate(json_decode($raw, true));
+                  echo "$type: valid\n";
+              } catch (Throwable $e) {
+                  echo "$type: REFUSED: ", $e->getMessage(), "\n";
+              }
+          }
+          foreach (App\Models\Activity::where('type', 'Follow')->orderByDesc('id')->limit(5)->get() as $a) {
+              echo 'stored Follow ', $a->activity_id, ' by ', $a->profile_id, ' processed=', var_export($a->processed, true), "\n";
+          }
+          // the last Follow once more, through the same call the inbox job makes
+          $follow = json_decode((string)@file_get_contents('/tmp/last-Follow.json'), true);
+          if (is_array($follow)) {
+              $actor = App\Models\Profile::where('uri', $follow['actor'])->first();
+              preg_match('#/ap/users/(\d+)#', (string)$follow['object'], $m);
+              $target = App\Models\Profile::find($m[1] ?? 0);
+              echo 'replay: actor ', $actor?->id, ' status ', var_export($actor?->status, true), ' target ', $target?->id, "\n";
+              try {
+                  $result = app(App\Services\ActivityService::class)->processIncomingActivity($follow, $actor, $target);
+                  echo 'replay result: ', is_object($result) ? get_class($result) : json_encode($result), "\n";
+              } catch (Throwable $e) {
+                  echo 'replay threw: ', get_class($e), ': ', $e->getMessage(), "\n";
+              }
+              echo 'follows by that actor now: ', App\Models\Follower::where('profile_id', $actor?->id)->count(), "\n";
+          }
+          PHP
+          (cd loops-server && php /tmp/loops-validate.php) 2>&1 | tail -30 || true
+          echo '--- Loops account feed of the last remote account with a video ---'
+          PID=$(mysql -h 127.0.0.1 -uloops -ploops loops -N -e "select profile_id from videos where is_local = 0 order by id desc limit 1" 2>/dev/null || true)
+          if [ -n "$PID" ]; then
+            curl -s -w '\n%{http_code}\n' -H "Authorization: Bearer $LOOPS_TOKEN" -H 'Accept: application/json' "$LOOPS_BASE_URL/api/v1/feed/account/$PID" | head -c 1500; echo
+          fi
+          echo '--- Loops queue worker ---'
+          tail -100 /tmp/loops-horizon.log || true
+          echo '--- Loops web server ---'
+          grep -v ' \[200\]: ' /tmp/loops-server.log | tail -60 || true
