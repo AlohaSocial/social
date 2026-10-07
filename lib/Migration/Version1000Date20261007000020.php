@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace OCA\Social\Migration;
@@ -30,7 +31,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addUniqueIndex(['handle'], 'social_at_identity3');
 			$table->addIndex(['state'], 'social_at_identity4');
 		}
-		
+
 		// social_atproto_instance_key
 		if (!$schema->hasTable('social_atproto_instance_key')) {
 			$table = $schema->createTable('social_atproto_instance_key');
@@ -42,7 +43,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['kind', 'created'], 'social_at_instance_1');
 		}
-		
+
 		// social_atproto_repo
 		if (!$schema->hasTable('social_atproto_repo')) {
 			$table = $schema->createTable('social_atproto_repo');
@@ -56,7 +57,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['did'], 'social_at_repo1');
 		}
-		
+
 		// social_atproto_record
 		if (!$schema->hasTable('social_atproto_record')) {
 			$table = $schema->createTable('social_atproto_record');
@@ -72,7 +73,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addUniqueIndex(['did', 'collection', 'rkey'], 'social_at_record1');
 			$table->addIndex(['local_id'], 'social_at_record2');
 		}
-		
+
 		// social_atproto_block
 		if (!$schema->hasTable('social_atproto_block')) {
 			$table = $schema->createTable('social_atproto_block');
@@ -85,7 +86,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addUniqueIndex(['did', 'cid'], 'social_at_block1');
 			$table->addIndex(['kind'], 'social_at_block2');
 		}
-		
+
 		// social_atproto_blob
 		if (!$schema->hasTable('social_atproto_blob')) {
 			$table = $schema->createTable('social_atproto_blob');
@@ -98,7 +99,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['did', 'cid'], 'social_at_blob1');
 		}
-		
+
 		// social_atproto_event
 		if (!$schema->hasTable('social_atproto_event')) {
 			$table = $schema->createTable('social_atproto_event');
@@ -111,7 +112,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addIndex(['did'], 'social_at_event1');
 			$table->addIndex(['kind'], 'social_at_event2');
 		}
-		
+
 		// social_atproto_plc_log
 		if (!$schema->hasTable('social_atproto_plc_log')) {
 			$table = $schema->createTable('social_atproto_plc_log');
@@ -124,7 +125,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addIndex(['did'], 'social_at_plc_log1');
 		}
-		
+
 		// social_atproto_watch
 		if (!$schema->hasTable('social_atproto_watch')) {
 			$table = $schema->createTable('social_atproto_watch');
@@ -139,7 +140,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['did'], 'social_at_watch1');
 		}
-		
+
 		// social_atproto_notify_cursor
 		if (!$schema->hasTable('social_atproto_notify_cursor')) {
 			$table = $schema->createTable('social_atproto_notify_cursor');
@@ -152,7 +153,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['did'], 'social_at_notify_cu1');
 		}
-		
+
 		// social_atproto_labeler
 		if (!$schema->hasTable('social_atproto_labeler')) {
 			$table = $schema->createTable('social_atproto_labeler');
@@ -164,7 +165,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['actor_id', 'labeler_did'], 'social_at_labeler1');
 		}
-		
+
 		// social_atproto_blocklist
 		if (!$schema->hasTable('social_atproto_blocklist')) {
 			$table = $schema->createTable('social_atproto_blocklist');
@@ -176,7 +177,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->setPrimaryKey(['id']);
 			$table->addUniqueIndex(['kind', 'value'], 'social_at_blocklist1');
 		}
-		
+
 		// social_atproto_session
 		if (!$schema->hasTable('social_atproto_session')) {
 			$table = $schema->createTable('social_atproto_session');
@@ -190,7 +191,7 @@ class Version1000Date20261007000020 extends \OCP\Migration\SimpleMigrationStep {
 			$table->addUniqueIndex(['jti'], 'social_at_session1');
 			$table->addIndex(['did'], 'social_at_session2');
 		}
-		
+
 		// social_atproto_recovery_phrase
 		if (!$schema->hasTable('social_atproto_recovery')) {
 			$table = $schema->createTable('social_atproto_recovery');

@@ -1727,7 +1727,8 @@ class ActivityServiceTest extends TestCase {
 		$note = new \OCA\Social\Model\ActivityPub\Object\Note();
 		$note->setId('https://cloud.example/native-only')->setAttributedTo('https://cloud.example/@alice')->setLocal(true)->setTo('https://www.w3.org/ns/activitystreams#Public');
 		$note->setDetailArray(\OCA\Social\Model\Details::PUBLICATION, ['fediverse' => false, 'atproto' => true]);
-		$activity = new \OCA\Social\Model\ActivityPub\Activity\Create(); $activity->setObject($note);
+		$activity = new \OCA\Social\Model\ActivityPub\Activity\Create();
+		$activity->setObject($note);
 		$this->requestQueueService->expects(self::never())->method('generateRequestQueue');
 		self::assertSame('<ATProto only>', $this->service->request($activity));
 		self::assertSame('<ATProto only>', $this->service->deleteActivity($note));

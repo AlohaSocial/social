@@ -8,7 +8,6 @@ declare(strict_types=1);
  */
 
 namespace OCA\Social\Service;
-use OCA\Social\Model\Details;
 
 use Exception;
 use OCA\Social\AP;
@@ -23,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Traits\TStringTools;
@@ -76,7 +76,9 @@ class BoostService {
 		}
 		$native = $note->getDetails(Details::ATPROTO);
 		if (isset($native['uri'], $native['cid'])) {
-			if ($this->nativePublisher === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+			if ($this->nativePublisher === null) {
+				throw new \RuntimeException('Native protocol publisher unavailable');
+			}
 			$this->nativePublisher->publish($actor->getUserId(), 'repost', $native['uri'], $native['cid'], false);
 		}
 
@@ -115,7 +117,9 @@ class BoostService {
 		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::BOOSTED, true);
 		$this->signatureService->signObject($actor, $announce);
 
-		if (!isset($native['uri'])) { $token = $this->activityService->request($announce); }
+		if (!isset($native['uri'])) {
+			$token = $this->activityService->request($announce);
+		}
 
 		$this->streamQueueService->cacheStreamByToken($announce->getRequestToken());
 
@@ -156,7 +160,9 @@ class BoostService {
 		}
 		$native = $note->getDetails(Details::ATPROTO);
 		if (isset($native['uri'], $native['cid'])) {
-			if ($this->nativePublisher === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+			if ($this->nativePublisher === null) {
+				throw new \RuntimeException('Native protocol publisher unavailable');
+			}
 			$this->nativePublisher->publish($actor->getUserId(), 'repost', $native['uri'], $native['cid'], true);
 		}
 
@@ -186,7 +192,9 @@ class BoostService {
 			$this->streamRequest->deleteById($announce->getId(), Announce::TYPE);
 			$this->signatureService->signObject($actor, $undo);
 
-			if (!isset($native['uri'])) { $token = $this->activityService->request($undo); }
+			if (!isset($native['uri'])) {
+				$token = $this->activityService->request($undo);
+			}
 		} catch (ItemUnknownException $e) {
 		} catch (StreamNotFoundException $e) {
 		}

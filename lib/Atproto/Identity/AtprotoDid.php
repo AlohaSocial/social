@@ -1,10 +1,18 @@
 <?php
+
 declare(strict_types=1);
+
 namespace OCA\Social\Atproto\Identity;
-use OCA\Social\Atproto\Protocol\{Cid, DagCbor};
+
+use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCP\IConfig;
+
 class AtprotoDid {
-	public function __construct(private readonly IConfig $config) {}
+	public function __construct(
+		private readonly IConfig $config,
+	) {
+	}
 	public static function operation(string $signingKey, array $rotationKeys, string $handle, string $endpoint, ?string $prev = null): array {
 		return ['type' => 'plc_operation', 'verificationMethods' => ['atproto' => $signingKey],
 			'rotationKeys' => $rotationKeys, 'alsoKnownAs' => ['at://' . $handle],
@@ -24,5 +32,7 @@ class AtprotoDid {
 	public static function parse(string $did): ?array {
 		return preg_match('/^did:plc:([a-z2-7]{24})$/D', $did, $matches) ? ['method' => 'plc', 'suffix' => $matches[1]] : null;
 	}
-	public function getPlcDirectory(): string { return $this->config->getAppValue('social', 'atproto_plc_directory', 'https://plc.directory'); }
+	public function getPlcDirectory(): string {
+		return $this->config->getAppValue('social', 'atproto_plc_directory', 'https://plc.directory');
+	}
 }

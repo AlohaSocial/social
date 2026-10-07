@@ -104,7 +104,12 @@ class SearchService {
 	 */
 	public function resolveStatus(string $uri, bool $asViewer = false): ?Stream {
 		if ($this->nativeFeed !== null && \OCA\Social\Atproto\NativeFeedService::isPostAddress($uri)) {
-			try { return $this->nativeFeed->resolvePost($uri, $asViewer); } catch (\Throwable $e) { $this->logger->debug('AT Protocol post lookup unavailable', ['exception' => $e]); return null; }
+			try {
+				return $this->nativeFeed->resolvePost($uri, $asViewer);
+			} catch (\Throwable $e) {
+				$this->logger->debug('AT Protocol post lookup unavailable', ['exception' => $e]);
+				return null;
+			}
 		}
 		// `getTypeFromSearch()` is no use here: it answers SEARCH_ALL for plain
 		// text, and SEARCH_ALL has the URI bit set, so every search term would
@@ -229,7 +234,11 @@ class SearchService {
 
 		$search = ltrim($search, '@');
 		if ($followedBy === '' && $this->nativeFeed !== null) {
-			try { $this->nativeFeed->discover($search); } catch (\Throwable $e) { $this->logger->debug('AT Protocol search unavailable', ['exception' => $e]); }
+			try {
+				$this->nativeFeed->discover($search);
+			} catch (\Throwable $e) {
+				$this->logger->debug('AT Protocol search unavailable', ['exception' => $e]);
+			}
 		}
 
 		// an account this instance has never seen is not one anybody here

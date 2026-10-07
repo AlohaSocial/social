@@ -1,24 +1,25 @@
 <?php
+
 declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
-use OCA\Social\Atproto\Identity\IdentityService;
 
 class AtprotoIdentityController extends Controller {
 	public function __construct(
 		$appName,
 		IRequest $request,
 		private readonly IdentityService $identityService,
-		private readonly IUserSession $userSession
+		private readonly IUserSession $userSession,
 	) {
 		parent::__construct($appName, $request);
 	}
-	
+
 	/**
 	 * @NoAdminRequired
 	 */
@@ -28,17 +29,17 @@ class AtprotoIdentityController extends Controller {
 		if (!$userId) {
 			return new DataResponse(['error' => 'Not logged in'], 401);
 		}
-		
+
 		$actorId = $this->getActorId($userId);
 		if (!$actorId) {
 			return new DataResponse(['identity' => null]);
 		}
-		
+
 		$identity = $this->identityService->getIdentityByActor($actorId);
 		if (!$identity) {
 			return new DataResponse(['identity' => null]);
 		}
-		
+
 		return new DataResponse([
 			'did' => $identity['did'],
 			'handle' => $identity['handle'],
@@ -46,7 +47,7 @@ class AtprotoIdentityController extends Controller {
 			'profileUrl' => 'https://bsky.app/profile/' . $identity['did']
 		]);
 	}
-	
+
 	/**
 	 * @NoAdminRequired
 	 */
@@ -56,15 +57,17 @@ class AtprotoIdentityController extends Controller {
 		if (!$userId) {
 			return new DataResponse(['error' => 'Not logged in'], 401);
 		}
-		
+
 		$actorId = $this->getActorId($userId);
 		if (!$actorId) {
 			return new DataResponse(['error' => 'No Social actor found'], 404);
 		}
-		
+
 		try {
 			$identity = $this->identityService->createIdentity($actorId);
-			if ($identity['state'] !== IdentityService::STATE_ACTIVE) { return new DataResponse(['error' => 'PLC registration is pending', 'did' => $identity['did'], 'handle' => $identity['handle'], 'state' => $identity['state']], 503); }
+			if ($identity['state'] !== IdentityService::STATE_ACTIVE) {
+				return new DataResponse(['error' => 'PLC registration is pending', 'did' => $identity['did'], 'handle' => $identity['handle'], 'state' => $identity['state']], 503);
+			}
 			return new DataResponse([
 				'success' => true,
 				'did' => $identity['did'],
@@ -74,7 +77,7 @@ class AtprotoIdentityController extends Controller {
 			return new DataResponse(['error' => $e->getMessage()], 500);
 		}
 	}
-	
+
 	/**
 	 * @NoAdminRequired
 	 */
@@ -87,20 +90,20 @@ class AtprotoIdentityController extends Controller {
 		if (!$userId) {
 			return new DataResponse(['error' => 'Not logged in'], 401);
 		}
-		
+
 		$actorId = $this->getActorId($userId);
 		if (!$actorId) {
 			return new DataResponse(['error' => 'No Social actor found'], 404);
 		}
-		
+
 		$phrase = $this->identityService->getRecoveryPhrase($actorId);
 		if (!$phrase) {
 			return new DataResponse(['error' => 'Recovery phrase not available'], 404);
 		}
-		
+
 		return new DataResponse(['recoveryPhrase' => $phrase]);
 	}
-	
+
 	private function getActorId(string $userId): ?string {
 		return $this->identityService->actorIdForUser($userId);
 	}

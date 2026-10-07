@@ -302,7 +302,9 @@ class ActivityService {
 		$tombstone->setId($item->getId());
 
 		$delete->setObject($tombstone);
-		if ($item instanceof Stream && ($item->getDetails(\OCA\Social\Model\Details::PUBLICATION)['fediverse'] ?? true) === false) { return '<ATProto only>'; }
+		if ($item instanceof Stream && ($item->getDetails(\OCA\Social\Model\Details::PUBLICATION)['fediverse'] ?? true) === false) {
+			return '<ATProto only>';
+		}
 		$delete->addInstancePaths($item->getInstancePaths());
 		// from the post, not from the Tombstone that replaces it: a Tombstone
 		// names nobody
@@ -408,7 +410,9 @@ class ActivityService {
 	public function request(ACore $activity, int $holdUntil = 0): string {
 		// A native-only post is stored locally but never enters the ActivityPub queue.
 		$object = $activity->getObject();
-		if ($object instanceof Stream && ($object->getDetails(\OCA\Social\Model\Details::PUBLICATION)['fediverse'] ?? true) === false) { return '<ATProto only>'; }
+		if ($object instanceof Stream && ($object->getDetails(\OCA\Social\Model\Details::PUBLICATION)['fediverse'] ?? true) === false) {
+			return '<ATProto only>';
+		}
 		$author = $this->getAuthorFromItem($activity);
 		$instancePaths = $this->generateInstancePaths($activity);
 		if ($activity instanceof Delete && isset($instancePaths[0])) {

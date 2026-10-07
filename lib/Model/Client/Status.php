@@ -40,8 +40,12 @@ class Status implements \JsonSerializable {
 	/** the handle of a team account this post is written as, or '' */
 	private string $postAs = '';
 	private string $publishTarget = '';
-	public function setPublishTarget(string $target): void { $this->publishTarget = $target; }
-	public function getPublishTarget(): string { return $this->publishTarget; }
+	public function setPublishTarget(string $target): void {
+		$this->publishTarget = $target;
+	}
+	public function getPublishTarget(): string {
+		return $this->publishTarget;
+	}
 	private string $status = '';
 	/** BCP 47 as the client sent it, normalised; empty for "whatever the poster's default is" */
 	private string $language = '';
