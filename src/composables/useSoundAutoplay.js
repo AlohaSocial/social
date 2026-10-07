@@ -59,8 +59,8 @@ export function forgetMuteChoice() {
  * Playing a video with its sound on wherever the browser allows it, and with
  * one tap otherwise.
  *
- * No page can start sound without a user gesture. Opening Shorts or a story
- * by a click counts as one; a pasted link or a reload does not, and the
+ * No page can start sound without a user gesture. Opening Shorts by a click
+ * counts as one; a pasted link or a reload does not, and the
  * browser then rejects `play()` with a `NotAllowedError`. That rejection is
  * the autoplay rule answering rather than a fault: the video plays muted
  * instead, and `soundHeld` says so, for the "Tap for sound" hint beside the

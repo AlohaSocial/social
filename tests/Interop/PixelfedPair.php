@@ -13,6 +13,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CountsService;
 use OCA\Social\Service\RequestQueueService;
 use OCP\Server;
 
@@ -68,6 +69,8 @@ trait PixelfedPair {
 		// the way the app makes an account, so the actor is cached too:
 		// webfinger and the actor document are answered from the cache
 		$this->actor = Server::get(AccountService::class)->getActorFromUserId($aloha->user(), true);
+		// counts are hidden by default; these tests assert what was counted
+		Server::get(CountsService::class)->setHides($aloha->user(), false);
 		$this->ourHandle = $this->actor->getPreferredUsername() . '@'
 			. Server::get(ConfigService::class)->getCloudAuthority();
 		$this->theirHandle = $this->pixelfed->selfHandle();

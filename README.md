@@ -121,39 +121,49 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   or turn it off. It never leaves this server and nobody else sees it.
   Administrators can switch it off or make it opt-in.
 
-![Stories](img/readme/stories.png)
+![The Shorts bar above the feed](img/readme/stories.png)
 
-- **Stories** — a row of faces above your feed: whose stories are up. One picture or
-  video, for followers, gone after a day; a ring on the face while there is something
-  you have not seen, a player that runs them one after another (videos with sound, a
-  speaker to mute them, and the same "Tap for sound" hint as Shorts), and your own place
-  first in the row with a **+** on it to add one. Adding one opens the same dialog as
-  a new short: record a video with the camera (15 s or 1 min) or upload one, trim it and
-  pick its cover; a picture or a text story goes on to the story editor below. The poster sees how many people
-  watched and can take it down early; nobody else sees either. Stories federate to
-  Pixelfed, in the shape Pixelfed actually reads — an `Add` carrying a capability its
-  inbox fetches the story with, measured field by field against Pixelfed's own source
-  rather than against the specification. One that arrives is held no longer than a day
-  here whatever the sender says. You can answer one with an emoji or a line of text,
-  and the poster is told and sees what was said; watching one posted elsewhere sends a
-  receipt to its author, so their own server can count it. The other direction is not ours to fix: Pixelfed sends
-  stories only to instances it has identified as Pixelfed.
-- **Text stories and stickers.** A story can be a few words on a coloured card instead
-  of a picture — the type shrinks as you write, the way the picture will — and a
-  picture story can carry stickers: eight emoji and a line of your own words, dragged
+- **Shorts, kept or for 24 hours.** A short is kept on your profile like any other
+  post, or lasts **24 hours**: one picture, video or card of words that only your
+  followers see, gone after a day. Above your feed is the **Shorts** bar — your own
+  tile first with a **+** to make one, then the people you follow who have a 24-hour
+  short up, a ring on the face while there is something you have not seen, and an
+  **All shorts** tile at the end. The bar is there only while somebody you follow has a
+  24-hour short up; the camera at the end of the post composer makes a **New short**
+  for 24 hours whether the bar is there or not. One player plays both kinds (videos with sound, a
+  speaker to mute them, a "Tap for sound" hint where the browser will not start with
+  it; a picture or a card for the seconds its poster gave it). On your own 24-hour
+  short you see **Who has seen it** and what was said, and can take it down early;
+  nobody else sees either. Anybody who can see one can answer it with an emoji or a
+  line of text, which goes to the poster alone. 24-hour shorts federate to Pixelfed,
+  and Pixelfed shows them in its stories bar — in the shape Pixelfed actually reads,
+  an `Add` carrying a capability its inbox fetches the short with, measured field by
+  field against Pixelfed's own source rather than against the specification. One
+  that arrives is held no longer than a day here whatever the sender says; watching
+  one posted elsewhere sends a receipt to its author, so their own server can count
+  it. The other direction is not ours to fix: Pixelfed sends its own only to
+  instances it has identified as Pixelfed.
+- **Words on a card, and stickers.** A 24-hour short can be a few words on a coloured
+  card instead of a picture — the type shrinks as you write, the way the picture will
+  — and a picture can carry stickers: eight emoji and a line of your own words, dragged
   where you want them (or moved with the arrow keys) and baked into the picture before
   it goes up, so they arrive on Pixelfed where you put them.
 - **Photos and Videos are timelines of their own**, drawn as grids and asked of the
   server rather than filtered out of a page you already have.
-- **Shorts**, in the sidebar under Videos, is the same videos as a stack: one at a
+- **Shorts**, in the sidebar under Videos, is a stack: one at a
   time, full height, playing as it comes past and stopping as it goes — the shape
-  somebody arriving from TikTok or YouTube Shorts already knows. A switch in the corner
+  somebody arriving from TikTok or YouTube Shorts already knows. The 24-hour shorts of
+  the people you follow come first, each person's together and the unseen ones ahead,
+  marked **24h** with the hours they have left; then the kept ones, which are the
+  videos of the Videos timeline. A switch in the corner
   picks whose videos: the people you follow, this server, or everywhere. It plays with
   sound, or muted with a "Tap for sound" hint when the browser will not start with it,
   one video at a time in a single player that moves from video to video (so the sound
   one tap allowed stays on as you scroll, iPhone included) while the others show their
   cover, and reachable
-  with the arrow keys and the space bar. The **+** opens a composer made for a short:
+  with the arrow keys and the space bar. The **+** opens a composer made for a short,
+  which first asks how long it lasts — **Keep it on my profile** or **Only for 24
+  hours, for my followers** (a 24-hour one may also be a picture or words), then lets you
   upload a video, drop one on it, or record one with the camera (a 3-2-1 countdown,
   front or back camera, 15 s, 60 s or 3 min; browsers offer the camera over https
   only). Then trim it with two handles over a
@@ -514,8 +524,8 @@ for a browser goes through `occ social:account:import-posts`.
   the posts, and says so if you try it), and the posts, reels and their pictures come
   across with their captions and the hashtags written in them. Instagram's archive says
   nothing about who could see a post, so they are posted with **your own default
-  visibility**; stories, archived posts and deleted ones are deliberately left where
-  they are.
+  visibility**; posts Instagram showed for only a day, archived posts and deleted ones
+  are deliberately left where they are.
 
 ## 📱 On a phone, and in the dark
 
@@ -533,7 +543,7 @@ the same app, not a second design.
 **Sound and touch**, in Settings: a soft tick on a like, a breath of air when a post
 goes out, a two-note chime when a direct message arrives, and a short tap in the hand
 on a phone. Sound is off until you turn it on; vibration is on, and your system's
-setting for less motion turns it off too. A third switch says whether Shorts and stories
+setting for less motion turns it off too. A third switch says whether Shorts
 start with their sound on. All three are kept on the device rather than the
 account, so the laptop at work can stay quiet while your phone taps back. The sounds
 are synthesised in the browser, so there is nothing to download.

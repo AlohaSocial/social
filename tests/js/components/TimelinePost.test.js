@@ -181,6 +181,22 @@ describe('TimelinePost', () => {
 	})
 
 	describe('header and body', () => {
+		it('marks a like and a boost the reader gave beside the timestamp', () => {
+			const { wrapper } = mountPost({ item: makeItem({ favourited: true, reblogged: true }) })
+
+			const mark = wrapper.find('.post-header .post-given')
+			expect(mark.attributes('aria-hidden')).toBe('true')
+			expect(mark.find('.heart-icon').exists()).toBe(true)
+			expect(mark.find('.repeat-icon').exists()).toBe(true)
+			expect(isBefore(mark.element, wrapper.find('.post-timestamp').element)).toBe(true)
+		})
+
+		it('has no mark on a post the reader has not liked or boosted', () => {
+			const { wrapper } = mountPost()
+
+			expect(wrapper.find('.post-given').exists()).toBe(false)
+		})
+
 		it('shows the author and links to the profile', () => {
 			const { wrapper } = mountPost()
 
@@ -301,17 +317,36 @@ describe('TimelinePost', () => {
 		 * in the row and is the least important thing in it.
 		 */
 		it('draws the visibility icon no larger than the byline it sits in', () => {
-			const { wrapper } = mountPost()
+			const { wrapper } = mountPost({ item: makeItem({ visibility: 'followers' }) })
 			expect(wrapper.find('.post-visibility svg').attributes('width')).toBe('14')
 		})
 
 		/** two icons on one line at two different sizes read as a mistake */
 		it('draws both byline icons at the same size', () => {
-			const { wrapper } = mountPost({ item: makeItem({ pinned: true }) })
-			const globe = wrapper.find('.post-visibility svg').attributes('width')
+			const { wrapper } = mountPost({ item: makeItem({ pinned: true, visibility: 'unlisted' }) })
+			const marker = wrapper.find('.post-visibility svg').attributes('width')
 			const pin = wrapper.find('.post-pinned svg').attributes('width')
 
-			expect(pin).toBe(globe)
+			expect(pin).toBe(marker)
+		})
+
+		/** Public is what a post is unless it says otherwise; only the exception is marked. */
+		it('marks the audience only when it is not everybody', () => {
+			expect(mountPost().wrapper.find('.post-visibility').exists()).toBe(false)
+			for (const visibility of ['unlisted', 'followers', 'direct']) {
+				expect(mountPost({ item: makeItem({ visibility }) }).wrapper.find('.post-visibility').exists(), visibility).toBe(true)
+			}
+		})
+
+		it('says how old a post is in a word, and keeps the full date for the pointer', () => {
+			vi.useFakeTimers()
+			vi.setSystemTime(new Date('2026-09-15T10:00:00Z'))
+			const { wrapper } = mountPost()
+			const stamp = wrapper.find('.post-timestamp')
+
+			expect(stamp.text()).toBe('2w')
+			expect(stamp.attributes('title')).toContain('2026')
+			vi.useRealTimers()
 		})
 
 		it('exposes the creation time on the timestamp', () => {
@@ -885,13 +920,13 @@ describe('TimelinePost', () => {
 		})
 
 		/** The page counts on its own when the reader likes, so the server's zero is not enough. */
-		it('draws no like or boost counter for a reader who hides the numbers, only the replies', () => {
+		it('draws no counter at all for a reader who hides the numbers', () => {
 			const { wrapper } = mountPost({
 				item: makeItem({ replies_count: 3, reblogs_count: 5, favourites_count: 12 }),
 				serverData: { public: false, cloudAddress: 'https://cloud.example.org', hideCounts: true },
 			})
 
-			expect(wrapper.findAll('.post-action-count').map((count) => count.text())).toEqual(['3'])
+			expect(wrapper.findAll('.post-action-count')).toHaveLength(0)
 		})
 	})
 
@@ -991,10 +1026,15 @@ describe('TimelinePost', () => {
 			expect(actionButton(wrapper, 'Boost').exists()).toBe(true)
 		})
 
-		it.each(['followers', 'direct'])('is not offered for a %s post', (visibility) => {
-			const { wrapper } = mountPost({ item: makeItem({ visibility }) })
-			expect(actionButton(wrapper, 'Boost').exists()).toBe(false)
-			expect(actionButton(wrapper, 'Undo boost').exists()).toBe(false)
+		/** The row is the same on every post; a boost that cannot be is there, disabled, and says why. */
+		it.each(['followers', 'direct'])('is there but cannot be pressed on a %s post, and says why', (visibility) => {
+			const { wrapper, dispatch } = mountPost({ item: makeItem({ visibility }) })
+			const button = actionButton(wrapper, 'Boost')
+
+			expect(button.attributes('disabled')).toBeDefined()
+			expect(button.attributes('title')).toBe('Only public and unlisted posts can be boosted')
+			button.trigger('click')
+			expect(dispatch).not.toHaveBeenCalled()
 		})
 
 		it('boosts a post that is not boosted yet', async () => {
@@ -1858,9 +1898,14 @@ describe('TimelinePost', () => {
 				}),
 			})
 
-			expect(actionButton(wrapper, 'Reply').exists()).toBe(false)
-			expect(actionButton(wrapper, 'Boost').exists()).toBe(false)
-			expect(actionButton(wrapper, 'Like').exists()).toBe(false)
+			// still there, so nothing moves from one post to the next — but
+			// disabled, each saying why
+			for (const label of ['Reply', 'Boost', 'Like']) {
+				expect(actionButton(wrapper, label).attributes('disabled'), label).toBeDefined()
+			}
+			expect(actionButton(wrapper, 'Reply').attributes('title')).toBe('The author does not take replies to this post')
+			expect(actionButton(wrapper, 'Boost').attributes('title')).toBe('The author does not allow boosts of this post')
+			expect(actionButton(wrapper, 'Like').attributes('title')).toBe('The author does not allow likes of this post')
 		})
 
 		it('keeps the ones the author allowed', () => {
@@ -1871,9 +1916,17 @@ describe('TimelinePost', () => {
 				}),
 			})
 
-			expect(actionButton(wrapper, 'Reply').exists()).toBe(true)
-			expect(actionButton(wrapper, 'Boost').exists()).toBe(false)
-			expect(actionButton(wrapper, 'Like').exists()).toBe(true)
+			expect(actionButton(wrapper, 'Reply').attributes('disabled')).toBeUndefined()
+			expect(actionButton(wrapper, 'Boost').attributes('disabled')).toBeDefined()
+			expect(actionButton(wrapper, 'Like').attributes('disabled')).toBeUndefined()
+		})
+
+		/** One way to react, not two: the heart offers the reactions, the bar no longer has a button of its own. */
+		it('offers reactions through the heart and the menu, not a second button', () => {
+			const { wrapper } = mountPost()
+
+			expect(wrapper.find('.reaction--add').exists()).toBe(false)
+			expect(actionButton(wrapper, 'Like').attributes('title')).toBe('Like — hold for a reaction')
 		})
 
 		/** Undoing is how this instance stops having sent one. */

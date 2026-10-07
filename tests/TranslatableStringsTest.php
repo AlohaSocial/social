@@ -188,7 +188,7 @@ class TranslatableStringsTest extends TestCase {
 			'src/components/FediverseSearch.vue',
 			'src/views/Discover.vue',
 			'src/components/DiscoverCategories.vue',
-			'src/views/VideoReels.vue',
+			'src/views/VideoShorts.vue',
 			'src/components/VideoHeader.vue',
 			'src/components/ProfileMediaGrid.vue',
 			'src/components/FollowGraphSuggestions.vue',

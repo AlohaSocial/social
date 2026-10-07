@@ -5,7 +5,7 @@
 <template>
 	<NcDialog
 		:open="open"
-		:name="t('social', 'Add to your story')"
+		:name="t('social', 'New short')"
 		:buttons="buttons"
 		class="story-composer"
 		@update:open="$emit('update:open', $event)">
@@ -13,7 +13,7 @@
 			{{ t('social', 'A picture, a video or a few words, for the people who follow you, gone after a day.') }}
 		</p>
 
-		<div class="story-composer__kinds" role="radiogroup" :aria-label="t('social', 'What kind of story')">
+		<div class="story-composer__kinds" role="radiogroup" :aria-label="t('social', 'What kind of short')">
 			<button
 				type="button"
 				role="radio"
@@ -215,17 +215,18 @@ const NUDGE = 0.02
 let stickerSerial = 0
 
 /**
- * Posts one story: a picture or a video with stickers on it, or a few words
- * on a coloured card, and how long it stays on screen.
+ * Posts one 24-hour short (a story, in the API): a picture or a video with
+ * stickers on it, or a few words on a coloured card, and how long it stays on
+ * screen. Opened by ShortComposerDialog for a picture or a card.
  *
- * A text story and the stickers are drawn onto a picture in the browser
+ * A text card and the stickers are drawn onto a picture in the browser
  * (utils/textCard.js) and uploaded as one, so they reach other servers as what
  * they look like. The words of a text story go with it as its description.
  *
  * The file goes up through the same upload every attachment takes
  * (`/api/v1/media`), so it is stripped of its metadata like any other
- * picture posted here, and the story is then made of that upload. A story
- * is for followers and lasts a day; the dialog says so, since neither is
+ * picture posted here, and the short is then made of that upload. It is for
+ * followers and lasts 24 hours; the dialog says so, since neither is
  * how a post behaves.
  */
 export default {
@@ -574,7 +575,7 @@ export default {
 			try {
 				const upload = await this.fileToPost()
 				if (!upload) {
-					showError(t('social', 'This browser could not draw the story'))
+					showError(t('social', 'This browser could not draw the short'))
 					return
 				}
 
@@ -595,14 +596,14 @@ export default {
 					caption: this.kind === 'text' ? '' : this.caption.trim(),
 					duration: Number(this.duration) || 5,
 				})
-				showSuccess(t('social', 'Your story is up for a day'))
+				showSuccess(t('social', 'Your short is up for 24 hours'))
 				feel('post')
 				this.$emit('posted', data)
 				this.$emit('update:open', false)
 				this.reset()
 			} catch (error) {
 				logger.error('could not post the story', { error })
-				showError(error?.response?.data?.error || t('social', 'Could not post the story'))
+				showError(error?.response?.data?.error || t('social', 'The short could not be posted'))
 			} finally {
 				this.posting = false
 			}

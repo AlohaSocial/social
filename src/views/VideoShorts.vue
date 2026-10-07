@@ -3,24 +3,42 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="reels" role="region" :aria-label="t('social', 'Videos, one at a time')">
+	<div class="shorts" role="region" :aria-label="t('social', 'Videos, one at a time')">
 		<div
 			ref="track"
-			class="reels__track"
+			class="shorts__track"
 			tabindex="0"
 			@keydown="onKey"
 			@scroll.passive="onScroll">
 			<article
-				v-for="(entry, index) in reels"
+				v-for="(entry, index) in shorts"
 				:key="entry.key"
 				:ref="(el) => setSlide(el, index)"
-				class="reel"
+				class="short"
+				:class="{ 'short--day': entry.day }"
 				:data-index="index">
+				<!-- a 24-hour picture or text card is its own picture; pressing
+				     it holds its clock, as tapping a video pauses it -->
+				<button
+					v-if="entry.day && !entry.isVideo && entry.video.url"
+					type="button"
+					class="short__picture-hold"
+					:aria-pressed="index === playing && held"
+					:aria-label="t('social', 'Hold this short')"
+					@click="togglePlay(index)">
+					<img
+						class="short__poster short__picture"
+						:src="entry.video.url"
+						:alt="entry.video.description || entry.text">
+				</button>
+				<p v-else-if="entry.day && !entry.isVideo" class="short__gone">
+					{{ t('social', 'The picture of this short is gone.') }}
+				</p>
 				<!-- a still where the player is not: the one <video> below
 				     is over whichever slide is being watched -->
 				<img
-					v-if="entry.video.preview_url"
-					class="reel__poster"
+					v-else-if="entry.video.preview_url"
+					class="short__poster"
 					:src="entry.video.preview_url"
 					:alt="index === playing ? '' : (entry.video.description || entry.text)"
 					loading="lazy">
@@ -29,12 +47,12 @@
 				     and a few rising up the edge, the way live video does it.
 				     Decoration only; the button below is what a screen reader
 				     is told about. -->
-				<div class="reel__hearts" aria-hidden="true">
+				<div class="short__hearts" aria-hidden="true">
 					<svg
 						v-for="heart in heartsOn(index)"
 						:key="heart.id"
-						class="reel__heart"
-						:class="heart.big ? 'reel__heart--burst' : 'reel__heart--float'"
+						class="short__heart"
+						:class="heart.big ? 'short__heart--burst' : 'short__heart--float'"
 						:style="heart.style"
 						viewBox="0 0 24 24">
 						<path fill="currentColor" :d="HEART_PATH" />
@@ -42,56 +60,69 @@
 				</div>
 
 				<button
+					v-if="entry.status"
 					type="button"
-					class="reel__like"
-					:class="{ 'reel__like--on': entry.status.favourited === true }"
+					class="short__like"
+					:class="{ 'short__like--on': entry.status.favourited === true }"
 					:aria-pressed="entry.status.favourited === true"
 					:aria-label="entry.status.favourited === true ? t('social', 'Unlike') : t('social', 'Like')"
 					@click.stop="toggleLike(index)">
 					<IconHeart v-if="entry.status.favourited === true" :size="24" />
 					<IconHeartOutline v-else :size="24" />
-					<span v-if="entry.status.favourites_count > 0 && !settingsStore.hidesCounts" class="reel__like-count">
+					<span v-if="entry.status.favourites_count > 0 && !settingsStore.hidesCounts" class="short__like-count">
 						{{ entry.status.favourites_count }}
 					</span>
 				</button>
 
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
 				<button
+					v-if="entry.isVideo"
 					type="button"
-					class="reel__sound"
+					class="short__sound"
 					:aria-label="silent ? t('social', 'Unmute') : t('social', 'Mute')"
 					@click.stop="toggleSound">
 					<IconVolumeOff v-if="silent" :size="20" />
 					<IconVolumeHigh v-else :size="20" />
 				</button>
 				<!-- the browser would not start with sound: say where it is -->
-				<span v-if="soundHeld && index === playing" class="reel__sound-hint" aria-hidden="true">
+				<span v-if="entry.isVideo && soundHeld && index === playing" class="short__sound-hint" aria-hidden="true">
 					{{ t('social', 'Tap for sound') }}
 				</span>
 
-				<div class="reel__caption">
+				<DayShortPanel
+					v-if="entry.day"
+					:short="entry.day"
+					:own="entry.own"
+					:active="index === playing"
+					:held="held"
+					@done="onDayDone(index)"
+					@seen="onDaySeen"
+					@deleted="onDayDeleted"
+					@hold="onDayHold" />
+
+				<div v-else class="short__caption">
 					<router-link
-						class="reel__author"
+						class="short__author"
 						:to="{ name: 'profile', params: { account: entry.status.account.acct } }">
 						<img
 							v-if="entry.status.account.avatar"
-							class="reel__avatar"
+							class="short__avatar"
 							:src="entry.status.account.avatar"
 							alt="">
-						<span class="reel__names">
-							<span class="reel__name">{{ entry.status.account.display_name || entry.status.account.username }}</span>
-							<span class="reel__handle">@{{ entry.status.account.acct }}</span>
+						<span class="short__names">
+							<span class="short__name">{{ entry.status.account.display_name || entry.status.account.username }}</span>
+							<span class="short__handle">@{{ entry.status.account.acct }}</span>
 						</span>
 					</router-link>
-					<p v-if="entry.text" class="reel__text">
+					<p v-if="entry.text" class="short__text">
 						{{ entry.text }}
 					</p>
 					<!-- why For you put it here, as the chip over a post says it -->
-					<p v-if="reasonOf(entry.status)" class="reel__reason" :aria-label="reasonOf(entry.status).label">
+					<p v-if="reasonOf(entry.status)" class="short__reason" :aria-label="reasonOf(entry.status).label">
 						{{ reasonOf(entry.status).text }}
 					</p>
 					<router-link
-						class="reel__open"
+						class="short__open"
 						:to="{ name: 'single-post', params: { account: entry.status.account.acct, id: entry.status.id } }">
 						{{ t('social', 'Open the post') }}
 					</router-link>
@@ -102,29 +133,32 @@
 			     given its video. WebKit lets an element play with sound only
 			     once a gesture has allowed it, and a scroll is not a gesture:
 			     a new element per slide was refused the sound on every slide
-			     after the first. -->
+			     after the first. It stays, hidden, while a 24-hour picture is
+			     on screen, for the same reason. A kept short loops; a 24-hour
+			     one moves on when it ends. -->
 			<video
 				v-if="current"
+				v-show="current.isVideo"
 				ref="player"
-				class="reel__video"
+				class="short__video"
 				:style="{ '--at': playing }"
-				:src="current.video.url"
-				:poster="current.video.preview_url || undefined"
-				:aria-label="current.video.description || current.text"
+				:src="current.isVideo ? current.video.url : undefined"
+				:poster="(current.isVideo && current.video.preview_url) || undefined"
+				:aria-label="current.isVideo ? (current.video.description || current.text) : undefined"
 				playsinline
-				loop
+				:loop="!current.day"
 				preload="auto"
-				@timeupdate="reelSignals.progress(current.status, $event.target)"
-				@ended="reelSignals.ended(current.status)"
+				@timeupdate="shortSignals.progress(current.status, $event.target)"
+				@ended="onEnded"
 				@click="onVideoTap(playing, $event)" />
 
-			<div v-if="reels.length === 0 && loading" class="reels__empty">
+			<div v-if="shorts.length === 0 && (loading || !dayReady)" class="shorts__empty">
 				<NcLoadingIcon :size="44" appearance="light" />
 				<p>{{ t('social', 'Loading videos …') }}</p>
 			</div>
 
 			<!-- a feed that could not be fetched is not a feed with nothing in it -->
-			<div v-else-if="reels.length === 0 && failed" class="reels__empty" role="alert">
+			<div v-else-if="shorts.length === 0 && failed" class="shorts__empty" role="alert">
 				<p>{{ t('social', 'The videos could not be loaded.') }}</p>
 				<NcButton @click="load">
 					<template #icon>
@@ -134,7 +168,7 @@
 				</NcButton>
 			</div>
 
-			<div v-else-if="reels.length === 0" class="reels__empty">
+			<div v-else-if="shorts.length === 0" class="shorts__empty">
 				<p>{{ t('social', 'No videos here yet.') }}</p>
 				<NcButton :to="{ name: 'timeline', params: { type: 'videos' } }">
 					{{ t('social', 'Back to Videos') }}
@@ -145,25 +179,25 @@
 		<!-- a new short: its own dialog, made for a video -->
 		<button
 			type="button"
-			class="reels__create"
+			class="shorts__create"
 			:title="t('social', 'New short')"
 			:aria-label="t('social', 'New short')"
 			@click="startShort">
 			<IconPlus :size="24" />
 		</button>
-		<ShortComposerDialog v-model:open="composing" @posted="open" />
+		<ShortComposerDialog v-model:open="composing" @posted="onPosted" />
 
 		<!-- whose videos: the three circles the Videos page is read at. Shorts
 		     is its own entry in the sidebar, so this page is where the choice
 		     is made rather than something carried over from the grid -->
-		<nav class="reels__scopes" :aria-label="t('social', 'Whose videos')">
+		<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
 			<router-link
 				v-for="option in scopes"
 				:key="option.value"
-				class="reels__scope"
-				:class="{ 'reels__scope--current': option.value === watching }"
+				class="shorts__scope"
+				:class="{ 'shorts__scope--current': option.value === watching }"
 				:aria-current="option.value === watching ? 'page' : undefined"
-				:to="{ name: 'reels', query: { scope: option.value } }">
+				:to="{ name: 'shorts', query: { scope: option.value } }">
 				{{ option.label }}
 			</router-link>
 		</nav>
@@ -201,7 +235,18 @@
  *    slide: it is the one thing that behaves the same under a finger, a
  *    trackpad, a wheel and a keyboard, and it keeps working when the
  *    JavaScript that observes it does not.
+ *
+ * Before the kept shorts come the 24-hour shorts of the people the reader
+ * follows (the stories carousel), one person after another, those with
+ * something unseen first and the reader's own last. `?account=` puts that
+ * person first, which is how a face in the Home bar opens the stack at them.
+ * A 24-hour short plays in the same stack: a video in the one player, ending
+ * into the next slide; a picture or a text card for the seconds its poster
+ * gave it. Its marks and its answers are DayShortPanel's.
  */
+import axios from '@nextcloud/axios'
+import { getCurrentUser } from '@nextcloud/auth'
+import { generateUrl } from '@nextcloud/router'
 import { mapStores } from 'pinia'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -212,16 +257,18 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
 import { hasInterestsFeed, isTracking } from '../services/interests.js'
-import { createReelSignals } from '../services/reelSignals.js'
+import { createShortSignals } from '../services/shortSignals.js'
 import { interestReason } from '../utils/interestReason.js'
 import { oldestId } from '../utils/snowflake.js'
 import { htmlToPlainText } from '../utils/plainText.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
 import { useSoundAutoplay } from '../composables/useSoundAutoplay.js'
+import DayShortPanel from '../components/DayShortPanel.vue'
 import ShortComposerDialog from '../components/ShortComposerDialog.vue'
 
 /** How close to the end the reader gets before the next page is asked for. */
@@ -243,8 +290,9 @@ const HEART_PATH = 'M12,21.35L10.55,20.03C5.4,15.36 2,12.28 2,8.5C2,5.42 4.42,3 
 let heartSerial = 0
 
 export default {
-	name: 'VideoReels',
+	name: 'VideoShorts',
 	components: {
+		DayShortPanel,
 		IconHeart,
 		IconHeartOutline,
 		IconPlus,
@@ -268,6 +316,12 @@ export default {
 			type: String,
 			default: '',
 		},
+
+		/** whose 24-hour shorts come first, by handle; '' for the usual order */
+		account: {
+			type: String,
+			default: '',
+		},
 	},
 
 	setup() {
@@ -282,6 +336,12 @@ export default {
 			composing: false,
 			/** the slide on screen, which the player is over */
 			playing: 0,
+			/** the 24-hour shorts, in the order they are watched */
+			dayShorts: [],
+			/** the 24-hour shorts have been asked for; the stack waits for them */
+			dayReady: false,
+			/** a 24-hour picture's clock is held */
+			held: false,
 			loading: false,
 			/** the last page asked for could not be fetched */
 			failed: false,
@@ -295,8 +355,8 @@ export default {
 			lastTap: null,
 			/** the pause a single tap is waiting to do */
 			tapTimer: null,
-			/** what watching teaches For you (`reelSignals.js`) */
-			reelSignals: createReelSignals({
+			/** what watching teaches For you (`shortSignals.js`) */
+			shortSignals: createShortSignals({
 				enabled: () => {
 					const serverData = useSettingsStore().getServerData
 
@@ -309,7 +369,21 @@ export default {
 	},
 
 	computed: {
-		...mapStores(useSettingsStore, useTimelineStore),
+		...mapStores(useAccountStore, useSettingsStore, useTimelineStore),
+
+		/** @return {boolean} whether this reader is offered 24-hour shorts at all */
+		dayOffered() {
+			const serverData = this.settingsStore.getServerData
+
+			return getCurrentUser() !== null
+				&& !serverData?.public
+				&& serverData?.sections?.stories !== false
+		},
+
+		/** @return {string} the reader's handle, for telling their own shorts apart */
+		viewerAcct() {
+			return this.accountStore.currentAccount?.acct ?? getCurrentUser()?.uid ?? ''
+		},
 
 		/**
 		 * The circles a reader can watch: the people they follow, this server,
@@ -356,13 +430,40 @@ export default {
 		},
 
 		/**
+		 * One slide per 24-hour short.
+		 *
+		 * @return {object[]} the short, its media, its words, and whether it is the reader's
+		 */
+		dayEntries() {
+			return this.dayShorts.map((short) => ({
+				key: 'day:' + short.id,
+				day: short,
+				video: short.media ?? {},
+				isVideo: short.media?.type === 'video',
+				text: String(short.caption ?? ''),
+				own: this.isOwn(short),
+			}))
+		},
+
+		/**
+		 * The 24-hour shorts, then the kept ones. Nothing until the 24-hour
+		 * shorts have been asked for, so that they do not arrive above a slide
+		 * somebody is already watching.
+		 *
+		 * @return {object[]}
+		 */
+		shorts() {
+			return this.dayReady ? [...this.dayEntries, ...this.keptEntries] : []
+		},
+
+		/**
 		 * One entry per video, not per post: a post with three videos on it is
 		 * three things to watch, and a stack that showed only the first would
 		 * be hiding two of them behind a grid tile nobody goes back to.
 		 *
 		 * @return {object[]} the video, the post it is on, and its words
 		 */
-		reels() {
+		keptEntries() {
 			const entries = []
 
 			for (const status of this.timelineStore.getTimeline) {
@@ -374,6 +475,7 @@ export default {
 							key: status.id + ':' + media.id,
 							status,
 							video: media,
+							isVideo: true,
 							text: htmlToPlainText(status.content ?? '').trim(),
 						})
 					}
@@ -385,7 +487,7 @@ export default {
 
 		/** @return {object|undefined} the slide the player is over */
 		current() {
-			return this.reels[this.playing]
+			return this.shorts[this.playing]
 		},
 	},
 
@@ -395,10 +497,17 @@ export default {
 		watching() {
 			this.open()
 		},
+
+		// a face tapped while the stack is already open
+		account(now) {
+			this.dayShorts = this.orderDay(this.dayShorts, now)
+			this.toTop()
+		},
 	},
 
 	mounted() {
 		this.open()
+		this.loadDay()
 
 		// `threshold: 0.6` rather than a bare intersection: two slides touch
 		// the viewport for most of a scroll, and whichever was observed last
@@ -409,13 +518,15 @@ export default {
 	},
 
 	beforeUnmount() {
-		this.reelSignals.leave()
+		this.shortSignals.leave()
 		window.clearTimeout(this.tapTimer)
 		this.observer?.disconnect()
 		this.player()?.pause?.()
 	},
 
 	updated() {
+		// a 24-hour short taken out leaves its old place behind
+		this.slides.length = this.shorts.length
 		// slides arrive a page at a time, so each new one is taken under
 		// observation as it appears rather than all of them once at mount
 		for (const slide of this.slides) {
@@ -431,7 +542,7 @@ export default {
 
 		/** Points the store at the videos of this scope and fetches the first page. */
 		open() {
-			this.reelSignals.leave()
+			this.shortSignals.leave()
 			this.timelineStore.changeTimelineType({
 				type: 'videos',
 				params: { scope: this.watching },
@@ -439,6 +550,96 @@ export default {
 			this.allLoaded = false
 			this.playing = 0
 			this.load()
+		},
+
+		/**
+		 * The 24-hour shorts of the people the reader follows, and the
+		 * reader's own.
+		 *
+		 * @param {string} [first] whose to put first, by handle
+		 * @return {Promise<void>}
+		 */
+		async loadDay(first = this.account) {
+			if (!this.dayOffered) {
+				this.dayShorts = []
+				this.dayReady = true
+
+				return
+			}
+
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/stories/carousel'))
+				this.dayShorts = this.orderDay(Array.isArray(data) ? data : [], first)
+			} catch (error) {
+				// the kept shorts are still a stack without them
+				logger.debug('could not load the 24-hour shorts', { error })
+				this.dayShorts = []
+			} finally {
+				this.dayReady = true
+			}
+		},
+
+		/**
+		 * One person after another: the one asked for first, then those with
+		 * something unseen, then those seen, then the reader's own. Each
+		 * person's shorts stay in the order the server gave them.
+		 *
+		 * Worked out when the list arrives and not as it is watched, or a
+		 * short marked seen would move under the reader.
+		 *
+		 * @param {object[]} shorts the carousel
+		 * @param {string} first whose to put first, by handle
+		 * @return {object[]} the same shorts, ordered
+		 */
+		orderDay(shorts, first) {
+			const groups = new Map()
+			for (const short of shorts) {
+				const account = short?.account
+				if (!account) {
+					continue
+				}
+				if (!groups.has(account.id)) {
+					groups.set(account.id, { account, shorts: [], seen: true, own: this.isOwn(short) })
+				}
+				const group = groups.get(account.id)
+				group.shorts.push(short)
+				if (!short.seen) {
+					group.seen = false
+				}
+			}
+
+			const rank = (group) => {
+				if (first !== '' && group.account.acct === first) {
+					return 0
+				}
+				if (group.own) {
+					return 3
+				}
+
+				return group.seen ? 2 : 1
+			}
+
+			return [...groups.values()]
+				.sort((a, b) => rank(a) - rank(b))
+				.flatMap((group) => group.shorts)
+		},
+
+		/**
+		 * @param {object} short a 24-hour short
+		 * @return {boolean} whether it is the reader's own
+		 */
+		isOwn(short) {
+			return this.viewerAcct !== '' && short?.account?.acct === this.viewerAcct
+		},
+
+		/** Back to the first slide, and plays it. */
+		toTop() {
+			this.playing = 0
+			const track = /** @type {HTMLElement|undefined} */ (this.$refs.track)
+			if (track) {
+				track.scrollTop = 0
+			}
+			this.play(0)
 		},
 
 		/**
@@ -490,8 +691,9 @@ export default {
 		 * @return {Promise<void>}
 		 */
 		async play(index) {
-			this.reelSignals.enter(this.reels[index]?.status)
-			if (index >= this.reels.length - LOOK_AHEAD) {
+			this.held = false
+			this.shortSignals.enter(this.shorts[index]?.status)
+			if (index >= this.shorts.length - LOOK_AHEAD) {
 				this.load()
 			}
 
@@ -500,7 +702,104 @@ export default {
 				return
 			}
 
+			// a picture runs on its own clock; the hidden player must not go
+			// on with the video before it
+			if (!this.shorts[index]?.isVideo) {
+				this.player()?.pause?.()
+
+				return
+			}
+
 			await this.playWithSound(this.player())
+		},
+
+		/** A kept short loops; a 24-hour one moves on. */
+		onEnded() {
+			if (this.current?.day) {
+				this.advance()
+
+				return
+			}
+			this.shortSignals.ended(this.current?.status)
+		},
+
+		/** On to the next slide, the way the arrow key goes. */
+		advance() {
+			this.scrollToSlide(this.playing + 1)
+		},
+
+		/** @param {number} index the slide to bring on screen */
+		scrollToSlide(index) {
+			this.slides[index]?.scrollIntoView?.({
+				behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth',
+			})
+		},
+
+		/** @param {number} index the slide whose picture's time is up */
+		onDayDone(index) {
+			if (index === this.playing) {
+				this.advance()
+			}
+		},
+
+		/** @param {string} id the 24-hour short the server has marked seen */
+		onDaySeen(id) {
+			const short = this.dayShorts.find((one) => one.id === id)
+			if (short) {
+				short.seen = true
+			}
+		},
+
+		/**
+		 * One of the reader's own is gone: the slide after it takes its place.
+		 *
+		 * @param {object} deleted the short
+		 * @return {Promise<void>}
+		 */
+		async onDayDeleted(deleted) {
+			this.dayShorts = this.dayShorts.filter((one) => one.id !== deleted.id)
+			this.playing = Math.max(0, Math.min(this.playing, this.shorts.length - 1))
+			await this.$nextTick()
+			this.play(this.playing)
+		},
+
+		/**
+		 * A reply is being written: the video under it stops, and goes on
+		 * when the writer leaves the field.
+		 *
+		 * @param {boolean} on whether to hold
+		 */
+		onDayHold(on) {
+			this.held = on
+			const video = this.current?.isVideo ? this.player() : undefined
+			if (!video) {
+				return
+			}
+			if (on) {
+				video.pause?.()
+			} else if (video.paused && !video.ended) {
+				this.playWithSound(video)
+			}
+		},
+
+		/**
+		 * Something new from the New short dialog: a kept one is in the
+		 * timeline, a 24-hour one in the carousel, shown first.
+		 *
+		 * @param {object} [made] what was posted
+		 * @param {string} [lifetime] 'kept' or 'day'
+		 * @return {Promise<void>}
+		 */
+		async onPosted(made, lifetime) {
+			if (lifetime !== 'day') {
+				this.open()
+
+				return
+			}
+
+			await this.loadDay(this.viewerAcct)
+			await this.$nextTick()
+			this.toTop()
 		},
 
 		/**
@@ -511,6 +810,13 @@ export default {
 		 * @param {MouseEvent} event the tap, for where the heart goes
 		 */
 		onVideoTap(index, event) {
+			// a 24-hour short is answered with a reaction, not a like
+			if (this.shorts[index]?.day) {
+				this.togglePlay(index)
+
+				return
+			}
+
 			const now = Date.now()
 			if (this.lastTap !== null && this.lastTap.index === index && now - this.lastTap.at < DOUBLE_TAP_MS) {
 				window.clearTimeout(this.tapTimer)
@@ -547,7 +853,7 @@ export default {
 
 			this.addHeart(index, { big: true, x, y })
 			this.releaseHearts(index, 2)
-			if (this.reels[index]?.status?.favourited !== true) {
+			if (this.shorts[index]?.status?.favourited !== true) {
 				this.like(index)
 			}
 		},
@@ -559,7 +865,7 @@ export default {
 		 * @param {number} index the slide
 		 */
 		async toggleLike(index) {
-			const status = this.reels[index]?.status
+			const status = this.shorts[index]?.status
 			if (!status) {
 				return
 			}
@@ -576,7 +882,7 @@ export default {
 
 		/** @param {number} index the slide whose post to like */
 		async like(index) {
-			const status = this.reels[index]?.status
+			const status = this.shorts[index]?.status
 			if (!status) {
 				return
 			}
@@ -646,8 +952,17 @@ export default {
 		},
 
 		togglePlay(index) {
+			if (index !== this.playing) {
+				return
+			}
+			if (!this.shorts[index]?.isVideo) {
+				this.held = !this.held
+
+				return
+			}
+
 			const video = this.player()
-			if (!video || index !== this.playing) {
+			if (!video) {
 				return
 			}
 
@@ -669,12 +984,14 @@ export default {
 		 * @param {KeyboardEvent} event the key
 		 */
 		onKey(event) {
+			// somebody writing a reply is not paging
+			if (/** @type {Element|null} */ (event.target)?.closest?.('input, textarea, [contenteditable]')) {
+				return
+			}
+
 			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 				event.preventDefault()
-				const next = this.playing + ((event.key === 'ArrowDown') ? 1 : -1)
-				this.slides[next]?.scrollIntoView({
-					behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth',
-				})
+				this.scrollToSlide(this.playing + ((event.key === 'ArrowDown') ? 1 : -1))
 			} else if (event.key === ' ') {
 				event.preventDefault()
 				this.togglePlay(this.playing)
@@ -740,7 +1057,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.reels {
+.shorts {
 	position: relative;
 	/* the app's own content area, not the window: the navigation stays where
 	   it is and the stack fills what is left of the page.
@@ -843,7 +1160,7 @@ export default {
 	}
 }
 
-.reel {
+.short {
 	position: relative;
 	display: flex;
 	align-items: center;
@@ -866,6 +1183,24 @@ export default {
 
 	&__poster {
 		inset-block-start: 0;
+	}
+
+	&__picture-hold {
+		position: absolute;
+		inset: 0;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: -4px;
+		}
+	}
+
+	&__gone {
+		color: rgba(255, 255, 255, 0.7);
 	}
 
 	/* over the slide being watched: every slide is exactly the track's
@@ -907,7 +1242,7 @@ export default {
 		font-size: 12px;
 		font-weight: 600;
 		pointer-events: none;
-		animation: reel-hint-in .4s ease-out both;
+		animation: short-hint-in .4s ease-out both;
 	}
 
 	/* above the sound button, the column every short-video app keeps its
@@ -976,14 +1311,14 @@ export default {
 			/* stylelint-disable-next-line csstools/use-logical -- a point on the screen, not a side: where the finger landed is set inline as `left`, and the heart is centred on it with translate() */
 			left: 50%;
 			top: 45%;
-			animation: reel-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
+			animation: short-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
 		}
 
 		/* up the edge from the heart button, drifting as it goes */
 		&--float {
 			inset-inline-end: 24px;
 			inset-block-end: 120px;
-			animation: reel-heart-float 1.6s ease-out both;
+			animation: short-heart-float 1.6s ease-out both;
 		}
 	}
 
@@ -1056,7 +1391,7 @@ export default {
 	}
 }
 
-@keyframes reel-heart-burst {
+@keyframes short-heart-burst {
 	0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt)); }
 	25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt)); }
 	45% { transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt)); }
@@ -1064,33 +1399,33 @@ export default {
 	100% { opacity: 0; transform: translate(-50%, -140%) scale(.8) rotate(var(--tilt)); }
 }
 
-@keyframes reel-heart-float {
+@keyframes short-heart-float {
 	0% { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0); }
 	15% { opacity: 1; transform: translate(calc(var(--drift) * .2), -20px) scale(1) rotate(var(--tilt)); }
 	100% { opacity: 0; transform: translate(var(--drift), -45vh) scale(.8) rotate(calc(var(--tilt) * -1)); }
 }
 
-@keyframes reel-hint-in {
+@keyframes short-hint-in {
 	from { opacity: 0; transform: translateX(8px); }
 	to { opacity: 1; transform: none; }
 }
 
 /* the like still lands; only the flight is taken away */
 @media (prefers-reduced-motion: reduce) {
-	.reel__sound-hint {
+	.short__sound-hint {
 		animation: none;
 	}
 
-	.reels__create {
+	.shorts__create {
 		transition: none;
 	}
 
-	.reel__heart {
+	.short__heart {
 		animation: none;
 		display: none;
 	}
 
-	.reel__like {
+	.short__like {
 		transition: none;
 	}
 }

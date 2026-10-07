@@ -32,13 +32,14 @@ describe('ProfileStatusCard', () => {
 
 	afterEach(() => vi.restoreAllMocks())
 
-	it('names the likes without their number for a reader who hides the numbers', () => {
+	it('names the likes and comments without their numbers for a reader who hides the numbers', () => {
 		useSettingsStore().setServerData({ hideCounts: true })
 		const wrapper = mount(ProfileStatusCard, { props: { status }, global: { stubs } })
 
 		expect(wrapper.text()).toContain('Likes')
 		expect(wrapper.text()).not.toContain('Likes (3)')
-		expect(wrapper.text()).toContain('Comments (2)')
+		expect(wrapper.text()).toContain('Comments')
+		expect(wrapper.text()).not.toContain('Comments (2)')
 	})
 
 	it('provides a real post link, counts, and lazy like details', async () => {

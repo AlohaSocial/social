@@ -769,7 +769,7 @@ describe('Navigation', () => {
 	})
 
 	/**
-	 * The reel stack once had a client route, a view and a server route, and
+	 * The Shorts stack once had a client route, a view and a server route, and
 	 * nothing anywhere linked to it — so the only way to the page was typing
 	 * the address. A page needs a way in: the stack has a sidebar entry (as
 	 * Shorts), and Migration carries a button to the switch wizard.
@@ -780,7 +780,7 @@ describe('Navigation', () => {
 		const destinations = [...wrapper.vm.menu.timelines, ...wrapper.vm.menu.more]
 			.map((entry) => entry.to?.name)
 
-		expect(destinations).toContain('reels')
+		expect(destinations).toContain('shorts')
 	})
 
 	/**
@@ -793,8 +793,8 @@ describe('Navigation', () => {
 		expect(itemNames(mountNavigation())).not.toContain('Shorts')
 	})
 
-	it('lights Shorts on the reel stack and nothing else', () => {
-		expect(activeNames(mountNavigation({}, appRouter.resolve('/reels')))).toEqual(['Shorts'])
+	it('lights Shorts on the Shorts stack and nothing else', () => {
+		expect(activeNames(mountNavigation({}, appRouter.resolve('/shorts')))).toEqual(['Shorts'])
 	})
 
 	it('lists the fixed entries in order, without an errors entry when there are none', () => {
@@ -803,11 +803,10 @@ describe('Navigation', () => {
 			'Photos',
 			'Videos',
 			'Shorts',
+			'Activities',
 			'Direct messages',
 			'Discover',
-			// the profile entry appears only when an ActivityPub account exists;
-			// Activities follows it
-			'Activities',
+			// the profile entry appears only when an ActivityPub account exists
 			'Follow requests',
 			'Liked posts',
 			'Bookmarks',
@@ -827,7 +826,6 @@ describe('Navigation', () => {
 		const wrapper = mountNavigation()
 
 		expect(moreNames(wrapper)).toEqual([
-			'Activities',
 			'Follow requests',
 			'Liked posts',
 			'Bookmarks',
@@ -843,6 +841,7 @@ describe('Navigation', () => {
 			'Photos',
 			'Videos',
 			'Shorts',
+			'Activities',
 			'Direct messages',
 			'Discover',
 		])
@@ -882,14 +881,15 @@ describe('Navigation', () => {
 	})
 
 	/**
-	 * Activities is inside the account menu, so while the menu is shut the
-	 * account button carries the unread count; otherwise it would be a count
-	 * nobody sees until they go looking for it.
+	 * Activities is a top-level entry again, between Shorts and Direct
+	 * messages, with its own count; the account button no longer needs to
+	 * carry one for a menu that held it.
 	 */
-	it('puts the unread Activities count on the account button', () => {
-		expect(mountNavigation().find('.navigation__more').attributes('data-unread')).toBeUndefined()
-		expect(mountNavigation({ unread: 5 }).find('.navigation__more').attributes('data-unread')).toBe('5')
-		expect(mountNavigation({ unread: 250 }).find('.navigation__more').attributes('data-unread')).toBe('99+')
+	it('puts Activities with its count in the sidebar, not behind the account button', () => {
+		const wrapper = mountNavigation({ unread: 5 })
+
+		expect(moreNames(wrapper)).not.toContain('Activities')
+		expect(wrapper.find('.navigation__more').attributes('data-unread')).toBeUndefined()
 	})
 
 	/**

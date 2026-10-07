@@ -31,6 +31,13 @@
 					</span>
 				</component>
 			</div>
+			<!-- the reader's own like or boost, for a row whose controls are
+			     out of sight until it is pointed at; the buttons carry the
+			     state for a screen reader -->
+			<span v-if="isBoosted || isLiked" class="post-given" aria-hidden="true">
+				<Repeat v-if="isBoosted" :size="14" fillColor="var(--color-primary-element)" />
+				<Heart v-if="isLiked" :size="14" fillColor="var(--color-element-error)" />
+			</span>
 			<a
 				v-if="postHref"
 				:href="postHref"
@@ -282,6 +289,7 @@
 				:statusId="String(item.id || '')"
 				:modelValue="item.reactions || []"
 				:canReact="!serverData.public"
+				:offerAdd="false"
 				@update:modelValue="onReactionsChanged" />
 			<!-- The counts are always here; the controls arrive with the
 			     pointer. Nothing widens and nothing moves — see the stylesheet
@@ -316,6 +324,7 @@
 						@translate="toggleTranslation"
 						@delivery="showDeliveryDialog = true"
 						@bookmark="toggleBookmark"
+						@react="askForReaction"
 						@collect="showCollectionDialog = true"
 						@pin="togglePin"
 						@lessLikeThis="lessLikeThis"
@@ -323,25 +332,29 @@
 						@block="showBlockDialog = true"
 						@report="showReportDialog = true" />
 					<div class="post-actions__groups">
-						<div class="post-action-group">
+						<!-- the same three controls on every post, so nothing moves
+						     from one post to the next: one that cannot be used
+						     here is there, disabled, and says why -->
+						<div class="post-action-group" :title="refusedBecause.reply || undefined">
 							<NcButton
-								v-if="canReply"
-								:title="t('social', 'Reply')"
+								:title="refusedBecause.reply || t('social', 'Reply')"
 								:aria-label="t('social', 'Reply')"
+								:disabled="!canReply"
 								variant="tertiary"
 								@click="reply">
 								<template #icon>
 									<Reply :size="20" />
 								</template>
 							</NcButton>
-							<RollingCount :count="item.replies_count || 0" />
+							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
 						</div>
 						<div
 							class="post-action-group"
-							:class="{ 'post-action-group--refused': refused === 'boost' }">
+							:class="{ 'post-action-group--refused': refused === 'boost' }"
+							:title="refusedBecause.boost || undefined">
 							<NcButton
-								v-if="canBoost"
-								:title="isBoosted ? t('social', 'Undo boost') : t('social', 'Boost')"
+								:disabled="!canBoost"
+								:title="refusedBecause.boost || (isBoosted ? t('social', 'Undo boost') : t('social', 'Boost'))"
 								:aria-label="isBoosted ? t('social', 'Undo boost') : t('social', 'Boost')"
 								:aria-pressed="isBoosted ? 'true' : 'false'"
 								variant="tertiary"
@@ -355,7 +368,8 @@
 						</div>
 						<div
 							class="post-action-group post-action-group--like"
-							:class="{ 'post-action-group--refused': refused === 'like' }">
+							:class="{ 'post-action-group--refused': refused === 'like' }"
+							:title="refusedBecause.like || undefined">
 							<template v-if="celebrate === 'like'">
 								<span class="post-action__burst" aria-hidden="true" />
 								<!-- six sparks rather than one ring: a ring says
@@ -374,8 +388,8 @@
 							     unmounting the button someone just pressed drops their focus
 							     to the body and loses their place in the timeline -->
 							<NcButton
-								v-if="canLike || isLiked"
-								:title="isLiked ? t('social', 'Undo Like') : t('social', 'Like')"
+								:disabled="!canLike && !isLiked"
+								:title="refusedBecause.like || (isLiked ? t('social', 'Undo Like') : t('social', 'Like — hold for a reaction'))"
 								:aria-label="isLiked ? t('social', 'Undo Like') : t('social', 'Like')"
 								:aria-pressed="isLiked ? 'true' : 'false'"
 								variant="tertiary"
@@ -474,7 +488,7 @@
 
 // side-effect imports: they register the mention plugin and the string
 // interface that the rendered content relies on
-import { fromNow, fullDateTime } from '../utils/relativeTime.js'
+import { shortAgo, fullDateTime } from '../utils/relativeTime.js'
 import 'linkify-plugin-mention'
 import 'linkify-string'
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
@@ -1003,7 +1017,7 @@ export default {
 		 * @return {string}
 		 */
 		relativeTimestamp() {
-			return fromNow(this.item.created_at, new Date(this.now))
+			return shortAgo(this.item.created_at, new Date(this.now))
 		},
 
 		/**
@@ -1080,9 +1094,31 @@ export default {
 			return this.item.type !== undefined
 		},
 
-		/** @return {object} */
+		/**
+		 * The audience, when it is not everybody: public is what a post is
+		 * unless it says otherwise, so a globe on most of them was a mark
+		 * nobody needed and the lock among them was harder to see.
+		 *
+		 * @return {object|undefined}
+		 */
 		visibility() {
+			if (this.item.visibility === 'public') {
+				return undefined
+			}
+
 			return visibilitiesInfo.find(({ id }) => this.item.visibility === id)
+		},
+
+		/** @return {{reply: string, boost: string, like: string}} why each of reply, boost and like cannot be used here; empty where it can */
+		refusedBecause() {
+			return {
+				reply: this.canReply ? '' : t('social', 'The author does not take replies to this post'),
+				boost: this.canBoost
+					? ''
+					: (isShareable(this.item) ? t('social', 'The author does not allow boosts of this post') : t('social', 'Only public and unlisted posts can be boosted')),
+
+				like: (this.canLike || this.isLiked) ? '' : t('social', 'The author does not allow likes of this post'),
+			}
 		},
 	},
 
@@ -1669,6 +1705,13 @@ export default {
 		align-items: baseline;
 		margin-bottom: 10px;
 
+		// shown only where the timeline lets the controls float (TimelineEntry)
+		.post-given {
+			display: none;
+			align-self: center;
+			gap: 4px;
+		}
+
 		.post-author-wrapper {
 			flex-grow: 1;
 			min-width: 0;
@@ -2085,10 +2128,12 @@ export default {
 			}
 		}
 
-		/* a hairline at rest: enough to say what the number counts, not enough
-		   to read as a button somebody should press */
+		/* gone at rest, back with the pointer or the keyboard: thirty grey
+		   glyphs down a page are noise, and the one row that is being looked
+		   at is the one that is pointed at. A touch screen keeps them (see the
+		   `hover: none` block below), since it cannot point first */
 		:deep(.button-vue__icon) {
-			opacity: .38;
+			opacity: 0;
 			transition: opacity .2s ease;
 		}
 

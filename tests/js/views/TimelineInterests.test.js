@@ -47,7 +47,7 @@ function mountTimeline(route, serverData = {}) {
 				TimelineList: { name: 'TimelineList', props: ['type', 'display', 'listTitle'], template: '<ul class="timeline-list-stub" />' },
 				OnThisDay: stub('OnThisDay'),
 				WeeklyRecap: stub('WeeklyRecap'),
-				StoryBar: stub('StoryBar'),
+				ShortsBar: stub('ShortsBar'),
 				InterestsNotice: stub('InterestsNotice', 'section'),
 				InterestsLearningBanner: stub('InterestsLearningBanner'),
 				RouterLink: RouterLinkStub,

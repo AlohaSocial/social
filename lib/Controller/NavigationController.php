@@ -106,7 +106,7 @@ class NavigationController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	// The client-side router owns `/follow_requests`, `/blocked`, `/discover`,
-	// `/migration`, `/statistics`, `/settings`, `/search`, `/reels` and
+	// `/migration`, `/statistics`, `/settings`, `/search`, `/shorts` and
 	// `/switch`; the server has to answer them too, or reloading or bookmarking
 	// one of those pages is a 404 — and a page nobody can link to is one
 	// nobody can be sent.
@@ -123,6 +123,9 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/switch', postfix: 'switch')]
 	#[FrontpageRoute(verb: 'GET', url: '/statistics', postfix: 'statistics')]
 	#[FrontpageRoute(verb: 'GET', url: '/settings', postfix: 'settings')]
+	#[FrontpageRoute(verb: 'GET', url: '/shorts', postfix: 'shorts')]
+	// the Shorts stack's earlier address, kept for old links and bookmarks;
+	// the client router sends it on to `/shorts`
 	#[FrontpageRoute(verb: 'GET', url: '/reels', postfix: 'reels')]
 	#[FrontpageRoute(verb: 'GET', url: '/search', postfix: 'search')]
 	#[FrontpageRoute(verb: 'GET', url: '/search/{term}', postfix: 'searchterm')]

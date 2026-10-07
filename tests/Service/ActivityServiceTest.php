@@ -357,6 +357,54 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame(ACore::FORMAT_LOCAL, $note->getExportFormat(), 'the caller keeps its post as it was');
 	}
 
+	/**
+	 * An actor carries no audience, and an Update that copied none named no
+	 * recipient: Loops routes its shared inbox by `to` and `cc` and dropped
+	 * every profile change.
+	 */
+	public function testAnActorUpdateIsAddressedToThePublicAndTheFollowers(): void {
+		$alice = $this->alice();
+		$update = clone $alice;
+		$update->addInstancePath(new InstancePath(self::ALICE_ID, InstancePath::TYPE_FOLLOWERS, InstancePath::PRIORITY_LOW));
+
+		$queued = null;
+		$this->requestQueueService->method('generateRequestQueue')
+			->willReturnCallback(function (array $paths, ACore $item) use (&$queued): string {
+				$queued = $item;
+
+				return self::TOKEN;
+			});
+		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+
+		$this->service->updateActivity($alice, $update);
+
+		$this->assertInstanceOf(Update::class, $queued);
+		$wire = json_decode(json_encode($queued), true);
+		$this->assertContains(ACore::CONTEXT_PUBLIC, (array)($wire['to'] ?? []), 'the Update names no public audience');
+		$this->assertSame([self::ALICE_ID . '/followers'], $wire['cc'] ?? null, 'the Update is not copied to the followers');
+	}
+
+	public function testAPostUpdateKeepsThePostsOwnAudience(): void {
+		$note = $this->note();
+		$note->setTo(ACore::CONTEXT_PUBLIC);
+		$note->setCcArray([self::ALICE_ID . '/followers', 'https://other.example/@bob']);
+
+		$queued = null;
+		$this->requestQueueService->method('generateRequestQueue')
+			->willReturnCallback(function (array $paths, ACore $item) use (&$queued): string {
+				$queued = $item;
+
+				return self::TOKEN;
+			});
+		$this->requestQueueService->method('getPriorityRequest')->willThrowException(new NoHighPriorityRequestException());
+		$this->requestQueueService->method('getRequestFromToken')->willReturn([]);
+
+		$this->service->updateActivity($this->alice(), $note);
+
+		$this->assertSame([self::ALICE_ID . '/followers', 'https://other.example/@bob'], $queued->getCcArray());
+	}
+
 	// deleteActivity()
 
 	public function testDeleteActivitySendsTombstoneOnBehalfOfItemAuthor(): void {

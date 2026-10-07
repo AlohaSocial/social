@@ -16,7 +16,7 @@
 						{{ hidesCounts ? t('social', 'Likes') : t('social', 'Likes ({count})', { count: status.favourites_count || 0 }) }}
 					</NcButton>
 					<NcButton variant="tertiary" :aria-expanded="commentsOpen" @click="toggleComments">
-						{{ t('social', 'Comments ({count})', { count: commentCount }) }}
+						{{ hidesCounts ? t('social', 'Comments') : t('social', 'Comments ({count})', { count: commentCount }) }}
 					</NcButton>
 					<a v-if="postHref" class="profile-status-card__open" :href="postHref">{{ t('social', 'Open post') }}</a>
 				</div>

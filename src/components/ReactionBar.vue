@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div v-if="reactions.length || canReact" class="reaction-bar">
+	<div v-if="reactions.length || (canReact && offerAdd)" class="reaction-bar">
 		<button
 			v-for="reaction in reactions"
 			:key="reaction.name"
@@ -25,7 +25,7 @@
 		     megabyte into each. So this asks for the picker over the bus and
 		     keeps the request; see ReactionPicker. -->
 		<button
-			v-if="canReact"
+			v-if="canReact && offerAdd"
 			type="button"
 			class="reaction reaction--add"
 			:disabled="busy !== ''"
@@ -97,6 +97,15 @@ export default {
 		modelValue: {
 			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean}>>} */ (Array),
 			default: () => [],
+		},
+
+		/**
+		 * Whether the bar offers its own button for a new reaction. A post
+		 * does not: its heart offers the reactions on a hold, and the menu does.
+		 */
+		offerAdd: {
+			type: Boolean,
+			default: true,
 		},
 
 		/** whether this reader may react at all; false on the public page */

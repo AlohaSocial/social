@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct' }">
+	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct', 'social__wrapper--reading': display === 'list' && type !== 'direct' }">
 		<!-- the first thing a new account sees; gone for good once closed -->
 		<FirstRun v-if="showInfo" @done="hideInfo" />
 
@@ -16,7 +16,7 @@
 		<!-- said once, on the pages where the reading it describes happens -->
 		<InterestsNotice v-if="showInterestsNotice" />
 
-		<Composer v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct'" />
+		<Composer v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct'" :offerShort="isHome && settingsStore.getServerData.sections?.stories !== false" />
 
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while
@@ -76,9 +76,9 @@
 		<!-- what the reader wrote on this day in years gone by, and how their
 		     week went if they asked to be told; only over their own home feed,
 		     which is the one page that is about them -->
-		<!-- whose stories are up: a row of faces above the reader's own
-		     feed, and only there — a story is for the people who follow -->
-		<StoryBar v-if="isHome" />
+		<!-- whose 24-hour shorts are up: a row of faces above the reader's
+		     own feed, and only there; they are for the people who follow -->
+		<ShortsBar v-if="isHome" />
 
 		<WeeklyRecap v-if="isHome" />
 		<OnThisDay v-if="isHome" />
@@ -122,7 +122,7 @@ import HashtagFollowButton from './../components/HashtagFollowButton.vue'
 import InterestsLearningBanner from './../components/InterestsLearningBanner.vue'
 import InterestsNotice from './../components/InterestsNotice.vue'
 import OnThisDay from './../components/OnThisDay.vue'
-import StoryBar from './../components/StoryBar.vue'
+import ShortsBar from './../components/ShortsBar.vue'
 import WeeklyRecap from './../components/WeeklyRecap.vue'
 import { tagStyle } from '../utils/tagColour.js'
 import HashtagFollowedList from './../components/HashtagFollowedList.vue'
@@ -155,7 +155,7 @@ export default {
 		InterestsLearningBanner,
 		InterestsNotice,
 		OnThisDay,
-		StoryBar,
+		ShortsBar,
 		WeeklyRecap,
 		TimelineList,
 		DirectMessages,
@@ -288,7 +288,7 @@ export default {
 		/**
 		 * Whether this is the reader's own feed.
 		 *
-		 * The memories, the recap and the story bar belong here and nowhere
+		 * The memories, the recap and the Shorts bar belong here and nowhere
 		 * else; on a tag page or a profile they would be an interruption from
 		 * another subject.
 		 *
@@ -812,4 +812,11 @@ export default {
 	}
 }
 
+/* A feed of text is read, and a line much wider than 600 pixels is hard to
+   follow back to its start. The grids keep the wider column: a picture is
+   looked at, not read. Everything in the column — composer, switcher,
+   the Shorts bar, posts — follows the one property. */
+.social__wrapper--reading {
+	--social-column: 616px;
+}
 </style>

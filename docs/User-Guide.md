@@ -265,17 +265,24 @@ The sidebar is the map:
   time, and the posts below it are drawn a shade quieter. It is the position
   Mastodon apps keep too: read your feed on your phone and the line here has
   moved, and the other way round.
-- **Shorts** — the Videos timeline watched one at a time, full height, each
-  playing as it comes up and pausing as you scroll past. The switch in the top
-  corner picks whose videos (**My Feed**, **For you**, **Local** or
-  **Global**); it opens on For you once your reading has taught it something,
-  and on My Feed before that. It plays
+- **Shorts** — short videos watched one at a time, full height, each
+  playing as it comes up and pausing as you scroll past. A short is kept on
+  its poster's profile like any other post, or lasts **24 hours** and is seen
+  only by its poster's followers (see **Shorts that last 24 hours** below).
+  The 24-hour shorts of the people you follow come first, grouped by person
+  and the ones you have not seen before the rest, each marked **24h** with the
+  hours it has left; then come the kept ones, which are the Videos timeline.
+  The switch in the top corner picks whose videos (**My Feed**, **For you**,
+  **Local** or **Global**); it opens on For you once your reading has taught
+  it something, and on My Feed before that. It plays
   with sound; opened from a link, the browser may hold the sound back until
   you tap the speaker, which a "Tap for sound" hint points at. Once you have
   tapped it, the videos after it keep their sound as you scroll, and if you
   mute one they stay muted until you close the tab. Tap to pause,
   arrow keys to move, space to pause, `m` for sound, `l` to like. The **+**
-  opens **New short**:
+  opens **New short**, which first asks how long it should last: **Keep it on
+  my profile**, or **Only for 24 hours, for my followers**. A kept short is a
+  video; a 24-hour one can also be a picture or a few words on a card.
   - **Upload a video**, drop one on the dialog, or **Record** one with your
     camera. Recording counts down 3-2-1 first, can switch between the front
     and back camera, and stops by itself at the limit you pick (15 s, 60 s or
@@ -286,18 +293,16 @@ The sidebar is the map:
     End for the ends). The preview loops over just the part you kept.
   - **Cover**: slide to the frame people see before the short plays.
   - Write a **caption**; the popular hashtags underneath add themselves with
-    one press. Choose **Everyone**, **Quiet public** or **Followers**, and
-    switch on **Sensitive content** to hide it until somebody chooses to
-    watch.
+    one press. For a kept short, choose **Everyone**, **Quiet public** or
+    **Followers**, and switch on **Sensitive content** to hide it until
+    somebody chooses to watch; a 24-hour short always goes to your followers.
   - **Post** shows how far it has got: cutting (as long as the trimmed short
     lasts, since the browser plays it through once), uploading, posting.
     Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
-  It is in the account menu at the foot of the sidebar, under **My profile**,
-  because it is about you rather than a place to go and read. The badge
-  counts what arrived since you last looked, and sits on your name while the
-  menu is shut so it is never out of sight; the same
+  It is in the sidebar, between Shorts and Direct messages. The badge
+  beside it counts what arrived since you last looked; the same
   events reach the Nextcloud bell and its mail digest; a follow request can be
   accepted or declined from the bell itself. The page says how many that is at
   the top — *3 new activities*, with a **Mark all as read** button that clears
@@ -431,58 +436,88 @@ same announcement.
 
 Administrators post and remove announcements in **Administration → Aloha Social**.
 
-### Stories
+### How a post reads
 
-Above your own feed is a row of faces: whose stories are up. A story is one
-picture or video that the people who follow the account can see for a day,
-and then it is gone. A face with a coloured ring around it still holds
-something you have not seen; tap it and the stories play one after another,
-each for the seconds its poster gave it, and the ring goes grey. Hold the
-picture to pause it, tap the left or right of it to go back or forward, and
-use the arrows at the sides to move to the next account. A video story plays
-with its sound on; the speaker at the top turns it off (or `m`), and when the
-browser holds the sound back a "Tap for sound" hint points at the speaker, as
-on Shorts.
+A feed is a column of posts separated by thin lines, not a stack of boxes,
+narrow enough that a line of text is easy to follow back to its start (the
+photo and video grids keep the wider page). Each post has its author's face
+beside their name, how old it is in a word — *now*, *5m*, *3h*, *2d*, *2w*,
+then the date — and the full date when you point at it. A post shows who can
+see it only when that is not everybody: a mark for unlisted, followers-only or
+direct posts, nothing for public ones.
 
-Your own place is always first in the row, with a **+** on it. It opens the
-same dialog as a new short (see **Shorts**): **Record** a video with your
-camera (up to 15 seconds or a minute) or **Upload** one, trim it, pick its
-cover and add a caption. Your followers can watch it for a day.
+The reply, boost and like buttons stay out of sight until you point at a post
+or reach it with the keyboard, so a page of posts is a page of words; a like
+or boost you have given shows as a small heart or arrows beside the post's age.
+On a phone they are always there. The
+three are on every post in the same place; one that cannot be used — a boost
+of a followers-only post, a reply the author does not take — is greyed out and
+says why. To react with an emoji, hold the heart (or right-click it), or choose
+**Add a reaction** in the post's menu; the reactions people left are shown under
+the post.
 
-Choose **Picture or words** there, or upload a picture, and the story editor
-opens instead: add a caption if you like, and say how many seconds a picture
-should show for. On a picture you can add
+### Shorts that last 24 hours
+
+A short you post for **24 hours** is one picture, video or card of words that
+the people who follow you can see for a day, and then it is gone. It is not on
+your profile and nobody else can open it.
+
+Above your own feed is the **Shorts** bar. Your own tile, **Your shorts**,
+comes first, with a **+** on it to make a new one. After it come the people
+you follow who have a 24-hour short up, the ones holding something you have
+not seen first, with a coloured ring around their face; the ring goes grey
+once you have seen them all. The last tile, **All shorts**, opens the Shorts
+stack. The bar is there only while somebody you follow has a 24-hour
+short up, and takes no room at all while nobody does; **Shorts** in the
+sidebar is always there.
+
+Tap a face and that person's shorts play one after another in the same
+player as every other short: a picture or a card for the seconds its poster
+gave it, a video for as long as it runs. Hold the picture to pause it, tap
+the left or right of it to go back or forward, and use the arrows at the
+sides to move to the next person. A video plays with its sound on; the
+speaker at the top turns it off (or `m`), and when the browser holds the
+sound back a "Tap for sound" hint points at the speaker.
+
+To post one, press the camera at the end of the box you write posts in
+(**New short**) — it opens on 24 hours — or the **+** (on your tile or in the
+Shorts stack) and choose
+**Only for 24 hours, for my followers**, and either record or upload a video
+as for any short, or choose a picture or words. A picture goes on to an
+editor: add a caption if you like, and say how many seconds it should show
+for. On a picture you can add
 **stickers** — eight emoji, or a line of your own words — drag them where you
 want them, move a selected one with the arrow keys and remove it with Delete;
-they are drawn into the picture before it goes up. Or choose **Text** at the
-top instead: write a few words, pick one of six backgrounds (the first is your
-own colour), and the story is a card with those words on it, sent with the
-words as its description so somebody who cannot see it is told what it says.
-Either way the picture goes up the way every attachment does — stripped of
-the camera's metadata — and your story is up for a day, to your followers
-and nobody else. While it is up, you can see how many people watched it and
-take it down early from the same player.
+they are drawn into the picture before it goes up. Or write a few words, pick
+one of six backgrounds (the first is your own colour), and the short is a
+card with those words on it, sent with the words as its description so
+somebody who cannot see it is told what it says. Either way the picture goes
+up the way every attachment does — stripped of the camera's metadata — and
+your short is up for a day, to your followers and nobody else. While it is
+up, **Who has seen it** in the player lists the people who watched it, and
+**Delete this short** takes it down early.
 
-Somebody watching a story can answer it: a row of emoji under the picture for a
-reaction, and a box beside them for a line of text. Either one goes to the
-person who posted it and to nobody else — a reply to a story is a message, not a
-comment on a page — and only somebody who follows them can send one, which is
-the same condition as being able to see the story at all. Five answers to one
-story is the limit, because without one what a story hands somebody is a
-private channel to its poster that the poster cannot close. What was said shows
-under your own story while it is up, and goes with it when it expires: a reply
-is not a post, and nothing keeps it after the thing it was about has gone.
+Somebody watching a 24-hour short can answer it: a row of emoji under it for
+a reaction, and a box beside them for a line of text. Either one goes to the
+person who posted it and to nobody else — a reply to a 24-hour short is a
+message, not a comment on a page — and only somebody who follows them can
+send one, which is the same condition as being able to see the short at all.
+Five answers to one short is the limit, because without one what it hands
+somebody is a private channel to its poster that the poster cannot close.
+What was said shows under your own short while it is up, and goes with it
+when it expires: a reply is not a post, and nothing keeps it after the thing
+it was about has gone.
 
-Stories travel. Yours go to the people who follow you on other servers that
-have stories — Pixelfed is the one that does. Stories from a Pixelfed account
-do not come the other way, and that is Pixelfed's decision rather than this
-server's: it sends them only to servers it recognises as Pixelfed. Taking
-yours down early takes it down there too. What another server does with its copy after the day is up is that
-server's business, which is why a story that arrives here is kept for a day
-at the most, whatever the sender says, and one that has already expired is
-not kept at all. Watching a story from another server sends a receipt to its
-author so that their own server can count it, and reactions and replies travel
-the same way in both directions, in the shape Pixelfed's own inbox reads.
+24-hour shorts travel. Yours go to the people who follow you on Pixelfed,
+and Pixelfed shows them in its stories bar. Pixelfed's own come the other way
+only to servers it recognises as Pixelfed, and that is Pixelfed's decision
+rather than this server's. Taking yours down early takes it down there too.
+What another server does with its copy after the day is up is that server's
+business, which is why one that arrives here is kept for a day at the most,
+whatever the sender says, and one that has already expired is not kept at
+all. Watching one from another server sends a receipt to its author so that
+their own server can count it, and reactions and replies travel the same way
+in both directions, in the shape Pixelfed's own inbox reads.
 
 ### Collections
 
@@ -682,20 +717,20 @@ table as they always did — and if you already wrote a row called "Pronouns" by
 hand, it is picked up as one.
 
 
-- **Likes and followers.** You are not shown how many likes, dislikes, boosts
-  or followers anything has — not on your posts, not on anybody else's, not on
+- **Likes and followers.** You are not shown how many likes, dislikes, boosts,
+  replies or followers anything has — not on your posts, not on anybody else's, not on
   any profile. A number next to a post is a score, and a score is pressure.
   **Settings → Likes and followers → Show the numbers** brings them back. It
   belongs to your account, so your phone apps follow it too: they are sent
   zero for each of those numbers while they are hidden. Who liked or boosted a
-  post is still there to look at; replies, following and post counts are not
-  hidden.
+  post is still there to look at, and so is every reply; following and post
+  counts are not hidden.
 - **Sound and touch.** **Settings → Sound and touch** has three switches:
   **Play sounds** (a tick on a like, a breath of air when a post goes out, a
   chime when a direct message arrives; off until you turn it on, with
   **Listen** to hear them first), **Vibrate** (a short tap on a phone; on
   unless you turn it off, and off whenever your system asks for less motion)
-  and **Start videos with sound** (Shorts and stories; on unless you turn it
+  and **Start videos with sound** (Shorts; on unless you turn it
   off). All three belong to the device you are on, not to your account.
 - **Profile.** **My profile** (behind your portrait at the bottom of the
   sidebar) → **Edit profile**: a banner (upload one or give the address of
@@ -869,8 +904,8 @@ hand, it is picked up as one.
   before you press it. An Instagram post does not record who could see it, so
   every one of them is posted here with **your own default visibility** — set
   that first, in **Settings → Your account**, if you would rather they were not
-  public. And your **stories, your archived posts and anything you deleted are
-  not imported**: you put those away on purpose.
+  public. And **what Instagram showed for only a day, your archived posts and
+  anything you deleted are not imported**: you put those away on purpose.
 - **Leaving.** **Settings → Delete your Aloha Social account** deletes your fediverse
   account and keeps your Nextcloud one. Everything you posted goes, your
   followers and the people you follow are let go, and every server that knew

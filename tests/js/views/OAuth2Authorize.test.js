@@ -85,6 +85,15 @@ describe('OAuth2Authorize', () => {
 		expect(items[2].text()).toContain('read:invented')
 	})
 
+	it('explains the stories scopes as 24-hour shorts, keeping the scope names', () => {
+		setState('scopes', ['read:stories', 'write:stories'])
+		const items = mount(OAuth2Authorize).findAll('.scopes__item')
+
+		expect(items[0].text()).toContain('See your 24-hour shorts')
+		expect(items[0].text()).toContain('read:stories')
+		expect(items[1].text()).toContain('Publish and delete 24-hour shorts as you')
+	})
+
 	/**
 	 * A scope that only reads and a scope that acts as you are not the same
 	 * grant, and a list where every line looks alike hides that.

@@ -1392,4 +1392,31 @@ class StreamTest extends TestCase {
 
 		$this->assertSame(12, $stream->getDetailInt('replies'));
 	}
+
+	/**
+	 * Loops keeps a remote video's address only when `url` is a string, and
+	 * names the video by it for likes, comments and edits afterwards.
+	 */
+	public function testAPostWrittenHereFederatesItsPageAsUrl(): void {
+		$note = new Note();
+		$note->setId('https://cloud.example/apps/social/@alice/1791');
+		$note->setAttributedTo('https://cloud.example/apps/social/users/alice');
+
+		$this->assertSame('https://cloud.example/apps/social/@alice/1791', $note->exportAsActivityPub()['url'] ?? null);
+	}
+
+	public function testAPostKeepsTheUrlItCameWith(): void {
+		$note = new Note();
+		$note->setId('https://remote.example/users/bob/statuses/1');
+		$note->setUrl('https://remote.example/@bob/1');
+
+		$this->assertSame('https://remote.example/@bob/1', $note->exportAsActivityPub()['url'] ?? null);
+	}
+
+	public function testABoostCarriesNoPageOfItsOwn(): void {
+		$boost = new Announce();
+		$boost->setId('https://cloud.example/apps/social/@alice/1792/activity');
+
+		$this->assertArrayNotHasKey('url', $boost->exportAsActivityPub());
+	}
 }

@@ -1795,7 +1795,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			$this->exportQuoteAsActivityPub(),
 			$this->exportRepliesAsActivityPub(),
 			$this->exportInteractionPolicy(),
-			$this->exportLanguageMaps()
+			$this->exportLanguageMaps(),
+			$this->exportPageAsActivityPub()
 		);
 
 		// Bookkeeping this app keeps about a post — the counts it has seen, the
@@ -2333,6 +2334,25 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * the id keeps every local post — whose id *is* its page — exactly as it
 	 * was.
 	 */
+	/**
+	 * The page of a post as `url`, which Mastodon always sends and Loops
+	 * needs: it keeps a remote video's address only when `url` is a string,
+	 * and every later interaction with the video names it by that address.
+	 * The table has no column for it, so a post written here went out with
+	 * none, Loops stored our videos without an address, and likes, comments
+	 * and edits on them failed there. A boost is not a page of its own.
+	 *
+	 * @return array{url?: string}
+	 */
+	private function exportPageAsActivityPub(): array {
+		if ($this->getType() === Announce::TYPE) {
+			return [];
+		}
+		$page = $this->pageUrl();
+
+		return ($page === '') ? [] : ['url' => $page];
+	}
+
 	public function pageUrl(): string {
 		if ($this->getUrl() !== '') {
 			return $this->getUrl();

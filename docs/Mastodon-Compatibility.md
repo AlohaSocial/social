@@ -665,7 +665,10 @@ direct-message thread routes, `tags/{tag}/related`, `push/*` told the truth
 (off, no token), and Pixelfed's `/api/admin/*` screens behind the same gate as
 Mastodon's admin API. The silence tier reached the Mastodon admin API on the
 way (item 19). And the three Pixelfed-native features that were API-only —
-stories, collections, places — have pages in the web app.
+stories, collections, places — have pages in the web app. In the API and on
+the wire a story stays Pixelfed's `Story` (bearcap fetch, `View`,
+`Story:Reaction`, `Story:Reply`); the web client presents it as a 24-hour
+short, beside the kept shorts that are ordinary video posts, all under Shorts.
 
 And of this document's own list, five items were done in #2126 — the `source`
 leak, the suspension, the three dropped profile fields, the version string and

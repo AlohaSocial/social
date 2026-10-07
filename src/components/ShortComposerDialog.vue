@@ -4,26 +4,43 @@
 -->
 <template>
 	<NcModal
-		v-if="open"
+		v-if="open && !editing"
 		size="large"
-		:name="forStory ? t('social', 'Add to your story') : t('social', 'New short')"
+		:name="t('social', 'New short')"
 		:closeOnClickOutside="false"
 		@close="requestClose">
 		<div class="short" @dragover.prevent @drop.prevent="onDrop">
 			<!-- 1. where the video comes from -->
 			<div v-if="phase === 'choose'" class="short__choose">
 				<h2 class="short__title">
-					{{ forStory ? t('social', 'Add to your story') : t('social', 'Post a short') }}
+					{{ t('social', 'Post a short') }}
 				</h2>
+				<div
+					v-if="lifetimes.length > 1"
+					class="short__pills short__pills--wide short__lifetimes"
+					role="radiogroup"
+					:aria-label="t('social', 'How long it stays')">
+					<button
+						v-for="option in lifetimes"
+						:key="option.value"
+						type="button"
+						role="radio"
+						class="short__pill"
+						:aria-checked="option.value === chosenLifetime"
+						@click="chosenLifetime = option.value">
+						<component :is="option.icon" :size="18" />
+						{{ option.label }}
+					</button>
+				</div>
 				<p class="short__lede">
-					{{ forStory
+					{{ forDay
 						? t('social', 'For the people who follow you, gone after a day. Record a video, upload one, or post a picture or a few words.')
 						: t('social', 'A video, watched full height, one after another. Upload one, drop one here, or record one now.') }}
 				</p>
 				<input
 					ref="file"
 					type="file"
-					:accept="forStory ? 'video/mp4,video/webm,video/quicktime,video/*,image/*' : 'video/mp4,video/webm,video/quicktime,video/*'"
+					:accept="forDay ? 'video/mp4,video/webm,video/quicktime,video/*,image/*' : 'video/mp4,video/webm,video/quicktime,video/*'"
 					class="hidden-visually"
 					tabindex="-1"
 					aria-hidden="true"
@@ -31,7 +48,7 @@
 				<div class="short__sources">
 					<button type="button" class="short__source" @click="pickFile">
 						<IconUpload :size="36" />
-						<span class="short__source-name">{{ forStory ? t('social', 'Upload') : t('social', 'Upload a video') }}</span>
+						<span class="short__source-name">{{ forDay ? t('social', 'Upload') : t('social', 'Upload a video') }}</span>
 						<span class="short__source-hint">{{ t('social', 'or drop it here') }}</span>
 					</button>
 					<button
@@ -52,13 +69,13 @@
 						<span class="short__source-name">{{ t('social', 'Record') }}</span>
 						<span class="short__source-hint">{{ t('social', 'needs a secure (https) connection') }}</span>
 					</div>
-					<!-- a picture with stickers, or words on a card, are the
-					     story editor's; this dialog is for video -->
+					<!-- a picture with stickers, or words on a card, go on to the
+					     picture editor; this dialog is for video -->
 					<button
-						v-if="forStory"
+						v-if="forDay"
 						type="button"
 						class="short__source short__source--other"
-						@click="$emit('other', null)">
+						@click="openEditor(null)">
 						<IconImageText :size="36" />
 						<span class="short__source-name">{{ t('social', 'Picture or words') }}</span>
 						<span class="short__source-hint">{{ t('social', 'with stickers, or on a card') }}</span>
@@ -239,7 +256,7 @@
 							class="short__caption"
 							rows="3"
 							:maxlength="maxCharacters"
-							:placeholder="forStory ? t('social', 'Optional') : t('social', 'Say what it is. Add #hashtags so people find it.')" />
+							:placeholder="forDay ? t('social', 'Optional') : t('social', 'Say what it is. Add #hashtags so people find it.')" />
 						<span class="short__counter" :class="{ 'short__counter--near': caption.length > maxCharacters * 0.9 }">
 							{{ caption.length }} / {{ maxCharacters }}
 						</span>
@@ -256,11 +273,26 @@
 						</div>
 					</section>
 
-					<p v-if="forStory" class="short__note short__note--plain">
-						{{ t('social', 'Your followers can watch it for a day.') }}
-					</p>
+					<section v-if="lifetimes.length > 1" class="short__section">
+						<h3 id="short-lifetime" class="short__heading">
+							{{ t('social', 'How long it stays') }}
+						</h3>
+						<div class="short__pills short__pills--wide" role="radiogroup" aria-labelledby="short-lifetime">
+							<button
+								v-for="option in lifetimes"
+								:key="option.value"
+								type="button"
+								role="radio"
+								class="short__pill"
+								:aria-checked="option.value === chosenLifetime"
+								@click="chosenLifetime = option.value">
+								<component :is="option.icon" :size="18" />
+								{{ option.label }}
+							</button>
+						</div>
+					</section>
 
-					<section v-if="!forStory" class="short__section">
+					<section v-if="!forDay" class="short__section">
 						<h3 id="short-audience" class="short__heading">
 							{{ t('social', 'Who can watch') }}
 						</h3>
@@ -280,7 +312,7 @@
 						</div>
 					</section>
 
-					<section v-if="!forStory" class="short__section">
+					<section v-if="!forDay" class="short__section">
 						<NcCheckboxRadioSwitch v-model="sensitive" type="switch">
 							{{ t('social', 'Sensitive content: hide it until somebody chooses to watch') }}
 						</NcCheckboxRadioSwitch>
@@ -330,6 +362,15 @@
 			</div>
 		</div>
 	</NcModal>
+
+	<!-- a picture or words on a card: the editor with the stickers and the
+	     cards, in place of this dialog -->
+	<StoryComposerDialog
+		v-if="open && editing"
+		:open="true"
+		:initialFile="editingFile"
+		@update:open="closeEditor"
+		@posted="(short) => $emit('posted', short, 'day')" />
 </template>
 
 <script>
@@ -341,7 +382,10 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcModal from '@nextcloud/vue/components/NcModal'
 import { mapStores } from 'pinia'
+import { defineAsyncComponent } from 'vue'
 import IconAccountGroup from 'vue-material-design-icons/AccountMultiple.vue'
+import IconAccountHeart from 'vue-material-design-icons/AccountHeartOutline.vue'
+import IconClock from 'vue-material-design-icons/ClockOutline.vue'
 import IconCameraFlip from 'vue-material-design-icons/CameraFlipOutline.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconMoon from 'vue-material-design-icons/WeatherNight.vue'
@@ -355,6 +399,7 @@ import { knownLimits } from '../services/instanceLimits.js'
 import logger from '../services/logger.js'
 import { feel } from '../services/senses.js'
 import { showError, showSuccess } from '../services/toast.js'
+import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 import {
 	captureFrame,
@@ -370,10 +415,13 @@ import {
 	trimVideo,
 } from '../utils/shortVideo.js'
 
+// the picture editor is only needed for a picture or a text card
+const StoryComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-editor" */'./StoryComposerDialog.vue'))
+
 /** how many stills the trim bar shows */
 const FRAMES = 10
 
-/** the longest a story's caption may be, as the story editor has it */
+/** the longest a 24-hour short's caption may be, as the picture editor has it */
 const STORY_CAPTION_MAX = 500
 
 /** how far one arrow key moves a trim handle, in seconds; shift moves five times as far */
@@ -389,8 +437,14 @@ let serial = 0
  * stills, a cover picked from any frame -- beside what the post says and who
  * sees it. Everything that changes the video happens in the browser
  * (`utils/shortVideo.js`), so what goes up is what the writer watched, and it
- * goes up as an ordinary video attachment on an ordinary post: a short is a
- * post with a video, and federates as one.
+ * goes up as an ordinary video attachment on an ordinary post: a kept short is
+ * a post with a video, and federates as one.
+ *
+ * A short has one of two lifetimes, chosen at the top. Kept is a video on the
+ * writer's profile. Twenty-four hours is for followers only and may also be a
+ * picture or words on a card; it goes through the stories API, and a picture
+ * or a card continues into the picture editor (StoryComposerDialog), which
+ * this dialog opens in its own place.
  */
 export default {
 	name: 'ShortComposerDialog',
@@ -401,6 +455,7 @@ export default {
 		NcLoadingIcon,
 		NcModal,
 		IconCameraFlip,
+		StoryComposerDialog,
 		IconRecord,
 		IconSend,
 		IconImageText,
@@ -416,23 +471,29 @@ export default {
 		},
 
 		/**
-		 * 'short' posts the video as a post; 'story' adds it to the writer's
-		 * story, for followers and for a day, and hands a picture or a text
-		 * story to the story editor through `other`.
+		 * The lifetime chosen when the dialog opens: 'kept' posts a video as a
+		 * post on the profile; 'day' makes a 24-hour short for followers.
 		 */
-		mode: {
+		lifetime: {
 			type: String,
-			default: 'short',
-			validator: (value) => ['short', 'story'].includes(String(value)),
+			default: 'kept',
+			validator: (value) => ['kept', 'day'].includes(String(value)),
 		},
 	},
 
-	emits: ['update:open', 'posted', 'other'],
+	/** `posted` carries what was made and its lifetime, 'kept' or 'day' */
+	emits: ['update:open', 'posted'],
 
 	data() {
 		serial++
 
 		return {
+			/** 'kept' or 'day', see the prop */
+			chosenLifetime: 'kept',
+			/** the picture editor is open in place of this dialog */
+			editing: false,
+			/** @type {File|null} the picture it was opened with, if any */
+			editingFile: null,
 			/** 'choose', 'record' or 'edit' */
 			phase: 'choose',
 			/** @type {File|null} */
@@ -480,7 +541,7 @@ export default {
 	},
 
 	computed: {
-		...mapStores(useTimelineStore),
+		...mapStores(useSettingsStore, useTimelineStore),
 
 		/** @return {boolean} whether this browser can record from a camera */
 		canRecord() {
@@ -505,19 +566,39 @@ export default {
 			return this.duration > 0 && isTrimmed(this.trim, this.duration)
 		},
 
-		/** @return {boolean} whether this is adding to a story rather than posting */
-		forStory() {
-			return this.mode === 'story'
+		/** @return {boolean} whether this is a 24-hour short rather than a kept one */
+		forDay() {
+			return this.chosenLifetime === 'day'
+		},
+
+		/** @return {boolean} whether this instance offers 24-hour shorts (the admin's `stories` section) */
+		dayOffered() {
+			return this.settingsStore.getServerData?.sections?.stories !== false
+		},
+
+		/** @return {object[]} the lifetimes a short can have here */
+		lifetimes() {
+			const kept = { value: 'kept', label: t('social', 'Keep it on my profile'), icon: IconAccountHeart }
+			if (!this.dayOffered) {
+				return [kept]
+			}
+
+			return [kept, { value: 'day', label: t('social', 'Only for 24 hours, for my followers'), icon: IconClock }]
+		},
+
+		/** @return {string} the lifetime to start on: the one asked for, where it is offered */
+		startingLifetime() {
+			return this.lifetime === 'day' && this.dayOffered ? 'day' : 'kept'
 		},
 
 		/** @return {number} how long a caption may be */
 		maxCharacters() {
-			return this.forStory ? STORY_CAPTION_MAX : knownLimits().maxCharacters
+			return this.forDay ? STORY_CAPTION_MAX : knownLimits().maxCharacters
 		},
 
-		/** @return {number[]} the recording limits on offer; a story is a minute at most */
+		/** @return {number[]} the recording limits on offer; a 24-hour short is a minute at most */
 		recordLimits() {
-			return this.forStory ? RECORD_LIMITS.filter((seconds) => seconds <= 60) : RECORD_LIMITS
+			return this.forDay ? RECORD_LIMITS.filter((seconds) => seconds <= 60) : RECORD_LIMITS
 		},
 
 		/** @return {object[]} the audiences a short can have */
@@ -542,11 +623,19 @@ export default {
 	watch: {
 		open(now) {
 			if (now) {
-				if (!this.forStory) {
+				this.chosenLifetime = this.startingLifetime
+				if (!this.forDay) {
 					this.loadSuggestions()
 				}
 			} else {
 				this.reset()
+			}
+		},
+
+		// hashtags are for a kept short; fetched once it is chosen
+		forDay(now) {
+			if (!now && this.open && this.suggestions.length === 0) {
+				this.loadSuggestions()
 			}
 		},
 
@@ -557,8 +646,12 @@ export default {
 		},
 	},
 
+	created() {
+		this.chosenLifetime = this.startingLifetime
+	},
+
 	mounted() {
-		if (this.open && !this.forStory) {
+		if (this.open && !this.forDay) {
 			this.loadSuggestions()
 		}
 	},
@@ -606,7 +699,7 @@ export default {
 			if (this.phase !== 'choose') {
 				return
 			}
-			const dropped = [...(event.dataTransfer?.files ?? [])].find((one) => one.type.startsWith('video/') || (this.forStory && one.type.startsWith('image/')))
+			const dropped = [...(event.dataTransfer?.files ?? [])].find((one) => one.type.startsWith('video/') || (this.forDay && one.type.startsWith('image/')))
 			if (dropped) {
 				this.useFile(dropped)
 			}
@@ -618,8 +711,8 @@ export default {
 		 * @param {File} file the video
 		 */
 		useFile(file) {
-			if (this.forStory && file.type.startsWith('image/')) {
-				this.$emit('other', file)
+			if (this.forDay && file.type.startsWith('image/')) {
+				this.openEditor(file)
 				return
 			}
 			if (!file.type.startsWith('video/')) {
@@ -916,7 +1009,7 @@ export default {
 
 				this.busy = 'post'
 				this.progress = 1
-				if (this.forStory) {
+				if (this.forDay) {
 					const { data } = await axios.post(generateUrl('apps/social/api/v1/stories'), {
 						media_id: media.id,
 						caption: this.caption.trim(),
@@ -924,8 +1017,8 @@ export default {
 						duration: 5,
 					})
 					feel('post')
-					showSuccess(t('social', 'Your story is up for a day'))
-					this.$emit('posted', data)
+					showSuccess(t('social', 'Your short is up for 24 hours'))
+					this.$emit('posted', data, 'day')
 					this.$emit('update:open', false)
 					return
 				}
@@ -944,12 +1037,12 @@ export default {
 				if (!created?.held_for_review) {
 					showSuccess(t('social', 'Your short is up'))
 				}
-				this.$emit('posted', created)
+				this.$emit('posted', created, 'kept')
 				this.$emit('update:open', false)
 			} catch (error) {
 				logger.error('the short could not be posted', { error })
-				showError(this.forStory
-					? (error?.response?.data?.error || t('social', 'Could not post the story'))
+				showError(this.forDay
+					? (error?.response?.data?.error || t('social', 'The short could not be posted'))
 					: t('social', 'The short could not be posted'))
 			} finally {
 				this.busy = ''
@@ -973,6 +1066,26 @@ export default {
 		discard() {
 			this.confirmingDiscard = false
 			this.$emit('update:open', false)
+		},
+
+		/**
+		 * From this dialog to the picture editor, for a picture or a card.
+		 *
+		 * @param {File|null} file a picture chosen here, or null to start empty
+		 */
+		openEditor(file) {
+			this.stopCamera()
+			this.editingFile = file
+			this.editing = true
+		},
+
+		/** @param {boolean} open whether the editor stays open; closing it closes this too */
+		closeEditor(open) {
+			if (!open) {
+				this.editing = false
+				this.editingFile = null
+				this.$emit('update:open', false)
+			}
 		},
 
 		changeVideo() {
@@ -1002,6 +1115,9 @@ export default {
 			this.release()
 			this.releaseVideo()
 			this.phase = 'choose'
+			this.chosenLifetime = this.startingLifetime
+			this.editing = false
+			this.editingFile = null
 			this.caption = ''
 			this.visibility = 'public'
 			this.sensitive = false
@@ -1284,6 +1400,13 @@ export default {
 	}
 }
 
+/* the lifetime choice on the first step, centred above the lede */
+.short__lifetimes {
+	align-self: center;
+	justify-content: center;
+	margin: 0 auto 16px;
+}
+
 .short__pill {
 	display: inline-flex;
 	align-items: center;
@@ -1429,11 +1552,6 @@ export default {
 	strong {
 		color: var(--color-main-text);
 	}
-}
-
-.short__note.short__note--plain {
-	margin: 0;
-	color: var(--color-text-maxcontrast);
 }
 
 .short__note {
