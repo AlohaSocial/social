@@ -15,39 +15,14 @@ class OutboundPublisher {
 		private readonly ILogger $logger,
 		private readonly IdentityService $identityService,
 		private readonly Repository $repository,
-		private readonly RecordMapper $recordMapper
+		private readonly RecordMapper $recordMapper,
+		private readonly OutboundQueue $outboundQueue
 	) {}
 	
 	public function publishPost(string $nid): void {
-		// Convert NID to numeric post ID
-		$postId = Nid::fromStorage($nid)->getId();
-		
-		$mapped = $this->recordMapper->mapPost($postId);
-		if (!$mapped) {
-			return; // Not a public post or no Bluesky identity
-		}
-		
-		$identity = $this->identityService->getIdentityByActor(
-			$this->getPostActorId($postId)
-		);
-		
-		if (!$identity) {
-			return;
-		}
-		
-		$did = $identity['did'];
-		$signingKey = $this->identityService->getSigningKey($identity['actor_id']);
-		
-		if (!$signingKey) {
-			$this->logger->error('No signing key for identity', ['did' => $did]);
-			return;
-		}
-		
-		// Create record in repository
-		$record = $this->repository->createRecord(
-			$did,
-			$mapped['collection'],
-			$mapped['rkey'],
+		// Queue the post for async publishing
+		$this->outboundQueue->queuePost($nid);
+	}
 			$mapped['record'],
 			$postId
 		);

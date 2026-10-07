@@ -118,12 +118,12 @@ class FirehoseHandler implements MessageComponentInterface {
 		if ($cursor !== null) {
 			$this->replayFromCursor($conn, $cursor);
 		} else {
-			$this->sendInfoFrame($conn, 'Connected to firehose');
+			$this->sendFrame($conn, $this->createInfoFrame('Connected to firehose'));
 		}
 	}
 	
 	public function onMessage(ConnectionInterface $conn, \Ratchet\RFC6455\Messaging\MessageInterface $msg): void {
-		// Firehose is server-to-client only
+		// Firehose is server-to-client only; clients don't send messages
 	}
 	
 	public function onClose(ConnectionInterface $conn): void {
@@ -137,19 +137,23 @@ class FirehoseHandler implements MessageComponentInterface {
 	}
 	
 	public static function broadcast(array $event): void {
-		// Extract the frame data from the event
 		$frameData = json_decode($event['bytes'], true);
 		if (!$frameData) return;
 		
 		$frameData['seq'] = (int)($event['seq'] ?? 0);
 		
-		// Encode frame as CBOR for wire format
+		// Encode as CBOR for wire format
 		$frameCbor = CborEncoder::encode($frameData);
 		
 		foreach (self::$connections as $id => $client) {
 			try {
-				// Send binary frame (CBOR)
-				$client['conn']->send($frameCbor, true); // true = binary
+				// Send binary frame with proper ATProto firehose format:
+				// Each WebSocket frame contains TWO CBOR objects concatenated:
+				// 1. Header: {op: 1, t: "frame_type"} 
+				// 2. Payload: the actual frame data
+				$header = CborEncoder::encode(['op' => 1, 't' => $frameData['kind'] ?? '#commit']);
+				$frame = $header . $frameCbor;
+				$client['conn']->send($frame, true); // true = binary
 			} catch (\Throwable $e) {
 				unset(self::$connections[$id]);
 			}
@@ -169,21 +173,26 @@ class FirehoseHandler implements MessageComponentInterface {
 			$frameData = json_decode($event['bytes'], true);
 			if ($frameData) {
 				$frameData['seq'] = (int)$event['seq'];
-				$frameCbor = CborEncoder::encode($frameData);
-				$conn->send($frameCbor, true);
+				$header = CborEncoder::encode(['op' => 1, 't' => $frameData['kind'] ?? '#commit']);
+				$payload = CborEncoder::encode($frameData);
+				$conn->send($header . $payload, true);
 			}
 		}
 		
-		$this->sendInfoFrame($conn, 'Replay complete, now live');
+		$this->sendFrame($conn, $this->createInfoFrame('Replay complete, now live'));
 	}
 	
-	private function sendInfoFrame(ConnectionInterface $conn, string $message): void {
-		$frame = [
-			'type' => 'info',
+	private function createInfoFrame(string $message): array {
+		return [
+			'kind' => '#info',
 			'seq' => ++self::$sequenceCounter,
 			'message' => $message
 		];
-		$frameCbor = CborEncoder::encode($frame);
-		$conn->send($frameCbor, true);
+	}
+	
+	private function sendFrame(ConnectionInterface $conn, array $frame): void {
+		$header = CborEncoder::encode(['op' => 1, 't' => $frame['kind'] ?? '#info']);
+		$payload = CborEncoder::encode($frame);
+		$conn->send($header . $payload, true);
 	}
 }
