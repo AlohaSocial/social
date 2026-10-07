@@ -5,6 +5,7 @@ namespace OCA\Social\Atproto\RecordMapper;
 
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Repository\Repository;
+use OCA\Social\Tools\Nid;
 use OCP\IDBConnection;
 use OCP\ILogger;
 
@@ -17,7 +18,10 @@ class OutboundPublisher {
 		private readonly RecordMapper $recordMapper
 	) {}
 	
-	public function publishPost(int $postId): void {
+	public function publishPost(string $nid): void {
+		// Convert NID to numeric post ID
+		$postId = Nid::fromStorage($nid)->getId();
+		
 		$mapped = $this->recordMapper->mapPost($postId);
 		if (!$mapped) {
 			return; // Not a public post or no Bluesky identity
@@ -386,13 +390,74 @@ class OutboundPublisher {
 		}
 	}
 	
-	private function extractDidFromAtUri(string $atUri): string {
-		// at://did:plc:xyz/app.bsky.feed.post/abc
-		preg_match('/^at:\/\/([^\/]+)/', $atUri, $matches);
-		return $matches[1] ?? '';
+	public function deleteFollow(int $actorId, string $targetDid): void {
+		$identity = $this->identityService->getIdentityByActor($actorId);
+		if (!$identity) return;
+		
+		$signingKey = $this->identityService->getSigningKey($actorId);
+		if (!$signingKey) return;
+		
+		// Find and delete the follow record
+		$followRecord = $this->findFollowRecord($identity['did'], $targetDid);
+		if ($followRecord) {
+			$this->repository->deleteRecord($identity['did'], 'app.bsky.graph.follow', $followRecord['rkey']);
+			$this->repository->commit($identity['did'], $signingKey);
+		}
 	}
 	
-	private function extractRkeyFromAtUri(string $atUri): string {
+	private function findFollowRecord(string $did, string $subjectDid): ?array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from('social_atproto_record')
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.graph.follow')));
+		
+		$results = $qb->executeQuery()->fetchAllAssociative();
+		
+		foreach ($results as $record) {
+			$value = json_decode($record['bytes'], true);
+			if (($value['subject'] ?? '') === $subjectDid) {
+				return $record;
+			}
+		}
+		
+		return null;
+	}
+	
+	public function deleteRepost(int $actorId, string $postUri): void {
+		$identity = $this->identityService->getIdentityByActor($actorId);
+		if (!$identity) return;
+		
+		$signingKey = $this->identityService->getSigningKey($actorId);
+		if (!$signingKey) return;
+		
+		$repostRecord = $this->findRepostRecord($identity['did'], $postUri);
+		if ($repostRecord) {
+			$this->repository->deleteRecord($identity['did'], 'app.bsky.feed.repost', $repostRecord['rkey']);
+			$this->repository->commit($identity['did'], $signingKey);
+		}
+	}
+	
+	private function findRepostRecord(string $did, string $subjectUri): ?array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from('social_atproto_record')
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter('app.bsky.feed.repost')));
+		
+		$results = $qb->executeQuery()->fetchAllAssociative();
+		
+		foreach ($results as $record) {
+			$value = json_decode($record['bytes'], true);
+			if (($value['subject']['uri'] ?? '') === $subjectUri) {
+				return $record;
+			}
+		}
+		
+		return null;
+	}
+	
+	private function extractDidFromAtUri(string $atUri): string {
 		preg_match('/\/([^\/]+)$/', $atUri, $matches);
 		return $matches[1] ?? '';
 	}

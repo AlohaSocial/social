@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\RecordMapper\OutboundPublisher;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -78,6 +79,7 @@ class PostService {
 		private InterestService $interestService,
 		private VideoDeliveryHold $videoDeliveryHold,
 		private DocumentService $documentService,
+		private OutboundPublisher $outboundPublisher,
 	) {
 	}
 
@@ -221,6 +223,12 @@ class PostService {
 		// published rather than what was asked for — and never waits on
 		// delivery, which is a queue and other people's servers
 		$this->eventDispatcher->dispatchTyped(new PostPublishedEvent($note));
+
+		// Publish to Bluesky if it's a public post and atproto is enabled
+		if ($note->addressesPublic() && $this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED)) {
+			// Queue the Bluesky publishing to not block the request
+			$this->outboundPublisher->publishPost($note->getNid());
+		}
 
 		return $activity;
 	}

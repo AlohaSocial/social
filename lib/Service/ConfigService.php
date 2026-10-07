@@ -59,6 +59,15 @@ class ConfigService {
 	public const SOCIAL_ACCESS_TYPE = 'access_type';
 	public const SOCIAL_ACCESS_LIST = 'access_list';
 
+	/** AT Protocol (Bluesky) integration */
+	public const ATPROTO_ENABLED = 'atproto_enabled';
+	public const ATPROTO_RELAYS = 'atproto_relays';
+	public const ATPROTO_JETSTREAM = 'atproto_jetstream';
+	public const ATPROTO_SYNC_CEILING = 'atproto_sync_ceiling';
+	public const ATPROTO_PLC_DIRECTORY = 'atproto_plc_directory';
+	public const ATPROTO_APPVIEW = 'atproto_appview';
+	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
+
 	public const SOCIAL_SELF_SIGNED = 'allow_self_signed';
 
 	/** incoming inbox requests allowed per origin host per minute; 0 disables */
