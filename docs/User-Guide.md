@@ -429,6 +429,26 @@ same announcement.
 
 Administrators post and remove announcements in **Administration → Aloha Social**.
 
+### How a post reads
+
+A feed is a column of posts separated by thin lines, not a stack of boxes,
+narrow enough that a line of text is easy to follow back to its start (the
+photo and video grids keep the wider page). Each post has its author's face
+beside their name, how old it is in a word — *now*, *5m*, *3h*, *2d*, *2w*,
+then the date — and the full date when you point at it. A post shows who can
+see it only when that is not everybody: a mark for unlisted, followers-only or
+direct posts, nothing for public ones.
+
+The reply, boost and like buttons stay out of sight until you point at a post
+or reach it with the keyboard, so a page of posts is a page of words; a like
+or boost you have given shows as a small heart or arrows beside the post's age.
+On a phone they are always there. The
+three are on every post in the same place; one that cannot be used — a boost
+of a followers-only post, a reply the author does not take — is greyed out and
+says why. To react with an emoji, hold the heart (or right-click it), or choose
+**Add a reaction** in the post's menu; the reactions people left are shown under
+the post.
+
 ### Stories
 
 Above your own feed is a row of faces while somebody you follow has a story

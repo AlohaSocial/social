@@ -102,6 +102,14 @@
 			</template>
 			{{ item.bookmarked ? t('social', 'Remove bookmark') : t('social', 'Bookmark') }}
 		</NcActionButton>
+		<!-- the keyboard's way to a reaction: the heart offers them on a hold
+		     or a right-click, neither of which a keyboard has -->
+		<NcActionButton v-if="!isPublic" @click="$emit('react')">
+			<template #icon>
+				<EmoticonPlusOutline :size="20" />
+			</template>
+			{{ t('social', 'Add a reaction') }}
+		</NcActionButton>
 		<!-- an album is made of the reader's own pictures; where the picture
 		     is, is where it is put into one -->
 		<NcActionButton v-if="canCollect" @click="$emit('collect')">
@@ -155,6 +163,7 @@ import NcActionLink from '@nextcloud/vue/components/NcActionLink'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import Bookmark from 'vue-material-design-icons/Bookmark.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
+import EmoticonPlusOutline from 'vue-material-design-icons/EmoticonPlusOutline.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
 import Flag from 'vue-material-design-icons/Flag.vue'
 import FolderMultiplePlusOutline from 'vue-material-design-icons/FolderMultiplePlusOutline.vue'
@@ -190,6 +199,7 @@ export default {
 	components: {
 		Bookmark,
 		BookmarkOutline,
+		EmoticonPlusOutline,
 		Cancel,
 		Flag,
 		FolderMultiplePlusOutline,
@@ -271,6 +281,7 @@ export default {
 		'translate',
 		'delivery',
 		'bookmark',
+		'react',
 		'collect',
 		'pin',
 		'lessLikeThis',

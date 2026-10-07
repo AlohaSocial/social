@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct' }">
+	<div class="social__wrapper" :class="{ 'social__wrapper--direct': type === 'direct', 'social__wrapper--reading': display === 'list' && type !== 'direct' }">
 		<!-- the first thing a new account sees; gone for good once closed -->
 		<FirstRun v-if="showInfo" @done="hideInfo" />
 
@@ -812,4 +812,11 @@ export default {
 	}
 }
 
+/* A feed of text is read, and a line much wider than 600 pixels is hard to
+   follow back to its start. The grids keep the wider column: a picture is
+   looked at, not read. Everything in the column — composer, switcher,
+   stories, posts — follows the one property. */
+.social__wrapper--reading {
+	--social-column: 616px;
+}
 </style>

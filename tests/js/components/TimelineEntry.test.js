@@ -341,10 +341,11 @@ describe('TimelineEntry', () => {
 			phone.listeners.clear()
 		})
 
-		it('leaves the avatar its default size on a wide screen', () => {
+		/** a set size and no padding of its own, so it lines up with the name beside it */
+		it('asks for a 40-pixel face on a wide screen', () => {
 			const { wrapper } = mountEntry(post)
 
-			expect(wrapper.findComponent(TimelineAvatarStub).props('size')).toBeNull()
+			expect(wrapper.findComponent(TimelineAvatarStub).props('size')).toBe(40)
 		})
 
 		it('asks for a face small enough to sit inside the card', () => {
