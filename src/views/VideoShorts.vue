@@ -17,14 +17,20 @@
 				class="short"
 				:class="{ 'short--day': entry.day }"
 				:data-index="index">
-				<!-- a 24-hour picture or text card is its own picture; tapping
+				<!-- a 24-hour picture or text card is its own picture; pressing
 				     it holds its clock, as tapping a video pauses it -->
-				<img
+				<button
 					v-if="entry.day && !entry.isVideo && entry.video.url"
-					class="short__poster short__picture"
-					:src="entry.video.url"
-					:alt="entry.video.description || entry.text"
+					type="button"
+					class="short__picture-hold"
+					:aria-pressed="index === playing && held"
+					:aria-label="t('social', 'Hold this short')"
 					@click="togglePlay(index)">
+					<img
+						class="short__poster short__picture"
+						:src="entry.video.url"
+						:alt="entry.video.description || entry.text">
+				</button>
 				<p v-else-if="entry.day && !entry.isVideo" class="short__gone">
 					{{ t('social', 'The picture of this short is gone.') }}
 				</p>
@@ -1179,8 +1185,18 @@ export default {
 		inset-block-start: 0;
 	}
 
-	&__picture {
+	&__picture-hold {
+		position: absolute;
+		inset: 0;
+		padding: 0;
+		border: none;
+		background: none;
 		cursor: pointer;
+
+		&:focus-visible {
+			outline: 2px solid #fff;
+			outline-offset: -4px;
+		}
 	}
 
 	&__gone {

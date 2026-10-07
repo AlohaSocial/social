@@ -930,12 +930,13 @@ describe('VideoShorts', () => {
 				slide.scrollIntoView = () => scrolled.push(at)
 			})
 
-			await wrapper.find('.short__picture').trigger('click')
+			await wrapper.find('.short__picture-hold').trigger('click')
 			expect(wrapper.vm.held).toBe(true)
+			expect(wrapper.find('.short__picture-hold').attributes('aria-pressed')).toBe('true')
 			vi.advanceTimersByTime(5000)
 			expect(scrolled).toEqual([])
 
-			await wrapper.find('.short__picture').trigger('click')
+			await wrapper.find('.short__picture-hold').trigger('click')
 			vi.advanceTimersByTime(3200)
 			expect(scrolled).toEqual([1])
 		})
