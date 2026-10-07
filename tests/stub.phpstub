@@ -1047,12 +1047,3 @@ namespace OCP\Navigation\Events {
 		public function getType(): string {}
 	}
 }
-
-// Psalm does not reliably resolve the imported bitwise Attribute constants in
-// vendor OCP metadata. Match the actual repeatable method attribute (4 | 64).
-namespace OCP\AppFramework\Http\Attribute {
-	#[\Attribute(68)]
-	class FrontpageRoute extends Route {
-		public function __construct(string $verb, string $url, ?array $requirements = null, ?array $defaults = null, ?string $root = null, ?string $postfix = null) {}
-	}
-}

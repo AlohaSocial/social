@@ -21,8 +21,6 @@
 		<directory name="vendor" />
 		<ignoreFiles>
 			<directory name="vendor/phpunit/php-code-coverage" />
-			<!-- Repeatable route metadata is provided explicitly by tests/stub.phpstub. -->
-			<file name="vendor/nextcloud/ocp/OCP/AppFramework/Http/Attribute/FrontpageRoute.php" />
 		</ignoreFiles>
 	</extraFiles>
 	<issueHandlers>
