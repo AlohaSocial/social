@@ -32,6 +32,7 @@ OC.L10N.register(
     "{name}: {count}, seen" : "{name}: {count}, gesehen",
     "{name}: {count}, new" : "{name}: {count}, neu",
     "_%n short_::_%n shorts_" : ["%n Short","%n Shorts"],
+    "_%n person is waiting to reach you_::_%n people are waiting to reach you_" : ["%n Person wartet darauf, dich zu erreichen","%n Personen warten darauf, dich zu erreichen"],
     "All shorts" : "Alle Shorts",
     "Your shorts" : "Deine Shorts",
     "React with {emoji}" : "Mit {emoji} reagieren",

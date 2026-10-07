@@ -30,6 +30,7 @@
     "{name}: {count}, seen" : "{name}: {count}, gesehen",
     "{name}: {count}, new" : "{name}: {count}, neu",
     "_%n short_::_%n shorts_" : ["%n Short", "%n Shorts"],
+    "_%n person is waiting to reach you_::_%n people are waiting to reach you_" : ["%n Person wartet darauf, Sie zu erreichen", "%n Personen warten darauf, Sie zu erreichen"],
     "All shorts" : "Alle Shorts",
     "Your shorts" : "Ihre Shorts",
     "React with {emoji}" : "Mit {emoji} reagieren",
