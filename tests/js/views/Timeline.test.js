@@ -36,7 +36,7 @@ const ComposerStub = {
 const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-stub" />' }
 const AnnouncementsStub = { name: 'Announcements', template: '<div class="announcements-stub" />' }
 const WeeklyRecapStub = { name: 'WeeklyRecap', template: '<div class="weekly-recap-stub" />' }
-const StoryBarStub = { name: 'StoryBar', template: '<div class="story-bar-stub" />' }
+const ShortsBarStub = { name: 'ShortsBar', template: '<div class="shorts-bar-stub" />' }
 const TimelineListStub = {
 	name: 'TimelineList',
 	props: ['type', 'showParents', 'reverseOrder', 'display'],
@@ -81,7 +81,7 @@ function mountTimeline(route = {}) {
 			// Announcements what the instance is telling everybody; each is its
 			// own request with its own tests, and left real they would answer
 			// after these tests have finished
-			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub },
+			stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: ShortsBarStub },
 		},
 	})
 }
@@ -124,15 +124,15 @@ describe('Timeline', () => {
 	// drawn on any page.
 	describe('the reader\'s own feed', () => {
 		const cards = (wrapper) => ({
-			stories: wrapper.find('.story-bar-stub').exists(),
+			shorts: wrapper.find('.shorts-bar-stub').exists(),
 			recap: wrapper.find('.weekly-recap-stub').exists(),
 			memories: wrapper.find('.on-this-day-stub').exists(),
 		})
 
-		it('draws the story bar, the recap and the memories on the home feed', () => {
+		it('draws the Shorts bar, the recap and the memories on the home feed', () => {
 			const wrapper = mountTimeline({ name: 'timeline', params: {} })
 
-			expect(cards(wrapper)).toEqual({ stories: true, recap: true, memories: true })
+			expect(cards(wrapper)).toEqual({ shorts: true, recap: true, memories: true })
 		})
 
 		it.each([
@@ -144,13 +144,13 @@ describe('Timeline', () => {
 		])('draws none of them on %s', (type) => {
 			const wrapper = mountTimeline({ name: 'timeline', params: { type } })
 
-			expect(cards(wrapper)).toEqual({ stories: false, recap: false, memories: false })
+			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
 		})
 
 		it('draws none of them on a hashtag page', () => {
 			const wrapper = mountTimeline({ name: 'tags', params: { tag: 'nextcloud' } })
 
-			expect(cards(wrapper)).toEqual({ stories: false, recap: false, memories: false })
+			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
 		})
 	})
 
@@ -302,7 +302,7 @@ describe('Timeline', () => {
 					$route: { name: 'timeline', params: {}, query: { welcome: '1', other: 'x' } },
 					$router: { replace },
 				},
-				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, StoryBar: StoryBarStub },
+				stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: ShortsBarStub },
 			},
 		})
 		await wrapper.findComponent(FirstRunStub).vm.$emit('done')

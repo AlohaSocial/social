@@ -1,6 +1,11 @@
 OC.L10N.register(
     "social",
     {
+    "{name}: {count}, seen" : "{name}: {count}, gesehen",
+    "{name}: {count}, new" : "{name}: {count}, neu",
+    "_%n short_::_%n shorts_" : ["%n Short","%n Shorts"],
+    "All shorts" : "Alle Shorts",
+    "Your shorts" : "Deine Shorts",
     "React with {emoji}" : "Mit {emoji} reagieren",
     "The picture of this short is gone." : "Das Bild dieses Shorts ist nicht mehr da.",
     "Could not delete the short" : "Der Short konnte nicht gelöscht werden",
@@ -302,7 +307,7 @@ OC.L10N.register(
     "My Feed" : "Mein Feed",
     "Photos" : "Fotos",
     "Videos" : "Videos",
-    "Shorts" : "Kurzvideos",
+    "Shorts" : "Shorts",
     "Subscriptions" : "Abonnements",
     "Discover" : "Entdecken",
     "My profile" : "Mein Profil",

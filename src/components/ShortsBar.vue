@@ -3,30 +3,48 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section v-if="viewer && offered" class="story-bar" :aria-label="t('social', 'Stories')">
-		<ul class="story-bar__list">
+	<section v-if="viewer && offered" class="shorts-bar" aria-labelledby="shorts-bar-heading">
+		<h2 id="shorts-bar-heading" class="shorts-bar__heading">
+			{{ t('social', 'Shorts') }}
+		</h2>
+		<ul class="shorts-bar__list">
 			<!-- the reader's own place is always there, with or without a
-			     story in it: it is where a story is added from -->
-			<li class="story-bar__item story-bar__item--own">
-				<button
-					type="button"
-					class="story-bar__tile"
-					:class="{ 'story-bar__tile--unseen': ownGroup && !ownGroup.seen, 'story-bar__tile--empty': !ownGroup }"
-					:aria-label="ownGroup ? t('social', 'Your story') : t('social', 'Add to your story')"
-					@click="ownGroup ? open(0) : (composing = true)">
-					<span class="story-bar__ring">
+			     24-hour short in it: it is where one is made from -->
+			<li class="shorts-bar__item shorts-bar__item--own">
+				<router-link
+					v-if="ownGroup"
+					class="shorts-bar__tile"
+					:class="{ 'shorts-bar__tile--unseen': !ownGroup.seen }"
+					:to="feedAt(ownGroup.account)"
+					:aria-label="t('social', 'Your shorts')">
+					<span class="shorts-bar__ring">
 						<ActorAvatar
 							:actor="viewer"
 							:size="52"
 							:link="false"
 							:hoverCard="false" />
 					</span>
-					<span class="story-bar__name">{{ t('social', 'Your story') }}</span>
+					<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
+				</router-link>
+				<button
+					v-else
+					type="button"
+					class="shorts-bar__tile shorts-bar__tile--empty"
+					:aria-label="t('social', 'New short')"
+					@click="composing = true">
+					<span class="shorts-bar__ring">
+						<ActorAvatar
+							:actor="viewer"
+							:size="52"
+							:link="false"
+							:hoverCard="false" />
+					</span>
+					<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
 				</button>
 				<NcButton
-					class="story-bar__add"
+					class="shorts-bar__add"
 					variant="primary"
-					:ariaLabel="t('social', 'Add to your story')"
+					:ariaLabel="t('social', 'New short')"
 					@click="composing = true">
 					<template #icon>
 						<IconPlus :size="16" />
@@ -34,33 +52,36 @@
 				</NcButton>
 			</li>
 
-			<li v-for="(other, index) in others" :key="other.account.id" class="story-bar__item">
-				<button
-					type="button"
-					class="story-bar__tile"
-					:class="{ 'story-bar__tile--unseen': !other.seen }"
+			<li v-for="other in others" :key="other.account.id" class="shorts-bar__item">
+				<router-link
+					class="shorts-bar__tile"
+					:class="{ 'shorts-bar__tile--unseen': !other.seen }"
 					:style="accountStyle(other.account)"
-					:aria-label="tileLabel(other)"
-					@click="open(ownGroup ? index + 1 : index)">
-					<span class="story-bar__ring">
+					:to="feedAt(other.account)"
+					:aria-label="tileLabel(other)">
+					<span class="shorts-bar__ring">
 						<ActorAvatar
 							:actor="other.account"
 							:size="52"
 							:link="false"
 							:hoverCard="false" />
 					</span>
-					<span class="story-bar__name">{{ firstName(other.account) }}</span>
-				</button>
+					<span class="shorts-bar__name">{{ firstName(other.account) }}</span>
+				</router-link>
+			</li>
+
+			<!-- the way on to every short, kept ones included -->
+			<li class="shorts-bar__item">
+				<router-link class="shorts-bar__tile shorts-bar__tile--all" :to="{ name: 'shorts' }">
+					<span class="shorts-bar__ring">
+						<span class="shorts-bar__all-icon">
+							<IconPlayBoxMultiple :size="28" />
+						</span>
+					</span>
+					<span class="shorts-bar__name">{{ t('social', 'All shorts') }}</span>
+				</router-link>
 			</li>
 		</ul>
-
-		<StoryViewer
-			v-if="viewing !== null"
-			:groups="groups"
-			:start="viewing"
-			@close="viewing = null"
-			@seen="markSeen"
-			@deleted="forget" />
 
 		<!-- New short, opened on 24 hours: a picture or a card goes on to
 		     the picture editor from inside the dialog -->
@@ -80,6 +101,7 @@ import { n, t } from '@nextcloud/l10n'
 import { defineAsyncComponent } from 'vue'
 import { mapStores } from 'pinia'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultipleOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import ActorAvatar from './ActorAvatar.vue'
 import logger from '../services/logger.js'
@@ -88,39 +110,35 @@ import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { accountStyle } from '../services/accountColour.js'
 
-// the viewer and the composer are the heavy halves and most visits open
-// neither; they are fetched when one is
-const StoryViewer = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./StoryViewer.vue'))
-const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "stories" */'./ShortComposerDialog.vue'))
+// the dialog is the heavy half and most visits never open it
+const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /**
- * The row of faces above the home timeline: whose stories are up.
+ * The Shorts bar above the home timeline: whose 24-hour shorts are up.
  *
- * Stories have been in the API for a while and had no page in this app; a
- * user of this server could post one from a Pixelfed client and never see
- * it here. The bar is the API's carousel grouped by account — the reader's
- * own first, then the accounts they follow — with a ring around the faces
- * that still hold something unseen, the way every app that has stories
- * draws them. Tapping a face plays that account's stories; the reader's own
- * place is always there, because it is where a story is added from.
+ * The stories carousel grouped by account: the reader's own place first, then
+ * the people they follow, those with something unseen first, with a ring
+ * around the faces that still hold something unseen; last, a tile on to the
+ * whole Shorts feed. A face opens the Shorts feed at that person
+ * (`/shorts?account=`), which is where every short is watched; the reader's
+ * own place opens New short on its 24-hour lifetime when there is nothing in
+ * it yet, and the + does the same at any time.
  */
 export default {
-	name: 'StoryBar',
+	name: 'ShortsBar',
 
 	components: {
 		ActorAvatar,
+		IconPlayBoxMultiple,
 		IconPlus,
 		NcButton,
 		ShortComposerDialog,
-		StoryViewer,
 	},
 
 	data() {
 		return {
-			/** @type {Array<{account: object, stories: Array<object>, seen: boolean, own: boolean}>} */
+			/** @type {Array<{account: object, shorts: Array<object>, seen: boolean, own: boolean}>} */
 			groups: [],
-			/** which group the viewer is playing, or null while it is closed */
-			viewing: null,
 			composing: false,
 		}
 	},
@@ -159,11 +177,9 @@ export default {
 		},
 
 		/**
-		 * Whether this instance offers stories at all.
-		 *
-		 * Asked here rather than where the bar is drawn, so that every place that
-		 * draws one is covered. Default on, and on for a server that said nothing
-		 * about it.
+		 * Whether this instance offers 24-hour shorts at all (the admin's
+		 * `stories` section). Default on, and on for a server that said
+		 * nothing about it.
 		 *
 		 * @return {boolean} whether to draw the bar
 		 */
@@ -171,19 +187,21 @@ export default {
 			return this.settingsStore.getServerData?.sections?.stories !== false
 		},
 
-		/** @return {string} the reader's handle, for telling their own stories apart */
+		/** @return {string} the reader's handle, for telling their own shorts apart */
 		viewerAcct() {
 			return this.accountStore.currentAccount?.acct ?? getCurrentUser()?.uid ?? ''
 		},
 
-		/** @return {object|undefined} the reader's own stories, grouped */
+		/** @return {object|undefined} the reader's own 24-hour shorts, grouped */
 		ownGroup() {
 			return this.groups.find((group) => group.own)
 		},
 
-		/** @return {Array<object>} everybody else's */
+		/** @return {Array<object>} everybody else's, those with something unseen first */
 		others() {
-			return this.groups.filter((group) => !group.own)
+			const others = this.groups.filter((group) => !group.own)
+
+			return [...others.filter((group) => !group.seen), ...others.filter((group) => group.seen)]
 		},
 	},
 
@@ -198,10 +216,10 @@ export default {
 		 * What to call somebody under their face.
 		 *
 		 * The first word of their display name. "Maya Lin…" and "Petra No…" are
-		 * what a full name comes to in the space a story tile has, and a first
-		 * name is both shorter and warmer than a truncated surname.
+		 * what a full name comes to in the space a tile has, and a first name is
+		 * both shorter and warmer than a truncated surname.
 		 *
-		 * @param {object} account whose story it is
+		 * @param {object} account whose shorts they are
 		 * @return {string} one word, or the handle when there is no name
 		 */
 		firstName(account) {
@@ -213,6 +231,14 @@ export default {
 		t,
 		n,
 
+		/**
+		 * @param {object} account whose 24-hour shorts to start at
+		 * @return {object} the Shorts feed, opened at them
+		 */
+		feedAt(account) {
+			return { name: 'shorts', query: { account: account.acct } }
+		},
+
 		/** @return {Promise<void>} */
 		async load() {
 			try {
@@ -221,63 +247,50 @@ export default {
 			} catch (error) {
 				// a bar that could not be loaded is no bar: the timeline below
 				// is the page, and a toast over it for this would be noise
-				logger.error('could not load the stories', { error })
+				logger.error('could not load the 24-hour shorts', { error })
 				this.groups = []
 			}
 		},
 
 		/**
-		 * One group per account, in the order the server gave them — the
-		 * viewer's own first, then the followed — each seen only when every
-		 * story in it was.
+		 * One group per account, in the order the server gave them, each seen
+		 * only when every short in it was.
 		 *
-		 * @param {Array<object>} stories the carousel
+		 * @param {Array<object>} shorts the carousel
 		 * @return {Array<object>}
 		 */
-		group(stories) {
+		group(shorts) {
 			const groups = new Map()
-			for (const story of stories) {
-				const account = story.account
+			for (const short of shorts) {
+				const account = short.account
 				if (!account) {
 					continue
 				}
 				if (!groups.has(account.id)) {
 					groups.set(account.id, {
 						account,
-						stories: [],
+						shorts: [],
 						seen: true,
 						own: this.viewerAcct !== '' && account.acct === this.viewerAcct,
 					})
 				}
 				const group = groups.get(account.id)
-				group.stories.push(story)
-				if (!story.seen) {
+				group.shorts.push(short)
+				if (!short.seen) {
 					group.seen = false
 				}
 			}
 
-			const list = [...groups.values()]
-			// own first whatever the server did; the API already does this,
-			// and the bar should not depend on it
-			list.sort((a, b) => Number(b.own) - Number(a.own))
-
-			return list
+			return [...groups.values()]
 		},
 
 		/**
-		 * @param {number} index which group to play
-		 */
-		open(index) {
-			this.viewing = index
-		},
-
-		/**
-		 * @param {object} group one account's stories
+		 * @param {object} group one account's 24-hour shorts
 		 * @return {string} what the tile is, for a reader who cannot see the ring
 		 */
 		tileLabel(group) {
 			const name = group.account.display_name || group.account.username
-			const count = n('social', '%n story', '%n stories', group.stories.length)
+			const count = n('social', '%n short', '%n shorts', group.shorts.length)
 
 			return group.seen
 				? t('social', '{name}: {count}, seen', { name, count })
@@ -285,46 +298,22 @@ export default {
 		},
 
 		/**
-		 * The viewer marked one seen; the ring follows.
+		 * A short the reader just posted: a 24-hour one goes into their own
+		 * place; a kept one is not the bar's.
 		 *
-		 * @param {string} id the story
+		 * @param {object} short the new short
+		 * @param {string} lifetime 'kept' or 'day'
 		 */
-		markSeen(id) {
-			for (const group of this.groups) {
-				for (const story of group.stories) {
-					if (story.id === id) {
-						story.seen = true
-					}
-				}
-				group.seen = group.stories.every((story) => story.seen)
+		add(short, lifetime) {
+			if (lifetime !== 'day') {
+				return
 			}
-		},
 
-		/**
-		 * The viewer deleted one of the reader's own.
-		 *
-		 * @param {object} deleted the story
-		 */
-		forget(deleted) {
-			this.groups = this.groups
-				.map((group) => ({ ...group, stories: group.stories.filter((story) => story.id !== deleted.id) }))
-				.filter((group) => group.stories.length > 0)
-			if (this.viewing !== null && this.viewing >= this.groups.length) {
-				this.viewing = null
-			}
-		},
-
-		/**
-		 * A 24-hour short the reader just posted goes into their own place.
-		 *
-		 * @param {object} story the new short
-		 */
-		add(story) {
 			const own = this.ownGroup
 			if (own) {
-				own.stories.push({ ...story, seen: true })
+				own.shorts.push({ ...short, seen: true })
 			} else if (this.viewer) {
-				this.groups = [{ account: story.account ?? this.viewer, stories: [{ ...story, seen: true }], seen: true, own: true }, ...this.groups]
+				this.groups = [{ account: short.account ?? this.viewer, shorts: [{ ...short, seen: true }], seen: true, own: true }, ...this.groups]
 			}
 		},
 	},
@@ -335,25 +324,33 @@ export default {
 /* a ring that swells and fades: drawn as a pseudo-element rather than a
    box-shadow, because a shadow on a card is this app's elevation and means
    something else */
-@keyframes story-breathe {
+@keyframes shorts-breathe {
 	0% { transform: scale(1); opacity: .45; }
 	70%, 100% { transform: scale(1.22); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.story-bar__tile--unseen .story-bar__ring::after {
+	.shorts-bar__tile--unseen .shorts-bar__ring::after {
 		animation: none;
 		opacity: 0;
 	}
 }
 
-.story-bar {
+.shorts-bar {
 	max-width: var(--social-column);
 	margin: 8px auto 12px;
 	padding: 0 10px;
 }
 
-.story-bar__list {
+.shorts-bar__heading {
+	margin: 0 0 2px;
+	padding: 0 2px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--color-text-maxcontrast);
+}
+
+.shorts-bar__list {
 	display: flex;
 	gap: 14px;
 	margin: 0;
@@ -363,12 +360,12 @@ export default {
 	scrollbar-width: thin;
 }
 
-.story-bar__item {
+.shorts-bar__item {
 	position: relative;
 	flex: 0 0 auto;
 }
 
-.story-bar__tile {
+.shorts-bar__tile {
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -378,15 +375,16 @@ export default {
 	border: 0;
 	background: none;
 	color: var(--color-main-text);
+	text-decoration: none;
 	cursor: pointer;
 
-	&:focus-visible .story-bar__ring {
+	&:focus-visible .shorts-bar__ring {
 		outline: 2px solid var(--color-primary-element);
 		outline-offset: 2px;
 	}
 }
 
-.story-bar__ring {
+.shorts-bar__ring {
 	display: flex;
 	padding: 3px;
 	border-radius: 50%;
@@ -403,7 +401,7 @@ export default {
 	 * seconds and barely there -- enough to say "something here", not enough
 	 * to be a thing moving on the page while somebody is reading.
 	 */
-	.story-bar__tile--unseen & {
+	.shorts-bar__tile--unseen & {
 		border-color: hsl(var(--account-hue, 210) 65% 50%);
 		position: relative;
 
@@ -413,17 +411,29 @@ export default {
 			inset: -3px;
 			border-radius: 50%;
 			border: 2px solid hsl(var(--account-hue, 210) 65% 50%);
-			animation: story-breathe 2.4s ease-out infinite;
+			animation: shorts-breathe 2.4s ease-out infinite;
 			pointer-events: none;
 		}
 	}
 
-	.story-bar__tile--empty & {
+	.shorts-bar__tile--empty & {
 		border-style: dashed;
 	}
 }
 
-.story-bar__name {
+// the last tile: no face, the Shorts feed's own sign
+.shorts-bar__all-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	inline-size: 52px;
+	block-size: 52px;
+	border-radius: 50%;
+	background: var(--color-background-dark);
+	color: var(--color-main-text);
+}
+
+.shorts-bar__name {
 	max-width: 72px;
 	overflow: hidden;
 	font-size: 12px;
@@ -431,7 +441,7 @@ export default {
 	white-space: nowrap;
 }
 
-.story-bar__add {
+.shorts-bar__add {
 	position: absolute;
 	top: 42px;
 	inset-inline-end: 4px;
