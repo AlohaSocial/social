@@ -28,7 +28,7 @@ class AtprotoWellKnownController extends Controller {
 		if (!$this->identities->isEnabled()) {
 			return new DataDisplayResponse('', 404, ['Content-Type' => 'text/plain']);
 		}
-		$identity = $this->identities->getIdentityByHandle(strtolower($this->request->getServerHost()));
+		$identity = $this->identities->getIdentityByHandle(strtolower((string)parse_url('https://' . $this->request->getServerHost(), PHP_URL_HOST)));
 		return new DataDisplayResponse($identity !== null && $identity['state'] === IdentityService::STATE_ACTIVE ? $identity['did'] : '', $identity !== null && $identity['state'] === IdentityService::STATE_ACTIVE ? 200 : 404, ['Content-Type' => 'text/plain; charset=utf-8']);
 	}
 	#[PublicPage] #[NoCSRFRequired] #[AnonRateLimit(limit: 120, period: 60)]

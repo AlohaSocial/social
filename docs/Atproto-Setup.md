@@ -13,7 +13,9 @@ public Bluesky AppView indexing or production deployment on your domain.
 ## Requirements
 
 - Supported Nextcloud with PHP 8.3+, GMP, Sodium, Intl and GD.
-- Dependencies from the committed Composer lockfile; install using `composer install`.
+- Dependencies from the committed Composer lockfile; install into the running app using `composer install --no-dev`.
+  Keep development/test dependencies in a separate checkout: they can conflict
+  with other Nextcloud apps (for example different Amp versions in Mail).
 - Public HTTPS for the Social instance, e.g. `social.example.org`.
 - Wildcard DNS and TLS for account handles, e.g. `alice.social.example.org`.
   Route their `/.well-known/atproto-did` requests to this same Nextcloud app,
