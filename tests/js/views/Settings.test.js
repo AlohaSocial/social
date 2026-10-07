@@ -41,6 +41,7 @@ const asyncStubs = {
 	InterestsSettings: { name: 'InterestsSettings', template: '<section class="interests-settings-stub" />' },
 	// reads the delivery settings on mount
 	NotificationDeliverySettings: { name: 'NotificationDeliverySettings', template: '<section class="notification-delivery-settings-stub" />' },
+	NotificationPolicySettings: { name: 'NotificationPolicySettings', template: '<section class="notification-policy-settings-stub" />' },
 }
 
 describe('Settings', () => {
@@ -109,7 +110,7 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(wrapper.findAll('.settings__section-heading').map((h) => h.text()))
-			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Sound and touch', 'Notifications', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
+			.toEqual(['Your account', 'Featured hashtags', 'Lists', 'Scheduled posts', 'Portfolio', 'Archived posts', 'Waiting to be looked at', 'Looking back', 'Likes and followers', 'Sound and touch', 'Notifications', 'Who may reach you', 'Authorized apps', 'Introduction', 'Keyboard shortcuts', 'Delete your Aloha Social account'])
 	})
 
 	/**
