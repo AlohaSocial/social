@@ -63,6 +63,25 @@
 			</NcButton>
 		</div>
 
+		<!-- the senders the notification policy is holding back: a count, and
+		     the list on request. Here rather than on the Blocking page, because
+		     this is where somebody wonders why a mention never arrived -->
+		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests">
+			<div class="held-requests__row">
+				<IconInboxOutline :size="20" />
+				<span class="held-requests__count">
+					{{ n('social', '%n person you have no relationship with is waiting to notify you', '%n people you have no relationship with are waiting to notify you', pendingRequests) }}
+				</span>
+				<NcButton variant="tertiary" @click="showRequests = !showRequests">
+					{{ showRequests ? t('social', 'Hide') : t('social', 'Review') }}
+				</NcButton>
+				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }" class="held-requests__settings">
+					{{ t('social', 'Who may reach you') }}
+				</RouterLink>
+			</div>
+			<NotificationRequests v-if="showRequests" class="held-requests__list" @changed="onRequestsChanged" />
+		</div>
+
 		<!-- which kinds of activity to show; the same control as the scopes
 		     above the feed, choosing a filter of this page rather than a page -->
 		<TimelineSwitcher
@@ -108,6 +127,7 @@ import IconCheckAll from 'vue-material-design-icons/CheckAll.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
+import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
 import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
@@ -115,6 +135,7 @@ import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
 import TimelineList from './../components/TimelineList.vue'
 import DirectMessages from './../components/DirectMessages.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
+import NotificationRequests from './../components/NotificationRequests.vue'
 import FirstPostCelebration from './../components/FirstPostCelebration.vue'
 import Announcements from './../components/Announcements.vue'
 import FirstRun from './../components/FirstRun.vue'
@@ -160,6 +181,8 @@ export default {
 		TimelineList,
 		DirectMessages,
 		TimelineSwitcher,
+		IconInboxOutline,
+		NotificationRequests,
 	},
 
 	data() {
@@ -174,11 +197,18 @@ export default {
 			notificationFilter: rememberedFilter(),
 			/** while the marker is being moved, so it cannot be moved twice */
 			markingAllRead: false,
+			/** whether the held senders are unfolded under their count */
+			showRequests: false,
 		}
 	},
 
 	computed: {
 		...mapStores(useAccountStore, useNotificationsStore, useSettingsStore, useTimelineStore),
+
+		/** @return {number} how many senders the policy is holding back */
+		pendingRequests() {
+			return this.notificationsStore.pendingRequests
+		},
 
 		/**
 		 * How many activities the sidebar badge is counting.
@@ -547,6 +577,7 @@ export default {
 				this.timelineStore.changeTimelineType({ type: this.type, params: this.params })
 			}
 			this.fetchListTitle()
+			this.fetchPendingRequests()
 		},
 	},
 
@@ -555,6 +586,7 @@ export default {
 			this.timelineStore.changeTimelineType({ type: this.type, params: this.params })
 		}
 		this.fetchListTitle()
+		this.fetchPendingRequests()
 	},
 
 	mounted() {
@@ -639,6 +671,27 @@ export default {
 		chooseNotificationFilter(filter) {
 			this.notificationFilter = filter
 			rememberFilter(filter)
+		},
+
+		/** Asks how many senders are held, on the one page that shows them. */
+		fetchPendingRequests() {
+			this.showRequests = false
+			if (this.type === 'notifications') {
+				this.notificationsStore.fetchPendingRequests()
+			}
+		},
+
+		/**
+		 * The list under the count changed; the count follows, and an emptied
+		 * list folds away.
+		 *
+		 * @param {number} left how many senders are still waiting
+		 */
+		onRequestsChanged(left) {
+			this.notificationsStore.setPendingRequests(left)
+			if (left === 0) {
+				this.showRequests = false
+			}
 		},
 
 		/**
@@ -770,6 +823,35 @@ export default {
    it on the other. Tinted rather than bordered -- it is the page saying
    something, not another card to read -- and gone entirely at zero, so the
    list does not keep a permanent header it has no news for. */
+.held-requests {
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-background-hover);
+
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	&__count {
+		flex: 1 1 200px;
+	}
+
+	&__settings {
+		font-size: var(--font-size-small, 13px);
+		color: var(--color-text-maxcontrast);
+		text-decoration: underline;
+	}
+
+	&__list {
+		margin-top: 8px;
+	}
+}
+
 .new-activities {
 	display: flex;
 	align-items: center;

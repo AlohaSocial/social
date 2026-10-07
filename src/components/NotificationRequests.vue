@@ -102,6 +102,9 @@ export default {
 		NcLoadingIcon,
 	},
 
+	/** `changed` carries how many senders are left, whenever the list changes. */
+	emits: ['changed'],
+
 	data() {
 		return {
 			requests: [],
@@ -135,6 +138,7 @@ export default {
 				const url = generateUrl('apps/social/api/v1/notifications/requests')
 				const { data } = await axios.get(url)
 				this.requests = Array.isArray(data) ? data : []
+				this.$emit('changed', this.requests.length)
 			} catch (error) {
 				logger.error('could not load the held notifications', { error })
 				showError(t('social', 'Could not load what is waiting'))
@@ -171,6 +175,7 @@ export default {
 				const url = generateUrl(path, { id: request.id, what })
 				await axios.post(url)
 				this.requests = this.requests.filter((one) => one.id !== request.id)
+				this.$emit('changed', this.requests.length)
 			} catch (error) {
 				logger.error('could not decide about a sender', { error })
 				showError(t('social', 'Could not do that'))
@@ -204,6 +209,7 @@ export default {
 				const url = generateUrl('apps/social/api/v1/notifications/requests/{what}', { what })
 				await axios.post(url, { id: ids })
 				this.requests = []
+				this.$emit('changed', 0)
 			} catch (error) {
 				logger.error('could not decide about every sender', { error })
 				showError(t('social', 'Could not do that'))

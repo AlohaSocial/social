@@ -200,9 +200,16 @@
 				</h3>
 			</header>
 			<p class="block-card__lede">
-				{{ t('social', 'Your notification settings hold some notifications back instead of showing them — from accounts nobody here follows, from brand-new accounts, from people you do not follow. They wait here, one row per sender, so you decide about the person once rather than about every notification they send.') }}
+				{{ t('social', 'Your notification settings can hold notifications back instead of showing them — from accounts nobody here follows, from brand-new accounts, from people you do not follow. The senders wait at the top of Activities now, where you decide about the person once; which of them are held is set under Who may reach you.') }}
 			</p>
-			<NotificationRequests />
+			<p class="block-card__links">
+				<RouterLink :to="{ name: 'timeline', params: { type: 'notifications' } }">
+					{{ t('social', 'Open Activities') }}
+				</RouterLink>
+				<RouterLink :to="{ name: 'settings', hash: '#notification-policy' }">
+					{{ t('social', 'Who may reach you') }}
+				</RouterLink>
+			</p>
 		</section>
 
 		<div v-if="loading" class="loading-indicator">
@@ -218,7 +225,6 @@ import { showError } from '../services/toast.js'
 import { fetchAiContent, saveAiContent } from '../services/aiContent.js'
 import ActorAvatar from '../components/ActorAvatar.vue'
 import FiltersSettings from '../components/FiltersSettings.vue'
-import NotificationRequests from '../components/NotificationRequests.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -244,7 +250,6 @@ export default {
 		FilterOutline,
 		FiltersSettings,
 		IconInboxOutline,
-		NotificationRequests,
 		NcButton,
 		NcCheckboxRadioSwitch,
 		NcTextField,
@@ -614,4 +619,10 @@ export default {
 	max-width: 320px;
 }
 
+.block-card__links {
+	display: flex;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin: 0;
+}
 </style>

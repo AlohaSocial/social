@@ -45,6 +45,8 @@ export const useNotificationsStore = defineStore('notifications', {
 		unreadDirect: 0,
 		/** whether the count has been read once, so a rise can be told from a first answer */
 		directCounted: false,
+		/** how many senders the notification policy is holding back, from the policy's summary */
+		pendingRequests: 0,
 		/**
 		 * The row id the reader had read up to, the last time the server was
 		 * asked; '0' while unknown or when nothing has ever been read. What
@@ -121,6 +123,24 @@ export const useNotificationsStore = defineStore('notifications', {
 				logger.error('Failed to mark the direct messages read', { error })
 				// put back whatever the server actually thinks
 				this.fetchUnreadDirectMessages()
+			}
+		},
+
+		setPendingRequests(count) {
+			this.pendingRequests = Math.max(0, Number(count) || 0)
+		},
+
+		/**
+		 * Reads how many senders the policy is holding back, off the policy's
+		 * own summary — the count Mastodon's clients draw their banner from.
+		 * Silent on failure: the strip simply stays away.
+		 */
+		async fetchPendingRequests() {
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v2/notifications/policy'))
+				this.setPendingRequests(data?.summary?.pending_requests_count)
+			} catch (error) {
+				logger.error('Failed to read how many senders are held back', { error })
 			}
 		},
 

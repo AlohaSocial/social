@@ -68,6 +68,26 @@ describe('notifications store', () => {
 		})
 	})
 
+	describe('fetchPendingRequests', () => {
+		it('reads the count off the policy summary', async () => {
+			axios.get.mockResolvedValue({ data: { for_not_following: 'filter', summary: { pending_requests_count: 4, pending_notifications_count: 9 } } })
+
+			await store.fetchPendingRequests()
+
+			expect(axios.get).toHaveBeenCalledWith(expect.stringContaining('/api/v2/notifications/policy'))
+			expect(store.pendingRequests).toBe(4)
+		})
+
+		it('keeps the count where it was when the server does not answer', async () => {
+			store.setPendingRequests(2)
+			axios.get.mockRejectedValue(new Error('offline'))
+
+			await store.fetchPendingRequests()
+
+			expect(store.pendingRequests).toBe(2)
+		})
+	})
+
 	describe('fetchUnreadNotifications', () => {
 		it('reads the count the server keeps', async () => {
 			axios.get.mockResolvedValue({ data: { count: 5 } })
