@@ -69,6 +69,7 @@ describe('the post menu', () => {
 				'Open on original instance',
 				'Bookmark',
 				'Add a reaction',
+				'Mute conversation',
 				'Mute jens@chaos.social',
 				'Block jens@chaos.social',
 				'Report',
@@ -81,6 +82,22 @@ describe('the post menu', () => {
 
 			expect(wrapper.emitted('react')).toHaveLength(1)
 			expect(items(mountMenu({}, { isPublic: true }))).not.toContain('Add a reaction')
+		})
+
+		it('offers no conversation mute on a public page', () => {
+			const offered = items(mountMenu({}, { isPublic: true }))
+			expect(offered).not.toContain('Mute conversation')
+			expect(offered).not.toContain('Unmute conversation')
+		})
+
+		it('offers to unmute the conversation it is in once it is muted, and says so to the post', async () => {
+			const wrapper = mountMenu({ muted: true })
+			expect(items(wrapper)).toContain('Unmute conversation')
+			expect(items(wrapper)).not.toContain('Mute conversation')
+
+			await itemFor(wrapper, 'Unmute conversation').trigger('click')
+
+			expect(wrapper.emitted('muteConversation')).toHaveLength(1)
 		})
 
 		/** Every one of these is the reader acting on their own post. */
@@ -106,6 +123,7 @@ describe('the post menu', () => {
 				'Delivery status',
 				'Bookmark',
 				'Add a reaction',
+				'Mute conversation',
 				'Add to a collection',
 				'Pin to profile',
 			])
@@ -121,7 +139,8 @@ describe('the post menu', () => {
 
 			expect(offered).toContain('Quote')
 			expect(offered).not.toContain('Report')
-			expect(offered.some((one) => one.startsWith('Mute'))).toBe(false)
+			// the conversation is the reader's to mute, their own post or not
+			expect(offered.filter((one) => one.startsWith('Mute'))).toEqual(['Mute conversation'])
 			expect(offered.some((one) => one.startsWith('Block'))).toBe(false)
 		})
 

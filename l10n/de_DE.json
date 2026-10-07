@@ -1,4 +1,8 @@
 { "translations": {
+    "Could not mute the conversation" : "Die Unterhaltung konnte nicht stummgeschaltet werden",
+    "Could not unmute the conversation" : "Die Stummschaltung der Unterhaltung konnte nicht aufgehoben werden",
+    "Conversation muted — you won't be notified about it" : "Unterhaltung stummgeschaltet – Sie werden darüber nicht mehr benachrichtigt",
+    "Conversation unmuted" : "Stummschaltung der Unterhaltung aufgehoben",
     "Hold this short" : "Diesen Short anhalten",
     "Coming from Instagram? The same button reads its archive — ask Instagram for your information in JSON, not HTML. Your posts and reels arrive with their pictures and captions. An Instagram post does not record who could see it, so each one is posted with your own default visibility; what you shared for 24 hours, your archived posts and deleted ones are left where they are." : "Sie kommen von Instagram? Derselbe Knopf liest auch dessen Archiv – fordern Sie Ihre Informationen bei Instagram als JSON an, nicht als HTML. Ihre Beiträge und Reels kommen mit ihren Bildern und Bildunterschriften an. Ein Instagram-Beitrag hält nicht fest, wer ihn sehen durfte, daher wird jeder mit Ihrer eigenen Standard-Sichtbarkeit veröffentlicht; was Sie für 24 Stunden geteilt haben, Ihre archivierten und Ihre gelöschten Beiträge bleiben, wo sie sind.",
     "Almost everything this app does away from a page happens on a schedule: posts go out, 24-hour shorts expire, media is swept, videos are transcoded, the storage figures are taken. When cron stops, the symptom is a post that never arrives and a disk that never shrinks — and nothing in the app said so. This is when each job last ran." : "Fast alles, was diese App abseits einer Seite tut, geschieht nach Zeitplan: Beiträge gehen hinaus, 24-Stunden-Shorts laufen ab, Medien werden aufgeräumt, Videos werden umgewandelt, die Speicherzahlen werden erhoben. Bleibt Cron stehen, zeigt sich das an einem Beitrag, der nie ankommt, und an einem Speicher, der nie kleiner wird – und nichts in der App hat es gesagt. Hier steht, wann jeder Job zuletzt lief.",
@@ -410,6 +414,8 @@
     "Only public and unlisted posts can be boosted" : "Nur öffentliche und nicht gelistete Beiträge können geteilt werden",
     "The author does not allow likes of this post" : "Die Person, die das gepostet hat, erlaubt kein „Gefällt mir“ für diesen Beitrag",
     "Add a reaction" : "Reaktion hinzufügen",
+    "Mute conversation" : "Unterhaltung stummschalten",
+    "Unmute conversation" : "Unterhaltung nicht mehr stummschalten",
     "Which activities to show" : "Welche Aktivitäten angezeigt werden",
     "List" : "Liste",
     "Link" : "Link",
