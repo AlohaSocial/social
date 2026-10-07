@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -26,6 +31,7 @@ class PlcCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:plc')
 			->setDescription('Manage PLC operations')
@@ -34,6 +40,7 @@ class PlcCommand extends Command {
 			->addOption('repair', null, InputOption::VALUE_NONE, 'Repair discrepancies between log and directory');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$action = $input->getArgument('action');

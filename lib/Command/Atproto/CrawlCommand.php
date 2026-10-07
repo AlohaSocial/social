@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -30,12 +35,14 @@ class CrawlCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:crawl')
 			->setDescription('Request relay crawl for all or specific repositories')
 			->addArgument('did', InputArgument::OPTIONAL, 'Specific DID to request crawl for');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$did = $input->getArgument('did');

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -23,11 +28,13 @@ class VerifyPublicationCommand extends Command {
 	) {
 		parent::__construct();
 	}
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:verify-publication')
 			->setDescription('Verify that a native Social post is indexed by public Bluesky')
 			->addArgument('post', InputArgument::REQUIRED, 'Social post ID (the numeric ID returned by the composer API)');
 	}
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		try {

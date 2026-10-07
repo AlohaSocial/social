@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Sync;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -50,10 +55,10 @@ class AtprotoSync {
 			}
 			$qb = $this->db->getQueryBuilder();
 			$qb->update('social_atpds_watch')->set('last_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s')))
-				->set('next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() + min(21600, 120 * (2 ** min($failures, 8))))))
+				->set('next_sync', $qb->createNamedParameter(gmdate('Y-m-d H:i:s', time() + min(21600, (120 << min($failures, 8))))))
 				->set('failures', $qb->createNamedParameter($failures, IQueryBuilder::PARAM_INT))->set('last_error', $qb->createNamedParameter($error))->where($qb->expr()->eq('did', $qb->createNamedParameter($watch['did'])))->executeStatement();
 		}
-		$stats['duration_ms'] = (int)((microtime(true) - $start) * 1000);
+		$stats['duration_ms'] = (int)((microtime(true) - $start) * 1000.0);
 		return $stats;
 	}
 }

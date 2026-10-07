@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Repository;
 
 use OCA\Social\Atproto\Protocol\Cid;
@@ -38,9 +43,9 @@ class BlobService {
 			throw new \InvalidArgumentException('Invalid image');
 		}
 		try {
-			$scale = min(1, 2000 / max($info[0], $info[1]));
-			$width = max(1, (int)($info[0] * $scale));
-			$height = max(1, (int)($info[1] * $scale));
+			$scale = min(1.0, 2000.0 / (float)max($info[0], $info[1]));
+			$width = max(1, (int)((float)$info[0] * $scale));
+			$height = max(1, (int)((float)$info[1] * $scale));
 			if ($scale < 1) {
 				$scaled = imagescale($image, $width, $height);
 				if (!$scaled) {

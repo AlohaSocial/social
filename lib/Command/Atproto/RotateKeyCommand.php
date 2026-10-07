@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -27,6 +32,7 @@ class RotateKeyCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:rotate-key')
 			->setDescription('Rotate instance rotation key and update all DIDs via PLC')
@@ -34,6 +40,7 @@ class RotateKeyCommand extends Command {
 			->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Number of DIDs to process per batch', 50);
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$dryRun = $input->getOption('dry-run');

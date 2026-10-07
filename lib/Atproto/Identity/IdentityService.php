@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Identity;
 
 use OCA\Social\Atproto\Protocol\Cid;
@@ -51,7 +56,7 @@ class IdentityService {
 		$existing = $this->getIdentityByActor($actorId);
 		if ($existing !== null) {
 			$this->registerPending($existing['did']);
-			return $this->getIdentityByDid($existing['did']);
+			return $this->getIdentityByDid($existing['did']) ?? throw new \RuntimeException('Identity disappeared during registration');
 		}
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('preferred_username')->from('social_actor')->where($qb->expr()->eq('id', $qb->createNamedParameter($actorId)))->andWhere($qb->expr()->isNull('deleted'));
@@ -83,7 +88,7 @@ class IdentityService {
 			throw $e;
 		}
 		$this->registerPending($did);
-		return $this->getIdentityByDid($did);
+		return $this->getIdentityByDid($did) ?? throw new \RuntimeException('Identity disappeared during registration');
 	}
 	public function registerPending(string $did): bool {
 		if (!$this->isEnabled()) {

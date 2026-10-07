@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -20,9 +25,11 @@ class PublishCommand extends Command {
 	) {
 		parent::__construct();
 	}
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:publish')->setDescription('Process one due batch of native ATProto publications (up to 25)');
 	}
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		if (!$this->identities->isEnabled()) {
 			$output->writeln('<error>AT Protocol is disabled</error>');

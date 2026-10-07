@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Repository;
 
 use OCA\Social\Atproto\Identity\KeyManager;
@@ -245,7 +250,11 @@ class Repository {
 		return $result === false ? null : self::bytes($result);
 	}
 	public static function bytes(mixed $value): string {
-		return is_resource($value) ? stream_get_contents($value) : (string)$value;
+		$bytes = is_resource($value) ? stream_get_contents($value) : (string)$value;
+		if ($bytes === false) {
+			throw new \RuntimeException('Could not read repository bytes');
+		}
+		return $bytes;
 	}
 	private function insert(string $table, array $values, array $binary = []): void {
 		$qb = $this->db->getQueryBuilder();

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Identity;
 
 use Mdanter\Ecc\Crypto\Key\PublicKey;
@@ -119,7 +124,7 @@ class KeyManager {
 			$n = gmp_add(gmp_mul($n, 58), $i);
 		}
 		$hex = gmp_strval($n, 16);
-		$bytes = gmp_cmp($n, 0) === 0 ? '' : hex2bin(str_pad($hex, (int)(ceil(strlen($hex) / 2) * 2), '0', STR_PAD_LEFT));
+		$bytes = gmp_cmp($n, 0) === 0 ? '' : hex2bin(str_pad($hex, intdiv(strlen($hex) + 1, 2) * 2, '0', STR_PAD_LEFT));
 		return str_repeat("\0", strlen($value) - strlen(ltrim($value, '1'))) . $bytes;
 	}
 	public function getJwtSigningKey(): string {

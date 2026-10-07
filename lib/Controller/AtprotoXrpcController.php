@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Controller;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -107,7 +112,7 @@ class AtprotoXrpcController extends Controller {
 		}
 		$identity = str_starts_with($repo, 'did:') ? $this->identities->getIdentityByDid($repo) : $this->identities->getIdentityByHandle($repo);
 		if (!$this->identities->isEnabled()) {
-			return $this->unavailable();
+			return $this->unavailable() ?? $this->error('Unavailable', 'PDS is unavailable', 503);
 		}
 		if (!$identity) {
 			return $this->error('RepoNotFound', 'Repository not found', 404);

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Sync\AtprotoNotifications;
@@ -21,6 +26,7 @@ class NotificationsCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:notifications')
 			->setDescription('Fetch Bluesky notifications for local accounts')
@@ -28,6 +34,7 @@ class NotificationsCommand extends Command {
 			->addOption('dry-run', null, InputOption::VALUE_NONE, 'Show what would be fetched without doing it');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$batch = (int)$input->getOption('batch');

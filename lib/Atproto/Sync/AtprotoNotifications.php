@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Sync;
 
 use OCA\Social\Atproto\Auth\ServiceAuth;
@@ -75,7 +80,7 @@ class AtprotoNotifications {
 			}
 			$this->schedule($account['did'], $failed ? ($account['cursor'] ?? '') : $cursor, $failed);
 		}
-		$stats['duration_ms'] = (int)((microtime(true) - $start) * 1000);
+		$stats['duration_ms'] = (int)((microtime(true) - $start) * 1000.0);
 		return $stats;
 	}
 	private function store(string $recipient, array $item): bool {

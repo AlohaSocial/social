@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\Protocol;
 
 final class Tid {
@@ -9,7 +14,7 @@ final class Tid {
 	private static int $last = 0;
 	public static function next(?string $previous = null): string {
 		$floor = $previous === null || $previous === '' ? 0 : self::decode($previous) >> 10;
-		self::$last = max((int)(microtime(true) * 1000000), self::$last + 1, $floor + 1);
+		self::$last = max((int)(microtime(true) * 1000000.0), self::$last + 1, $floor + 1);
 		return self::encode((self::$last << 10) | random_int(0, 1023));
 	}
 	public static function encode(int $value): string {

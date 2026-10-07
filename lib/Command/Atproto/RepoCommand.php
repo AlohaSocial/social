@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Repository\Repository;
@@ -23,6 +28,7 @@ class RepoCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:repo')
 			->setDescription('Inspect an AT Protocol repository')
@@ -30,6 +36,7 @@ class RepoCommand extends Command {
 			->addOption('verify', null, InputOption::VALUE_NONE, 'Recompute MST and compare with stored head');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$user = $input->getArgument('user');

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\SetupChecks;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -17,12 +22,15 @@ class AtprotoHttpsCheck implements ISetupCheck {
 		private readonly IdentityService $identities,
 	) {
 	}
+	#[\Override]
 	public function getCategory(): string {
 		return 'system';
 	}
+	#[\Override]
 	public function getName(): string {
 		return $this->l10n->t('Aloha Social: native PDS HTTPS');
 	}
+	#[\Override]
 	public function run(): SetupResult {
 		if (!$this->identities->isEnabled()) {
 			return SetupResult::success($this->l10n->t('AT Protocol is disabled.'));

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Atproto\RecordMapper;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -37,7 +42,7 @@ class OutboundWorker {
 				$attempts = (int)$row['attempts'] + 1;
 				$qb = $this->db->getQueryBuilder();
 				$qb->update('social_atpds_outbox')->set('attempts', $qb->createNamedParameter($attempts))->set('last_error', $qb->createNamedParameter(substr($e->getMessage(), 0, 255)))
-					->set('next_try', $qb->createNamedParameter(time() + min(3600, 30 * 2 ** min($attempts, 7))))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($lease)))->executeStatement();
+					->set('next_try', $qb->createNamedParameter(time() + min(3600, (30 << min($attempts, 7)))))->where($qb->expr()->eq('id', $qb->createNamedParameter($row['id'])))->andWhere($qb->expr()->eq('next_try', $qb->createNamedParameter($lease)))->executeStatement();
 				$this->logger->warning('AT Protocol publishing will retry', ['exception' => $e, 'post_nid' => $row['post_nid']]);
 			}
 		}

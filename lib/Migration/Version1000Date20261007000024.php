@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Migration;
 
 use Closure;
@@ -17,6 +22,7 @@ class Version1000Date20261007000024 extends SimpleMigrationStep {
 		private readonly IDBConnection $db,
 	) {
 	}
+	#[\Override]
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 		$schema = $schemaClosure();
 		$sharedSchema = static fn (): ISchemaWrapper => $schema;
@@ -26,6 +32,7 @@ class Version1000Date20261007000024 extends SimpleMigrationStep {
 		(new Version1000Date20261007000023($this->db))->changeSchema($output, $sharedSchema, $options);
 		return $schema;
 	}
+	#[\Override]
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
 		$schema = $schemaClosure();
 		// Only earlier native draft schemas have recovery_public. Never copy the

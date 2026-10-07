@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Firehose\FirehoseDaemon;
@@ -23,6 +28,7 @@ class ServeCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:serve')
 			->setDescription('Run the AT Protocol firehose WebSocket server')
@@ -32,6 +38,7 @@ class ServeCommand extends Command {
 			->addOption('host', null, InputOption::VALUE_REQUIRED, 'Host to bind to', '127.0.0.1');
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$once = $input->getOption('once');

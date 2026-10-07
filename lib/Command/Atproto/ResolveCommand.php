@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\AppViewClient;
@@ -21,9 +26,11 @@ class ResolveCommand extends Command {
 	) {
 		parent::__construct();
 	}
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:resolve')->setDescription('Resolve a Bluesky handle or DID')->addArgument('identifier', InputArgument::REQUIRED, 'Handle (alice.bsky.social) or DID (did:plc:...)');
 	}
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$identifier = (string)$input->getArgument('identifier');

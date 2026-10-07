@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Cron;
 
 use OCA\Social\Atproto\Identity\IdentityService;
@@ -21,6 +26,7 @@ class AtprotoNotifications extends TimedJob {
 		$this->setInterval(60);
 		$this->setTimeSensitivity(self::TIME_INSENSITIVE);
 	}
+	#[\Override]
 	protected function run($argument): void {
 		if (!$this->identities->isEnabled()) {
 			return;

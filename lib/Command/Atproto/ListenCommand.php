@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
 namespace OCA\Social\Command\Atproto;
 
 use OCA\Social\Atproto\Sync\JetstreamListener;
@@ -23,6 +28,7 @@ class ListenCommand extends Command {
 		parent::__construct();
 	}
 
+	#[\Override]
 	protected function configure(): void {
 		$this->setName('social:atproto:listen')
 			->setDescription('Run the AT Protocol Jetstream listener for real-time updates')
@@ -30,6 +36,7 @@ class ListenCommand extends Command {
 			->addOption('max-seconds', null, InputOption::VALUE_REQUIRED, 'Maximum seconds to run', 0);
 	}
 
+	#[\Override]
 	protected function execute(InputInterface $input, OutputInterface $output): int {
 		$io = new SymfonyStyle($input, $output);
 		$once = $input->getOption('once');

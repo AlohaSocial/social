@@ -49,7 +49,8 @@
 		"nextcloud/coding-standard": "^1.0.0",
 		"nextcloud/ocp": "dev-master",
 		"vimeo/psalm": "^6.17",
-		"symfony/console": "^6.4 || ^7.4"
+		"symfony/console": "^6.4 || ^7.4",
+		"symfony/config": "^6.4"
 	},
 	"scripts": {
 		"lint": "find . -name \\*.php -not -path './vendor/*' -not -path './build/*' -print0 | xargs -0 -n1 php -l",
