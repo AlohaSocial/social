@@ -75,7 +75,7 @@
 				<router-link :to="{ name: 'profile', params: { account: item.account.acct } }">
 					<ActorAvatar :actor="item.account" :size="16" :link="false" />
 					<span :title="item.account.acct" class="post-author">
-						{{ item.account.display_name }}&ensp;
+						{{ item.account.display_name }}
 					</span>
 				</router-link>
 				{{ t('social', 'boosted') }}
@@ -152,6 +152,8 @@ import { useTimelineStore } from '../store/timeline.js'
 
 /** the face's size inside the card, on a phone */
 const PHONE_AVATAR = 36
+/** The face beside a post in a list, sized so it lines up with the name. */
+const LIST_AVATAR = 40
 
 /** how many levels of a conversation are indented before the column runs out */
 const MAX_INDENT = 4
@@ -298,9 +300,9 @@ export default {
 	},
 
 	computed: {
-		/** the face's size: smaller on a phone, where it sits inside the card */
+		/** the face's size: smaller on a phone, where it sits inside the row */
 		avatarSize() {
-			return this.isPhone ? PHONE_AVATAR : null
+			return this.isPhone ? PHONE_AVATAR : LIST_AVATAR
 		},
 
 		/**
@@ -712,11 +714,35 @@ export default {
 	transition: opacity .16s ease;
 
 	a {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 		font-weight: 600;
 		color: var(--color-main-text);
 
 		&:hover {
 			color: var(--color-primary-element);
+		}
+	}
+
+	.post-author {
+		font-size: inherit;
+	}
+}
+
+// in a list the arrows stand over the avatar column and the booster's face
+// starts where the post's name does
+.timeline-entry:not(.notification) .boost {
+	gap: 10px;
+	padding-inline-start: 0;
+
+	> .material-design-icon {
+		display: flex;
+		justify-content: center;
+		inline-size: 40px;
+
+		@include layout.below(layout.$phone) {
+			inline-size: 36px;
 		}
 	}
 }
@@ -776,6 +802,163 @@ export default {
 @media (prefers-reduced-motion: reduce) {
 	.timeline-entry {
 		animation: none;
+	}
+}
+
+/*
+ * In a list, a post is a row rather than a card: no frame and no shadow,
+ * whitespace and a hairline between one post and the next, and the avatar
+ * beside the name inside the row. Ten boxed cards on a screen read as a
+ * form. A notification keeps its frame — on Activities the frame is what
+ * carries the "new" mark — and the post component keeps its own look
+ * wherever it is drawn outside a list (a quote, the dashboard, a profile
+ * card).
+ */
+.timeline-entry:not(.notification) {
+	position: relative;
+	margin-bottom: 13px;
+	padding-block: 14px 13px;
+	padding-inline: 8px;
+	border-radius: var(--border-radius-large, 8px);
+	transition: background-color .15s ease;
+
+	// the hairline sits in the middle of the gap, clear of the hover tint.
+	// A post followed by a reply has none, and that is also the only case
+	// where a reply's own ::after (its thread line) is drawn
+	&:not(:last-child):not(:has(+ .timeline-entry--reply))::after {
+		content: '';
+		position: absolute;
+		inset-inline: 8px;
+		inset-block-end: -7px;
+		block-size: 1px;
+		background: var(--color-border);
+		pointer-events: none;
+	}
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+
+	// a reply hangs off the post above by its elbow line; a gap between
+	// them would cut the line
+	&:has(+ .timeline-entry--reply) {
+		margin-bottom: 0;
+	}
+
+	// the whole row opens the thread, so the whole row answers the pointer
+	&:hover {
+		background-color: var(--color-background-hover);
+	}
+
+	.wrapper {
+		align-items: flex-start;
+		gap: 10px;
+	}
+
+	// the face's top on the name's: face and words start at one height, and
+	// the face does not reach up into the gap above the row. The name's line
+	// is taller than its letters, hence the few pixels down
+	.wrapper .entry__avatar {
+		margin-top: 2px;
+	}
+
+	// a phone draws the face over the row's corner instead (see below); with
+	// no card padding any more, the corner is the row's own
+	@include layout.below(layout.$phone) {
+		// the face starts the row here, without the step down it takes
+		// beside the name on a wide screen
+		padding-block-start: 16px;
+
+		.wrapper {
+			gap: 0;
+		}
+
+		.wrapper .entry__avatar {
+			top: 0;
+			inset-inline-start: 0;
+			margin-top: 0;
+		}
+
+		.wrapper :deep(.post-header) {
+			padding-inline-start: 46px;
+		}
+	}
+
+	.wrapper :deep(.post-content),
+	.wrapper :deep(.post-content:hover),
+	.wrapper :deep(.post-content:focus-within) {
+		padding: 0;
+		border: none;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+		transform: none;
+	}
+
+	.wrapper :deep(.post-content) {
+		line-height: 1.55;
+	}
+
+	.wrapper :deep(.post-content .post-header) {
+		margin-bottom: 2px;
+	}
+
+	// nothing under the last line, so the hairline sits as far from the
+	// words above it as from the face below it
+	.wrapper :deep(.post-content .post-message) {
+		margin-bottom: 0;
+	}
+
+	// the last icon ends where the timestamp ends: the pill's frame and the
+	// button's own padding would otherwise hold it 9px short
+	.wrapper :deep(.post-footer .post-actions-reveal) {
+		margin-inline-end: -9px;
+	}
+
+	// likewise at the bottom: a lone heart ends where the words would, and
+	// the button's room under the icon does not push the hairline down
+	.wrapper :deep(.post-footer:not(:has(.reaction-bar))) {
+		margin-bottom: -6px;
+	}
+}
+
+/*
+ * With a pointer, the controls take no room of their own: an invisible row
+ * under every post was a band of empty space down the page. The pill floats
+ * over the top end of the row, across the timestamp, when the post is
+ * pointed at or focused. A post that shows something in that row at rest —
+ * reactions, or a like or boost the reader gave — keeps it in its place.
+ */
+@media (hover: hover) {
+	.timeline-entry:not(.notification) .wrapper :deep(.post-footer:not(:has(.reaction-bar))) {
+		height: 0;
+		margin: 0;
+
+		.post-actions-reveal {
+			position: absolute;
+			inset-block-start: -8px;
+			inset-inline-end: 0;
+			margin-inline-end: 0;
+		}
+	}
+
+	// a like or boost already given shows as a small mark by the timestamp,
+	// so it never needs a row of its own under the words; its button keeps
+	// to the pill, which only shows when the post is pointed at
+	.timeline-entry:not(.notification) .wrapper :deep(.post-content:not(:has(.reaction-bar))) {
+		.post-given {
+			display: inline-flex;
+		}
+
+		&:not(:hover):not(:focus-within):not(:has(.post-actions-reveal--held)) .button-vue[aria-pressed="true"] .button-vue__icon {
+			opacity: 0;
+		}
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.timeline-entry:not(.notification) {
+		transition: none;
 	}
 }
 </style>

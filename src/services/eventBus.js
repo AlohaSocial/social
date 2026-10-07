@@ -32,6 +32,13 @@ export const LISTS_CHANGED = 'social:lists-changed'
 export const REACTION_PICK = 'social:reaction-pick'
 
 /**
+ * Asks for New short on its 24-hour lifetime: the camera in the post composer
+ * sends it, and the Shorts bar, which owns the dialog and adds the new short to
+ * the reader's own place, opens it.
+ */
+export const SHORT_COMPOSE = 'social:short-compose'
+
+/**
  * The reader pressed "Mark all as read" on the Activities page.
  *
  * The payload is the id the marker was moved to. The page owns that button

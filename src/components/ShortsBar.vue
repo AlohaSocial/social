@@ -3,85 +3,95 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section v-if="viewer && offered" class="shorts-bar" aria-labelledby="shorts-bar-heading">
-		<h2 id="shorts-bar-heading" class="shorts-bar__heading">
-			{{ t('social', 'Shorts') }}
-		</h2>
-		<ul class="shorts-bar__list">
-			<!-- the reader's own place is always there, with or without a
-			     24-hour short in it: it is where one is made from -->
-			<li class="shorts-bar__item shorts-bar__item--own">
-				<router-link
-					v-if="ownGroup"
-					class="shorts-bar__tile"
-					:class="{ 'shorts-bar__tile--unseen': !ownGroup.seen }"
-					:to="feedAt(ownGroup.account)"
-					:aria-label="t('social', 'Your shorts')">
-					<span class="shorts-bar__ring">
-						<ActorAvatar
-							:actor="viewer"
-							:size="52"
-							:link="false"
-							:hoverCard="false" />
-					</span>
-					<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
-				</router-link>
-				<button
-					v-else
-					type="button"
-					class="shorts-bar__tile shorts-bar__tile--empty"
-					:aria-label="t('social', 'New short')"
-					@click="composing = true">
-					<span class="shorts-bar__ring">
-						<ActorAvatar
-							:actor="viewer"
-							:size="52"
-							:link="false"
-							:hoverCard="false" />
-					</span>
-					<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
-				</button>
-				<NcButton
-					class="shorts-bar__add"
-					variant="primary"
-					:ariaLabel="t('social', 'New short')"
-					@click="composing = true">
-					<template #icon>
-						<IconPlus :size="16" />
-					</template>
-				</NcButton>
-			</li>
-
-			<li v-for="other in others" :key="other.account.id" class="shorts-bar__item">
-				<router-link
-					class="shorts-bar__tile"
-					:class="{ 'shorts-bar__tile--unseen': !other.seen }"
-					:style="accountStyle(other.account)"
-					:to="feedAt(other.account)"
-					:aria-label="tileLabel(other)">
-					<span class="shorts-bar__ring">
-						<ActorAvatar
-							:actor="other.account"
-							:size="52"
-							:link="false"
-							:hoverCard="false" />
-					</span>
-					<span class="shorts-bar__name">{{ firstName(other.account) }}</span>
-				</router-link>
-			</li>
-
-			<!-- the way on to every short, kept ones included -->
-			<li class="shorts-bar__item">
-				<router-link class="shorts-bar__tile shorts-bar__tile--all" :to="{ name: 'shorts' }">
-					<span class="shorts-bar__ring">
-						<span class="shorts-bar__all-icon">
-							<IconPlayBoxMultiple :size="28" />
+	<section
+		v-if="viewer && offered"
+		class="shorts-bar"
+		:class="{ 'shorts-bar--empty': others.length === 0 }"
+		:aria-labelledby="others.length > 0 ? 'shorts-bar-heading' : undefined">
+		<!-- the row only while somebody the reader follows has a 24-hour
+		     short up: a lone "Your shorts" is a place to make one, and that
+		     lives in the composer's camera; All shorts is in the sidebar.
+		     The dialog below stays mounted for the camera. -->
+		<template v-if="others.length > 0">
+			<h2 id="shorts-bar-heading" class="shorts-bar__heading">
+				{{ t('social', 'Shorts') }}
+			</h2>
+			<ul class="shorts-bar__list">
+				<!-- the reader's own place is always there, with or without a
+				     24-hour short in it: it is where one is made from -->
+				<li class="shorts-bar__item shorts-bar__item--own">
+					<router-link
+						v-if="ownGroup"
+						class="shorts-bar__tile"
+						:class="{ 'shorts-bar__tile--unseen': !ownGroup.seen }"
+						:to="feedAt(ownGroup.account)"
+						:aria-label="t('social', 'Your shorts')">
+						<span class="shorts-bar__ring">
+							<ActorAvatar
+								:actor="viewer"
+								:size="52"
+								:link="false"
+								:hoverCard="false" />
 						</span>
-					</span>
-					<span class="shorts-bar__name">{{ t('social', 'All shorts') }}</span>
-				</router-link>
-			</li>
-		</ul>
+						<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
+					</router-link>
+					<button
+						v-else
+						type="button"
+						class="shorts-bar__tile shorts-bar__tile--empty"
+						:aria-label="t('social', 'New short')"
+						@click="composing = true">
+						<span class="shorts-bar__ring">
+							<ActorAvatar
+								:actor="viewer"
+								:size="52"
+								:link="false"
+								:hoverCard="false" />
+						</span>
+						<span class="shorts-bar__name">{{ t('social', 'Your shorts') }}</span>
+					</button>
+					<NcButton
+						class="shorts-bar__add"
+						variant="primary"
+						:ariaLabel="t('social', 'New short')"
+						@click="composing = true">
+						<template #icon>
+							<IconPlus :size="16" />
+						</template>
+					</NcButton>
+				</li>
+
+				<li v-for="other in others" :key="other.account.id" class="shorts-bar__item">
+					<router-link
+						class="shorts-bar__tile"
+						:class="{ 'shorts-bar__tile--unseen': !other.seen }"
+						:style="accountStyle(other.account)"
+						:to="feedAt(other.account)"
+						:aria-label="tileLabel(other)">
+						<span class="shorts-bar__ring">
+							<ActorAvatar
+								:actor="other.account"
+								:size="52"
+								:link="false"
+								:hoverCard="false" />
+						</span>
+						<span class="shorts-bar__name">{{ firstName(other.account) }}</span>
+					</router-link>
+				</li>
+
+				<!-- the way on to every short, kept ones included -->
+				<li class="shorts-bar__item">
+					<router-link class="shorts-bar__tile shorts-bar__tile--all" :to="{ name: 'shorts' }">
+						<span class="shorts-bar__ring">
+							<span class="shorts-bar__all-icon">
+								<IconPlayBoxMultiple :size="28" />
+							</span>
+						</span>
+						<span class="shorts-bar__name">{{ t('social', 'All shorts') }}</span>
+					</router-link>
+				</li>
+			</ul>
+		</template>
 
 		<!-- New short, opened on 24 hours: a picture or a card goes on to
 		     the picture editor from inside the dialog -->
@@ -104,6 +114,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import IconPlayBoxMultiple from 'vue-material-design-icons/PlayBoxMultipleOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
 import ActorAvatar from './ActorAvatar.vue'
+import eventBus, { SHORT_COMPOSE } from '../services/eventBus.js'
 import logger from '../services/logger.js'
 import { ownAvatarUrl } from '../services/avatar.js'
 import { useAccountStore } from '../store/account.js'
@@ -123,6 +134,10 @@ const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkNam
  * (`/shorts?account=`), which is where every short is watched; the reader's
  * own place opens New short on its 24-hour lifetime when there is nothing in
  * it yet, and the + does the same at any time.
+ *
+ * The row is drawn only while somebody the reader follows has a 24-hour short
+ * up; otherwise the section takes no room and only keeps the dialog, which
+ * the post composer's camera opens through `SHORT_COMPOSE`.
  */
 export default {
 	name: 'ShortsBar',
@@ -207,10 +222,20 @@ export default {
 
 	mounted() {
 		this.load()
+		eventBus.on(SHORT_COMPOSE, this.compose)
+	},
+
+	beforeUnmount() {
+		eventBus.off(SHORT_COMPOSE, this.compose)
 	},
 
 	methods: {
 		accountStyle,
+
+		/** The composer's camera asked for a new 24-hour short. */
+		compose() {
+			this.composing = true
+		},
 
 		/**
 		 * What to call somebody under their face.
@@ -450,5 +475,11 @@ export default {
 	padding: 0 !important;
 	border: 2px solid var(--color-main-background);
 	border-radius: 50%;
+}
+
+/* nothing to show: the section only holds the dialog, and takes no room */
+.shorts-bar--empty {
+	margin: 0;
+	padding: 0;
 }
 </style>

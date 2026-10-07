@@ -301,10 +301,8 @@ The sidebar is the map:
     Closing the dialog with a video in it asks before throwing it away.
 - **Activities** — your notifications: mentions, favourites, boosts, new
   followers and follow requests, poll results, edits of posts you boosted.
-  It is in the account menu at the foot of the sidebar, under **My profile**,
-  because it is about you rather than a place to go and read. The badge
-  counts what arrived since you last looked, and sits on your name while the
-  menu is shut so it is never out of sight; the same
+  It is in the sidebar, between Shorts and Direct messages. The badge
+  beside it counts what arrived since you last looked; the same
   events reach the Nextcloud bell and its mail digest; a follow request can be
   accepted or declined from the bell itself. The page says how many that is at
   the top — *3 new activities*, with a **Mark all as read** button that clears
@@ -438,6 +436,26 @@ same announcement.
 
 Administrators post and remove announcements in **Administration → Aloha Social**.
 
+### How a post reads
+
+A feed is a column of posts separated by thin lines, not a stack of boxes,
+narrow enough that a line of text is easy to follow back to its start (the
+photo and video grids keep the wider page). Each post has its author's face
+beside their name, how old it is in a word — *now*, *5m*, *3h*, *2d*, *2w*,
+then the date — and the full date when you point at it. A post shows who can
+see it only when that is not everybody: a mark for unlisted, followers-only or
+direct posts, nothing for public ones.
+
+The reply, boost and like buttons stay out of sight until you point at a post
+or reach it with the keyboard, so a page of posts is a page of words; a like
+or boost you have given shows as a small heart or arrows beside the post's age.
+On a phone they are always there. The
+three are on every post in the same place; one that cannot be used — a boost
+of a followers-only post, a reply the author does not take — is greyed out and
+says why. To react with an emoji, hold the heart (or right-click it), or choose
+**Add a reaction** in the post's menu; the reactions people left are shown under
+the post.
+
 ### Shorts that last 24 hours
 
 A short you post for **24 hours** is one picture, video or card of words that
@@ -449,7 +467,9 @@ comes first, with a **+** on it to make a new one. After it come the people
 you follow who have a 24-hour short up, the ones holding something you have
 not seen first, with a coloured ring around their face; the ring goes grey
 once you have seen them all. The last tile, **All shorts**, opens the Shorts
-stack.
+stack. The bar is there only while somebody you follow has a 24-hour
+short up, and takes no room at all while nobody does; **Shorts** in the
+sidebar is always there.
 
 Tap a face and that person's shorts play one after another in the same
 player as every other short: a picture or a card for the seconds its poster
@@ -459,7 +479,9 @@ sides to move to the next person. A video plays with its sound on; the
 speaker at the top turns it off (or `m`), and when the browser holds the
 sound back a "Tap for sound" hint points at the speaker.
 
-To post one, press the **+** (on your tile or in the Shorts stack), choose
+To post one, press the camera at the end of the box you write posts in
+(**New short**) — it opens on 24 hours — or the **+** (on your tile or in the
+Shorts stack) and choose
 **Only for 24 hours, for my followers**, and either record or upload a video
 as for any short, or choose a picture or words. A picture goes on to an
 editor: add a caption if you like, and say how many seconds it should show

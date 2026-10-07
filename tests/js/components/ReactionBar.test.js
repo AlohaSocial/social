@@ -37,6 +37,16 @@ describe('ReactionBar', () => {
 		axios.post.mockReset()
 	})
 
+	/** A post reacts through its heart and its menu; the bar's own button is for elsewhere. */
+	it('offers no button of its own when asked not to, and draws nothing with no reactions to show', () => {
+		const empty = mountBar({ modelValue: [], offerAdd: false })
+		expect(empty.find('.reaction-bar').exists()).toBe(false)
+
+		const some = mountBar({ modelValue: [{ name: '🎉', count: 2, me: false }], offerAdd: false })
+		expect(some.findAll('.reaction')).toHaveLength(1)
+		expect(some.find('.reaction--add').exists()).toBe(false)
+	})
+
 	it('draws one chip per emoji, with its count', () => {
 		const wrapper = mountBar({ modelValue: bar })
 		const chips = wrapper.findAll('.reaction:not(.reaction--add)')

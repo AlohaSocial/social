@@ -68,10 +68,19 @@ describe('the post menu', () => {
 				'Quote',
 				'Open on original instance',
 				'Bookmark',
+				'Add a reaction',
 				'Mute jens@chaos.social',
 				'Block jens@chaos.social',
 				'Report',
 			])
+		})
+
+		it('offers a reaction to a keyboard, which has no hold or right-click', async () => {
+			const wrapper = mountMenu()
+			await itemFor(wrapper, 'Add a reaction').trigger('click')
+
+			expect(wrapper.emitted('react')).toHaveLength(1)
+			expect(items(mountMenu({}, { isPublic: true }))).not.toContain('Add a reaction')
 		})
 
 		/** Every one of these is the reader acting on their own post. */
@@ -96,6 +105,7 @@ describe('the post menu', () => {
 				'Delete & re-draft',
 				'Delivery status',
 				'Bookmark',
+				'Add a reaction',
 				'Add to a collection',
 				'Pin to profile',
 			])

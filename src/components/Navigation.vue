@@ -181,8 +181,6 @@
 				     and the cog itself is hidden. -->
 				<NcAppNavigationSettings
 					class="navigation__more"
-					:class="{ 'navigation__more--rang': ringing }"
-					:data-unread="unreadBadge"
 					:style="{ '--social-face': `url(${avatarUrl})`, '--entry-total': moreCount }"
 					:name="profileName">
 					<!-- `--entry-index`, with `--entry-total` above, is what
@@ -195,7 +193,6 @@
 					<NcAppNavigationItem
 						v-for="(item, index) in menu.more"
 						:key="item.key"
-						:class="{ navigation__rang: ringing && item.key === 'social-notifications' }"
 						:style="{ '--entry-index': index }"
 						:name="item.title"
 						:href="hrefFor(item.to)"
@@ -553,22 +550,6 @@ export default {
 		},
 
 		/**
-		 * The unread count the account button shows, so moving Activities
-		 * into the menu does not hide it while the menu is shut. Undefined
-		 * when there is nothing unread, which removes the attribute.
-		 *
-		 * @return {string|undefined}
-		 */
-		unreadBadge() {
-			const count = this.unreadNotifications
-			if (!(count > 0)) {
-				return undefined
-			}
-
-			return count > 99 ? '99+' : String(count)
-		},
-
-		/**
 		 * How many rows the account menu holds.
 		 *
 		 * The stylesheet staggers them from the bottom row upward, so it needs
@@ -659,6 +640,16 @@ export default {
 						title: t('social', 'Shorts'),
 						to: { name: 'shorts' },
 					},
+					// what happened to the reader — a mention, a like, a follow.
+					// "Activities" rather than "Notifications": only some of it
+					// was ever notified.
+					{
+						key: 'social-notifications',
+						icon: IconBell,
+						title: t('social', 'Activities'),
+						to: { name: 'timeline', params: { type: 'notifications' } },
+						counter: this.unreadNotifications,
+					},
 					{
 						key: 'social-direct',
 						icon: IconCommentAccount,
@@ -704,19 +695,6 @@ export default {
 								to: { name: 'profile', params: { account: this.currentAccount.acct } },
 							}]
 						: []),
-					// Under the reader's own name, beside their profile: what
-					// happened to *them* -- a mention, a like, a follow -- is
-					// about the account, where the sidebar above is places to
-					// go and read. "Activities" rather than "Notifications":
-					// only some of it was ever notified. The count is not lost
-					// with the menu shut: the account button carries it too.
-					{
-						key: 'social-notifications',
-						icon: IconBell,
-						title: t('social', 'Activities'),
-						to: { name: 'timeline', params: { type: 'notifications' } },
-						counter: this.unreadNotifications,
-					},
 					{
 						key: 'social-follow-requests',
 						icon: IconAccountClock,
@@ -1612,54 +1590,6 @@ export default {
  * The guard existed to stop a bare `opacity: 0` from leaving it permanently
  * empty, and there is no longer a bare `opacity: 0`.
  */
-/*
- * The unread Activities count, on the account button while the menu is shut.
- *
- * Activities lives inside the account menu, and a count nobody can see until
- * they open a menu is a count nobody sees. So the button carries it, in the
- * same quiet bubble the entry uses, and drops it once the menu is open and
- * the entry shows its own. `attr()` reads `data-unread`, which the template
- * removes altogether when there is nothing unread.
- */
-.navigation__more[data-unread]::after {
-	content: attr(data-unread);
-	position: absolute;
-	inset-block-start: calc(var(--default-grid-baseline) + var(--default-clickable-area) / 2);
-	inset-inline-end: calc(var(--default-grid-baseline) * 3);
-	transform: translateY(-50%);
-	min-inline-size: 20px;
-	padding-inline: 6px;
-	border-radius: var(--border-radius-pill, 999px);
-	background: var(--color-primary-element-light);
-	color: var(--color-primary-element-light-text);
-	font-size: 12px;
-	font-weight: 600;
-	line-height: 20px;
-	text-align: center;
-	font-variant-numeric: tabular-nums;
-	pointer-events: none;
-}
-
-.navigation__more:has(button[aria-expanded="true"])::after {
-	display: none;
-}
-
-/* a new one arrived: the bubble swells once, as the bell used to wobble */
-@keyframes social-unread-bump {
-	0%, 100% { transform: translateY(-50%) scale(1); }
-	40% { transform: translateY(-50%) scale(1.3); }
-}
-
-.navigation__more--rang[data-unread]::after {
-	animation: social-unread-bump .5s cubic-bezier(.3, 1.5, .5, 1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.navigation__more--rang[data-unread]::after {
-		animation: none;
-	}
-}
-
 @keyframes social-menu-pop {
 	from {
 		opacity: 0;
