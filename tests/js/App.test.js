@@ -595,4 +595,54 @@ describe('App', () => {
 			expect(wrapper.find('.social__visitor').exists()).toBe(false)
 		})
 	})
+
+	// a scope of the feed is a filter on the page, not another page: the
+	// whole column sliding and fading moved the switcher out from under the
+	// pointer that had just used it
+	describe('animating a page change', () => {
+		let resolve
+		let startViewTransition
+
+		beforeEach(() => {
+			router = {
+				push: vi.fn(),
+				beforeEach: vi.fn(() => () => {}),
+				beforeResolve: vi.fn((hook) => {
+					resolve = hook
+
+					return () => {}
+				}),
+			}
+			startViewTransition = vi.fn((update) => {
+				update()
+			})
+			document.startViewTransition = startViewTransition
+		})
+
+		afterEach(() => {
+			delete document.startViewTransition
+		})
+
+		const feed = (type) => ({ name: 'timeline', params: type === undefined ? {} : { type } })
+
+		it.each([
+			[undefined, 'interests'],
+			['interests', 'timeline'],
+			['timeline', 'federated'],
+			['federated', undefined],
+		])('does not animate a switch of scope, %s to %s', (from, to) => {
+			mountApp()
+
+			expect(resolve(feed(to), feed(from))).toBe(true)
+			expect(startViewTransition).not.toHaveBeenCalled()
+		})
+
+		it('still animates a move to another sidebar entry', async () => {
+			mountApp()
+
+			await resolve(feed('photos'), feed('federated'))
+
+			expect(startViewTransition).toHaveBeenCalledTimes(1)
+		})
+	})
 })

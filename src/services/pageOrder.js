@@ -37,11 +37,18 @@ const ORDER = [
 const BEYOND = ORDER.length
 
 /**
+ * The feed's scopes: My Feed, For you, Local and Global are one sidebar entry
+ * read at different distances, and the switcher above the posts moves between
+ * them. They are one page here, so changing scope is not a page change.
+ */
+const FEED_SCOPES = ['', 'home', 'interests', 'timeline', 'federated']
+
+/**
  * What a route is called for the purpose of ordering.
  *
  * The timeline is six sidebar entries wearing one route name, told apart by
- * `params.type`, so the type is part of the identity. Everything else is its
- * route name.
+ * `params.type`, so the type is part of the identity -- except for the feed's
+ * scopes, which are all the first entry. Everything else is its route name.
  *
  * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} route a route, or anything with `name` and `params`
  * @return {string} the identity
@@ -49,10 +56,26 @@ const BEYOND = ORDER.length
 export function pageIdentity(route) {
 	const name = String(route?.name ?? '')
 	if (name === 'timeline') {
-		return 'timeline:' + String(route?.params?.type ?? '')
+		const type = String(route?.params?.type ?? '')
+
+		return 'timeline:' + (FEED_SCOPES.includes(type) ? '' : type)
 	}
 
 	return name
+}
+
+/**
+ * Whether two routes are the same page, read differently: another scope of the
+ * feed, another scope of Photos, the same page with another query. Nothing is
+ * animated between them -- the reader changed what the page shows, not where
+ * they are.
+ *
+ * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}} to where they are going
+ * @param {{name?: string|symbol|null, params?: Record<string, string|string[]>}|null|undefined} from where they were
+ * @return {boolean}
+ */
+export function isSamePage(to, from) {
+	return from !== undefined && from !== null && pageIdentity(to) === pageIdentity(from)
 }
 
 /**

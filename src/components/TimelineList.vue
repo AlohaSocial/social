@@ -830,6 +830,12 @@ export default {
 		 */
 		timelineIdentity() {
 			if (!this.showParents) {
+				// a list put back, or fetched ahead, replaces the one on
+				// screen in the same render: drawn as a swap, like a held-over
+				// list being replaced
+				if (this.timelineStore.restored && this.timeline.length > 0) {
+					this.startSwap()
+				}
 				this.rememberPlace()
 				this.readPlace()
 				this.resetAndLoad()

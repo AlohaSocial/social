@@ -1442,6 +1442,20 @@ describe('TimelineList', () => {
 			expect(wrapper.find('.timeline-list--swapping').exists()).toBe(false)
 		})
 
+		it('draws a list put back, or fetched ahead, as a swap', async () => {
+			// switching to a scope the store already holds replaces the posts
+			// in one render; rising them in one by one was the page blinking
+			const { wrapper, store } = mountList({ timeline: [status('1'), status('2')] })
+			await flushPromises()
+
+			store.$patch({ ...showing('["federated","",{}]'), statuses: { 9: status('9') }, timeline: ['9'], restored: true })
+			await nextTick()
+			await nextTick()
+
+			expect(wrapper.find('.timeline-list--swapping').exists()).toBe(true)
+			expect(wrapper.findComponent(TimelineEntryStub).props('immediate')).toBe(true)
+		})
+
 		it('does not call a list that was simply there a swap', async () => {
 			const { wrapper } = mountList({ timeline: [status('1')] })
 			await flushPromises()
