@@ -885,13 +885,13 @@ describe('TimelinePost', () => {
 		})
 
 		/** The page counts on its own when the reader likes, so the server's zero is not enough. */
-		it('draws no like or boost counter for a reader who hides the numbers, only the replies', () => {
+		it('draws no counter at all for a reader who hides the numbers', () => {
 			const { wrapper } = mountPost({
 				item: makeItem({ replies_count: 3, reblogs_count: 5, favourites_count: 12 }),
 				serverData: { public: false, cloudAddress: 'https://cloud.example.org', hideCounts: true },
 			})
 
-			expect(wrapper.findAll('.post-action-count').map((count) => count.text())).toEqual(['3'])
+			expect(wrapper.findAll('.post-action-count')).toHaveLength(0)
 		})
 	})
 
