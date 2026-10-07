@@ -10,10 +10,10 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use Psr\Log\NullLogger;
 #[AllowMockObjectsWithoutExpectations]
 class PublicationPolicyTest extends TestCase {
-	public function testEveryRestrictedAudienceStaysOutOfTheOutbox(): void {
+	public function testRestrictedAudienceNeverPublishesAndWithdrawsAnyPreviousPublicCopy(): void {
 		foreach (['unlisted', 'followers', 'direct'] as $visibility) {
 			$post = $this->createStub(Stream::class); $post->method('isLocal')->willReturn(true); $post->method('getVisibility')->willReturn($visibility);
-			$queue = $this->createMock(OutboundQueue::class); $queue->expects(self::never())->method('queuePost');
+			$queue = $this->createMock(OutboundQueue::class); $queue->expects(self::never())->method('queuePost'); $queue->expects(self::once())->method('queueDelete');
 			(new AtprotoPostListener($queue, new NullLogger()))->handle(new PostPublishedEvent($post));
 		}
 	}

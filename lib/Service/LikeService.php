@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 namespace OCA\Social\Service;
+use OCA\Social\Model\Details;
 
 use Exception;
 use OCA\Social\AP;
@@ -43,6 +44,7 @@ class LikeService {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ModerationService $moderationService,
+		private ?\OCA\Social\Atproto\RecordMapper\InteractionPublisher $nativePublisher = null,
 	) {
 	}
 
@@ -80,6 +82,11 @@ class LikeService {
 			]);
 			throw new StreamNotFoundException('Stream is not a Note');
 		}
+		$native = $note->getDetails(Details::ATPROTO);
+		if (isset($native['uri'], $native['cid'])) {
+			if ($this->nativePublisher === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+			$this->nativePublisher->publish($actor->getUserId(), 'like', $native['uri'], $native['cid'], false);
+		}
 
 		$this->logger->info('LikeService::create - note found', [
 			'noteId' => $note->getId(),
@@ -89,7 +96,7 @@ class LikeService {
 
 		$like->setObjectId($note->getId());
 		$like->setTo($note->getAttributedTo());
-		$this->assignInstance($like, $note);
+		if (!isset($native['uri'])) { $this->assignInstance($like, $note); }
 
 		$this->logger->info('LikeService::create - instance paths', [
 			'paths' => array_map(function ($p) {
@@ -105,7 +112,7 @@ class LikeService {
 		$interface->save($like);
 
 		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::LIKED, true);
-		$token = $this->activityService->request($like);
+		if (!isset($native['uri'])) { $token = $this->activityService->request($like); }
 
 		$this->logger->info('LikeService::create - request done', [
 			'token' => $token,
@@ -131,9 +138,14 @@ class LikeService {
 		if ($note->getType() !== Note::TYPE) {
 			throw new StreamNotFoundException('Stream is not a Note');
 		}
+		$native = $note->getDetails(Details::ATPROTO);
+		if (isset($native['uri'], $native['cid'])) {
+			if ($this->nativePublisher === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+			$this->nativePublisher->publish($actor->getUserId(), 'like', $native['uri'], $native['cid'], true);
+		}
 
 		try {
-			$this->assignInstance($undo, $note);
+			if (!isset($native['uri'])) { $this->assignInstance($undo, $note); }
 		} catch (Exception $e) {
 			// the Undo has nowhere to go, but the like still has to come off
 			// this instance — the author simply keeps theirs
@@ -160,7 +172,7 @@ class LikeService {
 			$undo->setPublished(date('c'));
 			$this->signatureService->signObject($actor, $undo);
 
-			$token = $this->activityService->request($undo);
+			if (!isset($native['uri'])) { $token = $this->activityService->request($undo); }
 		} catch (ItemUnknownException $e) {
 		} catch (ItemNotFoundException $e) {
 		}

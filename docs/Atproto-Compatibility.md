@@ -1008,3 +1008,12 @@ repository primitives include deterministic MST layers, CARv1 framing and
 monotonic sortable TIDs. Signing uses the installed `Mdanter\Ecc` API from
 `paragonie/ecc`, RFC 6979 nonces and raw 64-byte low-S signatures. This is
 unit-level evidence, not evidence of relay indexing or a complete PDS.
+
+### Shared application interface (user clarification, 2026-10-07)
+
+Bluesky and ActivityPub accounts and posts use the existing common timeline,
+search, profile pages, composer and interaction controls. There is no second
+Bluesky application inside Social. Protocol-specific identity, recovery and
+administration settings remain separate. Native imported profiles are stored
+in the ordinary actor cache; posts are Notes in the ordinary stream, with
+AT Protocol strong references retained as internal metadata.

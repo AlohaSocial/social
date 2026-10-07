@@ -10,7 +10,7 @@ class MerkleSearchTree {
 	public static function exportCar(array $records): array {
 		ksort($records, SORT_STRING); $entries = [];
 		foreach ($records as $key => $record) {
-			if (!preg_match('#^[a-zA-Z0-9._~\-]+/[a-zA-Z0-9._~\-]+$#D', $key)) { throw new \InvalidArgumentException('Invalid repository path'); }
+			if (!preg_match('#^[a-zA-Z0-9._~:\-]+/[a-zA-Z0-9._~:\-]+$#D', $key)) { throw new \InvalidArgumentException('Invalid repository path'); }
 			$entries[] = ['key' => $key, 'cid' => $record['cid'], 'layer' => self::layer($key)];
 		}
 		$blocks = []; $layer = $entries === [] ? 0 : max(array_column($entries, 'layer'));

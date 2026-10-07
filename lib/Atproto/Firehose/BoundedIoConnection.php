@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Firehose;
 use Ratchet\Server\IoConnection;
 use React\Socket\ConnectionInterface;
+#[\AllowDynamicProperties]
 class BoundedIoConnection extends IoConnection {
 	private bool $blocked = false;
 	private int $buffered = 0;

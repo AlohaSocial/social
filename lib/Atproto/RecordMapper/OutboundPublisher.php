@@ -15,6 +15,7 @@ class OutboundPublisher {
 		try { $post = $this->streams->getStreamByNid($nid); } catch (ItemUnknownException) { $this->deletePost($nid); return; }
 		if (!$post->isLocal() || $post->getVisibility() !== 'public' || !$post->addressesPublic()) { $this->deletePost($nid); return; }
 		$identity = $this->identities->getIdentityByActor($post->getAttributedTo()) ?? $this->identities->createIdentity($post->getAttributedTo());
+		if ($identity['state'] !== IdentityService::STATE_ACTIVE) { $this->identities->registerPending($identity['did']); $identity = $this->identities->getIdentityByDid($identity['did']); }
 		if ($identity['state'] !== IdentityService::STATE_ACTIVE) { throw new \RuntimeException('Identity is awaiting PLC registration'); }
 		$existing = $this->localRecord($nid); $mapped = $this->mapper->map($post, $identity['did']);
 		if ($mapped === null) { return; }

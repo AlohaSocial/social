@@ -13,6 +13,7 @@ class AtprotoPostListener implements IEventListener {
 			$post = $event->getPost();
 			if ($event instanceof PostDeletedEvent) { $this->queue->queueDelete((string)$post->getNid()); }
 			elseif ($post->isLocal() && $post->getVisibility() === 'public' && $post->addressesPublic()) { $this->queue->queuePost((string)$post->getNid()); }
+			elseif ($post->isLocal()) { $this->queue->queueDelete((string)$post->getNid()); }
 		} catch (\Throwable $e) { $this->logger->error('AT Protocol could not queue a Social post', ['exception' => $e]); }
 	}
 }

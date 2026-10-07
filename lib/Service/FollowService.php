@@ -77,6 +77,8 @@ class FollowService {
 		private AccountService $accountService,
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
+		private ?\OCA\Social\Atproto\RecordMapper\InteractionPublisher $nativePublisher = null,
+		private ?\OCA\Social\Atproto\AuthorWatchService $nativeWatches = null,
 	) {
 	}
 
@@ -268,7 +270,8 @@ class FollowService {
 		// `addInstancePath()` drops the empty URI, `request()` answers
 		// "<request token not needed>", and the follow row sat pending for
 		// ever with a log line claiming the activity had been queued.
-		if (!$remoteActor->isLocal() && $remoteActor->getInbox() === '') {
+		$native = $remoteActor->getDetails(Details::ATPROTO);
+		if (!$remoteActor->isLocal() && $remoteActor->getInbox() === '' && !isset($native['did'])) {
 			throw new InvalidResourceException(
 				$remoteActor->getId() . ' publishes no inbox, so a Follow cannot be delivered'
 			);
@@ -290,6 +293,12 @@ class FollowService {
 
 			return false;
 		} catch (FollowNotFoundException $e) {
+			if (isset($native['did'])) {
+				if ($this->nativePublisher === null || $this->nativeWatches === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+				$this->nativePublisher->publish($actor->getUserId(), 'follow', $native['did']);
+				$this->nativeWatches->watch($native['did'], $native['handle']);
+				$follow->setAccepted(true);
+			}
 			$this->followsRequest->save($follow);
 			// their home timeline holds different posts from now on, which its
 			// ETag has no other way of knowing — see TimelineRevisionService
@@ -299,6 +308,8 @@ class FollowService {
 				'actor' => $actor->getId(),
 				'object' => $remoteActor->getId(),
 			]);
+
+			if (isset($native['did'])) { return true; }
 
 			if ($remoteActor->isLocal()) {
 				// Both sides live in this database, and a delivery addressed to
@@ -373,8 +384,14 @@ class FollowService {
 
 		try {
 			$follow = $this->followsRequest->getByPersons($actor->getId(), $remoteActor->getId());
+			$native = $remoteActor->getDetails(Details::ATPROTO);
+			if (isset($native['did'])) {
+				if ($this->nativePublisher === null) { throw new \RuntimeException('Native protocol publisher unavailable'); }
+				$this->nativePublisher->publish($actor->getUserId(), 'follow', $native['did'], null, true);
+			}
 			$this->followsRequest->delete($follow);
 			$this->timelineRevisionService->bumpForActor($actor->getId());
+			if (isset($native['did'])) { return true; }
 			if ($follow->isAccepted()) {
 				// the account they left has one follower fewer. The Accept is
 				// what counted it up — locally handled or delivered, see

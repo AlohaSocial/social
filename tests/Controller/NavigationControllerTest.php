@@ -172,6 +172,7 @@ class NavigationControllerTest extends TestCase {
 		$this->assertInstanceOf(TemplateResponse::class, $response);
 		$this->assertSame('main', $response->getTemplateName());
 		$this->assertSame([
+			'atprotoEnabled' => false,
 			'public' => false,
 			'firstrun' => false,
 			'introductionDismissed' => false,

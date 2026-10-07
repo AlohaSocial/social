@@ -44,64 +44,7 @@ class RotateKeyCommand extends Command {
 			$io->text('Running in dry-run mode');
 		}
 		
-		// Generate new instance rotation key
-		$newKey = $this->keyManager->generateRotationKey();
-		$io->text("New rotation key: {$newKey['multibase']}");
-		
-		if ($dryRun) {
-			$io->text('Would store new key and queue PLC operations for all identities');
-			return Command::SUCCESS;
-		}
-		
-		// Store new key
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('social_atproto_instance_key')
-			->values([
-				'kind' => $qb->createNamedParameter('rotation'),
-				'private_key' => $qb->createNamedParameter($this->keyManager->sealPrivateKey($newKey['private'])),
-				'public_key' => $qb->createNamedParameter($newKey['multibase']),
-				'created' => $qb->createNamedParameter((new \DateTime())->format('Y-m-d H:i:s'))
-			])
-			->executeStatement();
-		
-		$io->success('New rotation key stored');
-		
-		// Queue PLC operations for all active identities
-		$qb->select('did, actor_id')
-			->from('social_atproto_identity')
-			->where($qb->expr()->eq('state', $qb->createNamedParameter('active')));
-		
-		$identities = $qb->executeQuery()->fetchAllAssociative();
-		$io->text("Queuing PLC operations for " . count($identities) . " identities...");
-		
-		$processed = 0;
-		foreach ($identities as $identity) {
-			$plcOperation = [
-				'type' => 'update',
-				'did' => $identity['did'],
-				'rotationKeys' => [$newKey['multibase'], $identity['recovery_public']],
-				'prev' => null // Would need to get previous operation CID
-			];
-			
-			$qb->insert('social_atproto_plc_log')
-				->values([
-					'did' => $qb->createNamedParameter($identity['did']),
-					'cid' => $qb->createNamedParameter(''),
-					'operation' => $qb->createNamedParameter(json_encode($plcOperation)),
-					'sent' => $qb->createNamedParameter(null, \PDO::PARAM_NULL),
-					'confirmed' => $qb->createNamedParameter(null, \PDO::PARAM_NULL)
-				])
-				->executeStatement();
-			
-			$processed++;
-			if ($processed % $batch === 0) {
-				$io->text("Processed $processed identities...");
-			}
-		}
-		
-		$io->success("Queued $processed PLC operations for rotation");
-		$io->note('Operations will be sent to PLC directory by the PLC client');
-		
-		return Command::SUCCESS;
+		$io->error('Instance rotation is not available until resumable PLC migration is implemented. No keys or PLC operations were changed.');
+		return Command::FAILURE;
 	}
 }

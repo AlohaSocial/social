@@ -152,6 +152,8 @@ class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(ClientApiAtRoot::class);
 		$context->registerSetupCheck(ProxyForwardsTheScheme::class);
 		$context->registerSetupCheck(MemcacheConfigured::class);
+		$context->registerSetupCheck(\OCA\Social\SetupChecks\AtprotoEnabledCheck::class);
+		$context->registerSetupCheck(\OCA\Social\SetupChecks\AtprotoHttpsCheck::class);
 	}
 
 	/**

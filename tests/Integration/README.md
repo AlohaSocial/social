@@ -13,6 +13,7 @@ an OAuth secret column too short for its hashed value on MySQL, and an UPDATE
 built without a SET clause — which is exactly the class of regression they exist
 to stop.
 
+- `Atproto/RepositoryTest` — native record/commit/event BLOB round trips, signature and MST verification, and atomic rollback against the real database; no PLC or relay writes.
 - `Db/TimelineSeedTest` — seeds actors, follows and notes through the production
   Request classes and asserts what each timeline returns: home via the follow
   join, direct-message isolation, favourites/bookmarks via the action join,

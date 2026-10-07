@@ -1342,3 +1342,24 @@ or confirmation that a relay has indexed the instance.
 | GET | `/api/admin/atproto/settings` | Enablement and public PDS endpoint |
 | POST | `/api/admin/atproto/settings` | Persist instance-wide enablement |
 | GET | `/api/admin/atproto/status` | Actual identity, record, blob, event and queue counts |
+
+### Session-owned Bluesky reads and interactions
+
+These routes require an authenticated local session and instance enablement.
+POST requests require CSRF protection. Reads use a fixed public AppView without
+forwarding credentials. Writes commit to the current user's native repository;
+request-supplied actor IDs cannot choose another account. Relay indexing is
+asynchronous, so a committed action is not an AppView indexing confirmation.
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/atproto/search/actors` | Public actor search, capped at 25 results |
+| GET | `/api/atproto/profile` | Public actor profile |
+| GET | `/api/atproto/thread` | Public post thread, capped depth |
+| GET | `/api/atproto/author-feed` | Public author feed, capped at 25 posts |
+| POST | `/api/atproto/follow` | Commit native follow (`targetDid`) |
+| POST | `/api/atproto/unfollow` | Remove owned matching follows (`targetDid`) |
+| POST | `/api/atproto/like` | Commit native like (`uri`, `cid`) |
+| POST | `/api/atproto/unlike` | Remove owned matching likes (`uri`) |
+| POST | `/api/atproto/repost` | Commit native repost (`uri`, `cid`) |
+| POST | `/api/atproto/undorepost` | Remove owned matching reposts (`uri`) |

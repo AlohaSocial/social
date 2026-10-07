@@ -23,7 +23,8 @@ class CrawlCommand extends Command {
 		private readonly Repository $repository,
 		private readonly IDBConnection $db,
 		private readonly IConfig $config,
-		private readonly LoggerInterface $logger
+		private readonly LoggerInterface $logger,
+		private readonly \OCP\Http\Client\IClientService $clients
 	) {
 		parent::__construct();
 	}
@@ -42,31 +43,23 @@ class CrawlCommand extends Command {
 		
 		$relays = json_decode($this->config->getAppValue('social', 'atproto_relays', '["https://bsky.network"]'), true);
 		
-		if ($did) {
-			$dids = [$did];
-		} else {
-			// Get all active DIDs
-			$qb = $this->db->getQueryBuilder();
-			$qb->select('did')
-				->from('social_atproto_identity')
-				->where($qb->expr()->eq('state', $qb->createNamedParameter('active')));
-			$dids = array_column($qb->executeQuery()->fetchAllAssociative(), 'did');
-		}
-		
+		if ($did && !$this->identityService->getIdentityByDid($did)) { $io->error('DID is not owned by this instance'); return Command::FAILURE; }
+		if (!$this->identityService->isEnabled()) { $io->error('AT Protocol is disabled'); return Command::FAILURE; }
+		$failed = false;
 		foreach ($relays as $relay) {
-			$io->text("Requesting crawl from $relay...");
-			foreach ($dids as $targetDid) {
-				$success = $this->requestCrawl($relay, $targetDid);
-				$io->text("  $targetDid: " . ($success ? 'OK' : 'FAILED'));
-			}
+			$success = $this->requestCrawl($relay, (string)parse_url($this->identityService->getPdsEndpoint(), PHP_URL_HOST));
+			$io->text($relay . ': ' . ($success ? 'Accepted' : 'FAILED'));
+			$failed = $failed || !$success;
 		}
-		
-		return Command::SUCCESS;
+		return $failed ? Command::FAILURE : Command::SUCCESS;
 	}
-	
+
 	private function requestCrawl(string $relay, string $did): bool {
-		// Send com.atproto.sync.requestCrawl to relay
-		// This would use HTTP client to call the relay's requestCrawl endpoint
-		return true; // Placeholder
+		if (parse_url($relay, PHP_URL_SCHEME) !== 'https' || parse_url($relay, PHP_URL_USER) !== null) { return false; }
+		try {
+			$response = $this->clients->newClient()->post(rtrim($relay, '/') . '/xrpc/com.atproto.sync.requestCrawl', ['timeout' => 15, 'allow_redirects' => false,
+				'headers' => ['Content-Type' => 'application/json'], 'body' => json_encode(['hostname' => $did], JSON_THROW_ON_ERROR)]);
+			return $response->getStatusCode() === 200;
+		} catch (\Throwable $e) { $this->logger->warning('AT Protocol relay crawl request failed', ['relay' => $relay, 'exception' => $e]); return false; }
 	}
 }

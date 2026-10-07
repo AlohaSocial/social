@@ -27,6 +27,8 @@ namespace OCA\Social\Model;
  * @see \OCA\Social\Traits\TDetails for the accessors
  */
 final class Details {
+	/** Native protocol identity or strong reference on a shared actor or post. */
+	public const ATPROTO = 'atproto';
 	/**
 	 * Counts on a post.
 	 *

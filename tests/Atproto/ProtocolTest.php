@@ -6,6 +6,14 @@ use OCA\Social\Atproto\Identity\KeyManager;
 use OCA\Social\Atproto\Repository\MerkleSearchTree;
 use PHPUnit\Framework\TestCase;
 class ProtocolTest extends TestCase {
+	public function testMstRootsMatchOfficialJavascriptReference(): void {
+		foreach (json_decode(file_get_contents(__DIR__ . '/fixtures/mst-reference-roots.json'), true) as $count => $root) {
+			$records = [];
+			for ($i = 0; $i < $count; $i++) { $records['app.bsky.feed.post/' . substr(hash('sha256', (string)$i), 0, 13)] = ['cid' => Cid::hash(DagCbor::encode(['text' => 'record ' . $i]))]; }
+			self::assertSame($root, MerkleSearchTree::build($records));
+		}
+	}
+
 	public function testOfficialDataModelVectors(): void {
 		$fixtures = json_decode(file_get_contents(__DIR__ . '/fixtures/data-model-fixtures.json'), false, 512, JSON_THROW_ON_ERROR);
 		foreach ($fixtures as $fixture) {

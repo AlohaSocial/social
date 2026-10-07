@@ -151,6 +151,7 @@ class NavigationController extends Controller {
 		]);
 
 		$serverData = [
+			'atprotoEnabled' => in_array($this->configService->getAppValue(ConfigService::ATPROTO_ENABLED), ['1', 'true'], true),
 			'public' => false,
 			'firstrun' => false,
 			'introductionDismissed' => $this->config->getUserValue(

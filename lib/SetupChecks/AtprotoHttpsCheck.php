@@ -1,55 +1,18 @@
 <?php
 declare(strict_types=1);
-
 namespace OCA\Social\SetupChecks;
-
-use OCP\SetupCheckResult;
-use OCP\IConfig;
-use Psr\Log\LoggerInterface;
-use OCP\IServerContainer;
-
-class AtprotoHttpsCheck extends \OCA\Social\SetupChecks\CheckBase {
-	public function __construct(
-		private readonly IConfig $config,
-		private readonly LoggerInterface $logger,
-		private readonly IServerContainer $serverContainer
-	) {
-		parent::__construct($config, $logger, $serverContainer);
-	}
-	
-	public function getId(): string {
-		return 'social_atproto_https';
-	}
-	
-	public function getTitle(): string {
-		return 'AT Protocol HTTPS Requirement';
-	}
-	
-	public function run(): SetupCheckResult {
-		$enabled = $this->config->getAppValue('social', 'atproto_enabled', false);
-		
-		if (!$enabled) {
-			return SetupCheckResult::ok('AT Protocol is disabled');
-		}
-		
-		$socialUrl = $this->config->getSystemValue('social_url', '');
-		if (empty($socialUrl)) {
-			$socialUrl = $this->config->getSystemValue('overwrite.cli.url', '');
-		}
-		
-		if (str_starts_with($socialUrl, 'http://')) {
-			return SetupCheckResult::error(
-				'AT Protocol requires HTTPS. Instance URL is HTTP. ' .
-				'AT Protocol PDS cannot operate on HTTP. Configure a valid HTTPS URL.'
-			);
-		}
-		
-		if (!str_starts_with($socialUrl, 'https://')) {
-			return SetupCheckResult::error(
-				'AT Protocol requires HTTPS. Instance URL does not use HTTPS scheme.'
-			);
-		}
-		
-		return SetupCheckResult::ok('Instance uses HTTPS as required by AT Protocol');
+use OCP\SetupCheck\{ISetupCheck, SetupResult};
+use OCP\IL10N;
+use OCA\Social\Service\ConfigService;
+use OCA\Social\Atproto\Identity\IdentityService;
+class AtprotoHttpsCheck implements ISetupCheck {
+	public function __construct(private readonly IL10N $l10n, private readonly ConfigService $config, private readonly IdentityService $identities) {}
+	public function getCategory(): string { return 'system'; }
+	public function getName(): string { return $this->l10n->t('Aloha Social: native PDS HTTPS'); }
+	public function run(): SetupResult {
+		if (!$this->identities->isEnabled()) { return SetupResult::success($this->l10n->t('AT Protocol is disabled.')); }
+		try { $url = $this->config->getSocialUrl(); } catch (\Throwable) { $url = ''; }
+		if (parse_url($url, PHP_URL_SCHEME) !== 'https') { return SetupResult::error($this->l10n->t('AT Protocol requires a public HTTPS Social address.'), Docs::ADMIN_GUIDE); }
+		return SetupResult::success($this->l10n->t('The configured Social address uses HTTPS.'));
 	}
 }

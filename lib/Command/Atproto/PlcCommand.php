@@ -100,8 +100,8 @@ class PlcCommand extends Command {
 		}
 		
 		$io->table(['Property', 'Value'], [
-			['DID', $directory['did'] ?? ''],
-			['Handle', $directory['handle'] ?? ''],
+			['DID', $directory['id'] ?? ''],
+			['Handle', implode(', ', $directory['alsoKnownAs'] ?? [])],
 			['Signing Key', $directory['verificationMethod'][0]['publicKeyMultibase'] ?? ''],
 			['Rotation Keys', implode(', ', array_column($directory['rotationKeys'] ?? [], 'publicKeyMultibase'))],
 			['PDS Endpoint', $directory['service'][0]['serviceEndpoint'] ?? ''],
@@ -110,8 +110,8 @@ class PlcCommand extends Command {
 	}
 	
 	private function repair(SymfonyStyle $io, ?string $did): void {
-		$io->text('Repairing PLC discrepancies...');
-		// Would compare local log with directory and resend failed operations
-		$io->success('Repair complete');
+		if (!$did || !$this->identityService->getIdentityByDid($did)) { throw new \InvalidArgumentException('An owned DID is required'); }
+		if (!$this->identityService->registerPending($did)) { throw new \RuntimeException('PLC registration could not be confirmed'); }
+		$io->success('Pending signed PLC operations submitted and confirmed');
 	}
 }
