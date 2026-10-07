@@ -411,8 +411,12 @@ parameters ignore an unknown kind.
   running time is unknown is weighed as a post.
 - **Shorts default.** The page is told whether a reading pace has been
   written (`profile` in the page state); once it has, Shorts opens on For you.
-- Nothing in the data says "short": Shorts is every video. A length or
+- Nothing in the data says "short": a kept short is every video. A length or
   orientation filter would need those stored.
+- **24-hour shorts are not ranked.** The Shorts stack puts the followed
+  people's 24-hour shorts ahead of the ranked videos, in their own order (per
+  person, unseen first). They live in their own table rather than the stream,
+  so no For you ranking ever holds one.
 
 ## 8. API
 

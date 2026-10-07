@@ -27,15 +27,15 @@ What it does:
 - 🪜 An administrator can have each stored video written at a ladder of smaller sizes as HLS, so a player picks what the connection carries; and can set a per-account video quota, see who is holding the disk, choose what happens to media marked sensitive, and hold every post with a video for a moderator
 - 📥 A channel can be brought over from PeerTube's own export, or a single video by its address
 - 🎨 Filters in the composer and a profile that draws as a grid
-- 🗂️ Collections, stories and places
+- 🗂️ Collections, 24-hour shorts and places
 - 📱 Pixelfed's own routes — the config its app reads on launch, discover, the story carousel, collections, mutuals, reports, direct-message threads, push (honestly off) and its admin screens — so its app finds what it looks for once the API is at the domain root
-- 🖼️ Stories, collections and places in the web app: a row of faces above your feed with a player and a way to post one; albums as the fourth tab of a profile, each a page of its posts; a pin in the composer that says where a picture was taken, and a page for every place — with nothing ever sent to a map service
+- 🖼️ Shorts, collections and places in the web app: a Shorts bar above your feed with the people whose 24-hour shorts are up, one player for every short and a way to post one; albums as the fourth tab of a profile, each a page of its posts; a pin in the composer that says where a picture was taken, and a page for every place — with nothing ever sent to a map service
 - 🧭 A Discover page: who to follow, with starter packs you can follow in one go, and the people your follows follow drawn as a constellation you can drag around and follow from
 - 🎲 A composer that plays: /dice, /flip and /pick are rolled when the post goes out and sent as plain text, a short post can go out as a card drawn on colour, and a new post makes an entrance at the top of the timeline
-- ✨ Text stories on a coloured card, and stickers dragged onto a picture story — both drawn into the picture, so they arrive elsewhere as you made them
+- ✨ 24-hour shorts as words on a coloured card, or a picture with stickers dragged onto it — both drawn into the picture, so they arrive elsewhere as you made them
 - ❤️ Hearts on the video stack: a like button, and double tap to like with a heart where your finger was
-- 🎥 Post a short from the Shorts stack: upload, drop or record a video with a countdown, trim it, pick its cover frame, add trending hashtags and choose who can watch
-- 🔊 Sound and touch, per device: a tick on a like, a chime for a direct message, a tap in the hand on a phone. Sound is off until you turn it on; Shorts and stories play with sound, or muted with "Tap for sound" where the browser will not start it
+- 🎥 Shorts, kept or for 24 hours: keep a short on your profile, or post one for your followers only that is gone after a day and goes to Pixelfed too. The Shorts stack plays the 24-hour shorts of the people you follow first; its composer asks how long a short lasts, then lets you upload, drop or record a video with a countdown, trim it, pick its cover frame, add trending hashtags and choose who can watch
+- 🔊 Sound and touch, per device: a tick on a like, a chime for a direct message, a tap in the hand on a phone. Sound is off until you turn it on; Shorts play with sound, or muted with "Tap for sound" where the browser will not start it
 - 📤 Share to Aloha Social from the Files app: pick pictures or videos there and the composer opens with them attached
 - 👥 Lists, and the Nextcloud groups an administrator chooses as lists of their own — kept in step with the group automatically; you make, rename, delete and fill your own in Settings
 - ⚙️ Account settings: the name you publish under, whether people ask before they follow you, whether other servers may suggest you and index your public posts, and the audience every new post starts with

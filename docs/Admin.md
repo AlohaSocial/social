@@ -410,7 +410,8 @@ a list of them beside the page on a wide screen:
   author. Three switches at the top turn first-post review, the spam rules and
   holding every post with a video on it on and off.
 - **Sections** — what this instance offers the people using it. Three switches,
-  **all on by default**: *Stories*, and the *Photos* and *Videos*
+  **all on by default**: *24-hour shorts* (shorts that only followers see
+  and that are gone after a day), and the *Photos* and *Videos*
   timelines. Turning one off takes it out of the sidebar and stops it being
   offered; nothing already posted is touched, so a video posted while Videos
   was off is still a video and appears again the moment it is turned back on.
@@ -476,7 +477,7 @@ a list of them beside the page on a wide screen:
   happen.
 - **Background work** — when each of this app's cron jobs last ran, and whether
   that is later than it should be. Almost everything the app does away from a
-  page happens on a schedule: posts go out, stories expire, media is swept,
+  page happens on a schedule: posts go out, 24-hour shorts expire, media is swept,
   videos are transcoded, the storage figures are taken. When cron stops, the
   symptom is a post that never arrives and a disk that never shrinks, and
   nothing in the app said so. A job is called late after **three** of its own
@@ -750,7 +751,7 @@ the moderation routes accept.
 | `media_usage` | *(written by the job)* | The last measurement of what is on disk, as JSON with the moment it was taken. Bookkeeping, not a setting: the walk is a `stat` per stored file and belongs in the cron, so the administration page reads this rather than counting on page load. |
 | `directory_known` | *(written by the job)* | What `Cron\Cache` last found out about the servers the Discover page may ask: the `fediverse.info` server list and each federated peer's NodeInfo software, as JSON with when each was read. Bookkeeping, not a setting: the page reads this rather than asking those servers while somebody waits. |
 | `polls_swept` | `0` | How far the closed-poll sweep has got, as a timestamp. |
-| `story_secret` | *(generated)* | The secret a story's fetch capability is derived from, made the first time a story is published. Changing it invalidates every outstanding capability at once, which is the only revocation it needs: a story lives a day. Never set this by hand. |
+| `story_secret` | *(generated)* | The secret a 24-hour short's fetch capability (the bearcap Pixelfed fetches it with) is derived from, made the first time one is published. Changing it invalidates every outstanding capability at once, which is the only revocation it needs: a 24-hour short lives a day. Never set this by hand. |
 
 ### The Server card
 

@@ -229,8 +229,9 @@ Two things are different from the Mastodon job:
 
 `PixelfedDeliveryTest` covers what we send: our `Follow` accepted, a photo
 with its description, an album whole and in order, caption hashtags, a
-content warning, a like counted and notified, a comment threaded, a story on
-Pixelfed's story bar (fetched through the bearcap), a profile `Update`, a
+content warning, a like counted and notified, a comment threaded, a story — what
+the web client calls a 24-hour short — on Pixelfed's story bar (fetched
+through the bearcap), a profile `Update`, a
 direct message landing in the conversation and not on a profile, a delete
 and an unfollow. `PixelfedInboundTest` covers what Pixelfed sends: its
 `Follow` accepted, a photo on our Photos timeline with its description, an
