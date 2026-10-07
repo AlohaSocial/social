@@ -488,11 +488,12 @@ class StreamRequest extends StreamRequestBuilder {
 	public function carriesUpload(string $actorId, string $nid): bool {
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();
-		$qb->select('nid')
-			->from(self::TABLE_STREAM)
+		$qb->select('s.nid')
+			->from(self::TABLE_STREAM, 's')
 			->setMaxResults(1);
+		$qb->setDefaultSelectAlias('s');
 		$qb->limitToAttributedTo($actorId, true);
-		$qb->andWhere($expr->like('attachments', $qb->createNamedParameter(
+		$qb->andWhere($expr->like('s.attachments', $qb->createNamedParameter(
 			'%"id":"' . $this->dbConnection->escapeLikeParameter($nid) . '"%'
 		)));
 

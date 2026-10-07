@@ -73,7 +73,7 @@ class StreamCarriesUploadTest extends TestCase {
 		$this->assertTrue($this->request(['nid' => '40'])->carriesUpload('https://cloud.example/users/alice', '7'));
 
 		$this->assertSame(['https://cloud.example/users/alice', true], $this->author);
-		$this->assertSame(['attachments LIKE %"id":"7"%'], $this->where);
+		$this->assertSame(['s.attachments LIKE %"id":"7"%'], $this->where);
 		$this->assertSame(1, $this->max);
 	}
 

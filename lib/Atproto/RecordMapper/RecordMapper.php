@@ -12,7 +12,7 @@ class RecordMapper {
 	public const BLUESKY_MAX_BYTES = 3000;
 	public const BLUESKY_TRUNCATE_GRAPHEMES = 280;
 	public const MAX_IMAGES = 4;
-	public function __construct(private readonly BlobService $blobs, private readonly DocumentService $documents, private readonly LoggerInterface $logger, private readonly StrongRefResolver $references) {}
+	public function __construct(private readonly BlobService $blobs, private readonly DocumentService $documents, private readonly LoggerInterface $logger, private readonly StrongRefResolver $references, private readonly \OCA\Social\Db\ActorsRequest $actors) {}
 	public function map(Stream $post, string $did): ?array {
 		if (!$post->isLocal() || $post->getVisibility() !== 'public' || !$post->addressesPublic()) { return null; }
 		$text = self::plainText($post->getContent()); $url = $post->getUrl() ?: $post->getId(); $mustLink = false;
@@ -23,7 +23,7 @@ class RecordMapper {
 			if (($data['type'] ?? '') !== 'image') { $mustLink = true; continue; }
 			if (count($images) >= 4) { $mustLink = true; continue; }
 			try {
-				$documents = $this->documents->getMediaFromArray([(string)$data['id']], $post->getAttributedTo());
+				$documents = $this->documents->getMediaFromArray([(string)$data['id']], $this->actors->getFromId($post->getAttributedTo())->getPreferredUsername());
 				$document = reset($documents); if (!$document) { throw new \RuntimeException('Attachment missing'); }
 				if (!$this->documents->isAttachedToAPostBy($document, $post->getAttributedTo())) { throw new \RuntimeException('Attachment owner mismatch'); }
 				$mime = ''; $file = $this->documents->getFromCache($document->getId(), $mime, true);
