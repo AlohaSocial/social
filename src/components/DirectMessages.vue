@@ -126,6 +126,7 @@
 					</button>
 					<NcActions
 						class="direct-messages__row-menu"
+						:forceMenu="true"
 						:aria-label="t('social', 'Conversation actions')">
 						<template #icon>
 							<DotsHorizontal :size="20" />
@@ -1363,11 +1364,6 @@ export default {
 		border-color: var(--color-primary-element);
 	}
 
-	&:has(:focus-visible) {
-		outline: 2px solid var(--color-primary-element);
-		outline-offset: 1px;
-	}
-
 	input,
 	textarea {
 		flex: 1;
@@ -1472,6 +1468,17 @@ export default {
 	&:focus-visible {
 		outline: 2px solid var(--color-primary-element);
 		outline-offset: -2px;
+	}
+}
+
+/* the row carries the tint; core's own button grey on hover, focus or press
+   outranks a single class and drew a box inside it */
+.direct-messages__row .direct-messages__conversation,
+.direct-messages__row .direct-messages__recipient-option {
+	&:hover,
+	&:focus,
+	&:active {
+		background: transparent;
 	}
 }
 
