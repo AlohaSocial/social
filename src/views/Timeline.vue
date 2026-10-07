@@ -118,11 +118,21 @@
 		     week went if they asked to be told; only over their own home feed,
 		     which is the one page that is about them -->
 		<!-- whose 24-hour shorts are up: a row of faces above the reader's
-		     own feed, and only there; they are for the people who follow -->
-		<ShortsBar v-if="isHome" />
+		     own feed, and only there; they are for the people who follow.
+		     Kept while the reader is on another scope of the feed, like the
+		     two cards below, so that coming back to My Feed draws them at
+		     once rather than asking the server again and pushing the posts
+		     down when it answers -->
+		<KeepAlive>
+			<ShortsBar v-if="isHome" />
+		</KeepAlive>
 
-		<WeeklyRecap v-if="isHome" />
-		<OnThisDay v-if="isHome" />
+		<KeepAlive>
+			<WeeklyRecap v-if="isHome" />
+		</KeepAlive>
+		<KeepAlive>
+			<OnThisDay v-if="isHome" />
+		</KeepAlive>
 
 		<DirectMessages
 			v-if="type === 'direct'"
@@ -183,6 +193,9 @@ import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 
+/** How long after a feed is on screen its other scopes are fetched ahead, in milliseconds. */
+const PREFETCH_AFTER = 1500
+
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 // only drawn when somebody asks to review who is waiting
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
@@ -215,6 +228,8 @@ export default {
 	data() {
 		return {
 			infoHidden: false,
+			/** the pending fetch-ahead of the other scopes, or 0 */
+			prefetchTimer: 0,
 			/** the title of the list being read, once the server has said */
 			listTitle: '',
 			/**
@@ -618,10 +633,13 @@ export default {
 
 	mounted() {
 		eventBus.on('post-published', this.onPostPublished)
+		eventBus.on('timeline:rendered', this.schedulePrefetch)
 	},
 
 	beforeUnmount() {
 		eventBus.off('post-published', this.onPostPublished)
+		eventBus.off('timeline:rendered', this.schedulePrefetch)
+		clearTimeout(this.prefetchTimer)
 		// navigating away mid-celebration must not leave the flag standing for
 		// whatever timeline mounts next
 		if (this.celebratingFirstPost) {
@@ -630,6 +648,31 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * Once a scope of the feed is on screen, fetches the first page of
+		 * the others, so that the switcher puts each on screen at once.
+		 *
+		 * After a pause, and one after another: the list being read goes
+		 * first, and a reader who never switches costs the server three small
+		 * requests rather than three at the same moment as their own.
+		 */
+		schedulePrefetch() {
+			clearTimeout(this.prefetchTimer)
+			if (!this.isFeed || this.isScopedPage) {
+				return
+			}
+
+			this.prefetchTimer = window.setTimeout(async () => {
+				this.prefetchTimer = 0
+				for (const { value } of this.scopes) {
+					if (value === this.type || !this.isFeed || this.isScopedPage) {
+						continue
+					}
+					await this.timelineStore.prefetchTimeline({ type: value })
+				}
+			}, PREFETCH_AFTER)
+		},
+
 		/**
 		 * Keep the selected exchange in the address so it can be reopened.
 		 *

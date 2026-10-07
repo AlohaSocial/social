@@ -122,6 +122,9 @@ import { useSettingsStore } from '../store/settings.js'
 import { accountStyle } from '../services/accountColour.js'
 
 // the dialog is the heavy half and most visits never open it
+/** How old the bar may be when the reader comes back to it, in milliseconds. */
+const RELOAD_AFTER = 60 * 1000
+
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /**
@@ -155,6 +158,8 @@ export default {
 			/** @type {Array<{account: object, shorts: Array<object>, seen: boolean, own: boolean}>} */
 			groups: [],
 			composing: false,
+			/** when the bar was last read from the server, or 0 */
+			loadedAt: 0,
 		}
 	},
 
@@ -225,6 +230,14 @@ export default {
 		eventBus.on(SHORT_COMPOSE, this.compose)
 	},
 
+	// kept alive while the reader is on another scope of the feed: back on
+	// My Feed the bar is drawn as it was, and read again only if it is old
+	activated() {
+		if (this.loadedAt !== 0 && Date.now() - this.loadedAt > RELOAD_AFTER) {
+			this.load()
+		}
+	},
+
 	beforeUnmount() {
 		eventBus.off(SHORT_COMPOSE, this.compose)
 	},
@@ -266,6 +279,7 @@ export default {
 
 		/** @return {Promise<void>} */
 		async load() {
+			this.loadedAt = Date.now()
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/stories/carousel'))
 				this.groups = this.group(Array.isArray(data) ? data : [])

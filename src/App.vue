@@ -125,7 +125,7 @@ import ShortcutHelp from './components/ShortcutHelp.vue'
 import SetupChecks from './components/SetupChecks.vue'
 import { listenForShortcuts } from './services/shortcuts.js'
 import TimelineSkeleton from './components/TimelineSkeleton.vue'
-import { pageDirection } from './services/pageOrder.js'
+import { isSamePage, pageDirection } from './services/pageOrder.js'
 import { canViewTransition, markDirection, startPageTransition } from './services/pageTransition.js'
 import eventBus, { REACTION_PICK } from './services/eventBus.js'
 
@@ -314,6 +314,12 @@ export default {
 
 			this.stopAfter = router.beforeResolve((to, from) => {
 				this.disarmPending()
+				// a switch of scope keeps the page where it is: animating it
+				// moved the switcher out from under the pointer that used it
+				if (isSamePage(to, from)) {
+					return true
+				}
+
 				const direction = pageDirection(to, from)
 				markDirection(direction)
 

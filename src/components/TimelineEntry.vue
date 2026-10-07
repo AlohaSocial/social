@@ -12,6 +12,7 @@
 			'timeline-entry--reply': depth > 0,
 			'timeline-entry--continues': depth > 0 && continues,
 			'timeline-entry--unread': unread,
+			'timeline-entry--settled': !staggered,
 		}"
 		:style="entryStyle"
 		:data-status-id="entryContent?.id"
@@ -244,9 +245,10 @@ export default {
 		},
 
 		/**
-		 * Whether to rise without the stagger: set for the entries of a list
-		 * that replaces one already on screen, read once at mount so a delay
-		 * is never put back on an entry that is already rising.
+		 * Whether to appear in place, without rising in: set for the entries
+		 * of a list that replaces one already on screen, where twenty cards
+		 * fading in at once is the page blinking. Read once at mount, so an
+		 * entry is never given an animation half way through being drawn.
 		 */
 		immediate: {
 			type: Boolean,
@@ -303,7 +305,7 @@ export default {
 
 	data() {
 		return {
-			/** whether this entry takes its place in the stagger */
+			/** whether this entry rises in, taking its place in the stagger */
 			staggered: !this.immediate,
 			/**
 			 * On a phone the avatar column beside the card would take a
@@ -513,6 +515,11 @@ export default {
 	 */
 	animation: timeline-rise .28s ease-out both;
 	animation-delay: var(--stagger-delay, 0ms);
+
+	/* one list swapped for another: the posts are simply there */
+	&.timeline-entry--settled {
+		animation: none;
+	}
 
 	/**
 	 * A reply steps in under the one it answers, joined to it by a line.

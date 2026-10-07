@@ -210,3 +210,61 @@ describe('ShortsBar', () => {
 		expect(wrapper.find('.shorts-bar').exists()).toBe(false)
 	})
 })
+
+/**
+ * The bar is kept alive while the reader is on another scope of the feed, so
+ * coming back to My Feed draws it at once instead of pushing the posts down
+ * when the carousel answers.
+ */
+describe('ShortsBar kept alive', () => {
+	const Host = {
+		components: { ShortsBar },
+		data: () => ({ shown: true }),
+		template: '<KeepAlive><ShortsBar v-if="shown" /></KeepAlive>',
+	}
+
+	function mountHost() {
+		get.mockReset()
+		get.mockResolvedValue({ data: [short('1', bob)] })
+		const pinia = createPinia()
+		setActivePinia(pinia)
+		useAccountStore().addAccount({ actorId: alice.url, data: alice })
+		useAccountStore().setCurrentAccount('alice@cloud.example.org')
+
+		return mount(Host, { global: { plugins: [pinia], stubs } })
+	}
+
+	async function leaveAndComeBack(wrapper) {
+		wrapper.vm.shown = false
+		await flushPromises()
+		wrapper.vm.shown = true
+		await flushPromises()
+	}
+
+	it('is drawn as it was on the way back, without asking again', async () => {
+		const wrapper = mountHost()
+		await flushPromises()
+		const bar = wrapper.findComponent(ShortsBar).vm
+
+		await leaveAndComeBack(wrapper)
+
+		expect(get).toHaveBeenCalledTimes(1)
+		expect(wrapper.findComponent(ShortsBar).vm).toBe(bar)
+		expect(tiles(wrapper).length).toBeGreaterThan(0)
+	})
+
+	it('reads the carousel again when it is more than a minute old', async () => {
+		const wrapper = mountHost()
+		await flushPromises()
+		const later = Date.now() + 61 * 1000
+		vi.spyOn(Date, 'now').mockReturnValue(later)
+
+		try {
+			await leaveAndComeBack(wrapper)
+		} finally {
+			vi.restoreAllMocks()
+		}
+
+		expect(get).toHaveBeenCalledTimes(2)
+	})
+})

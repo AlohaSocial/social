@@ -4,7 +4,7 @@
  */
 import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { nextTick, reactive } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
 import Timeline from '../../../src/views/Timeline.vue'
@@ -149,10 +149,82 @@ describe('Timeline', () => {
 			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
 		})
 
+		it('keeps them while the reader is on another scope of the feed', async () => {
+			// drawn again from nothing on the way back to My Feed, each asked
+			// the server again and pushed the posts down when it answered
+			let mounts = 0
+			const CountedShortsBar = { name: 'ShortsBar', mounted: () => mounts++, template: '<div class="shorts-bar-stub" />' }
+			const route = reactive({ name: 'timeline', params: {}, query: {} })
+			const wrapper = mount(Timeline, {
+				global: {
+					plugins: [pinia],
+					mocks: { $route: route, $router: { replace: vi.fn() } },
+					stubs: { Announcements: AnnouncementsStub, Composer: ComposerStub, DirectMessages: DirectMessagesStub, FirstRun: FirstRunStub, TimelineList: TimelineListStub, RouterLink: RouterLinkStub, OnThisDay: OnThisDayStub, WeeklyRecap: WeeklyRecapStub, ShortsBar: CountedShortsBar, NotificationRequests: NotificationRequestsStub },
+				},
+			})
+
+			route.params = { type: 'federated' }
+			await nextTick()
+			expect(cards(wrapper).shorts).toBe(false)
+
+			route.params = {}
+			await nextTick()
+			expect(cards(wrapper).shorts).toBe(true)
+			expect(mounts).toBe(1)
+		})
+
 		it('draws none of them on a hashtag page', () => {
 			const wrapper = mountTimeline({ name: 'tags', params: { tag: 'nextcloud' } })
 
 			expect(cards(wrapper)).toEqual({ shorts: false, recap: false, memories: false })
+		})
+	})
+
+	// the switcher's other scopes are fetched ahead once a scope is on
+	// screen, so that the switch has its posts at once
+	describe('fetching the other scopes ahead', () => {
+		beforeEach(() => {
+			vi.useFakeTimers()
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		it('fetches the other scopes once the list is on screen', async () => {
+			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
+			mountTimeline({ params: { type: 'timeline' } })
+
+			eventBus.emit('timeline:rendered')
+			expect(prefetch).not.toHaveBeenCalled()
+			await vi.advanceTimersByTimeAsync(1500)
+
+			expect(prefetch.mock.calls.map(([list]) => list.type)).toEqual(['home', 'federated'])
+		})
+
+		it.each([
+			[{ name: 'tags', params: { tag: 'nextcloud' } }],
+			[{ params: { type: 'photos' } }],
+			[{ params: { type: 'notifications' } }],
+		])('fetches nothing ahead on a page that is not the feed: %o', async (route) => {
+			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
+			mountTimeline(route)
+
+			eventBus.emit('timeline:rendered')
+			await vi.advanceTimersByTimeAsync(1500)
+
+			expect(prefetch).not.toHaveBeenCalled()
+		})
+
+		it('fetches nothing once the page is gone', async () => {
+			const prefetch = vi.spyOn(timelineStore, 'prefetchTimeline').mockResolvedValue(undefined)
+			const wrapper = mountTimeline()
+
+			eventBus.emit('timeline:rendered')
+			wrapper.unmount()
+			await vi.advanceTimersByTimeAsync(1500)
+
+			expect(prefetch).not.toHaveBeenCalled()
 		})
 	})
 

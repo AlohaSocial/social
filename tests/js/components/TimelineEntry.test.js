@@ -471,6 +471,11 @@ describe('the stagger on the way in', () => {
 		expect(mountEntry(storedPost, { index: 2, immediate: true }).wrapper.attributes('style') ?? '').not.toContain('--stagger-delay')
 	})
 
+	it('is not drawn at all for an entry that replaces one already on screen', () => {
+		expect(mountEntry(storedPost, { index: 2, immediate: true }).wrapper.classes()).toContain('timeline-entry--settled')
+		expect(mountEntry(storedPost, { index: 2 }).wrapper.classes()).not.toContain('timeline-entry--settled')
+	})
+
 	it('is read once: the delay is not put back on a rising entry', async () => {
 		const { wrapper } = mountEntry(storedPost, { index: 2, immediate: true })
 		await wrapper.setProps({ immediate: false })

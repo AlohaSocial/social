@@ -588,9 +588,9 @@ describe('timeline store actions', () => {
 	it('changeTimelineType forgets the oldest rather than every timeline ever opened', async () => {
 		// the index keeps every status a held list names, so the number of
 		// them is a memory ceiling and not only a convenience
-		// six visits means five departures, so the first list has fallen off a
-		// shelf that holds four
-		const visited = ['home', 'federated', 'timeline', 'direct', 'notifications', 'liked']
+		// seven visits means six departures, so the first list has fallen off
+		// a shelf that holds five
+		const visited = ['home', 'federated', 'timeline', 'direct', 'notifications', 'liked', 'bookmarks']
 		for (const [index, type] of visited.entries()) {
 			await store.changeTimelineType({ type, params: {} })
 			store.addToTimeline([makeStatus(String(index))])
@@ -672,9 +672,10 @@ describe('timeline store actions', () => {
 			await store.changeTimelineType({ type: 'notifications', params: {} })
 			expect(Object.keys(tl().statuses).sort()).toEqual(['1', '2', '3', '4', '5'])
 
-			// six lists have been opened and four departures are held, so
+			// seven lists have been opened and five departures are held, so
 			// home — the first — is gone, and with it the status only it named
 			await store.changeTimelineType({ type: 'liked', params: {} })
+			await store.changeTimelineType({ type: 'bookmarks', params: {} })
 
 			expect(Object.keys(tl().statuses).sort()).toEqual(['1', '3', '4', '5'])
 		})
@@ -1469,5 +1470,102 @@ describe('the home read marker', () => {
 
 		await expect(store.markHomeRead('42')).resolves.toBeUndefined()
 		expect(logger.error).toHaveBeenCalled()
+	})
+})
+
+/**
+ * The switcher's other scopes are fetched ahead while the reader is on one,
+ * so switching puts a list on screen at once instead of a skeleton or the
+ * posts being left.
+ */
+describe('fetching a scope ahead', () => {
+	let store
+
+	beforeEach(async () => {
+		setActivePinia(createPinia())
+		store = useTimelineStore()
+		axios.get.mockReset()
+		await store.changeTimelineType({ type: 'home', params: {} })
+		store.addToTimeline([makeStatus('1')])
+	})
+
+	it('asks for the page the list itself would ask for', async () => {
+		axios.get.mockResolvedValue({ data: [makeStatus('2')] })
+
+		await store.prefetchTimeline({ type: 'timeline' })
+
+		expect(axios.get).toHaveBeenCalledWith(`${API}/timelines/public`, { params: { limit: 15, local: true } })
+	})
+
+	it('is put on screen by the switch, without a request', async () => {
+		axios.get.mockResolvedValue({ data: [makeStatus('2'), makeStatus('3')] })
+		await store.prefetchTimeline({ type: 'federated' })
+		axios.get.mockClear()
+
+		await store.changeTimelineType({ type: 'federated', params: {} })
+
+		expect(store.timeline).toEqual(['2', '3'])
+		expect(store.restored).toBe(true)
+		expect(store.wasFilled('["federated","",{}]')).toBe(true)
+		expect(axios.get).not.toHaveBeenCalled()
+	})
+
+	it('leaves the list on screen alone', async () => {
+		axios.get.mockResolvedValue({ data: [makeStatus('2')] })
+
+		await store.prefetchTimeline({ type: 'timeline' })
+
+		expect(store.timeline).toEqual(['1'])
+		expect(store.type).toBe('home')
+	})
+
+	it('does not fetch the list on screen, or one already fetched', async () => {
+		axios.get.mockResolvedValue({ data: [makeStatus('2')] })
+
+		await store.prefetchTimeline({ type: 'home' })
+		await store.prefetchTimeline({ type: 'timeline' })
+		await store.prefetchTimeline({ type: 'timeline' })
+
+		expect(axios.get).toHaveBeenCalledTimes(1)
+	})
+
+	it('is not put back once it is stale', async () => {
+		vi.useFakeTimers()
+		try {
+			axios.get.mockResolvedValue({ data: [makeStatus('2')] })
+			await store.prefetchTimeline({ type: 'timeline' })
+
+			vi.advanceTimersByTime(3 * 60 * 1000)
+			await store.changeTimelineType({ type: 'timeline', params: {} })
+
+			expect(store.timeline).toEqual([])
+			expect(store.restored).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('drops a page that arrives after the reader got there', async () => {
+		let land
+		axios.get.mockReturnValue(new Promise((resolve) => {
+			land = resolve
+		}))
+		const fetching = store.prefetchTimeline({ type: 'timeline' })
+
+		await store.changeTimelineType({ type: 'timeline', params: {} })
+		land({ data: [makeStatus('2')] })
+		await fetching
+
+		expect(store.timeline).toEqual([])
+		expect(store.remembered.some((held) => held.identity === '["timeline","",{}]')).toBe(false)
+	})
+
+	it('says nothing when it fails', async () => {
+		axios.get.mockRejectedValue(new Error('down'))
+
+		await store.prefetchTimeline({ type: 'timeline' })
+
+		expect(showError).not.toHaveBeenCalled()
+		expect(store.timeline).toEqual(['1'])
 	})
 })

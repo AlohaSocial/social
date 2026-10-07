@@ -13,12 +13,22 @@ import { defineStore } from 'pinia'
 /**
  * How many lists are held aside at once.
  *
- * Four covers the switcher — My Feed, Local, Global — plus whatever the reader
- * came from, which is the round trip that used to cost a request and a
- * skeleton every time. The status index is pruned to what these lists still
- * name, so this is a memory number as much as a UX one.
+ * Five covers the switcher — My Feed, For you, Local, Global — plus whatever
+ * the reader came from, which is the round trip that used to cost a request
+ * and a skeleton every time. The status index is pruned to what these lists
+ * still name, so this is a memory number as much as a UX one.
  */
-const REMEMBERED = 4
+const REMEMBERED = 5
+
+/**
+ * How long a page fetched ahead stands in for the list it was fetched for, in
+ * milliseconds. Older than this, a switch asks the server as if nothing had
+ * been fetched: a feed read ten minutes ago is not news.
+ */
+const PREFETCH_FRESH = 3 * 60 * 1000
+
+/** The identities being fetched ahead right now, so none is asked for twice. */
+const prefetching = new Set()
 
 import logger from '../services/logger.js'
 import { isNewerId, newerId } from '../utils/snowflake.js'
@@ -76,7 +86,7 @@ function rememberCelebrated() {
  * @property {Array|null} seededPage the first screenful the server rendered with the page
  * @property {{tag?: string, id?: string, account?: string, scope?: string, media?: string, filter?: string, url?: string, singlePost?: string}} params what the current list was asked for
  * @property {string} account whose timeline, where it is somebody's
- * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object}[]} remembered the lists lately visited
+ * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object, fetchedAt?: number}[]} remembered the lists lately visited
  * @property {boolean} restored whether the list was put back rather than loaded
  * @property {Object<string, true>} filled the lists that have shown a post this session, by identity
  * @property {boolean} composerDisplayStatus whether the composer is open
@@ -219,6 +229,122 @@ function appendNew(list, statuses) {
 }
 
 /**
+ * Where a list is asked for, and what the request has to add to say which.
+ *
+ * Shared by the list on screen and by the ones fetched ahead of a switch, so
+ * that a page fetched ahead is the page the list would have asked for.
+ *
+ * @param {{type: string, account: string, params: object}} list which list
+ * @param {object} params the query, completed in place
+ * @return {string} the url
+ */
+function timelineRequest(list, params) {
+	let url
+	switch (list.type) {
+		case 'account':
+			url = generateUrl(`apps/social/api/v1/accounts/${list.account}/statuses`)
+			// the profile's Photos and Videos tabs. `media_type` is a
+			// Social extension; `only_media` is Mastodon's own and
+			// says what the two have in common, so a client that knows
+			// neither still gets a sensible answer to the first.
+			if (list.params.media === 'image' || list.params.media === 'video') {
+				params.only_media = true
+				params.media_type = list.params.media
+			}
+			break
+		case 'tags':
+			url = generateUrl(`apps/social/api/v1/timelines/tag/${list.params.tag}`)
+			break
+		case 'list':
+			url = generateUrl(`apps/social/api/v1/timelines/list/${list.params.id}`)
+			break
+		case 'single-post':
+			url = generateUrl(`apps/social/api/v1/statuses/${list.params.id}/context`)
+			break
+		case 'timeline':
+			url = generateUrl('apps/social/api/v1/timelines/public')
+			params.local = true
+			break
+		case 'federated':
+			url = generateUrl('apps/social/api/v1/timelines/public')
+			break
+		case 'interests':
+			url = generateUrl('apps/social/api/v1/timelines/interests')
+			// narrowed to one kind, a ranking of its own on the server
+			if (list.params.media === 'photos' || list.params.media === 'videos') {
+				params.media = list.params.media
+			}
+			break
+		case 'photos':
+		case 'videos':
+		// a timeline with the text-only posts left out: what people
+		// showed rather than what they said. Which people is the scope
+		// the switcher sets — the ones you follow by default, this
+		// instance, or everywhere — so this is the same three feeds
+		// above, one predicate narrower. Or For you narrowed to the
+		// same kind, which is a ranking rather than a circle of people
+		// and asks nothing about attachments: the server narrows it.
+			if (list.params.scope === 'interests') {
+				url = generateUrl('apps/social/api/v1/timelines/interests')
+				params.media = list.type
+				break
+			}
+			if (list.params.scope === 'timeline' || list.params.scope === 'federated') {
+				url = generateUrl('apps/social/api/v1/timelines/public')
+				if (list.params.scope === 'timeline') {
+					params.local = true
+				}
+			} else {
+				url = generateUrl('apps/social/api/v1/timelines/home')
+			}
+			// `only_media` is Mastodon's question — "does this post
+			// carry an attachment" — and it is not the question either
+			// of these pages is asking: it answered Photos with every
+			// video on the instance and Videos with every photograph.
+			// `media_type` and `only_video` are this app's own and name
+			// the kind. All of them go out, so a server that has not
+			// been upgraded yet still answers with media rather than
+			// with everything.
+			params.only_media = true
+			if (list.type === 'videos') {
+				params.only_video = true
+			} else {
+				// a post carrying both is `mixed` and is in both pages,
+				// which is what `limitToMediaType()` already says
+				params.media_type = 'image'
+			}
+			break
+		case 'link':
+		// everything said here about one article. The link is the
+		// subject, so it rides in the query rather than the path: a URL
+		// inside a path segment is a URL that has to survive two rounds
+		// of encoding and one web server's idea of what a slash means.
+			url = generateUrl('apps/social/api/v1/timelines/link')
+			params.url = list.params.url ?? ''
+			break
+		case 'notifications': {
+			url = generateUrl('apps/social/api/v1/notifications')
+			// the page's filter, as the server takes it: what to leave
+			// out. Part of the params, so changing it is a different
+			// timeline and refetches rather than filtering the page
+			const excluded = excludeTypesFor(list.params.filter ?? 'all')
+			if (excluded.length > 0) {
+				params.exclude_types = excluded
+			}
+			break
+		}
+		case 'bookmarks':
+		// the only timeline the server serves without a trailing slash
+			url = generateUrl('apps/social/api/v1/bookmarks')
+			break
+		default:
+			url = generateUrl(`apps/social/api/v1/timelines/${list.type}`)
+	}
+
+	return url
+}
+
+/**
  * The list currently on screen: which one it is, what it holds, and everything
  * the reader does to a post in it.
  */
@@ -261,7 +387,10 @@ export const useTimelineStore = defineStore('timeline', {
 		 * list that shows the post; a copy per list showed the reader the post
 		 * as it was when they left.
 		 *
-		 * @type {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object}[]}
+		 * A list fetched ahead of a switch is held here too, marked with when
+		 * it was fetched, so that it is only put back while still fresh.
+		 *
+		 * @type {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object, fetchedAt?: number}[]}
 		 */
 		remembered: [],
 		/**
@@ -838,7 +967,8 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			const wanted = this.getTimelineIdentity
-			const returning = this.remembered.find((held) => held.identity === wanted) ?? null
+			const held = this.remembered.find((entry) => entry.identity === wanted) ?? null
+			const returning = held !== null && (held.fetchedAt === undefined || Date.now() - held.fetchedAt < PREFETCH_FRESH) ? held : null
 			// the one being left goes to the front, the one being returned to
 			// is taken out, and the oldest falls off the end
 			this.remembered = [left, ...this.remembered.filter((held) => held.identity !== wanted && held.identity !== left.identity)].slice(0, REMEMBERED)
@@ -867,6 +997,59 @@ export const useTimelineStore = defineStore('timeline', {
 		 * @param {string} media.id its id on this server
 		 * @param {string} media.description what it shows
 		 */
+		/**
+		 * Fetches the first page of a list the reader is likely to switch to,
+		 * and holds it with the remembered lists, so that the switch puts it
+		 * on screen at once instead of waiting for the server.
+		 *
+		 * Quiet: a failure is the switch asking for itself, as it always has.
+		 * Put in front of the lists the reader has left, because from the feed
+		 * the next list is most likely another scope of it.
+		 *
+		 * @param {object} list which list
+		 * @param {string} list.type the timeline type, as the store names it
+		 * @param {object} [list.params] what narrows it
+		 */
+		async prefetchTimeline({ type, params = {} }) {
+			const identity = JSON.stringify([type, '', params])
+			const held = this.remembered.find((entry) => entry.identity === identity)
+			if (identity === this.getTimelineIdentity
+				|| prefetching.has(identity)
+				|| (held !== undefined && (held.fetchedAt === undefined || Date.now() - held.fetchedAt < PREFETCH_FRESH))) {
+				return
+			}
+
+			const query = { limit: 15 }
+			const url = timelineRequest({ type, account: '', params }, query)
+			prefetching.add(identity)
+			let data
+			try {
+				({ data } = await axios.get(url, { params: query }))
+			} catch (error) {
+				logger.debug('Could not fetch a timeline ahead', { identity, error })
+				return
+			} finally {
+				prefetching.delete(identity)
+			}
+
+			// the reader got there first, and the list's own request answers
+			if (!Array.isArray(data) || identity === this.getTimelineIdentity) {
+				return
+			}
+
+			data.forEach((status) => indexStatus(this, status))
+			const ids = []
+			appendNew(ids, data)
+			if (ids.length > 0) {
+				this.markFilled(identity)
+			}
+
+			this.remembered = [
+				{ identity, timeline: ids, parentsTimeline: [], removedFrom: {}, fetchedAt: Date.now() },
+				...this.remembered.filter((entry) => entry.identity !== identity),
+			].slice(0, REMEMBERED)
+			pruneIndex(this)
+		},
 		async describeMedia({ id, description }) {
 			try {
 				await axios.put(generateUrl('apps/social/api/v1/media/' + id), { description })
@@ -1273,107 +1456,7 @@ export const useTimelineStore = defineStore('timeline', {
 				return seeded
 			}
 
-			let url
-			switch (this.type) {
-				case 'account':
-					url = generateUrl(`apps/social/api/v1/accounts/${this.account}/statuses`)
-					// the profile's Photos and Videos tabs. `media_type` is a
-					// Social extension; `only_media` is Mastodon's own and
-					// says what the two have in common, so a client that knows
-					// neither still gets a sensible answer to the first.
-					if (this.params.media === 'image' || this.params.media === 'video') {
-						params.only_media = true
-						params.media_type = this.params.media
-					}
-					break
-				case 'tags':
-					url = generateUrl(`apps/social/api/v1/timelines/tag/${this.params.tag}`)
-					break
-				case 'list':
-					url = generateUrl(`apps/social/api/v1/timelines/list/${this.params.id}`)
-					break
-				case 'single-post':
-					url = generateUrl(`apps/social/api/v1/statuses/${this.params.id}/context`)
-					break
-				case 'timeline':
-					url = generateUrl('apps/social/api/v1/timelines/public')
-					params.local = true
-					break
-				case 'federated':
-					url = generateUrl('apps/social/api/v1/timelines/public')
-					break
-				case 'interests':
-					url = generateUrl('apps/social/api/v1/timelines/interests')
-					// narrowed to one kind, a ranking of its own on the server
-					if (this.params.media === 'photos' || this.params.media === 'videos') {
-						params.media = this.params.media
-					}
-					break
-				case 'photos':
-				case 'videos':
-				// a timeline with the text-only posts left out: what people
-				// showed rather than what they said. Which people is the scope
-				// the switcher sets — the ones you follow by default, this
-				// instance, or everywhere — so this is the same three feeds
-				// above, one predicate narrower. Or For you narrowed to the
-				// same kind, which is a ranking rather than a circle of people
-				// and asks nothing about attachments: the server narrows it.
-					if (this.params.scope === 'interests') {
-						url = generateUrl('apps/social/api/v1/timelines/interests')
-						params.media = this.type
-						break
-					}
-					if (this.params.scope === 'timeline' || this.params.scope === 'federated') {
-						url = generateUrl('apps/social/api/v1/timelines/public')
-						if (this.params.scope === 'timeline') {
-							params.local = true
-						}
-					} else {
-						url = generateUrl('apps/social/api/v1/timelines/home')
-					}
-					// `only_media` is Mastodon's question — "does this post
-					// carry an attachment" — and it is not the question either
-					// of these pages is asking: it answered Photos with every
-					// video on the instance and Videos with every photograph.
-					// `media_type` and `only_video` are this app's own and name
-					// the kind. All of them go out, so a server that has not
-					// been upgraded yet still answers with media rather than
-					// with everything.
-					params.only_media = true
-					if (this.type === 'videos') {
-						params.only_video = true
-					} else {
-						// a post carrying both is `mixed` and is in both pages,
-						// which is what `limitToMediaType()` already says
-						params.media_type = 'image'
-					}
-					break
-				case 'link':
-				// everything said here about one article. The link is the
-				// subject, so it rides in the query rather than the path: a URL
-				// inside a path segment is a URL that has to survive two rounds
-				// of encoding and one web server's idea of what a slash means.
-					url = generateUrl('apps/social/api/v1/timelines/link')
-					params.url = this.params.url ?? ''
-					break
-				case 'notifications': {
-					url = generateUrl('apps/social/api/v1/notifications')
-					// the page's filter, as the server takes it: what to leave
-					// out. Part of the params, so changing it is a different
-					// timeline and refetches rather than filtering the page
-					const excluded = excludeTypesFor(this.params.filter ?? 'all')
-					if (excluded.length > 0) {
-						params.exclude_types = excluded
-					}
-					break
-				}
-				case 'bookmarks':
-				// the only timeline the server serves without a trailing slash
-					url = generateUrl('apps/social/api/v1/bookmarks')
-					break
-				default:
-					url = generateUrl(`apps/social/api/v1/timelines/${this.type}`)
-			}
+			const url = timelineRequest(this, params)
 
 			// which list this page was asked for, so an answer that arrives after
 			// the reader has moved on is dropped instead of being committed under
