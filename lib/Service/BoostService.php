@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\RecordMapper\OutboundPublisher;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -45,6 +46,8 @@ class BoostService {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ModerationService $moderationService,
+		private ConfigService $configService,
+		private OutboundPublisher $outboundPublisher,
 	) {
 	}
 
@@ -111,6 +114,14 @@ class BoostService {
 		$token = $this->activityService->request($announce);
 
 		$this->streamQueueService->cacheStreamByToken($announce->getRequestToken());
+
+		// Publish to Bluesky if the post is on Bluesky
+		if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
+			$note->getDetails()?->get('atproto')?->get('uri')) {
+			$postUri = $note->getDetails()->get('atproto')->get('uri');
+			$postCid = $note->getDetails()->get('atproto')->get('cid') ?? '';
+			$this->outboundPublisher->publishRepost($actor->getId(), $postUri, $postCid);
+		}
 
 		return $announce;
 	}
@@ -180,6 +191,13 @@ class BoostService {
 		}
 
 		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::BOOSTED, false);
+
+		// Delete Bluesky repost if the post was on Bluesky
+		if ($this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED) && 
+			$note->getDetails()?->get('atproto')?->get('uri')) {
+			$postUri = $note->getDetails()->get('atproto')->get('uri');
+			$this->outboundPublisher->deleteRepost($actor->getId(), $postUri);
+		}
 
 		return $undo;
 	}
