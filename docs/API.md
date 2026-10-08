@@ -1255,7 +1255,7 @@ These serve HTML or files for the app's own UI; they are not client API endpoint
 
 | Method | Route | Auth | Parameters | Description |
 |--------|-------|------|------------|-------------|
-| POST | `/async/request/{token}` | public, no-csrf | `token` (path) | Internal endpoint the app calls against itself to deliver queued federation requests for `{token}`. With nothing queued it returns an empty HTTP 200. Otherwise it closes the connection (`async()`) and processes standby requests for at most `QueueController::MAX_DURATION` (90 s) — whatever is left stays standby for the cron — then ends in `exit()`, since the connection is already gone. |
+| POST | `/async/request/{token}` | public, no-csrf, signed | `token` (path); header `X-Social-Async-Signature` | Internal endpoint the app calls against itself to deliver queued federation requests for `{token}`. The call carries an HMAC of the token under the instance secret (`AsyncRequestSigner`); without a valid one it is a **403** before the queue is read, counted by Nextcloud's brute-force protection — failures only, so the server's own calls are never slowed. With nothing queued it returns an empty HTTP 200. Otherwise it closes the connection (`async()`) and processes standby requests for at most `QueueController::MAX_DURATION` (90 s) — whatever is left stays standby for the cron — then ends in `exit()`, since the connection is already gone. |
 
 ---
 

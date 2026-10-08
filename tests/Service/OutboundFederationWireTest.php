@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\BlurService;
 use OCA\Social\Service\CacheActorService;
@@ -47,6 +48,7 @@ use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
+use OCP\Security\ICrypto;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -162,6 +164,7 @@ class OutboundFederationWireTest extends TestCase {
 			$clientService,
 			$this->httpSignatureService(),
 			new NullLogger(),
+			new AsyncRequestSigner($this->createStub(ICrypto::class)),
 		);
 	}
 

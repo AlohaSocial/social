@@ -19,6 +19,7 @@ use OCA\Social\Exceptions\RetrieveAccountFormatException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\FediverseService;
@@ -33,6 +34,7 @@ use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use OCP\Security\ICrypto;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -96,7 +98,7 @@ class CurlServiceTest extends TestCase {
 		$this->service = $this->getMockBuilder(CurlService::class)
 			->setConstructorArgs([
 				$this->configService, $this->fediverseService, $this->clientService,
-				$this->httpSignatureService, new NullLogger()
+				$this->httpSignatureService, new NullLogger(), $this->signer()
 			])
 			->onlyMethods([$mocked])
 			->getMock();
@@ -127,7 +129,7 @@ class CurlServiceTest extends TestCase {
 
 	public function testConstructorConvertsTheMaxSizeToBytes(): void {
 		$service = new CurlService($this->configService, $this->fediverseService, $this->clientService,
-			$this->httpSignatureService, new NullLogger());
+			$this->httpSignatureService, new NullLogger(), $this->signer());
 		$property = new \ReflectionProperty(CurlService::class, 'maxDownloadSize');
 
 		$this->assertSame(10 * 1048576, $property->getValue($service));
@@ -135,7 +137,7 @@ class CurlServiceTest extends TestCase {
 
 	public function testTheUserAgentNamesTheInstalledVersion(): void {
 		$service = new CurlService($this->configService, $this->fediverseService, $this->clientService,
-			$this->httpSignatureService, new NullLogger());
+			$this->httpSignatureService, new NullLogger(), $this->signer());
 
 		$this->assertSame('Aloha Social 0.9.1', $service->userAgent());
 	}
@@ -144,7 +146,7 @@ class CurlServiceTest extends TestCase {
 		$this->fediverseService->method('authorized')->willThrowException(new UnauthorizedFediverseException());
 		$this->client->expects($this->never())->method('request');
 		$service = new CurlService($this->configService, $this->fediverseService, $this->clientService,
-			$this->httpSignatureService, new NullLogger());
+			$this->httpSignatureService, new NullLogger(), $this->signer());
 
 		$this->expectException(UnauthorizedFediverseException::class);
 		$service->doRequest('get', 'https://blocked.example/users/bob');
@@ -656,10 +658,30 @@ class CurlServiceTest extends TestCase {
 		$this->assertTrue($sent()['options']['nextcloud']['allow_local_address']);
 	}
 
+	/** The route refuses a call this server did not sign. */
+	public function testTheSelfCallCarriesItsSignature(): void {
+		$this->configService->method('getSocialUrl')->willReturn('https://cloud.example/apps/social/');
+		$this->configService->method('getCloudHost')->willReturn('cloud.example');
+		$sent = $this->captureRequest($this->answer('{}'));
+
+		$this->service()->asyncWithToken('tok-1');
+
+		$this->assertTrue($this->signer()->verify('tok-1', $sent()['options']['headers'][AsyncRequestSigner::HEADER]));
+	}
+
+	/** A signer under a fixed secret, as the instance's own would be. */
+	private function signer(): AsyncRequestSigner {
+		$crypto = $this->createStub(ICrypto::class);
+		$crypto->method('calculateHMAC')
+			->willReturnCallback(static fn (string $message): string => hash_hmac('sha512', $message, 'secret', true));
+
+		return new AsyncRequestSigner($crypto);
+	}
+
 	private function service(): CurlService {
 		return new CurlService(
 			$this->configService, $this->fediverseService, $this->clientService,
-			$this->httpSignatureService, new NullLogger()
+			$this->httpSignatureService, new NullLogger(), $this->signer()
 		);
 	}
 

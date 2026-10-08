@@ -13,10 +13,12 @@ use OCA\Social\Controller\QueueController;
 use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\RequestQueueService;
 use OCP\AppFramework\Http;
 use OCP\IRequest;
+use OCP\Security\ICrypto;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -28,17 +30,47 @@ class QueueControllerTest extends TestCase {
 	private ActivityService|MockObject $activityService;
 	private LoggerInterface|MockObject $logger;
 	private TestableQueueController $controller;
+	private AsyncRequestSigner $signer;
+	/** What the request carries in the signature header. */
+	private string $signature = '';
 
 	protected function setUp(): void {
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
+		$crypto = $this->createStub(ICrypto::class);
+		$crypto->method('calculateHMAC')
+			->willReturnCallback(static fn (string $message): string => hash_hmac('sha512', $message, 'secret', true));
+		$this->signer = new AsyncRequestSigner($crypto);
+		$request = $this->createStub(IRequest::class);
+		$request->method('getHeader')->willReturnCallback(
+			fn (string $name): string => $name === AsyncRequestSigner::HEADER ? $this->signature : ''
+		);
+		$this->signature = $this->signer->sign('tok');
 		$this->controller = new TestableQueueController(
-			$this->createStub(IRequest::class),
+			$request,
 			$this->requestQueueService,
 			$this->activityService,
-			$this->logger
+			$this->logger,
+			$this->signer
 		);
+	}
+
+	/**
+	 * The route is public and a token is written to the log on every failed
+	 * delivery, so holding one must not be enough to have a worker spend a
+	 * minute and a half delivering.
+	 */
+	public function testACallThisServerDidNotSignIsRefusedBeforeTheQueueIsRead(): void {
+		foreach (['', 'deadbeef', $this->signer->sign('another-token')] as $signature) {
+			$this->signature = $signature;
+			$this->requestQueueService->expects($this->never())->method('getRequestFromToken');
+
+			$response = $this->controller->asyncForRequest('tok');
+
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+			$this->assertTrue($response->isThrottled(), 'a refusal counts against the caller');
+		}
 	}
 
 	public function testAnUnknownTokenGetsARealResponseInsteadOfExit(): void {

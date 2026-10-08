@@ -20,6 +20,7 @@ use OCA\Social\Exceptions\RetrieveAccountFormatException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Security\RemoteAddress;
 use OCA\Social\Tools\Exceptions\ArrayNotFoundException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
@@ -79,6 +80,7 @@ class CurlService {
 		private IClientService $clientService,
 		private HttpSignatureService $httpSignatureService,
 		private LoggerInterface $logger,
+		private AsyncRequestSigner $asyncRequestSigner,
 	) {
 		$this->maxDownloadSize = $this->configService->getAppValue(ConfigService::SOCIAL_MAX_SIZE) * 1048576;
 	}
@@ -333,7 +335,8 @@ class CurlService {
 
 	/**
 	 * Fires a request at this app's own `/async/request/{token}` route so that
-	 * the rows left on standby are delivered without the caller waiting.
+	 * the rows left on standby are delivered without the caller waiting. The
+	 * request is signed, since the route refuses one this server did not send.
 	 *
 	 * @throws SocialAppConfigException
 	 */
@@ -354,7 +357,10 @@ class CurlService {
 			// the local-address guard is lifted for this one call. It is the
 			// configured cloud host and nothing a request can influence; every
 			// genuinely remote address is still refused.
-			$this->retrieveJson('post', $url, ['allow_local_address' => true]);
+			$this->retrieveJson('post', $url, [
+				'allow_local_address' => true,
+				'headers' => [AsyncRequestSigner::HEADER => $this->asyncRequestSigner->sign($token)],
+			]);
 		} catch (RequestResultNotJsonException $e) {
 		} catch (Exception $e) {
 			$this->logger->error('Cannot initiate AsyncWithToken', ['token' => $token, 'exception' => $e]);
