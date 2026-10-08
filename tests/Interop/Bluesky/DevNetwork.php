@@ -32,6 +32,9 @@ final class DevNetwork {
 	public string $ozoneDid = '';
 	/** where the AppView says a video's playlist is */
 	public string $videoHost = '';
+	/** the domain of the network's handle server, and where to tell it the DID */
+	public string $customHandle = '';
+	public string $handleServer = '';
 
 	/** null when the job did not start the network */
 	public static function fromEnvironment(): ?self {
@@ -52,6 +55,8 @@ final class DevNetwork {
 		$network->ozone = rtrim((string)($addresses['ozone'] ?? ''), '/');
 		$network->ozoneDid = (string)($addresses['ozoneDid'] ?? '');
 		$network->videoHost = (string)($addresses['videoHost'] ?? '');
+		$network->customHandle = (string)($addresses['customHandle'] ?? '');
+		$network->handleServer = rtrim((string)($addresses['handleServer'] ?? ''), '/');
 
 		return $network;
 	}
@@ -195,6 +200,17 @@ final class DevNetwork {
 		], true);
 
 		return ['uri' => (string)($answer['uri'] ?? ''), 'cid' => (string)($answer['cid'] ?? '')];
+	}
+
+	/**
+	 * Puts a DID in the handle server's `/.well-known/atproto-did`, as a
+	 * person does on their own domain.
+	 */
+	public function serveHandleDid(string $did): void {
+		[$status, $body] = $this->request('POST', $this->handleServer . '/did', $did, ['Content-Type: text/plain']);
+		if ($status !== 204) {
+			throw new RuntimeException('the handle server answered ' . $status . ': ' . $body);
+		}
 	}
 
 	/**
