@@ -164,6 +164,18 @@ all 68 repository classes on a constructor signature that carries no stability
 promise and broke outright when Nextcloud 35 added a method to the public
 interface. Nothing in `lib/` now names a class outside `OCP\`.
 
+`StreamRequest`, the repository of `social_stream`, is one class spread over
+several files: what it reads and writes for one concern is a trait it uses —
+`StreamTimelines` (every timeline), `StreamInterests` (For you),
+`StreamThreads` (replies and the conversation under a post), `StreamSearch`
+(full-text search), `StreamCounters` (the reply/like/boost counters),
+`StreamMedia` (stored attachment copies and `social_stream_media`),
+`StreamStatistics` (tallies for the admin, profile and statistics pages) and
+`StreamDeletion` (removing posts and what hangs off them). A trait rather than
+a class because each reaches into `StreamRequest` for its query builders and
+injected requests; the header of `StreamTimelines` says why. Writing and
+reading a single post stays in `StreamRequest.php`.
+
 The tables are created by `lib/Migration/Version1000Date20221118000002.php` — the whole schema in one step — all prefixed with `social_`:
 
 | Table | Purpose |
