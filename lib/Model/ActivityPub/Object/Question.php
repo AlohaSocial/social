@@ -52,6 +52,26 @@ class Question extends Note implements JsonSerializable {
 		return $this->endTime;
 	}
 
+	/**
+	 * When the poll ends, as a Unix time, or null for one with no end time
+	 * or one that cannot be read — the form `social_stream.poll_ends_at`
+	 * stores it in.
+	 */
+	public function getEndTimestamp(): ?int {
+		return self::timestampOf($this->endTime);
+	}
+
+	/** An ActivityPub `endTime` as a Unix time, or null when there is none to read. */
+	public static function timestampOf(string $endTime): ?int {
+		if ($endTime === '') {
+			return null;
+		}
+
+		$time = strtotime($endTime);
+
+		return ($time === false || $time < 0) ? null : $time;
+	}
+
 	public function isExpired(): bool {
 		if ($this->closed !== '') {
 			return true;

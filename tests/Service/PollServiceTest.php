@@ -602,4 +602,23 @@ class PollServiceTest extends TestCase {
 		$this->assertSame((string)(time() - 600), $this->stored[\OCA\Social\Service\ConfigService::SOCIAL_POLLS_SWEPT]);
 		$this->assertSame([], $this->announced);
 	}
+
+	/**
+	 * A sweep cut off at its limit starts the next one where it stopped, so
+	 * the polls that closed after the last one it read are not skipped.
+	 */
+	public function testASweepCutOffAtItsLimitResumesAfterTheLastPollItRead(): void {
+		$this->stored[\OCA\Social\Service\ConfigService::SOCIAL_POLLS_SWEPT] = (string)(time() - 3600);
+		$first = $this->closedPoll('https://cloud.example/polls/1', time() - 1800);
+		$second = $this->closedPoll('https://cloud.example/polls/2', time() - 1200);
+		$this->streamRequest->method('getPollsClosedSince')->willReturn([$first, $second]);
+		$this->actionsRequest->method('votersOfPolls')->willReturn([]);
+
+		$this->service->announceClosedPolls(2);
+
+		$this->assertSame(
+			(string)($second->getEndTimestamp() - 1),
+			$this->stored[\OCA\Social\Service\ConfigService::SOCIAL_POLLS_SWEPT]
+		);
+	}
 }

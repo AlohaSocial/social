@@ -65,6 +65,9 @@ class IndexCoverageTest extends TestCase {
 		yield 'the voters of the polls a sweep announces' => [
 			'social_action', ['poll_prim'],
 		];
+		yield 'the polls that closed since the last sweep' => [
+			'social_stream', ['poll_ends_at'],
+		];
 	}
 
 	/**

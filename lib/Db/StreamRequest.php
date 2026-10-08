@@ -146,14 +146,6 @@ class StreamRequest extends StreamRequestBuilder {
 	/** How many posts one pass of deleteByAuthor() removes. */
 	public const DELETE_BATCH = 500;
 
-	/**
-	 * How far back the closed-poll sweep reads.
-	 *
-	 * Mastodon caps a poll at six months, so a poll published longer ago than
-	 * that has closed already and is not news to anybody.
-	 */
-	public const POLL_LOOKBACK = 190 * 86400;
-
 	public function __construct(
 		IDBConnection $connection,
 		LoggerInterface $logger,
@@ -312,6 +304,13 @@ class StreamRequest extends StreamRequestBuilder {
 		// took an approval back has to change the column too, or the column and
 		// the object it was copied from disagree from the next read on.
 		$this->setPostFields($qb, $stream, false);
+		// an `Update{Question}` can move the end of a poll, and the sweep
+		// that announces it reads only this column
+		if ($stream instanceof Question) {
+			$qb->set('poll_ends_at', $qb->createNamedParameter(
+				$stream->getEndTimestamp(), IQueryBuilder::PARAM_INT
+			));
+		}
 		if ($stream instanceof Note) {
 			$encoded = (string)json_encode($stream->getAttachments(), JSON_UNESCAPED_SLASHES);
 			$qb->set('hashtags', $qb->createNamedParameter(json_encode($stream->getHashtags(), JSON_UNESCAPED_SLASHES)));
@@ -1983,48 +1982,31 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The polls whose end time has passed since a moment.
+	 * The polls whose end time has passed since a moment, the earliest to
+	 * close first.
 	 *
-	 * A poll's end time lives in the stored wire object rather than in a
-	 * column, so it cannot be a predicate: what this does is read the recent
-	 * `Question` rows and let the model answer. That is bounded twice over —
-	 * by how far back it looks, and by `$scan` — and on any instance the set
-	 * is a handful of rows, because a poll is a rare kind of post and one that
-	 * closed a year ago is not news.
+	 * Read on `poll_ends_at`, the end time `save()` and `update()` copy out
+	 * of the wire object, which is indexed: every poll that closed in the
+	 * window is found however long ago it was published and however many
+	 * other polls there are, and only those rows are read.
 	 *
 	 * @return Question[]
 	 */
-	public function getPollsClosedSince(int $since, int $limit = 50, int $scan = 500): array {
+	public function getPollsClosedSince(int $since, int $limit = 50): array {
 		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
+		$expr = $qb->expr();
+		$qb->andWhere($expr->gt('s.poll_ends_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));
+		$qb->andWhere($expr->lte('s.poll_ends_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT)));
 		$qb->limitToType(Question::TYPE);
-		$qb->andWhere($qb->expr()->gte(
-			's.published_time',
-			$qb->createNamedParameter(
-				(new DateTime())->setTimestamp(time() - self::POLL_LOOKBACK),
-				IQueryBuilder::PARAM_DATE
-			)
-		));
-		$qb->orderBy('s.nid', 'desc');
-		$qb->setMaxResults(max(1, $scan));
+		$qb->orderBy('s.poll_ends_at', 'asc');
+		$qb->addOrderBy('s.nid', 'asc');
+		$qb->setMaxResults(max(1, $limit));
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 
-		$closed = [];
-		foreach ($this->getStreamsFromRequest($qb) as $poll) {
-			if (!($poll instanceof Question)) {
-				continue;
-			}
-
-			$ends = $poll->getEndTime() === '' ? 0 : (int)strtotime($poll->getEndTime());
-			if ($ends > $since && $ends <= time()) {
-				$closed[] = $poll;
-			}
-
-			if (count($closed) >= $limit) {
-				break;
-			}
-		}
-
-		return $closed;
+		return array_values(array_filter(
+			$this->getStreamsFromRequest($qb),
+			static fn (Stream $poll): bool => $poll instanceof Question
+		));
 	}
 
 	/**
@@ -2649,6 +2631,11 @@ class StreamRequest extends StreamRequestBuilder {
 			$qb->setValue($column, $qb->createNamedParameter(max(0, $stream->getDetailInt($key)), IQueryBuilder::PARAM_INT));
 		}
 		$this->setPostFields($qb, $stream, true);
+		if ($stream instanceof Question) {
+			$qb->setValue('poll_ends_at', $qb->createNamedParameter(
+				$stream->getEndTimestamp(), IQueryBuilder::PARAM_INT
+			));
+		}
 
 		try {
 			$dTime = new DateTime();
