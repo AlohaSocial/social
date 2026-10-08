@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phase 1 (§18) is implemented; phases 2–4 are specification.**
+**Status: phases 1 and 2 (§18) are implemented; phases 3 and 4 are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -980,6 +980,64 @@ each for a reason:
   as evidence when it is there.
 - **Suspension** leaves the identity alone (it can be lifted, and nothing is
   told); deletion tombstones the DID.
+
+### Phase 2 as built
+
+Everything in the phase 2 row, in `lib/Atproto/Reader/` (`BlueskyActorService`,
+`ActorMapper`, `PostMapper`, `FacetRenderer`, `PostStore`, `FeedPoller`,
+`NotificationPoller`, `BlueskyGraphService`, `BlueskySearch`,
+`LocalRecordResolver`), `lib/Atproto/AppView/` (`AppViewClient`,
+`ServiceAuth`), `lib/Atproto/Publisher/InteractionPublisher`, and
+`Cron\AtprotoSync`, with these departures from the sections above:
+
+- **Ids are https URLs on bsky.app, not `at://` URIs.** Every id this app
+  stores must be an https URL: `id_prim` is empty for anything else, the
+  import validation drops it, and the origin checks compare hosts. A
+  Bluesky account is `https://bsky.app/profile/<did>`, a post
+  `https://bsky.app/profile/<did>/post/<rkey>` — by DID, so a handle change
+  moves nothing — and the `at://` URI, the CID and the AppView's counts ride
+  in `details.atproto`. The page link (`details.page_url`) is by handle.
+- **The cursor is the newest index time seen**, not the AppView's paging
+  cursor: `getAuthorFeed` pages backwards, so each read takes the newest
+  page and stops at the first item at or before the last read. Reposts are
+  ordered by the repost's own time, as the feed is.
+- **Replies to a local post carry a mention of its author.** Bluesky names
+  nobody in a reply; the mention tag is what makes the notification here,
+  as it does for a Mastodon reply.
+- **A reply's parent is resolved only through the record table**: a Bluesky
+  reply to `at://<local did>/…` lands under the local post; a reply to a
+  Bluesky post that is not here is stored with its bsky.app parent id and
+  the ordinary unknown-parent fetch is not run for it (one hop through
+  `getPostThread` is phase 3).
+- **Deletes from Bluesky are not yet noticed** (§9.5): a post gone from the
+  author feed stays until phase 3 adds the daily `getPosts` check or the
+  Jetstream listener. Nor is the optional Jetstream listener (§9.4) built.
+- **No quote notification**: Social has none (the spec was wrong there); a
+  quote of a local post is stored as the post it is in and shows in the
+  feed of anybody who follows the quoting account.
+- **Search** (§9.1) asks the typeahead only for text that is the start of a
+  handle — a dot in it, no `@` — so a plain username never leaves the
+  instance; what it finds is not stored until somebody follows or
+  mentions it.
+- **The admin's federation block list applies to a handle's domain** (the
+  part after the first dot) in the directory; the per-DID/PDS-host block
+  list of §12.4 is phase 3, as are labelers (§12.2) and reporting (§12.3).
+  Of §12.1, posts and accounts labelled `!hide`/`!takedown` are not stored
+  or read, the adult labels make the pictures sensitive with a warning
+  naming the label, and other service labels become a warning; labelers'
+  own definitions are not read yet.
+- **Per-user opt-out** (§19.1, taken as recommended): Settings → Your
+  account has a switch; off, the account is announced inactive on the
+  firehose and by `getRepoStatus`, nothing more is published for it and its
+  notifications are not read; the DID and repository stay.
+- Likes and reposts are written by the queued publish job, like posts, so
+  the request that made them never waits for a repository commit; a like
+  of a Fediverse-only post writes nothing.
+- The authenticated AppView (`atproto_appview_auth`, default
+  `https://api.bsky.app`) and its DID (`atproto_appview_did`, default
+  `did:web:api.bsky.app`) are configuration of their own beside the public
+  one, because the public AppView refuses authenticated requests; the
+  interop job points both at the dev AppView.
 
 ## 19. Open questions
 

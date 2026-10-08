@@ -1033,6 +1033,22 @@ use; it is what lets you take the identity with you if this server ever cannot.
 The post menu's *Delivery status* shows whether a post is on Bluesky and opens
 it there.
 
+**Reading Bluesky.** Type a Bluesky handle — `alice.bsky.social`, no `@` —
+into search, the follow box or the composer's mention picker: the account
+appears with a butterfly badge next to its name, its profile page is
+`/@alice.bsky.social`, and following it is accepted at once (Bluesky has no
+follow requests). Their posts then come into your home feed within minutes,
+badged but otherwise ordinary: like, boost, reply and quote them as you would
+any post — a like or boost reaches Bluesky, a reply lands in their thread
+there. *Open on Bluesky* in the post menu leads to the post on bsky.app. When
+somebody on Bluesky follows you, likes, boosts, answers or mentions you, it
+shows in Activities like anything else, under your notification policy.
+
+**Pausing.** *Show my posts on Bluesky* in Settings → Your account switches
+your presence there off: nothing new is published, Bluesky is told the account
+is inactive, and what you had posted stays until you switch it back on — same
+handle, same identity.
+
 ## Keyboard shortcuts
 
 Press `?` anywhere, or open **Settings → Keyboard shortcuts**, for the list.

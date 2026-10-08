@@ -304,6 +304,16 @@ likes the post, both of which the AppView counts; the relay reports the
 repository at this app's own head revision; an edit within the grace period
 is a new record and a delete takes the post off the feed.
 
+`AtprotoReadingTest` is phase 2: a local account resolves a dev-PDS user by
+his bare handle (the account id is the bsky.app profile by DID), follows him
+and reads his post in her home timeline off the AppView, with the hashtag
+facet as a tag link; her like of it is counted by the AppView as a record of
+her repository; his like of her post and his reply to it come in through the
+AppView's notifications, asked for as her — the like in her Activities, the
+reply under her post. The test polls the watch and the notification cursor
+directly rather than the timed pass, because an empty first read backs a row
+off past the test's wait.
+
 What it cannot prove: indexing by `bsky.app` itself, which needs a public
 https host with wildcard DNS and is done by hand; and anything of reading
 Bluesky from here, which is phase 2.
