@@ -915,9 +915,8 @@ class StreamRequest extends StreamRequestBuilder {
 	/**
 	 * The next ordered page for the incremental stream-index repair job.
 	 *
-	 * Keep this projection small: the repair reads only ids here and lets this
-	 * request hydrate one stream at a time, rather than holding whole posts for
-	 * the duration of a cron batch.
+	 * Only the keys: the repair hydrates the page with `getIndexStreams()` in
+	 * one query, and falls back to a stream at a time when that fails.
 	 *
 	 * @return list<array{nid: string, id_prim: string}>
 	 */
@@ -940,6 +939,33 @@ class StreamRequest extends StreamRequestBuilder {
 		$cursor->closeCursor();
 
 		return $rows;
+	}
+
+	/**
+	 * The streams of one repair page, by nid, in one query — the same
+	 * projection `getStream()` reads, without the joins a timeline adds, so a
+	 * stream whose author is not cached is still returned.
+	 *
+	 * @param list<string> $nids
+	 *
+	 * @return array<string, Stream> nid => stream
+	 */
+	public function getIndexStreams(array $nids): array {
+		if ($nids === []) {
+			return [];
+		}
+
+		$qb = $this->getStreamSelectSql();
+		$qb->andWhere(
+			$qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY))
+		);
+
+		$streams = [];
+		foreach ($this->getStreamsFromRequest($qb) as $stream) {
+			$streams[(string)$stream->getNid()] = $stream;
+		}
+
+		return $streams;
 	}
 
 	/**

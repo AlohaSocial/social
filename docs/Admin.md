@@ -879,11 +879,12 @@ occ social:details <id>             # who can see one post and where it lands
 
 Aloha Social also repairs the recipient and hashtag side indexes automatically in
 bounded five-minute cron passes. Each pass visits at most 500 streams, stores
-its last fully indexed NID, and resumes from there; a failed row is retried on a
-later pass rather than skipped. A repeatedly failing row holds the cursor at
-that NID and logs the error, so later rows wait until the underlying failure is
-resolved. Keep Nextcloud background jobs working as `Cron\Index` relies on
-them. The manual `occ social:check:install --index --force` remains a full
+its last fully indexed NID, and resumes from there; a failed row is retried on
+the next passes, and after five failures it is logged as skipped and the walk
+moves on. Once the walk reaches the newest post the repair is complete
+(app config `index_done` = `1`) and the job does nothing more; deleting that
+key runs it again from the stored cursor. Keep Nextcloud background jobs
+working as `Cron\Index` relies on them. The manual `occ social:check:install --index --force` remains a full
 rebuild for administrators; it clears and repopulates both indexes and should
 not be scheduled as a cron command.
 
