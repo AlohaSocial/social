@@ -658,7 +658,9 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 				// Remote HTML is rendered into every local reader's timeline.
 				// strip_tags() cannot do this job: it keeps attributes on the
 				// tags it allows, so `onclick` and `javascript:` survive it.
-				return HtmlSanitizer::sanitize($value);
+				// A relative link in it belongs to the server the object came
+				// from, not to the one showing it.
+				return HtmlSanitizer::sanitize($value, $this->getId());
 			case self::AS_USERNAME:
 			case self::AS_ACCOUNT:
 				// a display name is prose as much as a bio is, and `Alice <3`
