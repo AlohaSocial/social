@@ -1,0 +1,194 @@
+# SPDX-FileCopyrightText: 2026 AlohaSocial contributors
+# SPDX-License-Identifier: MIT
+
+name: Test App Store Release (Dry Run)
+
+# Only runs when manually triggered.
+# Does NOT create a GitHub Release or publish to the App Store.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-release:
+    name: Build, package and sign Social
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    # Only allow testing branches in the official repository
+    if: github.repository == 'AlohaSocial/social' && github.ref_type == 'branch'
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # 1. Check the App Store token without making an API request
+      - name: Check App Store token
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+        run: |
+          if [[ -z "$APPSTORE_TOKEN" ]]; then
+            echo "::error::APPSTORE_TOKEN is missing"
+            exit 1
+          fi
+
+          echo "APPSTORE_TOKEN is configured."
+          echo "No App Store request will be made."
+
+      # 2. Checkout the selected branch
+      - name: Checkout Social
+        uses: actions/checkout@v4
+        with:
+          path: social
+          persist-credentials: false
+
+      # 3. Install Node.js and npm
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Set up npm
+        run: npm install -g 'npm@^11.3.0'
+
+      # 4. Install PHP and Composer
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      # 5. Build the App Store package
+      # The Makefile runs npm ci, Composer, lint and build.
+      - name: Build and package Social
+        env:
+          CYPRESS_INSTALL_BINARY: '0'
+        run: |
+          set -euo pipefail
+          cd social
+
+          make appstore
+
+          test -s build/artifacts/social.tar.gz
+
+          echo "App Store package created successfully."
+
+      # 6. Download the matching Nextcloud server
+      - name: Download Nextcloud for signing
+        run: |
+          set -euo pipefail
+
+          NC_VERSION="$(php -r '$xml = simplexml_load_file("social/appinfo/info.xml"); echo (string) $xml->dependencies->nextcloud["min-version"];')"
+
+          if [[ ! "$NC_VERSION" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid Nextcloud version"
+            exit 1
+          fi
+
+          curl -fsSL --retry 3 \
+            "https://download.nextcloud.com/server/releases/latest-${NC_VERSION}.zip" \
+            -o "$RUNNER_TEMP/nextcloud.zip"
+
+          unzip -q "$RUNNER_TEMP/nextcloud.zip" \
+            -d "$GITHUB_WORKSPACE"
+
+          test -f nextcloud/occ
+
+          echo "Nextcloud signing environment ready."
+
+      # 7. Verify certificate and sign the app
+      - name: Verify private key and sign Social
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$APP_PRIVATE_KEY" ]]; then
+            echo "::error::APP_PRIVATE_KEY is missing"
+            exit 1
+          fi
+
+          umask 077
+
+          KEY_DIR="$(mktemp -d)"
+          trap 'rm -rf "$KEY_DIR"' EXIT
+
+          # Write the private key securely
+          printf '%s\n' "$APP_PRIVATE_KEY" \
+            > "$KEY_DIR/social.key"
+
+          # Download the registered Nextcloud certificate
+          curl -fsSL \
+            "https://raw.githubusercontent.com/nextcloud/app-certificate-requests/master/social/social.crt" \
+            -o "$KEY_DIR/social.crt"
+
+          # Compare public keys
+          openssl pkey \
+            -in "$KEY_DIR/social.key" \
+            -pubout \
+            -out "$KEY_DIR/private.pub"
+
+          openssl x509 \
+            -in "$KEY_DIR/social.crt" \
+            -pubkey \
+            -noout \
+            -out "$KEY_DIR/certificate.pub"
+
+          if ! cmp -s \
+            "$KEY_DIR/private.pub" \
+            "$KEY_DIR/certificate.pub"; then
+            echo "::error::Private key does not match certificate"
+            exit 1
+          fi
+
+          echo "Private key matches the certificate."
+
+          # Extract the built app
+          tar -xzf social/build/artifacts/social.tar.gz \
+            -C social/build/artifacts
+
+          # Sign the extracted app
+          php nextcloud/occ integrity:sign-app \
+            --privateKey="$KEY_DIR/social.key" \
+            --certificate="$KEY_DIR/social.crt" \
+            --path="$GITHUB_WORKSPACE/social/build/artifacts/social"
+
+          # Check that the signature was created
+          test -s social/build/artifacts/social/appinfo/signature.json
+
+          echo "App signing successful."
+
+          # Rebuild the signed package
+          tar -czf social/build/artifacts/social.tar.gz \
+            -C social/build/artifacts social
+
+          echo "Signed package ready."
+
+      # 8. Upload the signed package as a test artifact
+      # This is NOT a GitHub Release.
+      - name: Upload signed test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aloha-social-signed-test
+          path: social/build/artifacts/social.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+      # 9. Final result
+      - name: Test summary
+        run: |
+          echo "## Aloha Social Release Test" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build: Successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Packaging: Successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "- App Store token: Configured (not validated)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Private key: Valid and matching certificate" >> "$GITHUB_STEP_SUMMARY"
+          echo "- App signing: Successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "- GitHub Release: Not created" >> "$GITHUB_STEP_SUMMARY"
+          echo "- App Store publication: Not performed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Signed package available under Artifacts." >> "$GITHUB_STEP_SUMMARY"
