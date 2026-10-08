@@ -1,180 +1,259 @@
-# This workflow is provided via the organization template repository
-#
+# This workflow is based on the Nextcloud organization template:
 # https://github.com/nextcloud/.github
-# https://docs.github.com/en/actions/learn-github-actions/sharing-workflows-with-your-organization
 #
 # SPDX-FileCopyrightText: 2021-2024 Nextcloud GmbH and Nextcloud contributors
+# SPDX-FileCopyrightText: 2026 AlohaSocial contributors
 # SPDX-License-Identifier: MIT
+#
+# Requires:
+# - Repository secret: APP_PRIVATE_KEY
+# - Environment "nextcloud-appstore" with Required reviewers enabled
+# - Environment secret in "nextcloud-appstore": APPSTORE_TOKEN
+# Without Required reviewers, an environment alone will NOT pause deployment.
+# Stable AND pre-releases (e.g. v1.2.3-beta.1) are supported.
 
 name: Build and publish app release
-
-permissions:
-  contents: read
 
 on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
+env:
+  # Dynamically use the repository name as the Nextcloud app ID.
+  APP_NAME: ${{ github.event.repository.name }}
+
+concurrency:
+  group: appstore-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   build_and_publish:
+    name: Test, build, sign and attach release
+    if: github.repository == 'AlohaSocial/social'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: write
-    runs-on: ubuntu-latest
+    outputs:
+      download_url: ${{ steps.attach_to_release.outputs.browser_download_url }}
 
-    # Only allowed to be run from the AlohaSocial organisation
-    if: ${{ github.repository_owner == 'AlohaSocial' }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - name: Check actor permission
+      - name: Check release actor permission
         uses: skjnldsv/check-actor-permission@69e92a3c4711150929bca9fcf34448c5bf5526e7 # v3.0
         with:
           require: write
 
-      - name: Set app env
-        run: |
-          # Split and keep last
-          echo "APP_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
-          echo "APP_VERSION=${GITHUB_REF##*/}" >> $GITHUB_ENV
-
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: ${{ env.APP_NAME }}
+          persist-credentials: false
 
-      - name: Get appinfo data
-        id: appinfo
-        uses: skjnldsv/xpath-action@7e6a7c379d0e9abc8acaef43df403ab4fc4f770c # master
-        with:
-          filename: ${{ env.APP_NAME }}/appinfo/info.xml
-          expression: "//info//dependencies//nextcloud/@min-version"
-
-      - name: Read package.json node and npm engines version
-        uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
+      - name: Read Node.js and npm versions from package.json
         id: versions
-        # Continue if no package.json
-        continue-on-error: true
+        uses: skjnldsv/read-package-engines-version-actions@06d6baf7d8f41934ab630e97d9e6c0bc9c9ac5e4 # v3
         with:
           path: ${{ env.APP_NAME }}
           fallbackNode: '^20'
           fallbackNpm: '^10'
 
-      - name: Set up node ${{ steps.versions.outputs.nodeVersion }}
-        # Skip if no package.json
-        if: ${{ steps.versions.outputs.nodeVersion }}
+      - name: Set up Node.js ${{ steps.versions.outputs.nodeVersion }}
         uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
         with:
           node-version: ${{ steps.versions.outputs.nodeVersion }}
+          cache: npm
+          cache-dependency-path: ${{ env.APP_NAME }}/package-lock.json
 
       - name: Set up npm ${{ steps.versions.outputs.npmVersion }}
-        # Skip if no package.json
-        if: ${{ steps.versions.outputs.npmVersion }}
-        run: npm i -g 'npm@${{ steps.versions.outputs.npmVersion }}'
+        env:
+          NPM_VERSION: ${{ steps.versions.outputs.npmVersion }}
+        run: npm install -g "npm@${NPM_VERSION}"
 
-      - name: Get php version
+      - name: Read compatible PHP versions from info.xml
         id: php-versions
         uses: icewind1991/nextcloud-version-matrix@58becf3b4bb6dc6cef677b15e2fd8e7d48c0908f # v1.3.1
         with:
           filename: ${{ env.APP_NAME }}/appinfo/info.xml
 
-      - name: Set up php ${{ steps.php-versions.outputs.php-min }}
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+      - name: Set up PHP ${{ steps.php-versions.outputs.php-min }}
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ steps.php-versions.outputs.php-min }}
+          tools: composer:v2
           coverage: none
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check composer.json
-        id: check_composer
-        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3.0.0
-        with:
-          files: "${{ env.APP_NAME }}/composer.json"
-
-      - name: Install composer dependencies
-        if: steps.check_composer.outputs.files_exists == 'true'
+      - name: Verify release tag matches all app versions
         run: |
-          cd ${{ env.APP_NAME }}
-          composer install --no-dev
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          xml_version="$(php -r 'echo (string) simplexml_load_file(getenv("APP_NAME") . "/appinfo/info.xml")->version;')"
+          npm_version="$(node -p 'require("./" + process.env.APP_NAME + "/package.json").version')"
+          composer_version="$(php -r '$j=json_decode(file_get_contents(getenv("APP_NAME") . "/composer.json"), true); echo $j["version"];')"
+          # Nextcloud App Store expects SemVer without build metadata.
+          if [[ ! "$tag_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid release tag: ${GITHUB_REF_NAME} (use vX.Y.Z or vX.Y.Z-beta.1)"
+            exit 1
+          fi
+          if [[ "$tag_version" != "$xml_version" || "$tag_version" != "$npm_version" || "$tag_version" != "$composer_version" ]]; then
+            echo "::error::Version mismatch: tag=$tag_version, info.xml=$xml_version, package.json=$npm_version, composer.json=$composer_version"
+            exit 1
+          fi
+          echo "Release version ${tag_version} is consistent."
 
-      - name: Build ${{ env.APP_NAME }}
-        # Skip if no package.json
-        if: ${{ steps.versions.outputs.nodeVersion }}
+      - name: Install JavaScript dependencies
+        working-directory: ${{ env.APP_NAME }}
         env:
-          CYPRESS_INSTALL_BINARY: 0
-        run: |
-          cd ${{ env.APP_NAME }}
-          npm ci
-          npm run build --if-present
+          CYPRESS_INSTALL_BINARY: '0'
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
 
-      - name: Check Krankerl config
-        id: krankerl
-        uses: andstor/file-existence-action@076e0072799f4942c8bc574a82233e1e4d13e9d6 # v3.0.0
-        with:
-          files: ${{ env.APP_NAME }}/krankerl.toml
+      - name: Run JavaScript unit tests
+        working-directory: ${{ env.APP_NAME }}
+        run: npm run test
 
-      - name: Install Krankerl
-        if: steps.krankerl.outputs.files_exists == 'true'
+      - name: Run JavaScript lint and type checks
+        working-directory: ${{ env.APP_NAME }}
         run: |
-          wget https://github.com/ChristophWurst/krankerl/releases/download/v0.14.0/krankerl_0.14.0_amd64.deb
-          sudo dpkg -i krankerl_0.14.0_amd64.deb
+          set -euo pipefail
+          npm run lint
+          npm run typecheck
 
-      - name: Package ${{ env.APP_NAME }} ${{ env.APP_VERSION }} with krankerl
-        if: steps.krankerl.outputs.files_exists == 'true'
-        run: |
-          cd ${{ env.APP_NAME }}
-          krankerl package
+      - name: Install PHP development dependencies for tests
+        working-directory: ${{ env.APP_NAME }}
+        run: composer install --prefer-dist --no-interaction --no-progress
 
-      - name: Package ${{ env.APP_NAME }} ${{ env.APP_VERSION }} with makefile
-        if: steps.krankerl.outputs.files_exists != 'true'
+      - name: Run PHP unit tests and syntax checks
+        working-directory: ${{ env.APP_NAME }}
         run: |
-          cd ${{ env.APP_NAME }}
+          set -euo pipefail
+          composer run test:unit
+          composer run lint
+
+      - name: Build and package using Makefile (no Krankerl)
+        working-directory: ${{ env.APP_NAME }}
+        env:
+          CYPRESS_INSTALL_BINARY: '0'
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          set -euo pipefail
+          # make appstore installs production dependencies, builds and packages.
           make appstore
+          test -s "build/artifacts/${APP_NAME}.tar.gz"
 
-      - name: Checkout server ${{ fromJSON(steps.appinfo.outputs.result).nextcloud.min-version }}
-        continue-on-error: true
-        id: server-checkout
+      - name: Download the minimum supported Nextcloud server for signing
         run: |
-          NCVERSION='${{ fromJSON(steps.appinfo.outputs.result).nextcloud.min-version }}'
-          wget --quiet https://download.nextcloud.com/server/releases/latest-$NCVERSION.zip
-          unzip latest-$NCVERSION.zip
+          set -euo pipefail
+          nc_version="$(php -r 'echo (string) simplexml_load_file(getenv("APP_NAME") . "/appinfo/info.xml")->dependencies->nextcloud["min-version"];')"
+          if [[ ! "$nc_version" =~ ^[0-9]+$ ]]; then
+            echo '::error::Invalid Nextcloud minimum version in info.xml'
+            exit 1
+          fi
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://download.nextcloud.com/server/releases/latest-${nc_version}.zip" \
+            -o "$RUNNER_TEMP/nextcloud.zip"
+          unzip -q "$RUNNER_TEMP/nextcloud.zip" -d "$GITHUB_WORKSPACE"
+          test -f nextcloud/occ
 
-      - name: Checkout server master fallback
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        if: ${{ steps.server-checkout.outcome != 'success' }}
-        with:
-          submodules: true
-          repository: nextcloud/server
-          path: nextcloud
-
-      - name: Sign app
+      - name: Verify signing key, sign app and repackage
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
         run: |
-          # Extracting release
-          cd ${{ env.APP_NAME }}/build/artifacts
-          tar -xvf ${{ env.APP_NAME }}.tar.gz
-          cd ../../../
-          # Setting up keys
-          echo '${{ secrets.APP_PRIVATE_KEY }}' > ${{ env.APP_NAME }}.key
-          wget --quiet "https://github.com/nextcloud/app-certificate-requests/raw/master/${{ env.APP_NAME }}/${{ env.APP_NAME }}.crt"
-          # Signing
-          php nextcloud/occ integrity:sign-app --privateKey=../${{ env.APP_NAME }}.key --certificate=../${{ env.APP_NAME }}.crt --path=../${{ env.APP_NAME }}/build/artifacts/${{ env.APP_NAME }}
-          # Rebuilding archive
-          cd ${{ env.APP_NAME }}/build/artifacts
-          tar -zcvf ${{ env.APP_NAME }}.tar.gz ${{ env.APP_NAME }}
+          set -euo pipefail
+          if [[ -z "$APP_PRIVATE_KEY" ]]; then
+            echo '::error::Missing repository secret APP_PRIVATE_KEY'
+            exit 1
+          fi
+          umask 077
+          key_dir="$(mktemp -d)"
+          trap 'rm -rf "$key_dir"' EXIT
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$key_dir/${APP_NAME}.key"
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://raw.githubusercontent.com/nextcloud/app-certificate-requests/master/${APP_NAME}/${APP_NAME}.crt" \
+            -o "$key_dir/${APP_NAME}.crt"
+          openssl pkey -in "$key_dir/${APP_NAME}.key" -pubout -out "$key_dir/key.pub"
+          openssl x509 -in "$key_dir/${APP_NAME}.crt" -pubkey -noout -out "$key_dir/cert.pub"
+          if ! cmp -s "$key_dir/key.pub" "$key_dir/cert.pub"; then
+            echo '::error::App private key does not match the registered certificate'
+            exit 1
+          fi
+          tar -xzf "${APP_NAME}/build/artifacts/${APP_NAME}.tar.gz" -C "${APP_NAME}/build/artifacts"
+          php nextcloud/occ integrity:sign-app \
+            --privateKey="$key_dir/${APP_NAME}.key" \
+            --certificate="$key_dir/${APP_NAME}.crt" \
+            --path="$GITHUB_WORKSPACE/${APP_NAME}/build/artifacts/${APP_NAME}"
+          test -s "${APP_NAME}/build/artifacts/${APP_NAME}/appinfo/signature.json"
+          tar -czf "${APP_NAME}/build/artifacts/${APP_NAME}.tar.gz" \
+            -C "${APP_NAME}/build/artifacts" "$APP_NAME"
+          tar -tzf "${APP_NAME}/build/artifacts/${APP_NAME}.tar.gz" \
+            | grep -Fx "${APP_NAME}/appinfo/signature.json" > /dev/null
 
-      - name: Attach tarball to github release
-        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # v2
+      - name: Attach signed tarball to GitHub release
         id: attach_to_release
+        uses: svenstaro/upload-release-action@04733e069f2d7f7f0b4aebc4fbdbce8613b03ccd # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ env.APP_NAME }}/build/artifacts/${{ env.APP_NAME }}.tar.gz
-          asset_name: ${{ env.APP_NAME }}-${{ env.APP_VERSION }}.tar.gz
-          tag: ${{ github.ref }}
+          asset_name: ${{ env.APP_NAME }}-${{ github.event.release.tag_name }}.tar.gz
+          tag: ${{ github.event.release.tag_name }}
           overwrite: true
 
-      - name: Upload app to Nextcloud appstore
+      - name: Summarize successful build
+        env:
+          RELEASE_ASSET_URL: ${{ steps.attach_to_release.outputs.browser_download_url }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_ASSET_URL" ]]; then
+            echo '::error::GitHub Release asset URL is empty'
+            exit 1
+          fi
+          {
+            echo '## Signed release ready for manual approval'
+            echo ''
+            echo '- All mandatory tests: passed'
+            echo '- Package: built, signed and attached to GitHub Release'
+            echo "- [Download release archive]($RELEASE_ASSET_URL)"
+            echo '- Next: approve the `nextcloud-appstore` deployment'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish_appstore:
+    name: Publish to Nextcloud App Store (manual approval)
+    needs: build_and_publish
+    if: github.repository == 'AlohaSocial/social'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    environment:
+      name: nextcloud-appstore
+
+    steps:
+      # This entire job waits for environment approval, including the secrets.
+      - name: Verify App Store secrets and release URL
+        shell: bash
+        env:
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          DOWNLOAD_URL: ${{ needs.build_and_publish.outputs.download_url }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPSTORE_TOKEN" || -z "$APP_PRIVATE_KEY" || -z "$DOWNLOAD_URL" ]]; then
+            echo '::error::APPSTORE_TOKEN, APP_PRIVATE_KEY or release URL is missing'
+            exit 1
+          fi
+
+      - name: Upload app to Nextcloud App Store
         uses: nextcloud-releases/nextcloud-appstore-push-action@a011fe619bcf6e77ddebc96f9908e1af4071b9c1 # v1
         with:
           app_name: ${{ env.APP_NAME }}
           appstore_token: ${{ secrets.APPSTORE_TOKEN }}
-          download_url: ${{ steps.attach_to_release.outputs.browser_download_url }}
+          download_url: ${{ needs.build_and_publish.outputs.download_url }}
           app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
