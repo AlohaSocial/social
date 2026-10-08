@@ -54,7 +54,12 @@
 					its name starts with -- enough to tell two requests apart at
 					a glance, and honest about being no logo at all.
 				-->
-				<span class="oauth__seal oauth__seal--app" aria-hidden="true">
+				<img
+					v-if="appLogo"
+					class="oauth__seal oauth__seal--logo"
+					:src="appLogo"
+					alt="">
+				<span v-else class="oauth__seal oauth__seal--app" aria-hidden="true">
 					{{ appInitial }}
 				</span>
 				<h1>{{ t('social', 'Authorization required') }}</h1>
@@ -65,7 +70,10 @@
 				-->
 				<template v-if="atproto">
 					<span v-if="appWebsite" class="oauth__client-id">{{ appWebsite }}</span>
-					<span class="oauth__client-note">
+					<span v-if="trusted" class="oauth__client-note">
+						{{ t('social', 'An app this server\'s administrator vouches for, by this address.') }}
+					</span>
+					<span v-else class="oauth__client-note">
 						{{ t('social', 'This address is what the app is known by; its name is not checked.') }}
 					</span>
 				</template>
@@ -104,7 +112,25 @@
 			</NcNoteCard>
 
 			<h2>{{ t('social', 'This application will be able to:') }}</h2>
-			<ul class="scopes">
+			<ul v-if="permissions.length > 0" class="scopes">
+				<li v-for="permission in permissions" :key="permission.scope" class="scopes__item">
+					<span
+						class="scopes__icon"
+						:class="{ 'scopes__icon--write': permission.writes }">
+						<Pencil v-if="permission.writes" :size="16" />
+						<Eye v-else :size="16" />
+					</span>
+					<span class="scopes__text">
+						<span class="scopes__label">{{ permission.label }}</span>
+						<span v-if="permission.detail" class="scopes__detail">{{ permission.detail }}</span>
+						<ul v-if="permission.items.length > 0" class="scopes__items">
+							<li v-for="item in permission.items" :key="item">{{ item }}</li>
+						</ul>
+						<span class="scopes__name">{{ permission.scope }}</span>
+					</span>
+				</li>
+			</ul>
+			<ul v-else class="scopes">
 				<li v-for="scope in scopes" :key="scope" class="scopes__item">
 					<!--
 						Two icons rather than one: a scope that only reads and a
@@ -187,6 +213,11 @@ export default {
 			copied: false,
 			appName: loadState('social', 'appName'),
 			appWebsite: loadState('social', 'appWebsite', ''),
+			// a Bluesky app the administrator vouches for shows its own logo
+			appLogo: loadState('social', 'appLogo', ''),
+			trusted: loadState('social', 'trusted', false),
+			// a Bluesky app's permissions, in words, as the server reads them
+			permissions: loadState('social', 'permissions', []),
 			// 'atproto' for a Bluesky app, '' for a Mastodon one
 			protocol: loadState('social', 'protocol', ''),
 			account: loadState('social', 'account', null),
@@ -423,6 +454,11 @@ export default {
 		color: var(--color-success-text, var(--color-success));
 		background-color: var(--color-success-hover, var(--color-background-hover));
 	}
+
+	&--logo {
+		object-fit: cover;
+		background-color: var(--color-background-hover);
+	}
 }
 
 .oauth__website {
@@ -525,6 +561,16 @@ export default {
 
 	&__label {
 		line-height: 24px;
+	}
+
+	&__detail {
+		color: var(--color-text-maxcontrast);
+	}
+
+	&__items {
+		margin: 4px 0;
+		padding-inline-start: 18px;
+		list-style: disc;
 	}
 
 	&__name {

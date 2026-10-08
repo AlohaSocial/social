@@ -30,6 +30,7 @@ use OCA\Social\Service\ModerationService;
 class ClientXrpc {
 	public const UPLOAD = 'com.atproto.repo.uploadBlob';
 	public const IMPORT = 'com.atproto.repo.importRepo';
+	private const WRITES = ['com.atproto.repo.createRecord', 'com.atproto.repo.putRecord', 'com.atproto.repo.deleteRecord', 'com.atproto.repo.applyWrites'];
 	/** what the session of an account moving here asks, beside what any session may */
 	private const MOVE_QUERIES = [
 		'com.atproto.server.checkAccountStatus', 'com.atproto.identity.getRecommendedDidCredentials', 'com.atproto.repo.listMissingBlobs',
@@ -76,6 +77,13 @@ class ClientXrpc {
 			return null;
 		}
 		$session = $this->signedIn($headers, $method, 'GET');
+		$permissions = $session->permissions();
+		$allowed = match ($method) {
+			'com.atproto.server.getSession' => true,
+			'com.atproto.server.getServiceAuth' => $permissions->mayCall(self::param($params, 'lxm'), self::param($params, 'aud')),
+			default => $permissions->mayCall($method, $this->audience($headers)),
+		};
+		self::assertAllowed($allowed, 'call ' . $method);
 
 		return match (true) {
 			$method === 'com.atproto.server.getSession' => $this->sessions->describe($session),
@@ -123,6 +131,15 @@ class ClientXrpc {
 			return null;
 		}
 		$session = $this->signedIn($headers, $method, 'POST');
+		$writes = in_array($method, self::WRITES, true) ? self::writesOf($method, self::json($rawBody)) : null;
+		if ($writes !== null) {
+			foreach ($writes as [$collection, $actions]) {
+				$allowed = array_filter($actions, static fn (string $action): bool => $session->permissions()->mayWrite($collection, $action)) !== [];
+				self::assertAllowed($allowed, implode(' or ', $actions) . ' records of ' . $collection);
+			}
+		} else {
+			self::assertAllowed($session->permissions()->mayCall($method, $this->audience($headers)), 'call ' . $method);
+		}
 
 		return match ($method) {
 			'app.bsky.actor.putPreferences' => $this->preferences->put($session, self::json($rawBody)),
@@ -168,6 +185,7 @@ class ClientXrpc {
 		$session = $this->grants->uploader((string)($headers['authorization'] ?? ''));
 		if ($session === null) {
 			$session = $this->signedIn($headers, self::UPLOAD, 'POST');
+			self::assertAllowed($session->permissions()->mayUpload((string)($headers['content-type'] ?? '')), 'upload files of this type');
 		} else {
 			$this->assertNotSuspended($session);
 		}
@@ -222,11 +240,58 @@ class ClientXrpc {
 			throw XrpcException::authenticationRequired();
 		}
 		$this->assertNotSuspended($session);
-		if ($method !== 'com.atproto.server.getSession' && !$session->may(ClientSession::GENERIC)) {
-			throw new XrpcException(403, 'InsufficientScope', 'This app was not allowed to act for the account');
-		}
 
 		return $session;
+	}
+
+	/**
+	 * The service a call is for: what `atproto-proxy` names, else the
+	 * AppView's.
+	 */
+	private function audience(array $headers): string {
+		$proxy = trim((string)($headers['atproto-proxy'] ?? ''));
+
+		return $proxy !== '' ? $proxy : $this->config->appViewDid() . '#bsky_appview';
+	}
+
+	/**
+	 * The collections a write touches, each with the actions any one of which
+	 * allows it: `putRecord` both makes and replaces.
+	 *
+	 * @return list<array{0: string, 1: list<string>}>
+	 */
+	private static function writesOf(string $method, array $body): array {
+		$collection = (string)($body['collection'] ?? '');
+
+		switch ($method) {
+			case 'com.atproto.repo.createRecord':
+				return [[$collection, ['create']]];
+			case 'com.atproto.repo.putRecord':
+				return [[$collection, ['update', 'create']]];
+			case 'com.atproto.repo.deleteRecord':
+				return [[$collection, ['delete']]];
+		}
+		$writes = [];
+		foreach (is_array($body['writes'] ?? null) ? $body['writes'] : [] as $write) {
+			$write = is_array($write) ? $write : [];
+			$action = match ((string)($write['$type'] ?? '')) {
+				'com.atproto.repo.applyWrites#create' => 'create',
+				'com.atproto.repo.applyWrites#update' => 'update',
+				default => 'delete',
+			};
+			$writes[] = [(string)($write['collection'] ?? ''), [$action]];
+		}
+
+		return $writes;
+	}
+
+	/**
+	 * @throws XrpcException
+	 */
+	private static function assertAllowed(bool $allowed, string $what): void {
+		if (!$allowed) {
+			throw new XrpcException(403, 'InsufficientScope', 'This app was not allowed to ' . $what);
+		}
 	}
 
 	/**

@@ -484,6 +484,8 @@ class ConfigService {
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
 	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
 	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
+	/** the Bluesky apps (client IDs) whose own name and logo the consent page shows */
+	public const ATPROTO_OAUTH_TRUSTED = 'atproto_oauth_trusted';
 
 	public array $defaults = [
 		self::ATPROTO_ENABLED => '0',
@@ -499,6 +501,7 @@ class ConfigService {
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
+		self::ATPROTO_OAUTH_TRUSTED => '[]',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
 		self::SOCIAL_ADDRESS => '',

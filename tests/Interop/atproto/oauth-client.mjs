@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { NodeOAuthClient, buildAtprotoLoopbackClientMetadata, requestLocalLock } from '@atproto/oauth-client-node'
 
 const DIR = process.env.OAUTH_STATE_DIR ?? '/tmp/atproto-oauth'
-const SCOPE = 'atproto transition:generic'
+const SCOPE = process.env.OAUTH_SCOPE || 'atproto transition:generic'
 mkdirSync(DIR, { recursive: true })
 
 function fileStore(name) {
@@ -69,6 +69,15 @@ if (command === 'start') {
 			record: { $type: 'app.bsky.feed.post', text: process.env.OAUTH_POST_TEXT ?? 'Posted with Bluesky sign-in', createdAt: new Date().toISOString() },
 		}),
 	})
+	const liked = await call('/xrpc/com.atproto.repo.createRecord', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			repo: session.did,
+			collection: 'app.bsky.feed.like',
+			record: { $type: 'app.bsky.feed.like', subject: { uri: posted.body?.uri ?? '', cid: posted.body?.cid ?? '' }, createdAt: new Date().toISOString() },
+		}),
+	})
 	const first = await session.getTokenInfo(false)
 	const refreshed = await session.getTokenInfo(true)
 	const again = await call('/xrpc/com.atproto.server.getSession')
@@ -81,6 +90,7 @@ if (command === 'start') {
 		who,
 		timeline: { status: timeline.status },
 		posted,
+		liked: { status: liked.status, error: liked.body?.error ?? '' },
 		again: { status: again.status },
 	}))
 } else {

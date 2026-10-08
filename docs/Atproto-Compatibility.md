@@ -1272,9 +1272,31 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   signs one out. An OAuth app without `transition:generic` may only ask who
   it is (`getSession`); `getSession` shows the e-mail address only with
   `transition:email`.
-- **Not built**: the granular permission scopes (`repo:`, `rpc:`,
-  `include:`) — an app asking only for those gets `atproto` alone — and a
-  list of trusted apps whose names and logos would be shown.
+- **Granular permissions** (atproto.com/specs/permission) are granted and
+  held to: `repo:` records of a collection and an action, `rpc:` methods at
+  a service (the AppView's `#bsky_appview` unless `atproto-proxy` names
+  another), `blob:` uploads of a type, `account:email`, `identity:`, and
+  `include:` permission sets. A set is resolved as Lexicon resolution
+  says — the `_lexicon` TXT record of its authority, then the
+  `com.atproto.lexicon.schema` record of that DID — kept a day at most, and
+  only its `repo` and `rpc` permissions within its own namespace are taken;
+  an `rpc` permission that inherits takes the `aud` the `include` named. A
+  scope written wrong, or a set that cannot be resolved, is refused at the
+  pushed request (`invalid_scope`). Each call is checked: a write per
+  collection and action (every write of an `applyWrites` on its own), an
+  AppView call per method and service, a service-auth token per method and
+  audience, an upload per type; `getSession` is always answered and shows
+  the e-mail address with `account:email` or `transition:email`. The
+  transitional scopes stay as they were.
+- **The consent page says what each permission means**: a sentence per
+  scope, a permission set by its own title and detail (in the person's
+  language where the set has it) with what it holds listed beneath, and a
+  mark on what lets the app act rather than read.
+- **Trusted apps**: the administrator may list client IDs (Bluesky admin
+  section); for those, the consent page shows the app's own `client_name`
+  and `logo_uri` (https only) and says the administrator vouches for it.
+  Any other app is shown by its address only, because an app can call
+  itself anything.
 
 ### Phase 4 as it lands
 
