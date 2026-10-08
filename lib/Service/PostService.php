@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
@@ -459,6 +460,14 @@ class PostService {
 		}
 
 		$note->setQuote($quoted->getId());
+
+		if (BlueskyIds::isPostId($quoted->getId())) {
+			// Bluesky asks nobody's permission to quote: the author's postgate
+			// decides, and the AppView applies it
+			$note->setQuoteState(Stream::QUOTE_ACCEPTED);
+
+			return null;
+		}
 
 		if ($quoted->isLocal()) {
 			// this server is the quoted author's server, so the approval is

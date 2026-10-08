@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\AP;
 use OCA\Social\Atproto\Publisher\InteractionQueue;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -186,6 +187,11 @@ class LikeService {
 	 * @throws Exception when the author's actor cannot be resolved at all
 	 */
 	private function assignInstance(ACore $item, Stream $note): void {
+		if (BlueskyIds::isActorId($note->getAttributedTo())) {
+			// a Bluesky author has no inbox; the like reaches Bluesky as a
+			// record (InteractionQueue), not as an activity
+			return;
+		}
 		$target = $this->cacheActorService->getFromId($note->getAttributedTo());
 		$inbox = $target->getInbox();
 		if ($inbox === '') {
