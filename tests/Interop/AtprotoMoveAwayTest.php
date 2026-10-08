@@ -63,6 +63,11 @@ class AtprotoMoveAwayTest extends TestCase {
 
 		$here = Server::get(IdentityService::class)->getByDid($identity->did);
 		$this->assertSame(Identity::STATE_MOVED_AWAY, $here->state, 'switched off here');
-		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($identity->did)['handle'] ?? '') === $handle ? true : null), 'the AppView follows the DID to its new home');
+		$seen = null;
+		$followed = $this->network->await(function () use ($identity, $handle, &$seen) {
+			$seen = $this->network->profile($identity->did);
+			return ($seen['handle'] ?? '') === $handle ? true : null;
+		});
+		$this->assertNotNull($followed, 'the AppView follows the DID to its new home, but shows ' . json_encode($seen));
 	}
 }

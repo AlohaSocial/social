@@ -64,7 +64,8 @@ class PdsClient {
 		$options = ['headers' => $headers, 'timeout' => 600, 'http_errors' => false];
 		if ($json !== null) {
 			$options['headers']['Content-Type'] = 'application/json';
-			$options['body'] = (string)json_encode($json, JSON_UNESCAPED_SLASHES);
+			// a procedure's input is an object, and an empty PHP array encodes as []
+			$options['body'] = (string)json_encode($json === [] ? (object)[] : $json, JSON_UNESCAPED_SLASHES);
 		} elseif ($bytes !== null) {
 			$options['headers']['Content-Type'] = $type;
 			$options['body'] = $bytes;
