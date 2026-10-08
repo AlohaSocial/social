@@ -14,6 +14,8 @@ use OCA\Social\Atproto\Firehose\FirehoseDaemon;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Db\AtprotoRepoRequest;
+use OCA\Social\Db\AtprotoWatchRequest;
+use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -46,6 +48,7 @@ class AtprotoStatusService {
 		private IConfig $systemConfig,
 		private ICacheFactory $cacheFactory,
 		private ITimeFactory $time,
+		private ?AtprotoWatchRequest $watches = null,
 	) {
 	}
 
@@ -63,6 +66,10 @@ class AtprotoStatusService {
 				'repositories' => $this->repoRequest->countHeads(),
 				'events_in_window' => $this->events->countInWindow(),
 				'head_seq' => $this->events->latestSeq(),
+				// reading Bluesky: the followed authors and the local accounts
+				// whose notifications are asked for, and how far behind the
+				// slowest of each is
+				'reading' => $this->reading(),
 				'rotation_key_age' => $this->rotationKeyAgeDays(),
 				'daemon' => $this->daemon->status(),
 			],
@@ -220,4 +227,21 @@ class AtprotoStatusService {
 			return $fallback;
 		}
 	}
+	/**
+	 * @return array{watches: int, lag: int, accounts: int, lag_notifications: int}
+	 */
+	private function reading(): array {
+		if ($this->watches === null) {
+			return ['watches' => 0, 'lag' => 0, 'accounts' => 0, 'lag_notifications' => 0];
+		}
+		$now = $this->time->getTime();
+
+		return [
+			'watches' => $this->watches->count(),
+			'lag' => $this->watches->lag($now),
+			'accounts' => $this->watches->count(CoreRequestBuilder::TABLE_ATPROTO_NOTIFY_CURSOR),
+			'lag_notifications' => $this->watches->lag($now, CoreRequestBuilder::TABLE_ATPROTO_NOTIFY_CURSOR),
+		];
+	}
+
 }

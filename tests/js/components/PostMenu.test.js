@@ -100,6 +100,23 @@ describe('the post menu', () => {
 			expect(wrapper.emitted('muteConversation')).toHaveLength(1)
 		})
 
+		/** A Bluesky post has no "instance"; the link says where it really goes. */
+		it('offers to open a Bluesky post on Bluesky', () => {
+			const author = { acct: 'dana.bsky.social', bluesky: { handle: 'dana.bsky.social', did: 'did:plc:d', url: 'https://bsky.app/profile/dana.bsky.social', native: true } }
+			const wrapper = mountMenu({ account: author, url: 'https://bsky.app/profile/dana.bsky.social/post/3k2a' })
+
+			const link = wrapper.find('.action--link')
+			expect(link.text()).toBe('Open on Bluesky')
+			expect(link.attributes('href')).toBe('https://bsky.app/profile/dana.bsky.social/post/3k2a')
+			expect(items(wrapper)).not.toContain('Open on original instance')
+		})
+
+		it('reads the post address when the author entity does not say', () => {
+			const wrapper = mountMenu({ account: { acct: 'dana.bsky.social' }, url: 'https://bsky.app/profile/did:plc:d/post/3k2a' })
+			expect(wrapper.find('.action--link').text()).toBe('Open on Bluesky')
+			expect(mountMenu().find('.action--link').text()).toBe('Open on original instance')
+		})
+
 		/** Every one of these is the reader acting on their own post. */
 		it('never offers to edit, delete or archive it', () => {
 			const offered = items(mountMenu())

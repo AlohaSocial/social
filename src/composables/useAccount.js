@@ -7,6 +7,7 @@ import { computed, toValue } from 'vue'
 
 import { useAccountStore } from '../store/account.js'
 import { useServerData } from './useServerData.js'
+import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 
 /**
  * One account, as the page knows it: the handle a user id resolves to, what
@@ -19,14 +20,21 @@ export function useAccount(uid) {
 	const accountStore = useAccountStore()
 	const { hostname } = useServerData()
 
-	/** the complete account name: a local user id is qualified with this host */
+	/**
+	 * the complete account name: a local user id is qualified with this host.
+	 * A Bluesky handle has no host to add and the store files it as it is,
+	 * which is the one way to tell it from a local user id with a dot in it
+	 */
 	const profileAccount = computed(() => {
 		const value = toValue(uid)
 		if (!value) {
 			return ''
 		}
+		if (value.indexOf('@') !== -1 || isBlueskyAccount(accountStore.getAccount(value))) {
+			return value
+		}
 
-		return value.indexOf('@') === -1 ? value + '@' + hostname.value : value
+		return value + '@' + hostname.value
 	})
 
 	/** @type {import('vue').ComputedRef<import('../types/Mastodon.js').Account|undefined>} */
@@ -45,7 +53,7 @@ export function useAccount(uid) {
 	const accountLoaded = computed(() => accountInfo.value !== undefined)
 
 	/** whether the account lives on this instance */
-	const isLocal = computed(() => accountInfo.value && !accountInfo.value.acct.includes('@'))
+	const isLocal = computed(() => accountInfo.value && isLocalAccount(accountInfo.value))
 
 	/** @type {import('vue').ComputedRef<import('../types/Mastodon.js').Relationship|undefined>} */
 	const relationship = computed(() => accountInfo.value && accountStore.getRelationshipWith(accountInfo.value.id))

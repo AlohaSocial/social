@@ -51,6 +51,7 @@ import UserEntry from '../components/UserEntry.vue'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 
 export default {
 	name: 'ProfileFollowers',
@@ -83,7 +84,11 @@ export default {
 			if (account === '') {
 				return ''
 			}
-			return account.includes('@') ? account : account + '@' + this.hostname
+			// a Bluesky handle is filed as it is, see useAccount
+			if (account.includes('@') || isBlueskyAccount(this.accountStore.getAccount(account))) {
+				return account
+			}
+			return account + '@' + this.hostname
 		},
 
 		/** @return {string} */

@@ -20,6 +20,7 @@
 					<span class="post-author">
 						<DisplayName :text="item.account.display_name" :emojis="item.account.emojis" />
 					</span>
+					<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
 					<!-- The handle is what the byline falls back to, not what it
 					     carries: it repeats under the pointer as the wrapper's
 					     own `title`, and again in the card that opens when the
@@ -518,12 +519,14 @@ import logger from '../services/logger.js'
 import { onTick } from '../services/clock.js'
 import { filterCoverLabel, matchedFilters } from '../utils/filters.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
+import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { lessLikeThisFromPost } from '../services/interestFeedback.js'
 import MessageContent from './MessageContent.js'
 import Poll from './Poll.vue'
 import QuotedPost from './QuotedPost.vue'
 import RollingCount from './RollingCount.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
 import visibilitiesInfo from './Visibility/VisibilitiesInfos.js'
 import VisibilityIcon from './Visibility/VisibilityIcon.vue'
@@ -584,6 +587,7 @@ export default {
 		Poll,
 		QuotedPost,
 		RollingCount,
+		BlueskyBadge,
 		DisplayName,
 		VisibilityIcon,
 	},
@@ -1085,7 +1089,7 @@ export default {
 		 * @return {boolean}
 		 */
 		isLocal() {
-			return !this.item.account.acct.includes('@')
+			return isLocalAccount(this.item.account)
 		},
 
 		/** @return {import('../types/Mastodon.js').Account} */
@@ -1156,8 +1160,14 @@ export default {
 
 	methods: {
 		localProfileUrl,
+		isBlueskyAccount,
+
+		/**
+		 * @param {object} account an Account entity
+		 * @return {boolean} whether it has a native Nextcloud profile to link to
+		 */
 		isLocalAccount(account) {
-			return Boolean(account?.acct && !account.acct.includes('@') && account.username)
+			return Boolean(account?.acct && isLocalAccount(account) && account.username)
 		},
 
 		/**

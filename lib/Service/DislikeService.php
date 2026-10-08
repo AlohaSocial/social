@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -176,6 +177,10 @@ class DislikeService {
 	 * @throws InvalidResourceException when the author publishes no inbox
 	 */
 	private function assignInstance(ACore $item, Stream $note): void {
+		if (BlueskyIds::isActorId($note->getAttributedTo())) {
+			// Bluesky has no dislike; it stays here
+			return;
+		}
 		$target = $this->cacheActorService->getFromId($note->getAttributedTo());
 		$inbox = $target->getInbox();
 		if ($inbox === '') {

@@ -23,6 +23,7 @@ final class DevNetwork {
 
 	private string $accessJwt = '';
 	private string $did = '';
+	private string $handle = '';
 	public string $plc = '';
 	public string $pds = '';
 	public string $appView = '';
@@ -61,6 +62,7 @@ final class DevNetwork {
 		]);
 		$this->accessJwt = (string)($answer['accessJwt'] ?? '');
 		$this->did = (string)($answer['did'] ?? '');
+		$this->handle = strtolower($name . '.test');
 		if ($this->accessJwt === '' || $this->did === '') {
 			throw new RuntimeException('could not create a user on the dev PDS: ' . json_encode($answer));
 		}
@@ -125,6 +127,55 @@ final class DevNetwork {
 			'collection' => 'app.bsky.graph.follow',
 			'record' => ['$type' => 'app.bsky.graph.follow', 'subject' => $did, 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')],
 		], true);
+	}
+
+	/** The handle the dev PDS gave the signed-in user. */
+	public function userHandle(): string {
+		return $this->handle;
+	}
+
+	/**
+	 * The signed-in user posts.
+	 *
+	 * @return array{uri: string, cid: string}
+	 */
+	public function postText(string $text, ?array $reply = null): array {
+		$record = ['$type' => 'app.bsky.feed.post', 'text' => $text, 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')];
+		// a PDS stores what it is given; the hashtag facets are the client's
+		// to write, as the Bluesky app does
+		if (preg_match_all('/#(\w+)/u', $text, $tags, PREG_OFFSET_CAPTURE) > 0) {
+			foreach ($tags[0] as $i => [$whole, $at]) {
+				$record['facets'][] = [
+					'index' => ['byteStart' => $at, 'byteEnd' => $at + strlen($whole)],
+					'features' => [['$type' => 'app.bsky.richtext.facet#tag', 'tag' => $tags[1][$i][0]]],
+				];
+			}
+		}
+		if ($reply !== null) {
+			$record['reply'] = ['root' => $reply['root'] ?? $reply['parent'], 'parent' => $reply['parent']];
+		}
+		$answer = $this->post($this->pds, 'com.atproto.repo.createRecord', [
+			'repo' => $this->did,
+			'collection' => 'app.bsky.feed.post',
+			'record' => $record,
+		], true);
+
+		return ['uri' => (string)($answer['uri'] ?? ''), 'cid' => (string)($answer['cid'] ?? '')];
+	}
+
+	/**
+	 * Who liked a post, by DID, as the AppView counts it.
+	 *
+	 * @return string[]
+	 */
+	public function likers(string $uri): array {
+		$answer = $this->get($this->appView, 'app.bsky.feed.getLikes', ['uri' => $uri, 'limit' => '50']);
+		$dids = [];
+		foreach (is_array($answer['likes'] ?? null) ? $answer['likes'] : [] as $like) {
+			$dids[] = (string)($like['actor']['did'] ?? '');
+		}
+
+		return $dids;
 	}
 
 	/** The signed-in user likes a post. */

@@ -11,9 +11,15 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -82,6 +88,9 @@ class CacheActorService {
 		private LoggerInterface $logger,
 		private ?ContainerInterface $container = null,
 		private ?ITimeFactory $timeFactory = null,
+		private ?BlueskyActorService $blueskyActors = null,
+		private ?AtprotoIdentityRequest $atprotoIdentities = null,
+		private ?AtprotoConfig $atprotoConfig = null,
 	) {
 	}
 
@@ -132,6 +141,12 @@ class CacheActorService {
 			$actor = $this->memo[$id];
 			// moved to the end, so the eviction below takes the stalest
 			unset($this->memo[$id]);
+			$this->memo[$id] = $actor;
+
+			return $actor;
+		}
+		if (BlueskyIds::isActorId($id)) {
+			$actor = $this->blueskyActor(BlueskyIds::didOf($id), $refresh);
 			$this->memo[$id] = $actor;
 
 			return $actor;
@@ -368,6 +383,9 @@ class CacheActorService {
 	 * @throws UnauthorizedFediverseException
 	 */
 	public function getFromAccount(string $account, bool $retrieve = true): Person {
+		if (BlueskyIds::isHandle($account)) {
+			return $this->blueskyAccount(strtolower($account), $retrieve);
+		}
 		try {
 			return $this->getFromLocalAccount($account);
 		} catch (CacheActorDoesNotExistException $e) {
@@ -554,6 +572,11 @@ class CacheActorService {
 	}
 
 	private function refreshRemoteDetails(Person $item): void {
+		if (BlueskyIds::isActorId($item->getId())) {
+			$this->refreshBlueskyDetails($item);
+
+			return;
+		}
 		try {
 			$this->addRemoteActorDetailCount($item);
 			// what else a profile shows that only a fetch can answer: the
@@ -574,6 +597,10 @@ class CacheActorService {
 	}
 
 	public function addRemoteActorDetailCount(Person $actor): void {
+		if (BlueskyIds::isActorId($actor->getId())) {
+			// a Bluesky account's counts come with its profile; it has no collections
+			return;
+		}
 		try {
 			$followers = $this->getCollectionFromId($actor->getFollowers());
 			$following = $this->getCollectionFromId($actor->getFollowing());
@@ -588,6 +615,66 @@ class CacheActorService {
 			'post' => $outbox->getTotalItems()
 		];
 		$actor->setDetailArray(Details::COUNT, $count);
+	}
+
+	/**
+	 * A Bluesky account by DID: from the cache, or resolved through the
+	 * AppView when it is not here yet or a refresh is asked for.
+	 *
+	 * @throws CacheActorDoesNotExistException
+	 * @throws AtprotoException
+	 */
+	private function blueskyActor(string $did, bool $refresh): Person {
+		if ($this->blueskyActors === null) {
+			throw new CacheActorDoesNotExistException();
+		}
+
+		return $this->blueskyActors->resolve($did, $refresh);
+	}
+
+	/**
+	 * A handle with no `@`: one of this instance's own Bluesky handles leads
+	 * to the local account that owns it, any other is a Bluesky account.
+	 *
+	 * @throws CacheActorDoesNotExistException
+	 * @throws AtprotoException
+	 */
+	private function blueskyAccount(string $handle, bool $retrieve): Person {
+		if ($this->atprotoIdentities !== null && $this->atprotoConfig !== null
+			&& str_ends_with($handle, '.' . $this->atprotoConfig->handleHost())) {
+			try {
+				return $this->getFromId($this->atprotoIdentities->getByHandle($handle)->actorId);
+			} catch (AtprotoIdentityNotFoundException) {
+				throw new CacheActorDoesNotExistException();
+			}
+		}
+		if ($this->blueskyActors === null) {
+			throw new CacheActorDoesNotExistException();
+		}
+		if (!$retrieve) {
+			$cached = $this->blueskyActors->cached($handle);
+			if ($cached === null) {
+				throw new CacheActorDoesNotExistException();
+			}
+
+			return $cached;
+		}
+
+		return $this->blueskyActors->resolve($handle);
+	}
+
+	/**
+	 * The counts and labels of a Bluesky account come with its profile; a
+	 * refresh re-reads it, and nothing is fetched from collections it has none of.
+	 */
+	private function refreshBlueskyDetails(Person $item): void {
+		try {
+			$this->blueskyActor(BlueskyIds::didOf($item->getId()), true);
+			$this->cacheActorsRequest->recordSyncAttempt($item->getId(), true, $this->now());
+		} catch (Exception $e) {
+			$this->logger->info('could not refresh the Bluesky account ' . $item->getId() . ': ' . $e->getMessage(), ['actor' => $item->getId(), 'exception' => $e]);
+			$this->cacheActorsRequest->recordSyncAttempt($item->getId(), false, $this->now());
+		}
 	}
 
 	/**

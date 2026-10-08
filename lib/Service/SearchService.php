@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -41,6 +42,7 @@ class SearchService {
 		private StreamRequest $streamRequest,
 		private LoggerInterface $logger,
 		private CurlService $curlService,
+		private ?BlueskySearch $bluesky = null,
 	) {
 	}
 
@@ -236,7 +238,31 @@ class SearchService {
 			}
 		}
 
-		return $this->cacheActorService->searchCachedAccounts($search, $limit, $followedBy);
+		$found = $this->cacheActorService->searchCachedAccounts($search, $limit, $followedBy);
+		if ($followedBy === '' && $this->bluesky !== null) {
+			$found = self::withBluesky($found, $this->bluesky->typeahead($search));
+		}
+
+		return $found;
+	}
+
+	/**
+	 * The Bluesky accounts the typeahead found, after what is cached here,
+	 * without repeating an account the cache already answered.
+	 *
+	 * @param Person[] $found
+	 * @param Person[] $bluesky
+	 * @return Person[]
+	 */
+	public static function withBluesky(array $found, array $bluesky): array {
+		$ids = array_map(static fn (Person $p): string => $p->getId(), $found);
+		foreach ($bluesky as $person) {
+			if (!in_array($person->getId(), $ids, true)) {
+				$found[] = $person;
+			}
+		}
+
+		return $found;
 	}
 
 	/**

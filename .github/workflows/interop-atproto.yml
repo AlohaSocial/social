@@ -235,6 +235,13 @@ jobs:
           cat /tmp/network.log
           exit 1
 
+      - name: Point the app at the dev AppView as the authenticated one too
+        # the notifications of local accounts are asked for as the user,
+        # with a token addressed to the AppView's DID
+        run: |
+          ./occ config:app:set social atproto_appview_auth --value http://127.0.0.1:2584
+          ./occ config:app:set social atproto_appview_did --value "$(python3 -c 'import json; print(json.load(open("/tmp/atproto-network.json"))["bskyDid"])')"
+
       - name: Start the relay
         # The official relay, told to crawl this app. It verifies every
         # commit's signature and revision against the directory; a relay that
@@ -264,7 +271,7 @@ jobs:
         working-directory: apps/social
         run: |
           composer i
-          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter AtprotoVisibleTest
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest'
 
       - name: What each side saw, when it went wrong
         if: failure()

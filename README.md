@@ -108,8 +108,11 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 - **Bluesky** — every account is a Bluesky account too, hosted here: `alice.<your host>` resolves to a
   `did:plc` identity, every public post goes to Bluesky as it is made (cut to 300 characters with a link
   when it is longer, the first four pictures with it, a content warning as a self-label), and a relay
-  crawls the instance's firehose. Switched on by the administrator once the requirements are met; see
-  [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) for what is done and what is next.
+  crawls the instance's firehose. The other way too: follow `alice.bsky.social` by its bare handle and
+  read it in your home feed, badged; your likes and boosts reach Bluesky, and their follows, likes,
+  replies and mentions reach your Activities. Switched on by the administrator once the requirements
+  are met; see [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) for what is done and
+  what is next.
 - **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
   read. Aloha Social notices what you stay on, what you scroll past, and what you like,
   boost, reply to, bookmark and open, and keeps a list of hashtags from it; the feed
@@ -905,7 +908,7 @@ occ social:reset
   configuration key with its meaning and default, the sections of the
   administration page, how moderation is recorded, and the occ commands by task.
 - [docs/Mastodon-Compatibility.md](docs/Mastodon-Compatibility.md)
-- [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) — the specification for native Bluesky / AT Protocol identities (not yet implemented)
+- [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) — the specification for native Bluesky / AT Protocol identities, with what each phase built
   answers how close this is to Mastodon in the three senses that can mean —
   whether its clients work, whether peers can tell the difference, and whether an
   instance could move onto it. Its last section is the backlog that follows:

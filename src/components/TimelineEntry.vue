@@ -32,6 +32,7 @@
 						:link="false" />
 				</span>
 				<ActorAvatar v-else :actor="notification.account" :size="24" />
+				<BlueskyBadge v-if="groupedAccounts.length <= 1 && isBlueskyAccount(notification.account)" />
 				<Heart v-if="notification.type === 'favourite'" :size="16" />
 				<Repeat v-if="notification.type === 'reblog'" :size="16" />
 				<AccountPlusOutline v-if="notification.type === 'follow'" :size="16" />
@@ -90,6 +91,7 @@
 					<ActorAvatar :actor="item.account" :size="16" :link="false" />
 					<span :title="item.account.acct" class="post-author">
 						{{ item.account.display_name }}
+						<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
 					</span>
 				</router-link>
 				{{ t('social', 'boosted') }}
@@ -159,6 +161,8 @@ import TrendingUp from 'vue-material-design-icons/TrendingUp.vue'
 import { translate } from '@nextcloud/l10n'
 import TimelinePost from './TimelinePost.vue'
 import ActorAvatar from './ActorAvatar.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 import TimelineAvatar from './TimelineAvatar.vue'
 import UserEntry from './UserEntry.vue'
 import { GROUP_FACES, notificationSummary } from '../services/notifications.js'
@@ -195,6 +199,7 @@ export default {
 	components: {
 		TimelinePost,
 		ActorAvatar,
+		BlueskyBadge,
 		TimelineAvatar,
 		UserEntry,
 		Bell,
@@ -470,6 +475,7 @@ export default {
 
 	methods: {
 		t: translate,
+		isBlueskyAccount,
 
 		toggleConversationMute() {
 			this.timelineStore.postMuteConversation({ status: this.entryContent, muted: !this.entryContent.muted })

@@ -87,13 +87,13 @@
 		</NcActionButton>
 		<!-- NcActionLink sets rel="nofollow noreferrer noopener" itself -->
 		<NcActionLink
-			v-if="!origin.local && item.url"
+			v-if="(!origin.local || onBluesky) && item.url"
 			:href="item.url"
 			target="_blank">
 			<template #icon>
 				<OpenInNew :size="20" />
 			</template>
-			{{ t('social', 'Open on original instance') }}
+			{{ onBluesky ? t('social', 'Open on Bluesky') : t('social', 'Open on original instance') }}
 		</NcActionLink>
 		<NcActionButton @click="$emit('bookmark')">
 			<template #icon>
@@ -192,6 +192,7 @@ import Translate from 'vue-material-design-icons/Translate.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { hasInterestsFeed } from '../services/interests.js'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 import { originOf } from '../utils/instanceIdentity.js'
 
 /**
@@ -385,7 +386,22 @@ export default {
 		 * @return {{instance: string, colour: string, local: boolean}}
 		 */
 		origin() {
-			return originOf(this.item.account?.acct ?? '')
+			return originOf(this.item.account ?? '')
+		},
+
+		/**
+		 * @return {boolean} whether the post's home is Bluesky rather than
+		 * another instance: a Bluesky author, or a post address on bsky.app
+		 */
+		onBluesky() {
+			if (isBlueskyAccount(this.item.account)) {
+				return true
+			}
+			try {
+				return new URL(this.item.url ?? '').hostname === 'bsky.app'
+			} catch {
+				return false
+			}
 		},
 	},
 

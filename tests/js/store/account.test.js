@@ -111,6 +111,14 @@ describe('account store mutations and getters', () => {
 		expect(store.accounts[bob.url]).toEqual({ ...bob, note: '<p>hi</p>' })
 	})
 
+	it('addAccount maps a Bluesky account by its bare handle, which is what every lookup asks by', () => {
+		const dana = { id: '33', acct: 'dana.bsky.social', username: 'dana.bsky.social', url: 'https://bsky.app/profile/dana.bsky.social', bluesky: { handle: 'dana.bsky.social', did: 'did:plc:d', url: 'https://bsky.app/profile/dana.bsky.social', native: true } }
+		store.addAccount({ actorId: dana.url, data: dana })
+
+		expect(store.accountIdMap).toEqual({ 'dana.bsky.social': dana.url })
+		expect(store.getAccount('dana.bsky.social')).toEqual(dana)
+	})
+
 	it('addAccount without an acct stores the account but adds no handle mapping', () => {
 		store.addAccount({ actorId: 'https://x.tld/y', data: { id: '1', url: 'https://x.tld/y' } })
 

@@ -45,6 +45,7 @@ final class Identity {
 			'handle' => $this->handle,
 			'signing_key' => $this->signingPublic,
 			'state' => $this->state,
+			'active' => $this->isActive(),
 			'created_at' => gmdate('Y-m-d\TH:i:s\Z', $this->creation),
 		];
 	}

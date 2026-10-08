@@ -212,6 +212,30 @@ class IdentityService {
 	 *
 	 * @throws AtprotoException
 	 */
+	/**
+	 * Switches a person's Bluesky presence off (§19): the repository stays
+	 * and the DID stays theirs, but the account is announced inactive, the
+	 * sync endpoints say so, and nothing more is published for it.
+	 */
+	public function deactivate(Identity $identity): void {
+		if ($identity->state !== Identity::STATE_ACTIVE) {
+			return;
+		}
+		$this->identityRequest->setState($identity->did, Identity::STATE_DEACTIVATED);
+		$this->events->account($identity->did, false, 'deactivated');
+	}
+
+	/**
+	 * Switches it back on; the repository is as it was left.
+	 */
+	public function activate(Identity $identity): void {
+		if ($identity->state !== Identity::STATE_DEACTIVATED) {
+			return;
+		}
+		$this->identityRequest->setState($identity->did, Identity::STATE_ACTIVE);
+		$this->events->account($identity->did, true);
+	}
+
 	public function tombstone(Identity $identity): void {
 		if ($identity->state !== Identity::STATE_TOMBSTONED) {
 			$operation = PlcOperation::sign(PlcOperation::tombstone($this->prev($identity)), $this->instanceKeys->rotationKey());

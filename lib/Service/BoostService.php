@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Publisher\InteractionQueue;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
 use OCA\Social\Exceptions\ItemUnknownException;
@@ -45,6 +46,7 @@ class BoostService {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ModerationService $moderationService,
+		private ?InteractionQueue $bluesky = null,
 	) {
 	}
 
@@ -106,6 +108,7 @@ class BoostService {
 		$interface->save($announce);
 
 		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::BOOSTED, true);
+		$this->bluesky?->boosted($actor->getId(), $note->getId(), $announce->getId());
 		$this->signatureService->signObject($actor, $announce);
 
 		$token = $this->activityService->request($announce);
@@ -172,6 +175,7 @@ class BoostService {
 			$interface = AP::instance()->getInterfaceFromType(Announce::TYPE);
 			$interface->delete($announce);
 			$this->streamRequest->deleteById($announce->getId(), Announce::TYPE);
+			$this->bluesky?->unboosted($announce->getId());
 			$this->signatureService->signObject($actor, $undo);
 
 			$token = $this->activityService->request($undo);
