@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Moderation\BlueskyReporter;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -60,6 +62,7 @@ class ReportForwardService {
 		private CurlService $curlService,
 		private StreamRequest $streamRequest,
 		private LoggerInterface $logger,
+		private ?BlueskyReporter $bluesky = null,
 	) {
 	}
 
@@ -72,6 +75,10 @@ class ReportForwardService {
 	 * two instances doing that to each other is a loop.
 	 */
 	public function canForward(Report $report, Person $target): bool {
+		if ($this->bluesky !== null && BlueskyIds::isActorId($target->getId())) {
+			return $this->bluesky->canReport($report, $target);
+		}
+
 		return $report->isLocal()
 			&& !$target->isLocal()
 			&& $this->inboxOf($target) !== '';
@@ -86,6 +93,10 @@ class ReportForwardService {
 	public function forward(Report $report, Person $target): bool {
 		if (!$this->canForward($report, $target)) {
 			return false;
+		}
+		if ($this->bluesky !== null && BlueskyIds::isActorId($target->getId())) {
+			// Bluesky's moderation service, not an inbox: see BlueskyReporter
+			return $this->bluesky->report($report, $target) !== '';
 		}
 
 		$actor = $this->instanceActorService->getSigningActor();

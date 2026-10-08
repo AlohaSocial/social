@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
@@ -54,6 +55,7 @@ class NotificationPoller {
 		private LocalRecordResolver $local,
 		private ActorMapper $actorMapper,
 		private BlueskyActorService $actors,
+		private Blocklist $blocklist,
 		private ImportService $import,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
@@ -136,7 +138,7 @@ class NotificationPoller {
 		$did = (string)($author['did'] ?? '');
 		$uri = (string)($notification['uri'] ?? '');
 		$parsed = Syntax::parseAtUri($uri);
-		if ($did === '' || $parsed === null || $parsed['authority'] !== $did) {
+		if ($did === '' || $parsed === null || $parsed['authority'] !== $did || $this->blocklist->isBlockedDid($did)) {
 			return false;
 		}
 		$actorId = BlueskyIds::actorId($did);
@@ -196,7 +198,7 @@ class NotificationPoller {
 		$did = (string)($profile['did'] ?? '');
 		$actor = $this->actors->cached($did);
 		if ($actor !== null) {
-			return !BlueskyActorService::isLimited($actor);
+			return !BlueskyActorService::isLimited($actor) && !$this->blocklist->isBlockedActor($actor);
 		}
 		try {
 			$this->actors->store($this->actorMapper->person($profile));

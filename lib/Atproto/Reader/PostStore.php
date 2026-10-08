@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Db\StreamRequest;
@@ -36,6 +38,8 @@ class PostStore {
 		private InteractionPublisher $interactions,
 		private ActorMapper $actorMapper,
 		private BlueskyActorService $actors,
+		private Blocklist $blocklist,
+		private LabelerService $labelers,
 		private ImportService $import,
 		private StreamRequest $streams,
 		private ITimeFactory $time,
@@ -105,7 +109,7 @@ class PostStore {
 			return false;
 		}
 		try {
-			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => [$uri]]);
+			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => [$uri]], ['atproto-accept-labelers' => $this->labelers->acceptHeader()]);
 		} catch (Throwable $e) {
 			$this->logger->notice('Bluesky post not fetched', ['uri' => $uri, 'exception' => $e]);
 
@@ -136,7 +140,7 @@ class PostStore {
 			return 0;
 		}
 		try {
-			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => array_values($uris)]);
+			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => array_values($uris)], ['atproto-accept-labelers' => $this->labelers->acceptHeader()]);
 		} catch (Throwable $e) {
 			// nothing is concluded from an AppView that did not answer
 			$this->logger->notice('Bluesky posts not checked', ['exception' => $e]);
@@ -199,12 +203,12 @@ class PostStore {
 	 */
 	private function ensureActor(array $profile): bool {
 		$did = (string)($profile['did'] ?? '');
-		if ($did === '') {
+		if ($did === '' || $this->blocklist->isBlockedDid($did)) {
 			return false;
 		}
 		$actor = $this->actors->cached($did);
 		if ($actor !== null) {
-			return !BlueskyActorService::isLimited($actor);
+			return !BlueskyActorService::isLimited($actor) && !$this->blocklist->isBlockedActor($actor);
 		}
 		try {
 			$this->actors->store($this->actorMapper->person($profile));

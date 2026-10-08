@@ -463,6 +463,7 @@ class ConfigService {
 	/** the firehose daemon's last report (JSON), written by `occ social:atproto:serve` */
 	public const ATPROTO_FIREHOSE_STATUS = 'atproto_firehose_status';
 	public const ATPROTO_DELETE_CURSOR = 'atproto_delete_cursor';
+	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
 
 	public array $defaults = [
 		self::ATPROTO_ENABLED => '0',
@@ -475,6 +476,7 @@ class ConfigService {
 		self::ATPROTO_SYNC_CEILING => '200',
 		self::ATPROTO_FIREHOSE_STATUS => '',
 		self::ATPROTO_DELETE_CURSOR => '0',
+		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
 		self::SOCIAL_ADDRESS => '',

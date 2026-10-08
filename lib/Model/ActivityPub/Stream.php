@@ -1991,6 +1991,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			// client draws a quiet mark from it, and a reader who asked has
 			// such posts dropped before they get this far
 			'ai_generated' => $this->exportAiGenerated(),
+			// a post read from Bluesky: where it is there, and the labels on it
+			// with the labeler of each; null for every other post
+			'bluesky' => $this->exportBluesky(),
 			'replies_count' => $this->getDetailInt(Details::REPLIES),
 			'reblogs_count' => $this->getDetailInt(Details::BOOSTS),
 			'favourites_count' => $this->getDetailInt(Details::LIKES),
@@ -2562,6 +2565,25 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * tag set where the container can hand it out and the built-in defaults
 	 * where it cannot — a model exported outside a request.
 	 */
+	/**
+	 * @return array{uri: string, url: string, labels: list<array{src: string, val: string}>}|null
+	 */
+	private function exportBluesky(): ?array {
+		$details = $this->getDetails('atproto');
+		$uri = (string)($details['uri'] ?? '');
+		if ($uri === '' || !str_starts_with($this->getId(), 'https://bsky.app/profile/')) {
+			return null;
+		}
+		$labels = [];
+		foreach (is_array($details['label_sources'] ?? null) ? $details['label_sources'] : [] as $label) {
+			if (is_array($label) && is_string($label['src'] ?? null) && is_string($label['val'] ?? null)) {
+				$labels[] = ['src' => $label['src'], 'val' => $label['val']];
+			}
+		}
+
+		return ['uri' => $uri, 'url' => $this->pageUrl(), 'labels' => $labels];
+	}
+
 	private function exportAiGenerated(): bool {
 		try {
 			return Server::get(AiContentService::class)->labelsPost($this);

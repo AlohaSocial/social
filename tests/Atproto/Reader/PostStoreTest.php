@@ -11,6 +11,8 @@ namespace OCA\Social\Tests\Atproto\Reader;
 
 use OCA\Social\AP;
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
@@ -96,7 +98,7 @@ class PostStoreTest extends TestCase {
 		$time->method('getTime')->willReturn(1760000000);
 		$this->appView = $this->createMock(AppViewClient::class);
 		$this->interactions = $this->createMock(InteractionPublisher::class);
-		$this->store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->import, $this->streams, $time, new NullLogger());
+		$this->store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $this->import, $this->streams, $time, new NullLogger());
 	}
 
 	protected function tearDown(): void {

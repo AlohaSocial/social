@@ -11,6 +11,8 @@ namespace OCA\Social\Tests\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\FeedPoller;
@@ -53,7 +55,7 @@ class FeedPollerTest extends TestCase {
 		$this->actors = $this->createMock(BlueskyActorService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
-		$this->poller = new FeedPoller($this->config, $this->watches, $this->appView, $this->store, $this->actors, $time, new NullLogger());
+		$this->poller = new FeedPoller($this->config, $this->watches, $this->appView, $this->store, $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $time, new NullLogger());
 	}
 
 	public function testNewItemsAreStoredNewestFirstUntilTheCursor(): void {
@@ -142,12 +144,36 @@ class FeedPollerTest extends TestCase {
 		$config->method('syncCeiling')->willReturn(2);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
-		$poller = new FeedPoller($config, $this->watches, $this->appView, $this->store, $this->actors, $time, new NullLogger());
+		$poller = new FeedPoller($config, $this->watches, $this->appView, $this->store, $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $time, new NullLogger());
 		$this->watches->method('getDue')->with(self::NOW, FeedPoller::BATCH)->willReturn([$this->watch(), $this->watch('did:plc:two'), $this->watch('did:plc:three')]);
 		$this->appView->expects($this->exactly(2))->method('query')->willReturn(['feed' => [$this->item('2026-10-08T12:00:00.000Z', 'x')]]);
 		$this->store->method('storeFeedItem')->willReturn(1);
 
 		$this->assertSame(['watches' => 2, 'stored' => 2, 'requests' => 2], $poller->poll());
+	}
+
+	public function testABlockedAuthorsWatchIsDroppedUnread(): void {
+		$blocklist = $this->createMock(Blocklist::class);
+		$blocklist->method('isBlockedDid')->willReturn(true);
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$poller = new FeedPoller($this->config, $this->watches, $this->appView, $this->store, $this->actors, $blocklist, $this->createMock(LabelerService::class), $time, new NullLogger());
+		$this->appView->expects($this->never())->method('query');
+		$this->watches->expects($this->once())->method('remove')->with(self::DID);
+
+		$this->assertSame(0, $poller->pollWatch($this->watch()));
+	}
+
+	public function testTheReadAsksForTheLabelersSubscribedHere(): void {
+		$labelers = $this->createMock(LabelerService::class);
+		$labelers->expects($this->once())->method('acceptHeader')->willReturn('did:plc:mod, did:plc:other');
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$poller = new FeedPoller($this->config, $this->watches, $this->appView, $this->store, $this->actors, $this->createMock(Blocklist::class), $labelers, $time, new NullLogger());
+		$this->appView->expects($this->exactly(2))->method('query')->with('app.bsky.feed.getAuthorFeed', $this->anything(), ['atproto-accept-labelers' => 'did:plc:mod, did:plc:other'])->willReturn(['feed' => []]);
+
+		$poller->pollWatch($this->watch());
+		$poller->pollWatch($this->watch('did:plc:two'));
 	}
 
 	private function watch(string $did = self::DID, string $cursor = '', int $lastSync = self::NOW - 1000, int $nextSync = self::NOW, int $failures = 0): Watch {
