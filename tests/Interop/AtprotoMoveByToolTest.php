@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoMoveRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\Server;
@@ -105,6 +106,11 @@ class AtprotoMoveByToolTest extends TestCase {
 		$this->assertSame($here->pds, rtrim((string)($document['service'][0]['serviceEndpoint'] ?? ''), '/'), 'the DID names this server');
 		$texts = array_map(static fn ($record): string => (string)(DagCbor::decode($record->bytes)['text'] ?? ''), Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50));
 		$this->assertContains($words, $texts, 'the posts are here');
+		$record = array_values(array_filter(Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50), static fn ($r): bool => str_contains((string)(DagCbor::decode($r->bytes)['text'] ?? ''), $words)))[0] ?? null;
+		$this->assertNotSame('', $record?->localId ?? '', 'the post is tied to a post here');
+		$post = Server::get(StreamRequest::class)->getStreamById((string)$record->localId);
+		$this->assertSame([$this->alice->actor->getId(), true], [$post->getAttributedTo(), $post->isLocal()], 'as the account\'s own post');
+		$this->assertStringContainsString($words, $post->getContent());
 		$this->assertSame($picture, $here->blob($did, $pictureCid), 'the picture is served here, byte for byte');
 	}
 
