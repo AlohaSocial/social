@@ -33,6 +33,16 @@ class AtprotoPlcLogRequest extends CoreRequestBuilder {
 		return $qb->getLastInsertId();
 	}
 
+	/**
+	 * Forgets an operation the directory refused and nobody will send again.
+	 */
+	public function remove(int $id): void {
+		$qb = $this->getQueryBuilder();
+		$qb->delete(self::TABLE_ATPROTO_PLC_LOG)
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		$qb->executeStatement();
+	}
+
 	public function markSent(int $id): void {
 		$this->mark($id, 'sent');
 	}
