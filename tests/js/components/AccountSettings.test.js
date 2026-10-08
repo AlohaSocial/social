@@ -15,7 +15,7 @@ import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({
-	default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() },
+	default: { delete: vi.fn(), get: vi.fn(), patch: vi.fn(), post: vi.fn() },
 }))
 vi.mock('../../../src/services/toast.js', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 vi.mock('../../../src/services/externalApi.js', () => ({ confirmPassword: vi.fn().mockResolvedValue(undefined) }))
@@ -474,6 +474,241 @@ describe('AccountSettings', () => {
 				await flushPromises()
 
 				expect(showError).toHaveBeenCalledWith('Could not create a recovery phrase')
+			})
+		})
+
+		/**
+		 * What a Bluesky app signs in with: a password of its own, shown once,
+		 * so the Nextcloud password is never typed into it.
+		 */
+		describe('app passwords for Bluesky apps', () => {
+			const APP_PASSWORDS = '/index.php/apps/social/api/v1/social/bluesky/app-passwords'
+			const PASSWORD = 'abcd-efgh-ijkl-mnop'
+			const NOW = Math.floor(Date.now() / 1000)
+			const PHONE = { id: 1, name: 'Graysky on my phone', creation: NOW - 7 * 24 * 3600, last_used: NOW - 2 * 3600 }
+			const TABLET = { id: 2, name: 'Tablet', creation: NOW - 24 * 3600, last_used: 0 }
+
+			/**
+			 * @param {object} answer what the identity route answers
+			 * @param {Promise<object>} passwords what the app-passwords route answers
+			 */
+			function serverHasPasswords(answer = identity(), passwords = Promise.resolve({ data: { app_passwords: [PHONE, TABLET] } })) {
+				axios.get.mockImplementation((url) => {
+					if (url === IDENTITY) {
+						return Promise.resolve({ data: answer })
+					}
+					if (url === APP_PASSWORDS) {
+						return passwords
+					}
+					return Promise.resolve({ data: credentials() })
+				})
+			}
+
+			const section = (wrapper) => wrapper.find('.account-settings__app-passwords')
+			const rows = (wrapper) => wrapper.findAll('.account-settings__app-password')
+			const nameField = (wrapper) => section(wrapper).find('input')
+
+			it('lists them, with when each was made and last used', async () => {
+				serverHasPasswords()
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(axios.get).toHaveBeenCalledWith(APP_PASSWORDS)
+				expect(section(wrapper).text()).toContain('App passwords for Bluesky apps')
+				expect(section(wrapper).text()).toContain(`choose this server as your hosting provider: ${window.location.origin}.`)
+				expect(rows(wrapper)).toHaveLength(2)
+				expect(rows(wrapper)[0].text()).toContain('Graysky on my phone')
+				expect(rows(wrapper)[0].text()).toContain('Made ')
+				expect(rows(wrapper)[0].text()).toContain('Last used 2 hours ago')
+				expect(rows(wrapper)[1].text()).toContain('Tablet')
+				expect(rows(wrapper)[1].text()).toContain('Never used')
+				// the password itself is never listed
+				expect(section(wrapper).find('.account-settings__new-password').exists()).toBe(false)
+			})
+
+			it('is not drawn when the server has no such route', async () => {
+				serverHasPasswords(identity(), Promise.reject({ response: { status: 404 } }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(block(wrapper).exists()).toBe(true)
+				expect(section(wrapper).exists()).toBe(false)
+			})
+
+			it('says so when they could not be read', async () => {
+				serverHasPasswords(identity(), Promise.reject(new Error('offline')))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('Could not read your app passwords right now.')
+				expect(rows(wrapper)).toHaveLength(0)
+			})
+
+			it('is neither drawn nor asked for while the account is paused on Bluesky', async () => {
+				serverHasPasswords(identity({ active: false }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).exists()).toBe(false)
+				expect(axios.get).not.toHaveBeenCalledWith(APP_PASSWORDS)
+			})
+
+			it('is asked for once the account is switched back on', async () => {
+				serverHasPasswords(identity({ active: false }))
+				axios.post.mockResolvedValue({ data: identity({ active: true }) })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await wrapper.find('.account-settings__bluesky-switch input').setValue(true)
+				await flushPromises()
+
+				expect(axios.get).toHaveBeenCalledWith(APP_PASSWORDS)
+				expect(rows(wrapper)).toHaveLength(2)
+			})
+
+			it('asks for the password, then shows the new one once, to copy', async () => {
+				serverHasPasswords()
+				axios.post.mockResolvedValue({
+					data: { id: 3, name: 'Bluesky', password: PASSWORD, app_passwords: [PHONE, TABLET, { id: 3, name: 'Bluesky', creation: NOW, last_used: 0 }] },
+				})
+				const writeText = vi.fn().mockResolvedValue(undefined)
+				Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('  Bluesky ')
+				await buttonByText(wrapper, 'Make an app password').trigger('click')
+				await flushPromises()
+
+				expect(confirmPassword).toHaveBeenCalled()
+				expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky' })
+				const box = section(wrapper).find('.account-settings__new-password')
+				expect(box.text()).toContain('New app password for Bluesky')
+				expect(box.find('code').text()).toBe(PASSWORD)
+				expect(box.text()).toContain('Copy it now: it is not shown again.')
+				expect(rows(wrapper)).toHaveLength(3)
+				expect(nameField(wrapper).element.value).toBe('')
+
+				await buttonByLabel(wrapper, 'Copy the app password').trigger('click')
+				await flushPromises()
+				expect(writeText).toHaveBeenCalledWith(PASSWORD)
+
+				await buttonByText(wrapper, 'Done').trigger('click')
+				expect(section(wrapper).find('.account-settings__new-password').exists()).toBe(false)
+				expect(section(wrapper).text()).not.toContain(PASSWORD)
+			})
+
+			it('makes one on Enter without saving the account form', async () => {
+				serverHasPasswords()
+				axios.post.mockResolvedValue({ data: { id: 3, name: 'Bluesky', password: PASSWORD, app_passwords: [PHONE, TABLET] } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('Bluesky')
+				await nameField(wrapper).trigger('keydown', { key: 'Enter' })
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky' })
+				expect(axios.patch).not.toHaveBeenCalled()
+			})
+
+			it('makes nothing when the password dialog is dismissed', async () => {
+				serverHasPasswords()
+				vi.mocked(confirmPassword).mockRejectedValueOnce(new Error('dismissed'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('Bluesky')
+				await buttonByText(wrapper, 'Make an app password').trigger('click')
+				await flushPromises()
+
+				expect(axios.post).not.toHaveBeenCalled()
+				expect(section(wrapper).find('.account-settings__new-password').exists()).toBe(false)
+			})
+
+			it('cannot be made without a name', async () => {
+				serverHasPasswords()
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('   ')
+
+				expect(buttonByText(wrapper, 'Make an app password').attributes('disabled')).toBeDefined()
+			})
+
+			it('says what was wrong with the name under the field', async () => {
+				serverHasPasswords()
+				axios.post.mockRejectedValue({ response: { status: 422, data: { error: 'There is an app password with that name' } } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('Tablet')
+				await buttonByText(wrapper, 'Make an app password').trigger('click')
+				await flushPromises()
+
+				expect(section(wrapper).find('.account-settings__app-password-create').text())
+					.toContain('There is an app password with that name')
+				expect(showError).not.toHaveBeenCalled()
+				expect(section(wrapper).find('.account-settings__new-password').exists()).toBe(false)
+				expect(nameField(wrapper).element.value).toBe('Tablet')
+			})
+
+			it('asks for the password again when the server says the confirmation ran out', async () => {
+				serverHasPasswords()
+				axios.post.mockRejectedValue({ response: { status: 403 } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await nameField(wrapper).setValue('Bluesky')
+				await buttonByText(wrapper, 'Make an app password').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Confirm your password again and retry.')
+			})
+
+			it('revokes one after asking, and follows the list the server answered', async () => {
+				serverHasPasswords()
+				axios.delete.mockResolvedValue({ data: { app_passwords: [TABLET] } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await rows(wrapper)[0].findAll('button').find((button) => button.text() === 'Revoke').trigger('click')
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(rows(wrapper)[0].text()).toContain('signed out')
+
+				await buttonByText(wrapper, 'Revoke it').trigger('click')
+				await flushPromises()
+
+				expect(axios.delete).toHaveBeenCalledWith(`${APP_PASSWORDS}/1`)
+				expect(rows(wrapper)).toHaveLength(1)
+				expect(rows(wrapper)[0].text()).toContain('Tablet')
+			})
+
+			it('keeps one when the revocation is called off', async () => {
+				serverHasPasswords()
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await rows(wrapper)[0].findAll('button').find((button) => button.text() === 'Revoke').trigger('click')
+				await buttonByText(wrapper, 'Keep it').trigger('click')
+
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(buttonByText(wrapper, 'Revoke it')).toBeUndefined()
+				expect(rows(wrapper)).toHaveLength(2)
+			})
+
+			it('says so when one could not be revoked', async () => {
+				serverHasPasswords()
+				axios.delete.mockRejectedValue(new Error('offline'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await rows(wrapper)[0].findAll('button').find((button) => button.text() === 'Revoke').trigger('click')
+				await buttonByText(wrapper, 'Revoke it').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Could not revoke that app password')
+				expect(rows(wrapper)).toHaveLength(2)
 			})
 		})
 	})
