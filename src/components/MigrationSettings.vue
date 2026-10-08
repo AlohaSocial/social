@@ -514,6 +514,7 @@
 		</section>
 
 		<BlueskyMoveIn />
+		<BlueskyMoveInbound />
 		<BlueskyMoveAway />
 	</div>
 </template>
@@ -525,6 +526,7 @@ import { showError, showSuccess } from '../services/toast.js'
 import { confirmPassword } from '../services/externalApi.js'
 import BlueskyMoveAway from './BlueskyMoveAway.vue'
 import BlueskyMoveIn from './BlueskyMoveIn.vue'
+import BlueskyMoveInbound from './BlueskyMoveInbound.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -555,6 +557,7 @@ export default {
 	components: {
 		BlueskyMoveAway,
 		BlueskyMoveIn,
+		BlueskyMoveInbound,
 		IconAccountArrowLeft,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,
