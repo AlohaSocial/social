@@ -333,8 +333,11 @@ The sidebar is the map:
   opens the list of them in place. The page says how many new activities there are at
   the top — *3 new activities*, with a **Mark all as read** button that clears
   the badge whichever filter you are looking at — and marks the activities
-  themselves: each new one carries a **New** tag beside its timestamp, and a
-  **New** heading separates them from **Earlier** where the page holds both.
+  themselves: each new one carries a **New** tag beside its age and a bar
+  down its edge, and a **New** heading separates them from **Earlier** where
+  the page holds both. Each activity is a row like a post in My Feed: who did
+  what and how long ago (*3h*, *2w*), with the post or account it is about
+  underneath.
   Otherwise the page marks itself read after a couple of seconds in front of
   you, and that position is the one every other Fediverse client shares: a
   badge cleared on your phone is cleared here too.

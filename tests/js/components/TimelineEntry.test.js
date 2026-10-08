@@ -13,6 +13,7 @@ import ActorAvatar from '../../../src/components/ActorAvatar.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
+import { shortAgo } from '../../../src/utils/relativeTime.js'
 
 // the phone query, under the test's control: what it answers and who listens
 const phone = vi.hoisted(() => ({ matches: false, listeners: new Set() }))
@@ -289,6 +290,13 @@ describe('TimelineEntry', () => {
 			expect(wrapper.find('.notification__faces').exists()).toBe(false)
 		})
 
+		it('says how old it is the way a post in the feed does', () => {
+			const { wrapper } = mountEntry(notification('favourite'), { type: 'notifications' })
+			const age = wrapper.find('.notification__details .post-timestamp')
+
+			expect(age.text()).toBe(shortAgo(age.attributes('data-timestamp'), new Date(wrapper.vm.now)))
+		})
+
 		it('marks what arrived since the reader last looked', () => {
 			expect(mountEntry(notification('favourite'), { type: 'notifications', unread: true }).wrapper.classes())
 				.toContain('timeline-entry--unread')
@@ -519,5 +527,27 @@ describe('a direct message', () => {
 
 		expect(source).not.toMatch(/\.timeline-entry:not\(\.notification\)/)
 		expect(source.match(/\.timeline-entry:not\(\.notification, \.timeline-entry--direct\)/g)?.length).toBeGreaterThanOrEqual(4)
+	})
+})
+
+/**
+ * Activities is a list like My Feed: a notification is a row, not a card
+ * with the post boxed inside it.
+ */
+describe('a notification in the list', () => {
+	const source = readFileSync(resolve(process.cwd(), 'src/components/TimelineEntry.vue'), 'utf8')
+
+	it('takes the list-row rules', () => {
+		expect(source).toMatch(/\n\.timeline-entry:not\(\.timeline-entry--direct\) \{\n\tposition: relative;/)
+		expect(source).toMatch(/\.timeline-entry:not\(\.timeline-entry--direct\) \{\n\t\.wrapper :deep\(\.post-content\),/)
+	})
+
+	it('has no card of its own', () => {
+		expect(source).not.toMatch(/&\.with-header \{/)
+		expect(source).toMatch(/&\.notification \{\s*border: none;/)
+	})
+
+	it('keeps the room for a post\'s face on a phone for posts only', () => {
+		expect(source).toMatch(/\.timeline-entry:not\(\.notification, \.timeline-entry--direct\) \.wrapper \{\s*position: relative;/)
 	})
 })
