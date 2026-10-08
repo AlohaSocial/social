@@ -112,7 +112,7 @@ class PixelfedAdminController extends AdminApiControllerBase {
 		try {
 			$this->initAdmin(['admin:write']);
 
-			return new DataResponse($this->pixelfedAdminService->userAction($id, $action), Http::STATUS_OK);
+			return new DataResponse($this->pixelfedAdminService->userAction($id, $action, $this->userId), Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

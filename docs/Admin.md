@@ -546,7 +546,9 @@ the server. Server settings and Relays are the exception — neither is rendered
 delegate and their endpoints refuse them, because what they hold is a decision
 about the server rather than about a report: a relay changes what every
 federated timeline here holds and where every public post written here is
-sent.
+sent. A delegate cannot act on a Nextcloud administrator's account, and
+nobody — administrator or delegate — can silence, suspend, lift or purge their
+own.
 
 ---
 

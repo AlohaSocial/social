@@ -14,6 +14,7 @@ use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -158,6 +159,49 @@ class AdminApiService {
 		return $this->settingsManager->getAllowedAdminSettings(
 			AdminSection::SECTION_ID, $user
 		) !== [];
+	}
+
+	/**
+	 * Refuses a moderator's action against an account they may not act on.
+	 *
+	 * Being handed the Social section is not being handed the server: a
+	 * moderator who is not a Nextcloud administrator may not silence, suspend
+	 * or purge an administrator's account, which would let the person the
+	 * administrator delegated to take the administrator off the instance. And
+	 * nobody acts on their own account, administrator or not — lifting a
+	 * decision against yourself is the obvious case, and deleting your own
+	 * posts through the moderation tools leaves a record that says a
+	 * moderator did it.
+	 *
+	 * Only a local account has a Nextcloud user behind it; a remote one is
+	 * never refused here.
+	 *
+	 * @throws ModerationNotAllowedException
+	 */
+	public function assertMayActOn(string $actorId, string $callerId): void {
+		$userId = $this->localUserOf($actorId);
+		if ($userId === '') {
+			return;
+		}
+
+		if ($userId === $callerId) {
+			throw new ModerationNotAllowedException('a moderator cannot act on their own account');
+		}
+
+		if ($this->groupManager->isAdmin($userId) && !$this->groupManager->isAdmin($callerId)) {
+			throw new ModerationNotAllowedException(
+				'only a Nextcloud administrator can act on an administrator\'s account'
+			);
+		}
+	}
+
+	/** The Nextcloud user behind a local account, or '' for anything else. */
+	private function localUserOf(string $actorId): string {
+		try {
+			return $this->accountService->getFromId($actorId)->getUserId();
+		} catch (Exception $e) {
+			return '';
+		}
 	}
 
 	/**

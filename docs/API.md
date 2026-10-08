@@ -705,6 +705,12 @@ the `read`/`write` every timeline client holds satisfies neither. An
 administrator's own browser session (with its CSRF token) needs no scope,
 having no token to carry one.
 
+Every write about one account (`action`, `unsilence`, `unsuspend`,
+`unsensitive`, `DELETE`, and Pixelfed's `/api/admin/users/action`) is a **403**
+with nothing done when it names the caller's own account, or a Nextcloud
+administrator's account and the caller is only a delegate
+(`AdminApiService::assertMayActOn()`).
+
 A client finds out whether to offer moderation at all from the `role` of the
 CredentialAccount — `verify_credentials`, `update_credentials` and the two
 `/api/v1/profile/*` deletions — so it can ask for `admin:read admin:write` only

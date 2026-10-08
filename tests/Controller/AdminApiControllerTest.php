@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Controller\AdminApiController;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Client\AdminDomainBlock;
@@ -454,6 +455,36 @@ class AdminApiControllerTest extends TestCase {
 		$this->adminApiService->expects($this->never())->method('resolveReport');
 
 		$this->controller()->accountAction('7', 'silence');
+	}
+
+	/**
+	 * The rule is AdminApiService's; what is checked here is that every write
+	 * about an account asks it before anything is changed.
+	 */
+	public function testAnAccountTheCallerMayNotActOnIsRefusedOnEveryWrite(): void {
+		$this->adminApiService->method('account')->willReturn($this->account());
+		$this->adminApiService->method('assertMayActOn')
+			->willReturnCallback(function (string $actorId, string $callerId): void {
+				$this->assertSame(self::ACTOR, $actorId);
+				$this->assertSame(self::ADMIN, $callerId);
+
+				throw new ModerationNotAllowedException('a moderator cannot act on their own account');
+			});
+		foreach (['act', 'unsilence', 'unsuspend', 'unsensitive', 'purge', 'resolveReport'] as $write) {
+			$this->adminApiService->expects($this->never())->method($write);
+		}
+
+		$controller = $this->controller();
+		foreach ([
+			$controller->accountAction('7', 'suspend', '', 4),
+			$controller->accountUnsilence('7'),
+			$controller->accountUnsuspend('7'),
+			$controller->accountUnsensitive('7'),
+			$controller->accountDelete('7'),
+		] as $response) {
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+			$this->assertSame('a moderator cannot act on their own account', $response->getData()['error']);
+		}
 	}
 
 	public function testEnablingAnAccountChangesNothingAndSaysSo(): void {

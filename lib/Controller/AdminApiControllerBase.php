@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InsufficientScopeException;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\AdminApiService;
@@ -141,7 +142,7 @@ abstract class AdminApiControllerBase extends Controller {
 	 * and a message only where the message is the caller's to read.
 	 */
 	protected function error(Throwable $e): DataResponse {
-		if ($e instanceof InsufficientScopeException) {
+		if ($e instanceof InsufficientScopeException || $e instanceof ModerationNotAllowedException) {
 			// no WWW-Authenticate: PHP turns any response carrying it into a 401,
 			// and a 401 tells a client its token is dead and to sign in again
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);

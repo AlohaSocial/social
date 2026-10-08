@@ -570,6 +570,14 @@ retention period and the access list through the validating routes above, not
 through core's raw app-config endpoint. The check is asked of the *user id*,
 never of the token: a scope on an OAuth token says only that some client asked
 for it, since registration stores whatever scope string arrives.
+Being a moderator is not being an administrator of the server, and nobody
+moderates themselves: every write about an account — `ModerationController`'s
+decide/lift and forced-sensitive, the Mastodon admin API's `action`, `unsilence`,
+`unsuspend`, `unsensitive` and `DELETE`, and the Pixelfed admin app's user
+actions — first asks `AdminApiService::assertMayActOn()`, which refuses (403) an
+action on the caller's own account, and an action on a Nextcloud administrator's
+account unless the caller is one too. A remote account has no Nextcloud user
+behind it and is never refused there.
 
 **Setup checks.** The `OCP\SetupCheck\ISetupCheck` classes in `lib/SetupChecks/`, registered in `Application::register()` and shown in **Administration → Overview**: `WebFingerReachable` (the `CheckService::checkWellKnown()` probe, asked about the oldest live local account rather than about the viewer, who may never have opened Aloha Social), `CloudAddressMatches` (the stored `cloud_url` against what the server now reports, and the origin of `social_url`, which ids are minted from, against `cloud_url`), `CronRanRecently` (`Cron\Queue`'s last run, read off the job list), `OutboundQueueNotStuck` (abandoned rows, and standby rows last tried more than a day ago — past anything the retry schedule would wait on purpose), `ClientApiAtRoot` (whether `/api` and `/oauth` at the domain root reach the app), `ProxyForwardsTheScheme` (whether the proxy in front of those rules tells Nextcloud the scheme), `ReachableByStrictPeers` (https and a public name, which Pixelfed insists on), `UploadLimitsAgree` (PHP's upload ceilings against the app's own), `VideoConverter` (a warning when ffmpeg is missing, since iPhone `.mov` and HEVC videos then play neither on other servers nor in Chrome and Firefox; information when it is there and `video_transcode` is off) and `MemcacheConfigured` (what is kept in the database, off or recomputed without a memcache). `occ social:check:install` runs the first five as the same objects rather than a second copy of the logic, so the console and the settings page cannot drift apart; `--offline` leaves out the one that goes out on the network. Each links to [Admin.md](Admin.md), through `SetupChecks\Docs` so a moved guide is one edit.
 

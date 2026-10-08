@@ -11,7 +11,10 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\Db\TrendReviewRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Model\AccessBlock;
+use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Service\AccessBlockService;
 use OCA\Social\Service\AdminApiService;
 use OCA\Social\Service\ClientService;
@@ -179,7 +182,7 @@ class AdminApiController extends AdminApiControllerBase {
 		try {
 			$this->initAdmin(['admin:write']);
 
-			$account = $this->adminApiService->account($id);
+			$account = $this->actionable($id);
 			$this->adminApiService->act($account, $type, $text, $report_id);
 
 			if ($report_id > 0) {
@@ -222,7 +225,7 @@ class AdminApiController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->adminApiService->unsilence($this->adminApiService->account($id)), Http::STATUS_OK
+				$this->adminApiService->unsilence($this->actionable($id)), Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);
@@ -237,7 +240,7 @@ class AdminApiController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->adminApiService->unsuspend($this->adminApiService->account($id)), Http::STATUS_OK
+				$this->adminApiService->unsuspend($this->actionable($id)), Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);
@@ -259,7 +262,7 @@ class AdminApiController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->adminApiService->unsensitive($this->adminApiService->account($id)),
+				$this->adminApiService->unsensitive($this->actionable($id)),
 				Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
@@ -287,11 +290,25 @@ class AdminApiController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			return new DataResponse(
-				$this->adminApiService->purge($this->adminApiService->account($id)), Http::STATUS_OK
+				$this->adminApiService->purge($this->actionable($id)), Http::STATUS_OK
 			);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * The account a write is about, once the caller is known to be allowed to
+	 * act on it.
+	 *
+	 * @throws ItemNotFoundException
+	 * @throws ModerationNotAllowedException
+	 */
+	private function actionable(string $id): AdminAccount {
+		$account = $this->adminApiService->account($id);
+		$this->adminApiService->assertMayActOn($account->getActorId(), $this->userId);
+
+		return $account;
 	}
 
 	/**
