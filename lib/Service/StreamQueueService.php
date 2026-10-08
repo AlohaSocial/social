@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\AP;
+use OCA\Social\Db\HostBreakerRequest;
 use OCA\Social\Db\StreamQueueRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidOriginException;
@@ -68,6 +69,13 @@ class StreamQueueService {
 	/** An item left `running` for longer than this was stranded by a dead drain. */
 	public const STALE_RUNNING_SECONDS = 3600;
 
+	/**
+	 * The breaker deliveries keep on dead hosts, consulted before a fetch: an
+	 * unreachable server cost a timeout for every parent and every post queued
+	 * against it, on every pass.
+	 */
+	private HostBreaker $breaker;
+
 	public function __construct(
 		private StreamRequest $streamRequest,
 		private StreamQueueRequest $streamQueueRequest,
@@ -77,7 +85,9 @@ class StreamQueueService {
 		private MiscService $miscService,
 		private LinkPreviewService $linkPreviewService,
 		private LoggerInterface $logger,
+		HostBreakerRequest $hostBreakerRequest,
 	) {
+		$this->breaker = new HostBreaker($hostBreakerRequest);
 	}
 
 	/**
@@ -122,6 +132,8 @@ class StreamQueueService {
 	 * @return StreamQueue[]
 	 */
 	public function getRequestStandby(int &$total = 0): array {
+		// a batch is a drain: what the breaker says is read again for it
+		$this->breaker->reset();
 		$queue = $this->streamQueueRequest->getStandby();
 		$total = sizeof($queue);
 
@@ -169,6 +181,17 @@ class StreamQueueService {
 	 * @param StreamQueue $queue
 	 */
 	public function manageStreamQueue(StreamQueue $queue) {
+		if ($queue->getType() === StreamQueue::TYPE_FETCH) {
+			$openUntil = $this->breaker->openUntil(self::hostOf($queue->getStreamId()));
+			if ($openUntil > 0) {
+				// held back until the breaker closes, without spending a try
+				// on an attempt that was never made
+				$this->postponeCache($queue, $openUntil);
+
+				return;
+			}
+		}
+
 		try {
 			$this->initCache($queue);
 		} catch (QueueStatusException $e) {
@@ -243,6 +266,7 @@ class StreamQueueService {
 			|RequestResultNotJsonException
 			|RequestServerException $e
 		) {
+			$this->holdHost($queue->getStreamId(), $e);
 			$this->logger->info('could not fetch a post from its origin', [
 				'url' => $queue->getStreamId(),
 				'exception' => $e,
@@ -278,6 +302,7 @@ class StreamQueueService {
 	 */
 	private function fetchFromOrigin(string $url): void {
 		$data = $this->curlService->retrieveObject($url);
+		$this->breaker->close(self::hostOf($url));
 		$object = AP::instance()->getItemFromData($data);
 		if ($object->getId() !== $url) {
 			throw new InvalidOriginException('the document does not claim the address it came from: ' . $url);
@@ -341,7 +366,11 @@ class StreamQueueService {
 
 		foreach ($cache->getItems() as $item) {
 			try {
-				$this->cacheItem($stream, $item);
+				if (!$this->cacheItem($stream, $item)) {
+					// its server is behind the breaker: not attempted, so
+					// not counted against the item either
+					continue;
+				}
 				if ($stream->getType() === Note::TYPE) {
 					// a reply only needed its parent fetched; the parent is a row
 					// of its own now and nothing reads a copy out of the reply
@@ -374,6 +403,7 @@ class StreamQueueService {
 				// the other server is the problem, and it may not be tomorrow:
 				// counted against the item, which the queue retries until the
 				// count runs out
+				$this->holdHost($item->getUrl(), $e);
 				$this->logCacheError($item, $e);
 				$item->incrementError();
 			}
@@ -403,6 +433,9 @@ class StreamQueueService {
 	 * @param Stream $stream the stream whose cache wants the item
 	 * @param CacheItem $item
 	 *
+	 * @return bool false when the item's server is behind the breaker and was
+	 *              not asked
+	 *
 	 * @throws InvalidOriginException
 	 * @throws InvalidResourceException
 	 * @throws ItemUnknownException
@@ -417,11 +450,17 @@ class StreamQueueService {
 	 * @throws SocialAppConfigException
 	 * @throws UnauthorizedFediverseException
 	 */
-	private function cacheItem(Stream $stream, CacheItem &$item) {
+	private function cacheItem(Stream $stream, CacheItem &$item): bool {
 		try {
 			$note = $this->streamRequest->getStreamById($item->getUrl());
 		} catch (StreamNotFoundException $e) {
+			$host = self::hostOf($item->getUrl());
+			if ($this->breaker->openUntil($host) > 0) {
+				return false;
+			}
+
 			$data = $this->curlService->retrieveObject($item->getUrl());
+			$this->breaker->close($host);
 			$object = AP::instance()->getItemFromData($data);
 
 			$origin = parse_url($item->getUrl(), PHP_URL_HOST);
@@ -456,6 +495,22 @@ class StreamQueueService {
 		}
 
 		$item->setContent(json_encode($note, JSON_UNESCAPED_SLASHES));
+
+		return true;
+	}
+
+	/**
+	 * Puts the server of a fetch that failed behind the breaker — unless it
+	 * answered: a reply that is not JSON is a server that is up.
+	 */
+	private function holdHost(string $url, Throwable $e): void {
+		if ($e instanceof RequestNetworkException || $e instanceof RequestServerException) {
+			$this->breaker->open(self::hostOf($url));
+		}
+	}
+
+	private static function hostOf(string $url): string {
+		return (string)parse_url($url, PHP_URL_HOST);
 	}
 
 	/**
@@ -517,6 +572,14 @@ class StreamQueueService {
 			} else {
 				$this->streamQueueRequest->setAsFailure($queue);
 			}
+		} catch (QueueStatusException $e) {
+		}
+	}
+
+	/** Holds a standby item back until `$until`; one taken meanwhile is left alone. */
+	private function postponeCache(StreamQueue $queue, int $until): void {
+		try {
+			$this->streamQueueRequest->postpone($queue, $until);
 		} catch (QueueStatusException $e) {
 		}
 	}

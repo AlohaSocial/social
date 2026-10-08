@@ -17,7 +17,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * In the database rather than a cache that may not exist: without a memcache
  * the cache held nothing, and every delivery pass paid a full timeout per
  * dead peer to find out again what the last pass already knew. See
- * `ActivityService::circuitOpenUntil()` for how it is read.
+ * `HostBreaker::openUntil()` for how it is read.
  */
 class HostBreakerRequest extends CoreRequestBuilder {
 	/**

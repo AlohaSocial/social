@@ -116,6 +116,29 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	}
 
 	/**
+	 * Moves a standby item out of the due window until `$until`.
+	 *
+	 * `last` is what the backoff is measured from, so a time in the future
+	 * holds the row back without spending one of its tries on an attempt
+	 * that was never made — the same hold `RequestQueueRequest::postpone()`
+	 * puts on a delivery whose host is behind the breaker.
+	 *
+	 * @throws QueueStatusException when the item was not on standby any more
+	 */
+	public function postpone(StreamQueue $queue, int $until): void {
+		$qb = $this->getStreamQueueUpdateSql();
+		$qb->set('last', $qb->createNamedParameter(new DateTime('@' . $until), IQueryBuilder::PARAM_DATE));
+		$qb->limitToId($queue->getId());
+		$qb->limitToStatus(StreamQueue::STATUS_STANDBY);
+
+		if ($qb->executeStatement() === 0) {
+			throw new QueueStatusException();
+		}
+
+		$queue->setLast($until);
+	}
+
+	/**
 	 * A cached item has nothing left to record, so the row goes rather than
 	 * staying as a STATUS_SUCCESS row nothing ever reads or removes — which is
 	 * what made this table grow without bound. The in-memory status is still
