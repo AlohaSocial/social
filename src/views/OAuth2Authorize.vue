@@ -58,8 +58,19 @@
 					{{ appInitial }}
 				</span>
 				<h1>{{ t('social', 'Authorization required') }}</h1>
+				<!--
+					A Bluesky app is known by its client_id, an address; the
+					name it gives is not checked, so the address is shown whole
+					and is not offered as a link to follow.
+				-->
+				<template v-if="atproto">
+					<span v-if="appWebsite" class="oauth__client-id">{{ appWebsite }}</span>
+					<span class="oauth__client-note">
+						{{ t('social', 'This address is what the app is known by; its name is not checked.') }}
+					</span>
+				</template>
 				<a
-					v-if="websiteLabel"
+					v-else-if="websiteLabel"
 					class="oauth__website"
 					:href="appWebsite"
 					target="_blank"
@@ -154,7 +165,6 @@ import { t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 
 const OUT_OF_BAND = 'urn:ietf:wg:oauth:2.0:oob'
-
 export default {
 	name: 'OAuth2Authorize',
 	components: {
@@ -177,6 +187,8 @@ export default {
 			copied: false,
 			appName: loadState('social', 'appName'),
 			appWebsite: loadState('social', 'appWebsite', ''),
+			// 'atproto' for a Bluesky app, '' for a Mastodon one
+			protocol: loadState('social', 'protocol', ''),
 			account: loadState('social', 'account', null),
 			scopes: loadState('social', 'scopes', []),
 			redirectUri: loadState('social', 'redirectUri', ''),
@@ -227,7 +239,15 @@ export default {
 				'write:reports': t('social', 'Send reports as you'),
 				'write:statuses': t('social', 'Publish, edit and delete posts as you'),
 				'write:stories': t('social', 'Publish and delete 24-hour shorts as you'),
+				atproto: t('social', 'Know which account you are'),
+				'transition:generic': t('social', 'Post, like, follow, upload and read as you, everywhere on Bluesky'),
+				'transition:email': t('social', 'See your e-mail address'),
 			}
+		},
+
+		/** @return {boolean} whether a Bluesky app is asking */
+		atproto() {
+			return this.protocol === 'atproto'
 		},
 
 		/**
@@ -306,6 +326,7 @@ export default {
 			return scope === 'write'
 				|| scope === 'follow'
 				|| scope === 'push'
+				|| scope === 'transition:generic'
 				|| scope.startsWith('write:')
 				|| scope.startsWith('admin')
 		},
@@ -418,6 +439,20 @@ export default {
 		color: var(--color-main-text);
 		text-decoration: underline;
 	}
+}
+
+.oauth__client-id {
+	color: var(--color-main-text);
+	font-family: var(--font-face-monospace, monospace);
+	font-size: 90%;
+	text-align: center;
+	overflow-wrap: anywhere;
+}
+
+.oauth__client-note {
+	color: var(--color-text-maxcontrast);
+	font-size: 90%;
+	text-align: center;
 }
 
 .oauth__lead {

@@ -711,5 +711,157 @@ describe('AccountSettings', () => {
 				expect(rows(wrapper)).toHaveLength(2)
 			})
 		})
+
+		describe('apps signed in with Bluesky sign-in', () => {
+			const SESSIONS = '/index.php/apps/social/api/v1/social/bluesky/oauth-sessions'
+			const NOW = Math.floor(Date.now() / 1000)
+			const BSKY = {
+				id: 7,
+				client_id: 'https://bsky.app/oauth-client-metadata.json',
+				client: 'bsky.app',
+				scopes: ['atproto', 'transition:generic', 'transition:email'],
+				created: NOW - 3 * 24 * 3600,
+				last_used: NOW - 2 * 3600,
+			}
+			const LOCAL = {
+				id: 8,
+				client_id: 'http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback',
+				client: 'localhost',
+				scopes: ['atproto', 'some:other'],
+				created: NOW - 24 * 3600,
+				last_used: 0,
+			}
+
+			/**
+			 * @param {object} answer what the identity route answers
+			 * @param {Promise<object>} sessions what the sessions route answers
+			 */
+			function serverHasSessions(answer = identity(), sessions = Promise.resolve({ data: { sessions: [BSKY, LOCAL] } })) {
+				axios.get.mockImplementation((url) => {
+					if (url === IDENTITY) {
+						return Promise.resolve({ data: answer })
+					}
+					if (url === SESSIONS) {
+						return sessions
+					}
+					if (url.endsWith('/app-passwords')) {
+						return Promise.resolve({ data: { app_passwords: [] } })
+					}
+					return Promise.resolve({ data: credentials() })
+				})
+			}
+
+			const section = (wrapper) => wrapper.find('.account-settings__oauth-sessions')
+			const rows = (wrapper) => wrapper.findAll('.account-settings__oauth-session')
+			const signOutButton = (row) => row.findAll('button').find((button) => button.text() === 'Sign out')
+
+			it('lists them by host, with the client_id, the dates and what each may do', async () => {
+				serverHasSessions()
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(axios.get).toHaveBeenCalledWith(SESSIONS)
+				expect(section(wrapper).text()).toContain('Apps signed in with Bluesky sign-in')
+				expect(section(wrapper).text()).toContain('without an app password. Signing one out stops it at once.')
+				expect(rows(wrapper)).toHaveLength(2)
+
+				const [bsky, local] = rows(wrapper)
+				expect(bsky.find('.account-settings__app-password-name').text()).toBe('bsky.app')
+				// the one thing about the app that is checked stays readable
+				expect(bsky.find('.account-settings__oauth-client-id').text()).toBe('https://bsky.app/oauth-client-metadata.json')
+				expect(bsky.text()).toContain('Signed in ')
+				expect(bsky.text()).toContain('Last used 2 hours ago')
+				expect(bsky.findAll('.account-settings__oauth-grants li').map((li) => li.text()))
+					.toEqual(['Post, like, follow and read as you', 'See your e-mail address'])
+
+				expect(local.find('.account-settings__oauth-client-id').text())
+					.toBe('http://localhost?redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback')
+				expect(local.text()).toContain('Never used')
+				expect(local.findAll('.account-settings__oauth-grants li').map((li) => li.text()))
+					.toEqual(['Know who you are'])
+			})
+
+			it('says so when no app has signed in', async () => {
+				serverHasSessions(identity(), Promise.resolve({ data: { sessions: [] } }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('No app has signed in this way.')
+				expect(rows(wrapper)).toHaveLength(0)
+			})
+
+			it('is not drawn when the server has no such route', async () => {
+				serverHasSessions(identity(), Promise.reject({ response: { status: 404 } }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(block(wrapper).exists()).toBe(true)
+				expect(section(wrapper).exists()).toBe(false)
+			})
+
+			it('says so when they could not be read', async () => {
+				serverHasSessions(identity(), Promise.reject(new Error('offline')))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('Could not read your signed-in apps right now.')
+				expect(rows(wrapper)).toHaveLength(0)
+			})
+
+			it('is neither drawn nor asked for while the account is paused on Bluesky', async () => {
+				serverHasSessions(identity({ active: false }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).exists()).toBe(false)
+				expect(axios.get).not.toHaveBeenCalledWith(SESSIONS)
+			})
+
+			it('signs one out after asking, and follows the list the server answered', async () => {
+				serverHasSessions()
+				axios.delete.mockResolvedValue({ data: { sessions: [LOCAL] } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await signOutButton(rows(wrapper)[0]).trigger('click')
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(rows(wrapper)[0].text()).toContain('This app is signed out and has to ask you again to sign in.')
+
+				await buttonByText(wrapper, 'Sign it out').trigger('click')
+				await flushPromises()
+
+				expect(axios.delete).toHaveBeenCalledWith(`${SESSIONS}/7`)
+				expect(rows(wrapper)).toHaveLength(1)
+				expect(rows(wrapper)[0].text()).toContain('localhost')
+				expect(buttonByText(wrapper, 'Sign it out')).toBeUndefined()
+			})
+
+			it('keeps one signed in when the sign-out is called off', async () => {
+				serverHasSessions()
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await signOutButton(rows(wrapper)[0]).trigger('click')
+				await buttonByText(wrapper, 'Keep it').trigger('click')
+
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(buttonByText(wrapper, 'Sign it out')).toBeUndefined()
+				expect(rows(wrapper)).toHaveLength(2)
+			})
+
+			it('says so when one could not be signed out', async () => {
+				serverHasSessions()
+				axios.delete.mockRejectedValue(new Error('offline'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await signOutButton(rows(wrapper)[0]).trigger('click')
+				await buttonByText(wrapper, 'Sign it out').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Could not sign the app out')
+				expect(rows(wrapper)).toHaveLength(2)
+			})
+		})
 	})
 })

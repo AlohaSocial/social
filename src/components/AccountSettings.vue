@@ -204,6 +204,63 @@
 							</div>
 						</template>
 					</div>
+					<!-- a Bluesky app that signed in through the OAuth consent
+					     page holds a token of its own, not an app password -->
+					<div v-if="bluesky.active !== false && !oauthSessionsHidden" class="account-settings__oauth-sessions">
+						<h4 class="account-settings__bluesky-title">
+							{{ t('social', 'Apps signed in with Bluesky sign-in') }}
+						</h4>
+						<p class="account-settings__hint account-settings__hint--block">
+							{{ t('social', 'Bluesky apps that sign in with your account here, without an app password. Signing one out stops it at once.') }}
+						</p>
+						<p v-if="oauthSessionsError" class="account-settings__hint account-settings__hint--block">
+							{{ oauthSessionsError }}
+						</p>
+						<p v-else-if="oauthSessions === null" class="account-settings__hint account-settings__hint--block">
+							{{ t('social', 'Loading …') }}
+						</p>
+						<p v-else-if="oauthSessions.length === 0" class="account-settings__hint account-settings__hint--block">
+							{{ t('social', 'No app has signed in this way.') }}
+						</p>
+						<ul v-else class="account-settings__app-password-list">
+							<li v-for="session in oauthSessions" :key="session.id" class="account-settings__oauth-session">
+								<span class="account-settings__app-password-name">{{ session.client }}</span>
+								<!-- the client_id is the only part of the app that is checked -->
+								<span class="account-settings__hint account-settings__oauth-client-id">{{ session.client_id }}</span>
+								<span class="account-settings__hint">
+									{{ t('social', 'Signed in {date}', { date: madeOn(session.created) }) }}
+									·
+									{{ session.last_used > 0
+										? t('social', 'Last used {when}', { when: lastUsed(session.last_used) })
+										: t('social', 'Never used') }}
+								</span>
+								<ul v-if="sessionGrants(session).length > 0" class="account-settings__oauth-grants">
+									<li v-for="grant in sessionGrants(session)" :key="grant">
+										{{ grant }}
+									</li>
+								</ul>
+								<div v-if="confirmingSignOut === session.id" class="account-settings__app-password-actions">
+									<p class="account-settings__hint account-settings__hint--block">
+										{{ t('social', 'This app is signed out and has to ask you again to sign in.') }}
+									</p>
+									<NcButton
+										variant="error"
+										:disabled="signingOut === session.id"
+										@click="signOutSession(session)">
+										{{ t('social', 'Sign it out') }}
+									</NcButton>
+									<NcButton :disabled="signingOut === session.id" @click="confirmingSignOut = 0">
+										{{ t('social', 'Keep it') }}
+									</NcButton>
+								</div>
+								<div v-else class="account-settings__app-password-actions">
+									<NcButton @click="confirmingSignOut = session.id">
+										{{ t('social', 'Sign out') }}
+									</NcButton>
+								</div>
+							</li>
+						</ul>
+					</div>
 				</template>
 				<NcDialog
 					:open="phrase !== ''"
@@ -437,6 +494,20 @@ export default {
 			confirmingRevoke: 0,
 			/** the row a revocation is out for, or 0 */
 			revoking: 0,
+
+			/**
+			 * The Bluesky apps signed in through OAuth; null until they come
+			 *
+			 * @type {Array<{id: number, client_id: string, client: string, scopes: string[], created: number, last_used: number}>|null}
+			 */
+			oauthSessions: null,
+			/** the server has no such route: Bluesky is off there */
+			oauthSessionsHidden: false,
+			oauthSessionsError: '',
+			/** the session asking to be confirmed, or 0 */
+			confirmingSignOut: 0,
+			/** the session a sign-out is out for, or 0 */
+			signingOut: 0,
 		}
 	},
 
@@ -561,6 +632,9 @@ export default {
 		blueskyLive(live) {
 			if (live && this.appPasswords === null && !this.appPasswordsHidden) {
 				this.loadAppPasswords()
+			}
+			if (live && this.oauthSessions === null && !this.oauthSessionsHidden) {
+				this.loadOAuthSessions()
 			}
 		},
 
@@ -792,6 +866,62 @@ export default {
 			}
 		},
 
+		/** @return {Promise<void>} */
+		async loadOAuthSessions() {
+			this.oauthSessionsError = ''
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/oauth-sessions'))
+				this.oauthSessions = data?.sessions ?? []
+			} catch (error) {
+				if (error?.response?.status === 404) {
+					this.oauthSessionsHidden = true
+					return
+				}
+				logger.debug('Could not load the signed-in apps', { error })
+				this.oauthSessionsError = t('social', 'Could not read your signed-in apps right now.')
+			}
+		},
+
+		/**
+		 * What a session's scopes let the app do, in words; scopes without
+		 * a meaning to a person are left out.
+		 *
+		 * @param {{scopes: string[]}} session one signed-in app
+		 * @return {string[]}
+		 */
+		sessionGrants(session) {
+			const scopes = session.scopes ?? []
+			const grants = []
+			if (scopes.includes('transition:generic')) {
+				grants.push(t('social', 'Post, like, follow and read as you'))
+			} else if (scopes.includes('atproto')) {
+				grants.push(t('social', 'Know who you are'))
+			}
+			if (scopes.includes('transition:email')) {
+				grants.push(t('social', 'See your e-mail address'))
+			}
+
+			return grants
+		},
+
+		/**
+		 * @param {{id: number}} session the signed-in app to sign out
+		 * @return {Promise<void>}
+		 */
+		async signOutSession(session) {
+			this.signingOut = session.id
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/social/bluesky/oauth-sessions/{id}', { id: session.id }))
+				this.oauthSessions = data.sessions
+				this.confirmingSignOut = 0
+			} catch (error) {
+				logger.debug('Could not sign an app out', { error })
+				showError(t('social', 'Could not sign the app out'))
+			} finally {
+				this.signingOut = 0
+			}
+		},
+
 		/**
 		 * Pauses or resumes the account on Bluesky; the block follows what
 		 * the server answered, so the switch never says what did not happen.
@@ -931,7 +1061,8 @@ export default {
 		margin-top: 4px;
 	}
 
-	&__app-passwords {
+	&__app-passwords,
+	&__oauth-sessions {
 		margin-top: 12px;
 	}
 
@@ -972,7 +1103,8 @@ export default {
 		list-style: none;
 	}
 
-	&__app-password {
+	&__app-password,
+	&__oauth-session {
 		padding: 8px 12px;
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-element, 8px);
@@ -981,6 +1113,18 @@ export default {
 	&__app-password-name {
 		font-weight: bold;
 		overflow-wrap: anywhere;
+	}
+
+	&__oauth-client-id {
+		font-size: 12px;
+		overflow-wrap: anywhere;
+	}
+
+	&__oauth-grants {
+		margin: 4px 0 0;
+		padding-inline-start: 20px;
+		font-size: 13px;
+		list-style: disc;
 	}
 
 	&__app-password-actions {
