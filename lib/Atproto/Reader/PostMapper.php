@@ -20,7 +20,8 @@ use OCA\Social\Model\Details;
  * the `Announce` the boosting account would have sent.
  *
  * What the mapping decides: the post's text and facets become HTML; the
- * pictures of an image embed become attachments pointing at the CDN; a
+ * pictures of an image embed become attachments pointing at the CDN, and
+ * a video is a federated `Video` streamed from Bluesky's video CDN; a
  * reply names its parent, a quote the quoted post; the moderation labels
  * of §12.1 become `sensitive` and a content warning; every post is public
  * and addressed to the author's followers collection, which is what the
@@ -157,6 +158,19 @@ class PostMapper {
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
 			],
 		];
+		$video = self::videoOf($embed);
+		if ($video !== null) {
+			// the shape a federated video arrives in, so it is streamed through
+			// this server's HLS proxy and never copied here, with its still
+			$note['type'] = 'Video';
+			$note['url'] = [
+				['type' => 'Link', 'mediaType' => 'text/html', 'href' => $note['url']],
+				['type' => 'Link', 'mediaType' => 'application/x-mpegURL', 'href' => $video['playlist'], 'width' => $video['width'], 'height' => $video['height']],
+			];
+			if ($video['thumbnail'] !== '') {
+				$note['icon'] = ['type' => 'Image', 'mediaType' => 'image/jpeg', 'url' => $video['thumbnail']];
+			}
+		}
 		if ($quote !== '') {
 			$note['quote'] = $quote;
 		}
@@ -221,6 +235,9 @@ class PostMapper {
 
 				return [[], '', '<p><a href="' . self::escape($uri) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($title !== '' ? $title : $uri) . '</a></p>'];
 			case self::VIDEO:
+				if (self::videoOf($embed) !== null) {
+					return [[], '', ''];
+				}
 				$parsed = BlueskyIds::parsePostId($postId);
 				$url = $parsed === null ? '' : BlueskyIds::postUrl($parsed['did'], $parsed['rkey']);
 
@@ -228,6 +245,35 @@ class PostMapper {
 		}
 
 		return [[], '', ''];
+	}
+
+	/**
+	 * The playable video of a post's embed, alone or beside a quote: its HLS
+	 * playlist, its still and its size. Null when there is none, or while the
+	 * video service has not made a playlist of it yet.
+	 *
+	 * @return array{playlist: string, thumbnail: string, width: int, height: int}|null
+	 */
+	public static function videoOf(array $embed): ?array {
+		if (($embed['$type'] ?? '') === self::RECORD_WITH_MEDIA) {
+			$embed = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+		}
+		if (($embed['$type'] ?? '') !== self::VIDEO) {
+			return null;
+		}
+		$playlist = (string)($embed['playlist'] ?? '');
+		if (!preg_match('#^https://#i', $playlist)) {
+			return null;
+		}
+		$thumbnail = (string)($embed['thumbnail'] ?? '');
+		$ratio = is_array($embed['aspectRatio'] ?? null) ? $embed['aspectRatio'] : [];
+
+		return [
+			'playlist' => $playlist,
+			'thumbnail' => preg_match('#^https://#i', $thumbnail) ? $thumbnail : '',
+			'width' => max(0, (int)($ratio['width'] ?? 0)),
+			'height' => max(0, (int)($ratio['height'] ?? 0)),
+		];
 	}
 
 	/**
