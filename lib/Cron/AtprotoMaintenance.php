@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Reader\DeletionSweep;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Db\AtprotoClientRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use Psr\Log\LoggerInterface;
@@ -37,6 +38,7 @@ class AtprotoMaintenance extends TimedJob {
 		private EventService $events,
 		private InstanceKeyService $instanceKeys,
 		private DeletionSweep $deletions,
+		private AtprotoClientRequest $clients,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -54,6 +56,7 @@ class AtprotoMaintenance extends TimedJob {
 			'prune events' => fn (): int => $this->events->prune(),
 			'prune keys' => fn (): int => $this->instanceKeys->pruneRetired($this->time->getTime()),
 			'deleted on Bluesky' => fn (): int => $this->deletions->run(),
+			'expired app sessions' => fn (): int => $this->clients->pruneSessions($this->time->getTime()),
 		] as $step => $run) {
 			try {
 				$run();

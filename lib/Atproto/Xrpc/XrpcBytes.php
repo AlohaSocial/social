@@ -10,12 +10,14 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Xrpc;
 
 /**
- * A binary XRPC answer: a CAR file or a blob, with its media type.
+ * An XRPC answer passed on as bytes: a CAR file, a blob, or what the
+ * AppView answered a proxied call, with its media type and status.
  */
 final class XrpcBytes {
 	public function __construct(
 		public readonly string $bytes,
 		public readonly string $contentType,
+		public readonly int $status = 200,
 	) {
 	}
 }

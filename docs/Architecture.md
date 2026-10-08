@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.148
+**App version:** 0.26.149
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -245,6 +245,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
 | `social_atproto_blocklist` | The administrator's Bluesky block list: a PDS host or a DID, with the reason. A blocked account is not resolved, read or heard from; a blocked host blocks every account whose PDS it is |
 | `social_atproto_labeler` | The Bluesky labelers each person subscribes to, by DID, with their choice per label value (`ignore`, `warn`, `hide`) as JSON; Bluesky's own moderation service is always applied and needs no row |
+| `social_atproto_app_password` | The app passwords a person made for Bluesky apps, by name, stored as password hashes only — the password is shown once. Good for this app's Bluesky surface and nothing else of Nextcloud |
+| `social_atproto_session` | The sessions Bluesky apps opened with those passwords, by the id of their refresh token, with the password that opened them: ending a session, or revoking its password, ends its tokens |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
@@ -2001,7 +2003,8 @@ into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
 `#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
 `#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`
 where the server gives every account a Bluesky identity — `BlueskySettings.vue`,
-the handle, the DID, the pause switch and the recovery phrase —, `#invites`, `#storage`,
+the handle, the DID, the pause switch, the recovery phrase and the app
+passwords Bluesky apps sign in with —, `#invites`, `#storage`,
 `#delete`, last because it cannot be undone) and **Help**
 (`#introduction`, `#shortcuts`). One group is drawn at a time. The rail lists the
 groups and, under the open one, its sections; on a narrow screen the groups are a
