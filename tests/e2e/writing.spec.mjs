@@ -58,35 +58,35 @@ test.describe('writing, in a browser', () => {
 	 * A setting that says it saved and did not is the worst kind of bug on a
 	 * settings page, because nobody checks.
 	 *
-	 * The account switches edit a draft and are written by the Save button, so
-	 * this drives both: the switch, the save, and what the server hands back
-	 * on the next load.
+	 * The account switches are saved as they are flipped, so this drives the
+	 * switch, waits for the save, and checks what the server hands back on the
+	 * next load.
 	 */
 	test('an account setting survives the reload after it is saved', async ({ page }) => {
-		await openApp(page, '/settings')
-		const form = page.locator('.account-settings')
-		await expect(form).toBeVisible()
+		const saved = () => page.waitForResponse((response) => response.url().includes('/accounts/update_credentials')
+			&& response.request().method() === 'PATCH')
+		const firstSwitch = () => page.locator('.account-settings .account-settings__switch').first()
 
-		const control = form.locator('.account-settings__switch').first()
-		const box = control.locator('input[type="checkbox"]')
+		await openApp(page, '/settings')
+		await expect(page.locator('.account-settings')).toBeVisible()
+
+		const box = firstSwitch().locator('input[type="checkbox"]')
 		const before = await box.isChecked()
 
-		await control.click()
+		let response = saved()
+		await firstSwitch().click()
 		await expect(box).toBeChecked({ checked: !before })
-		await form.getByRole('button', { name: /^Save/ }).click()
+		expect((await response).ok()).toBe(true)
 
 		await page.reload()
-		const saved = page.locator('.account-settings .account-settings__switch')
-			.first()
-			.locator('input[type="checkbox"]')
-		await expect(saved, 'the server kept it, not just the page')
+		await expect(firstSwitch().locator('input[type="checkbox"]'), 'the server kept it, not just the page')
 			.toBeChecked({ checked: !before })
 
 		// put it back, so the run leaves the account as it found it
-		await page.locator('.account-settings .account-settings__switch').first().click()
-		await page.locator('.account-settings').getByRole('button', { name: /^Save/ }).click()
-		await expect(page.locator('.account-settings .account-settings__switch').first()
-			.locator('input[type="checkbox"]')).toBeChecked({ checked: before })
+		response = saved()
+		await firstSwitch().click()
+		expect((await response).ok()).toBe(true)
+		await expect(firstSwitch().locator('input[type="checkbox"]')).toBeChecked({ checked: before })
 	})
 
 	/**

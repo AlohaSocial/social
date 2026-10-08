@@ -65,7 +65,6 @@ describe('NotificationPolicySettings', () => {
 		const wrapper = await mountSettings({ ...open, for_new_accounts: 'filter' })
 
 		expect(axios.get).toHaveBeenCalledWith(API)
-		expect(wrapper.find('h4').text()).toBe('Who may reach you')
 		expect(wrapper.findAll('legend').map((legend) => legend.text())).toEqual([
 			'People you don\'t follow',
 			'People who don\'t follow you',

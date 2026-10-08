@@ -194,14 +194,19 @@ test.describe('Aloha Social, in a browser', () => {
 		await page.keyboard.press('Escape')
 	})
 
-	/** Reference at the end, and the one thing that cannot be undone last. */
-	test('the settings page ends with the shortcuts above the deletion', async ({ page }) => {
-		await openApp(page, '/settings')
+	/**
+	 * The one thing that cannot be undone closes its group, and a link to a
+	 * section opens the group it is in.
+	 */
+	test('the settings page ends Apps and account with the deletion', async ({ page }) => {
+		await openApp(page, '/settings#delete')
 		const headings = page.locator('.settings__section-heading')
-		await expect(headings.first()).toBeVisible()
+		await expect(page.locator('#delete')).toBeVisible()
 
-		expect((await headings.allInnerTexts()).slice(-2))
-			.toEqual(['Keyboard shortcuts', 'Delete your Aloha Social account'])
+		expect((await headings.allInnerTexts()).at(-1)).toBe('Delete your Aloha Social account')
+
+		await page.locator('.settings__group-title', { hasText: /^Help$/ }).click()
+		await expect(headings.filter({ hasText: /^Keyboard shortcuts$/ })).toBeVisible()
 	})
 
 	test('Discover has its sections', async ({ page }) => {

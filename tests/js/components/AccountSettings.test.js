@@ -9,7 +9,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
 
 import AccountSettings from '../../../src/components/AccountSettings.vue'
-import { showSuccess } from '../../../src/services/toast.js'
+import { showError } from '../../../src/services/toast.js'
 import { useAccountStore } from '../../../src/store/account.js'
 
 vi.mock('@nextcloud/axios', () => ({
@@ -52,7 +52,6 @@ function switchFor(wrapper, label) {
 	return wrapper.findAll('.account-settings__switch')
 		.find((row) => row.text().includes(label))
 }
-const saveButton = (wrapper) => wrapper.find('.account-settings__actions button')
 
 describe('AccountSettings', () => {
 	beforeEach(() => {
@@ -98,25 +97,62 @@ describe('AccountSettings', () => {
 			.toMatchObject({ id: 'followers' })
 	})
 
-	it('has nothing to save until something changes', async () => {
-		const wrapper = mountSettings()
+	it('sends nothing until something changes', async () => {
+		mountSettings()
 		await flushPromises()
 
-		expect(saveButton(wrapper).attributes('disabled')).toBeDefined()
+		expect(axios.patch).not.toHaveBeenCalled()
 	})
 
-	it('sends only what was changed', async () => {
+	/**
+	 * Every other setting on the page saves as it is changed, and a Save
+	 * button on this one alone was a form that looked saved and was not.
+	 */
+	it('saves a switch as soon as it is flipped, sending only that', async () => {
 		const wrapper = mountSettings()
 		await flushPromises()
 		axios.patch.mockResolvedValue({ data: credentials({ locked: true }) })
 
 		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
-		await wrapper.find('form').trigger('submit')
 		await flushPromises()
 
 		// the display name and the three other flags are untouched, so a
 		// backend that owns the name is never asked to write it back
+		expect(axios.patch).toHaveBeenCalledTimes(1)
 		expect(axios.patch).toHaveBeenCalledWith(`${API}/accounts/update_credentials`, { locked: true })
+		expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
+	})
+
+	it('saves a change made while another is on its way once that one answers', async () => {
+		const wrapper = mountSettings()
+		await flushPromises()
+		let answer
+		axios.patch
+			.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+			.mockResolvedValueOnce({ data: credentials({ locked: true, bot: true }) })
+
+		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+		await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
+		expect(axios.patch).toHaveBeenCalledTimes(1)
+
+		answer({ data: credentials({ locked: true }) })
+		await flushPromises()
+
+		expect(axios.patch).toHaveBeenCalledTimes(2)
+		expect(axios.patch).toHaveBeenLastCalledWith(`${API}/accounts/update_credentials`, { bot: true })
+	})
+
+	it('puts a refused change back, so the switch shows what the server holds', async () => {
+		const wrapper = mountSettings()
+		await flushPromises()
+		axios.patch.mockRejectedValue(new Error('refused'))
+
+		await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
+		await flushPromises()
+
+		expect(showError).toHaveBeenCalled()
+		expect(wrapper.vm.draft.locked).toBe(false)
+		expect(axios.patch).toHaveBeenCalledTimes(1)
 	})
 
 	/**
@@ -158,7 +194,6 @@ describe('AccountSettings', () => {
 			axios.patch.mockResolvedValue({ data: credentials({ locked: true }) })
 
 			await switchFor(wrapper, 'Approve who follows you').find('input').setValue(true)
-			await wrapper.find('form').trigger('submit')
 			await flushPromises()
 
 			const [, body] = axios.patch.mock.calls[0]
@@ -172,25 +207,12 @@ describe('AccountSettings', () => {
 		axios.patch.mockResolvedValue({ data: credentials({ source: { privacy: 'public' } }) })
 
 		wrapper.findComponent({ name: 'NcSelect' }).vm.$emit('update:modelValue', { id: 'public', text: 'Public' })
-		await wrapper.find('form').trigger('submit')
 		await flushPromises()
 
 		expect(axios.patch).toHaveBeenCalledWith(
 			`${API}/accounts/update_credentials`,
 			{ source: { privacy: 'public' } },
 		)
-	})
-
-	it('says so when the settings have been saved', async () => {
-		const wrapper = mountSettings()
-		await flushPromises()
-		axios.patch.mockResolvedValue({ data: credentials({ bot: true }) })
-
-		await switchFor(wrapper, 'This is an automated account').find('input').setValue(true)
-		await wrapper.find('form').trigger('submit')
-		await flushPromises()
-
-		expect(showSuccess).toHaveBeenCalledWith('Your account settings have been saved')
 	})
 
 	/** The store holds the answer, so the composer's default follows the form. */
@@ -200,7 +222,6 @@ describe('AccountSettings', () => {
 		axios.patch.mockResolvedValue({ data: credentials({ source: { privacy: 'unlisted' } }) })
 
 		wrapper.findComponent({ name: 'NcSelect' }).vm.$emit('update:modelValue', { id: 'unlisted', text: 'Unlisted' })
-		await wrapper.find('form').trigger('submit')
 		await flushPromises()
 
 		expect(useAccountStore().defaultPostVisibility).toBe('unlisted')
@@ -210,6 +231,6 @@ describe('AccountSettings', () => {
 		const wrapper = mountSettings()
 
 		expect(wrapper.find('.account-settings__loading').exists()).toBe(true)
-		expect(wrapper.find('.account-settings__actions').exists()).toBe(false)
+		expect(wrapper.find('.account-settings__switch').exists()).toBe(false)
 	})
 })

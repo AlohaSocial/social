@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.141
+**App version:** 0.26.142
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1927,25 +1927,36 @@ of the animation.
 
 `Composer.vue` carries a full `tributeOptions` config for `@` account and `#` hashtag completion. `tributejs` is a plain DOM library rather than a component: it is attached to the contenteditable in `mounted()` and detached in `unmounted()`, and it appends its menu to the body, which the unscoped `.tribute-container` rule at the end of the file styles. The account collection searches `/api/v1/global/accounts/search` and the hashtag collection `/api/v1/global/tags/search`, both debounced. The composer's HTML-to-text conversion inserts one newline at each block boundary, including before a block that follows an unwrapped text node; browser contenteditables commonly encode the first Enter in that mixed form, so missing the leading separator concatenates the first two lines in a new post. The shared `htmlToPlainText()` applies the same rule when editing/redrafting and when presenting portfolio captions. The emoji picker is a separate `NcEmojiPicker`; it is loaded on first use and portals to `#content`, outside the composer toolbar and reaction modal's clipping/stacking containers while retaining Nextcloud theme variables inherited from the app root. The reaction picker shares that portal so the popover does not participate in its centered flex panel's sizing or sit beneath its backdrop. Portfolio captions are reduced to plain text by `htmlToPlainText()` and use `white-space: pre-line` so paragraph boundaries remain visible without rendering untrusted HTML.
 
-**The Settings page, and what is on it.** `src/views/Settings.vue` is a list of
-sections, each with an id — `#account`, `#lists`, `#scheduled`, `#migration`,
-`#shortcuts` — because other pages link to one of them: the Follow requests
-page's empty state sends the reader to `#account` for the switch it talks about.
-An id names the section it is on, which the scheduled posts' did not: it said
-`#migration`, so that link scrolled to the wrong section and the migration tools
-had no anchor at all. The order is the things done to the account first and the
-**keyboard shortcuts at the end**, under them: they are reference rather than a
-setting, nothing on them is changed, and only the account deletion is below them
-— last, and on its own, because it is the one thing on the page that cannot be
-undone. The two large
-sections are `defineAsyncComponent` imports in a `settings` chunk, since nobody
-loads them until they open the page, and a section that arrives after the page
-did is why the scroll to the hash is retried in `updated()`.
+**The Settings page, and what is on it.** `src/views/Settings.vue` describes
+every section once (`{ id, group, icon, component, title, lede }`) and sorts them
+into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
+`#portfolio`), **Reading** (`#interests`, `#lists`, `#sensitive`, `#counts`,
+`#recap`, `#senses`), **Notifications** (`#notifications` for when,
+`#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
+`#archive`, `#files-comments`), **Apps and account** (`#apps`, `#invites`,
+`#storage`, `#delete`, last because it cannot be undone) and **Help**
+(`#introduction`, `#shortcuts`). One group is drawn at a time. The rail lists the
+groups and, under the open one, its sections; on a narrow screen the groups are a
+row of tabs. A group's link is `#` plus its first section's id, so every address
+is a section address and the links other pages hold keep working: a hash opens
+the group its section is in, then scrolls to it (retried in `updated()`, because
+the sections arrive in an async `settings` chunk). **Find a setting** matches
+every typed word, folded to lower case without accents, against each section's
+title, lede and group, and draws the matches from all groups at once with their
+group named above each. The rail marks the last section whose heading has passed
+the top (`services/sectionRail.js`), and the first one before any has: keeping
+the previous mark left a section far down the page marked at the very top.
+`#migration` is sent on to the Migration page.
 
-`AccountSettings.vue` is `PATCH /api/v1/accounts/update_credentials` as a form:
-the display name, `locked`, `discoverable`, `indexable`, `bot` and
-`source[privacy]`. It sends **only the fields that changed**, which is not an
-optimisation: the route writes only what it is given, and a form that posted the
+`AccountSettings.vue` is `PATCH /api/v1/accounts/update_credentials` for
+`locked`, `discoverable`, `indexable`, `bot` and `source[privacy]`, saved as each
+one changes, like every other setting on the page. A change made while a save is
+on its way goes once that save answers, and the store's answer is not copied into
+the form while a save is pending, since it predates the later change. A refused
+save puts the form back to what the server holds. The display name is shown, not
+edited: it belongs to the Nextcloud account. How sensitive media is shown is a
+reading preference, so it is `SensitiveMediaSettings.vue` under Reading. The form
+sends **only the fields that changed**, which is not an optimisation: the route writes only what it is given, and a form that posted the
 whole of itself back would re-save a display name into a backend that owns it
 (LDAP, SAML) and be refused for a switch it never meant to touch. The bio, the
 banner and the metadata fields stay in the profile's own editor, because they are

@@ -203,7 +203,7 @@ the account keys.
 
 ### 4.4 What the person sees of their identity
 
-Nothing, unless they look: **Settings → Your account** shows the Bluesky
+Nothing, unless they look: **Settings → Profile and privacy** shows the Bluesky
 handle and DID under the Fediverse handle, with a *Copy* button and a
 sentence that says the Bluesky account exists because this server offers
 one. The recovery key is shown there **once**, on first view, as a
@@ -638,7 +638,7 @@ account age, and the requests inbox shows the sender with the badge.
   §8.6. Reply to a Bluesky post from here → published as a reply (§8.3).
 - **Activities**: Bluesky events with the badge on the actor; the filter
   switcher gains no entry (D14 chose "mixed", not "separate").
-- **Settings → Your account**: the Bluesky handle/DID block and the
+- **Settings → Profile and privacy**: the Bluesky handle/DID block and the
   recovery phrase (§4.4). **Settings → Blocking**: labelers (§12.2).
 - **Admin settings**: the Bluesky section (§14.2).
 

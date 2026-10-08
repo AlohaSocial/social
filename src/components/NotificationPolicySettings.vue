@@ -3,10 +3,9 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div id="notification-policy" class="policy-settings" :aria-busy="saving !== '' ? 'true' : undefined">
-		<h4 class="policy-settings__heading">
-			{{ t('social', 'Who may reach you') }}
-		</h4>
+	<!-- the heading and the id other pages link to (#notification-policy)
+	     are the settings section's -->
+	<div class="policy-settings" :aria-busy="saving !== '' ? 'true' : undefined">
 		<p class="policy-settings__hint">
 			{{ t('social', 'Held people can still write to you. Their posts, likes and follows wait in Activities until you look; they do not ring, push or mail.') }}
 		</p>
@@ -280,12 +279,6 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: calc(var(--default-grid-baseline) * 2);
-
-	&__heading {
-		margin: 0;
-		font-size: 16px;
-		font-weight: bold;
-	}
 
 	&__subheading {
 		margin: calc(var(--default-grid-baseline) * 2) 0 0;
