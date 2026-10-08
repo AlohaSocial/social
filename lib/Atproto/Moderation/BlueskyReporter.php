@@ -16,9 +16,11 @@ use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Tools\Nid;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -46,6 +48,7 @@ class BlueskyReporter {
 		private ServiceAuth $serviceAuth,
 		private PlcClient $plc,
 		private PostRefs $refs,
+		private StreamRequest $streams,
 		private CurlService $curlService,
 		private LoggerInterface $logger,
 	) {
@@ -104,7 +107,7 @@ class BlueskyReporter {
 	public function body(Report $report, Person $target): array {
 		$subject = ['$type' => 'com.atproto.admin.defs#repoRef', 'did' => BlueskyIds::didOf($target->getId())];
 		foreach ($report->getStatusIds() as $statusId) {
-			$ref = $this->refs->strongRef((string)$statusId);
+			$ref = $this->refs->strongRef($this->postIdOf((string)$statusId));
 			if ($ref !== null) {
 				$subject = ['$type' => 'com.atproto.repo.strongRef'] + $ref;
 				break;
@@ -120,6 +123,21 @@ class BlueskyReporter {
 		}
 
 		return $body;
+	}
+
+	/**
+	 * A reported status by the id a client knows it by — its number — or by
+	 * its address, as a report that came from elsewhere names it.
+	 */
+	private function postIdOf(string $statusId): string {
+		if (!ctype_digit($statusId)) {
+			return $statusId;
+		}
+		try {
+			return $this->streams->getStreamByNid(Nid::fromStorage($statusId))->getId();
+		} catch (Throwable) {
+			return '';
+		}
 	}
 
 	private function endpointOf(string $did): string {

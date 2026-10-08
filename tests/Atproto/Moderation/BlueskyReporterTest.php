@@ -18,7 +18,9 @@ use OCA\Social\Atproto\Moderation\BlueskyReporter;
 use OCA\Social\Atproto\Protocol\Encoding;
 use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\CurlService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -37,6 +39,8 @@ class BlueskyReporterTest extends TestCase {
 	/** @var PostRefs&MockObject */
 	private PostRefs $refs;
 	private BlueskyReporter $reporter;
+	/** @var StreamRequest&MockObject */
+	private StreamRequest $streams;
 	private PrivateKey $serviceKey;
 
 	protected function setUp(): void {
@@ -56,7 +60,14 @@ class BlueskyReporterTest extends TestCase {
 		]]);
 		$this->refs = $this->createMock(PostRefs::class);
 		$this->curl = $this->createMock(CurlService::class);
-		$this->reporter = new BlueskyReporter($config, $keys, new ServiceAuth($time), $plc, $this->refs, $this->curl, new NullLogger());
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamByNid')->willReturnCallback(static function (): Note {
+			$note = new Note();
+			$note->setId('https://bsky.app/profile/' . self::BOB . '/post/3k');
+
+			return $note;
+		});
+		$this->reporter = new BlueskyReporter($config, $keys, new ServiceAuth($time), $plc, $this->refs, $this->streams, $this->curl, new NullLogger());
 	}
 
 	public function testAReportGoesToTheModerationServiceInTheInstancesNameNotTheReporters(): void {
@@ -81,7 +92,7 @@ class BlueskyReporterTest extends TestCase {
 			return '{"id":42,"reasonType":"com.atproto.moderation.defs#reasonSpam"}';
 		});
 
-		$this->assertSame('42', $this->reporter->report($this->report(['https://social.test/@x/1', 'https://bsky.app/profile/' . self::BOB . '/post/3k']), $this->bob()));
+		$this->assertSame('42', $this->reporter->report($this->report(['https://social.test/@x/1', '1791458880860688332']), $this->bob()));
 	}
 
 	public function testAnAccountReportNamesTheRepositoryAndARefusalIsNotATakenReport(): void {
