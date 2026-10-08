@@ -523,10 +523,22 @@ class ConfigService {
 	/** Seconds a federation request may take when nobody asks for anything else. */
 	public const DEFAULT_REQUEST_TIMEOUT = 10;
 
+	/**
+	 * Seconds allowed for reaching a peer — DNS, TCP and TLS — when nobody
+	 * asks for anything else; never more than the request's own timeout.
+	 *
+	 * A live peer is reached in well under a second, and what takes longer is
+	 * almost always a host that is gone. Allowing it the whole read timeout
+	 * made every dead host cost ten seconds, or thirty from the queue, before
+	 * the breaker could hear about it; a slow peer that is there still gets
+	 * the full timeout to answer once connected.
+	 */
+	public const DEFAULT_CONNECT_TIMEOUT = 4;
+
 	/** Seconds; 0 leaves each request its own default. See withRequestTimeout(). */
 	private int $requestTimeout = 0;
 
-	/** Seconds allowed for reaching the peer alone; 0 shares $requestTimeout. */
+	/** Seconds allowed for reaching the peer alone; 0 means DEFAULT_CONNECT_TIMEOUT. */
 	private int $requestConnectTimeout = 0;
 
 	public function __construct(
@@ -1047,9 +1059,10 @@ class ConfigService {
 
 		$options = [
 			'timeout' => $timeout,
-			// reaching the peer has no budget of its own unless one was asked
-			// for, and may then use the whole read timeout
-			'connect_timeout' => ($this->requestConnectTimeout > 0) ? $this->requestConnectTimeout : $timeout,
+			'connect_timeout' => min(
+				$timeout,
+				($this->requestConnectTimeout > 0) ? $this->requestConnectTimeout : self::DEFAULT_CONNECT_TIMEOUT
+			),
 			'nextcloud' => ['allow_local_address' => $this->isLocalNetworkAllowed()],
 		];
 
