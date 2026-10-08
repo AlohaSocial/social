@@ -151,6 +151,7 @@ class SignatureService {
 		ICacheFactory $cacheFactory,
 		LoggerInterface $logger,
 		private DurableCache $durableCache,
+		private FediverseService $fediverseService,
 	) {
 		$this->cacheActorService = $cacheActorService;
 		$this->cacheActorsRequest = $cacheActorsRequest;
@@ -458,6 +459,9 @@ class SignatureService {
 		$keyId = $signature['params']['keyid'];
 		$origin = $this->getKeyOrigin($keyId);
 		$signer = $this->keyOwner($keyId);
+		// an instance this one does not federate with is refused before its
+		// key is fetched, not after
+		$this->fediverseService->authorized($origin);
 
 		$covered = array_map(
 			static fn (array $component): string => strtolower($component['name']),
@@ -693,6 +697,9 @@ class SignatureService {
 
 			$signature = new LinkedDataSignature();
 			$signature->import(json_decode($object->getSource(), true));
+			// the key lives on the actor's host, and a host this instance does
+			// not federate with is not asked for it
+			$this->fediverseService->authorized($this->getKeyOrigin($actorId));
 			$signature->setPublicKey($this->retrieveKey($actorId));
 
 			if (!$signature->verify()) {
@@ -860,6 +867,9 @@ class SignatureService {
 		$keyId = $sign['keyId'];
 		$origin = $this->getKeyOrigin($keyId);
 		$signer = $this->keyOwner($keyId);
+		// an instance this one does not federate with is refused before its
+		// key is fetched, not after
+		$this->fediverseService->authorized($origin);
 
 		$headers = $sign['headers'];
 

@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Exceptions\SignatureIsGoneException;
+use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -26,6 +27,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DurableCache;
+use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\HttpSignatureService;
 use OCA\Social\Service\InstanceActorService;
 use OCA\Social\Service\SignatureService;
@@ -68,6 +70,7 @@ class SignatureServiceTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private CacheActorService|MockObject $cacheActorService;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
+	private FediverseService|MockObject $fediverseService;
 	private SignatureService $service;
 	/** the replay records, on the table an instance without a memcache uses */
 	private InMemoryDurableCacheRequest $seenSignatures;
@@ -92,6 +95,7 @@ class SignatureServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		// no key is in the local cache unless a test puts one there
 		$this->cacheActorsRequest->method('getFromId')
@@ -124,6 +128,7 @@ class SignatureServiceTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->durableCache(),
+			$this->fediverseService,
 		);
 	}
 
@@ -294,6 +299,47 @@ class SignatureServiceTest extends TestCase {
 
 		$this->assertSame('remote.example', $origin);
 		$this->assertSame((new DateTime($headers['date']))->getTimestamp(), $time);
+	}
+
+	/** The access list refuses the signer's host. */
+	private function refuseRemoteHost(): void {
+		$this->fediverseService->method('authorized')
+			->willReturnCallback(static function (string $host): bool {
+				if ($host === 'remote.example') {
+					throw new UnauthorizedFediverseException('Unauthorized Fediverse');
+				}
+
+				return true;
+			});
+	}
+
+	public function testCheckRequestRefusesABlockedInstanceBeforeFetchingItsKey(): void {
+		$this->refuseRemoteHost();
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkRequest($this->incomingRequest($this->signedHeaders($body, self::$privateKey)), $body);
+	}
+
+	public function testCheckRequestRefusesABlockedInstanceSigningWithRfc9421BeforeFetchingItsKey(): void {
+		$this->refuseRemoteHost();
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkRequest($this->incomingRequest($this->messageSignedHeaders($body, self::$privateKey)), $body);
+	}
+
+	public function testCheckObjectRefusesABlockedActorHostBeforeFetchingItsKey(): void {
+		$this->registerContextCache();
+		$this->refuseRemoteHost();
+		$received = $this->receivedSignedNote();
+		$received->setActorId(self::REMOTE_ACTOR);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkObject($received);
 	}
 
 	public function testAnInstanceOnANonDefaultPortVerifiesTheHostWithItsPort(): void {
@@ -1220,6 +1266,7 @@ class SignatureServiceTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->durableCache(),
+			$this->fediverseService,
 		);
 	}
 

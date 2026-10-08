@@ -184,6 +184,7 @@ class OutboundFederationWireTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->createStub(DurableCache::class),
+			$this->createStub(FediverseService::class),
 		);
 	}
 
