@@ -203,6 +203,76 @@ final class DevNetwork {
 	}
 
 	/**
+	 * The signed-in user posts a picture, uploaded to its own PDS as a blob.
+	 *
+	 * @return string the picture's CID
+	 */
+	public function postPicture(string $text, string $bytes, string $mime): string {
+		[$status, $body] = $this->request('POST', $this->pds . '/xrpc/com.atproto.repo.uploadBlob', $bytes, [
+			'Content-Type: ' . $mime, 'Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt,
+		]);
+		$blob = json_decode($body, true)['blob'] ?? null;
+		if ($status !== 200 || !is_array($blob)) {
+			throw new RuntimeException('uploadBlob answered ' . $status . ': ' . $body);
+		}
+		$this->post($this->pds, 'com.atproto.repo.createRecord', [
+			'repo' => $this->did,
+			'collection' => 'app.bsky.feed.post',
+			'record' => [
+				'$type' => 'app.bsky.feed.post',
+				'text' => $text,
+				'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+				'embed' => ['$type' => 'app.bsky.embed.images', 'images' => [['image' => $blob, 'alt' => 'A test pattern']]],
+			],
+		], true);
+
+		return (string)($blob['ref']['$link'] ?? '');
+	}
+
+	/**
+	 * A service-auth token the dev PDS signs as the signed-in user.
+	 */
+	public function serviceAuth(string $audience, string $method): string {
+		[$status, $answer] = $this->asUser('GET', 'com.atproto.server.getServiceAuth', null, ['aud' => $audience, 'lxm' => $method]);
+		if ($status !== 200) {
+			throw new RuntimeException('getServiceAuth answered ' . $status . ': ' . json_encode($answer));
+		}
+
+		return (string)($answer['token'] ?? '');
+	}
+
+	/**
+	 * A call to the dev PDS as the signed-in user; an empty body goes as an
+	 * object, as every procedure's input is one.
+	 *
+	 * @return array{0: int, 1: array} the status and the decoded answer
+	 */
+	public function asUser(string $verb, string $method, ?array $body = null, array $query = []): array {
+		$headers = ['Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt];
+		$payload = null;
+		if ($verb === 'POST') {
+			$headers[] = 'Content-Type: application/json';
+			$payload = (string)json_encode($body === null || $body === [] ? new \stdClass() : $body, JSON_UNESCAPED_SLASHES);
+		}
+		[$status, $answer] = $this->request($verb, $this->pds . '/xrpc/' . $method . ($query === [] ? '' : '?' . http_build_query($query)), $payload, $headers);
+		$decoded = json_decode($answer, true);
+
+		return [$status, is_array($decoded) ? $decoded : []];
+	}
+
+	/**
+	 * Bytes the dev PDS serves anyone: a repository, a blob.
+	 */
+	public function pdsBytes(string $method, array $query): string {
+		[$status, $body] = $this->request('GET', $this->pds . '/xrpc/' . $method . '?' . http_build_query($query), null, []);
+		if ($status !== 200) {
+			throw new RuntimeException($method . ' answered ' . $status . ': ' . $body);
+		}
+
+		return $body;
+	}
+
+	/**
 	 * The records of a collection in a repository, as the dev PDS holds it.
 	 *
 	 * @return list<array{uri: string, value: array}>
