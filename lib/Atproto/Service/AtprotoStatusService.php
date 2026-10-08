@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Firehose\EventService;
 use OCA\Social\Atproto\Firehose\FirehoseDaemon;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
@@ -49,6 +50,7 @@ class AtprotoStatusService {
 		private ICacheFactory $cacheFactory,
 		private ITimeFactory $time,
 		private ?AtprotoWatchRequest $watches = null,
+		private ?Blocklist $blocklist = null,
 	) {
 	}
 
@@ -70,6 +72,7 @@ class AtprotoStatusService {
 				// whose notifications are asked for, and how far behind the
 				// slowest of each is
 				'reading' => $this->reading(),
+				'blocks' => $this->blocklist?->list() ?? [],
 				'rotation_key_age' => $this->rotationKeyAgeDays(),
 				'daemon' => $this->daemon->status(),
 			],

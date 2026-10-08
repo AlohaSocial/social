@@ -233,6 +233,7 @@ class IdentityServiceTest extends TestCase {
 		$document = $this->service->instanceDocument();
 
 		$this->assertSame('did:web:social.test', $document['id']);
+		$this->assertSame(['at://social.test'], $document['alsoKnownAs'], 'a handle, or the reference resolver will not take it');
 		$this->assertSame('did:web:social.test#atproto', $document['verificationMethod'][0]['id']);
 		$this->assertInstanceOf(PublicKey::class, PublicKey::fromDidKey('did:key:' . $document['verificationMethod'][0]['publicKeyMultibase']));
 		$this->assertSame('https://social.test', $document['service'][0]['serviceEndpoint']);

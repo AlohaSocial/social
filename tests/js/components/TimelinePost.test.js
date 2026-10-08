@@ -553,6 +553,29 @@ describe('TimelinePost', () => {
 			expect(wrapper.find('.post-warning__text').text()).toBe('an election')
 			expect(wrapper.text()).not.toContain('the filtered part')
 		})
+		/**
+		 * A Bluesky label the reader set to warn arrives as one more entry,
+		 * named after the label, with an id that is a string and not a number.
+		 */
+		it('covers a post a Bluesky label warns about, by the label\'s name', async () => {
+			const { wrapper } = mountPost({
+				item: makeItem({
+					content: '<p>the labelled part</p>',
+					filtered: [{
+						filter: { id: 'bluesky-label:did:plc:ar7c4by46qjdydhdevvrndac:porn', title: 'Adult Content', context: ['home'], expires_at: null, filter_action: 'warn' },
+						keyword_matches: [],
+						status_matches: [],
+					}],
+				}),
+			})
+
+			expect(cover(wrapper).text()).toContain('Filtered: Adult Content')
+			expect(wrapper.text()).not.toContain('the labelled part')
+
+			await showAnyway(wrapper).trigger('click')
+
+			expect(wrapper.text()).toContain('the labelled part')
+		})
 	})
 
 	describe('content warnings', () => {
@@ -1233,6 +1256,76 @@ describe('TimelinePost', () => {
 			await wrapper.find('.report-dialog__close').trigger('click')
 
 			expect(wrapper.find('.report-dialog').exists()).toBe(false)
+		})
+
+		describe('reporting', () => {
+			const carol = {
+				id: '3',
+				acct: 'carol.bsky.social',
+				username: 'carol.bsky.social',
+				display_name: 'Carol',
+				url: 'https://bsky.app/profile/carol.bsky.social',
+				avatar: 'https://cdn.bsky.app/carol.jpg',
+				note: '',
+				bluesky: { handle: 'carol.bsky.social', did: 'did:plc:carol', url: 'https://bsky.app/profile/carol.bsky.social', native: true },
+			}
+			const forward = (wrapper) => wrapper.find('.report-dialog').findComponent({ name: 'NcCheckboxRadioSwitch' })
+
+			/**
+			 * @param {object} account whose post is reported
+			 * @return {Promise<object>} the post, with its report dialog open
+			 */
+			async function openReport(account) {
+				axios.post.mockResolvedValue({ data: {} })
+				const { wrapper } = mountPost({ item: makeItem({ account }) })
+				await menuItem(wrapper, 'Report').trigger('click')
+
+				return wrapper
+			}
+
+			it('offers a Fediverse account\'s report to the moderators here only', async () => {
+				const wrapper = await openReport(bob)
+
+				expect(forward(wrapper).exists()).toBe(false)
+				expect(wrapper.find('.report-dialog').text()).toContain('It is never sent to the reported account or their server.')
+
+				await wrapper.find('.nc-dialog__button--1').trigger('click')
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', {
+					account_id: '2',
+					status_ids: ['101'],
+					comment: '',
+				})
+			})
+
+			it('passes a Bluesky account\'s report on to Bluesky\'s moderation service by default', async () => {
+				const wrapper = await openReport(carol)
+
+				expect(forward(wrapper).text()).toBe('Also report to Bluesky\'s moderation service')
+				expect(forward(wrapper).props('modelValue')).toBe(true)
+				expect(wrapper.find('.report-dialog').text()).toContain('in its own name and not yours')
+
+				await wrapper.find('.nc-dialog__button--1').trigger('click')
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', {
+					account_id: '3',
+					status_ids: ['101'],
+					comment: '',
+					forward: true,
+				})
+			})
+
+			it('keeps a Bluesky account\'s report here when the box is unticked', async () => {
+				const wrapper = await openReport(carol)
+
+				await forward(wrapper).vm.$emit('update:modelValue', false)
+				await wrapper.find('.nc-dialog__button--1').trigger('click')
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith('/index.php/apps/social/api/v1/reports', expect.objectContaining({ forward: false }))
+			})
 		})
 
 		it('are withheld for somebody else\'s post, which offers Report instead', () => {

@@ -545,6 +545,31 @@ php occ social:atproto:repo USER [--verify]
 |--------|-------|-------------|
 | `--verify` | none | Recompute the Merkle search tree from the records and check the head's signature; exits 1 when either differs |
 
+### `social:atproto:block`
+
+The administrator's Bluesky block list: an account by its DID, or a PDS host
+and every account on it.
+
+```
+php occ social:atproto:block [<target>] [--unblock] [--reason=REASON] [--list]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `target` | No | A DID (`did:plc:…`), or a PDS host (`pds.example.com`); none lists the blocks |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--unblock` | none | Take the target off the list |
+| `--reason` | string | Why, shown in the list |
+| `--list` | none | List the blocks (also what no target does) |
+
+A blocked account is not resolved, its posts are not read, its follows, likes
+and replies are dropped on arrival, and it does not appear in search. Blocking
+one that is followed here purges it as a domain block purges a Fediverse
+account: its posts, the follows, and the watch. A host blocks every account
+whose PDS it is, and the hosts under it. The list is never published.
+
 ### `social:atproto:crawl`
 
 Ask the configured relays to subscribe to this instance's firehose now.

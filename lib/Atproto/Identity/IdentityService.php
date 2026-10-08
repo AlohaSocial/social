@@ -307,6 +307,10 @@ class IdentityService {
 		return [
 			'@context' => ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/multikey/v1', 'https://w3id.org/security/suites/secp256k1-2019/v1'],
 			'id' => $did,
+			// a DID document without a handle is not an atproto identity to
+			// the reference resolver, which is what checks this server's
+			// tokens — the moderation service's, for a forwarded report
+			'alsoKnownAs' => ['at://' . $this->config->handleHost()],
 			'verificationMethod' => [[
 				'id' => $did . '#atproto',
 				'type' => 'Multikey',

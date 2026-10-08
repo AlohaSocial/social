@@ -79,6 +79,11 @@ class AtprotoConfig {
 		return rtrim($this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_AUTH), '/');
 	}
 
+	/** Bluesky's moderation service, whose labels always apply and which reports go to. */
+	public function moderationDid(): string {
+		return $this->configService->getAppValue(ConfigService::ATPROTO_MODERATION_DID);
+	}
+
 	/** The DID of that AppView: the audience of the service-auth tokens. */
 	public function appViewDid(): string {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_DID);

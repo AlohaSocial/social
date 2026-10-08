@@ -21,6 +21,7 @@ use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Service\AiContentService;
 use OCA\Social\Service\ConfigService;
@@ -1418,5 +1419,22 @@ class StreamTest extends TestCase {
 		$boost->setId('https://cloud.example/apps/social/@alice/1792/activity');
 
 		$this->assertArrayNotHasKey('url', $boost->exportAsActivityPub());
+	}
+
+	public function testABlueskyPostSaysWhereItIsAndWhichLabelsItCarries(): void {
+		$post = new Stream();
+		$post->setId('https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur/post/3kpost');
+		$post->setDetail(Details::PAGE, 'https://bsky.app/profile/bob.bsky.social/post/3kpost');
+		$post->setDetailArray(Details::ATPROTO, ['uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kpost', 'label_sources' => [['src' => 'did:plc:l', 'val' => 'spoiler'], 'junk']]);
+		$this->assertSame([
+			'uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kpost',
+			'url' => 'https://bsky.app/profile/bob.bsky.social/post/3kpost',
+			'labels' => [['src' => 'did:plc:l', 'val' => 'spoiler']],
+		], $post->exportAsLocal()['bluesky']);
+
+		$fediverse = new Stream();
+		$fediverse->setId('https://mastodon.test/@bob/1');
+		$fediverse->setDetailArray(Details::ATPROTO, ['uri' => 'at://forged']);
+		$this->assertNull($fediverse->exportAsLocal()['bluesky'], 'only a post read from Bluesky');
 	}
 }

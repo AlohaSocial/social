@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Db\FiltersRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -706,5 +707,28 @@ class FilterServiceTest extends TestCase {
 		$boost->setObject($boosted);
 
 		$this->assertSame([], $this->service->applyToNotifications([$boost], $this->viewer(self::ALICE)));
+	}
+
+	public function testALabelersChoiceWarnsOrHidesABlueskyPost(): void {
+		$labelers = $this->createStub(LabelerService::class);
+		$labelers->method('results')->willReturnCallback(static fn (string $user, array $labels): array => array_map(static fn (array $l): array => [
+			'filter' => ['id' => 'bluesky-label:' . $l['src'] . ':' . $l['val'], 'title' => $l['val'], 'context' => ['home'], 'expires_at' => null, 'filter_action' => $l['val'] === 'gore' ? 'hide' : 'warn'],
+			'keyword_matches' => [], 'status_matches' => [],
+		], $labels));
+		$service = new FilterService($this->filtersRequest, new AiContentService($this->createStub(\OCA\Social\Service\ConfigService::class)), $labelers);
+		$viewer = new Person();
+		$viewer->setId('https://social.test/@alice');
+		$viewer->setUserId('alice');
+		$warned = ['id' => '1', 'content' => 'x', 'bluesky' => ['uri' => 'at://x', 'url' => '', 'labels' => [['src' => 'did:plc:l', 'val' => 'spoiler']]]];
+		$hidden = ['id' => '2', 'content' => 'y', 'bluesky' => ['uri' => 'at://y', 'url' => '', 'labels' => [['src' => 'did:plc:l', 'val' => 'gore']]]];
+		$boosted = ['id' => '3', 'content' => '', 'bluesky' => null, 'reblog' => $hidden];
+		$plain = ['id' => '4', 'content' => 'z', 'bluesky' => null];
+
+		$kept = $service->apply([$warned, $hidden, $boosted, $plain], 'home', $viewer);
+
+		$this->assertSame(['1', '4'], array_column($kept, 'id'), 'hidden, and hidden when boosted');
+		$this->assertSame('bluesky-label:did:plc:l:spoiler', $kept[0]['filtered'][0]['filter']['id']);
+		$this->assertSame([], $kept[1]['filtered']);
+		$this->assertCount(4, $service->apply([$warned, $hidden, $boosted, $plain], 'home', null), 'nobody signed in, nobody\'s choices');
 	}
 }

@@ -272,6 +272,8 @@ OC.L10N.register(
     "Their posts leave your timelines, they are unfollowed both ways, and they can no longer follow you or see your posts." : "Ihre Beiträge werden aus deinen Zeitleisten entfernt. Ihr folgt euch nicht mehr und sie können dir weder folgen noch deine Beiträge sehen.",
     "Report {account}" : "{account} melden",
     "The report goes to the moderators of this instance. It is never sent to the reported account or their server." : "Die Meldung geht an die Moderatoren dieser Instanz. Sie wird niemals an das gemeldete Konto oder dessen Server gesendet.",
+    "The report goes to the moderators of this instance. With the box below ticked, this server also passes it on to Bluesky's moderation service, in its own name and not yours." : "Die Meldung geht an die Moderatoren dieser Instanz. Ist das Kästchen unten angehakt, gibt dieser Server sie außerdem an die Moderation von Bluesky weiter – in seinem eigenen Namen, nicht in Ihrem.",
+    "Also report to Bluesky's moderation service" : "Auch an die Moderation von Bluesky melden",
     "Why are you reporting this post? (optional)" : "Warum meldest du diesen Beitrag? (optional)",
     "Delete and write it again?" : "Beitrag löschen und neu schreiben?",
     "Delete this post?" : "Diesen Beitrag löschen?",

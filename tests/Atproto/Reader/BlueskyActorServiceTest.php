@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Identity\PlcClient;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -69,7 +70,7 @@ class BlueskyActorServiceTest extends TestCase {
 
 			return $person;
 		});
-		$this->service = new BlueskyActorService($this->config, $this->appView, $this->plc, $mapper, $this->cache, $this->actors, new NullLogger());
+		$this->service = new BlueskyActorService($this->config, $this->appView, $this->plc, $mapper, $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger());
 	}
 
 	public function testAHandleIsResolvedThroughTheAppViewAndSavedOnce(): void {
@@ -109,7 +110,7 @@ class BlueskyActorServiceTest extends TestCase {
 	public function testNothingIsResolvedWhileBlueskyIsOff(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(false);
-		$service = new BlueskyActorService($config, $this->appView, $this->plc, $this->createMock(ActorMapper::class), $this->cache, $this->actors, new NullLogger());
+		$service = new BlueskyActorService($config, $this->appView, $this->plc, $this->createMock(ActorMapper::class), $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger());
 		$this->appView->expects($this->never())->method('query');
 		$this->expectException(CacheActorDoesNotExistException::class);
 		$service->resolve('alice.bsky.social');
@@ -119,5 +120,24 @@ class BlueskyActorServiceTest extends TestCase {
 		$this->appView->method('query')->willReturn(['did' => 'did:web:example.com', 'handle' => 'example.com']);
 		$this->plc->expects($this->never())->method('document');
 		$this->assertSame('', $this->service->resolve('example.com')->getDetails(ActorMapper::DETAIL)['pds']);
+	}
+
+	public function testABlockedAccountIsNotResolvedByDidOrByItsHost(): void {
+		$blocklist = $this->createMock(Blocklist::class);
+		$blocklist->method('isBlockedDid')->willReturnCallback(static fn (string $did): bool => $did === 'did:plc:blockedblockedblockedbl');
+		$blocklist->method('isBlockedAccount')->willReturnCallback(static fn (string $did, string $pds): bool => $pds === 'https://evil.example');
+		$mapper = $this->createMock(ActorMapper::class);
+		$service = new BlueskyActorService($this->config, $this->appView, $this->plc, $mapper, $this->cache, $this->actors, $blocklist, new NullLogger());
+		$this->appView->method('query')->willReturn(['did' => self::DID, 'handle' => 'alice.evil.example']);
+		$this->plc->method('document')->willReturn(['service' => [['id' => '#atproto_pds', 'serviceEndpoint' => 'https://evil.example']]]);
+		$this->actors->expects($this->never())->method('save');
+
+		foreach (['did:plc:blockedblockedblockedbl', 'alice.evil.example'] as $target) {
+			try {
+				$service->resolve($target);
+				$this->fail('resolved ' . $target);
+			} catch (CacheActorDoesNotExistException) {
+			}
+		}
 	}
 }

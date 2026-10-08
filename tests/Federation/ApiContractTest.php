@@ -108,7 +108,7 @@ class ApiContractTest extends TestCase {
 			'quote_approval', 'reply_approval', 'interaction_policy', 'video',
 			'dislikes_count', 'disliked',
 			'reactions', 'reblog', 'reblogged', 'reblogs_count', 'replies_count', 'sensitive', 'spoiler_text',
-			'tagged_people', 'tags', 'uri', 'url', 'view_count', 'visibility', 'interest', 'ai_generated',
+			'tagged_people', 'tags', 'uri', 'url', 'view_count', 'visibility', 'interest', 'ai_generated', 'bluesky',
 		];
 		sort($expected);
 

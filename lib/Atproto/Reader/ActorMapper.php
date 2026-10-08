@@ -22,7 +22,7 @@ use OCA\Social\Model\Details;
  * AppView already knows, and the DID, PDS and labels in `details.atproto`.
  */
 class ActorMapper {
-	public const DETAIL = 'atproto';
+	public const DETAIL = Details::ATPROTO;
 
 	/** the moderation labels that mark an account rather than a post */
 	private const LIMITING_LABELS = ['!hide', '!takedown'];

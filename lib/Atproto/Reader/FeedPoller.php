@@ -11,6 +11,8 @@ namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Exceptions\AppViewNotFoundException;
@@ -27,6 +29,8 @@ use Throwable;
  * it visits and by the instance-wide ceiling on AppView requests.
  */
 class FeedPoller {
+	private ?string $acceptLabelers = null;
+
 	/** how soon a watch is read again after a page with posts */
 	public const INTERVAL = 120;
 	public const MAX_BACKOFF = 6 * 3600;
@@ -41,6 +45,8 @@ class FeedPoller {
 		private AppViewClient $appView,
 		private PostStore $store,
 		private BlueskyActorService $actors,
+		private Blocklist $blocklist,
+		private LabelerService $labelers,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 	) {
@@ -75,13 +81,18 @@ class FeedPoller {
 	public function pollWatch(Watch $watch): int {
 		$now = $this->time->getTime();
 		$actor = $this->actors->cached($watch->did);
+		if ($this->blocklist->isBlockedDid($watch->did) || ($actor !== null && $this->blocklist->isBlockedActor($actor))) {
+			$this->watches->remove($watch->did);
+
+			return 0;
+		}
 		if ($actor !== null && BlueskyActorService::isLimited($actor)) {
 			$this->watches->synced($watch->did, $watch->cursor, $now, $now + self::MAX_BACKOFF);
 
 			return 0;
 		}
 		try {
-			$feed = $this->appView->query('app.bsky.feed.getAuthorFeed', ['actor' => $watch->did, 'filter' => 'posts_with_replies', 'limit' => self::PAGE]);
+			$feed = $this->appView->query('app.bsky.feed.getAuthorFeed', ['actor' => $watch->did, 'filter' => 'posts_with_replies', 'limit' => self::PAGE], $this->labelHeaders());
 		} catch (AppViewNotFoundException $e) {
 			// an account that is gone, deactivated or blocking: the watch
 			// stays, tried again later, in case it comes back
@@ -142,5 +153,15 @@ class FeedPoller {
 		$last = max(self::INTERVAL, $watch->nextSync - $watch->lastSync);
 
 		return min(self::MAX_BACKOFF, $last * 2);
+	}
+
+	/**
+	 * The labelers the AppView is asked to label for: Bluesky's and the ones
+	 * people here subscribe to, once per pass.
+	 *
+	 * @return array<string, string>
+	 */
+	private function labelHeaders(): array {
+		return ['atproto-accept-labelers' => $this->acceptLabelers ??= $this->labelers->acceptHeader()];
 	}
 }

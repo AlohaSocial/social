@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Service\AccountService;
@@ -37,6 +38,7 @@ class AtprotoAccountController extends Controller {
 		private AccountService $accountService,
 		private IdentityService $identities,
 		private Publisher $publisher,
+		private LabelerService $labelers,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -97,6 +99,64 @@ class AtprotoAccountController extends Controller {
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	/**
+	 * The viewer's Bluesky labelers, Bluesky's own first, each with its
+	 * label values and the viewer's setting for each.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/labelers')]
+	public function labelers(): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+
+		return new DataResponse(['labelers' => $this->labelers->forUser($this->userId())]);
+	}
+
+	/**
+	 * Subscribes the viewer to a labeler, by handle or DID.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/labelers')]
+	public function subscribeLabeler(string $labeler): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$this->labelers->subscribe($this->userId(), $labeler);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['labelers' => $this->labelers->forUser($this->userId())]);
+	}
+
+	/**
+	 * Unsubscribes the viewer from a labeler; Bluesky's own stays.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/bluesky/labelers')]
+	public function unsubscribeLabeler(string $did): DataResponse {
+		$this->labelers->unsubscribe($this->userId(), $did);
+
+		return new DataResponse(['labelers' => $this->labelers->forUser($this->userId())]);
+	}
+
+	/**
+	 * What one label of a subscribed labeler does for the viewer.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/v1/social/bluesky/labelers/setting')]
+	public function labelerSetting(string $did, string $label, string $setting): DataResponse {
+		try {
+			$this->labelers->setSetting($this->userId(), $did, $label, $setting);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['labelers' => $this->labelers->forUser($this->userId())]);
 	}
 
 	#[NoAdminRequired]

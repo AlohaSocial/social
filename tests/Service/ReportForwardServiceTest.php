@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Moderation\BlueskyReporter;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Report;
@@ -342,5 +343,21 @@ class ReportForwardServiceTest extends TestCase {
 
 		$this->assertTrue($this->service->forward($this->report(), $target));
 		$this->assertSame('https://spam.example/inbox', $this->sent[0]['url']);
+	}
+
+	public function testAReportAboutABlueskyAccountGoesToBlueskysModerationNotAnInbox(): void {
+		$reporter = $this->createMock(BlueskyReporter::class);
+		$bob = new Person();
+		$bob->setId('https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur');
+		$report = new Report();
+		$report->setLocal(true);
+		$reporter->method('canReport')->willReturn(true);
+		$reporter->expects($this->exactly(2))->method('report')->with($report, $bob)->willReturn('42', '');
+		$this->curlService->expects($this->never())->method('retrieveJson');
+		$service = new ReportForwardService($this->instanceActorService, new HttpSignatureService($this->createStub(\OCA\Social\Db\ActorsRequest::class), $this->instanceActorService, new NullLogger()), $this->curlService, $this->streamRequest, new NullLogger(), $reporter);
+
+		$this->assertTrue($service->canForward($report, $bob), 'no inbox needed');
+		$this->assertTrue($service->forward($report, $bob));
+		$this->assertFalse($service->forward($report, $bob), 'refused there: not forwarded');
 	}
 }

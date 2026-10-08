@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Identity\PlcClient;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\CacheActorsRequest;
@@ -36,6 +37,7 @@ class BlueskyActorService {
 		private ActorMapper $mapper,
 		private CacheActorsRequest $cacheActorsRequest,
 		private ActorService $actorService,
+		private Blocklist $blocklist,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -52,9 +54,16 @@ class BlueskyActorService {
 			throw new CacheActorDoesNotExistException();
 		}
 		$handleOrDid = strtolower(trim($handleOrDid));
+		if (Syntax::isDid($handleOrDid) && $this->blocklist->isBlockedDid($handleOrDid)) {
+			throw new CacheActorDoesNotExistException('blocked here: ' . $handleOrDid);
+		}
 		if (!$refresh) {
 			$cached = $this->cached($handleOrDid);
 			if ($cached !== null) {
+				if ($this->blocklist->isBlockedActor($cached)) {
+					throw new CacheActorDoesNotExistException('blocked here: ' . $handleOrDid);
+				}
+
 				return $cached;
 			}
 		}
@@ -67,7 +76,11 @@ class BlueskyActorService {
 		if (!Syntax::isDid($did)) {
 			throw new CacheActorDoesNotExistException('the AppView answered no DID for ' . $handleOrDid);
 		}
-		$person = $this->mapper->person($profile, $this->pdsOf($did));
+		$pds = $this->pdsOf($did);
+		if ($this->blocklist->isBlockedAccount($did, $pds)) {
+			throw new CacheActorDoesNotExistException('blocked here: ' . $did);
+		}
+		$person = $this->mapper->person($profile, $pds);
 		$this->store($person);
 
 		return $person;

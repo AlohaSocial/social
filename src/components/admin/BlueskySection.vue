@@ -128,6 +128,57 @@
 		</div>
 
 		<h4 class="bluesky__title">
+			{{ t('social', 'Blocked on Bluesky') }}
+		</h4>
+		<p class="social-admin__hint">
+			{{ t('social', 'An account by its DID, or a whole data server by its host. Nothing from it is read or stored here, and the people here who followed it stop following it.') }}
+		</p>
+		<p v-if="blocks.length === 0" class="social-admin__hint">
+			{{ t('social', 'Nothing is blocked.') }}
+		</p>
+		<ul v-else class="bluesky__blocks">
+			<li v-for="block in blocks" :key="block.kind + ' ' + block.value" class="bluesky__block">
+				<span class="bluesky__block-kind">{{ block.kind === 'did' ? t('social', 'Account') : t('social', 'Data server') }}</span>
+				<code class="bluesky__block-value">{{ block.value }}</code>
+				<span v-if="block.reason" class="bluesky__block-reason">{{ block.reason }}</span>
+				<NcButton
+					variant="tertiary"
+					size="small"
+					:disabled="blocking"
+					@click="removeBlock(block)">
+					{{ t('social', 'Remove') }}
+				</NcButton>
+			</li>
+		</ul>
+		<form class="bluesky__block-form" @submit.prevent="addBlock">
+			<NcTextField
+				v-model="blockTarget"
+				class="bluesky__field"
+				:label="t('social', 'DID or host to block')"
+				placeholder="did:plc:… / pds.example.com"
+				:disabled="blocking" />
+			<NcTextField
+				v-model="blockReason"
+				class="bluesky__field"
+				:label="t('social', 'Reason (optional)')"
+				:disabled="blocking" />
+			<div class="bluesky__actions">
+				<NcButton type="submit" :disabled="blocking || blockTarget.trim() === ''">
+					<template v-if="blocking" #icon>
+						<NcLoadingIcon :size="20" />
+					</template>
+					{{ t('social', 'Block') }}
+				</NcButton>
+			</div>
+		</form>
+		<p v-if="blockError !== ''" class="bluesky__block-error" role="alert">
+			{{ blockError }}
+		</p>
+		<p v-else-if="purged > 0" class="social-admin__hint">
+			{{ n('social', '%n followed account removed', '%n followed accounts removed', purged) }}
+		</p>
+
+		<h4 class="bluesky__title">
 			{{ t('social', 'How it is doing') }}
 		</h4>
 		<dl class="bluesky__numbers">
@@ -205,8 +256,16 @@ import { showError, showSuccess } from '../../services/toast.js'
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
  * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, sync_ceiling: number}} settings - what is set, in the app values' names
- * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
+ * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
+ */
+
+/**
+ * @typedef {object} BlueskyBlock a DID or PDS host this server will not talk to
+ * @property {'did'|'host'} kind - which of the two
+ * @property {string} value - the DID or the host
+ * @property {string} reason - what the administrator noted, '' for nothing
+ * @property {number} creation - when, in seconds since the epoch
  */
 
 /**
@@ -277,6 +336,12 @@ export default {
 			crawling: false,
 			/** @type {Record<string, string>|null} what each relay answered, after Tell the relays */
 			crawlResults: null,
+			blockTarget: '',
+			blockReason: '',
+			blocking: false,
+			blockError: '',
+			/** how many follows the last block took away */
+			purged: 0,
 		}
 	},
 
@@ -320,6 +385,11 @@ export default {
 		/** @return {{watches: number, lag: number, accounts: number, lag_notifications: number}|null} the reading side, on a server that reports it */
 		reading() {
 			return this.current.status.reading ?? null
+		},
+
+		/** @return {BlueskyBlock[]} the DIDs and hosts blocked, as the server last listed them */
+		blocks() {
+			return this.current.status.blocks ?? []
 		},
 
 		/** @return {boolean} */
@@ -478,6 +548,55 @@ export default {
 			}
 		},
 
+		/**
+		 * Puts the block list the server answered in place of the one shown.
+		 *
+		 * @param {BlueskyBlock[]|undefined} blocks what a block route answered
+		 */
+		applyBlocks(blocks) {
+			this.current = { ...this.current, status: { ...this.current.status, blocks: blocks ?? [] } }
+		},
+
+		/** @return {Promise<void>} */
+		async addBlock() {
+			const target = this.blockTarget.trim()
+			if (target === '' || this.blocking) {
+				return
+			}
+			this.blocking = true
+			this.blockError = ''
+			this.purged = 0
+			try {
+				const { data } = await axios.post(blueskyUrl('/blocks'), { target, reason: this.blockReason.trim() })
+				this.applyBlocks(data?.blocks)
+				this.purged = Number(data?.purged) || 0
+				this.blockTarget = ''
+				this.blockReason = ''
+			} catch (error) {
+				this.blockError = errorMessage(error, t('social', 'Could not block that'))
+			} finally {
+				this.blocking = false
+			}
+		},
+
+		/**
+		 * @param {BlueskyBlock} block the entry to take off the list
+		 * @return {Promise<void>}
+		 */
+		async removeBlock(block) {
+			this.blocking = true
+			this.blockError = ''
+			this.purged = 0
+			try {
+				const { data } = await axios.delete(blueskyUrl('/blocks'), { data: { target: block.value } })
+				this.applyBlocks(data?.blocks)
+			} catch (error) {
+				this.blockError = errorMessage(error, t('social', 'Could not remove that block'))
+			} finally {
+				this.blocking = false
+			}
+		},
+
 		/** @return {Promise<void>} */
 		async crawl() {
 			this.crawling = true
@@ -615,5 +734,49 @@ export default {
 .bluesky__actions {
 	display: flex;
 	justify-content: flex-end;
+}
+
+.bluesky__blocks {
+	display: flex;
+	flex-direction: column;
+	margin-block-end: calc(var(--default-grid-baseline) * 2);
+}
+
+.bluesky__block {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	padding-block: 4px;
+
+	& + & {
+		border-top: 1px solid var(--color-border);
+	}
+}
+
+.bluesky__block-kind {
+	flex: none;
+	min-width: 96px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.bluesky__block-value {
+	overflow-wrap: anywhere;
+}
+
+.bluesky__block-reason {
+	flex: 1 1 160px;
+	color: var(--color-text-maxcontrast);
+}
+
+.bluesky__block-form {
+	display: flex;
+	flex-direction: column;
+	gap: calc(var(--default-grid-baseline) * 2);
+}
+
+.bluesky__block-error {
+	color: var(--color-error-text, var(--color-error));
 }
 </style>
