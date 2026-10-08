@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1 and 2 and parts 3a–3c (§18) are implemented; 3d (video), 3e (OAuth for Bluesky apps) and 4 are specification.**
+**Status: phases 1 and 2 and parts 3a–3d (§18) are implemented; 3e (OAuth for Bluesky apps) and 4 are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -287,7 +287,8 @@ through `DocumentService`) with a `social_atproto_blob` row giving its CID
 streams it; `listBlobs` lists them per repository; a blob no record refers
 to is deleted by the ordinary document retention. Limits are Bluesky's:
 pictures ≤ 2,000,000 bytes (re-encoded to fit, §8.4), at most four per
-post; video ≤ 300 MB mp4 and through the video service, a later phase (D11).
+post; a video is one mp4 ≤ 100,000,000 bytes and three minutes, made into
+a stream by Bluesky's video service (D11, built in 3d).
 
 ## 6. The XRPC surface
 
@@ -801,7 +802,9 @@ App values: `atproto_enabled`, `atproto_relays` (JSON list),
 `atproto_jetstream`, `atproto_sync_ceiling`, `atproto_plc_directory`
 (default `https://plc.directory`, the dev-env's in CI), `atproto_appview`
 (default `https://public.api.bsky.app` for reads, `https://api.bsky.app`
-for the proxy), `atproto_video_service` (later). Secrets (keys) in their
+for the proxy), `atproto_video_service` and `atproto_video_service_did`
+(default `https://video.bsky.app`, `did:web:video.bsky.app`; an empty
+address publishes a video post as a link). Secrets (keys) in their
 tables, sealed; never in app values.
 
 ### 14.5 Backups
@@ -1154,11 +1157,58 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   gates. `uploadBlob` stores a picture as any upload is, named by its CID,
   for the post that uses it. A report an app files is a report here, passed
   on in this server's name (3b).
-- Not yet: `getServiceAuth` (the video upload of 3d needs it), and the
-  account's avatar and banner from the app's profile editor.
+- Not yet: the account's avatar and banner from the app's profile editor.
+  `getServiceAuth` came with 3d.
 - A mention of a Bluesky account in a post published from here — the
   composer's `@alice.bsky.social` — is now a mention facet with the DID,
   where it was a link.
+
+**3d as built** — `Publisher\VideoBlobService`, `Publisher\VideoUploadService`,
+`Client\ServiceAuthGrant`, `Cron\AtprotoVideo`, table `social_atproto_video`:
+
+- **A video posted here becomes a Bluesky video.** Bluesky's apps play the
+  stream its video service makes, not a blob, so the publisher does what the
+  Bluesky app does: it asks the service's daily limit, sends the video in
+  the account's name (`app.bsky.video.uploadVideo`) with a token the account
+  signs for `com.atproto.repo.uploadBlob` here, and the service stores the
+  result in the account's repository with that token. The post waits in
+  `social_atproto_video` meanwhile; `Cron\AtprotoVideo` sends a few videos a
+  minute and asks after the jobs, and publishes each post once its job has
+  ended, naming the stored blob as `app.bsky.embed.video` with the alt text
+  and size of the video posted here. Beside a quote it is the media of
+  `recordWithMedia`; pictures beside a video are left to the link.
+- **When it stays a link.** A video Bluesky does not take (not MP4, WebM,
+  QuickTime or MPEG; over 100,000,000 bytes; over three minutes), an
+  account over its daily limit, a refusal, three failed tries, a job not
+  done in thirty minutes, or a job whose result was not stored here: the
+  post goes out as before, its text and a link to the post here, and the
+  reason is logged. `atproto_video_service` empty turns the service off.
+- **Apps upload video as the Bluesky app does.** `getServiceAuth` hands an
+  app a token signed with the account's key, for two kinds of use only:
+  Bluesky's video service (`getUploadLimits`, `uploadVideo`,
+  `getJobStatus`) and this server's `uploadBlob`, for at most thirty
+  minutes. Any other service or method is refused: it would be the
+  account's signature somewhere this server knows nothing of. `uploadBlob`
+  accepts such a token, checked against the account's key, as well as a
+  session; the body is written to disk as it arrives, never held in
+  memory, and a video may weigh up to 100,000,000 bytes. A post with an
+  `app.bsky.embed.video` is a Social video post. A video blob is stored as
+  it came, hashed as it is read, and `getBlob` streams it.
+- **A Bluesky video plays here.** A post whose embed has a playlist is read
+  as a federated `Video`: the HLS playlist is a streamed document, never
+  copied, played through this server's playlist proxy (hls.js, as for
+  PeerTube); the still is mirrored as its poster. A video the service has
+  not finished is a link to the post until it is read again.
+- **Fixed on the way:** a streamed HLS video was handed to the player as
+  the byte route, so its segments 404'd; it now gets the playlist route,
+  and stored links of older posts are rebuilt the same way when read.
+- **`getSession` reports the Nextcloud account's e-mail address**, and as
+  confirmed when it is set: the Bluesky app offers video only to an account
+  with a confirmed address, and the account is one an administrator or the
+  person manages.
+- **Departure:** a token handed to the video service is not single-use;
+  it is scoped to `uploadBlob` here and expires within thirty minutes, as
+  Bluesky's own PDS does it.
 
 ## 19. Open questions
 
@@ -1188,9 +1238,16 @@ that depends on it is written, because the number or the API has moved
 before.
 
 - Post: 300 graphemes / 3,000 bytes; 4 images ≤ 2,000,000 bytes each;
-  video mp4 ≤ 300 MB via the video service (*verify* current video limits
-  and the `app.bsky.video.uploadVideo` / `getJobStatus` flow and its
-  service-auth `aud did:web:video.bsky.app`).
+  one video per post, mp4 ≤ 100 MB and three minutes, through the video
+  service; 25 videos or 10 GB a day per account (checked 2026-10-08). The
+  flow: `getServiceAuth` (aud the PDS's `did:web`, lxm
+  `com.atproto.repo.uploadBlob`, up to 30 minutes) →
+  `POST https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?did=&name=`
+  with that token → `getJobStatus?jobId=` (no token) until
+  `JOB_STATE_COMPLETED` with the blob, which the service stored on the PDS;
+  `getUploadLimits` takes a token for `did:web:video.bsky.app`. A video
+  view's playlist is `https://video.bsky.app/watch/<did>/<cid>/playlist.m3u8`,
+  its segments relative to it.
 - Commit `version: 3`, `prev: null`, 64-byte low-S secp256k1 signature;
   MST fanout 4, 2 bits per level; CID v1 dag-cbor sha-256.
 - PLC: `POST /:did` operations, `GET /:did` document, `/:did/log/audit`,

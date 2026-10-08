@@ -19,6 +19,7 @@ use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\AttachmentMetaDim;
 use OCA\Social\Model\Client\AttachmentMetaFocus;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\ImageMetadataService;
 use OCP\IURLGenerator;
 
@@ -554,8 +555,10 @@ class Document extends ACore implements JsonSerializable {
 	 * keeps the proxy from being pointed anywhere a caller likes.
 	 */
 	public function streamUrl(IURLGenerator $urlGenerator): string {
+		// a playlist names its segments relative to itself, so it is served
+		// with every address in it pointed back through this server
 		return $urlGenerator->linkToRouteAbsolute(
-			'social.MediaApi.mediaStream',
+			DocumentService::isPlaylist($this->getMediaType()) ? 'social.MediaApi.mediaPlaylist' : 'social.MediaApi.mediaStream',
 			['nid' => (string)$this->getNid()]
 		);
 	}

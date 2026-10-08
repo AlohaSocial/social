@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
@@ -71,6 +72,7 @@ class WriteService {
 		private DocumentService $documents,
 		private Publisher $publisher,
 		private PictureService $pictures,
+		private VideoBlobService $videos,
 		private InteractionPublisher $interactions,
 		private RepositoryService $repositories,
 		private LocalRecordResolver $local,
@@ -193,33 +195,31 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.uploadBlob`: stored as any upload is, and named by
-	 * the CID of what was stored. Storing takes the camera's metadata off and
-	 * may re-encode a picture to fit Bluesky, so the bytes the app sent are
-	 * not the bytes `getBlob` serves, and the answer names the stored ones.
+	 * `com.atproto.repo.uploadBlob`, from the file the body was copied to:
+	 * stored as any upload is, and named by the CID of what was stored.
+	 * Storing takes a picture's camera metadata off and may re-encode it to
+	 * fit Bluesky, so the bytes the app sent are not the bytes `getBlob`
+	 * serves, and the answer names the stored ones. A video is stored as it
+	 * came.
 	 *
+	 * @param string $mime what the app said it is; what is stored is sniffed
 	 * @throws XrpcException
 	 */
-	public function upload(ClientSession $session, string $bytes, string $mime): array {
-		if ($bytes === '') {
+	public function upload(ClientSession $session, string $path, string $mime): array {
+		if ((int)filesize($path) === 0) {
 			throw XrpcException::invalidRequest('Empty blob');
-		}
-		$path = tempnam(sys_get_temp_dir(), 'social-atproto-blob-');
-		if ($path === false) {
-			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
 		}
 		$actor = $this->actor($session);
 		try {
-			file_put_contents($path, $bytes);
 			$document = $this->documents->storeLocalAttachment($actor, $path);
 		} catch (Throwable $e) {
-			$this->logger->notice('Blob from a Bluesky app refused', ['exception' => $e]);
+			$this->logger->notice('Blob from a Bluesky app refused', ['mime' => $mime, 'exception' => $e]);
 
 			throw XrpcException::invalidRequest('This file type is not accepted');
-		} finally {
-			@unlink($path);
 		}
-		$blob = $this->pictures->blobFor($session->identity, $actor, $document)['blob'] ?? null;
+		$blob = str_starts_with($document->getMimeType(), 'video/')
+			? $this->videos->blobFor($session->identity, $document)
+			: ($this->pictures->blobFor($session->identity, $actor, $document)['blob'] ?? null);
 		if ($blob === null) {
 			throw XrpcException::invalidRequest('This file cannot be shown on Bluesky');
 		}
@@ -295,6 +295,10 @@ class WriteService {
 		}
 		$images = $embed['images'] ?? $embed['media']['images'] ?? [];
 		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
+		$video = self::videoEmbedOf($embed);
+		if ($video !== null && $documents === []) {
+			$documents = [$this->uploaded($session, (string)($video['video']['ref']['$link'] ?? ''), (string)($video['alt'] ?? ''))];
+		}
 		$post->setMedias(array_map(
 			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
 			$documents
@@ -478,25 +482,47 @@ class WriteService {
 	private function pictures(ClientSession $session, array $images): array {
 		$documents = [];
 		foreach (array_slice($images, 0, 4) as $image) {
-			$cid = (string)($image['image']['ref']['$link'] ?? '');
-			$blob = $cid === '' ? null : $this->blobs->get($session->identity->did, $cid);
-			if ($blob === null) {
-				throw XrpcException::invalidRequest('A picture was not uploaded here: ' . $cid);
-			}
-			try {
-				$document = $this->documents->getDocumentById($blob->documentId);
-			} catch (Throwable) {
-				throw XrpcException::invalidRequest('A picture is gone: ' . $cid);
-			}
-			$alt = trim((string)($image['alt'] ?? ''));
-			if ($alt !== '') {
-				$document->setDescription(mb_substr($alt, 0, 1500));
-				$this->documents->updateDescription($document);
-			}
-			$documents[] = $document;
+			$documents[] = $this->uploaded($session, (string)($image['image']['ref']['$link'] ?? ''), (string)($image['alt'] ?? ''));
 		}
 
 		return $documents;
+	}
+
+	/**
+	 * The stored upload a blob reference names, with its alt text.
+	 *
+	 * @throws XrpcException
+	 */
+	private function uploaded(ClientSession $session, string $cid, string $alt): Document {
+		$blob = $cid === '' ? null : $this->blobs->get($session->identity->did, $cid);
+		if ($blob === null) {
+			throw XrpcException::invalidRequest('A file was not uploaded here: ' . $cid);
+		}
+		try {
+			$document = $this->documents->getDocumentById($blob->documentId);
+		} catch (Throwable) {
+			throw XrpcException::invalidRequest('A file is gone: ' . $cid);
+		}
+		$alt = trim($alt);
+		if ($alt !== '') {
+			$document->setDescription(mb_substr($alt, 0, 1500));
+			$this->documents->updateDescription($document);
+		}
+
+		return $document;
+	}
+
+	/**
+	 * The video of a post's embed, alone or beside a quote, or null.
+	 */
+	private static function videoEmbedOf(array $embed): ?array {
+		$type = (string)($embed['$type'] ?? '');
+		if ($type === 'app.bsky.embed.recordWithMedia') {
+			$embed = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+			$type = (string)($embed['$type'] ?? '');
+		}
+
+		return $type === 'app.bsky.embed.video' && is_array($embed['video'] ?? null) ? $embed : null;
 	}
 
 	/**

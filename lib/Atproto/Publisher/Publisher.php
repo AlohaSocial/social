@@ -49,6 +49,7 @@ class Publisher {
 		private IdentityService $identities,
 		private RepositoryService $repositories,
 		private RecordMapper $mapper,
+		private VideoUploadService $videos,
 		private StreamRequest $streamRequest,
 		private CacheActorService $cacheActorService,
 		private ITimeFactory $time,
@@ -77,7 +78,13 @@ class Publisher {
 		}
 		$this->ensureProfile($author, $identity);
 
-		$mapped = $this->mapper->post($post, $identity, $author);
+		$video = $this->videos->forPost($post, $identity, $author);
+		if ($video['state'] === 'waiting') {
+			$this->logger->info('Post waits for its video before it goes to Bluesky', ['post' => $post->getId(), 'did' => $identity->did]);
+
+			return null;
+		}
+		$mapped = $this->mapper->post($post, $identity, $author, $video);
 		$rkey = Tid::next();
 		$result = $this->repositories->write($identity->did, $this->identities->signingKey($identity), [
 			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId(), $rkey),
@@ -95,6 +102,7 @@ class Publisher {
 	 * @throws AtprotoException
 	 */
 	public function deletePost(string $postId): bool {
+		$this->videos->forget($postId);
 		$record = $this->recordOf($postId);
 		if ($record === null) {
 			return false;
@@ -309,7 +317,11 @@ class Publisher {
 	private function replaceRecord(Stream $post, StoredRecord $record): bool {
 		$identity = $this->identities->getByDid($record->did);
 		$author = $this->cacheActorService->getFromId($post->getAttributedTo());
-		$mapped = $this->mapper->post($post, $identity, $author);
+		$video = $this->videos->forPost($post, $identity, $author);
+		if ($video['state'] === 'waiting') {
+			return false;
+		}
+		$mapped = $this->mapper->post($post, $identity, $author, $video);
 		if (DagCbor::encode($mapped['record']) === $record->bytes) {
 			return false;
 		}

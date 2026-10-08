@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Client\AppViewProxy;
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\ClientXrpc;
 use OCA\Social\Atproto\Client\Preferences;
+use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Model\Identity;
@@ -34,6 +35,10 @@ class ClientXrpcTest extends TestCase {
 	private WriteService $writes;
 	/** @var ModerationService&MockObject */
 	private ModerationService $moderation;
+	/** @var ServiceAuthGrant&MockObject */
+	private ServiceAuthGrant $grants;
+	/** @var string[] */
+	private array $files = [];
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -46,7 +51,22 @@ class ClientXrpcTest extends TestCase {
 		$this->proxy = $this->createMock(AppViewProxy::class);
 		$this->writes = $this->createMock(WriteService::class);
 		$this->moderation = $this->createMock(ModerationService::class);
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->moderation);
+		$this->grants = $this->createMock(ServiceAuthGrant::class);
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->moderation);
+	}
+
+	protected function tearDown(): void {
+		foreach ($this->files as $file) {
+			@unlink($file);
+		}
+	}
+
+	private function file(string $bytes): string {
+		$path = (string)tempnam(sys_get_temp_dir(), 'social-test-');
+		file_put_contents($path, $bytes);
+		$this->files[] = $path;
+
+		return $path;
 	}
 
 	public function testThePublicSurfaceIsNotOurs(): void {
@@ -72,11 +92,40 @@ class ClientXrpcTest extends TestCase {
 		$headers = ['authorization' => 'Bearer t'];
 		$this->proxy->expects($this->once())->method('forward')->with($this->session, 'app.bsky.feed.getTimeline', 'get', 'limit=5', '', $headers)->willReturn(new XrpcBytes('{}', 'application/json'));
 		$this->writes->expects($this->once())->method('create')->with($this->session, ['repo' => 'x'])->willReturn(['uri' => 'at://x']);
-		$this->writes->expects($this->once())->method('upload')->with($this->session, 'bytes', 'image/png')->willReturn(['blob' => []]);
+		$path = $this->file('bytes');
+		$this->writes->expects($this->once())->method('upload')->with($this->session, $path, 'image/png')->willReturn(['blob' => []]);
 
 		$this->assertInstanceOf(XrpcBytes::class, $this->client->query('app.bsky.feed.getTimeline', 'limit=5', $headers));
 		$this->assertSame(['uri' => 'at://x'], $this->client->procedure('com.atproto.repo.createRecord', '{"repo":"x"}', $headers, '1.2.3.4'));
-		$this->assertSame(['blob' => []], $this->client->procedure('com.atproto.repo.uploadBlob', 'bytes', $headers + ['content-type' => 'image/png'], '1.2.3.4'));
+		$this->assertSame(['blob' => []], $this->client->upload($path, $headers + ['content-type' => 'image/png']));
+	}
+
+	public function testAServiceAuthTokenIsHandedOutForTheVideoService(): void {
+		$this->grants->expects($this->once())->method('grant')
+			->with($this->session, 'did:web:video.bsky.app', 'app.bsky.video.getUploadLimits', 1760000000)
+			->willReturn(['token' => 'signed']);
+
+		$this->assertSame(['token' => 'signed'], $this->client->query(
+			'com.atproto.server.getServiceAuth', 'aud=did%3Aweb%3Avideo.bsky.app&lxm=app.bsky.video.getUploadLimits&exp=1760000000', ['authorization' => 'Bearer t']
+		));
+	}
+
+	public function testTheVideoServiceStoresAnUploadWithTheAccountsToken(): void {
+		$path = $this->file('video');
+		$this->grants->method('uploader')->with('Bearer service-token')->willReturn($this->session);
+		$this->sessions->expects($this->never())->method('authenticate');
+		$this->writes->expects($this->once())->method('upload')->with($this->session, $path, 'video/mp4')->willReturn(['blob' => ['size' => 5]]);
+
+		$this->assertSame(['blob' => ['size' => 5]], $this->client->upload($path, ['authorization' => 'Bearer service-token', 'content-type' => 'video/mp4']));
+	}
+
+	public function testASuspendedAccountsVideoIsNotStored(): void {
+		$this->grants->method('uploader')->willReturn($this->session);
+		$this->moderation->method('isSuspended')->willReturn(true);
+		$this->writes->expects($this->never())->method('upload');
+
+		$this->expectException(XrpcException::class);
+		$this->client->upload($this->file('video'), ['authorization' => 'Bearer service-token']);
 	}
 
 	public function testASuspendedAccountsAppIsTurnedAway(): void {
@@ -89,7 +138,7 @@ class ClientXrpcTest extends TestCase {
 	public function testATooLargeUploadIsRefusedBeforeItIsStored(): void {
 		$this->writes->expects($this->never())->method('upload');
 		try {
-			$this->client->procedure('com.atproto.repo.uploadBlob', str_repeat('x', ClientXrpc::MAX_BLOB + 1), ['authorization' => 'Bearer t'], '1.2.3.4');
+			$this->client->upload($this->file(str_repeat('x', ClientXrpc::MAX_BLOB + 1)), ['authorization' => 'Bearer t']);
 			$this->fail('stored');
 		} catch (XrpcException $e) {
 			$this->assertSame(413, $e->status);

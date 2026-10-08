@@ -12,6 +12,7 @@ namespace OCA\Social\Model\Client;
 use JsonSerializable;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Service\DocumentService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\IURLGenerator;
 use OCP\Server;
@@ -27,9 +28,10 @@ class MediaAttachment implements JsonSerializable {
 
 	/**
 	 * The tail of a streamed link, which names a cache row rather than a copy:
-	 * `stream/{nid}`. A federated video's `url` is one of these.
+	 * `media/stream/{nid}`, or `media/playlist/{nid}` for an HLS one. A federated video's
+	 * `url` is one of these.
 	 */
-	private const MEDIA_STREAM = '/(?:^|\/)stream\/([0-9]+)$/';
+	private const MEDIA_STREAM = '/(?:^|\/)media\/(?:stream|playlist)\/([0-9]+)$/';
 
 	private string $id = '';
 	private string $type = '';
@@ -337,10 +339,13 @@ class MediaAttachment implements JsonSerializable {
 
 		// a streamed video names a row, not a copy, and is rebuilt the same
 		// way and for the same reason: the link was written by whichever
-		// `overwrite.cli.url` the inbox request ran under
+		// `overwrite.cli.url` the inbox request ran under. A playlist goes
+		// through the route that rewrites the addresses in it.
 		if (preg_match(self::MEDIA_STREAM, $stored, $matches) === 1) {
-			return Server::get(IURLGenerator::class)
-				->linkToRouteAbsolute('social.MediaApi.mediaStream', ['nid' => $matches[1]]);
+			return Server::get(IURLGenerator::class)->linkToRouteAbsolute(
+				DocumentService::isPlaylist($this->mediaType) ? 'social.MediaApi.mediaPlaylist' : 'social.MediaApi.mediaStream',
+				['nid' => $matches[1]]
+			);
 		}
 
 		$uuid = substr($stored, (int)strrpos($stored, '/') + 1);

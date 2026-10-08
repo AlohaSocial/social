@@ -70,7 +70,9 @@ class SessionServiceTest extends TestCase {
 		$users = $this->createMock(IUserManager::class);
 		$user = $this->createMock(IUser::class);
 		$user->method('getUID')->willReturn('alice');
+		$user->method('getEMailAddress')->willReturn('alice@example.org');
 		$users->method('getByEmail')->willReturnCallback(static fn (string $email): array => $email === 'alice@example.org' ? [$user] : []);
+		$users->method('get')->willReturnCallback(static fn (string $uid): ?IUser => $uid === 'alice' ? $user : null);
 		$this->throttler = $this->createMock(IThrottler::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
@@ -104,7 +106,9 @@ class SessionServiceTest extends TestCase {
 		}
 		$signedIn = $this->sessions->authenticate('Bearer ' . $session['accessJwt']);
 		$this->assertSame('alice', $signedIn->userId);
-		$this->assertSame(self::DID, $this->sessions->describe($signedIn)['did']);
+		$described = $this->sessions->describe($signedIn);
+		$this->assertSame(self::DID, $described['did']);
+		$this->assertSame(['email' => 'alice@example.org', 'emailConfirmed' => true], array_intersect_key($described, ['email' => 1, 'emailConfirmed' => 1]), 'Bluesky apps offer video to a confirmed address');
 		$this->assertNull($this->sessions->authenticate(''), 'no header, nobody');
 	}
 

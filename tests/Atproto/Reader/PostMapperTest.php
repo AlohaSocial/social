@@ -92,9 +92,33 @@ class PostMapperTest extends TestCase {
 		$card = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.external#view', 'external' => ['uri' => 'https://nextcloud.com/blog', 'title' => 'A <post>']]]));
 		$this->assertStringEndsWith('<p><a href="https://nextcloud.com/blog" rel="nofollow noopener noreferrer" target="_blank">A &lt;post&gt;</a></p>', $card['content']);
 
-		$video = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.video#view', 'playlist' => 'https://video.bsky.app/x.m3u8']]));
-		$this->assertStringContainsString('<a href="https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22"', $video['content']);
-		$this->assertStringContainsString('Video on Bluesky', $video['content']);
+		$pending = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.video#view', 'cid' => 'bafkrei']]));
+		$this->assertSame('Note', $pending['type'], 'no playlist yet: a link to the post');
+		$this->assertStringContainsString('<a href="https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22"', $pending['content']);
+		$this->assertStringContainsString('Video on Bluesky', $pending['content']);
+	}
+
+	public function testAVideoPostIsAFederatedVideoStreamedFromItsPlaylist(): void {
+		$mapper = new PostMapper($this->createMock(LocalRecordResolver::class));
+		$playlist = 'https://video.bsky.app/watch/did%3Aplc%3Ax/bafkrei/playlist.m3u8';
+		$view = ['$type' => 'app.bsky.embed.video#view', 'cid' => 'bafkrei', 'playlist' => $playlist,
+			'thumbnail' => 'https://video.bsky.app/watch/did%3Aplc%3Ax/bafkrei/thumbnail.jpg', 'aspectRatio' => ['width' => 720, 'height' => 1280]];
+
+		$video = $mapper->note($this->postView(['embed' => $view]));
+
+		$this->assertSame('Video', $video['type']);
+		$this->assertStringNotContainsString('Video on Bluesky', $video['content']);
+		$this->assertSame([
+			['type' => 'Link', 'mediaType' => 'text/html', 'href' => 'https://bsky.app/profile/alice.bsky.social/post/3kznmn7xqxl22'],
+			['type' => 'Link', 'mediaType' => 'application/x-mpegURL', 'href' => $playlist, 'width' => 720, 'height' => 1280],
+		], $video['url']);
+		$this->assertSame('https://video.bsky.app/watch/did%3Aplc%3Ax/bafkrei/thumbnail.jpg', $video['icon']['url']);
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', $video['_atproto']['uri'], 'still a Bluesky post');
+
+		$quoting = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.recordWithMedia#view', 'record' => ['record' => []], 'media' => $view]]));
+		$this->assertSame('Video', $quoting['type'], 'a video beside a quote');
+
+		$this->assertNull(PostMapper::videoOf(['$type' => 'app.bsky.embed.video#view', 'playlist' => 'http://plain.example/x.m3u8']), 'only https');
 	}
 
 	public function testARepostInAFeedIsAnAnnounceByTheReposter(): void {
