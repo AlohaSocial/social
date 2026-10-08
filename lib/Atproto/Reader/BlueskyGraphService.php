@@ -12,6 +12,7 @@ namespace OCA\Social\Atproto\Reader;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -31,6 +32,7 @@ class BlueskyGraphService {
 		private Publisher $publisher,
 		private AtprotoWatchRequest $watches,
 		private FollowsRequest $follows,
+		private AtprotoRepoRequest $repoRequest,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 	) {
@@ -56,6 +58,20 @@ class BlueskyGraphService {
 			$this->logger->warning('Follow not written to Bluesky', ['actor' => $actor->getId(), 'target' => $target->getId(), 'exception' => $e]);
 		}
 		$this->watches->add($did, $target->getAccount());
+	}
+
+	/**
+	 * A follow that came with a repository that moved here: its record is
+	 * there already and now stands for the follow saved here, and the
+	 * author's feed is watched. Nothing is written.
+	 */
+	public function adopt(string $did, string $rkey, Person $target, Follow $follow): void {
+		$subject = BlueskyIds::didOf($target->getId());
+		if ($subject === '') {
+			return;
+		}
+		$this->repoRequest->setLocalId($did, RecordMapper::FOLLOW, $rkey, $follow->getId());
+		$this->watches->add($subject, $target->getAccount());
 	}
 
 	/**

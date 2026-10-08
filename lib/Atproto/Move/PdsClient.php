@@ -82,6 +82,27 @@ class PdsClient {
 	}
 
 	/**
+	 * A query whose answer is bytes — a repository, a blob — with its type.
+	 *
+	 * @return array{status: int, bytes: string, type: string}
+	 * @throws AtprotoException when the PDS cannot be reached
+	 */
+	public function bytes(string $pds, string $method, array $query, string $token = ''): array {
+		$headers = $token === '' ? [] : ['Authorization' => 'Bearer ' . $token];
+		try {
+			$response = $this->clientService->newClient()->get($pds . '/xrpc/' . $method . '?' . http_build_query($query), [
+				'headers' => $headers,
+				'timeout' => 600,
+				'http_errors' => false,
+			]);
+		} catch (Throwable $e) {
+			throw new AtprotoException('The PDS at ' . $pds . ' could not be reached: ' . $e->getMessage(), 0, $e);
+		}
+
+		return ['status' => $response->getStatusCode(), 'bytes' => (string)$response->getBody(), 'type' => $response->getHeader('Content-Type')];
+	}
+
+	/**
 	 * The same, for a call that has to succeed.
 	 *
 	 * @return array the answer

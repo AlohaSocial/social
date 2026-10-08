@@ -14,8 +14,10 @@ use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Model\Move;
 use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Move\MoveAwayService;
+use OCA\Social\Atproto\Move\MoveInService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -48,6 +50,7 @@ class AtprotoAccountController extends Controller {
 		private AuthorizationServer $oauth,
 		private CustomHandleService $customHandles,
 		private MoveAwayService $moveAway,
+		private MoveInService $moveIn,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -290,7 +293,46 @@ class AtprotoAccountController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/retry')]
 	public function retryMove(): DataResponse {
 		try {
-			return new DataResponse(['move' => $this->moveAway->retry($this->userId())->export()]);
+			$latest = $this->moveAway->latest($this->userId());
+			$move = $latest !== null && $latest->direction === Move::IN
+				? $this->moveIn->retry($latest)
+				: $this->moveAway->retry($this->userId());
+
+			return new DataResponse(['move' => $move->export()]);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * Moves a Bluesky account here: the viewer signs in to it with its own
+	 * password, which is not kept, and the copy starts in the background.
+	 * Their Bluesky account here so far is replaced once the move is done.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move-in')]
+	public function moveIn(string $handle, string $password, string $authFactorToken = ''): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			return new DataResponse(['move' => $this->moveIn->start($this->userId(), $handle, $password, $authFactorToken)->export()]);
+		} catch (\InvalidArgumentException|AtprotoException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * The code the old Bluesky server e-mailed: the move here goes on.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/code')]
+	public function moveCode(string $code): DataResponse {
+		try {
+			return new DataResponse(['move' => $this->moveIn->code($this->userId(), $code)->export()]);
 		} catch (\InvalidArgumentException $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

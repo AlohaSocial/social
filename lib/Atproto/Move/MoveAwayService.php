@@ -73,7 +73,7 @@ class MoveAwayService {
 			throw new InvalidArgumentException('The Bluesky account is not active here');
 		}
 		$latest = $this->moves->latestOfUser($userId);
-		if ($latest !== null && $latest->state === Move::RUNNING) {
+		if ($latest !== null && in_array($latest->state, [Move::RUNNING, Move::WAITING], true)) {
 			throw new InvalidArgumentException('A move is already under way');
 		}
 		$origin = $this->pds->origin($pds);
