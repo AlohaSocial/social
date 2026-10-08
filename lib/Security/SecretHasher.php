@@ -16,12 +16,12 @@ namespace OCA\Social\Security;
  * digest is the right tool — it also keeps the token lookup a plain indexed
  * equality query.
  *
- * Rows written before hashing existed hold the bare value; `matches()` and
- * `forLookup()` still understand them, and the HashClientSecrets repair step
- * rewrites them once.
+ * Rows written before hashing existed held the bare value; migration
+ * `Version1000Date20261008000100` hashed what was left of them, or took it
+ * back, and nothing here accepts a bare stored value any more.
  */
 class SecretHasher {
-	private const PREFIX = 'sha256:';
+	public const PREFIX = 'sha256:';
 
 	public function hash(string $secret): string {
 		if ($secret === '') {
@@ -36,37 +36,30 @@ class SecretHasher {
 	}
 
 	/**
-	 * Whether a presented secret matches the stored value, hashed or legacy plaintext.
+	 * Whether a presented secret matches the stored digest.
 	 */
 	public function matches(string $stored, string $presented): bool {
-		if ($stored === '' || $presented === '') {
+		if ($presented === '' || !$this->isHashed($stored)) {
 			return false;
 		}
 
-		if ($this->isHashed($stored)) {
-			return hash_equals($stored, $this->hash($presented));
-		}
-
-		return hash_equals($stored, $presented);
+		return hash_equals($stored, $this->hash($presented));
 	}
 
 	/**
-	 * The values a presented secret may be stored under — for looking a token up
-	 * while legacy plaintext rows can still exist.
+	 * What a presented secret is stored under, for looking it up.
 	 *
-	 * A presented secret that already carries the hash prefix is never looked up
-	 * as a legacy row: a legacy row holds the bare value, and the prefixed shape
-	 * is what the column itself holds. Offering it here made the stored digest a
-	 * working credential of its own, so a database dump, a backup or a read-only
-	 * SQL flaw handed out usable tokens — the one thing hashing them is for.
-	 *
-	 * @return string[]
+	 * A presented secret that already carries the hash prefix is refused
+	 * rather than hashed again: the prefixed shape is what the column holds,
+	 * and accepting it would make a database dump, a backup or a read-only SQL
+	 * flaw hand out working tokens — the one thing hashing them is for. Null
+	 * for that and for an empty one.
 	 */
-	public function forLookup(string $secret): array {
+	public function forLookup(string $secret): ?string {
 		if ($secret === '' || $this->isHashed($secret)) {
-			return [];
+			return null;
 		}
 
-		return [$this->hash($secret), $secret];
+		return $this->hash($secret);
 	}
 }

@@ -14,6 +14,7 @@ use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Model\Client\Suggestion;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ArchiveService;
@@ -73,6 +74,10 @@ class PixelfedControllerTest extends TestCase {
 
 	private bool $hasSession = true;
 	private bool $csrf = true;
+	/** @var array<string, string> the request headers the controller will see */
+	private array $headers = [];
+	/** @var array<string, mixed> the request parameters the controller will see */
+	private array $params = [];
 
 	/** @var array{period: string, limit: int, offset: int, onlyMedia: bool}|null */
 	private ?array $trendAsked = null;
@@ -84,9 +89,11 @@ class PixelfedControllerTest extends TestCase {
 
 		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('test');
-		$this->request->method('getHeader')->willReturn('');
+		$this->request->method('getHeader')
+			->willReturnCallback(fn (string $name): string => $this->headers[$name] ?? '');
 		$this->request->method('passesCSRFCheck')->willReturnCallback(fn (): bool => $this->csrf);
-		$this->request->method('getParam')->willReturn('');
+		$this->request->method('getParam')
+			->willReturnCallback(fn (string $key): mixed => $this->params[$key] ?? '');
 		$this->request->method('getParams')->willReturn([]);
 
 		$user = $this->createStub(IUser::class);
@@ -318,6 +325,57 @@ class PixelfedControllerTest extends TestCase {
 		$this->assertFalse($state->getData()['notify_enabled']);
 	}
 
+	/** A bearer token carrying only these scopes, for the next controller made. */
+	private function token(array $scopes): void {
+		$this->csrf = false;
+		$this->headers = ['Authorization' => 'Bearer t'];
+		$client = new SocialClient();
+		$client->setAuthUserId('alice');
+		$client->setAuthScopes($scopes);
+		$this->clientService->method('getFromToken')->willReturn($client);
+	}
+
+	/** Storing the app's switches is a write: a read-only token may look, not change. */
+	public function testAReadTokenMayNotStoreTheAppSettings(): void {
+		$this->token(['read']);
+		$this->params = ['common' => ['media' => ['always_show_cw' => false]]];
+		$this->pixelfedService->expects($this->never())->method('saveAppSettings');
+
+		$response = $this->controller()->appSettings();
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+	}
+
+	public function testAReadTokenMayStillReadTheAppSettingsByPost(): void {
+		$this->token(['read']);
+		$this->pixelfedService->expects($this->never())->method('saveAppSettings');
+		$this->pixelfedService->method('appSettings')->willReturn(['common' => []]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->appSettings()->getStatus());
+	}
+
+	public function testAWriteTokenStoresTheAppSettings(): void {
+		$this->token(['write:accounts']);
+		$this->params = ['common' => ['media' => ['always_show_cw' => false]]];
+		$this->pixelfedService->expects($this->once())->method('saveAppSettings')->willReturn(['common' => []]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->appSettings()->getStatus());
+	}
+
+	public function testChangingPushNeedsMoreThanARead(): void {
+		$this->token(['read']);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $this->controller()->pushChange()->getStatus());
+		$this->assertSame(Http::STATUS_OK, $this->controller()->pushState()->getStatus());
+	}
+
+	public function testThePushScopeMayChangePush(): void {
+		$this->token(['push']);
+		$this->pixelfedService->method('pushState')->willReturn(['notify_enabled' => false]);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->pushChange()->getStatus());
+	}
+
 	/** Every one of these needs somebody signed in; without one it is a 401, not a 500. */
 	public function testTheViewerRoutesRefuseAnAnonymousCaller(): void {
 		$this->hasSession = false;
@@ -406,4 +464,5 @@ class PixelfedControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->composeTag($wide, ['bob@cloud.example'])->getStatus());
 		$this->assertSame(Http::STATUS_OK, $this->controller()->composeUntagMe($wide)->getStatus());
 	}
+
 }

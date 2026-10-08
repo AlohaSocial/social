@@ -60,32 +60,15 @@ class ActivityService {
 	/** How many deliveries `manageRequests()` has in flight at once, one per host. */
 	public const PARALLEL = 20;
 
-	/**
-	 * How long a host that has just failed is left alone, and the ceiling on
-	 * that.
-	 *
-	 * The list used to be per-pass: `manageInit()` emptied it at the start of
-	 * every run, so a dead peer was discovered afresh every twelve minutes, one
-	 * 30-second timeout at a time, for every row addressed to it. Kept in
-	 * `social_host_breaker` the discovery survives the pass and the process —
-	 * and a host that keeps failing is left alone for longer each time, up to
-	 * an hour, which is the difference between a dead instance costing a few
-	 * seconds a day and costing the whole delivery budget. Strikes older than
-	 * the ceiling no longer count.
-	 */
-	public const BREAKER_BASE = 60;
-	public const BREAKER_MAX = 3600;
+	/** How long a host that has just failed is left alone, and the ceiling; see `HostBreaker`. */
+	public const BREAKER_BASE = HostBreaker::BASE;
+	public const BREAKER_MAX = HostBreaker::MAX;
 
-	/** The hosts this pass has already found to be failing. */
-	private ?array $failInstances = null;
+	/** How recently a server must have answered to be sent an activity addressed to everybody. */
+	public const ALL_SEEN_DAYS = 90;
 
-	/**
-	 * The breaker's rows as this drain found them, loaded on first use and
-	 * again after every `manageInit()`.
-	 *
-	 * @var array<string, array{strikes: int, open_until: int, last_failure: int}>|null
-	 */
-	private ?array $breaker = null;
+	/** The delivery circuit breaker, as this drain sees it. */
+	private ?HostBreaker $breaker = null;
 
 	/** The hostnames this instance answers to; see `localHosts()`. */
 	private ?array $localHosts = null;
@@ -457,29 +440,11 @@ class ActivityService {
 	}
 
 	public function manageInit() {
-		$this->failInstances = [];
-		$this->breaker = null;
+		$this->breaker()->reset();
 	}
 
-	/**
-	 * The breaker's state, shared between the cron, the async worker and every
-	 * `social:worker` process — which is the point: one of them discovering
-	 * that a host is down spares all of them.
-	 *
-	 * @return array<string, array{strikes: int, open_until: int, last_failure: int}>
-	 */
-	private function breakerState(): array {
-		if ($this->breaker === null) {
-			try {
-				$this->breaker = $this->hostBreakerRequest->failingSince(time() - self::BREAKER_MAX);
-			} catch (\Throwable $e) {
-				// the table not there yet (an upgrade not run) or the database
-				// having a moment: the per-pass list is the fallback
-				$this->breaker = [];
-			}
-		}
-
-		return $this->breaker;
+	private function breaker(): HostBreaker {
+		return $this->breaker ??= new HostBreaker($this->hostBreakerRequest);
 	}
 
 	/**
@@ -487,72 +452,7 @@ class ActivityService {
 	 * ceiling. A cheap DELETE on an index, for the cron to run each pass.
 	 */
 	public function forgetRecoveredHosts(): void {
-		try {
-			$this->hostBreakerRequest->forgetBefore(time() - self::BREAKER_MAX);
-		} catch (\Throwable $e) {
-		}
-	}
-
-	/**
-	 * When this host is worth asking again, or 0 when it is worth asking now.
-	 *
-	 * Asked before a delivery is attempted rather than after it times out,
-	 * which is the whole saving: a row addressed to a dead instance costs a
-	 * lookup in a map this drain loaded once instead of thirty seconds. The
-	 * answer is a timestamp rather than a yes/no because the rows addressed to
-	 * the host have to be held back until then — see `manageRequest()`.
-	 */
-	private function circuitOpenUntil(string $host): int {
-		if (in_array($host, $this->failInstances ?? [], true)) {
-			return time() + self::BREAKER_BASE;
-		}
-
-		$until = $this->breakerState()[$host]['open_until'] ?? 0;
-
-		return ($until > time()) ? $until : 0;
-	}
-
-	/**
-	 * Records that this host is failing, for longer each consecutive time.
-	 *
-	 * The backoff is what stops a permanently dead instance from being
-	 * rediscovered every minute for ever; a host that answers again clears it,
-	 * so a peer that was merely restarting is not held at arm's length.
-	 */
-	private function openCircuit(string $host): void {
-		$this->failInstances[] = $host;
-
-		$now = time();
-		$state = $this->breakerState();
-		$strikes = (($state[$host]['last_failure'] ?? 0) > $now - self::BREAKER_MAX)
-			? $state[$host]['strikes'] + 1
-			: 1;
-		$for = min(self::BREAKER_MAX, self::BREAKER_BASE * (int)(2 ** min(6, $strikes - 1)));
-
-		$this->breaker[$host] = ['strikes' => $strikes, 'open_until' => $now + $for, 'last_failure' => $now];
-		try {
-			$this->hostBreakerRequest->open($host, $strikes, $now + $for, $now);
-		} catch (\Throwable $e) {
-			// the per-pass list above is the fallback
-		}
-	}
-
-	/**
-	 * A host that answered: it is not failing, whatever it did before.
-	 *
-	 * Only a host this drain knows to have failed costs a write; a healthy
-	 * one, which is nearly every delivery, costs nothing.
-	 */
-	private function closeCircuit(string $host): void {
-		if (!isset($this->breakerState()[$host])) {
-			return;
-		}
-
-		unset($this->breaker[$host]);
-		try {
-			$this->hostBreakerRequest->close($host);
-		} catch (\Throwable $e) {
-		}
+		$this->breaker()->forgetRecovered();
 	}
 
 	/**
@@ -586,7 +486,7 @@ class ActivityService {
 	public function manageRequest(RequestQueue $queue, bool $live = false): bool {
 		$host = $queue->getInstance()
 			->getAddress();
-		$openUntil = $this->circuitOpenUntil($host);
+		$openUntil = $this->breaker()->openUntil($host);
 		if ($openUntil > 0) {
 			// held back until the breaker closes. A skipped row keeps `tries =
 			// 0` and its old `last`, which sorts it ahead of every row ever
@@ -683,7 +583,7 @@ class ActivityService {
 		$sending = [];
 		foreach ($wave as $i => $queue) {
 			try {
-				$openUntil = $this->circuitOpenUntil($queue->getInstance()->getAddress());
+				$openUntil = $this->breaker()->openUntil($queue->getInstance()->getAddress());
 				if ($openUntil > 0) {
 					$this->requestQueueService->postponeRequest($queue, $openUntil);
 					continue;
@@ -744,7 +644,7 @@ class ActivityService {
 
 		if ($failure === null || $failure instanceof RequestResultNotJsonException) {
 			// an answer that is not JSON is still an answer: delivered
-			$this->closeCircuit($host);
+			$this->breaker()->close($host);
 			$this->requestQueueService->endRequest($queue, true);
 
 			return;
@@ -825,7 +725,7 @@ class ActivityService {
 			return;
 		}
 
-		$this->openCircuit($host);
+		$this->breaker()->open($host);
 	}
 
 	/** // ====> instanceService
@@ -1003,17 +903,34 @@ class ActivityService {
 	}
 
 	/**
+	 * Every server worth telling: one shared inbox per server heard from in
+	 * the last `ALL_SEEN_DAYS`, less the ones whose breaker is open.
+	 *
+	 * An activity addressed to everybody is an account deletion, and it used
+	 * to go to every shared inbox this instance had ever cached — servers gone
+	 * for years among them, each a queue row and, until the breaker learnt of
+	 * it, a timeout. A server that is down right now has its rows held back
+	 * by the breaker anyway, and one not heard from in three months is not
+	 * going to read a deletion either.
+	 *
 	 * @return InstancePath[]
 	 */
 	private function generateInstancePathsAll(): array {
-		$sharedInboxes = $this->cacheActorsRequest->getSharedInboxes();
+		$sharedInboxes = $this->cacheActorsRequest->getSharedInboxesSeenSince(
+			time() - self::ALL_SEEN_DAYS * 86400
+		);
 		$instancePaths = [];
 		foreach ($sharedInboxes as $sharedInbox) {
-			$instancePaths[] = new InstancePath(
+			$instancePath = new InstancePath(
 				$sharedInbox,
 				InstancePath::TYPE_GLOBAL,
 				InstancePath::PRIORITY_LOW
 			);
+			if ($this->breaker()->openUntil($instancePath->getAddress()) > 0) {
+				continue;
+			}
+
+			$instancePaths[] = $instancePath;
 		}
 
 		return $instancePaths;

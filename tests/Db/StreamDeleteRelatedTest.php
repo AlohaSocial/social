@@ -93,4 +93,17 @@ class StreamDeleteRelatedTest extends TestCase {
 
 		$this->assertSame('stream_id_prim', $this->deleted['social_import_post'] ?? null);
 	}
+
+	public function testThePostsWordsGoWithIt(): void {
+		$this->streamRequest()->deleteRelatedTo([md5('https://cloud.example/@alice/1')]);
+
+		$this->assertSame('stream_id_prim', $this->deleted['social_search_term'] ?? null);
+	}
+
+	/** A table added after the squash, so not in schema.json: named here. */
+	public function testTheMediaLinksGoWithThePost(): void {
+		$this->streamRequest()->deleteRelatedTo([md5('https://cloud.example/@alice/1')]);
+
+		$this->assertSame('stream_id_prim', $this->deleted['social_stream_media'] ?? null);
+	}
 }

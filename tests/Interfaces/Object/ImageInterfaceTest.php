@@ -36,7 +36,7 @@ class ImageInterfaceTest extends ActivityPubTestCase {
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 
 		// note the constructor takes its collaborators the other way round than DocumentInterface
-		$this->handler = new ImageInterface($this->cacheDocumentsRequest, $this->cacheDocumentService);
+		$this->handler = new ImageInterface($this->cacheDocumentsRequest, $this->cacheDocumentService, $this->configService);
 	}
 
 	private function image(): Image {

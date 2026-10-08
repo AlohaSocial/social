@@ -16,6 +16,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\SignatureException;
 use OCA\Social\Exceptions\SignatureIsGoneException;
+use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -26,6 +27,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DurableCache;
+use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\HttpSignatureService;
 use OCA\Social\Service\InstanceActorService;
 use OCA\Social\Service\SignatureService;
@@ -68,6 +70,7 @@ class SignatureServiceTest extends TestCase {
 	private ActorsRequest|MockObject $actorsRequest;
 	private CacheActorService|MockObject $cacheActorService;
 	private CacheActorsRequest|MockObject $cacheActorsRequest;
+	private FediverseService|MockObject $fediverseService;
 	private SignatureService $service;
 	/** the replay records, on the table an instance without a memcache uses */
 	private InMemoryDurableCacheRequest $seenSignatures;
@@ -92,6 +95,7 @@ class SignatureServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->actorsRequest = $this->createMock(ActorsRequest::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
+		$this->fediverseService = $this->createMock(FediverseService::class);
 		$this->cacheActorsRequest = $this->createStub(CacheActorsRequest::class);
 		// no key is in the local cache unless a test puts one there
 		$this->cacheActorsRequest->method('getFromId')
@@ -124,6 +128,7 @@ class SignatureServiceTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->durableCache(),
+			$this->fediverseService,
 		);
 	}
 
@@ -294,6 +299,47 @@ class SignatureServiceTest extends TestCase {
 
 		$this->assertSame('remote.example', $origin);
 		$this->assertSame((new DateTime($headers['date']))->getTimestamp(), $time);
+	}
+
+	/** The access list refuses the signer's host. */
+	private function refuseRemoteHost(): void {
+		$this->fediverseService->method('authorized')
+			->willReturnCallback(static function (string $host): bool {
+				if ($host === 'remote.example') {
+					throw new UnauthorizedFediverseException('Unauthorized Fediverse');
+				}
+
+				return true;
+			});
+	}
+
+	public function testCheckRequestRefusesABlockedInstanceBeforeFetchingItsKey(): void {
+		$this->refuseRemoteHost();
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkRequest($this->incomingRequest($this->signedHeaders($body, self::$privateKey)), $body);
+	}
+
+	public function testCheckRequestRefusesABlockedInstanceSigningWithRfc9421BeforeFetchingItsKey(): void {
+		$this->refuseRemoteHost();
+		$body = '{"type":"Follow"}';
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkRequest($this->incomingRequest($this->messageSignedHeaders($body, self::$privateKey)), $body);
+	}
+
+	public function testCheckObjectRefusesABlockedActorHostBeforeFetchingItsKey(): void {
+		$this->registerContextCache();
+		$this->refuseRemoteHost();
+		$received = $this->receivedSignedNote();
+		$received->setActorId(self::REMOTE_ACTOR);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+
+		$this->expectException(UnauthorizedFediverseException::class);
+		$this->service->checkObject($received);
 	}
 
 	public function testAnInstanceOnANonDefaultPortVerifiesTheHostWithItsPort(): void {
@@ -529,6 +575,95 @@ class SignatureServiceTest extends TestCase {
 		$this->expectException(SignatureException::class);
 		$this->expectExceptionMessage('missing date');
 		$this->service->checkRequest($this->incomingRequest($headers), $body);
+	}
+
+	/** @return array<string, array{string, int|null}> */
+	public static function httpDates(): array {
+		return [
+			'IMF-fixdate' => ['Thu, 08 Oct 2026 13:15:31 GMT', 1791465331],
+			'single-digit day' => ['Thu, 8 Oct 2026 13:15:31 GMT', 1791465331],
+			'UTC for GMT' => ['Thu, 08 Oct 2026 13:15:31 UTC', 1791465331],
+			'wrong weekday is not a different date' => ['Mon, 08 Oct 2026 13:15:31 GMT', 1791465331],
+			'now' => ['now', null],
+			'relative' => ['+30 min', null],
+			'relative with a date in front' => ['Thu, 08 Oct 2026 13:15:31 GMT +1 day', null],
+			'RFC 850' => ['Thursday, 08-Oct-26 13:15:31 GMT', null],
+			'asctime' => ['Thu Oct  8 13:15:31 2026', null],
+			'ISO 8601' => ['2026-10-08T13:15:31Z', null],
+			'impossible date' => ['Thu, 31 Feb 2026 13:15:31 GMT', null],
+			'impossible hour' => ['Thu, 08 Oct 2026 25:15:31 GMT', null],
+			'local zone' => ['Thu, 08 Oct 2026 13:15:31 CEST', null],
+		];
+	}
+
+	#[DataProvider('httpDates')]
+	public function testParseHttpDate(string $header, ?int $expected): void {
+		$this->assertSame($expected, SignatureService::parseHttpDate($header));
+	}
+
+	public function testCheckRequestRejectsARelativeDate(): void {
+		// `now` never ages out, so the request stays replayable once the
+		// replay record has expired
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => 'now']);
+
+		$this->expectException(DateTimeException::class);
+		$this->service->checkRequest($this->incomingRequest($headers), $body);
+	}
+
+	public function testARejectedDateIsQuotedEscapedAndShortened(): void {
+		$body = '{"type":"Follow"}';
+		$date = "now\x1b[31m" . str_repeat('A', 5000);
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => $date]);
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('an unparsable date was accepted');
+		} catch (DateTimeException $e) {
+			$this->assertStringContainsString('now\033[31m', $e->getMessage());
+			$this->assertStringNotContainsString("\x1b", $e->getMessage());
+			$this->assertLessThan(400, strlen($e->getMessage()));
+			$this->assertStringContainsString('more bytes', $e->getMessage());
+		}
+	}
+
+	public function testAFailedSignatureNamesTheKeyAndTheBaseButNotTheRawBytes(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$otherPublicKey));
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('a signature from another key was accepted');
+		} catch (SignatureException $e) {
+			$message = $e->getMessage();
+			$this->assertStringContainsString(self::REMOTE_KEY_ID, $message);
+			$this->assertStringContainsString('(request-target): post /apps/social/@alice/inbox\\nhost: ', $message);
+			$this->assertStringNotContainsString("\n", $message);
+			$this->assertStringNotContainsString('BEGIN PUBLIC KEY', $message);
+			$this->assertTrue(mb_check_encoding($message, 'ASCII'), 'no raw signature bytes');
+		}
+	}
+
+	public function testAMismatchedDigestIsQuotedShortened(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['digest' => 'SHA-256=' . str_repeat('x', 5000)]);
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('a wrong digest was accepted');
+		} catch (SignatureException $e) {
+			$this->assertStringContainsString('digest does not match', $e->getMessage());
+			$this->assertLessThan(400, strlen($e->getMessage()));
+		}
+	}
+
+	public function testCheckRequestAcceptsADateWithASingleDigitDay(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => gmdate('D, j M Y H:i:s \G\M\T')]);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+
+		$this->assertSame('remote.example', $this->service->checkRequest($this->incomingRequest($headers), $body));
 	}
 
 	public function testCheckRequestRejectsAnUnparsableDate(): void {
@@ -1220,6 +1355,7 @@ class SignatureServiceTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->durableCache(),
+			$this->fediverseService,
 		);
 	}
 
@@ -1435,6 +1571,35 @@ class SignatureServiceTest extends TestCase {
 
 		$this->assertFalse($this->service->checkObject($received));
 		$this->assertSame('', $received->getOrigin());
+	}
+
+	public function testCheckObjectRejectsARelativeCreated(): void {
+		// `now` was always inside the window, so the signature never aged out
+		$this->registerContextCache();
+		$received = $this->receivedSignedNote('now');
+		$this->cacheActorService->method('getFromId')
+			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+
+		$this->expectException(DateTimeException::class);
+		$this->service->checkObject($received);
+	}
+
+	/** @return array<string, array{string, int|null}> */
+	public static function objectDates(): array {
+		return [
+			'Z' => ['2026-10-08T13:15:31Z', 1791465331],
+			'fraction' => ['2026-10-08T13:15:31.123Z', 1791465331],
+			'offset' => ['2026-10-08T15:15:31+02:00', 1791465331],
+			'relative' => ['now', null],
+			'relative offset' => ['+1 day', null],
+			'no zone' => ['2026-10-08T13:15:31', null],
+			'impossible hour' => ['2026-10-08T25:15:31Z', null],
+		];
+	}
+
+	#[DataProvider('objectDates')]
+	public function testParseObjectDate(string $created, ?int $expected): void {
+		$this->assertSame($expected, SignatureService::parseObjectDate($created));
 	}
 
 	public function testSignRequestWithAnEmptyPrivateKeyFailsLoudly(): void {

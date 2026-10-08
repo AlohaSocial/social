@@ -69,6 +69,50 @@ class ClientRequest extends ClientRequestBuilder {
 	}
 
 	/**
+	 * Removes app registrations nobody ever authorized, older than `$before`.
+	 *
+	 * `POST /api/v1/apps` is public, and every call is a row: a client that
+	 * registers on each launch, or somebody calling it in a loop, leaves rows
+	 * no account will ever use. A registration counts as authorized once its
+	 * `last_update` has moved off its `creation` — `ClientAuthRequest::authorize()`
+	 * moves it — so an app whose authorizations later expired is kept, which
+	 * is the promise `ClientAuthRequest::deprecate()` makes to a client holding
+	 * its registration. Bounded per call; what is left is the next run's.
+	 *
+	 * @return int how many were removed
+	 */
+	public function deleteNeverAuthorized(int $before, int $limit = 500): int {
+		$date = new DateTime();
+		$date->setTimestamp($before);
+
+		$qb = $this->getQueryBuilder();
+		$qb->select('cl.id')
+			->from(self::TABLE_CLIENT, 'cl')
+			->leftJoin('cl', self::TABLE_CLIENT_AUTH, 'a', $qb->expr()->eq('a.client_id', 'cl.id'))
+			->where($qb->expr()->isNull('a.id'))
+			->andWhere($qb->expr()->eq('cl.last_update', 'cl.creation'))
+			->andWhere($qb->expr()->lt('cl.creation', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)))
+			->setMaxResults($limit);
+
+		$ids = [];
+		$cursor = $qb->executeQuery();
+		while ($row = $cursor->fetch()) {
+			$ids[] = (int)$row['id'];
+		}
+		$cursor->closeCursor();
+
+		if ($ids === []) {
+			return 0;
+		}
+
+		$delete = $this->getQueryBuilder();
+		$delete->delete(self::TABLE_CLIENT)
+			->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
+
+		return $delete->executeStatement();
+	}
+
+	/**
 	 * Removes an app registration, and with it every authorization against it.
 	 *
 	 * Nothing in the app calls this on its own: a registration is a thing a

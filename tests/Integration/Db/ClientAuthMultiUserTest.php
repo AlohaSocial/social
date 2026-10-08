@@ -65,6 +65,7 @@ class ClientAuthMultiUserTest extends TestCase {
 		}
 
 		$this->clientRequest->deleteApp(self::APP . '-id');
+		$this->clientRequest->deleteApp(self::APP . '-unused-id');
 	}
 
 	/** Authorizes, exchanges, and hands back the token. */
@@ -193,5 +194,31 @@ class ClientAuthMultiUserTest extends TestCase {
 
 		$this->assertSame([], $this->clientAuthRequest->getByUser('alice'));
 		$this->assertSame('bob', $this->clientAuthRequest->getByToken($bob)->getAuthUserId());
+	}
+
+	/**
+	 * The sweep behind the public registration endpoint takes a registration
+	 * nobody signed in with and leaves one somebody did — even after that
+	 * somebody's authorization is gone again.
+	 */
+	public function testTheSweepTakesOnlyRegistrationsNobodyEverAuthorized(): void {
+		$unused = new SocialClient();
+		$unused->setAppName(self::APP)
+			->setAppRedirectUris(['urn:ietf:wg:oauth:2.0:oob'])
+			->setAppScopes(['read'])
+			->setAppClientId(self::APP . '-unused-id')
+			->setAppClientSecret(self::APP . '-unused-secret');
+		$this->clientRequest->saveApp($unused);
+
+		$this->signIn('alice');
+		$this->clientAuthRequest->deleteRelatedId('alice');
+
+		// a cutoff in the future: both registrations are old enough
+		$this->clientRequest->deleteNeverAuthorized(time() + 60);
+
+		$this->assertSame($this->clientId, $this->clientRequest->getFromClientId(self::APP . '-id')->getId());
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->clientRequest->getFromClientId(self::APP . '-unused-id');
 	}
 }

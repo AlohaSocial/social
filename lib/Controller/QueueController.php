@@ -11,11 +11,13 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Tools\Traits\TAsync;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -42,6 +44,7 @@ class QueueController extends Controller {
 		RequestQueueService $requestQueueService,
 		ActivityService $activityService,
 		LoggerInterface $logger,
+		private AsyncRequestSigner $asyncRequestSigner,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->requestQueueService = $requestQueueService;
@@ -56,10 +59,29 @@ class QueueController extends Controller {
 	 */
 	public const MAX_DURATION = 90;
 
+	/**
+	 * Delivers what is on standby under a token, for this server alone.
+	 *
+	 * Public because the server calls itself here with no session, so it is
+	 * the signature `CurlService::asyncWithToken()` sends that decides: a
+	 * request without a valid one is refused before the queue is read, and
+	 * counted by Nextcloud's brute-force protection. Only failures are
+	 * counted, so the server's own calls — which never fail it — are never
+	 * slowed, where a rate limit on the address would have throttled its own
+	 * fan-out on a busy instance.
+	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[BruteForceProtection(action: 'socialAsyncRequest')]
 	#[FrontpageRoute(verb: 'POST', url: '/async/request/{token}')]
 	public function asyncForRequest(string $token): Response {
+		if (!$this->asyncRequestSigner->verify($token, $this->request->getHeader(AsyncRequestSigner::HEADER))) {
+			$response = new DataResponse([], Http::STATUS_FORBIDDEN);
+			$response->throttle(['token' => $token]);
+
+			return $response;
+		}
+
 		// a row whose `last` is still ahead is held back on purpose — a video
 		// post waiting for its conversion, or a host the breaker has put off —
 		// and is the cron's to deliver once that time has come

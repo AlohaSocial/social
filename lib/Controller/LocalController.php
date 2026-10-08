@@ -27,6 +27,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Post;
+use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Security\RemoteAddress;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\BannerService;
@@ -799,6 +800,7 @@ class LocalController extends Controller {
 
 				$response
 					= new FileDisplayResponse($document, Http::STATUS_OK, ['Content-Type' => $mime]);
+				RangedFileResponse::guardStoredFile($response, $mime);
 				$response->cacheFor(86400);
 
 				return $response;

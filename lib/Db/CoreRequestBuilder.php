@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Db;
 
-use DateTime;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
@@ -19,7 +18,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\IExtendedQueryBuilder;
 use OCP\DB\Exception;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
@@ -70,6 +68,7 @@ class CoreRequestBuilder {
 	public const TABLE_REPORTS = 'social_report';
 	public const TABLE_REACTIONS = 'social_reaction';
 	public const TABLE_REQUEST_QUEUE = 'social_req_queue';
+	public const TABLE_SEARCH_TERMS = 'social_search_term';
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_SCHEDULED = 'social_scheduled';
@@ -97,6 +96,7 @@ class CoreRequestBuilder {
 	public const TABLE_STRIKES = 'social_strike';
 	public const TABLE_STREAM_QUEUE = 'social_stream_queue';
 	public const TABLE_STREAM_TAGS = 'social_stream_tag';
+	public const TABLE_STREAM_MEDIA = 'social_stream_media';
 	public const TABLE_EXTERNAL_USERS = 'social_ext_user';
 	public const TABLE_EXTERNAL_SIGNUPS = 'social_ext_signup';
 	public const TABLE_EXTERNAL_INVITES = 'social_ext_invite';
@@ -111,6 +111,7 @@ class CoreRequestBuilder {
 			'actor_id_prim',
 			'object_id',
 			'object_id_prim',
+			'poll_prim',
 			'creation'
 		],
 		self::TABLE_GIFS => [
@@ -736,6 +737,10 @@ class CoreRequestBuilder {
 			'cache',
 			'creation',
 			'counts_at',
+			'count_replies',
+			'count_likes',
+			'count_boosts',
+			'count_dislikes',
 			'local',
 			'filter_duplicate',
 			'tags',
@@ -781,9 +786,20 @@ class CoreRequestBuilder {
 			'tries',
 			'last'
 		],
+		self::TABLE_SEARCH_TERMS => [
+			'id',
+			'term',
+			'head',
+			'nid',
+			'stream_id_prim'
+		],
 		self::TABLE_STREAM_TAGS => [
 			'stream_id',
 			'hashtag'
+		],
+		self::TABLE_STREAM_MEDIA => [
+			'stream_id_prim',
+			'doc_nid'
 		],
 		self::TABLE_EXTERNAL_USERS => [
 			'uid',
@@ -882,6 +898,8 @@ class CoreRequestBuilder {
 	 */
 	private static array $blockedDomains = [];
 
+	private ?bool $authorHostsFilled = null;
+
 	/** Blocking or unblocking an instance makes the memo wrong; drop it. */
 	public static function forgetBlockedDomains(): void {
 		self::$blockedDomains = [];
@@ -898,10 +916,30 @@ class CoreRequestBuilder {
 
 		if ($this->viewer !== null) {
 			$qb->setViewer($this->viewer);
-			$qb->setBlockedDomains($this->blockedDomainsOf($qb->prim($this->viewer->getId())));
+			$domains = $this->blockedDomainsOf($qb->prim($this->viewer->getId()));
+			$qb->setBlockedDomains($domains);
+			if ($domains !== []) {
+				$qb->setAuthorHostsFilled($this->authorHostsAreFilled());
+			}
 		}
 
 		return $qb;
+	}
+
+	/**
+	 * Whether every `social_stream` row carries the host of its author yet.
+	 *
+	 * A flag `Cron\StreamAuthorHosts` sets when its backfill reaches the end
+	 * of the table, read once per request builder: until it is set, the
+	 * filters on `author_host` keep matching the rows it has not reached by
+	 * their actor id instead.
+	 */
+	protected function authorHostsAreFilled(): bool {
+		$this->authorHostsFilled ??= $this->configService->getAppValueBool(
+			ConfigService::SOCIAL_STREAM_AUTHOR_HOSTS_FILLED
+		);
+
+		return $this->authorHostsFilled;
 	}
 
 	/**
@@ -954,6 +992,70 @@ class CoreRequestBuilder {
 	 */
 	public function getConnection(): IDBConnection {
 		return $this->dbConnection;
+	}
+
+	/**
+	 * Rows per statement of `insertIgnoringConflicts()`: a recipient row binds
+	 * five parameters, so a chunk stays far inside SQLite's 32,766.
+	 */
+	public const INSERT_IGNORE_CHUNK = 500;
+
+	/**
+	 * Inserts rows that may already be there, in one statement per chunk.
+	 *
+	 * `IDBConnection::insertIgnoreConflict()` takes one row, and a caller
+	 * writing several inside a transaction paid a round trip per row while it
+	 * held the locks. The three databases this app supports each have a
+	 * multi-row form of the same statement — the one `insertIgnoreConflict()`
+	 * itself issues for a single row — so that is used; anything else falls
+	 * back to it row by row.
+	 *
+	 * Every row must carry the same columns, in the same order.
+	 *
+	 * @param string $table without the prefix
+	 * @param list<array<string, int|string>> $rows column => value
+	 *
+	 * @throws Exception
+	 */
+	protected function insertIgnoringConflicts(string $table, array $rows): void {
+		if ($rows === []) {
+			return;
+		}
+
+		$platform = $this->dbConnection->getDatabaseProvider();
+		[$head, $tail] = match ($platform) {
+			IDBConnection::PLATFORM_MYSQL, IDBConnection::PLATFORM_MARIADB => ['INSERT IGNORE INTO', ''],
+			IDBConnection::PLATFORM_POSTGRES => ['INSERT INTO', ' ON CONFLICT DO NOTHING'],
+			IDBConnection::PLATFORM_SQLITE => ['INSERT OR IGNORE INTO', ''],
+			default => ['', ''],
+		};
+		if ($head === '') {
+			foreach ($rows as $row) {
+				$this->dbConnection->insertIgnoreConflict($table, $row);
+			}
+
+			return;
+		}
+
+		$columns = array_keys($rows[0]);
+		$tuple = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
+		// `*PREFIX*` and the backticks are what the connection rewrites for
+		// the platform; there is no public API that hands the prefix over
+		$into = ' `*PREFIX*' . $table . '` (`' . implode('`, `', $columns) . '`) VALUES ';
+
+		foreach (array_chunk($rows, self::INSERT_IGNORE_CHUNK) as $chunk) {
+			$params = [];
+			foreach ($chunk as $row) {
+				foreach ($columns as $column) {
+					$params[] = $row[$column];
+				}
+			}
+
+			$this->dbConnection->executeStatement(
+				$head . $into . implode(', ', array_fill(0, count($chunk), $tuple)) . $tail,
+				$params
+			);
+		}
 	}
 
 	/**
@@ -1023,42 +1125,16 @@ class CoreRequestBuilder {
 
 	/**
 	 * Limit a queue drain to the rows that are actually due: the retry backoff
-	 * and the give-up threshold, in SQL.
+	 * and the give-up threshold, in SQL (see `Backoff::limitToDue()`).
 	 *
 	 * Both queues used to take the oldest N rows and then drop most of them in
 	 * PHP on exactly these two conditions, which means the rows of one dead
 	 * instance permanently occupy the window and nothing behind them is ever
 	 * delivered.
-	 *
-	 * The delay grows as tries^4/3, which is not something a portable query
-	 * can compute from the column, so it is unrolled into one branch per try
-	 * count — $maxTries of them, and the give-up threshold falls out of the
-	 * same expression. A row that has never been attempted has a NULL `last`.
-	 *
-	 * @param int $maxTries the try count at which a row is abandoned
 	 */
-	protected function limitToQueueDue(IExtendedQueryBuilder $qb, int $maxTries): void {
-		$expr = $qb->expr();
+	protected function limitToQueueDue(IExtendedQueryBuilder $qb, Backoff $backoff): void {
 		$pf = ($qb->getType() === IExtendedQueryBuilder::SELECT) ? $this->defaultSelectAlias . '.' : '';
-		$now = time();
-
-		// built first and passed in one go: an empty orX() is deprecated and
-		// will throw
-		$due = [];
-		for ($tries = 0; $tries < $maxTries; $tries++) {
-			$delay = (int)floor($tries ** 4 / 3);
-			$cutoff = new DateTime('@' . ($now - $delay));
-
-			$due[] = $expr->andX(
-				$expr->eq($pf . 'tries', $qb->createNamedParameter($tries, IQueryBuilder::PARAM_INT)),
-				$expr->orX(
-					$expr->isNull($pf . 'last'),
-					$expr->lte($pf . 'last', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE))
-				)
-			);
-		}
-
-		$qb->andWhere($expr->orX(...$due));
+		$backoff->limitToDue($qb, $pf, time());
 	}
 
 	//

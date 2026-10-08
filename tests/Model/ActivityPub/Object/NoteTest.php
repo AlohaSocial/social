@@ -262,6 +262,23 @@ class NoteTest extends TestCase {
 	}
 
 	/**
+	 * A relative link is resolved by the browser against the page it is shown
+	 * on, which is this server's; it belongs to the server the post came from.
+	 */
+	public function testARelativeLinkInARemotePostPointsAtItsOwnServer(): void {
+		$note = new Note();
+		$note->importFromDatabase([
+			'id' => 'https://mastodon.social/users/alice/statuses/1',
+			'type' => 'Note',
+			'content' => '<p><a href="/logout">a</a> <a href="//evil.example/x">b</a></p>',
+		]);
+
+		$this->assertStringContainsString('href="https://mastodon.social/logout"', $note->getContent());
+		$this->assertStringContainsString('href="https://evil.example/x"', $note->getContent());
+		$this->assertStringNotContainsString('href="/', $note->getContent());
+	}
+
+	/**
 	 * `parse_url()` parses `javascript:alert(1)` quite happily, and this field
 	 * is rendered as a link by every client that reads it.
 	 */

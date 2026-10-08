@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -329,6 +330,61 @@ class AdminApiServiceTest extends TestCase {
 		$this->knownUsers = [];
 
 		$this->assertFalse($this->service()->isAdministrator('ghost'));
+	}
+
+	/** LOCAL is root's account, REMOTE has no Nextcloud user, `mod` is delegated. */
+	private function actingAs(): AdminApiService {
+		$this->groupManager->method('isAdmin')
+			->willReturnCallback(static fn (string $userId): bool => in_array($userId, ['root', 'other-admin'], true));
+		$this->accountService->method('getFromId')
+			->willReturnCallback(function (string $id): Person {
+				if ($id !== self::LOCAL) {
+					throw new \OCA\Social\Exceptions\ActorDoesNotExistException('Actor not found');
+				}
+
+				$person = new Person();
+				$person->setUserId('root');
+
+				return $person;
+			});
+
+		return $this->service();
+	}
+
+	/**
+	 * Handing somebody the Social section is not handing them the server: the
+	 * person an administrator delegated to cannot suspend that administrator.
+	 */
+	public function testADelegatedModeratorMayNotActOnANextcloudAdministrator(): void {
+		$this->expectException(ModerationNotAllowedException::class);
+		$this->actingAs()->assertMayActOn(self::LOCAL, 'mod');
+	}
+
+	public function testNobodyActsOnTheirOwnAccount(): void {
+		$this->expectException(ModerationNotAllowedException::class);
+		$this->actingAs()->assertMayActOn(self::LOCAL, 'root');
+	}
+
+	public function testAnotherNextcloudAdministratorMayActOnAnAdministrator(): void {
+		$this->actingAs()->assertMayActOn(self::LOCAL, 'other-admin');
+		$this->addToAssertionCount(1);
+	}
+
+	/** A remote account has no Nextcloud user behind it to protect. */
+	public function testARemoteAccountIsNeverRefusedHere(): void {
+		$this->actingAs()->assertMayActOn(self::REMOTE, 'mod');
+		$this->addToAssertionCount(1);
+	}
+
+	public function testAReportConcernsOnlyTheAccountItWasFiledAbout(): void {
+		$this->reportsRequest->method('getById')
+			->willReturn((new Report())->setId(4)->setAccountId(self::LOCAL));
+		$service = $this->service();
+
+		$service->assertReportConcerns(4, self::LOCAL);
+
+		$this->expectException(ReportNotFoundException::class);
+		$service->assertReportConcerns(4, self::REMOTE);
 	}
 
 	public function testANextcloudAdministratorAlwaysCounts(): void {

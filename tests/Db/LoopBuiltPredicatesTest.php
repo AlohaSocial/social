@@ -9,11 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Db;
 
+use OCA\Social\Db\Backoff;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Db\HashtagsRequest;
 use OCA\Social\Db\RequestQueueRequest;
 use OCA\Social\Db\SocialQueryBuilder;
+use OCA\Social\Db\StreamQueueRequest;
 use OCA\Social\Tools\IExtendedQueryBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -90,7 +92,7 @@ class LoopBuiltPredicatesTest extends TestCase {
 	}
 
 	public function testTheQueueDueConditionIsOneAlternativePerTry(): void {
-		$this->invoke(CoreRequestBuilder::class, 'limitToQueueDue', [$this->queryBuilder(), 3]);
+		$this->invoke(CoreRequestBuilder::class, 'limitToQueueDue', [$this->queryBuilder(), new Backoff(3, 0, 3)]);
 
 		$this->assertCount(1, $this->where);
 		// three tries, so three alternatives joined by OR
@@ -99,11 +101,13 @@ class LoopBuiltPredicatesTest extends TestCase {
 		$this->assertStringContainsString('last IS NULL', $this->where[0]);
 	}
 
-	public function testTheRequestQueueUsesItsOwnDelaysButTheSameShape(): void {
-		$this->invoke(RequestQueueRequest::class, 'limitToQueueDue', [$this->queryBuilder(), 4]);
+	public function testEachQueueHasOneAlternativePerTryBelowItsThreshold(): void {
+		$this->invoke(RequestQueueRequest::class, 'limitToQueueDue', [$this->queryBuilder(), Backoff::outbound()]);
+		$this->invoke(StreamQueueRequest::class, 'limitToQueueDue', [$this->queryBuilder(), Backoff::inbound()]);
 
-		$this->assertCount(1, $this->where);
-		$this->assertSame(4, substr_count($this->where[0], 'tries = '));
+		$this->assertCount(2, $this->where);
+		$this->assertSame(Backoff::OUTBOUND_MAX_TRIES, substr_count($this->where[0], 'tries = '));
+		$this->assertSame(Backoff::INBOUND_MAX_TRIES, substr_count($this->where[1], 'tries = '));
 	}
 
 	public function testTheActorSyncConditionIsOneAlternativePerFailureCount(): void {
@@ -140,6 +144,6 @@ class LoopBuiltPredicatesTest extends TestCase {
 	public function testNoTriesIsRefusedRatherThanMatchingEverything(): void {
 		$this->expectException(\InvalidArgumentException::class);
 
-		$this->invoke(CoreRequestBuilder::class, 'limitToQueueDue', [$this->queryBuilder(), 0]);
+		$this->invoke(CoreRequestBuilder::class, 'limitToQueueDue', [$this->queryBuilder(), new Backoff(3, 0, 0)]);
 	}
 }

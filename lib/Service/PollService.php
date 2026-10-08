@@ -227,7 +227,7 @@ class PollService {
 
 	private function alreadyVoted(string $voter, string $pollId, int $option): bool {
 		try {
-			$this->actionsRequest->getAction($voter, $pollId . '#option-' . $option, 'Vote');
+			$this->actionsRequest->getAction($voter, $pollId . ActionsRequest::VOTE_OPTION . $option, 'Vote');
 
 			return true;
 		} catch (\Exception $e) {
@@ -250,7 +250,7 @@ class PollService {
 		$vote->setType('Vote');
 		$vote->setId($this->voteId($voter, $pollId, $option));
 		$vote->setActorId($voter);
-		$vote->setObjectId($pollId . '#option-' . $option);
+		$vote->setObjectId($pollId . ActionsRequest::VOTE_OPTION . $option);
 		$this->actionsRequest->save($vote);
 	}
 
@@ -295,11 +295,20 @@ class PollService {
 	public function announceClosedPolls(int $limit = 50): int {
 		$announced = 0;
 
-		foreach ($this->streamRequest->getPollsClosedSince($this->lastSweep(), $limit) as $poll) {
+		// taken before the read, so a poll closing while the sweep runs is
+		// inside the next window rather than between the two
+		$now = time();
+		$since = $this->lastSweep();
+		$polls = $this->streamRequest->getPollsClosedSince($since, $limit);
+		// the voters of every poll in one indexed read; a failure here throws
+		// before the sweep is recorded, so the whole pass is tried again
+		$voters = $this->actionsRequest->votersOfPolls(
+			array_map(static fn (Question $poll): string => $poll->getId(), $polls)
+		);
+
+		foreach ($polls as $poll) {
 			try {
-				$this->notificationService->onPollClosed(
-					$poll, $this->actionsRequest->votersOf($poll->getId())
-				);
+				$this->notificationService->onPollClosed($poll, $voters[$poll->getId()] ?? []);
 				$announced++;
 			} catch (\Throwable $e) {
 				// one poll that cannot be announced must not stop the sweep:
@@ -313,9 +322,31 @@ class PollService {
 		// moved only after the pass, so a failure mid-sweep is retried rather
 		// than skipped: a duplicate notification is dropped by its id, a
 		// missed one is never sent
-		$this->configService->setAppValue(ConfigService::SOCIAL_POLLS_SWEPT, (string)time());
+		$this->configService->setAppValue(ConfigService::SOCIAL_POLLS_SWEPT, (string)$this->sweptTo($polls, $limit, $since, $now));
 
 		return $announced;
+	}
+
+	/**
+	 * Where the next sweep starts.
+	 *
+	 * Now, unless the read was cut off at its limit: the polls are read
+	 * earliest end first, so the ones left over closed after the last one
+	 * read, and the next sweep starts a second before that — a poll announced
+	 * twice is dropped by its notification id. Unless every poll read closed
+	 * in that same second, when starting there again would read the same
+	 * page for ever.
+	 *
+	 * @param Question[] $polls
+	 */
+	private function sweptTo(array $polls, int $limit, int $since, int $now): int {
+		if ($polls === [] || count($polls) < $limit) {
+			return $now;
+		}
+
+		$last = (int)end($polls)->getEndTimestamp();
+
+		return min($now, ($last - 1 > $since) ? $last - 1 : $last);
 	}
 
 	/**

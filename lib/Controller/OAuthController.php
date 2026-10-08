@@ -24,11 +24,13 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\InstanceService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\RedirectResponse;
@@ -148,7 +150,9 @@ class OAuthController extends Controller {
 	}
 
 	/**
-	 * @AnonRateThrottle(limit=15, period=300)
+	 * Registers a client app. Public, so it carries a limit of its own for a
+	 * caller with a session and one without: every registration is a row
+	 * that stays until the sweep in `Cron\Queue` finds it never authorized.
 	 *
 	 * A registration the service refuses -- no name, no redirect URI, or one
 	 * with a scheme a browser would run rather than follow -- is a 422, which
@@ -158,6 +162,8 @@ class OAuthController extends Controller {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 15, period: 300)]
+	#[UserRateLimit(limit: 15, period: 300)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/apps')]
 	public function apps(
 		string $client_name = '',
@@ -886,6 +892,8 @@ class OAuthController extends Controller {
 				// everybody and says nothing about whose phone this is
 				'created_at' => $client->getAuthCreation(),
 				'last_used_at' => $client->getLastUpdate(),
+				// 0 when the instance lets a token in use live for ever
+				'expires_at' => $this->clientService->expiresAt($client),
 				// an authorization whose code was never exchanged: the browser
 				// came back and the app never asked for its token. Worth
 				// showing, because taking it back is still the right thing to

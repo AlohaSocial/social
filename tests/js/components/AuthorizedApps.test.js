@@ -67,6 +67,25 @@ describe('the authorized apps', () => {
 		expect(wrapper.text()).toContain('Last used')
 	})
 
+	it('says when a sign-in runs out however much it is used', async () => {
+		get.mockResolvedValue({ data: [app({ expires_at: 1788536000 })] })
+
+		const wrapper = mount(AuthorizedApps)
+		await flushPromises()
+
+		expect(wrapper.find('.apps__expires').exists()).toBe(true)
+		expect(wrapper.find('.apps__expires').text()).toContain('2026')
+	})
+
+	it('says nothing about running out where the instance never signs an app out', async () => {
+		get.mockResolvedValue({ data: [app({ expires_at: 0 })] })
+
+		const wrapper = mount(AuthorizedApps)
+		await flushPromises()
+
+		expect(wrapper.find('.apps__expires').exists()).toBe(false)
+	})
+
 	/**
 	 * A unix timestamp read as milliseconds dated every app to January 1970,
 	 * which is the kind of wrong that makes the page useless for the one thing

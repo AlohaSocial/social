@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\AP;
+use OCA\Social\Db\HostBreakerRequest;
 use OCA\Social\Db\StreamQueueRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
@@ -55,6 +56,9 @@ class StreamQueueServiceTest extends TestCase {
 	private LinkPreviewService|MockObject $linkPreviewService;
 	private AP|MockObject $ap;
 	private ImportService|MockObject $importService;
+	private HostBreakerRequest|MockObject $hostBreakerRequest;
+	/** @var array<string, array{strikes: int, open_until: int, last_failure: int}> the breaker table */
+	private array $breakerRows = [];
 	private StreamQueueService $service;
 
 	protected function setUp(): void {
@@ -67,6 +71,14 @@ class StreamQueueServiceTest extends TestCase {
 		$this->ap = $this->createMock(AP::class);
 		$this->importService = $this->createMock(ImportService::class);
 		AP::set($this->ap);
+		$this->breakerRows = [];
+		$this->hostBreakerRequest = $this->createMock(HostBreakerRequest::class);
+		$this->hostBreakerRequest->method('failingSince')->willReturnCallback(fn (): array => $this->breakerRows);
+		$this->hostBreakerRequest->method('open')->willReturnCallback(
+			function (string $host, int $strikes, int $openUntil, int $now): void {
+				$this->breakerRows[$host] = ['strikes' => $strikes, 'open_until' => $openUntil, 'last_failure' => $now];
+			}
+		);
 
 		$this->service = new StreamQueueService(
 			$this->streamRequest,
@@ -77,6 +89,7 @@ class StreamQueueServiceTest extends TestCase {
 			$this->miscService,
 			$this->linkPreviewService,
 			new NullLogger(),
+			$this->hostBreakerRequest,
 		);
 	}
 
@@ -125,17 +138,18 @@ class StreamQueueServiceTest extends TestCase {
 		$this->service->generateStreamQueue('tok', StreamQueue::TYPE_CACHE, self::STREAM_ID);
 	}
 
-	public function testGetRequestStandbyAppliesTheRetryBackoff(): void {
+	public function testGetRequestStandbyHandsOnWhatTheQueryFoundDue(): void {
+		// the backoff is the query's (Backoff::inbound()); filtering again here
+		// could only disagree with it
 		$now = time();
 		$fresh = $this->queue()->setTries(0)->setLast($now - 1);
-		$recent = $this->queue()->setTries(3)->setLast($now - 10); // delay 27s
 		$old = $this->queue()->setTries(3)->setLast($now - 60);
-		$this->streamQueueRequest->method('getStandby')->willReturn([$fresh, $recent, $old]);
+		$this->streamQueueRequest->method('getStandby')->willReturn([$fresh, $old]);
 
 		$total = 0;
 		$ready = $this->service->getRequestStandby($total);
 
-		$this->assertSame(3, $total);
+		$this->assertSame(2, $total);
 		$this->assertSame([$fresh, $old], $ready);
 	}
 
@@ -388,13 +402,11 @@ class StreamQueueServiceTest extends TestCase {
 			$saved = true;
 		});
 		$this->ap->method('getInterfaceForItem')->willReturn($noteInterface);
-		$this->streamRequest->method('countRepliesTo')->with(self::PARENT_URL)->willReturn(2);
-
-		$this->streamRequest->expects($this->once())->method('updateDetails')->with($this->identicalTo($parent));
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($parent), Details::REPLIES);
+		$this->streamRequest->expects($this->never())->method('updateDetails');
 
 		$this->service->manageStreamQueue($this->queue());
-
-		$this->assertSame(7, $parent->getDetailInt('replies'));
 	}
 
 	public function testReplyWithMismatchingIdIsRemovedFromTheCache(): void {
@@ -576,6 +588,70 @@ class StreamQueueServiceTest extends TestCase {
 		$this->streamQueueRequest->expects($this->once())->method('setAsFailure');
 		$this->streamQueueRequest->expects($this->never())->method('delete');
 
+		$this->service->manageStreamQueue($this->fetchQueue());
+	}
+
+	public function testAFetchFromAHostBehindTheBreakerIsHeldBackWithoutSpendingATry(): void {
+		$until = time() + 600;
+		$this->breakerRows['remote.example'] = ['strikes' => 3, 'open_until' => $until, 'last_failure' => time() - 10];
+		$queue = $this->fetchQueue();
+		$this->curlService->expects($this->never())->method('retrieveObject');
+		$this->streamQueueRequest->expects($this->never())->method('setAsRunning');
+		$this->streamQueueRequest->expects($this->never())->method('setAsFailure');
+		$this->streamQueueRequest->expects($this->once())->method('postpone')
+			->with($this->identicalTo($queue), $until);
+
+		$this->service->manageStreamQueue($queue);
+	}
+
+	/** One timeout per dead host and drain, not one per item queued against it. */
+	public function testAnUnreachableOriginIsNotAskedAgainInTheSameDrain(): void {
+		$this->curlService->expects($this->once())->method('retrieveObject')
+			->willThrowException(new RequestNetworkException('timeout'));
+		$this->hostBreakerRequest->expects($this->once())->method('open')->with('remote.example');
+		$this->streamQueueRequest->expects($this->once())->method('setAsFailure');
+		$this->streamQueueRequest->expects($this->once())->method('postpone');
+
+		$this->service->manageStreamQueue($this->fetchQueue());
+		$this->service->manageStreamQueue($this->fetchQueue());
+	}
+
+	public function testACacheItemOnAHostBehindTheBreakerIsNeitherAskedNorCounted(): void {
+		$this->breakerRows['remote.example'] = ['strikes' => 1, 'open_until' => time() + 60, 'last_failure' => time()];
+		$queue = $this->queue();
+		$stream = $this->streamWithCache();
+		$this->streamRequest->method('getStreamById')
+			->willReturnCallback(function (string $id) use ($stream) {
+				if ($id === self::STREAM_ID) {
+					return $stream;
+				}
+				throw new StreamNotFoundException();
+			});
+		$this->ap->method('getInterfaceForItem')->willReturn($this->createStub(NoteInterface::class));
+		$this->curlService->expects($this->never())->method('retrieveObject');
+		$this->streamQueueRequest->expects($this->once())->method('setAsFailure')->with($this->identicalTo($queue));
+
+		$this->service->manageStreamQueue($queue);
+
+		$this->assertSame(0, $stream->getCache()->getItem(self::REPLY_URL)->getError());
+	}
+
+	public function testAHostThatAnswersAgainIsTakenOffTheBreaker(): void {
+		$this->breakerRows['remote.example'] = ['strikes' => 2, 'open_until' => time() - 1, 'last_failure' => time() - 300];
+		$this->fetchedNote();
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->hostBreakerRequest->expects($this->once())->method('close')->with('remote.example');
+
+		$this->service->manageStreamQueue($this->fetchQueue());
+	}
+
+	public function testABatchReadsTheBreakerAfresh(): void {
+		$this->streamQueueRequest->method('getStandby')->willReturn([]);
+		$this->hostBreakerRequest->expects($this->exactly(2))->method('failingSince')->willReturn([]);
+
+		$this->service->getRequestStandby();
+		$this->service->manageStreamQueue($this->fetchQueue());
+		$this->service->getRequestStandby();
 		$this->service->manageStreamQueue($this->fetchQueue());
 	}
 }

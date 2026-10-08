@@ -33,18 +33,15 @@ class SecretHasherTest extends TestCase {
 		$this->assertFalse($this->hasher->matches($stored, ''));
 	}
 
-	public function testMatchesALegacyPlaintextValue(): void {
-		$this->assertTrue($this->hasher->matches('s3cret', 's3cret'));
-		$this->assertFalse($this->hasher->matches('s3cret', 'other'));
+	/** A bare stored value is a row the migration missed, and is not a credential. */
+	public function testALegacyPlaintextValueNoLongerMatches(): void {
+		$this->assertFalse($this->hasher->matches('s3cret', 's3cret'));
 		$this->assertFalse($this->hasher->matches('', 's3cret'));
 	}
 
-	public function testForLookupCoversHashedAndLegacyRows(): void {
-		$this->assertSame(
-			[$this->hasher->hash('tok'), 'tok'],
-			$this->hasher->forLookup('tok')
-		);
-		$this->assertSame([], $this->hasher->forLookup(''));
+	public function testForLookupIsTheHashAlone(): void {
+		$this->assertSame($this->hasher->hash('tok'), $this->hasher->forLookup('tok'));
+		$this->assertNull($this->hasher->forLookup(''));
 	}
 
 	/**
@@ -55,7 +52,7 @@ class SecretHasherTest extends TestCase {
 	public function testTheStoredHashIsNotAcceptedAsAPresentedSecret(): void {
 		$stored = $this->hasher->hash('tok');
 
-		$this->assertSame([], $this->hasher->forLookup($stored));
+		$this->assertNull($this->hasher->forLookup($stored));
 		$this->assertFalse($this->hasher->matches($stored, $stored));
 	}
 

@@ -49,7 +49,7 @@ class DocumentInterfaceTest extends ActivityPubTestCase {
 		$this->cacheDocumentsRequest = $this->createMock(CacheDocumentsRequest::class);
 
 		$this->handler = new DocumentInterface(
-			$this->cacheDocumentService, $this->cacheDocumentsRequest, new NullLogger()
+			$this->cacheDocumentService, $this->cacheDocumentsRequest, $this->configService, new NullLogger()
 		);
 	}
 
@@ -152,6 +152,129 @@ class DocumentInterfaceTest extends ActivityPubTestCase {
 		$this->cacheDocumentService->expects($this->never())->method('saveRemoteFileToCache');
 
 		$this->handler->save($document);
+	}
+
+	/**
+	 * A peer names the id of a local user's upload as its attachment's: the
+	 * row is the upload's, and the incoming document becomes a new one.
+	 */
+	public function testARemoteAttachmentCannotRewriteALocalDocument(): void {
+		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');
+		$stored = new Document();
+		$stored->setId(self::LOCAL_URL . '/documents/local/upload');
+		$stored->setAccount('alice');
+		$stored->setParentId(self::LOCAL_URL . '/users/alice/statuses/1');
+		$stored->setLocalCopy('alices-picture');
+		$this->cacheDocumentsRequest->method('getById')->willReturnCallback(
+			static fn (string $id): Document => ($id === $stored->getId())
+				? $stored : throw new CacheDocumentDoesNotExistException()
+		);
+		$this->cacheDocumentsRequest->method('getByUrlAndParent')
+			->willThrowException(new CacheDocumentDoesNotExistException());
+		$incoming = new Document($note);
+		$incoming->setUrlCloud(self::LOCAL_URL);
+		$incoming->setId($stored->getId());
+		$incoming->setUrl(self::REMOTE_URL . '/media/evil.png');
+
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+		$this->cacheDocumentsRequest->expects($this->once())->method('save')
+			->with($this->identicalTo($incoming));
+
+		$this->handler->save($incoming);
+
+		$this->assertNotSame($stored->getId(), $incoming->getId());
+		$this->assertStringStartsWith(self::LOCAL_URL . '/documents/g/', $incoming->getId());
+		$this->assertSame('', $incoming->getLocalCopy());
+	}
+
+	/** Nor a picture that belongs to a third server's post. */
+	public function testARemoteAttachmentCannotRewriteAnotherHostsDocument(): void {
+		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');
+		$stored = new Document();
+		$stored->setId('https://third.example/media/9');
+		$stored->setParentId('https://third.example/notes/9');
+		$stored->setLocalCopy('carols-picture');
+		$this->cacheDocumentsRequest->method('getById')->willReturnCallback(
+			static fn (string $id): Document => ($id === $stored->getId())
+				? $stored : throw new CacheDocumentDoesNotExistException()
+		);
+		$this->cacheDocumentsRequest->method('getByUrlAndParent')
+			->willThrowException(new CacheDocumentDoesNotExistException());
+		$incoming = new Document($note);
+		$incoming->setId($stored->getId());
+		$incoming->setUrl(self::REMOTE_URL . '/media/evil.png');
+
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+		$this->cacheDocumentsRequest->expects($this->once())->method('save');
+
+		$this->handler->save($incoming);
+
+		$this->assertStringStartsWith(self::LOCAL_URL . '/documents/g/', $incoming->getId());
+	}
+
+	/**
+	 * An attachment without an id of its own is found by url and parent; a
+	 * post that claims a local post's id cannot reach that post's files that
+	 * way either.
+	 */
+	public function testARemoteAttachmentCannotReachALocalPostsDocumentByUrl(): void {
+		$this->cacheDocumentsRequest->method('getById')->willThrowException(new CacheDocumentDoesNotExistException());
+		$note = $this->note(self::LOCAL_URL . '/users/alice/statuses/1', self::LOCAL_URL . '/users/alice');
+		$stored = new Document();
+		$stored->setId(self::LOCAL_URL . '/documents/local/upload');
+		$stored->setParentId($note->getId());
+		$stored->setUrl(self::LOCAL_URL . '/media/upload.png');
+		$this->cacheDocumentsRequest->method('getByUrlAndParent')->willReturn($stored);
+		$incoming = new Document($note);
+		$incoming->setUrlCloud(self::LOCAL_URL);
+		$incoming->setId(self::LOCAL_URL . '/documents/g/new-id');
+		$incoming->setUrl($stored->getUrl());
+
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
+
+		$this->handler->save($incoming);
+
+		$this->assertNotSame($stored->getId(), $incoming->getId());
+	}
+
+	/** The server whose attachment it is re-sends it, on an `Update`: written. */
+	public function testTheSameHostReSendingItsOwnAttachmentUpdatesIt(): void {
+		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');
+		$stored = new Document();
+		$stored->setId(self::DOCUMENT);
+		$stored->setParentId($note->getId());
+		$stored->setNid(42);
+		$stored->setLocalCopy('bobs-picture');
+		$this->cacheDocumentsRequest->method('getById')->with(self::DOCUMENT)->willReturn($stored);
+		$incoming = new Document($note);
+		$incoming->setId(self::DOCUMENT);
+		$incoming->setUrl(self::REMOTE_URL . '/media/1.png');
+		$incoming->setDescription('now described');
+
+		$this->cacheDocumentsRequest->expects($this->once())->method('update')
+			->with($this->identicalTo($incoming));
+		$this->cacheDocumentsRequest->expects($this->never())->method('save');
+
+		$this->handler->save($incoming);
+
+		$this->assertSame(self::DOCUMENT, $incoming->getId());
+		$this->assertSame('bobs-picture', $incoming->getLocalCopy());
+	}
+
+	/** ... or re-uses it on another post of its own. */
+	public function testTheSameHostReUsingItsAttachmentOnAnotherPostUpdatesIt(): void {
+		$stored = new Document();
+		$stored->setId(self::DOCUMENT);
+		$stored->setParentId(self::REMOTE_URL . '/notes/1');
+		$this->cacheDocumentsRequest->method('getById')->willReturn($stored);
+		$incoming = new Document($this->note(self::REMOTE_URL . '/notes/2', self::REMOTE_URL . '/users/bob'));
+		$incoming->setId(self::DOCUMENT);
+		$incoming->setUrl(self::REMOTE_URL . '/media/1.png');
+
+		$this->cacheDocumentsRequest->expects($this->once())->method('update');
+		$this->cacheDocumentsRequest->expects($this->never())->method('save');
+
+		$this->handler->save($incoming);
 	}
 
 	/**

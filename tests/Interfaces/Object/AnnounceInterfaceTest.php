@@ -23,6 +23,7 @@ use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\MiscService;
@@ -237,15 +238,16 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->noStoredAction();
 		$post = $this->post(true, 1);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->actionsRequest->method('countActions')->with(self::POST, Announce::TYPE)->willReturn(2);
 		$announce = $this->incomingAnnounce();
 
 		$this->actionsRequest->expects($this->once())->method('save')->with($this->identicalTo($announce));
-		$this->streamRequest->expects($this->once())->method('updateDetails')->with($this->identicalTo($post));
+		// recounted in the statement that stores it, never written as a number
+		// counted beforehand: see StreamRecountTest
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($post), Details::BOOSTS);
+		$this->streamRequest->expects($this->never())->method('updateDetails');
 
 		$this->handler->processIncomingRequest($announce);
-
-		$this->assertSame(3, $post->getDetailInt('boosts'));
 	}
 
 	public function testBoostOfALocalPostNotifiesItsAuthor(): void {
@@ -286,7 +288,7 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->noStoredAction();
 		$this->streamRequest->method('getStreamById')->willReturn($this->post(false));
 
-		$this->streamRequest->expects($this->once())->method('updateDetails');
+		$this->streamRequest->expects($this->once())->method('recount');
 		$this->notificationInterface->expects($this->never())->method('save');
 		$this->notificationInterface->expects($this->never())->method('update');
 
@@ -300,7 +302,7 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->streamRequest->method('getStreamById')->willReturn($this->post());
 
 		$this->actionsRequest->expects($this->never())->method('save');
-		$this->streamRequest->expects($this->once())->method('updateDetails');
+		$this->streamRequest->expects($this->once())->method('recount');
 
 		$this->handler->processIncomingRequest($announce);
 	}
@@ -324,7 +326,7 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->streamRequest->expects($this->never())->method('save');
 		$this->streamQueueService->expects($this->never())->method('generateStreamQueue');
 		$this->actionsRequest->expects($this->never())->method('save');
-		$this->streamRequest->expects($this->never())->method('updateDetails');
+		$this->streamRequest->expects($this->never())->method('recount');
 		$this->notificationInterface->expects($this->never())->method('save');
 
 		$this->handler->processIncomingRequest($this->incomingAnnounce());
@@ -355,7 +357,7 @@ class AnnounceInterfaceTest extends ActivityPubTestCase {
 		$this->streamRequest->expects($this->once())->method('deleteById')->with($known->getId(), Announce::TYPE);
 		$this->streamRequest->expects($this->never())->method('update');
 		$this->actionsRequest->expects($this->once())->method('delete')->with($this->identicalTo($announce));
-		$this->streamRequest->expects($this->once())->method('updateDetails');
+		$this->streamRequest->expects($this->once())->method('recount');
 		$this->notificationInterface->expects($this->once())->method('delete')->with($this->identicalTo($notification));
 
 		$this->handler->activity($undo, $announce);

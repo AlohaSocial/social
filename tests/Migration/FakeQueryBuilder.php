@@ -31,6 +31,8 @@ class FakeQueryBuilder {
 	public ?string $orderBy = null;
 	public ?int $maxResults = null;
 	public int $statements = 0;
+	/** Whether this builder is a DELETE rather than a select or an update. */
+	public bool $deletes = false;
 	/** @var array<array<string, mixed>> what executeQuery() handed back */
 	public array $rows = [];
 
@@ -60,6 +62,13 @@ class FakeQueryBuilder {
 
 	public function update($table = null, $alias = null): self {
 		$this->table = (string)$table;
+
+		return $this;
+	}
+
+	public function delete($table = null, $alias = null): self {
+		$this->table = (string)$table;
+		$this->deletes = true;
 
 		return $this;
 	}

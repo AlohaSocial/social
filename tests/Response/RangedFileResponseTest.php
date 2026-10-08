@@ -107,6 +107,7 @@ class RangedFileResponseTest extends TestCase {
 
 		$this->assertSame('nosniff', $response->getHeaders()['X-Content-Type-Options']);
 		$this->assertSame('attachment', $response->getHeaders()['Content-Disposition']);
+		$this->assertStringStartsWith('sandbox', $response->getHeaders()['Content-Security-Policy']);
 	}
 
 	public static function downloadTypeProvider(): array {

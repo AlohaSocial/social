@@ -546,7 +546,9 @@ the server. Server settings and Relays are the exception — neither is rendered
 delegate and their endpoints refuse them, because what they hold is a decision
 about the server rather than about a report: a relay changes what every
 federated timeline here holds and where every public post written here is
-sent.
+sent. A delegate cannot act on a Nextcloud administrator's account, and
+nobody — administrator or delegate — can silence, suspend, lift or purge their
+own.
 
 ---
 
@@ -777,6 +779,7 @@ the moderation routes accept.
 | `media_usage` | *(written by the job)* | The last measurement of what is on disk, as JSON with the moment it was taken. Bookkeeping, not a setting: the walk is a `stat` per stored file and belongs in the cron, so the administration page reads this rather than counting on page load. |
 | `directory_known` | *(written by the job)* | What `Cron\Cache` last found out about the servers the Discover page may ask: the `fediverse.info` server list and each federated peer's NodeInfo software, as JSON with when each was read. Bookkeeping, not a setting: the page reads this rather than asking those servers while somebody waits. |
 | `polls_swept` | `0` | How far the closed-poll sweep has got, as a timestamp. |
+| `stream_author_hosts_filled` | `0` | Set to `1` by `Cron\StreamAuthorHosts` once every post carries the host of its author in `social_stream.author_host`. Until then the domain-block and silenced-instance filters also match a post by its actor id, which is slower. Bookkeeping, not a setting. |
 | `story_secret` | *(generated)* | The secret a 24-hour short's fetch capability (the bearcap Pixelfed fetches it with) is derived from, made the first time one is published. Changing it invalidates every outstanding capability at once, which is the only revocation it needs: a 24-hour short lives a day. Never set this by hand. |
 
 ### Server settings
@@ -798,7 +801,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `video_max_height` | `1080` | The tallest a converted video is written, 240–2160. Only smaller, never larger: a 480p video is left at 480p. Only consulted when `video_transcode` is on. |
 | `video_ladder` | `0` | Whether each stored MP4 is **also** written at a ladder of smaller sizes, as HLS, so a player can pick the one that fits the connection. A different question from `video_transcode`, which is about a video being playable at all elsewhere; this is about it being watchable on a phone on a train. Off by default, because it is several ffmpeg encodes per video on this server. Each rung is one file — `-hls_flags single_file` writes the rendition as a fragmented MP4 and the playlist addresses its segments as byte ranges — so a forty-minute video is three files rather than a thousand, which is also the shape PeerTube publishes. The original is kept and is what a player without HLS falls back to. Needs ffmpeg **and** ffprobe. One video every half-hour, or `occ social:media:ladder` to work through a backlog now. Built from `video/mp4` only: a `.mov` goes through the transcoder first. |
 | `video_ladder_heights` | `360,720,1080` | Which heights, comma-separated, 144–2160. Heights at or above a video's own are skipped rather than upscaled, and the video's own height is always a rung, so the best rung is never worse than the file beside it. A list with nothing usable in it is refused by the admin card rather than silently replaced with the default. Only consulted when `video_ladder` is on. |
-| `search_window_days` | `365` | How far back a content search looks. `content ILIKE '%term%'` cannot use an index — a leading wildcard never can — so an unbounded search reads every post the instance has ever stored, joined to seven other tables, **on every keystroke**; at ten million rows that is a table scan with the rate limit as the only defence. A year covers what anybody is looking for. `0` searches everything, which an instance small enough can afford to say. |
+| `search_window_days` | `365` | How far back a content search scans while it cannot use its word index: before `Cron\SearchIndex` has indexed the posts stored before the upgrade (until `search_index_ready` is `1`), and for a query that is only the beginning of a word. Such a search is a range rather than one indexed word, and unbounded it reads every post the instance has ever stored; a year covers what anybody is looking for. `0` searches everything, which an instance small enough can afford to say. A search for whole words reads the index and is not bounded by this. |
 | `local_actor_cursor` | `''` | Bookkeeping, not a setting: where the cron's local-account refresh walk got to. It used to read every local account into memory on every pass; it pages now, and this is what makes the next pass carry on rather than start again. |
 | `profile_link_cursor` | `''` | Bookkeeping, not a setting: where the cron's walk over the local accounts whose profile fields carry a link got to, so the next pass checks the next ones. |
 | `video_quota` | `0` | How many megabytes of video **one account** may keep here; `0` is no quota, which is what every instance has in effect today. A different question from `max_video_size`, which is a ceiling on one file: that is about a single request, this about a year of them. Off by default because an instance that has been running without a quota and acquires one on upgrade would start refusing uploads from exactly the accounts that use it most. Checked once, where an upload is written, against the size recorded on each stored file — so a video uploaded before this app recorded sizes counts as nothing until the daily usage job has been past it, which fills the column in as it walks. The **ladders this server builds do not count against it**: they are made because an administrator asked for them, are several times the size of the upload, and would turn a quota somebody was told about into one several times smaller. They are counted in what an administrator is shown, because they are real disk. Who is holding what is under **Administration → Aloha Social → Storage**. |
@@ -808,6 +811,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `rate_limit_user` | `900` | How many client API requests one **signed-in account** may make per window. The routes that fan out — search, the directories, the follow graph — carry limits of their own and Nextcloud enforces those; this is the budget for everything else, which was some three hundred routes with no limit at all. Generous on purpose: it exists to stop a scraper reading the whole instance at machine speed, not to pace an app. One budget for the whole API, not one per route. `0` switches it off, which is what an instance behind its own limiter wants. Federation, the internal queue and the routes that serve bytes (attachments, avatars, emoji, GIFs) are never counted — one public page is forty requests for pictures, and deliveries arrive in bursts from a handful of addresses. |
 | `rate_limit_anon` | `300` | The same budget for a caller with **no account**, counted per address. |
 | `rate_limit_window` | `300` | How long that window is, in seconds. |
+| `token_max_days` | `365` | How many days an OAuth token works from the moment it was granted, **however much it is used**. A token idle for a year stops working anyway; this is about one in use, which used to live for ever — every request kept it alive, so a token copied off a phone lived as long as whoever held the copy kept using it. Past it the app is signed out and the person signs in again; there are no refresh tokens. Each person sees when under **Settings → Authorized apps**. `0` lets a token in use live for ever. |
 | `follow_limit` | `100` | How many follows **one account** may send in an hour. A compromised account, or one running a script, can fan out follows to thousands of servers from this instance's address in a few minutes — every one a signed request this instance is answerable for. An hour rather than a day because what this catches is a burst, and high enough that importing a follow list from another server still goes through. Counted from the rows, so it holds on an instance with no memcache. `0` is no limit. |
 | `domain_media_quota` | `0` | How many megabytes of media **one other server** may keep here. Every picture on a post somebody here follows is fetched and cached, and nothing bounded that by where it came from: one server posting large images at a high rate fills the disk of every instance that follows anybody on it. The server is the host of the file's own address (its `url`), which for a Mastodon instance is often a separate media host. Counted from the figure the daily storage walk takes, plus successfully cached bytes from that host since — rejected or unreadable downloads do not spend quota. The figure is up to a day coarse and errs towards refusing early. Off by default, because an instance that has been federating for a year and acquires a quota on upgrade would start refusing the pictures of the servers it talks to most. Who is holding what is under **Administration → Aloha Social → Storage**. |
 | `secure_mode` | `0` | Refuse ActivityPub fetches that are not signed. Mastodon's secure mode. Turning it on makes this instance invisible to every peer that does not sign what it asks for, and to every anonymous reader; it is a decision about who to federate with, not a hardening step to apply by default. |
@@ -879,11 +883,12 @@ occ social:details <id>             # who can see one post and where it lands
 
 Aloha Social also repairs the recipient and hashtag side indexes automatically in
 bounded five-minute cron passes. Each pass visits at most 500 streams, stores
-its last fully indexed NID, and resumes from there; a failed row is retried on a
-later pass rather than skipped. A repeatedly failing row holds the cursor at
-that NID and logs the error, so later rows wait until the underlying failure is
-resolved. Keep Nextcloud background jobs working as `Cron\Index` relies on
-them. The manual `occ social:check:install --index --force` remains a full
+its last fully indexed NID, and resumes from there; a failed row is retried on
+the next passes, and after five failures it is logged as skipped and the walk
+moves on. Once the walk reaches the newest post the repair is complete
+(app config `index_done` = `1`) and the job does nothing more; deleting that
+key runs it again from the stored cursor. Keep Nextcloud background jobs
+working as `Cron\Index` relies on them. The manual `occ social:check:install --index --force` remains a full
 rebuild for administrators; it clears and repopulates both indexes and should
 not be scheduled as a cron command.
 
@@ -999,9 +1004,9 @@ tenfold cut in the request volume, for one app install. The polls also answer
 index probe and an empty response rather than a rendered page.
 
 **Run delivery workers.** `Cron\Queue` delivers twenty servers at a time and
-takes batch after batch for its 300 seconds: with peers that answer within a
+takes batch after batch for its 240 seconds: with peers that answer within a
 second that is up to 6,000 deliveries a run, some 30,000 an hour, and when every
-batch runs into a dead peer's 30-second timeout still about 200 a run. A peer
+batch runs into a dead peer's 30-second timeout still about 160 a run. A peer
 that fails is left alone — from a minute, doubling to an hour — and that is
 kept in the database (`social_host_breaker`), so it holds without a memcache and
 across runs: a dead server costs one timeout per wait, not one per row. An
@@ -1050,7 +1055,7 @@ interrupted during them picks up where it stopped; the first starts again from
 the beginning.
 
 Two settings exist for size and are listed above: `search_window_days` bounds
-what a content search scans, and `retention_days` bounds what cached remote
+what a content search scans when it cannot use its word index, and `retention_days` bounds what cached remote
 media costs. Both trade completeness for a bounded cost, and the default of each
 is the one a medium instance wants.
 

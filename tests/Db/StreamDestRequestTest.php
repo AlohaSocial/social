@@ -44,11 +44,13 @@ class StreamDestRequestTest extends TestCase {
 
 		$request = $this->getMockBuilder(StreamDestRequest::class)
 			->disableOriginalConstructor()
-			->onlyMethods(['create'])
+			->onlyMethods(['createRecipients'])
 			->getMock();
-		$request->method('create')->willReturnCallback(
-			function (string $streamId, string $actorId, string $type, string $subType = '', int|string $nid = 0): void {
-				$this->rows[] = [$actorId, $type, $subType];
+		$request->method('createRecipients')->willReturnCallback(
+			function (string $streamId, array $recipients, int|string $nid = 0): void {
+				foreach ($recipients as $actorId => [$type, $subType]) {
+					$this->rows[] = [(string)$actorId, $type, $subType];
+				}
 			}
 		);
 		(new ReflectionProperty(StreamDestRequest::class, 'cacheActorsRequest'))->setValue($request, $this->cacheActorsRequest);

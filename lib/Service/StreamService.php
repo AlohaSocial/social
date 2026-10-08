@@ -84,6 +84,7 @@ class StreamService {
 		private MediaTagsRequest $mediaTagsRequest,
 		private AccountService $accountService,
 		private ChannelService $channelService,
+		private ?RemoteFetchQueue $remoteFetchQueue = null,
 	) {
 	}
 
@@ -747,6 +748,12 @@ class StreamService {
 	 * name under a photograph is not part of the wire object. On the wire the
 	 * names are `Mention` tags, which is where a peer looks for them.
 	 *
+	 * The people are read from the actor cache only, in one query: a page is
+	 * being built, and fetching an uncached person from their server here
+	 * held the whole timeline for that server's timeout. Somebody not cached
+	 * is left out of this page and fetched in the background
+	 * (`RemoteFetchQueue`), so the next page that shows the picture names them.
+	 *
 	 * @param Stream[] $posts
 	 */
 	public function attachTaggedPeople(array $posts): void {
@@ -762,31 +769,27 @@ class StreamService {
 			return;
 		}
 
-		$people = [];
+		$wanted = [];
+		foreach ($posts as $post) {
+			foreach ($tags[$post->getNid()] ?? [] as $actorId) {
+				$wanted[$actorId] = $actorId;
+			}
+		}
+
+		$people = $this->cacheActorService->getCachedFromIds(array_values($wanted));
+		foreach ($people as $person) {
+			$person->setExportFormat(ACore::FORMAT_LOCAL);
+		}
+		$this->remoteFetchQueue?->resolveActors(array_values(array_diff_key($wanted, $people)));
+
 		foreach ($posts as $post) {
 			$named = [];
 			foreach ($tags[$post->getNid()] ?? [] as $actorId) {
-				if (!array_key_exists($actorId, $people)) {
-					$people[$actorId] = $this->taggedPerson($actorId);
-				}
-				if ($people[$actorId] !== null) {
+				if (isset($people[$actorId])) {
 					$named[] = $people[$actorId];
 				}
 			}
 			$post->setTaggedPeople($named);
-		}
-	}
-
-	private function taggedPerson(string $actorId): ?Person {
-		try {
-			$person = $this->cacheActorService->getFromId($actorId);
-			$person->setExportFormat(ACore::FORMAT_LOCAL);
-
-			return $person;
-		} catch (Exception $e) {
-			// somebody this server cannot name any more is left out rather
-			// than drawn as a blank
-			return null;
 		}
 	}
 

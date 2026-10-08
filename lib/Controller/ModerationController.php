@@ -15,6 +15,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
 use OCA\Social\Db\TrendReviewRequest;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Report;
@@ -89,6 +90,20 @@ class ModerationController extends Controller {
 	}
 
 	/**
+	 * A 403 when the signed-in moderator may not act on this account, which
+	 * is `AdminApiService::assertMayActOn()`'s rule; null when they may.
+	 */
+	private function refusal(string $actorId): ?DataResponse {
+		try {
+			$this->adminApiService->assertMayActOn($actorId, $this->moderatorName());
+		} catch (ModerationNotAllowedException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+		}
+
+		return null;
+	}
+
+	/**
 	 * Silences or suspends an account, or lifts whatever stands against it.
 	 *
 	 * @param string $actorId the account
@@ -101,6 +116,11 @@ class ModerationController extends Controller {
 		$actorId = trim($actorId);
 		if ($actorId === '') {
 			return new DataResponse(['error' => 'no account given'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$refused = $this->refusal($actorId);
+		if ($refused !== null) {
+			return $refused;
 		}
 
 		if ($level === '') {
@@ -392,6 +412,11 @@ class ModerationController extends Controller {
 		$actorId = trim($actorId);
 		if ($actorId === '') {
 			return new DataResponse(['error' => 'no account given'], Http::STATUS_BAD_REQUEST);
+		}
+
+		$refused = $this->refusal($actorId);
+		if ($refused !== null) {
+			return $refused;
 		}
 
 		$this->moderationService->forceSensitive($actorId, $sensitive);

@@ -25,13 +25,15 @@ use PHPUnit\Framework\TestCase;
 class StreamReadPredicatesTest extends TestCase {
 	/**
 	 * Where a stream read may be written. `StreamRequest` is one class across
-	 * two files — the timelines are a trait — so a method is looked for in
-	 * both rather than in whichever one it happened to be in when the test was
-	 * written.
+	 * several files — each concern is a trait — so a method is looked for in
+	 * all of them rather than in whichever one it happened to be in when the
+	 * test was written.
 	 */
 	private const SOURCE = [
 		__DIR__ . '/../../lib/Db/StreamRequest.php',
 		__DIR__ . '/../../lib/Db/StreamTimelines.php',
+		__DIR__ . '/../../lib/Db/StreamThreads.php',
+		__DIR__ . '/../../lib/Db/StreamStatistics.php',
 	];
 	private const TAGS_SOURCE = [__DIR__ . '/../../lib/Db/StreamTagsRequest.php'];
 

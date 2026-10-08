@@ -99,6 +99,51 @@ class CacheActorServiceTest extends TestCase {
 		$this->assertSame($bob, $this->service->getFromId(self::BOB . '#main-key'));
 	}
 
+	public function testGetFromIdAsksTheDatabaseOnceForTheSameActor(): void {
+		$bob = $this->person(self::BOB);
+		$this->cacheActorsRequest->expects($this->once())->method('getFromId')->willReturn($bob);
+
+		$this->service->getFromId(self::BOB);
+		$this->assertSame($bob, $this->service->getFromId(self::BOB));
+	}
+
+	/**
+	 * cron.php is one process for every job it runs, so the memo is held to
+	 * MEMO_LIMIT and gives up the least recently used actor first.
+	 */
+	public function testTheMemoForgetsTheLeastRecentlyUsedActorPastItsLimit(): void {
+		$asked = [];
+		$this->cacheActorsRequest->method('getFromId')
+			->willReturnCallback(function (string $id) use (&$asked): Person {
+				$asked[] = $id;
+
+				return $this->person($id);
+			});
+
+		$this->service->getFromId('https://remote.example/users/0');
+		$this->service->getFromId('https://remote.example/users/1');
+		for ($i = 2; $i <= CacheActorService::MEMO_LIMIT; $i++) {
+			$this->service->getFromId('https://remote.example/users/' . $i);
+			// /0 is used all along and stays; /1 is the stalest when the limit is passed
+			$this->service->getFromId('https://remote.example/users/0');
+		}
+
+		$asked = [];
+		$this->service->getFromId('https://remote.example/users/0');
+		$this->service->getFromId('https://remote.example/users/1');
+
+		$this->assertSame(['https://remote.example/users/1'], $asked);
+	}
+
+	public function testForgettingTheMemoReadsTheActorAgain(): void {
+		$this->cacheActorsRequest->expects($this->exactly(2))->method('getFromId')
+			->willReturn($this->person(self::BOB));
+
+		$this->service->getFromId(self::BOB);
+		$this->service->forgetMemoised();
+		$this->service->getFromId(self::BOB);
+	}
+
 	/** a route answered to anybody is not a reason to go and fetch an actor */
 	public function testResolveDoesNotFetchAnUnknownUrlByDefault(): void {
 		$this->cacheActorsRequest->method('getFromIds')->willReturn([]);

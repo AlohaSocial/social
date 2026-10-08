@@ -43,6 +43,9 @@ class SocialCoreQueryBuilder extends ExtendedQueryBuilder {
 	 */
 	private array $blockedDomains = [];
 
+	/** Whether every `social_stream` row carries its `author_host`; see `filterDomainBlocked()`. */
+	private bool $authorHostsFilled = false;
+
 	public function __construct(
 		IQueryBuilder $queryBuilder,
 		protected IURLGenerator $urlGenerator,
@@ -81,6 +84,14 @@ class SocialCoreQueryBuilder extends ExtendedQueryBuilder {
 	/** @return string[] the instances the viewer has blocked */
 	public function blockedDomains(): array {
 		return $this->blockedDomains;
+	}
+
+	public function setAuthorHostsFilled(bool $filled): void {
+		$this->authorHostsFilled = $filled;
+	}
+
+	public function authorHostsAreFilled(): bool {
+		return $this->authorHostsFilled;
 	}
 
 	public function prim(string $id): string {

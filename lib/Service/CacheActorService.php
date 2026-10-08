@@ -62,9 +62,15 @@ class CacheActorService {
 	 * response, which is what makes it safe: nothing can change underneath it
 	 * that this request would have seen anyway.
 	 *
+	 * Held to MEMO_LIMIT entries, the least recently used going first, because
+	 * cron.php and `social:worker` are one "request" for as long as they run.
+	 *
 	 * @var array<string, Person>
 	 */
 	private array $memo = [];
+
+	/** The most actors `$memo` holds; far more than one page of posts names. */
+	public const MEMO_LIMIT = 500;
 
 	use TArrayTools;
 
@@ -123,7 +129,12 @@ class CacheActorService {
 		// this is not a cache with a lifetime, it is the same answer to the
 		// same question inside one response.
 		if (!$refresh && array_key_exists($id, $this->memo)) {
-			return $this->memo[$id];
+			$actor = $this->memo[$id];
+			// moved to the end, so the eviction below takes the stalest
+			unset($this->memo[$id]);
+			$this->memo[$id] = $actor;
+
+			return $actor;
 		}
 
 		try {
@@ -162,7 +173,11 @@ class CacheActorService {
 			}
 		}
 
+		unset($this->memo[$id]);
 		$this->memo[$id] = $actor;
+		if (count($this->memo) > self::MEMO_LIMIT) {
+			unset($this->memo[array_key_first($this->memo)]);
+		}
 
 		return $actor;
 	}
@@ -204,9 +219,11 @@ class CacheActorService {
 	/**
 	 * Forgets the memoised actors.
 	 *
-	 * For the long-running processes — `social:worker`, the cron — where "one
-	 * request" is not a bound at all and an unbounded map is a leak. Every
-	 * short-lived request throws the whole object away instead.
+	 * For the long-running processes — `social:worker`, `Cron\Queue` and
+	 * `Cron\Cache` — between batches: the memo is bounded, but an actor held
+	 * from an earlier batch would hide a key rotation or a profile change the
+	 * database has since seen. Every short-lived request throws the whole
+	 * object away instead.
 	 */
 	public function forgetMemoised(): void {
 		$this->memo = [];

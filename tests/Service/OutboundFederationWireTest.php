@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Report;
 use OCA\Social\Model\RequestQueue;
+use OCA\Social\Security\AsyncRequestSigner;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\BlurService;
 use OCA\Social\Service\CacheActorService;
@@ -47,6 +48,7 @@ use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\ITempManager;
 use OCP\IURLGenerator;
+use OCP\Security\ICrypto;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
@@ -162,6 +164,7 @@ class OutboundFederationWireTest extends TestCase {
 			$clientService,
 			$this->httpSignatureService(),
 			new NullLogger(),
+			new AsyncRequestSigner($this->createStub(ICrypto::class)),
 		);
 	}
 
@@ -181,6 +184,7 @@ class OutboundFederationWireTest extends TestCase {
 			$cacheFactory,
 			new NullLogger(),
 			$this->createStub(DurableCache::class),
+			$this->createStub(FediverseService::class),
 		);
 	}
 
@@ -609,7 +613,7 @@ class OutboundFederationWireTest extends TestCase {
 
 		$options = $this->onlyRequest()['options'];
 		$this->assertSame(ActivityService::TIMEOUT_LIVE, $options['timeout']);
-		$this->assertSame(ActivityService::TIMEOUT_LIVE, $options['connect_timeout'], 'no separate budget was asked for');
+		$this->assertSame(ActivityService::TIMEOUT_LIVE, $options['connect_timeout'], 'the connect budget is capped by the row\'s timeout');
 	}
 
 	/** A bounded call overrides it, connect budget and all. */
@@ -634,7 +638,7 @@ class OutboundFederationWireTest extends TestCase {
 
 		$options = $this->onlyRequest()['options'];
 		$this->assertSame(10, $options['timeout']);
-		$this->assertSame(10, $options['connect_timeout']);
+		$this->assertSame(ConfigService::DEFAULT_CONNECT_TIMEOUT, $options['connect_timeout']);
 	}
 
 	/** An answer larger than the `max_size` app setting is refused rather than read. */

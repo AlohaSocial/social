@@ -29,6 +29,7 @@ use OCA\Social\Service\SuggestionService;
 use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TrendService;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -245,6 +246,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/stories/seen')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/seen', postfix: 'pf')]
@@ -297,6 +299,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.2/stories/react')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/react', postfix: 'pf')]
@@ -324,6 +327,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.2/stories/comment')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/stories/comment', postfix: 'pf')]
@@ -352,6 +356,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/compose/tag')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/compose/tag', postfix: 'pf')]
@@ -377,6 +382,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/compose/tag/untagme')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/compose/tag/untagme', postfix: 'pf')]
@@ -453,6 +459,7 @@ class PixelfedController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/portfolio')]
 	public function portfolioSave(
@@ -626,6 +633,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 30, period: 3600)]
 	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/report')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/report', postfix: 'pf')]
@@ -665,7 +673,9 @@ class PixelfedController extends ClientApiController {
 	 *
 	 * GET and POST on one method because the app uses one URL for both, and
 	 * a POST with no `common` is a read — which is what the app sends when it
-	 * wants to know what is stored without changing it.
+	 * wants to know what is stored without changing it. Storing is a write to
+	 * the account, so it needs the scope that says so; a token that may only
+	 * read could otherwise turn content warnings off in somebody's app.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -673,8 +683,8 @@ class PixelfedController extends ClientApiController {
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/app/settings', postfix: 'store')]
 	public function appSettings(): DataResponse {
 		try {
-			$this->initViewer(['read']);
 			$common = $this->request->getParam('common');
+			$this->initViewer(is_array($common) ? ['write:accounts'] : ['read']);
 
 			return new DataResponse(
 				is_array($common)
@@ -777,11 +787,29 @@ class PixelfedController extends ClientApiController {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1.1/push/state')]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/disable', postfix: 'disable')]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/update', postfix: 'update')]
 	public function pushState(): DataResponse {
 		try {
 			$this->initViewer(['read']);
+
+			return new DataResponse($this->pixelfedService->pushState($this->viewer()), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Turning push off or on. Nothing is stored, since there is no push here
+	 * to switch, but these are the app's requests to change the account and
+	 * are held to the scope a change needs, as Mastodon holds its own push
+	 * subscription to `push`.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/disable', postfix: 'disable')]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/update', postfix: 'update')]
+	public function pushChange(): DataResponse {
+		try {
+			$this->initViewer(['write:accounts', 'push']);
 
 			return new DataResponse($this->pixelfedService->pushState($this->viewer()), Http::STATUS_OK);
 		} catch (Throwable $e) {
@@ -833,6 +861,7 @@ class PixelfedController extends ClientApiController {
 
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/direct/thread/send')]
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/direct/thread/send', postfix: 'pf')]

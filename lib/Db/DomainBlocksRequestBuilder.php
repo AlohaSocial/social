@@ -12,6 +12,7 @@ namespace OCA\Social\Db;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\DB\QueryBuilder\ICompositeExpression;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /**
  * Class DomainBlocksRequestBuilder
@@ -28,6 +29,48 @@ class DomainBlocksRequestBuilder extends CoreRequestBuilder {
 	 * host cannot be matched half way through.
 	 */
 	public const SCHEMES = ['https://', 'http://'];
+
+	/**
+	 * The width of `social_stream.author_host`: what MySQL can index whole in
+	 * utf8mb4. A longer host is stored cut to it, and every host it is
+	 * compared with is cut the same way (`hostsToMatch()`), so the two still
+	 * meet.
+	 */
+	public const AUTHOR_HOST_LENGTH = 191;
+
+	/**
+	 * The host of an actor id as `social_stream.author_host` stores it:
+	 * lower case, without scheme or port, at most `AUTHOR_HOST_LENGTH` long.
+	 * `''` for an id with no host, or one that is not plain ASCII — an actor
+	 * id spells an internationalised host in punycode, and a domain block is
+	 * stored that way too.
+	 */
+	public static function authorHostOf(string $actorId): string {
+		$host = parse_url($actorId, PHP_URL_HOST);
+		if (!is_string($host) || $host === '' || preg_match('/[^\x21-\x7e]/', $host) === 1) {
+			return '';
+		}
+
+		return substr(strtolower($host), 0, self::AUTHOR_HOST_LENGTH);
+	}
+
+	/**
+	 * Domains as `author_host` would hold them, each once.
+	 *
+	 * @param string[] $domains
+	 * @return string[]
+	 */
+	public static function hostsToMatch(array $domains): array {
+		$hosts = [];
+		foreach ($domains as $domain) {
+			$host = substr(strtolower(trim($domain)), 0, self::AUTHOR_HOST_LENGTH);
+			if ($host !== '') {
+				$hosts[$host] = true;
+			}
+		}
+
+		return array_keys($hosts);
+	}
 
 	/**
 	 * The columns a domain block is applied to: the author of the row, and the
@@ -50,34 +93,28 @@ class DomainBlocksRequestBuilder extends CoreRequestBuilder {
 	/**
 	 * Hides every post whose author is on an instance the viewer has blocked.
 	 *
-	 * One LEFT JOIN anti-join against the viewer's own rows, the same shape
-	 * `filterHiddenActors()` uses for blocked and muted accounts — and called
-	 * from it, so that a domain block reaches every timeline, thread and
-	 * notification list a per-account block reaches, and reaches all of them at
-	 * once.
+	 * Called from `filterHiddenActors()`, so that a domain block reaches every
+	 * timeline, thread and notification list a per-account block reaches, and
+	 * reaches all of them at once.
 	 *
-	 * A domain is matched against the *host of the author's actor id*, because
-	 * that is the one form of the author's instance every row involved already
-	 * carries: `social_stream.attributed_to` is the full actor uri, so this
-	 * needs no join to the actor cache to find out where a post came from. Two
-	 * patterns, `https://` and `http://`, each anchored at the scheme and
-	 * closed by the `/` that ends the host, so `good.example` cannot be matched
-	 * by `good.example.attacker.test` — and `domain` cannot carry a `%` or a
-	 * `_` (see `DomainBlockService::normalise()`), so nothing in the table can
-	 * widen its own pattern.
+	 * A domain is matched against `author_host`, the host of the author's
+	 * actor id that `StreamRequest::saveStream()` writes beside it: one
+	 * `NOT IN` against a short indexed column, however many instances the
+	 * viewer has blocked. It used to be two `LIKE` patterns per domain —
+	 * anchored at the scheme and closed by the `/` that ends the host — on
+	 * `LOWER(attributed_to)`, an unindexed text column, so an imported
+	 * blocklist of a hundred domains put four hundred of them on every
+	 * candidate row of every timeline read.
+	 *
+	 * Those patterns are still what a row is matched by while
+	 * `Cron\StreamAuthorHosts` has not reached it (its `author_host` is
+	 * NULL until then); once the job has filled in every row it sets a flag,
+	 * and from then on the patterns are not built at all.
 	 *
 	 * The domains are read once and compared as **constants**, rather than
-	 * joined as a table. The join this used to be cost a `LIKE` against
-	 * `LOWER(attributed_to)` — four of them, on an unindexed text column —
-	 * evaluated against the block rows for every candidate row of every
-	 * timeline read, and it cost that whether or not the account had blocked
-	 * anything. An account that has blocked nothing now adds no clause at all;
-	 * one that has blocked something pays for its own handful of patterns and
-	 * for no join. Measured on a home timeline over 22,000 posts: 56.2 ms with
-	 * the join, 41.5 ms without it.
-	 *
-	 * The list is read through a per-request cache, so several filtered
-	 * queries in one request — a timeline and its thread, say — read it once.
+	 * joined as a table, and through a per-request cache, so several filtered
+	 * queries in one request — a timeline and its thread, say — read them
+	 * once. An account that has blocked nothing adds no clause at all.
 	 *
 	 * @param string $announceAlias the alias the boosted row is joined under —
 	 *                              a boost's own author is the booster, so
@@ -99,34 +136,67 @@ class DomainBlocksRequestBuilder extends CoreRequestBuilder {
 
 		$expr = $qb->expr();
 		$pf = $qb->getDefaultSelectAlias();
+		$hosts = $qb->createNamedParameter(self::hostsToMatch($domains), IQueryBuilder::PARAM_STR_ARRAY);
+		$filled = $qb->authorHostsAreFilled();
 
 		foreach (self::authorColumns($pf, $announceAlias) as $author) {
+			$alias = substr($author, 0, (int)strrpos($author, '.'));
+			$host = $alias . '.author_host';
+			$notOnIt = $expr->notIn($host, $hosts);
+
 			// the boosted row is joined LEFT, so its author is NULL on every
-			// post that is not a boost. `NOT (NULL LIKE …)` is NULL, which
-			// would drop those rows, so a missing author is explicitly allowed
+			// post that is not a boost. `NULL NOT IN (…)` is NULL, which would
+			// drop those rows, so a missing author is explicitly allowed
 			$nullable = $author !== $pf . '.attributed_to';
+			if ($filled) {
+				$qb->andWhere($nullable ? $expr->orX($expr->isNull($host), $notOnIt) : $notOnIt);
 
-			foreach ($domains as $domain) {
-				try {
-					$patterns = self::domainPatterns($domain);
-				} catch (InvalidResourceException) {
-					// a row that cannot be turned into a pattern is one this
-					// filter cannot honour; leaving it out would quietly widen
-					// the timeline, so nothing is matched by it and the block
-					// simply does not apply to this read
-					continue;
-				}
+				continue;
+			}
 
-				foreach ($patterns as $pattern) {
-					$notOnIt = $expr->notLike(
-						$qb->func()->lower($author), $qb->createNamedParameter($pattern)
-					);
-					$qb->andWhere(
-						$nullable ? $expr->orX($expr->isNull($author), $notOnIt) : $notOnIt
-					);
-				}
+			$byPattern = self::notOnDomainsByPattern($qb, $author, $domains, $nullable);
+			$qb->andWhere($expr->orX(
+				$expr->andX($expr->isNotNull($host), $notOnIt),
+				($byPattern === null) ? $expr->isNull($host) : $expr->andX($expr->isNull($host), $byPattern)
+			));
+		}
+	}
+
+	/**
+	 * The pattern form of the domain block, for a row whose `author_host` has
+	 * not been filled in yet: two `NOT LIKE`s per domain on the actor id.
+	 * Null when no domain could be made a pattern, which matches nothing.
+	 *
+	 * @param string[] $domains
+	 */
+	private static function notOnDomainsByPattern(
+		SocialCoreQueryBuilder $qb, string $author, array $domains, bool $nullable,
+	): ICompositeExpression|string|null {
+		$expr = $qb->expr();
+		$clauses = [];
+		foreach ($domains as $domain) {
+			try {
+				$patterns = self::domainPatterns($domain);
+			} catch (InvalidResourceException) {
+				// a row that cannot be turned into a pattern is one this
+				// filter cannot honour; leaving it out would quietly widen
+				// the timeline, so nothing is matched by it and the block
+				// simply does not apply to this read
+				continue;
+			}
+
+			foreach ($patterns as $pattern) {
+				$clauses[] = $expr->notLike($qb->func()->lower($author), $qb->createNamedParameter($pattern));
 			}
 		}
+
+		if ($clauses === []) {
+			return null;
+		}
+
+		$all = $expr->andX(...$clauses);
+
+		return $nullable ? $expr->orX($expr->isNull($author), $all) : $all;
 	}
 
 	/**

@@ -32,6 +32,13 @@ class ClientService {
 	// looks like there is no token refresh. token must have been used in the last year.
 	public const TIME_TOKEN_TTL = 30672000; // 1y
 
+	/**
+	 * How long a registration nobody has authorized is kept. Mastodon vacuums
+	 * those after a day; a week leaves room for somebody who registered a
+	 * client and comes back to sign in with it later.
+	 */
+	public const TIME_UNUSED_APP_TTL = 604800; // 7d
+
 	// an authorization code is single-use plumbing; it expires quickly
 	public const TIME_CODE_TTL = 600; // 10m
 
@@ -70,6 +77,7 @@ class ClientService {
 		ClientRequest $clientRequest,
 		SecretHasher $secretHasher,
 		private ClientAuthRequest $clientAuthRequest,
+		private ConfigService $configService,
 	) {
 		$this->clientRequest = $clientRequest;
 		$this->secretHasher = $secretHasher;
@@ -303,6 +311,15 @@ class ClientService {
 			throw new ClientNotFoundException();
 		}
 
+		// The sliding TTL above is about a token nobody uses; this is about one
+		// somebody does. Without it a token copied off a device lived as long
+		// as whoever held the copy kept using it.
+		if ($this->expiredByAge($client)) {
+			$this->clientAuthRequest->revoke($client->getAuthId());
+
+			throw new ClientNotFoundException('the access_token has expired');
+		}
+
 		// Keep the row's last_update roughly current (at most one write per
 		// TIME_TOKEN_REFRESH), so a token in active use never reaches the TTL.
 		// The old inverted comparison only refreshed *recently written* rows, so
@@ -313,6 +330,42 @@ class ClientService {
 		}
 
 		return $client;
+	}
+
+	/**
+	 * The housekeeping `Cron\Cache` runs: authorizations idle past the TTL,
+	 * and app registrations nobody ever authorized.
+	 *
+	 * The first used to happen only when an expired token was presented, so a
+	 * token whose holder never came back stayed in the table for good; the
+	 * second is what keeps the public `POST /api/v1/apps` from filling it.
+	 *
+	 * @return int how many unused registrations were removed
+	 */
+	public function sweep(): int {
+		$this->clientAuthRequest->deprecate();
+
+		return $this->clientRequest->deleteNeverAuthorized(time() - self::TIME_UNUSED_APP_TTL);
+	}
+
+	/**
+	 * When an authorization stops working however much it is used: its grant
+	 * plus `token_max_days`, or 0 for never — with the setting at 0, or for an
+	 * authorization whose grant date is not recorded.
+	 */
+	public function expiresAt(SocialClient $client): int {
+		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_TOKEN_MAX_DAYS);
+		if ($days < 1 || $client->getAuthCreation() < 1) {
+			return 0;
+		}
+
+		return $client->getAuthCreation() + $days * 86400;
+	}
+
+	private function expiredByAge(SocialClient $client): bool {
+		$expiresAt = $this->expiresAt($client);
+
+		return $expiresAt > 0 && $expiresAt < time();
 	}
 
 	/**

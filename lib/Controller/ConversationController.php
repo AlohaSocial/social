@@ -93,14 +93,15 @@ class ConversationController extends ClientApiController {
 	 * shows a conversation as a thing of its own.
 	 *
 	 * This app's own route. Mastodon has no equivalent because its clients
-	 * mark each conversation as the reader opens it.
+	 * mark each conversation as the reader opens it. It writes, so it needs
+	 * the scope `read` and `delete` on one conversation need.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/conversations/read_all')]
 	public function readAll(): DataResponse {
 		try {
-			$this->initViewer(['read:statuses']);
+			$this->initViewer(['write:conversations']);
 
 			return new DataResponse(
 				['count' => $this->conversationService->markAllRead($this->viewer)],

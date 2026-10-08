@@ -81,7 +81,7 @@ could still be cheaper, and the schema items at the end.
 ### Transactions
 
 `StreamRequest::save()` is now one transaction: the post, its recipient rows
-and its tags go in together or not at all, and `StreamDestRequest::create()`
+and its tags go in together or not at all, and `StreamDestRequest::createRecipients()`
 raises instead of logging a failure and carrying on. It was the one place where
 a partial write was both permanent and silent — the recipient rows are what put
 a post in a timeline, so the post existed and was in nobody's.
@@ -92,8 +92,12 @@ hashtags repeat in ordinary posts — `getToAll()` returns `to` alongside
 so the same actor in `to` and `cc` collides too — and both inserts used to
 catch the violation and carry on. PostgreSQL aborts the whole transaction on
 any refused statement, so that caught violation took the commit with it and the
-post was lost. Both now use `insertIgnoreConflict()`: the database skips the
-duplicate row, nothing fails, and the raise is left to mean what it says.
+post was lost. Both now ask the database to skip the duplicate row, nothing
+fails, and the raise is left to mean what it says. The recipient rows go in as
+one statement per post (`CoreRequestBuilder::insertIgnoringConflicts()`: the
+multi-row `INSERT IGNORE` / `ON CONFLICT DO NOTHING` / `INSERT OR IGNORE` that
+`insertIgnoreConflict()` issues for one row), not one round trip per recipient
+with the post's locks held.
 
 The two places this section used to name are settled: `StreamActionsRequest::save()`
 inserts first and updates on the unique violation (`StreamActionsFlagsTest` pins
@@ -111,20 +115,22 @@ column, then `streamsByNids()` for exactly those rows
 (`tests/Db/TwoQueryTimelinesTest.php` pins the shape for the three moved last).
 What still pairs `selectDistinct('s.id')` with the full stream column set is
 the single-row lookups (`getStreamById()` and friends, which return one row and
-have nothing to deduplicate), `searchContent()`, `getDescendants()` /
+have nothing to deduplicate), `searchContent()` (which hydrates only the nids
+the word index picked, but still through the wide select), `getDescendants()` /
 `getRepliesTo()`, `getAnnouncesAndRepliesTo()`, and the `*_dep()` methods behind
-the uncalled Custom Local API routes. Of those, search and the thread walk are
-the ones worth moving next; the `_dep` ones go with their routes.
+the uncalled Custom Local API routes. Of those, the thread walk is the one worth
+moving next; the `_dep` ones go with their routes.
 
 ### Lookups that cannot use an index
 
 `DomainBlocksRequestBuilder::filterDomainBlocked()` is no longer one of them:
-the four `LIKE`s it built are now compared against constants read once per
-request, and skipped entirely for an account that has blocked nothing. They are
-still `LIKE`s on an unindexed column for an account that has blocked something,
-bounded at `CoreRequestBuilder::BLOCKED_DOMAINS_IN_A_QUERY`; storing the
-author's host in its own indexed column would make them equalities, and would
-serve the silenced-instance filter next door as well.
+the blocked domains are read once per request, skipped entirely for an account
+that has blocked nothing, and compared as one `NOT IN` against
+`social_stream.author_host`, the author's host in its own indexed column. The
+silenced-instance filter next door uses the same column. Both still carry the
+old `LIKE`s on `attributed_to` for rows whose host is NULL, until
+`Cron\StreamAuthorHosts` has filled in every row stored before the column and
+set `stream_author_hosts_filled`.
 
 
 The `*_prim` columns (md5 of the lower-cased id) exist so a lookup can be an
@@ -132,6 +138,28 @@ indexed equality. The hot paths now use them, but `ActorsRequest`'s
 `preferred_username` lookups still compare `LOWER(column)` against
 `LOWER(?)` on an unindexed column — the public ActivityPub actor endpoint and
 webfinger both land there.
+
+### Paging by offset
+
+An offset page reads and throws away every row before it, so page *n* costs
+*n* pages. Everything this app walks for itself pages on a keyset: the
+timelines on the nid, the follower and following lists on (`creation`,
+`id_prim`) through `FollowsRequest::cursorAfter()` — which is also how the
+export of both lists and the re-follow after a Move walk them. The offsets
+that are left are ones a contract outside this app asks for:
+
+- the numbered `?page=N` of the ActivityPub outbox, followers, following and
+  replies collections (`getPublicByAuthor()`, `getFollowersByActorId()`,
+  `getFollowingByActorId()`, `getPublicRepliesTo()`), because those are the
+  addresses peers already hold. Every `next` link those pages hand out is a
+  cursor, so a peer that follows them never reads by offset past the first;
+- Mastodon's `offset` on `/api/v1/trends/*` (`TrendsRequest`), where the rows
+  are a ranking over a window and the grouping, not the offset, is the cost;
+- Mastodon's `offset` on `/api/v2/search`, capped at
+  `StreamRequest::SEARCH_MAX_OFFSET`, with `max_id` the way further back.
+
+`favourited_by` and `reblogged_by` answer one page of up to 80 accounts and do
+not page at all.
 
 ### Schema shape
 
@@ -290,6 +318,7 @@ here so a reader who finds that report knows why the code no longer matches it.
 | `filterSilencedActors()` was dead code, so a silenced account was not silenced | Called from the three read paths that need it |
 | `HashtagService::manageHashtags()` ran five hydrated wide queries and one write per hashtag, and reported the same number for every window | `StreamRequest::countHashtagsInWindows()` is one grouped aggregate over the widest window, with a conditional sum per window |
 | `CacheActorsRequest::getSharedInboxes()` returned `''` for actors with no shared inbox, which the caller turned into a delivery to the host `''` | Empty values and local actors are excluded in SQL |
+| An account deletion was queued for every shared inbox ever cached, read with a `SELECT DISTINCT` over the unindexed TEXT column, dead servers included | `getSharedInboxesSeenSince()` groups on the indexed `host` and keeps servers heard from in the last 90 days; `ActivityService` drops those whose breaker is open |
 | The delivery fan-out hydrated every follower into a `Follow` with a `Person` and its details to read one string off each | `ActivityService::generateInstancePathsFollowers()` asks `FollowsRequest::getFollowerInboxes()` for one row per distinct inbox, resolved in the database — the number of *instances*, not of followers |
 | `MigrationService` re-followed on behalf of every local follower from one unbounded read | Paged at `REFOLLOW_PAGE`, bounded at `REFOLLOW_MAX` |
 | `social_actor.user_id` had no index, and it is what resolves the logged-in user's actor on every authenticated request | `Version1000Date20260912000001` adds `social_a_uid`, and the four `social_hashtag` trend columns got theirs |
@@ -302,7 +331,7 @@ here so a reader who finds that report knows why the code no longer matches it.
 | One dead instance froze the actor-cache refresh: `getRemoteActorsToUpdate()` took 50 stale rows with no order and no record of having tried, and a failed refresh wrote nothing — so the same 50 unreachable rows came back every twelve minutes and no live profile was refreshed again | Every attempt is stamped in `sync_attempt`, the oldest attempt goes first, a failure doubles the wait from an hour, and after ten failures the refresh leaves the actor alone. Nothing is deleted: the row, its followers and its posts stay, and an on-demand fetch still resets the count |
 | `Cron\Cache` had no wall-clock budget while `Cron\Queue` had one: eleven steps, two of them a request per remote actor, ran until they were done — so a handful of slow peers could hold a cron slot open past the twelve-minute interval | `MAX_DURATION` of 300 seconds, threaded through the steps and into the two loops. A skipped step is named in the log and the next run starts with it, so the tail of the list is not the part that never runs |
 | Nothing ever evicted a cached remote actor: a row was written the first time this instance saw an account and only a remote `Delete` or a domain purge removed one | `CacheActorSweepService`, bounded per cron pass, removes the ones nobody here follows, that follow nobody here, that wrote no stored post and have no pending relation, after `cache_actor_days` (180) — with their avatars. `occ social:media:usage` is what says how much that is worth |
-| `StreamRequest::save()` wrote the post, then its recipients, then its tags, outside any transaction, and the recipient insert swallowed its failure | One transaction, and `StreamDestRequest::create()` raises. A post that cannot have recipients is not stored at all, so the delivery can be retried into a clean state. The duplicate recipient and hashtag rows an ordinary post produces are skipped by the database rather than caught, which a transaction on PostgreSQL does not survive |
+| `StreamRequest::save()` wrote the post, then its recipients, then its tags, outside any transaction, and the recipient insert swallowed its failure | One transaction, and `StreamDestRequest::createRecipients()` raises. A post that cannot have recipients is not stored at all, so the delivery can be retried into a clean state. The duplicate recipient and hashtag rows an ordinary post produces are skipped by the database rather than caught, which a transaction on PostgreSQL does not survive |
 
 ## The home timeline, and one thing that did not work
 
@@ -339,10 +368,11 @@ What is left, in order of how much it would cost to try:
 
 ## What to do next
 
-1. **Move `searchContent()` and the thread walk (`getDescendants()`,
-   `getRepliesTo()`) onto `getStreamNidsSelectSql()`.** Every timeline is on it
-   now; these two are what is left of the wide `SELECT DISTINCT`, and the thread
-   walk is also the one read that is still a query per level.
+1. **Move the thread walk (`getDescendants()`, `getRepliesTo()`) onto
+   `getStreamNidsSelectSql()`.** Every timeline is on it now, and the search
+   picks its page from the word index before it hydrates; the thread walk is
+   what is left of the wide `SELECT DISTINCT`, and also the one read that is
+   still a query per level.
 2. **Retire the `*_dep()` methods with the Custom Local API routes** that call
    them (Technical-Debt.md, item 2): that removes the last wide timeline reads
    without rewriting them.

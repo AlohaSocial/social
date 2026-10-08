@@ -95,6 +95,13 @@ class ConfigService {
 	public const SOCIAL_CACHE_ACTOR_DAYS = 'cache_actor_days';
 
 	/**
+	 * Days an OAuth token lives from the moment it was granted, however much
+	 * it is used; 0 lets a token in use live for ever, as it used to. Use
+	 * keeps a token from ageing out inside this, never past it.
+	 */
+	public const SOCIAL_TOKEN_MAX_DAYS = 'token_max_days';
+
+	/**
 	 * Which of `Cron\Cache`'s steps the next pass begins with — bookkeeping,
 	 * not a setting. Written by the job when it runs out of its budget, so the
 	 * steps at the end of the list are not the ones that never run.
@@ -352,6 +359,17 @@ class ConfigService {
 	 */
 	public const SOCIAL_DEST_NID_FILLED = 'dest_nid_filled';
 
+	/**
+	 * Whether every post carries the host of its author in `author_host` yet.
+	 *
+	 * Set by `Cron\StreamAuthorHosts` when its backfill reaches the end of
+	 * the table. Until then the domain-block and silenced-instance filters
+	 * also match a row with no host by its actor id, which is the slow form
+	 * the column replaces; a flag rather than a check for NULL rows for the
+	 * reason `dest_nid_filled` gives.
+	 */
+	public const SOCIAL_STREAM_AUTHOR_HOSTS_FILLED = 'stream_author_hosts_filled';
+
 	public const SOCIAL_SEARCH_WINDOW_DAYS = 'search_window_days';
 
 	public const SOCIAL_NSFW_POLICY = 'nsfw_policy';
@@ -465,6 +483,7 @@ class ConfigService {
 		self::SOCIAL_RETENTION_DAYS => '0',
 		self::SOCIAL_NOTIFICATION_RETENTION_DAYS => '90',
 		self::SOCIAL_CACHE_ACTOR_DAYS => '180',
+		self::SOCIAL_TOKEN_MAX_DAYS => '365',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',
 		self::SOCIAL_SECURE_MODE => '0',
@@ -488,6 +507,7 @@ class ConfigService {
 		self::SOCIAL_LOCAL_ACTOR_CURSOR => '',
 		self::SOCIAL_PROFILE_LINK_CURSOR => '',
 		self::SOCIAL_DEST_NID_FILLED => '0',
+		self::SOCIAL_STREAM_AUTHOR_HOSTS_FILLED => '0',
 		self::SOCIAL_SEARCH_WINDOW_DAYS => '365',
 		self::SOCIAL_NSFW_POLICY => 'default',
 		self::SOCIAL_REVIEW_VIDEOS => '0',
@@ -523,10 +543,22 @@ class ConfigService {
 	/** Seconds a federation request may take when nobody asks for anything else. */
 	public const DEFAULT_REQUEST_TIMEOUT = 10;
 
+	/**
+	 * Seconds allowed for reaching a peer — DNS, TCP and TLS — when nobody
+	 * asks for anything else; never more than the request's own timeout.
+	 *
+	 * A live peer is reached in well under a second, and what takes longer is
+	 * almost always a host that is gone. Allowing it the whole read timeout
+	 * made every dead host cost ten seconds, or thirty from the queue, before
+	 * the breaker could hear about it; a slow peer that is there still gets
+	 * the full timeout to answer once connected.
+	 */
+	public const DEFAULT_CONNECT_TIMEOUT = 4;
+
 	/** Seconds; 0 leaves each request its own default. See withRequestTimeout(). */
 	private int $requestTimeout = 0;
 
-	/** Seconds allowed for reaching the peer alone; 0 shares $requestTimeout. */
+	/** Seconds allowed for reaching the peer alone; 0 means DEFAULT_CONNECT_TIMEOUT. */
 	private int $requestConnectTimeout = 0;
 
 	public function __construct(
@@ -1047,9 +1079,10 @@ class ConfigService {
 
 		$options = [
 			'timeout' => $timeout,
-			// reaching the peer has no budget of its own unless one was asked
-			// for, and may then use the whole read timeout
-			'connect_timeout' => ($this->requestConnectTimeout > 0) ? $this->requestConnectTimeout : $timeout,
+			'connect_timeout' => min(
+				$timeout,
+				($this->requestConnectTimeout > 0) ? $this->requestConnectTimeout : self::DEFAULT_CONNECT_TIMEOUT
+			),
 			'nextcloud' => ['allow_local_address' => $this->isLocalNetworkAllowed()],
 		];
 

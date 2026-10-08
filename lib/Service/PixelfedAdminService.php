@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use InvalidArgumentException;
 use OCA\Social\Db\InstanceStatsRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\AdminAccount;
@@ -197,14 +198,18 @@ class PixelfedAdminService {
 	 * `no_autolink` — are states an account does not have here, and
 	 * `verify_email` and `refresh_stats` are the server's.
 	 *
+	 * `$callerId` is the moderator, held to `AdminApiService::assertMayActOn()`
+	 * before anything is applied.
+	 *
 	 * @return array<string, mixed>
 	 * @throws InvalidArgumentException
 	 * @throws ItemNotFoundException
+	 * @throws ModerationNotAllowedException
 	 */
-	public function userAction(string $reference, string $action): array {
+	public function userAction(string $reference, string $action, string $callerId): array {
 		$action = strtolower(trim($action));
 		if ($action === 'delete') {
-			$account = $this->adminApiService->account($reference);
+			$account = $this->actionable($reference, $callerId);
 			$this->adminApiService->act($account, AdminApiService::ACTION_SUSPEND, 'removed from the Pixelfed admin app');
 
 			return ['status' => 200, 'msg' => 'deleted'];
@@ -216,7 +221,7 @@ class PixelfedAdminService {
 		// everything it posts sensitive. Answered as a 422 until now, which
 		// was true of the words and not of the instance.
 		if ($action === 'unlisted' || $action === 'unlist') {
-			$account = $this->adminApiService->account($reference);
+			$account = $this->actionable($reference, $callerId);
 			$this->adminApiService->act(
 				$account, AdminApiService::ACTION_SILENCE, 'unlisted from the Pixelfed admin app'
 			);
@@ -225,7 +230,7 @@ class PixelfedAdminService {
 		}
 
 		if ($action === 'cw') {
-			$account = $this->adminApiService->account($reference);
+			$account = $this->actionable($reference, $callerId);
 			$this->moderationService->forceSensitive($account->getActorId(), true);
 
 			return ['status' => 200, 'msg' => 'cw'];
@@ -236,6 +241,17 @@ class PixelfedAdminService {
 		}
 
 		throw new InvalidArgumentException('"' . $action . '" belongs to the Nextcloud server, which owns the accounts');
+	}
+
+	/**
+	 * @throws ItemNotFoundException
+	 * @throws ModerationNotAllowedException
+	 */
+	private function actionable(string $reference, string $callerId): AdminAccount {
+		$account = $this->adminApiService->account($reference);
+		$this->adminApiService->assertMayActOn($account->getActorId(), $callerId);
+
+		return $account;
 	}
 
 	/**

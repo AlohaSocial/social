@@ -12,24 +12,20 @@ namespace OCA\Social\Db;
 use DateTime;
 use DateTimeZone;
 use Exception;
-use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Announce;
-use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
-use OCA\Social\Model\Details;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\MiscService;
-use OCA\Social\Tools\Exceptions\DateTimeException;
 use OCA\Social\Tools\Model\Cache;
 use OCA\Social\Tools\Nid;
 use OCP\DB\Exception as DBException;
@@ -46,6 +42,12 @@ use Psr\Log\LoggerInterface;
 class StreamRequest extends StreamRequestBuilder {
 	use StreamTimelines;
 	use StreamInterests;
+	use StreamCounters;
+	use StreamMedia;
+	use StreamSearch;
+	use StreamThreads;
+	use StreamStatistics;
+	use StreamDeletion;
 
 	/** replies other people wrote to this account's posts */
 	public const PARTNERS_INBOUND = 1;
@@ -121,6 +123,13 @@ class StreamRequest extends StreamRequestBuilder {
 	 */
 	public const SEARCH_MAX_OFFSET = 400;
 
+	/**
+	 * How many rounds of candidates one page of a search reads before it
+	 * answers with what it has: a word common in posts the viewer cannot see
+	 * is otherwise a walk down the whole index.
+	 */
+	private const SEARCH_ROUNDS = 5;
+
 	/** Whether the recipient rows carry their post's nid yet; asked once per request. */
 	private ?bool $recipientNidsFilled = null;
 
@@ -135,14 +144,6 @@ class StreamRequest extends StreamRequestBuilder {
 
 	/** How many posts one pass of deleteByAuthor() removes. */
 	public const DELETE_BATCH = 500;
-
-	/**
-	 * How far back the closed-poll sweep reads.
-	 *
-	 * Mastodon caps a poll at six months, so a poll published longer ago than
-	 * that has closed already and is not news to anybody.
-	 */
-	public const POLL_LOOKBACK = 190 * 86400;
 
 	public function __construct(
 		IDBConnection $connection,
@@ -159,6 +160,7 @@ class StreamRequest extends StreamRequestBuilder {
 		private ConversationsRequest $conversationsRequest,
 		private RenditionsRequest $renditionsRequest,
 		private FollowsRequest $followsRequest,
+		private SearchTermsRequest $searchTermsRequest,
 	) {
 		parent::__construct($connection, $logger, $urlGenerator, $configService, $miscService);
 	}
@@ -210,6 +212,8 @@ class StreamRequest extends StreamRequestBuilder {
 
 					$this->streamDestRequest->generateStreamDest($stream);
 					$this->streamTagsRequest->generateStreamTags($stream);
+					$this->searchTermsRequest->index($stream);
+					$this->linkLocalMedia($stream, false);
 
 					$this->dbConnection->commit();
 				} catch (\Throwable $t) {
@@ -300,6 +304,13 @@ class StreamRequest extends StreamRequestBuilder {
 		// took an approval back has to change the column too, or the column and
 		// the object it was copied from disagree from the next read on.
 		$this->setPostFields($qb, $stream, false);
+		// an `Update{Question}` can move the end of a poll, and the sweep
+		// that announces it reads only this column
+		if ($stream instanceof Question) {
+			$qb->set('poll_ends_at', $qb->createNamedParameter(
+				$stream->getEndTimestamp(), IQueryBuilder::PARAM_INT
+			));
+		}
 		if ($stream instanceof Note) {
 			$encoded = (string)json_encode($stream->getAttachments(), JSON_UNESCAPED_SLASHES);
 			$qb->set('hashtags', $qb->createNamedParameter(json_encode($stream->getHashtags(), JSON_UNESCAPED_SLASHES)));
@@ -336,6 +347,10 @@ class StreamRequest extends StreamRequestBuilder {
 				$this->streamDestRequest->generateStreamDest($stream);
 			}
 			$this->streamTagsRequest->replaceStreamTags($stream);
+			// and its words, for the same reason: an edit that took a word
+			// out left the post answering a search for it
+			$this->searchTermsRequest->reindex($stream);
+			$this->linkLocalMedia($stream, true);
 
 			$this->dbConnection->commit();
 		} catch (\Throwable $t) {
@@ -343,92 +358,6 @@ class StreamRequest extends StreamRequestBuilder {
 
 			throw $t;
 		}
-	}
-
-	/**
-	 * @param ?DateTime $countsAt when this instance last heard the origin's
-	 *                            totals for the post, for a write that heard
-	 *                            them; null leaves the schedule where it is
-	 *
-	 * @see \OCA\Social\Service\RemoteCountService
-	 */
-	public function updateDetails(Stream $stream, ?DateTime $countsAt = null): void {
-		$qb = $this->getStreamUpdateSql();
-		$qb->set('details', $qb->createNamedParameter(json_encode($stream->getDetailsAll())));
-
-		if ($countsAt !== null) {
-			$qb->set('counts_at', $qb->createNamedParameter($countsAt, IQueryBuilder::PARAM_DATE));
-		}
-
-		$qb->limitToIdPrim($qb->prim($stream->getId()));
-		$qb->executeStatement();
-	}
-
-	/**
-	 * Counts the replies to a post again and stores the total on it.
-	 *
-	 * A recount rather than a bump, because the two things that change it —
-	 * a reply arriving and a reply being deleted — do not both know which way.
-	 * `remote_replies` is what the post's own instance reported and is carried
-	 * across untouched: nothing here can see the replies that live over there.
-	 *
-	 * @param string $inReplyTo the id of the post that was replied to
-	 */
-	public function recountReplies(string $inReplyTo): void {
-		if ($inReplyTo === '') {
-			return;
-		}
-
-		try {
-			$parent = $this->getStreamById($inReplyTo);
-		} catch (StreamNotFoundException $e) {
-			return;
-		}
-
-		$parent->setDetailInt(
-			Details::REPLIES, $parent->getDetailInt(Details::REMOTE_REPLIES) + $this->countRepliesTo($inReplyTo)
-		);
-		$this->updateDetails($parent);
-	}
-
-	/**
-	 * The remote posts whose counts were last heard from their own server
-	 * long enough ago to be worth asking again — including every one never
-	 * asked, which has no `counts_at` at all.
-	 *
-	 * Oldest post first, so a pass that runs out of budget leaves the posts
-	 * that have waited longest at the front of the next one rather than
-	 * wherever they fell.
-	 *
-	 * @param DateTime $due not asked since
-	 * @param int $limit 0 is every post that is due
-	 *
-	 * @return Stream[]
-	 */
-	public function getRemoteStreamsDueForCounts(DateTime $due, int $limit = 0): array {
-		$qb = $this->getStreamSelectSql();
-		$qb->limitToLocal(false);
-		$qb->limitToDBFieldDateTime('counts_at', $due, true);
-		$qb->orderBy('s.published_time', 'asc');
-
-		if ($limit > 0) {
-			$qb->setMaxResults($limit);
-		}
-
-		return $this->getStreamsFromRequest($qb);
-	}
-
-	/**
-	 * Stamps a post as having been asked for its counts, leaving whatever
-	 * they are stored as alone. Written even when the answer did not come, so
-	 * that a host which is gone is asked once per interval rather than on
-	 * every pass.
-	 */
-	public function markCountsRefreshed(string $id, DateTime $when): void {
-		$qb = $this->getStreamUpdateSql();
-		$qb->set('counts_at', $qb->createNamedParameter($when, IQueryBuilder::PARAM_DATE));
-		$qb->limitToIdPrim($qb->prim($id));
-		$qb->executeStatement();
 	}
 
 	public function updateCache(Stream $stream, Cache $cache): void {
@@ -440,232 +369,11 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->executeStatement();
 	}
 
-	/**
-	 * The posts that carry a stored attachment copy, a page at a time.
-	 *
-	 * A post keeps its own copy of its attachments (`save()` writes
-	 * `asLocal()` into the `attachments` column), so anything that changes a
-	 * *document* after the fact -- a poster frame made for a video that was
-	 * stored before posters existed -- never reaches the post that shows it.
-	 * `occ social:media:posters` walks these and rewrites the copies.
-	 *
-	 * Only the id and the blob are read: rebuilding a whole `Stream` with its
-	 * joins, for every post with a picture on the instance, would be a great
-	 * deal of work to reach one column.
-	 *
-	 * @return array<array{nid: string, id: string, attachments: string}>
-	 */
-	public function getStoredAttachmentCopies(int $limit, int|string $after = '0'): array {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$qb->select('nid', 'id', 'attachments')
-			->from(self::TABLE_STREAM)
-			->andWhere($expr->neq('attachments', $qb->createNamedParameter('')))
-			->andWhere($expr->neq('attachments', $qb->createNamedParameter('[]')))
-			->andWhere($expr->gt('nid', $qb->createNamedParameter($after)))
-			->orderBy('nid', 'asc')
-			->setMaxResults($limit);
-
-		$rows = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$rows[] = [
-				'nid' => (string)$data['nid'],
-				'id' => (string)$data['id'],
-				'attachments' => (string)$data['attachments'],
-			];
-		}
-		$cursor->closeCursor();
-
-		return $rows;
-	}
-
-	/**
-	 * Whether one of `$actorId`'s posts carries the upload with this nid in
-	 * its stored attachment copies. Narrowed by the author first, which is
-	 * indexed, before the copies are matched.
-	 */
-	public function carriesUpload(string $actorId, string $nid): bool {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$qb->select('nid')
-			->from(self::TABLE_STREAM)
-			->setMaxResults(1);
-		$qb->limitToAttributedTo($actorId, true);
-		$qb->andWhere($expr->like('attachments', $qb->createNamedParameter(
-			'%"id":"' . $this->dbConnection->escapeLikeParameter($nid) . '"%'
-		)));
-
-		$cursor = $qb->executeQuery();
-		$found = $cursor->fetch() !== false;
-		$cursor->closeCursor();
-
-		return $found;
-	}
-
-	/** Replaces one post's stored attachment copies with the JSON given. */
-	public function setStoredAttachmentCopies(string $id, string $attachments): void {
-		$qb = $this->getStreamUpdateSql();
-		$qb->set('attachments', $qb->createNamedParameter($attachments));
-		$qb->limitToIdPrim($qb->prim($id));
-
-		$qb->executeStatement();
-	}
-
-	/**
-	 * Remote posts whose original ActivityPub object may still contain media
-	 * even though the attachment column was written empty. The JSON is checked
-	 * by the repair command; this bounded query only finds candidates.
-	 *
-	 * @return array<array{nid: string, id: string, source: string, subtype: string}>
-	 */
-	public function getMissingRemoteAttachments(int $limit, int|string $after = '0'): array {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$qb->select('nid', 'id', 'source', 'subtype')
-			->from(self::TABLE_STREAM)
-			->where($expr->eq('local', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
-			->andWhere($expr->eq('attachments', $qb->createNamedParameter('[]')))
-			->andWhere($expr->gt('nid', $qb->createNamedParameter($after)))
-			->orderBy('nid', 'asc')
-			->setMaxResults($limit);
-
-		$rows = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$rows[] = [
-				'nid' => (string)$data['nid'],
-				'id' => (string)$data['id'],
-				'source' => (string)$data['source'],
-				'subtype' => (string)$data['subtype'],
-			];
-		}
-		$cursor->closeCursor();
-
-		return $rows;
-	}
-
-	/** Keep a concurrent import's attachments and update the Photos/Video index together. */
-	public function setRecoveredRemoteAttachments(string $id, string $attachments, string $subtype): bool {
-		$qb = $this->getStreamUpdateSql();
-		$qb->set('attachments', $qb->createNamedParameter($attachments))
-			->set('media_kind', $qb->createNamedParameter(Stream::mediaKindOf($attachments, $subtype)))
-			->where($qb->expr()->eq('attachments', $qb->createNamedParameter('[]')));
-		$qb->limitToIdPrim($qb->prim($id));
-
-		return $qb->executeStatement() > 0;
-	}
-
-	public function updateAttachments(Document $document): void {
-		$qb = $this->getStreamSelectSql();
-		$qb->limitToIdPrim($qb->prim($document->getParentId()));
-
-		$cursor = $qb->executeQuery();
-		$data = $cursor->fetch();
-		$cursor->closeCursor();
-
-		if ($data === false) {
-			return;
-		}
-
-		$new = $this->updateAttachmentInList($document, $this->getArray('attachments', $data, []));
-		$qb = $this->getStreamUpdateSql();
-		$qb->set('attachments', $qb->createNamedParameter(json_encode($new, JSON_UNESCAPED_SLASHES)));
-		$qb->limitToIdPrim($qb->prim($document->getParentId()));
-
-		$qb->executeStatement();
-	}
-
-	/**
-	 * Rebuilds the attachment copy of $document on every post of this
-	 * instance that carries it.
-	 *
-	 * An upload is not tied to its post by `parent_id` the way a fetched
-	 * attachment is — it is uploaded before the post exists — so the posts
-	 * are found by the copy itself, which is keyed by the document's nid. The
-	 * candidates are narrowed first by the indexed `media_kind` (a row the
-	 * backfill has not reached is NULL there, and counts), and only this
-	 * instance's own posts: a remote post names the origin's file, not ours.
-	 *
-	 * @return int how many posts were rewritten
-	 */
-	public function updateLocalAttachmentCopies(Document $document): int {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$qb->select('id', 'attachments')
-			->from(self::TABLE_STREAM)
-			->where($expr->eq('local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
-			->andWhere($expr->orX(
-				$expr->in('media_kind', $qb->createNamedParameter(
-					['video', Stream::MEDIA_KIND_MIXED], IQueryBuilder::PARAM_STR_ARRAY
-				)),
-				$expr->isNull('media_kind')
-			))
-			->andWhere($expr->like('attachments', $qb->createNamedParameter(
-				'%"id":"' . (string)$document->getNid() . '"%'
-			)));
-
-		$rows = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$rows[] = $data;
-		}
-		$cursor->closeCursor();
-
-		$rewritten = 0;
-		foreach ($rows as $data) {
-			$stored = json_decode((string)$data['attachments'], true);
-			if (!is_array($stored)) {
-				continue;
-			}
-
-			$new = $this->updateAttachmentInList($document, $stored);
-			if ($new === $stored) {
-				continue;
-			}
-
-			$this->setStoredAttachmentCopies(
-				(string)$data['id'], json_encode($new, JSON_UNESCAPED_SLASHES)
-			);
-			$rewritten++;
-		}
-
-		return $rewritten;
-	}
-
-	/**
-	 * The post's stored attachment copies with the one for $document rebuilt
-	 * from it.
-	 *
-	 * The copies are the client format `save()` writes, keyed by the
-	 * document's nid, not cache rows: read back as `Document`s they matched
-	 * nothing, and the whole list was written out again in the ActivityPub
-	 * shape, without ids, previews or alt text. The picture the cron had just
-	 * fetched kept its empty link, and every other picture on the post lost
-	 * its preview with it. The copies that are not this document's are kept
-	 * exactly as stored.
-	 *
-	 * @return array<mixed>
-	 */
-	private function updateAttachmentInList(Document $document, array $attachments): array {
-		$nid = (string)$document->getNid();
-
-		$new = [];
-		foreach ($attachments as $attachment) {
-			if (is_array($attachment) && (string)($attachment['id'] ?? '') === $nid) {
-				$new[] = $document->convertToMediaAttachment($this->urlGenerator)->asLocal();
-			} else {
-				$new[] = $attachment;
-			}
-		}
-
-		return $new;
-	}
-
 	public function updateAttributedTo(string $itemId, string $to): void {
 		$qb = $this->getStreamUpdateSql();
 		$qb->set('attributed_to', $qb->createNamedParameter($to));
 		$qb->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($to)));
+		$qb->set('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($to)));
 
 		$qb->limitToIdPrim($qb->prim($itemId));
 
@@ -720,136 +428,6 @@ class StreamRequest extends StreamRequestBuilder {
 		} catch (StreamNotFoundException $e) {
 			throw new StreamNotFoundException('Stream not found');
 		}
-	}
-
-	/**
-	 * @param string $id
-	 * @param bool $asViewer
-	 * @param int $format
-	 *
-	 * @return Stream
-	 * @throws StreamNotFoundException
-	 */
-	/**
-	 * Full-text search over the statuses the viewer is allowed to see: their
-	 * own posts, public/unlisted content, and what is addressed to them. A
-	 * plain (case-insensitive) substring match — fine at the instance sizes
-	 * this app targets; no external search engine required.
-	 *
-	 * `$authorId` narrows the answers to one account's posts, still within
-	 * what the viewer may see. `$offset` skips that many answers, up to
-	 * SEARCH_MAX_OFFSET; `$maxId` and `$minId` bound the status nid, leaving
-	 * the newest-first order as it is.
-	 *
-	 * @return Stream[]
-	 */
-	public function searchContent(
-		string $term, int $limit = 20, int $offset = 0, string $authorId = '',
-		int|string $maxId = 0, int|string $minId = 0,
-	): array {
-		$offset = max(0, $offset);
-		if (strlen($term) < 3 || $offset > self::SEARCH_MAX_OFFSET) {
-			return [];
-		}
-
-		// candidates, not answers, are what the database is asked for, so the
-		// rows an offset skips are read on top of the over-read page
-		$window = min(self::SEARCH_OVERREAD_MAX, max($limit, $limit * self::SEARCH_OVERREAD)) + $offset;
-
-		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
-		$qb->limitToStatusTypes();
-		$expr = $qb->expr();
-		$qb->andWhere($expr->iLike(
-			's.content',
-			$qb->createNamedParameter('%' . $this->dbConnection->escapeLikeParameter($term) . '%')
-		));
-
-		if ($authorId !== '') {
-			$qb->andWhere($expr->eq('s.attributed_to_prim', $qb->createNamedParameter($qb->prim($authorId))));
-		}
-		if (Nid::compare($maxId, 0) > 0) {
-			$qb->andWhere($expr->lt('s.nid', $qb->createNamedParameter(Nid::fromStorage($maxId))));
-		}
-		if (Nid::compare($minId, 0) > 0) {
-			$qb->andWhere($expr->gt('s.nid', $qb->createNamedParameter(Nid::fromStorage($minId))));
-		}
-
-		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
-		$qb->leftJoinStreamAction();
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-		$qb->orderBy('s.published_time', 'desc');
-		$qb->setMaxResults($window);
-
-		// The window is what keeps this from being a full scan. `content
-		// ILIKE '%term%'` cannot use an index — a leading wildcard never
-		// can — so without a bound the database reads every post the instance
-		// has ever stored, joined to seven other tables, on every search. At
-		// ten million rows that is a table scan per keystroke, and the rate
-		// limit is the only thing between it and the CPU.
-		//
-		// `published_time` is indexed and is what the result is ordered by, so
-		// a range on it is both the narrowing and the ordering. Searching the
-		// recent past and saying so is a different promise from searching
-		// everything and timing out; a full-text index is what would let this
-		// promise more, and it is a per-database feature this app has nowhere
-		// else — see `SearchService`.
-		$since = $this->searchWindowStart();
-		if ($since > 0) {
-			$qb->andWhere($expr->gt(
-				's.published_time',
-				$qb->createNamedParameter($this->dateTime($since), IQueryBuilder::PARAM_DATE)
-			));
-		}
-
-		return array_slice($this->whoseTextCarries($this->getStreamsFromRequest($qb), $term), $offset, $limit);
-	}
-
-	/**
-	 * The posts whose *text* carries the term.
-	 *
-	 * `content` is stored as markup, so the `LIKE` above matches the markup as
-	 * well as the words: `span`, `href`, `class` and `http` each answered with
-	 * very nearly every post the instance holds, and a search for any of them
-	 * was a page of unrelated posts. The database cannot be asked to ignore
-	 * the tags without a column to search, so the rows it offers are
-	 * candidates and the flattened text decides which of them are answers.
-	 *
-	 * @param Stream[] $posts
-	 *
-	 * @return Stream[]
-	 */
-	private function whoseTextCarries(array $posts, string $term): array {
-		return array_values(array_filter($posts, static function (Stream $post) use ($term): bool {
-			$text = html_entity_decode(
-				ACore::withoutMarkup($post->getContent()), ENT_QUOTES | ENT_HTML5, 'UTF-8'
-			);
-
-			return mb_stripos($text, $term) !== false;
-		}));
-	}
-
-	/**
-	 * How far back a content search looks, as a timestamp, or 0 for "all of
-	 * it".
-	 *
-	 * An administrator can widen it — an instance with a hundred thousand
-	 * posts can afford to search all of them, and one with ten million cannot.
-	 * The default is a year, which covers what anybody is actually looking for
-	 * and bounds the scan at roughly the instance's yearly output rather than
-	 * its whole history.
-	 */
-	private function searchWindowStart(): int {
-		$days = $this->configService->getAppValueInt(ConfigService::SOCIAL_SEARCH_WINDOW_DAYS);
-
-		return ($days > 0) ? time() - ($days * 86400) : 0;
-	}
-
-	/** A timestamp as the DateTime the date parameters take. */
-	private function dateTime(int $timestamp): DateTime {
-		$date = new DateTime();
-		$date->setTimestamp($timestamp);
-
-		return $date;
 	}
 
 	public function getStreamByNid(int|string $nid): Stream {
@@ -915,9 +493,8 @@ class StreamRequest extends StreamRequestBuilder {
 	/**
 	 * The next ordered page for the incremental stream-index repair job.
 	 *
-	 * Keep this projection small: the repair reads only ids here and lets this
-	 * request hydrate one stream at a time, rather than holding whole posts for
-	 * the duration of a cron batch.
+	 * Only the keys: the repair hydrates the page with `getIndexStreams()` in
+	 * one query, and falls back to a stream at a time when that fails.
 	 *
 	 * @return list<array{nid: string, id_prim: string}>
 	 */
@@ -943,32 +520,30 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * @param string $id
-	 * @param int $since
-	 * @param int $limit
-	 * @param bool $asViewer
+	 * The streams of one repair page, by nid, in one query — the same
+	 * projection `getStream()` reads, without the joins a timeline adds, so a
+	 * stream whose author is not cached is still returned.
 	 *
-	 * @return Stream[]
-	 * @throws StreamNotFoundException
-	 * @throws DateTimeException
+	 * @param list<string> $nids
+	 *
+	 * @return array<string, Stream> nid => stream
 	 */
-	public function getRepliesByParentId(string $id, int $since = 0, int $limit = 5, bool $asViewer = false,
-	): array {
-		if ($id === '') {
-			throw new StreamNotFoundException();
-		};
-
-		$qb = $this->getStreamSelectSql();
-		$qb->limitToInReplyTo($id);
-		$qb->limitPaginate($since, $limit);
-
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-		if ($asViewer) {
-			$qb->limitToViewer('sd', 'f', true);
-			$qb->leftJoinStreamAction();
+	public function getIndexStreams(array $nids): array {
+		if ($nids === []) {
+			return [];
 		}
 
-		return $this->getStreamsFromRequest($qb);
+		$qb = $this->getStreamSelectSql();
+		$qb->andWhere(
+			$qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY))
+		);
+
+		$streams = [];
+		foreach ($this->getStreamsFromRequest($qb) as $stream) {
+			$streams[(string)$stream->getNid()] = $stream;
+		}
+
+		return $streams;
 	}
 
 	/**
@@ -1031,94 +606,6 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->limitToAttributedTo($actorId, true);
 
 		return $this->getStreamFromRequest($qb);
-	}
-
-	/**
-	 * The public replies to a post, oldest first, for the `replies` collection
-	 * a peer walks to discover a thread.
-	 *
-	 * Public only. The collection is served to anybody who asks for it, and a
-	 * followers-only or direct reply is not theirs to read — not even as an id,
-	 * which is enough to fetch the reply itself from the instance that holds
-	 * it. This is the same audience test `getPublicByAuthor()` applies to an
-	 * outbox.
-	 *
-	 * Oldest first, because that is the order a thread is read in and the order
-	 * `OrderedCollectionPage` offsets are stable under: newest-first paging
-	 * renumbers every page as soon as somebody replies again. Ordered on the
-	 * nid, which is the publication time with a random suffix, so that a page
-	 * can start after the last one's final reply (`$after`) rather than read
-	 * and discard every reply before it.
-	 *
-	 * @param string $after the nid the page starts after, '' for none
-	 *
-	 * @return Stream[]
-	 */
-	public function getPublicRepliesTo(string $id, int $limit, int $offset = 0, string $after = ''): array {
-		if ($id === '' || $limit < 1) {
-			return [];
-		}
-
-		$qb = $this->getStreamSelectSql();
-		$qb->limitToInReplyTo($id, true);
-		$qb->limitToStatusTypes();
-
-		$qb->selectDestFollowing('sd', '');
-		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
-		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
-
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-
-		if ($after !== '') {
-			$qb->andWhere($qb->expr()->gt('s.nid', $qb->createNamedParameter(Nid::normalize($after))));
-		}
-
-		$qb->orderBy('s.nid', 'asc');
-		$qb->setMaxResults($limit);
-		$qb->setFirstResult($offset);
-
-		return $this->getStreamsFromRequest($qb);
-	}
-
-	/**
-	 * How many replies {@see self::getPublicRepliesTo()} would return: the
-	 * `totalItems` of the collection, counted over the same audience so the
-	 * number and the pages cannot disagree.
-	 */
-	public function countPublicRepliesTo(string $id): int {
-		if ($id === '') {
-			return 0;
-		}
-
-		$qb = $this->countNotesSelectSql();
-		$qb->limitToInReplyTo($id, true);
-		$qb->limitToStatusTypes();
-
-		$qb->selectDestFollowing('sd', '');
-		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
-		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
-
-		$cursor = $qb->executeQuery();
-		$data = $cursor->fetch();
-		$cursor->closeCursor();
-
-		return $this->getInt('count', $data, 0);
-	}
-
-	/**
-	 * @param string $id
-	 *
-	 * @return int
-	 */
-	public function countRepliesTo(string $id): int {
-		$qb = $this->countNotesSelectSql();
-		$qb->limitToInReplyTo($id, true);
-
-		$cursor = $qb->executeQuery();
-		$data = $cursor->fetch();
-		$cursor->closeCursor();
-
-		return $this->getInt('count', $data, 0);
 	}
 
 	/**
@@ -1205,47 +692,6 @@ class StreamRequest extends StreamRequestBuilder {
 		$cursor->closeCursor();
 
 		return (int)($data['total'] ?? 0);
-	}
-
-	/**
-	 * What this instance's own people have been writing, for the two numbers
-	 * an administrator asks for first: how busy is it, and how many of the
-	 * accounts are actually used.
-	 *
-	 * Local posts only. A count that included the fediverse's would say how
-	 * much this server has *received*, which is a number about everybody
-	 * else's activity and about this instance's retention settings.
-	 *
-	 * @param int $since unix time to count from
-	 * @return array{posts: int, authors: int}
-	 */
-	public function localActivitySince(int $since): array {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-
-		$date = new DateTime();
-		$date->setTimestamp($since);
-
-		$qb->selectAlias($qb->func()->count('s.id'), 'posts')
-			->selectAlias($qb->createFunction('COUNT(DISTINCT s.attributed_to_prim)'), 'authors')
-			->from(self::TABLE_STREAM, 's')
-			->where($expr->eq('s.local', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->andWhere($expr->in(
-				's.type',
-				$qb->createNamedParameter([Note::TYPE, Question::TYPE], IQueryBuilder::PARAM_STR_ARRAY)
-			))
-			->andWhere($expr->gte(
-				's.published_time', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)
-			));
-
-		$cursor = $qb->executeQuery();
-		$data = $cursor->fetch();
-		$cursor->closeCursor();
-
-		return [
-			'posts' => (int)($data['posts'] ?? 0),
-			'authors' => (int)($data['authors'] ?? 0),
-		];
 	}
 
 	/**
@@ -1366,68 +812,6 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * When each of an author's public posts was published, since a point in
-	 * time.
-	 *
-	 * Only the timestamps: what the profile's little activity chart needs is
-	 * how many posts fell in each week, and hydrating the posts to count them
-	 * would read every column of every note to throw all of it away. Public
-	 * posts only — a chart drawn from what the viewer happens to be allowed to
-	 * see would be a different chart per viewer, and a chart that counted
-	 * posts the viewer cannot see would leak that they exist.
-	 *
-	 * Boosts are left out by `limitToStatusTypes()`: a boost is something the
-	 * account did, not something it wrote.
-	 *
-	 * @param string $actorId the author
-	 * @param int $since unix time to start at
-	 * @param int $limit a ceiling, so a prolific account cannot make this
-	 *                   query grow without bound
-	 * @return list<int> publication times, newest first
-	 */
-	public function publishedTimesByAuthor(string $actorId, int $since, int $limit = 2000): array {
-		if ($actorId === '' || $limit < 1) {
-			return [];
-		}
-
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-
-		$date = new DateTime();
-		$date->setTimestamp($since);
-
-		$qb->select('s.published_time')
-			->from(self::TABLE_STREAM, 's')
-			->where($expr->gte(
-				's.published_time', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)
-			))
-			->orderBy('s.published_time', 'desc')
-			->setMaxResults($limit);
-
-		$qb->setDefaultSelectAlias('s');
-		$qb->limitToAttributedTo($actorId, true);
-		$qb->limitToStatusTypes();
-
-		// the recipients are where "public" is recorded, the same join the
-		// author's public timeline uses
-		$qb->selectDestFollowing('sd', '');
-		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
-		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
-
-		$times = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$time = (int)strtotime((string)$data['published_time']);
-			if ($time > 0) {
-				$times[] = $time;
-			}
-		}
-		$cursor->closeCursor();
-
-		return $times;
-	}
-
-	/**
 	 * An author's own posts published inside a window of time.
 	 *
 	 * Used to look the reader up their own past: unlike the profile charts
@@ -1485,307 +869,31 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * The hashtags an author uses most, over their public posts since a point
-	 * in time.
+	 * The polls whose end time has passed since a moment, the earliest to
+	 * close first.
 	 *
-	 * Grouped in SQL rather than walked in PHP: unlike the per-post details
-	 * blob, a hashtag is a row of its own in `social_stream_tag`, so the three
-	 * databases can all count them the same way.
-	 *
-	 * @param string $actorId the author
-	 * @param int $since unix time to start at
-	 * @param int $limit how many to name
-	 * @return list<array{name: string, count: int}> most used first
-	 */
-	public function topHashtagsByAuthor(string $actorId, int $since, int $limit = 3): array {
-		if ($actorId === '' || $limit < 1) {
-			return [];
-		}
-
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-
-		$date = new DateTime();
-		$date->setTimestamp($since);
-
-		$qb->select('st.hashtag')
-			->selectAlias($qb->func()->count('*'), 'total')
-			->from(self::TABLE_STREAM_TAGS, 'st')
-			->innerJoin('st', self::TABLE_STREAM, 's', $expr->eq('s.id_prim', 'st.stream_id'))
-			->where($expr->eq('s.attributed_to_prim', $qb->createNamedParameter($qb->prim($actorId))))
-			->andWhere($expr->gte(
-				's.published_time', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)
-			))
-			->groupBy('st.hashtag')
-			->orderBy('total', 'desc')
-			->addOrderBy('st.hashtag', 'asc')
-			->setMaxResults($limit);
-
-		$qb->setDefaultSelectAlias('s');
-		$qb->limitToStatusTypes();
-
-		// public posts only, through the same recipient join as the chart
-		// above: the profile is read by strangers, and a tag used only in
-		// followers-only posts is a fact about those posts
-		$qb->selectDestFollowing('sd', '');
-		$qb->innerJoinStreamDest('recipient', 'id_prim', 'sd', 's');
-		$qb->limitToDest(ACore::CONTEXT_PUBLIC, 'recipient', '', 'sd');
-
-		$tags = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$name = (string)$data['hashtag'];
-			if ($name === '') {
-				continue;
-			}
-			$tags[] = ['name' => $name, 'count' => (int)$data['total']];
-		}
-		$cursor->closeCursor();
-
-		return $tags;
-	}
-
-	/**
-	 * How often each hashtag was used since a point in time.
-	 *
-	 * One window of `countHashtagsInWindows()`, for a caller that wants one.
-	 *
-	 * @return array<string, int> hashtag => how many posts used it
-	 */
-	public function countHashtagsSince(int $since): array {
-		return $this->countHashtagsInWindows(['since' => $since])['since'];
-	}
-
-	/**
-	 * How often each hashtag was used in each of several windows, in one pass.
-	 *
-	 * This is what the trends cron needs, and all it needs. It used to hydrate
-	 * the posts themselves — every column of every note, plus its action row —
-	 * and count the tags in PHP, bounded to a sample of the most recent
-	 * thousand notes; on a busy instance all five windows saw the same
-	 * thousand notes and every period therefore reported the same count. Then
-	 * it was one grouped query per window, which read the tag rows of the
-	 * widest window five times over; now the widest window is read once and
-	 * each narrower one is a conditional sum over the same rows.
-	 *
-	 * A hashtag used in none of a window's posts is absent from that window
-	 * rather than zero.
-	 *
-	 * @param array<string, int> $windows name => since, as a timestamp
-	 *
-	 * @return array<string, array<string, int>> name => (hashtag => how many posts used it)
-	 */
-	public function countHashtagsInWindows(array $windows): array {
-		$result = array_fill_keys(array_keys($windows), []);
-		if ($windows === []) {
-			return $result;
-		}
-
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-
-		$qb->select('st.hashtag');
-		$aliases = [];
-		foreach (array_keys($windows) as $i => $name) {
-			$date = new DateTime();
-			$date->setTimestamp($windows[$name]);
-			$aliases[$name] = 'w' . $i;
-			$qb->selectAlias(
-				$qb->createFunction(
-					'SUM(CASE WHEN '
-					. $expr->gte('s.published_time', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE))
-					. ' THEN 1 ELSE 0 END)'
-				),
-				'w' . $i
-			);
-		}
-
-		$widest = new DateTime();
-		$widest->setTimestamp(min($windows));
-		$qb->from(self::TABLE_STREAM_TAGS, 'st')
-			->innerJoin('st', self::TABLE_STREAM, 's', $expr->eq('s.id_prim', 'st.stream_id'))
-			->where($expr->gte(
-				's.published_time', $qb->createNamedParameter($widest, IQueryBuilder::PARAM_DATE)
-			))
-			// public posts only, the rule `HashtagsRequest::related()` counts
-			// by: a tag used inside a followers-only thread or a direct message
-			// is not public knowledge, and counting it published the tag — and
-			// its usage count — through `/api/v1/trends/tags`, `tagHistory()`
-			// and search
-			->andWhere($expr->eq(
-				's.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)
-			))
-			->groupBy('st.hashtag');
-
-		$qb->setDefaultSelectAlias('s');
-		$qb->limitToStatusTypes();
-
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			foreach ($aliases as $name => $alias) {
-				$count = (int)($data[$alias] ?? 0);
-				if ($count > 0) {
-					$result[$name][(string)$data['hashtag']] = $count;
-				}
-			}
-		}
-		$cursor->closeCursor();
-
-		return $result;
-	}
-
-	/**
-	 * Who an account actually talks with, and how often.
-	 *
-	 * Both directions are the same self-join on the stream, read from either
-	 * end: `PARTNERS_INBOUND` counts the replies other people wrote to this
-	 * account's posts, `PARTNERS_OUTBOUND` the replies this account wrote to
-	 * theirs. The window applies to the reply in both cases — it is the reply
-	 * that happened in the window, whatever the age of the post it answers.
-	 *
-	 * The account itself is excluded: a thread somebody continues on their own
-	 * is not a conversation with anybody, and left in it would outrank every
-	 * real partner.
-	 *
-	 * @param string $actorId the account whose conversations
-	 * @param int $direction self::PARTNERS_INBOUND or self::PARTNERS_OUTBOUND
-	 * @param int $since only replies from this moment on, or 0 for all of them
-	 *
-	 * @return list<array{id: string, account: string, replies: int}> most talkative first
-	 */
-	public function countConversationPartners(
-		string $actorId,
-		int $direction,
-		int $since = 0,
-		int $limit = 10,
-	): array {
-		if ($actorId === '') {
-			return [];
-		}
-
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$prim = $qb->prim($actorId);
-
-		// 'r' is always the reply, 'p' always the post it answers; which of the
-		// two belongs to this account is the whole difference between the
-		// directions
-		$partner = ($direction === self::PARTNERS_INBOUND) ? 'r' : 'p';
-		$mine = ($direction === self::PARTNERS_INBOUND) ? 'p' : 'r';
-
-		$qb->select($partner . '.attributed_to')
-			->selectAlias($qb->func()->count('*'), 'total')
-			->from(self::TABLE_STREAM, 'r')
-			->innerJoin('r', self::TABLE_STREAM, 'p', $expr->eq('p.id_prim', 'r.in_reply_to_prim'))
-			->where($expr->eq(
-				$mine . '.attributed_to_prim', $qb->createNamedParameter($prim)
-			))
-			->andWhere($expr->neq(
-				$partner . '.attributed_to_prim', $qb->createNamedParameter($prim)
-			))
-			->andWhere($expr->nonEmptyString($partner . '.attributed_to'))
-			->groupBy($partner . '.attributed_to')
-			->orderBy('total', 'desc')
-			->setMaxResults($limit);
-
-		if ($since > 0) {
-			$date = new DateTime();
-			$date->setTimestamp($since);
-			$qb->andWhere($expr->gte(
-				'r.published_time', $qb->createNamedParameter($date, IQueryBuilder::PARAM_DATE)
-			));
-		}
-
-		$qb->setDefaultSelectAlias('r');
-		$qb->limitToStatusTypes();
-
-		$partners = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$id = (string)$data['attributed_to'];
-			$partners[] = [
-				'id' => $id,
-				'account' => $this->handleFromActorId($id),
-				'replies' => (int)$data['total'],
-			];
-		}
-		$cursor->closeCursor();
-
-		return $partners;
-	}
-
-	/**
-	 * The handle an actor URI belongs to, for a name to put on a number.
-	 *
-	 * The cache is the only place a remote actor's handle is written down, and
-	 * an actor this account has held a conversation with is in it by
-	 * definition. If it is not, the URI's own last segment and host say who it
-	 * was well enough for a list of names.
-	 */
-	private function handleFromActorId(string $id): string {
-		$qb = $this->getQueryBuilder();
-		$qb->select('account')
-			->from(self::TABLE_CACHE_ACTORS)
-			->where($qb->expr()->eq('id_prim', $qb->createNamedParameter($qb->prim($id))))
-			->setMaxResults(1);
-
-		$cursor = $qb->executeQuery();
-		$account = (string)($cursor->fetchOne() ?: '');
-		$cursor->closeCursor();
-
-		if ($account !== '') {
-			return $account;
-		}
-
-		$host = (string)parse_url($id, PHP_URL_HOST);
-		$name = basename((string)parse_url($id, PHP_URL_PATH));
-
-		return ($name === '' || $host === '') ? $id : $name . '@' . $host;
-	}
-
-	/**
-	 * The polls whose end time has passed since a moment.
-	 *
-	 * A poll's end time lives in the stored wire object rather than in a
-	 * column, so it cannot be a predicate: what this does is read the recent
-	 * `Question` rows and let the model answer. That is bounded twice over —
-	 * by how far back it looks, and by `$scan` — and on any instance the set
-	 * is a handful of rows, because a poll is a rare kind of post and one that
-	 * closed a year ago is not news.
+	 * Read on `poll_ends_at`, the end time `save()` and `update()` copy out
+	 * of the wire object, which is indexed: every poll that closed in the
+	 * window is found however long ago it was published and however many
+	 * other polls there are, and only those rows are read.
 	 *
 	 * @return Question[]
 	 */
-	public function getPollsClosedSince(int $since, int $limit = 50, int $scan = 500): array {
+	public function getPollsClosedSince(int $since, int $limit = 50): array {
 		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
+		$expr = $qb->expr();
+		$qb->andWhere($expr->gt('s.poll_ends_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)));
+		$qb->andWhere($expr->lte('s.poll_ends_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT)));
 		$qb->limitToType(Question::TYPE);
-		$qb->andWhere($qb->expr()->gte(
-			's.published_time',
-			$qb->createNamedParameter(
-				(new DateTime())->setTimestamp(time() - self::POLL_LOOKBACK),
-				IQueryBuilder::PARAM_DATE
-			)
-		));
-		$qb->orderBy('s.nid', 'desc');
-		$qb->setMaxResults(max(1, $scan));
+		$qb->orderBy('s.poll_ends_at', 'asc');
+		$qb->addOrderBy('s.nid', 'asc');
+		$qb->setMaxResults(max(1, $limit));
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 
-		$closed = [];
-		foreach ($this->getStreamsFromRequest($qb) as $poll) {
-			if (!($poll instanceof Question)) {
-				continue;
-			}
-
-			$ends = $poll->getEndTime() === '' ? 0 : (int)strtotime($poll->getEndTime());
-			if ($ends > $since && $ends <= time()) {
-				$closed[] = $poll;
-			}
-
-			if (count($closed) >= $limit) {
-				break;
-			}
-		}
-
-		return $closed;
+		return array_values(array_filter(
+			$this->getStreamsFromRequest($qb),
+			static fn (Stream $poll): bool => $poll instanceof Question
+		));
 	}
 
 	/**
@@ -1868,205 +976,6 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
-	 * Who boosted each of these posts.
-	 *
-	 * One query for the whole set rather than one per post: the statistics
-	 * page asks about a month of posts at once, and a round trip per post to
-	 * fill in one column is a page that gets slower the more an account posts.
-	 *
-	 * The same account boosting the same post twice is one audience, so the
-	 * actors come back deduplicated per post.
-	 *
-	 * @param string[] $ids the posts, by id
-	 * @param int $limit how many Announce rows to read at most
-	 * @return array<string, list<string>> post id => the actors that boosted it
-	 */
-	public function boostersOf(array $ids, int $limit = 5000): array {
-		if ($ids === [] || $limit < 1) {
-			return [];
-		}
-
-		$qb = $this->getQueryBuilder();
-
-		$byPrim = [];
-		foreach ($ids as $id) {
-			$prim = $qb->prim($id);
-			if ($prim !== '') {
-				$byPrim[$prim] = $id;
-			}
-		}
-
-		if ($byPrim === []) {
-			return [];
-		}
-
-		$expr = $qb->expr();
-		$qb->select('s.object_id_prim', 's.attributed_to')
-			->from(self::TABLE_STREAM, 's')
-			->where($expr->eq('s.type', $qb->createNamedParameter(Announce::TYPE)))
-			->andWhere($expr->in(
-				's.object_id_prim',
-				$qb->createNamedParameter(array_keys($byPrim), IQueryBuilder::PARAM_STR_ARRAY)
-			))
-			->setMaxResults($limit);
-
-		$boosters = [];
-		$cursor = $qb->executeQuery();
-		while ($data = $cursor->fetch()) {
-			$id = $byPrim[(string)$data['object_id_prim']] ?? '';
-			$actor = (string)$data['attributed_to'];
-			if ($id === '' || $actor === '') {
-				continue;
-			}
-			$boosters[$id][$actor] = $actor;
-		}
-		$cursor->closeCursor();
-
-		return array_map(static fn (array $actors): array => array_values($actors), $boosters);
-	}
-
-	/**
-	 * Removes a post and everything that hangs off it.
-	 *
-	 * A post is not one row: its recipients (which is what puts it in a
-	 * timeline), the interaction flags on it, its hashtags, its link card, the
-	 * Like/Announce rows pointing at it and its cached attachments all key on
-	 * it. Deleting only the `social_stream` row left every one of those behind
-	 * in five tables plus the files on disk, for good — nothing else ever
-	 * looks at them again.
-	 *
-	 * @param string $type when given, the post is only removed if it is of
-	 *                     that type — and then nothing else is touched either
-	 */
-	public function deleteById(string $id, string $type = '') {
-		$qb = $this->getStreamDeleteSql();
-		$prim = $this->streamPrim($qb, $id);
-		if ($prim === '') {
-			return;
-		}
-
-		$qb->limitToIdPrim($prim);
-		if ($type !== '') {
-			$qb->limitToType($type);
-		}
-
-		$deleted = $qb->executeStatement();
-		if ($type !== '' && $deleted === 0) {
-			// a guarded delete that matched nothing: the post is of another
-			// type and still exists, so its related rows are still in use
-			return;
-		}
-
-		$this->deleteRelatedTo([$prim]);
-	}
-
-	/**
-	 * Removes every post of an author, and everything that hangs off each of
-	 * them. Done in batches: an account at scale has more posts than the
-	 * cascade wants to name in one IN () list.
-	 */
-	public function deleteByAuthor(string $actorId) {
-		while (true) {
-			$prims = $this->getIdPrimsByAuthor($actorId, self::DELETE_BATCH);
-			if ($prims === []) {
-				return;
-			}
-
-			$this->deleteRelatedTo($prims);
-
-			$qb = $this->getStreamDeleteSql();
-			$qb->andWhere($qb->expr()->in(
-				'id_prim',
-				$qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
-			));
-			if ($qb->executeStatement() === 0) {
-				// nothing was removed, so the next pass would select the very
-				// same rows: stop rather than spin
-				return;
-			}
-		}
-	}
-
-	/**
-	 * The authors of one instance that still have something stored here.
-	 *
-	 * Distinct authors rather than posts: the caller deletes an author's posts
-	 * with `deleteByAuthor()`, which is already batched, so this only has to
-	 * name who is left. Once an author's posts are gone they are not named
-	 * again, which is what lets a purge resume where it stopped.
-	 *
-	 * @return string[] actor ids
-	 *
-	 * @throws InvalidResourceException the domain is not one
-	 */
-	public function getAuthorsFromDomain(string $domain, int $limit = 100): array {
-		$qb = $this->getQueryBuilder();
-		$qb->selectDistinct('s.attributed_to')
-			->from(self::TABLE_STREAM, 's')
-			->where(DomainBlocksRequestBuilder::onDomain($qb, 's.attributed_to', $domain))
-			->setMaxResults($limit);
-
-		$cursor = $qb->executeQuery();
-		$authors = array_map(
-			static fn (array $row): string => (string)$row['attributed_to'], $cursor->fetchAll()
-		);
-		$cursor->closeCursor();
-
-		return $authors;
-	}
-
-	/**
-	 * @return string[] id_prim of the posts of an author
-	 */
-	private function getIdPrimsByAuthor(string $actorId, int $limit): array {
-		$qb = $this->getQueryBuilder();
-		$qb->select('s.id_prim')
-			->from(self::TABLE_STREAM, 's')
-			->where($qb->expr()->eq(
-				's.attributed_to_prim', $qb->createNamedParameter($qb->prim($actorId))
-			))
-			->setMaxResults($limit);
-
-		$cursor = $qb->executeQuery();
-		$prims = array_map(static fn (array $row): string => (string)$row['id_prim'], $cursor->fetchAll());
-		$cursor->closeCursor();
-
-		return $prims;
-	}
-
-	/**
-	 * The in-app notification rows (`SocialAppNotification`) created before a
-	 * cutoff, oldest first. A notification is a local row about a local user's
-	 * post; it is never federated, and nothing reads it again once it has
-	 * scrolled out of the notifications timeline.
-	 *
-	 * @return string[] id_prim
-	 */
-	public function getNotificationPrimsBefore(DateTime $cutoff, int $limit): array {
-		$qb = $this->notificationsBeforeQuery($cutoff);
-		$qb->select('s.id_prim')
-			->orderBy('s.creation', 'asc')
-			->setMaxResults($limit);
-
-		$cursor = $qb->executeQuery();
-		$prims = array_map(static fn (array $row): string => (string)$row['id_prim'], $cursor->fetchAll());
-		$cursor->closeCursor();
-
-		return $prims;
-	}
-
-	public function countNotificationsBefore(DateTime $cutoff): int {
-		$qb = $this->notificationsBeforeQuery($cutoff);
-		$qb->selectAlias($qb->createFunction('COUNT(*)'), 'count');
-
-		$cursor = $qb->executeQuery();
-		$row = $cursor->fetch();
-		$cursor->closeCursor();
-
-		return (int)($row['count'] ?? 0);
-	}
-
-	/**
 	 * How many unread notifications of each sub-type a local account received
 	 * in a window: the rows the notifications page would list (less the ones
 	 * from muted threads; the policy's holds are the caller's), with a nid past
@@ -2118,160 +1027,14 @@ class StreamRequest extends StreamRequestBuilder {
 		return $counts;
 	}
 
-	private function notificationsBeforeQuery(DateTime $cutoff): SocialQueryBuilder {
-		$qb = $this->getQueryBuilder();
-		$expr = $qb->expr();
-		$qb->from(self::TABLE_STREAM, 's')
-			->where($expr->eq('s.type', $qb->createNamedParameter(SocialAppNotification::TYPE)))
-			->andWhere($expr->eq('s.local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
-			->andWhere($expr->lt('s.creation', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE)));
-
-		return $qb;
-	}
-
-	/**
-	 * Removes the stream rows themselves; what hangs off them is
-	 * `deleteRelatedTo()`'s business and goes first, because the cascade is
-	 * keyed on rows that are about to be gone.
-	 *
-	 * @param string[] $prims
-	 */
-	public function deleteByPrims(array $prims): void {
-		if ($prims === []) {
-			return;
-		}
-
-		$qb = $this->getStreamDeleteSql();
-		$qb->andWhere($qb->expr()->in(
-			'id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
-		));
-		$qb->executeStatement();
-	}
-
-	/**
-	 * Removes the rows and the cached files that belong to a set of posts,
-	 * addressed by their id_prim. The single place that knows what "related to
-	 * a post" means.
-	 *
-	 * @param string[] $prims
-	 *
-	 * @return int how many cached attachment rows were removed
-	 */
-	public function deleteRelatedTo(array $prims): int {
-		if ($prims === []) {
-			return 0;
-		}
-
-		$documents = $this->deleteDocumentsOf($prims);
-
-		foreach ([
-			// dest and tag rows hold the prim in a column that is not named for it
-			[self::TABLE_STREAM_DEST, 'stream_id'],
-			[self::TABLE_STREAM_TAGS, 'stream_id'],
-			[self::TABLE_STREAM_ACTIONS, 'stream_id_prim'],
-			[self::TABLE_STREAM_CARDS, 'stream_id_prim'],
-			[self::TABLE_STATUS_REVISIONS, 'stream_id_prim'],
-			// the Like and Announce activities pointing at the post
-			[self::TABLE_ACTIONS, 'object_id_prim'],
-			// and the emoji reactions on it, which are a table of their own
-			[self::TABLE_REACTIONS, 'object_id_prim'],
-			// and its place in any album its author put it in: a collection
-			// entry pointing at a post that is gone would draw a gap
-			[self::TABLE_COLLECTION_ITEMS, 'stream_id_prim'],
-			// and who opened it, which is a row about a post that no longer
-			// exists and that nothing will ever read again
-			[self::TABLE_STREAM_VIEWS, 'stream_id_prim'],
-			// and the people named in its pictures
-			[self::TABLE_MEDIA_TAGS, 'stream_id_prim'],
-			// where readers had got to in it, which is a bookmark into a video
-			// that no longer exists
-			[self::TABLE_WATCH, 'stream_id_prim'],
-			// and which member of a team wrote it, which is the trail a team
-			// account keeps and has nothing left to be about
-			[self::TABLE_TEAM_POSTS, 'stream_id_prim'],
-			// and that it was brought over from an archive: the import skips
-			// any source id it remembers, so a deleted import could never be
-			// brought over again
-			[self::TABLE_IMPORTED_POSTS, 'stream_id_prim'],
-		] as [$table, $field]) {
-			$qb = $this->getQueryBuilder();
-			$qb->delete($table)
-				->where($qb->expr()->in(
-					$field, $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
-				));
-			$qb->executeStatement();
-		}
-
-		return $documents;
-	}
-
-	/**
-	 * The cached attachments of a set of posts, and the ladders built from
-	 * them: the files first, then the rows that name them — a row without its
-	 * file is recoverable, a file without its row is not.
-	 *
-	 * @param string[] $prims
-	 */
-	private function deleteDocumentsOf(array $prims): int {
-		$qb = $this->getQueryBuilder();
-		$qb->select('nid', 'id_prim', 'local_copy', 'resized_copy')
-			->from(self::TABLE_CACHE_DOCUMENTS)
-			->where($qb->expr()->in(
-				'parent_id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY)
-			));
-
-		$cursor = $qb->executeQuery();
-		$rows = $cursor->fetchAll();
-		$cursor->closeCursor();
-		if ($rows === []) {
-			return 0;
-		}
-
-		foreach ($rows as $row) {
-			$this->cacheDocumentService->removeFromCache((string)$row['local_copy']);
-			$this->cacheDocumentService->removeFromCache((string)$row['resized_copy']);
-
-			// and the rungs of its ladder, which are files of this server's
-			// own making that nothing else names: a document's row going away
-			// without them is disk that no later run would ever free, because
-			// the only thing that knew about them was the row
-			foreach ($this->renditionsRequest->deleteForDocument((string)$row['nid']) as $rung) {
-				$this->cacheDocumentService->removeFromCache($rung);
-			}
-		}
-
-		$delete = $this->getQueryBuilder();
-		$delete->delete(self::TABLE_CACHE_DOCUMENTS)
-			->where($delete->expr()->in('id_prim', $delete->createNamedParameter(
-				array_map(static fn (array $row): string => (string)$row['id_prim'], $rows),
-				IQueryBuilder::PARAM_STR_ARRAY
-			)));
-
-		return $delete->executeStatement();
-	}
-
-	/**
-	 * A post is addressed either by its uri or, from the dest table, by the
-	 * prim it is stored under there — the two are not distinguishable by the
-	 * signature, and reading an already-hashed id as a uri hashes it twice and
-	 * silently matches nothing.
-	 */
-	private function streamPrim(SocialQueryBuilder $qb, string $id): string {
-		$prim = $qb->prim($id);
-		if ($prim !== '') {
-			return $prim;
-		}
-
-		return (preg_match('/^[0-9a-f]{32}$/', $id) === 1) ? $id : '';
-	}
-
 	/**
 	 * @param string $actorId
 	 */
 	public function updateAuthor(string $actorId, string $newId) {
 		$qb = $this->getStreamUpdateSql();
 		$qb->set('attributed_to', $qb->createNamedParameter($newId))
-			->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($newId)));
+			->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($newId)))
+			->set('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($newId)));
 		$qb->limitToAttributedTo($actorId, true);
 
 		$qb->executeStatement();
@@ -2382,6 +1145,7 @@ class StreamRequest extends StreamRequestBuilder {
 			->setValue('published', $qb->createNamedParameter($stream->getPublished()))
 			->setValue('attributed_to', $qb->createNamedParameter($attributedTo))
 			->setValue('attributed_to_prim', $qb->createNamedParameter($qb->prim($attributedTo)))
+			->setValue('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($attributedTo)))
 			->setValue('in_reply_to', $qb->createNamedParameter($stream->getInReplyTo()))
 			->setValue('in_reply_to_prim', $qb->createNamedParameter($qb->prim($stream->getInReplyTo())))
 			->setValue('source', $qb->createNamedParameter($stream->getSource()))
@@ -2402,7 +1166,16 @@ class StreamRequest extends StreamRequestBuilder {
 			)
 			->setValue('local', $qb->createNamedParameter(($stream->isLocal()) ? '1' : '0'));
 
+		// the counts a remote post arrived with, as the origin stated them
+		foreach (Stream::COUNTER_COLUMNS as $key => $column) {
+			$qb->setValue($column, $qb->createNamedParameter(max(0, $stream->getDetailInt($key)), IQueryBuilder::PARAM_INT));
+		}
 		$this->setPostFields($qb, $stream, true);
+		if ($stream instanceof Question) {
+			$qb->setValue('poll_ends_at', $qb->createNamedParameter(
+				$stream->getEndTimestamp(), IQueryBuilder::PARAM_INT
+			));
+		}
 
 		try {
 			$dTime = new DateTime();
@@ -2423,126 +1196,5 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	public function getRelatedToActor(string $actorId) {
-	}
-
-	/** How much of a thread one context request returns. */
-	public const MAX_DESCENDANTS = 200;
-	/** How many levels below a post one context request walks. */
-	public const MAX_DESCENDANT_DEPTH = 20;
-
-	/**
-	 * The whole conversation under a post: its replies, the replies to those,
-	 * and so on — what `/statuses/{id}/context` calls the descendants. Used to
-	 * return the direct replies only, so a thread three messages deep showed as
-	 * one reply with nothing under it.
-	 *
-	 * Bounded in depth and in count (Mastodon bounds the same walk), filtered
-	 * for the viewer at every level, and returned depth first with siblings
-	 * oldest first, so each reply follows what it answers.
-	 *
-	 * @return Stream[]
-	 */
-	public function getDescendants(string $id): array {
-		$byParent = [];
-		$parents = [$id];
-		$count = 0;
-		for ($depth = 0; $depth < self::MAX_DESCENDANT_DEPTH && $parents !== []; $depth++) {
-			$remaining = self::MAX_DESCENDANTS - $count;
-			if ($remaining <= 0) {
-				break;
-			}
-
-			$level = $this->getRepliesTo($parents, $remaining);
-			$count += count($level);
-			$parents = [];
-			foreach ($level as $reply) {
-				$byParent[$reply->getInReplyTo()][] = $reply;
-				$parents[] = $reply->getId();
-			}
-		}
-
-		$thread = [];
-		$this->flattenThread($id, $byParent, $thread);
-		// a row was only ever selected as the child of a row above it, so this is
-		// empty unless a stored in_reply_to differs from its parent's id in spelling
-		foreach ($byParent as $unplaced) {
-			array_push($thread, ...$unplaced);
-		}
-
-		return $thread;
-	}
-
-	/**
-	 * @param array<string, Stream[]> $byParent
-	 * @param Stream[] $thread
-	 */
-	private function flattenThread(string $parent, array &$byParent, array &$thread): void {
-		foreach ($byParent[$parent] ?? [] as $reply) {
-			$thread[] = $reply;
-			$this->flattenThread($reply->getId(), $byParent, $thread);
-		}
-		unset($byParent[$parent]);
-	}
-
-	/**
-	 * One level of a thread: the direct replies to a set of posts, as the
-	 * viewer may see them, oldest first.
-	 *
-	 * @param string[] $ids
-	 *
-	 * @return Stream[]
-	 */
-	protected function getRepliesTo(array $ids, int $limit): array {
-		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
-
-		$qb->filterType(SocialAppNotification::TYPE);
-		// direct messages included, as `getStreamById()` and the ancestor walk
-		// both include them: a DM's recipient row is keyed on the viewer's own
-		// id, so without this the descendants of a direct thread could never
-		// match and a client was handed the ancestors and nothing else
-		$qb->limitToViewer('sd', 'f', true, true);
-		$qb->limitToDBFieldArray(
-			'in_reply_to_prim',
-			array_map(static fn (string $id): string => $qb->prim($id), $ids)
-		);
-		// a thread is read by anyone, logged in or not, and every row comes
-		// back fully hydrated: the context of a post that thousands replied to
-		// is not something to hand to PHP whole
-		$qb->setMaxResults($limit);
-		$qb->orderBy('s.published_time', 'asc');
-
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-
-		return $this->getStreamsFromRequest($qb);
-	}
-
-	/**
-	 * The boosts of a post and the replies to it, each with its author joined
-	 * in: the actors a Delete of the post has to reach beyond the author's own
-	 * followers, because each of them carried the post to followers of theirs.
-	 *
-	 * @return Stream[]
-	 */
-	public function getAnnouncesAndRepliesTo(string $id, int $limit = 500): array {
-		$qb = $this->getStreamSelectSql();
-		$prim = $qb->prim($id);
-		if ($prim === '') {
-			return [];
-		}
-
-		$expr = $qb->expr();
-		$qb->andWhere(
-			$expr->orX(
-				$expr->andX(
-					$qb->exprLimitToDBField('type', Announce::TYPE),
-					$qb->exprLimitToDBField('object_id_prim', $prim)
-				),
-				$qb->exprLimitToDBField('in_reply_to_prim', $prim)
-			)
-		);
-		$qb->setMaxResults($limit);
-		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
-
-		return $this->getStreamsFromRequest($qb);
 	}
 }

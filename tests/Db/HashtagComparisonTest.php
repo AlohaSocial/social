@@ -63,4 +63,18 @@ class HashtagComparisonTest extends TestCase {
 		$this->assertStringContainsString("'st.hashtag', \$page->createNamedParameter(FollowedTagsRequest::normalise(", $body);
 		$this->assertStringNotContainsString("exprLimitToDBField('hashtag'", $body);
 	}
+
+	/**
+	 * For you reads its candidates through the tag index too: the reader's
+	 * interests are normalised tags, so the stored column is compared with
+	 * them as it stands.
+	 */
+	public function testForYouComparesTheStoredTagAsItStands(): void {
+		$source = (string)file_get_contents(__DIR__ . '/../../lib/Db/StreamInterests.php');
+		$body = preg_split('/function interestCandidates\(/', $source, 2)[1] ?? '';
+		$body = preg_split('/\n\t\}\n/', $body, 2)[0];
+
+		$this->assertMatchesRegularExpression('/\$expr->in\(\s+\'st\.hashtag\',/', $body);
+		$this->assertStringNotContainsString("lower('st.hashtag')", $body);
+	}
 }

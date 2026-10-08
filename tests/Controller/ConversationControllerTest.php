@@ -94,6 +94,12 @@ class ConversationControllerTest extends TestCase {
 
 				return $this->conversation($id, 11, false);
 			});
+		$this->conversationService->method('markAllRead')
+			->willReturnCallback(function (): int {
+				$this->writes[] = ['markAllRead'];
+
+				return count($this->own);
+			});
 		$this->conversationService->method('remove')
 			->willReturnCallback(function (Person $viewer, int|string $id): void {
 				$this->mine($id);
@@ -303,7 +309,7 @@ class ConversationControllerTest extends TestCase {
 		$this->token(['read:statuses']);
 
 		$controller = $this->controller('Bearer readonly');
-		foreach ([$controller->read(10), $controller->delete(10)] as $response) {
+		foreach ([$controller->read(10), $controller->delete(10), $controller->readAll()] as $response) {
 			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
 		}
 
@@ -320,6 +326,7 @@ class ConversationControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $controller->read(10)->getStatus());
 		$this->assertSame(Http::STATUS_OK, $controller->delete(10)->getStatus());
+		$this->assertSame(Http::STATUS_OK, $controller->readAll()->getStatus());
 	}
 
 	public function testAFailureThisSideIsNotPublished(): void {
@@ -352,13 +359,10 @@ class ConversationControllerTest extends TestCase {
 	 * badge would never come down.
 	 */
 	public function testReadingThePageMarksThemAllRead(): void {
-		$this->conversationService->expects($this->once())
-			->method('markAllRead')
-			->willReturn(3);
-
 		$response = $this->controller()->readAll();
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame(['count' => 3], $response->getData());
+		$this->assertSame(['count' => 2], $response->getData());
+		$this->assertSame([['markAllRead']], $this->writes);
 	}
 }

@@ -18,6 +18,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\Filter;
 use OCA\Social\Model\Client\Options\ProbeOptions;
+use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
@@ -42,6 +43,7 @@ use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\Template\PublicTemplateResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IRequest;
@@ -482,7 +484,7 @@ class NavigationController extends Controller {
 				'mime' => $mime
 			]);
 
-			return new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
+			return $this->storedFile($file, $mime);
 		} catch (Exception $e) {
 			return $this->failFor($e);
 		}
@@ -508,7 +510,7 @@ class NavigationController extends Controller {
 				'mime' => $mime
 			]);
 
-			$response = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
+			$response = $this->storedFile($file, $mime);
 			$this->cacheMedia($response);
 
 			return $response;
@@ -531,7 +533,7 @@ class NavigationController extends Controller {
 			$mime = '';
 			$file = $this->documentService->getResizedFromCacheAsViewer($id, $this->viewer(), $mime);
 
-			return new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
+			return $this->storedFile($file, $mime);
 		} catch (Exception $e) {
 			return $this->failFor($e);
 		}
@@ -550,7 +552,7 @@ class NavigationController extends Controller {
 		try {
 			$mime = '';
 			$file = $this->documentService->getResizedFromCache($id, $mime, true);
-			$response = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
+			$response = $this->storedFile($file, $mime);
 			$this->cacheMedia($response);
 
 			return $response;
@@ -575,6 +577,17 @@ class NavigationController extends Controller {
 	 * it already applies, and it is the difference between forty requests a
 	 * page and forty requests a day.
 	 */
+	/**
+	 * A stored attachment as the document routes answer with it: a picture,
+	 * a video or a sound inline, anything else a sandboxed download.
+	 */
+	private function storedFile(ISimpleFile $file, string $mime): FileDisplayResponse {
+		$response = new FileDisplayResponse($file, Http::STATUS_OK, ['Content-Type' => $mime]);
+		RangedFileResponse::guardStoredFile($response, $mime);
+
+		return $response;
+	}
+
 	private function cacheMedia(Response $response): void {
 		$response->cacheFor(86400, true, false);
 	}

@@ -38,6 +38,7 @@ use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\ReactionSummaryService;
+use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\IURLGenerator;
@@ -1827,5 +1828,55 @@ class StreamServiceTest extends TestCase {
 
 		$this->assertContains('https://cloud.example.org/notes/opened', $batched);
 		$this->assertContains('https://cloud.example.org/notes/reply', $batched);
+	}
+
+	private function serviceWithTags(MediaTagsRequest $mediaTagsRequest, RemoteFetchQueue $remoteFetchQueue): StreamService {
+		return new StreamService(
+			$this->urlGenerator,
+			$this->streamRequest,
+			$this->activityService,
+			$this->cacheActorService,
+			$this->configService,
+			$this->curlService,
+			$this->linkPreviewService,
+			$this->emojiService,
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
+			new NullLogger(),
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$mediaTagsRequest,
+			$this->accountService,
+			$this->channelService,
+			$remoteFetchQueue
+		);
+	}
+
+	/**
+	 * The people named in a page's pictures come out of the actor cache in
+	 * one query; somebody not cached is left off this page and fetched in the
+	 * background, never over HTTP while the page is being built.
+	 */
+	public function testTaggedPeopleAreReadFromTheCacheAndMissesAreQueued(): void {
+		$bob = new Person();
+		$bob->setId('https://remote.example/users/bob');
+		$mediaTags = $this->createStub(MediaTagsRequest::class);
+		$mediaTags->method('forStreams')->willReturn([
+			7 => ['https://remote.example/users/bob', 'https://gone.example/users/carol'],
+			8 => ['https://remote.example/users/bob'],
+		]);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->cacheActorService->expects($this->once())->method('getCachedFromIds')
+			->with(['https://remote.example/users/bob', 'https://gone.example/users/carol'])
+			->willReturn(['https://remote.example/users/bob' => $bob]);
+		$queue = $this->createMock(RemoteFetchQueue::class);
+		$queue->expects($this->once())->method('resolveActors')->with(['https://gone.example/users/carol']);
+		$first = (new Note())->setNid(7);
+		$second = (new Note())->setNid(8);
+
+		$this->serviceWithTags($mediaTags, $queue)->attachTaggedPeople([$first, $second]);
+
+		$this->assertSame([$bob], $first->getTaggedPeople());
+		$this->assertSame([$bob], $second->getTaggedPeople());
+		$this->assertSame(ACore::FORMAT_LOCAL, $bob->getExportFormat());
 	}
 }

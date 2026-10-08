@@ -86,26 +86,6 @@ class MediaApiControllerTest extends TestCase {
 	}
 
 	/**
-	 * A route that limits only sessioned callers limits almost nobody here.
-	 *
-	 * Nextcloud applies `UserRateLimit` to a caller with a session, and a
-	 * client holding an OAuth token has none — which is every client this API
-	 * is written for. `ApiControllerTest` asserts the same thing about its own
-	 * controller; the rule is the same wherever routes are declared.
-	 */
-	public function testEveryRateLimitedRouteAlsoLimitsSessionlessCallers(): void {
-		$bare = [];
-
-		foreach (array_keys($this->routes()) as $method) {
-			if ($this->has($method, UserRateLimit::class) && !$this->has($method, AnonRateLimit::class)) {
-				$bare[] = $method;
-			}
-		}
-
-		$this->assertSame([], $bare, 'these routes are unthrottled for a bearer-token client');
-	}
-
-	/**
 	 * A write without a ceiling is a write anybody with a token can repeat.
 	 *
 	 * `mediaUpdate()` was one: its POST sibling has carried a limit since it

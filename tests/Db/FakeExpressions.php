@@ -59,6 +59,14 @@ class FakeExpressions {
 		return $x . ' IS NULL';
 	}
 
+	public function isNotNull($x): string {
+		return $x . ' IS NOT NULL';
+	}
+
+	public function notLike($x, $y, $type = null): string {
+		return $x . ' NOT LIKE ' . $y;
+	}
+
 	public function andX(...$parts): string {
 		return '(' . implode(' AND ', $this->parts($parts, 'andX')) . ')';
 	}

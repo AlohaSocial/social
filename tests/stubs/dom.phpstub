@@ -1,0 +1,61 @@
+<?php
+
+declare(strict_types=1);
+/**
+ * SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/**
+ * PHP 8.4's HTML5 DOM, as far as HtmlSanitizer uses it. The app supports
+ * PHP 8.3, where these classes do not exist, and Psalm runs there in CI;
+ * the sanitizer only takes this path on 8.4 and later.
+ */
+namespace Dom {
+	class Node {
+		public readonly string $nodeName;
+		public readonly ?Node $parentNode;
+		public readonly NodeList $childNodes;
+
+		public function insertBefore(Node $node, ?Node $child): Node {}
+		public function removeChild(Node $child): Node {}
+	}
+
+	class Attr extends Node {
+	}
+
+	abstract class CharacterData extends Node {
+	}
+
+	class Text extends CharacterData {
+	}
+
+	class Element extends Node {
+		public readonly ?string $namespaceURI;
+		public readonly string $localName;
+		public readonly NamedNodeMap $attributes;
+
+		public function getAttribute(string $qualifiedName): ?string {}
+		public function setAttribute(string $qualifiedName, string $value): void {}
+		public function removeAttribute(string $qualifiedName): void {}
+	}
+
+	class NodeList implements \IteratorAggregate, \Countable {
+		public function count(): int {}
+		public function getIterator(): \Iterator {}
+	}
+
+	class NamedNodeMap implements \IteratorAggregate, \Countable {
+		public function count(): int {}
+		public function getIterator(): \Iterator {}
+	}
+
+	abstract class Document extends Node {
+		public function getElementById(string $elementId): ?Element {}
+	}
+
+	final class HTMLDocument extends Document {
+		public static function createFromString(string $source, int $options = 0, ?string $overrideEncoding = null): HTMLDocument {}
+		public function saveHtml(?Node $node = null): string {}
+	}
+}

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Controller;
 use OCA\Social\Controller\ModerationController;
 use OCA\Social\Db\DiscoverCategoriesRequest;
 use OCA\Social\Db\MediaBlocksRequest;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
@@ -41,6 +42,8 @@ use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class ModerationControllerTest extends TestCase {
+	private const SELF = 'https://cloud.example/users/alice';
+
 	private ReportService|MockObject $reportService;
 	private FediverseService|MockObject $fediverseService;
 	private ConfigService|MockObject $configService;
@@ -595,6 +598,28 @@ class ModerationControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertTrue($response->getData()['sensitive']);
+	}
+
+	/** The rule is AdminApiService's; what is checked here is that it is asked first. */
+	public function testAnAccountTheModeratorMayNotActOnIsLeftAlone(): void {
+		$this->adminApiService->method('assertMayActOn')
+			->willReturnCallback(function (string $actorId, string $callerId): void {
+				$this->assertSame('alice', $callerId);
+
+				throw new ModerationNotAllowedException('a moderator cannot act on their own account');
+			});
+		$this->moderationService->expects($this->never())->method('decide');
+		$this->moderationService->expects($this->never())->method('lift');
+		$this->moderationService->expects($this->never())->method('forceSensitive');
+
+		foreach ([
+			$this->controller->accountModerate(self::SELF, 'suspend'),
+			$this->controller->accountModerate(self::SELF, ''),
+			$this->controller->accountForceSensitive(self::SELF),
+		] as $response) {
+			$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+			$this->assertSame('a moderator cannot act on their own account', $response->getData()['error']);
+		}
 	}
 
 	public function testForcingSensitiveNeedsAnAccount(): void {

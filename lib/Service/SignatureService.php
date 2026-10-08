@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use DateTime;
+use DateTimeZone;
 use Exception;
 use JsonLdException;
 use OCA\Social\Db\CacheActorsRequest;
@@ -132,6 +133,12 @@ class SignatureService {
 		'sha512' => 'sha512',
 	];
 
+	/** How much of a sender-written value an exception message quotes. */
+	private const EXCERPT = 200;
+
+	/** How much of a signature base an exception message quotes. */
+	private const EXCERPT_BASE = 1000;
+
 	/** The shortest interval between two forced refreshes of the same keyId. */
 	public const KEY_REFRESH_INTERVAL = 300;
 
@@ -151,6 +158,7 @@ class SignatureService {
 		ICacheFactory $cacheFactory,
 		LoggerInterface $logger,
 		private DurableCache $durableCache,
+		private FediverseService $fediverseService,
 	) {
 		$this->cacheActorService = $cacheActorService;
 		$this->cacheActorsRequest = $cacheActorsRequest;
@@ -300,18 +308,14 @@ class SignatureService {
 	 * @throws SignatureException
 	 */
 	private function checkDateHeader(IRequest $request): int {
-		try {
-			$dTime = new DateTime($request->getHeader('date'));
-			$time = $dTime->getTimestamp();
-		} catch (Exception $e) {
-			throw new DateTimeException(
-				'datetime exception: ' . $e->getMessage() . ' - ' . $request->getHeader('date')
-			);
+		$header = $request->getHeader('date');
+		if ($header === '') {
+			throw new SignatureException('missing date header');
 		}
 
-		if ($request->getHeader('date') === '') {
-			// an absent Date would silently parse as "now" and never age out
-			throw new SignatureException('missing date header');
+		$time = self::parseHttpDate($header);
+		if ($time === null) {
+			throw new DateTimeException('date header is not an HTTP date: ' . self::excerpt($header));
 		}
 
 		if ($time < (time() - self::DATE_PAST)) {
@@ -325,6 +329,78 @@ class SignatureService {
 		}
 
 		return $time;
+	}
+
+	/**
+	 * The timestamp an HTTP `Date` header names, or null when it is not one.
+	 *
+	 * Only RFC 7231's IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`) is read,
+	 * which is what Mastodon, Pixelfed, PeerTube, Misskey, GoToSocial and
+	 * this app send, with `UTC` taken for `GMT` and a day without its leading
+	 * zero. A free-form parse such as `new DateTime()` accepts `now` or
+	 * `+1 hour`, and a request signed over a relative date never ages out of
+	 * the replay window.
+	 */
+	public static function parseHttpDate(string $header): ?int {
+		if (preg_match('/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2}) (?:GMT|UTC)$/', trim($header), $m) !== 1) {
+			return null;
+		}
+
+		// the weekday is left out of the parse: PHP moves the date forward to
+		// match a weekday that disagrees with it. `d` takes a day with or
+		// without its leading zero; `!` zeroes what the format does not name
+		$date = DateTime::createFromFormat('!d M Y H:i:s', $m[1], new DateTimeZone('UTC'));
+
+		return self::wellFormed($date) ? $date->getTimestamp() : null;
+	}
+
+	/**
+	 * The timestamp of a Linked Data signature's `created`, or null when it is
+	 * not an RFC 3339 date-time.
+	 *
+	 * Held to the same standard as the `Date` header, for the same reason: a
+	 * relative `created` would keep a signature inside its window for good.
+	 */
+	public static function parseObjectDate(string $created): ?int {
+		if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/', trim($created), $m) !== 1) {
+			return null;
+		}
+
+		$date = DateTime::createFromFormat('!Y-m-d\TH:i:sP', $m[1] . $m[2]);
+
+		return self::wellFormed($date) ? $date->getTimestamp() : null;
+	}
+
+	/**
+	 * Whether `createFromFormat()` produced a date it did not have to roll
+	 * over: an impossible date such as 31 Feb, or 25:00, is moved on silently
+	 * with nothing but a warning to say so.
+	 *
+	 * @psalm-assert-if-true DateTime $date
+	 */
+	private static function wellFormed(DateTime|false $date): bool {
+		if ($date === false) {
+			return false;
+		}
+
+		$errors = DateTime::getLastErrors();
+
+		return $errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0);
+	}
+
+	/**
+	 * A value the sender wrote, made fit for an exception message: control
+	 * characters and bytes outside printable ASCII escaped, and cut at `$max`
+	 * bytes with the length that was left out. These messages reach the log,
+	 * and what goes into them is chosen by whoever sent the request.
+	 */
+	private static function excerpt(string $value, int $max = self::EXCERPT): string {
+		$escaped = addcslashes($value, "\0..\37\177..\377");
+		if (strlen($escaped) <= $max) {
+			return $escaped;
+		}
+
+		return substr($escaped, 0, $max) . '… (' . (strlen($escaped) - $max) . ' more bytes)';
 	}
 
 	/**
@@ -360,7 +436,7 @@ class SignatureService {
 
 		if ($candidates === []) {
 			throw new SignatureException(
-				'no usable signature: every label lacks a signature value or a keyid - ' . $inputHeader
+				'no usable signature: every label lacks a signature value or a keyid - ' . self::excerpt($inputHeader)
 			);
 		}
 
@@ -373,7 +449,7 @@ class SignatureService {
 		// the same refusal, by name, that the draft-cavage path gives an
 		// algorithm it cannot verify: an Ed25519 key has no place to live here
 		throw new SignatureException(
-			'unsupported signature algorithm: ' . $this->messageSignatureAlgorithm($candidates[0])
+			'unsupported signature algorithm: ' . self::excerpt($this->messageSignatureAlgorithm($candidates[0]))
 		);
 	}
 
@@ -458,6 +534,9 @@ class SignatureService {
 		$keyId = $signature['params']['keyid'];
 		$origin = $this->getKeyOrigin($keyId);
 		$signer = $this->keyOwner($keyId);
+		// an instance this one does not federate with is refused before its
+		// key is fetched, not after
+		$this->fediverseService->authorized($origin);
 
 		$covered = array_map(
 			static fn (array $component): string => strtolower($component['name']),
@@ -475,11 +554,12 @@ class SignatureService {
 		);
 		$algorithm = $this->messageSignatureAlgorithm($signature);
 
-		$this->verifyWithKey($keyId, function (string $publicKey) use ($algorithm, $base, $signature): void {
+		$this->verifyWithKey($keyId, function (string $publicKey) use ($algorithm, $base, $signature, $keyId): void {
 			if (!$this->messageSignatures->verify($algorithm, $publicKey, $base, $signature['signature'])) {
 				throw new SignatureException(
-					'signature cannot be checked - label: ' . $signature['label'] . ' - key: ' . $publicKey
-					. ' - algo: ' . $algorithm . ' - base: ' . $base
+					'signature cannot be checked - label: ' . self::excerpt($signature['label'])
+					. ' - keyId: ' . self::excerpt($keyId) . ' - algo: ' . $algorithm
+					. ' - base: ' . self::excerpt($base, self::EXCERPT_BASE)
 				);
 			}
 		});
@@ -581,7 +661,7 @@ class SignatureService {
 
 		if (strlen($data) !== (int)$length) {
 			throw new SignatureException(
-				'content-length does not match the body -- sent: ' . $length
+				'content-length does not match the body -- sent: ' . self::excerpt($length)
 				. ', body: ' . strlen($data)
 			);
 		}
@@ -626,14 +706,14 @@ class SignatureService {
 			if (!hash_equals(base64_encode(hash($expected, $data, true)), $sent)) {
 				throw new SignatureException(
 					'digest does not match the body -- algorithm: ' . $algorithm
-					. ', sent: ' . $sent
+					. ', sent: ' . self::excerpt($sent)
 				);
 			}
 		}
 
 		if ($checked === 0) {
 			throw new SignatureException(
-				'no digest algorithm we can compute: ' . implode(', ', array_keys($digests))
+				'no digest algorithm we can compute: ' . self::excerpt(implode(', ', array_keys($digests)))
 			);
 		}
 	}
@@ -693,6 +773,9 @@ class SignatureService {
 
 			$signature = new LinkedDataSignature();
 			$signature->import(json_decode($object->getSource(), true));
+			// the key lives on the actor's host, and a host this instance does
+			// not federate with is not asked for it
+			$this->fediverseService->authorized($this->getKeyOrigin($actorId));
 			$signature->setPublicKey($this->retrieveKey($actorId));
 
 			if (!$signature->verify()) {
@@ -702,13 +785,10 @@ class SignatureService {
 				}
 			}
 
-			try {
-				$dTime = new DateTime($signature->getCreated());
-				$time = $dTime->getTimestamp();
-			} catch (Exception $e) {
-				throw new DateTimeException(
-					'datetime exception: ' . $e->getMessage() . ' - ' . $signature->getCreated()
-				);
+			// an absent `created` is refused by the window check below
+			$time = ($signature->getCreated() === '') ? 0 : self::parseObjectDate($signature->getCreated());
+			if ($time === null) {
+				throw new DateTimeException('signature created is not a date: ' . self::excerpt($signature->getCreated()));
 			}
 
 			// An LD signature stays valid forever on its own, so any instance
@@ -860,6 +940,9 @@ class SignatureService {
 		$keyId = $sign['keyId'];
 		$origin = $this->getKeyOrigin($keyId);
 		$signer = $this->keyOwner($keyId);
+		// an instance this one does not federate with is refused before its
+		// key is fetched, not after
+		$this->fediverseService->authorized($origin);
 
 		$headers = $sign['headers'];
 
@@ -909,8 +992,9 @@ class SignatureService {
 		if ($publicKey === ''
 			|| openssl_verify($estimated, $signed, $publicKey, $algorithm) !== 1) {
 			throw new SignatureException(
-				'signature cannot be checked - signed: ' . $signed . ' - key: ' . $publicKey
-				. ' - algo: ' . $algorithm . ' - estimated: ' . $estimated
+				'signature cannot be checked - keyId: ' . self::excerpt((string)($sign['keyId'] ?? ''))
+				. ($publicKey === '' ? ' - the actor publishes no key' : '')
+				. ' - algo: ' . $algorithm . ' - estimated: ' . self::excerpt($estimated, self::EXCERPT_BASE)
 			);
 		}
 	}
@@ -1035,7 +1119,7 @@ class SignatureService {
 			// temporary by construction: the caller has to answer something that
 			// asks the peer to deliver this again rather than to give up on it
 			throw new SignatureException(
-				'key retrieval for ' . $id . ' was attempted too recently',
+				'key retrieval for ' . self::excerpt($id) . ' was attempted too recently',
 				Http::STATUS_SERVICE_UNAVAILABLE
 			);
 		}
@@ -1139,7 +1223,7 @@ class SignatureService {
 
 		if (strtolower($signer) !== strtolower($actor)) {
 			throw new InvalidOriginException(
-				'the key that signed this request belongs to ' . $signer . ', not to ' . $actor
+				'the key that signed this request belongs to ' . self::excerpt($signer) . ', not to ' . self::excerpt($actor)
 			);
 		}
 	}
@@ -1151,7 +1235,7 @@ class SignatureService {
 		}
 
 		throw new InvalidOriginException(
-			'SignatureService::getKeyOrigin - host: ' . $host . ' - id: ' . $id
+			'SignatureService::getKeyOrigin - id: ' . self::excerpt($id)
 		);
 	}
 
@@ -1183,7 +1267,7 @@ class SignatureService {
 				return 'sha256';
 			default:
 				throw new SignatureException(
-					'unsupported signature algorithm: ' . $algorithm
+					'unsupported signature algorithm: ' . self::excerpt($algorithm)
 				);
 		}
 	}

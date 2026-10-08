@@ -13,7 +13,6 @@ use DateTime;
 use OCA\Social\Exceptions\QueueStatusException;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\RequestQueueService;
-use OCA\Social\Tools\IExtendedQueryBuilder;
 use OCP\DB\Exception;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -121,18 +120,19 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	 * @return list<RequestQueue>
 	 * @throws Exception
 	 */
-	public function getStandby(int $maxTries = RequestQueueService::MAX_TRIES): array {
+	public function getStandby(): array {
+		$backoff = Backoff::outbound();
 		// what the drain has given up on is marked first: the query below cannot
 		// return those rows any more, and the author is entitled to see that a
 		// server never got their post rather than watch the row vanish
-		$this->abandonExhausted($maxTries);
+		$this->abandonExhausted($backoff->maxTries());
 
 		$qb = $this->getRequestQueueSelectSql();
 		$qb->limitToStatus(RequestQueue::STATUS_STANDBY);
 		// the retry backoff and the give-up threshold, in the query rather than
 		// in PHP afterwards: one dead instance otherwise fills the whole window
 		// with rows that are not due, and starves every other delivery
-		$this->limitToQueueDue($qb, $maxTries);
+		$this->limitToQueueDue($qb, $backoff);
 		// what is most urgent first, then what has been tried least, then the
 		// oldest attempt. 'id asc' alone handed the window to whatever was
 		// queued earliest regardless of priority; `tries` comes before `last`
@@ -355,11 +355,22 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
+	 * Marks a delivered row, and drops the body it carried.
+	 *
+	 * The row is kept for `RequestQueueService::RETENTION_SECONDS` to say that
+	 * this server got the post; the signed activity itself is never read
+	 * again — nothing re-sends a delivered row, `social:queue:retry` included
+	 * — and kept per inbox it was the bulk of the table: one copy of the whole
+	 * document per recipient server, for a week. An abandoned row keeps its
+	 * body, because handing it back to the queue is what `social:queue:retry`
+	 * is for.
+	 *
 	 * @throws QueueStatusException|Exception
 	 */
 	public function setAsSuccess(RequestQueue &$queue): void {
 		$qb = $this->getRequestQueueUpdateSql();
 		$qb->set('status', $qb->createNamedParameter(RequestQueue::STATUS_SUCCESS));
+		$qb->set('activity', $qb->createNamedParameter(''));
 		$qb->limitToId($queue->getId());
 		$qb->limitToStatus(RequestQueue::STATUS_RUNNING);
 
@@ -468,42 +479,6 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 		$qb->limitToId($queue->getId());
 
 		$qb->executeStatement();
-	}
-
-	/**
-	 * The outbound retry schedule, in SQL.
-	 *
-	 * The parent's version unrolls the `tries^4/3` backoff the inbound stream
-	 * queue still runs on. Deliveries wait on `RequestQueueService::retryDelay()`
-	 * instead — Mastodon's schedule, about two days in total — and the query
-	 * has to agree with the PHP side or a row is handed back and then dropped
-	 * again on every pass. Same shape as the parent: one branch per try count
-	 * below the give-up threshold, `tries = n AND (last IS NULL OR last <= now -
-	 * delay(n))`; the threshold falls out of the same expression. A row that
-	 * has never been attempted has a NULL `last`.
-	 */
-	#[\Override]
-	protected function limitToQueueDue(IExtendedQueryBuilder $qb, int $maxTries): void {
-		$expr = $qb->expr();
-		$pf = ($qb->getType() === IExtendedQueryBuilder::SELECT) ? $this->defaultSelectAlias . '.' : '';
-		$now = time();
-
-		// built first and passed in one go: an empty orX() is deprecated and
-		// will throw
-		$due = [];
-		for ($tries = 0; $tries < $maxTries; $tries++) {
-			$cutoff = new DateTime('@' . ($now - RequestQueueService::retryDelay($tries)));
-
-			$due[] = $expr->andX(
-				$expr->eq($pf . 'tries', $qb->createNamedParameter($tries, IQueryBuilder::PARAM_INT)),
-				$expr->orX(
-					$expr->isNull($pf . 'last'),
-					$expr->lte($pf . 'last', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE))
-				)
-			);
-		}
-
-		$qb->andWhere($expr->orX(...$due));
 	}
 
 	/**

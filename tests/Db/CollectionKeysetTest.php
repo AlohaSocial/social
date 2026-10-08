@@ -112,7 +112,8 @@ class CollectionKeysetTest extends TestCase {
 		$body = preg_split('/\n\t\}\n/', preg_split('/function getPublicByAuthor\(/', $streams, 2)[1] ?? '', 2)[0];
 		$this->assertStringContainsString("\$qb->expr()->lt('s.nid'", $body);
 		$this->assertStringContainsString("orderBy('s.nid', 'desc')", $body);
-		$body = preg_split('/\n\t\}\n/', preg_split('/function getPublicRepliesTo\(/', $streams, 2)[1] ?? '', 2)[0];
+		$threads = (string)file_get_contents(__DIR__ . '/../../lib/Db/StreamThreads.php');
+		$body = preg_split('/\n\t\}\n/', preg_split('/function getPublicRepliesTo\(/', $threads, 2)[1] ?? '', 2)[0];
 		$this->assertStringContainsString("\$qb->expr()->gt('s.nid'", $body);
 		$this->assertStringContainsString("orderBy('s.nid', 'asc')", $body);
 	}

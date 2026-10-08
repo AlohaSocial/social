@@ -165,6 +165,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/directories/search')]
 	public function searchDirectories(
@@ -258,11 +259,12 @@ class DiscoveryController extends ClientApiController {
 	 * are cheap and local; these cost one request per account followed, so
 	 * they are asked for rather than included by default.
 	 *
-	 * Rate-limited per user, because that is what a button that makes twenty
-	 * outgoing requests needs.
+	 * Rate-limited per account and per address, because that is what a button
+	 * that makes twenty outgoing requests needs.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 10, period: 300)]
 	#[UserRateLimit(limit: 10, period: 300)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/follow_graph')]
 	public function followGraph(int $limit = 20): DataResponse {
@@ -484,6 +486,7 @@ class DiscoveryController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 10, period: 60)]
 	#[UserRateLimit(limit: 10, period: 60)]
 	#[FrontpageRoute(
 		verb: 'POST',

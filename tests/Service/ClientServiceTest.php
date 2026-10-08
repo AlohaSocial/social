@@ -18,6 +18,7 @@ use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\ConfigService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -28,14 +29,21 @@ class ClientServiceTest extends TestCase {
 	private ClientRequest|MockObject $clientRequest;
 	private ClientAuthRequest|MockObject $clientAuthRequest;
 	private ClientService $service;
+	private ConfigService $configService;
+	/** What `token_max_days` reads as. */
+	private int $maxDays = 365;
 
 	protected function setUp(): void {
 		$this->clientRequest = $this->createMock(ClientRequest::class);
 		$this->clientAuthRequest = $this->createMock(ClientAuthRequest::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$this->configService->method('getAppValueInt')
+			->willReturnCallback(fn (string $key): int => $key === ConfigService::SOCIAL_TOKEN_MAX_DAYS ? $this->maxDays : 0);
 		$this->service = new ClientService(
 			$this->clientRequest,
 			new SecretHasher(),
-			$this->clientAuthRequest
+			$this->clientAuthRequest,
+			$this->configService
 		);
 	}
 
@@ -44,10 +52,25 @@ class ClientServiceTest extends TestCase {
 		$client->setAppName('Tusky');
 		$client->setAppRedirectUris(['urn:ietf:wg:oauth:2.0:oob', 'https://app.example/callback']);
 		$client->setAppScopes(['read', 'write']);
-		$client->setAppClientSecret('s3cret');
+		// stored the way ClientRequest::saveApp() stores it
+		$client->setAppClientSecret((new SecretHasher())->hash('s3cret'));
 		$client->setAuthCode('c0de');
 
 		return $client;
+	}
+
+	/**
+	 * Expired authorizations used to go only when somebody presented one, and
+	 * registrations nobody signed in with never went at all.
+	 */
+	public function testTheSweepTakesExpiredAuthorizationsAndUnusedRegistrations(): void {
+		$this->clientAuthRequest->expects($this->once())->method('deprecate');
+		$this->clientRequest->expects($this->once())->method('deleteNeverAuthorized')
+			->with($this->callback(static fn (int $before): bool
+				=> abs($before - (time() - ClientService::TIME_UNUSED_APP_TTL)) <= 5))
+			->willReturn(3);
+
+		$this->assertSame(3, $this->service->sweep());
 	}
 
 	public function testCreateAppGeneratesCredentialsAndSaves(): void {
@@ -402,6 +425,50 @@ class ClientServiceTest extends TestCase {
 		$this->service->getFromToken('tok');
 	}
 
+	/**
+	 * Use kept a token alive for ever: the sliding TTL is refreshed by every
+	 * request, so a copied token lived as long as whoever held it used it.
+	 */
+	public function testATokenInUseStillStopsAtItsAbsoluteLifetime(): void {
+		$client = $this->registeredClient();
+		$client->setAuthId(11);
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 365 * 86400 - 1);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->service->getFromToken('tok');
+	}
+
+	public function testATokenInsideItsLifetimeIsAccepted(): void {
+		$client = $this->registeredClient();
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 364 * 86400);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+
+		$this->assertSame($client, $this->service->getFromToken('tok'));
+	}
+
+	public function testZeroDaysLetsATokenInUseLiveForEver(): void {
+		$this->maxDays = 0;
+		$client = $this->registeredClient();
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 10 * 365 * 86400);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+
+		$this->assertSame($client, $this->service->getFromToken('tok'));
+		$this->assertSame(0, $this->service->expiresAt($client));
+	}
+
+	public function testTheLifetimeIsCountedFromTheGrant(): void {
+		$client = $this->registeredClient();
+		$client->setAuthCreation(1_700_000_000);
+
+		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->expiresAt($client));
+	}
+
 	public function testGetFromTokenPropagatesUnknownToken(): void {
 		$this->clientAuthRequest->method('getByToken')->willThrowException(new ClientNotFoundException());
 
@@ -449,6 +516,16 @@ class ClientServiceTest extends TestCase {
 		$this->expectException(ClientException::class);
 		$this->expectExceptionMessage($message);
 		$this->service->confirmData($this->registeredClient(), $data);
+	}
+
+	/** A secret still stored bare is one the hashing migration missed. */
+	public function testConfirmDataRefusesASecretStoredInPlaintext(): void {
+		$client = $this->registeredClient();
+		$client->setAppClientSecret('s3cret');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage('wrong client_secret');
+		$this->service->confirmData($client, ['client_secret' => 's3cret']);
 	}
 
 	public function testConfirmDataAcceptsSecretsStoredHashed(): void {

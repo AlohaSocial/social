@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use InvalidArgumentException;
 use OCA\Social\Db\InstanceStatsRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ModerationNotAllowedException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Client\AdminDomainBlock;
@@ -154,7 +155,7 @@ class PixelfedAdminServiceTest extends TestCase {
 		$this->adminApiService->expects($this->once())->method('act')
 			->with($account, AdminApiService::ACTION_SUSPEND, $this->anything());
 
-		$this->assertSame('deleted', $this->service->userAction('9', 'delete')['msg']);
+		$this->assertSame('deleted', $this->service->userAction('9', 'delete', 'admin')['msg']);
 	}
 
 	/**
@@ -169,7 +170,7 @@ class PixelfedAdminServiceTest extends TestCase {
 		$this->adminApiService->expects($this->once())->method('act')
 			->with($account, AdminApiService::ACTION_SILENCE, $this->anything());
 
-		$this->assertSame('unlisted', $this->service->userAction('9', 'unlisted')['msg']);
+		$this->assertSame('unlisted', $this->service->userAction('9', 'unlisted', 'admin')['msg']);
 	}
 
 	public function testCwMarksEverythingTheAccountPostsSensitive(): void {
@@ -177,7 +178,24 @@ class PixelfedAdminServiceTest extends TestCase {
 		$this->moderationService->expects($this->once())->method('forceSensitive')
 			->with(self::ALICE, true);
 
-		$this->assertSame('cw', $this->service->userAction('9', 'cw')['msg']);
+		$this->assertSame('cw', $this->service->userAction('9', 'cw', 'admin')['msg']);
+	}
+
+	public function testAnAccountTheModeratorMayNotActOnIsLeftAlone(): void {
+		$this->adminApiService->method('account')->willReturn($this->account(self::ALICE, 'alice', 7, 1_700_000_000));
+		$this->adminApiService->method('assertMayActOn')
+			->willThrowException(new ModerationNotAllowedException('a moderator cannot act on their own account'));
+		$this->adminApiService->expects($this->never())->method('act');
+		$this->moderationService->expects($this->never())->method('forceSensitive');
+
+		foreach (['delete', 'unlisted', 'cw'] as $action) {
+			try {
+				$this->service->userAction('7', $action, 'alice');
+				$this->fail($action . ' was applied');
+			} catch (ModerationNotAllowedException $e) {
+				$this->addToAssertionCount(1);
+			}
+		}
 	}
 
 	/** The one that is genuinely not a state an account has here. */
@@ -185,7 +203,7 @@ class PixelfedAdminServiceTest extends TestCase {
 		$this->adminApiService->expects($this->never())->method('act');
 
 		$this->expectException(InvalidArgumentException::class);
-		$this->service->userAction('9', 'no_autolink');
+		$this->service->userAction('9', 'no_autolink', 'admin');
 	}
 
 	public function testIgnoringAReportResolvesItAndTheOtherActionsAreRefused(): void {

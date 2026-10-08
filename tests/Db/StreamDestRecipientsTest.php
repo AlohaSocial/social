@@ -113,7 +113,7 @@ class StreamDestRecipientsTest extends TestCase {
 
 	/**
 	 * The three generators must all go through it: a recipient list that
-	 * reaches `create()` unfiltered is the churn coming back.
+	 * reaches `createRecipients()` unfiltered is the churn coming back.
 	 */
 	public function testEveryGeneratorNamesRecipientsThroughTheFilter(): void {
 		$source = (string)file_get_contents(__DIR__ . '/../../lib/Db/StreamDestRequest.php');

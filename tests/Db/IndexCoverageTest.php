@@ -47,6 +47,9 @@ class IndexCoverageTest extends TestCase {
 		yield 'the posts of one account' => [
 			'social_stream', ['attributed_to_prim'],
 		];
+		yield 'a page of one account\'s posts, newest first' => [
+			'social_stream', ['attributed_to_prim', 'nid'],
+		];
 		yield 'the replies under a post' => [
 			'social_stream', ['in_reply_to_prim'],
 		];
@@ -58,6 +61,15 @@ class IndexCoverageTest extends TestCase {
 		];
 		yield 'the outbound queue a drain reads' => [
 			'social_req_queue', ['status'],
+		];
+		yield 'the voters of the polls a sweep announces' => [
+			'social_action', ['poll_prim'],
+		];
+		yield 'the polls that closed since the last sweep' => [
+			'social_stream', ['poll_ends_at'],
+		];
+		yield 'the author\'s instance a domain block or a silence compares' => [
+			'social_stream', ['author_host'],
 		];
 	}
 

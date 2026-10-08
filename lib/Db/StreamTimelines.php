@@ -1195,38 +1195,44 @@ trait StreamTimelines {
 	 * whoever follows it and stops appearing in the public and global
 	 * timelines, which is the whole difference between a nuisance and a menace.
 	 *
-	 * Matched on the author's id rather than on a host column, because there is
-	 * none: an actor id begins with the scheme and host, so a domain and
-	 * everything under it is a prefix — `https://evil.test/` and
-	 * `%.evil.test/`. A block reads subdomains the same way, and anything less
-	 * would last as long as it takes to point a wildcard record at the same
-	 * host. The list is an admin-written handful, so one clause each is cheap;
-	 * `LIKE` on the id is not indexed, which is why this runs only on the two
-	 * timelines that need it.
+	 * Matched on `author_host`, the host of the author's id: the instance
+	 * itself by `NOT IN`, and everything under it by a suffix — a block reads
+	 * subdomains the same way, and anything less would last as long as it
+	 * takes to point a wildcard record at the same host. A suffix is not
+	 * indexed either, but it is a comparison against a short column rather
+	 * than a scan of the id's text, and the list is an admin-written handful.
+	 *
+	 * A row `Cron\StreamAuthorHosts` has not reached yet has no host, and is
+	 * matched by its id instead, as a prefix — `https://evil.test/` and
+	 * `%.evil.test/` — until the job says every row has one.
 	 */
 	private function filterSilencedInstances(SocialQueryBuilder $qb): void {
-		$silenced = $this->fediverseService->getSilencedAddresses();
-		if ($silenced === []) {
+		$hosts = DomainBlocksRequestBuilder::hostsToMatch(
+			array_map(static fn (string $host): string => rtrim(trim($host), '.'), $this->fediverseService->getSilencedAddresses())
+		);
+		if ($hosts === []) {
 			return;
 		}
 
-		foreach ($silenced as $host) {
-			$host = strtolower(trim($host));
-			if ($host === '') {
-				continue;
-			}
-
-			$qb->andWhere($qb->expr()->andX(
-				$qb->expr()->notLike(
-					's.attributed_to',
-					$qb->createNamedParameter('%://' . $this->escapeLike($host) . '/%')
-				),
-				$qb->expr()->notLike(
-					's.attributed_to',
-					$qb->createNamedParameter('%.' . $this->escapeLike($host) . '/%')
-				)
-			));
+		$expr = $qb->expr();
+		$byHost = [$expr->notIn('s.author_host', $qb->createNamedParameter($hosts, IQueryBuilder::PARAM_STR_ARRAY))];
+		$byId = [];
+		foreach ($hosts as $host) {
+			$byHost[] = $expr->notLike('s.author_host', $qb->createNamedParameter('%.' . $this->escapeLike($host)));
+			$byId[] = $expr->notLike('s.attributed_to', $qb->createNamedParameter('%://' . $this->escapeLike($host) . '/%'));
+			$byId[] = $expr->notLike('s.attributed_to', $qb->createNamedParameter('%.' . $this->escapeLike($host) . '/%'));
 		}
+
+		if ($this->authorHostsAreFilled()) {
+			$qb->andWhere($expr->andX(...$byHost));
+
+			return;
+		}
+
+		$qb->andWhere($expr->orX(
+			$expr->andX($expr->isNotNull('s.author_host'), ...$byHost),
+			$expr->andX($expr->isNull('s.author_host'), ...$byId)
+		));
 	}
 
 	/** `%`, `_` and the escape itself are literals in a hostname. */

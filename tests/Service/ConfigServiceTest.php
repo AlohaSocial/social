@@ -485,7 +485,23 @@ class ConfigServiceTest extends TestCase {
 		$this->service->withRequestTimeout(10, fn () => null, 5);
 
 		$options = $this->service->requestOptions(7);
-		$this->assertSame(7, $options['connect_timeout'], 'no separate budget was asked for');
+		$this->assertSame(ConfigService::DEFAULT_CONNECT_TIMEOUT, $options['connect_timeout'], 'no separate budget was asked for');
+	}
+
+	public function testReachingAPeerHasAShorterBudgetThanReadingItsAnswer(): void {
+		// a dead host must not cost the whole read timeout before it counts as failed
+		$this->withAppValues([]);
+
+		$options = $this->service->requestOptions(30);
+		$this->assertSame(30, $options['timeout']);
+		$this->assertSame(ConfigService::DEFAULT_CONNECT_TIMEOUT, $options['connect_timeout']);
+		$this->assertLessThanOrEqual(5, ConfigService::DEFAULT_CONNECT_TIMEOUT);
+	}
+
+	public function testTheConnectBudgetNeverExceedsTheRequestTimeout(): void {
+		$this->withAppValues([]);
+
+		$this->assertSame(2, $this->service->requestOptions(2)['connect_timeout']);
 	}
 
 	public function testTheTimeoutOverrideLastsOnlyForThatCall(): void {

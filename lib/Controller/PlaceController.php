@@ -15,6 +15,7 @@ use OCA\Social\Service\ClientService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PlaceService;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -52,6 +53,7 @@ class PlaceController extends ClientApiController {
 	/** Places whose name begins with what was typed. */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 120, period: 60)]
 	#[UserRateLimit(limit: 120, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/places/search')]
 	public function search(string $q = '', int $limit = PlacesRequest::SEARCH_LIMIT): DataResponse {
