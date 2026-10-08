@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1 and 2 (§18) are implemented; phases 3 and 4 are specification.**
+**Status: phases 1, 2 and the first part of 3 (§18) are implemented; the rest of 3, and 4, are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1038,6 +1038,50 @@ Everything in the phase 2 row, in `lib/Atproto/Reader/` (`BlueskyActorService`,
   `did:web:api.bsky.app`) are configuration of their own beside the public
   one, because the public AppView refuses authenticated requests; the
   interop job points both at the dev AppView.
+
+### Phase 3 as it lands
+
+Phase 3 is four concerns, so it lands as four pull requests in this order:
+**3a** interaction (threads, quotes, link cards, deletes both ways, quote
+rules), **3b** moderation (§12.2–12.4), **3c** Bluesky apps logging in
+(§6.3, app passwords then OAuth), **3d** video (D11).
+
+**3a as built** — `Publisher\PostRefs` (the strong reference of a local
+post that was published or of a Bluesky post read here, and a reply's
+thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
+`InteractionPublisher::removeAllOf()`, `Reader\DeletionSweep`, and
+`PostStore::storeByUri()`/`deleteGone()`:
+
+- **Replies** to a Bluesky post read here are replies in its thread there:
+  the parent is the post's stored URI and CID; the root is what was stored
+  with the parent when it was read (`details.atproto.reply_root`, new), or
+  what the AppView says of it, or the parent itself. A Bluesky reply whose
+  parent is not here fetches the parent one hop up (`getPosts`), never
+  further.
+- **Quotes** of a post that is on Bluesky are `app.bsky.embed.record`
+  (`recordWithMedia` with pictures); of anything else, the link as before.
+  A quote of a Bluesky post stands at once: Bluesky asks nobody's
+  permission, so no FEP-044f `QuoteRequest` waits for an answer.
+- **Link cards**: the post's link preview as `app.bsky.embed.external`
+  when it has a title and the post has no pictures and quotes nothing —
+  **without a thumbnail**: the preview's picture is a remote URL, and a
+  blob here is a stored document; storing card pictures idempotently
+  across reconcile passes is left for later. A card that appears after the
+  post was published is picked up by the reconcile pass within the edit
+  grace period, as an edit would be.
+- **Quote rules**: a post whose quote policy is followers-only or nobody
+  gets an `app.bsky.feed.postgate` under its rkey with `disableRule`.
+  Bluesky cannot say "followers only", so the stricter rule is published
+  rather than an open one. Reply approval has no Bluesky equivalent and
+  writes no threadgate: Bluesky replies arrive and are held here like any.
+- **Deletes**: a local post's delete removes its postgate with it and the
+  like and repost records local accounts made of it (§8.5); a post deleted
+  on Bluesky is noticed by the maintenance job, which asks the AppView
+  about a page of 25 stored Bluesky posts of the last week per run and
+  deletes what it no longer has (§9.5), the local likes' records too. An
+  AppView that does not answer proves nothing and nothing is deleted.
+- References are validated before they are written: a CID that is not a
+  CID makes the post "not on Bluesky" (linked), never a refused commit.
 
 ## 19. Open questions
 

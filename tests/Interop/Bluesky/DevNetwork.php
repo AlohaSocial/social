@@ -178,6 +178,39 @@ final class DevNetwork {
 		return $dids;
 	}
 
+	/**
+	 * The replies under a post, as the AppView's thread view has them.
+	 *
+	 * @return list<array> the reply post views, one level deep
+	 */
+	public function replies(string $uri): array {
+		$answer = $this->get($this->appView, 'app.bsky.feed.getPostThread', ['uri' => $uri, 'depth' => '1']);
+		$replies = [];
+		foreach (is_array($answer['thread']['replies'] ?? null) ? $answer['thread']['replies'] : [] as $reply) {
+			if (is_array($reply['post'] ?? null)) {
+				$replies[] = $reply['post'];
+			}
+		}
+
+		return $replies;
+	}
+
+	/** One post as the AppView shows it, or null. */
+	public function postView(string $uri): ?array {
+		$answer = $this->get($this->appView, 'app.bsky.feed.getPosts', ['uris' => $uri]);
+
+		return is_array($answer['posts'][0] ?? null) ? $answer['posts'][0] : null;
+	}
+
+	/** The signed-in user deletes one of their posts. */
+	public function deletePost(string $uri): void {
+		$this->post($this->pds, 'com.atproto.repo.deleteRecord', [
+			'repo' => $this->did,
+			'collection' => 'app.bsky.feed.post',
+			'rkey' => substr($uri, (int)strrpos($uri, '/') + 1),
+		], true);
+	}
+
 	/** The signed-in user likes a post. */
 	public function like(string $uri, string $cid): array {
 		return $this->post($this->pds, 'com.atproto.repo.createRecord', [

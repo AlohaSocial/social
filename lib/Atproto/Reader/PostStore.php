@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -30,6 +32,8 @@ use Throwable;
 class PostStore {
 	public function __construct(
 		private PostMapper $mapper,
+		private AppViewClient $appView,
+		private InteractionPublisher $interactions,
 		private ActorMapper $actorMapper,
 		private BlueskyActorService $actors,
 		private ImportService $import,
@@ -74,7 +78,7 @@ class PostStore {
 	 *
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
-	public function storePost(array $post): bool {
+	public function storePost(array $post, bool $fetchParent = true): bool {
 		$create = $this->mapper->create($post);
 		if ($create === null || $this->isKnown($create['object']['id'])) {
 			return false;
@@ -82,8 +86,80 @@ class PostStore {
 		if (!$this->ensureActor(is_array($post['author'] ?? null) ? $post['author'] : [])) {
 			return false;
 		}
+		$parent = (string)($create['object']['inReplyTo'] ?? '');
+		if ($fetchParent && BlueskyIds::isPostId($parent) && !$this->isKnown($parent)) {
+			// one hop up, so a reply is not stored without what it answers;
+			// the parent's own parent is not fetched
+			$this->storeByUri((string)($post['record']['reply']['parent']['uri'] ?? ''));
+		}
 
 		return $this->process($create);
+	}
+
+	/**
+	 * A post the AppView has by its `at://` URI, stored like one read off a
+	 * feed; its parent is not fetched.
+	 */
+	public function storeByUri(string $uri): bool {
+		if ($uri === '') {
+			return false;
+		}
+		try {
+			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => [$uri]]);
+		} catch (Throwable $e) {
+			$this->logger->notice('Bluesky post not fetched', ['uri' => $uri, 'exception' => $e]);
+
+			return false;
+		}
+		$post = is_array($answer['posts'][0] ?? null) ? $answer['posts'][0] : null;
+
+		return $post !== null && $this->storePost($post, false);
+	}
+
+	/**
+	 * Which of these stored Bluesky posts the AppView still has. A post it
+	 * no longer answers for is gone — deleted, or its author is — and is
+	 * deleted here the way a remote `Delete` would.
+	 *
+	 * @param string[] $postIds stored ids, at most 25 (one `getPosts`)
+	 * @return int how many were deleted
+	 */
+	public function deleteGone(array $postIds): int {
+		$uris = [];
+		foreach (array_slice($postIds, 0, 25) as $id) {
+			$parsed = BlueskyIds::parsePostId($id);
+			if ($parsed !== null) {
+				$uris[$id] = BlueskyIds::atUri($parsed['did'], BlueskyIds::POST, $parsed['rkey']);
+			}
+		}
+		if ($uris === []) {
+			return 0;
+		}
+		try {
+			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => array_values($uris)]);
+		} catch (Throwable $e) {
+			// nothing is concluded from an AppView that did not answer
+			$this->logger->notice('Bluesky posts not checked', ['exception' => $e]);
+
+			return 0;
+		}
+		if (!is_array($answer['posts'] ?? null)) {
+			return 0;
+		}
+		$present = [];
+		foreach ($answer['posts'] as $post) {
+			if (is_array($post) && is_string($post['uri'] ?? null)) {
+				$present[$post['uri']] = true;
+			}
+		}
+		$deleted = 0;
+		foreach ($uris as $id => $uri) {
+			if (!isset($present[$uri]) && $this->delete($id)) {
+				$deleted++;
+			}
+		}
+
+		return $deleted;
 	}
 
 	/**
@@ -94,13 +170,17 @@ class PostStore {
 			return false;
 		}
 		$did = BlueskyIds::didOf($postId);
-
-		return $this->process([
+		$deleted = $this->process([
 			'id' => $postId . '/delete',
 			'type' => 'Delete',
 			'actor' => BlueskyIds::actorId($did),
 			'object' => $postId,
 		]);
+		if ($deleted) {
+			$this->interactions->removeAllOf($postId);
+		}
+
+		return $deleted;
 	}
 
 	public function isKnown(string $id): bool {

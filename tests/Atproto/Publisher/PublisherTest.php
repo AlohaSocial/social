@@ -112,6 +112,28 @@ class PublisherTest extends TestCase {
 		$this->assertTrue($this->publisher->goesToBluesky($this->post()));
 	}
 
+	public function testARestrictedQuotePolicyWritesAPostgateUnderThePostsRkey(): void {
+		$this->mapper->method('postgate')->willReturnCallback(static fn (Stream $post, string $uri): array => ['$type' => RecordMapper::POSTGATE, 'post' => $uri, 'embeddingRules' => [['$type' => RecordMapper::POSTGATE . '#disableRule']], 'createdAt' => '2026-10-08T10:00:00.000Z']);
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static function (array $writes): bool {
+			[$post, $gate] = $writes;
+
+			return count($writes) === 2
+				&& $post->collection === RecordMapper::POST && $gate->collection === RecordMapper::POSTGATE
+				&& $post->rkey === $gate->rkey
+				&& $gate->record['post'] === 'at://' . self::DID . '/app.bsky.feed.post/' . $post->rkey;
+		}))->willReturnCallback(fn (): CommitResult => $this->written());
+
+		$this->assertNotNull($this->publisher->publishPost($this->post()));
+	}
+
+	public function testADeleteTakesThePostgateWithIt(): void {
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), '', self::POST, 0);
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POSTGATE, '3kznmn7xqxl22', Cid::forRaw('g'), '', self::POST, 0);
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => array_map(static fn (RepoWrite $w): string => $w->action . ' ' . $w->collection, $writes) === [RepoWrite::DELETE . ' ' . RecordMapper::POST, RepoWrite::DELETE . ' ' . RecordMapper::POSTGATE]))->willReturnCallback(fn (): CommitResult => $this->written());
+
+		$this->assertTrue($this->publisher->deletePost(self::POST));
+	}
+
 	public function testADeleteRemovesTheRecord(): void {
 		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), '', self::POST, 0);
 		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->action === RepoWrite::DELETE && $writes[0]->rkey === '3kznmn7xqxl22'))->willReturnCallback(fn (): CommitResult => $this->written());

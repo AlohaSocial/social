@@ -314,6 +314,11 @@ reply under her post. The test polls the watch and the notification cursor
 directly rather than the timed pass, because an empty first read backs a row
 off past the test's wait.
 
+`AtprotoThreadsTest` is phase 3a: a reply from here to a dev-PDS post is in
+that post's thread on the AppView (parent and root), a quote of it is a
+record embed, and when the author deletes it on Bluesky the deletion check
+removes it here.
+
 What it cannot prove: indexing by `bsky.app` itself, which needs a public
 https host with wildcard DNS and is done by hand; and anything of reading
 Bluesky from here, which is phase 2.

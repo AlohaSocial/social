@@ -9,19 +9,27 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Publisher;
 
+use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
+use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\ActionsRequest;
+use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
 class InteractionPublisherTest extends TestCase {
@@ -33,6 +41,12 @@ class InteractionPublisherTest extends TestCase {
 	/** @var RepositoryService&MockObject */
 	private RepositoryService $repositories;
 	private InteractionPublisher $interactions;
+	/** @var StreamRequest&MockObject */
+	private StreamRequest $streams;
+	/** @var ActionsRequest&MockObject */
+	private ActionsRequest $actions;
+	/** @var array<string, Note> */
+	private array $stored = [];
 	private Person $alice;
 
 	protected function setUp(): void {
@@ -40,7 +54,11 @@ class InteractionPublisherTest extends TestCase {
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
-		$this->interactions = new InteractionPublisher($this->publisher, $this->repositories, $time);
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturnCallback(fn (string $id): Note => $this->stored[$id] ?? throw new StreamNotFoundException());
+		$this->actions = $this->createMock(ActionsRequest::class);
+		$refs = new PostRefs($this->repositories, $this->streams, $this->createMock(AppViewClient::class), new NullLogger());
+		$this->interactions = new InteractionPublisher($this->publisher, $refs, $this->actions, $time, new NullLogger());
 		$this->alice = new Person();
 		$this->alice->setId('https://social.test/@alice');
 		$this->alice->setLocal(true);
@@ -49,10 +67,11 @@ class InteractionPublisherTest extends TestCase {
 	public function testALikeOfABlueskyPostNamesItsUriAndCid(): void {
 		$post = new Note();
 		$post->setId('https://bsky.app/profile/' . self::OTHER . '/post/3kpost');
-		$post->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kpost', 'cid' => 'bafypost']);
+		$post->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kpost', 'cid' => Cid::forRaw('post')->toString()]);
+		$this->stored[$post->getId()] = $post;
 		$this->publisher->expects($this->once())->method('writeRecord')->with($this->alice, RecordMapper::LIKE, [
 			'$type' => RecordMapper::LIKE,
-			'subject' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kpost', 'cid' => 'bafypost'],
+			'subject' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kpost', 'cid' => Cid::forRaw('post')->toString()],
 			'createdAt' => '2025-10-09T08:53:20.000Z',
 		], 'https://social.test/@alice#like/abc')->willReturn(true);
 
@@ -77,6 +96,23 @@ class InteractionPublisherTest extends TestCase {
 
 		$this->assertFalse($this->interactions->like($this->alice, $post, 'x'));
 		$this->assertNull($this->interactions->subjectOf($post));
+	}
+
+	public function testADeletedPostTakesTheLocalLikeAndRepostRecordsWithIt(): void {
+		$like = new Like();
+		$like->setId('https://social.test/@alice#like/1');
+		$boost = new Announce();
+		$boost->setId('https://social.test/@alice/announce/1');
+		$this->actions->method('getActionsOnObject')->willReturnCallback(static fn (string $post, string $type): array => $type === Like::TYPE ? [$like] : [$boost]);
+		$removed = [];
+		$this->publisher->method('removeRecord')->willReturnCallback(static function (string $collection, string $id) use (&$removed): bool {
+			$removed[] = $collection . ' ' . $id;
+
+			return true;
+		});
+
+		$this->assertSame(2, $this->interactions->removeAllOf('https://bsky.app/profile/x/post/1'));
+		$this->assertSame([RecordMapper::LIKE . ' https://social.test/@alice#like/1', RecordMapper::REPOST . ' https://social.test/@alice/announce/1'], $removed);
 	}
 
 	public function testUndoingRemovesTheRecordByTheSameKey(): void {

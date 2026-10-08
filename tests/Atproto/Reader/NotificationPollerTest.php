@@ -140,8 +140,7 @@ class NotificationPollerTest extends TestCase {
 	}
 
 	public function testRepliesMentionsAndQuotesStoreTheirPost(): void {
-		$this->appView->expects($this->exactly(3))->method('query')->with('app.bsky.feed.getPosts', $this->callback(static fn (array $p): bool => count($p['uris']) === 1))->willReturn(['posts' => [['uri' => 'x']]]);
-		$this->store->expects($this->exactly(3))->method('storePost')->willReturn(true);
+		$this->store->expects($this->exactly(3))->method('storeByUri')->with($this->stringStartsWith('at://' . self::BOB . '/app.bsky.feed.post/3k'))->willReturn(true);
 		foreach (['reply', 'mention', 'quote'] as $reason) {
 			$this->assertTrue($this->poller->handle($this->alice, $this->notification($reason, RecordMapper::POST, '3k' . $reason)));
 		}
