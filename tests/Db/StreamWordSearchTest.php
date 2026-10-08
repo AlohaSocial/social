@@ -171,11 +171,11 @@ class StreamWordSearchTest extends TestCase {
 		};
 
 		$this->assertMatchesRegularExpression(
-			'/generateStreamTags\(\$stream\);\s+\$this->searchTermsRequest->index\(\$stream\);\s+(?:\/\/[^\n]*\s+)*\$this->dbConnection->commit\(\);/',
+			'/generateStreamTags\(\$stream\);\s+\$this->searchTermsRequest->index\(\$stream\);\s+(?:\/\/[^\n]*\s+|\$this->\w+\([^;]*\);\s+)*\$this->dbConnection->commit\(\);/',
 			$body('save')
 		);
 		$this->assertMatchesRegularExpression(
-			'/replaceStreamTags\(\$stream\);\s+(?:\/\/[^\n]*\s+)*\$this->searchTermsRequest->reindex\(\$stream\);\s+\$this->dbConnection->commit\(\);/',
+			'/replaceStreamTags\(\$stream\);\s+(?:\/\/[^\n]*\s+)*\$this->searchTermsRequest->reindex\(\$stream\);\s+(?:\/\/[^\n]*\s+|\$this->\w+\([^;]*\);\s+)*\$this->dbConnection->commit\(\);/',
 			$body('update')
 		);
 	}
