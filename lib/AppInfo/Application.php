@@ -29,6 +29,7 @@ use OCA\Social\External\ExternalDavGuard;
 use OCA\Social\External\ExternalGroupBackend;
 use OCA\Social\External\ExternalUserBackend;
 use OCA\Social\External\SignupLoginProvider;
+use OCA\Social\Listeners\AtprotoPostListener;
 use OCA\Social\Listeners\ExternalAddressBookListener;
 use OCA\Social\Listeners\ExternalDavListener;
 use OCA\Social\Listeners\ExternalFirstLoginListener;
@@ -49,6 +50,7 @@ use OCA\Social\Middleware\RateLimitHeadersMiddleware;
 use OCA\Social\Notification\Notifier;
 use OCA\Social\Reference\PostReferenceProvider;
 use OCA\Social\Search\UnifiedSearchProvider;
+use OCA\Social\SetupChecks\BlueskyReady;
 use OCA\Social\SetupChecks\ClientApiAtRoot;
 use OCA\Social\SetupChecks\CloudAddressMatches;
 use OCA\Social\SetupChecks\CronRanRecently;
@@ -115,6 +117,10 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(BeforeTemplateRenderedEvent::class, ProfileSectionListener::class);
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		// a public post goes to Bluesky as it is made, edited or deleted
+		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);
+		$context->registerEventListener(PostEditedEvent::class, AtprotoPostListener::class);
+		$context->registerEventListener(PostDeletedEvent::class, AtprotoPostListener::class);
 		// the class is the Files app's, not OCP's; the name is a string here and
 		// the listener is only ever built when Files dispatches the event
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesScriptsListener::class);
@@ -161,6 +167,7 @@ class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(UploadLimitsAgree::class);
 		$context->registerSetupCheck(VideoConverter::class);
 		$context->registerSetupCheck(CronRanRecently::class);
+		$context->registerSetupCheck(BlueskyReady::class);
 		$context->registerSetupCheck(OutboundQueueNotStuck::class);
 		$context->registerSetupCheck(ClientApiAtRoot::class);
 		$context->registerSetupCheck(ProxyForwardsTheScheme::class);

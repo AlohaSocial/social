@@ -52,6 +52,21 @@ webpackConfig.plugins.push(new webpack.DefinePlugin({
 // half the time.
 webpackConfig.optimization.concatenateModules = false
 
+// Templates are compiled from source, not from the AST the SFC parser hands
+// vue-loader. @vue/compiler-core 3.5 computes the line and column of nodes it
+// creates while transforming (`cloneLoc` in `transformIf`) from the newline
+// table of whatever it tokenized last, which during a build is some other
+// file; the resulting source maps depend on build order, webpack hashes the
+// map into the module, and a chunk hash that differs between two builds of
+// the same source moves Terser's variable names around. A compiler of its
+// own makes compileTemplate drop the AST and parse the template itself, right
+// before transforming it.
+const vueRule = webpackConfig.module.rules.find((rule) => rule.loader === 'vue-loader')
+vueRule.options = {
+	...(vueRule.options ?? {}),
+	compiler: { ...require('@vue/compiler-dom') },
+}
+
 // The emoji picker is most of a megabyte, and it was landing in the same
 // vendor chunk as NcActionButton — which every post's overflow menu needs — so
 // everybody downloaded the whole emoji set to see a "..." button. Give it a

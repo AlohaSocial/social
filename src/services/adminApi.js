@@ -71,6 +71,16 @@ export function relaysUrl(path = '') {
 }
 
 /**
+ * The Bluesky card: its settings, its checks, and the relays it tells.
+ *
+ * @param {string} [path] appended below /apps/social/admin/bluesky
+ * @return {string} the whole URL
+ */
+export function blueskyUrl(path = '') {
+	return generateUrl('/apps/social/admin/bluesky' + path)
+}
+
+/**
  * What a refused request said, when it said anything.
  *
  * The endpoints of this page answer a 422 with the field they would not take,

@@ -11,9 +11,11 @@ namespace OCA\Social\Controller;
 
 use Exception;
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
+use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheContentDecodeException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
@@ -26,6 +28,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\Post;
 use OCA\Social\Response\RangedFileResponse;
 use OCA\Social\Security\RemoteAddress;
@@ -57,6 +60,7 @@ use OCP\IUserManager;
 use OCP\IUserSession;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Class LocalController
@@ -90,6 +94,7 @@ class LocalController extends Controller {
 		private BannerService $bannerService,
 		private IUserManager $userManager,
 		private IUserSession $userSession,
+		private IdentityService $atprotoIdentities,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -634,7 +639,7 @@ class LocalController extends Controller {
 			$actor->setCompleteDetails(true);
 			$actor->setExportFormat(ACore::FORMAT_LOCAL);
 
-			return new DataResponse($actor, Http::STATUS_OK);
+			return new DataResponse($this->attachBluesky($actor), Http::STATUS_OK);
 		} catch (Exception $e) {
 			return $this->failFor($e);
 		}
@@ -721,7 +726,7 @@ class LocalController extends Controller {
 			}
 
 			$this->logger->debug('[LocalController] Actor info retrieved', ['actorId' => $actor->getId()]);
-			return new DataResponse($actor, Http::STATUS_OK);
+			return new DataResponse($this->attachBluesky($actor), Http::STATUS_OK);
 		} catch (Exception $e) {
 			return $this->failFor($e);
 		}
@@ -901,5 +906,27 @@ class LocalController extends Controller {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Gives a local account its Bluesky handle and DID to show, when it has
+	 * them; the entity carries `bluesky: null` otherwise.
+	 */
+	private function attachBluesky(Person $actor): Person {
+		if (!$actor->isLocal()) {
+			return $actor;
+		}
+		try {
+			$identity = $this->atprotoIdentities->getByActorId($actor->getId());
+			if ($identity->isActive()) {
+				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle]);
+			}
+		} catch (AtprotoIdentityNotFoundException) {
+		} catch (Throwable $e) {
+			// the Bluesky side must never take the profile down with it
+			$this->logger->error('could not read the Bluesky identity of an account', ['actor' => $actor->getId(), 'exception' => $e]);
+		}
+
+		return $actor;
 	}
 }

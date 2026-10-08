@@ -19,7 +19,7 @@
 			<p class="delivery-hint">
 				{{ summary }}
 			</p>
-			<ul v-if="delivery.instances.length" class="delivery-list">
+			<ul v-if="delivery.instances.length || bluesky" class="delivery-list">
 				<li
 					v-for="entry in delivery.instances"
 					:key="entry.host + entry.state + entry.last"
@@ -29,8 +29,25 @@
 					<span class="delivery-list__host">{{ entry.host }}</span>
 					<span class="delivery-list__state">{{ stateLabel(entry) }}</span>
 				</li>
+				<!-- not a server among servers: Bluesky is a network the post
+				     is written into rather than sent to, so it is the one row
+				     that can be opened -->
+				<li
+					v-if="bluesky"
+					class="delivery-list__row delivery-list__row--bluesky"
+					:class="'delivery-list__row--' + (bluesky.state === 'published' ? 'delivered' : 'waiting')">
+					<span class="delivery-list__dot" aria-hidden="true" />
+					<span class="delivery-list__host">{{ t('social', 'Bluesky') }}</span>
+					<a
+						v-if="bluesky.state === 'published'"
+						class="delivery-list__state delivery-list__link"
+						:href="bluesky.url"
+						target="_blank"
+						rel="noopener">{{ t('social', 'Open on Bluesky') }} ↗</a>
+					<span v-else class="delivery-list__state">{{ t('social', 'Waiting') }}</span>
+				</li>
 			</ul>
-			<p v-else class="delivery-hint delivery-hint--muted">
+			<p v-if="!delivery.instances.length" class="delivery-hint delivery-hint--muted">
 				{{ t('social', 'No server deliveries are on record. Public posts go to your followers, mentioned accounts, and subscribed relays; Aloha Social does not broadcast them to every known server. Delivery records are kept for {days} days, so an older post may no longer have records.', { days: retentionDays }) }}
 			</p>
 		</template>
@@ -94,6 +111,19 @@ export default {
 					callback: () => this.$emit('update:open', false),
 				},
 			]
+		},
+
+		/**
+		 * @return {{state: string, uri: string, url: string}|null} where the
+		 * post stands on Bluesky, or null when it was never meant to go there
+		 */
+		bluesky() {
+			const bluesky = this.delivery?.bluesky
+			if (!bluesky || bluesky.state === 'not_applicable') {
+				return null
+			}
+
+			return bluesky
 		},
 
 		/** @return {number} how many days the queue keeps a finished delivery */
@@ -247,6 +277,16 @@ export default {
 		flex: none;
 		color: var(--color-text-lighter);
 		font-size: 13px;
+	}
+
+	&__link {
+		color: var(--color-primary-element);
+		text-decoration: none;
+
+		&:hover,
+		&:focus-visible {
+			text-decoration: underline;
+		}
 	}
 
 	&__row--delivered &__dot {

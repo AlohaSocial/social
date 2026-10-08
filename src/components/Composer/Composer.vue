@@ -499,6 +499,11 @@
 					:disabled="!canPost || loading"
 					@click="createPost" />
 			</div>
+			<!-- Social's own limit stays the counter's; this is the other
+			     network's, said once it matters and not before -->
+			<p v-if="blueskyHint" class="composer-bluesky-hint">
+				{{ t('social', 'Bluesky shows the first 280 characters and a link to the full post.') }}
+			</p>
 		</form>
 		<!-- the way to a 24-hour short on the one line the composer is at rest; open,
 		     the same button is in the toolbar above -->
@@ -583,6 +588,24 @@ import { userKey } from '../../utils/browserStore.js'
  * constants here; they are the server's, read from the instance entity into
  * the instance store, and appear below as `maxLength` and `maxAttachments`.
  */
+
+/** Where Bluesky cuts a public post from here and adds a link to the rest. */
+const BLUESKY_GRAPHEMES = 280
+
+/**
+ * How many characters a person sees, which is how Bluesky counts: a flag or
+ * a family emoji is one, not the four to seven code points behind it.
+ *
+ * @param {string} text what would be sent
+ * @return {number}
+ */
+function graphemes(text) {
+	if (typeof Intl.Segmenter !== 'function') {
+		return Array.from(text).length
+	}
+
+	return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].length
+}
 
 /**
  * The content warnings worth one press.
@@ -761,6 +784,7 @@ export default {
 
 		return {
 			hostname,
+			serverData,
 			hasFiles,
 			currentUser,
 			openedByHand,
@@ -1119,6 +1143,18 @@ export default {
 
 		hasMentions() {
 			return /(?:^|\s)@[a-zA-Z0-9_.-]+/i.test(this.statusText)
+		},
+
+		/**
+		 * Whether to say that Bluesky will cut this post: only a public post
+		 * goes there, and only when it is longer than what Bluesky shows.
+		 *
+		 * @return {boolean}
+		 */
+		blueskyHint() {
+			return this.serverData?.bluesky?.enabled === true
+				&& this.visibility === 'public'
+				&& graphemes(this.statusText) > BLUESKY_GRAPHEMES
 		},
 	},
 
@@ -2422,6 +2458,13 @@ $composer-duration: 220ms;
 
 .schedule-editor__remove {
 	margin-inline-start: auto;
+}
+
+.composer-bluesky-hint {
+	margin: 4px 0 0;
+	color: var(--color-text-maxcontrast);
+	font-size: 12px;
+	text-align: end;
 }
 
 /* the allowance as a ring that fills, rather than a limit you discover */

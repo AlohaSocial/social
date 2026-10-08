@@ -101,8 +101,27 @@ class CoreRequestBuilder {
 	public const TABLE_EXTERNAL_SIGNUPS = 'social_ext_signup';
 	public const TABLE_EXTERNAL_INVITES = 'social_ext_invite';
 	public const TABLE_IMPORTS = 'social_import';
+	public const TABLE_ATPROTO_IDENTITY = 'social_atproto_identity';
+	public const TABLE_ATPROTO_INSTANCE_KEY = 'social_atproto_instance_key';
+	public const TABLE_ATPROTO_REPO = 'social_atproto_repo';
+	public const TABLE_ATPROTO_RECORD = 'social_atproto_record';
+	public const TABLE_ATPROTO_BLOCK = 'social_atproto_block';
+	public const TABLE_ATPROTO_BLOB = 'social_atproto_blob';
+	public const TABLE_ATPROTO_EVENT = 'social_atproto_event';
+	public const TABLE_ATPROTO_PLC_LOG = 'social_atproto_plc_log';
 
 	public static array $tables = [
+		self::TABLE_ATPROTO_IDENTITY => [
+			'id', 'actor_id', 'actor_id_prim', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public',
+			'state', 'moved_from_pds', 'creation', 'updated',
+		],
+		self::TABLE_ATPROTO_INSTANCE_KEY => ['id', 'kind', 'private_key', 'public_key', 'creation', 'retired'],
+		self::TABLE_ATPROTO_REPO => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],
+		self::TABLE_ATPROTO_RECORD => ['id', 'did', 'collection', 'rkey', 'path_prim', 'cid', 'bytes', 'local_id', 'local_id_prim', 'creation'],
+		self::TABLE_ATPROTO_BLOCK => ['id', 'did', 'cid', 'kind', 'bytes'],
+		self::TABLE_ATPROTO_BLOB => ['id', 'did', 'cid', 'document_id', 'document_id_prim', 'mime', 'size', 'creation'],
+		self::TABLE_ATPROTO_EVENT => ['seq', 'did', 'kind', 'bytes', 'time'],
+		self::TABLE_ATPROTO_PLC_LOG => ['id', 'did', 'cid', 'operation', 'creation', 'sent', 'confirmed'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

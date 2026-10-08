@@ -105,6 +105,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<job>OCA\Social\Cron\MediaSweep</job>
 		<job>OCA\Social\Cron\BlocklistSync</job>
 		<job>OCA\Social\Cron\ExternalSignups</job>
+		<job>OCA\Social\Cron\AtprotoMaintenance</job>
 	</background-jobs>
 
 	<repair-steps>
@@ -152,6 +153,13 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<command>OCA\Social\Command\QueueRetry</command>
 		<command>OCA\Social\Command\DomainPurge</command>
 		<command>OCA\Social\Command\ExternalUsers</command>
+		<command>OCA\Social\Command\AtprotoServe</command>
+		<command>OCA\Social\Command\AtprotoIdentities</command>
+		<command>OCA\Social\Command\AtprotoPlc</command>
+		<command>OCA\Social\Command\AtprotoResolve</command>
+		<command>OCA\Social\Command\AtprotoRepo</command>
+		<command>OCA\Social\Command\AtprotoCrawl</command>
+		<command>OCA\Social\Command\AtprotoRotateKey</command>
 	</commands>
 
 	<settings>

@@ -6,7 +6,7 @@ SPDX-PackageSupplier = "Nextcloud <https://nextcloud.com/contact/>"
 SPDX-PackageDownloadLocation = "https://github.com/alohasocial/social"
 
 [[annotations]]
-path = ["package-lock.json", "package.json", "composer.json", "composer.lock", "jsconfig.json", "jsconfig.vue.json", ".tx/config"]
+path = ["package-lock.json", "package.json", "composer.json", "composer.lock", "jsconfig.json", "jsconfig.vue.json", ".tx/config", "tests/Interop/atproto/package.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "none"
 SPDX-License-Identifier = "CC0-1.0"
@@ -25,6 +25,31 @@ path = "data/noto-animated-emoji.json"
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Google LLC"
 SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+# The AT Protocol interoperability test vectors, copied from
+# github.com/bluesky-social/atproto-interop-tests; the protocol primitives
+# under lib/Atproto are pinned by them.
+path = "tests/Atproto/fixtures/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Bluesky Social PBC"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+# The BIP-39 English word list, which encodes a Bluesky recovery key as
+# twelve words a person can write down. See lib/Atproto/Identity/Mnemonic.php.
+path = "resources/atproto/bip39-english.txt"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2013 Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+# The AT Protocol lexicon documents this app validates records against,
+# copied from github.com/bluesky-social/atproto (dual MIT / Apache-2.0).
+path = "lib/Atproto/lexicons/*.json"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2022-2026 Bluesky Social PBC, and Contributors"
+SPDX-License-Identifier = "MIT OR Apache-2.0"
 
 [[annotations]]
 path = "img/nextcloud.png"

@@ -95,7 +95,7 @@ class ApplicationTest extends TestCase {
 		$listeners = [];
 		$all = [];
 		$priorities = [];
-		$context->expects($this->exactly(21))->method('registerEventListener')
+		$context->expects($this->exactly(24))->method('registerEventListener')
 			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$all, &$priorities): void {
 				if ($listener === FileCommentsListener::class) {
 					$all[] = $event;
@@ -118,6 +118,9 @@ class ApplicationTest extends TestCase {
 			UserUpdatedEvent::class => UserAccountListener::class,
 			// without this one a deleted user keeps a live Fediverse account
 			UserDeletedEvent::class => UserDeletedListener::class,
+			\OCA\Social\Events\PostPublishedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,
+			\OCA\Social\Events\PostEditedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,
+			\OCA\Social\Events\PostDeletedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,
 			// without this one Files has no "Share to Social"
 			LoadAdditionalScriptsEvent::class => FilesScriptsListener::class,
 			// the group lists follow the groups

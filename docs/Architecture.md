@@ -233,6 +233,14 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_place` | Places: one row per distinct place this instance has seen, deduplicated on (name, country). No geocoder — see the migration |
 | `social_import_post` | What an account has brought over from another server: one row per (account, original id), unique on the pair, naming the local post it became |
 | `social_import` | The imports an account asked for — a kept upload or a server to pull from — with where the run got to and what it came to; `Cron\RunImport` works a row off and the Migration page polls it |
+| `social_atproto_identity` | One row per local account that is also a Bluesky account: its `did:plc`, its handle (`alice.<host>`, stored, never recomputed), its signing key sealed with the instance secret, the public halves, and its state (`active`, `deactivated`, `moved_away`, `tombstoned`) |
+| `social_atproto_instance_key` | The instance's own keys: the rotation key listed first on every account's DID and the service key its `did:web` names, sealed; a rotated rotation key stays, retired, for the PLC's 72-hour window |
+| `social_atproto_repo` | Each repository's signed head: the commit CID and revision, the record count and the blob bytes — written last in a commit, so a failure half-way leaves the previous commit as the repository |
+| `social_atproto_record` | The live records of every repository with their DAG-CBOR bytes, the collection and rkey (unique by the hash of the path), and the Social object each came from (`local_id`), so a post maps to its record and back in one lookup |
+| `social_atproto_block` | The Merkle search tree nodes and the commits, by CID: what `getRepo` and the firehose serve. Records are not duplicated here; they are read from their own table |
+| `social_atproto_blob` | The pictures a repository refers to: a CID naming one of the app's stored documents, its type and size |
+| `social_atproto_event` | The firehose, one frame per commit, identity or account change, numbered by the database (`seq`) and kept for the 72-hour replay window; `occ social:atproto:serve` reads it |
+| `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
@@ -1987,8 +1995,10 @@ into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
 `#portfolio`), **Reading** (`#interests`, `#lists`, `#sensitive`, `#counts`,
 `#recap`, `#senses`), **Notifications** (`#notifications` for when,
 `#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
-`#archive`, `#files-comments`), **Apps and account** (`#apps`, `#invites`,
-`#storage`, `#delete`, last because it cannot be undone) and **Help**
+`#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`
+where the server gives every account a Bluesky identity — `BlueskySettings.vue`,
+the handle, the DID and the recovery phrase —, `#invites`, `#storage`,
+`#delete`, last because it cannot be undone) and **Help**
 (`#introduction`, `#shortcuts`). One group is drawn at a time. The rail lists the
 groups and, under the open one, its sections; on a narrow screen the groups are a
 row of tabs. A group's link is `#` plus its first section's id, so every address
@@ -2784,6 +2794,8 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | Background Jobs | `Cron\ExpiredStories` | `appinfo/info.xml` | Hourly: deletes the stories (24-hour shorts) whose day is up, at most 500 per run. The read filter on `expires_at` is the other half of the guarantee; this is what stops the rows and pictures outliving it |
 | Background Jobs | `Cron\ScheduledPosts` | `appinfo/info.xml` | 5-minute interval: publishes the scheduled posts whose time has come, at most 50 per run. Shorter than the other two jobs on purpose — a post may be published up to one cron period late, and a period longer than the five minutes' notice the API demands would promise a precision the app cannot keep |
 | Background Jobs | `Cron\NotificationDigests` | `appinfo/info.xml` | 5-minute interval, for the same reason as `ScheduledPosts`: visits the users flagged by `NotificationDeliveryService` (at most 1000 per run, 240 seconds), and for each raises the digests that have fallen due since their last one — the digest times in digest mode, the end of the quiet window in either mode — with the due time as the cut rather than the moment the job ran, so a late job reports the window the user asked for and the next window starts where it ended. At most four per user per run; a user with no clock yet gets one started rather than a digest of everything since 1970 |
+| Background Jobs | `Cron\AtprotoMaintenance` | `appinfo/info.xml` | 5-minute interval, only while Bluesky is on: reconciles the last day's public posts with their Bluesky records (publishes what the listener missed, replaces an edit within the grace period, removes the record of a deleted post), resends directory operations the PLC refused, prunes the firehose past its replay window and drops retired instance keys |
+| Background Jobs | `Cron\AtprotoPublish` | queued by `AtprotoPostListener` and `AccountService` | One post or profile at a time: publish, edit, delete, profile — the work the listener queues on the post events, done off the request. Not in `appinfo/info.xml`: meaningless without its argument. The maintenance job is the backstop for a job that failed or was never queued |
 | Repair step | `Migration\EncryptPrivateKeys` | `appinfo/info.xml` | Seals legacy plaintext actor private keys with ICrypto, once. A row it cannot process is named and skipped rather than aborting `occ upgrade` with the instance in maintenance mode |
 | Repair step | `Migration\BackfillRemoteVisibility` | `appinfo/info.xml` | Backfills the empty visibility of remote statuses stored before estimation landed (public/unlisted set-based, followers/direct per author), idempotent |
 | Repair step | `Migration\CacheFeaturedCollections` | `appinfo/info.xml` | Rebuilds the cached copy of every local actor when something the cache carries has changed — the `featured` URL, the display name. Gated on a `VERSION` marker rather than re-running on every upgrade, and it counts the local actors before loading any |
