@@ -87,6 +87,19 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	/**
 	 * Insert cache about an Actor in database.
 	 */
+	/**
+	 * The server an account is on: the part after the `@`, or, for a Bluesky
+	 * handle (no `@`, a domain of its own), the handle's domain.
+	 */
+	private static function hostOf(Person $actor): string {
+		$host = Version1000Date20260920000002::hostOf($actor->getAccount());
+		if ($host === '' && !$actor->isLocal() && str_contains($actor->getAccount(), '.')) {
+			return substr($actor->getAccount(), strpos($actor->getAccount(), '.') + 1);
+		}
+
+		return $host;
+	}
+
 	public function save(Person $actor): void {
 		$qb = $this->getCacheActorsInsertSql();
 		$qb->setValue('id', $qb->createNamedParameter($actor->getId()))
@@ -112,9 +125,7 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 			// the server this account is on, so "which servers do we know"
 			// is a grouped query rather than a read of every row; derived
 			// from the handle, which never changes for a row
-			->setValue('host', $qb->createNamedParameter(
-				Version1000Date20260920000002::hostOf($actor->getAccount())
-			))
+			->setValue('host', $qb->createNamedParameter(self::hostOf($actor)))
 			// what an account search matches a prefix of; see searchAccounts()
 			->setValue('account_lower', $qb->createNamedParameter(self::lowerAccount($actor->getAccount())));
 

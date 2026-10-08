@@ -74,6 +74,16 @@ class AtprotoConfig {
 		return rtrim($this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW), '/');
 	}
 
+	/** The AppView asked with a service-auth token, as a local user. */
+	public function appViewAuth(): string {
+		return rtrim($this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_AUTH), '/');
+	}
+
+	/** The DID of that AppView: the audience of the service-auth tokens. */
+	public function appViewDid(): string {
+		return $this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_DID);
+	}
+
 	public function jetstream(): string {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_JETSTREAM);
 	}

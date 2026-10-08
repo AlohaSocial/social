@@ -364,7 +364,7 @@ class CurlService {
 	/**
 	 * Sends the request and reads the answer as JSON.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -437,7 +437,7 @@ class CurlService {
 	 * twenty servers a question has to cope with anyway.
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 * @param array<string, array<string, mixed>> $perUrl options for one URL, merged over the shared ones
 	 *
 	 * @return array<string, array<string, mixed>|null> url => the document, or null
@@ -631,7 +631,7 @@ class CurlService {
 	 * doRequestOverUrls().
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -667,7 +667,7 @@ class CurlService {
 	/**
 	 * Sends the request and returns the body.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -775,7 +775,7 @@ class CurlService {
 	 * differ only in their scheme.
 	 *
 	 * @param string[] $urls
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 *
 	 * @throws RequestContentException
 	 * @throws RequestNetworkException
@@ -825,7 +825,7 @@ class CurlService {
 	 * Redirects are followed by `send()` rather than by the client, so that the
 	 * federation checks run on every hop -- see `redirectTarget()`.
 	 *
-	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool} $options
+	 * @param array{headers?: array<string, string>, body?: string, timeout?: int, json_headers?: bool, allow_local_address?: bool, accept_errors?: bool} $options
 	 *
 	 * @return array<string, mixed>
 	 */
@@ -847,6 +847,9 @@ class CurlService {
 
 		if ($options['allow_local_address'] ?? false) {
 			$clientOptions['nextcloud']['allow_local_address'] = true;
+		}
+		if ($options['accept_errors'] ?? false) {
+			$clientOptions['social']['accept_errors'] = true;
 		}
 
 		if (($options['body'] ?? '') !== '' && strtolower($method) !== 'get') {
@@ -897,6 +900,8 @@ class CurlService {
 		?int &$statusCode,
 	): string {
 		$clientOptions['allow_redirects'] = false;
+		$acceptErrors = (bool)($clientOptions['social']['accept_errors'] ?? false);
+		unset($clientOptions['social']);
 		$requested = $url;
 
 		for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
@@ -917,7 +922,7 @@ class CurlService {
 
 			$location = $this->redirectTarget($response, $url);
 			if ($location === '') {
-				if ($statusCode >= 300) {
+				if ($statusCode >= 300 && !$acceptErrors) {
 					throw new RequestContentException($url, $statusCode);
 				}
 

@@ -456,6 +456,8 @@ class ConfigService {
 	public const ATPROTO_RELAYS = 'atproto_relays';
 	public const ATPROTO_PLC_DIRECTORY = 'atproto_plc_directory';
 	public const ATPROTO_APPVIEW = 'atproto_appview';
+	public const ATPROTO_APPVIEW_AUTH = 'atproto_appview_auth';
+	public const ATPROTO_APPVIEW_DID = 'atproto_appview_did';
 	public const ATPROTO_JETSTREAM = 'atproto_jetstream';
 	public const ATPROTO_SYNC_CEILING = 'atproto_sync_ceiling';
 	/** the firehose daemon's last report (JSON), written by `occ social:atproto:serve` */
@@ -466,6 +468,8 @@ class ConfigService {
 		self::ATPROTO_RELAYS => '["https://bsky.network"]',
 		self::ATPROTO_PLC_DIRECTORY => 'https://plc.directory',
 		self::ATPROTO_APPVIEW => 'https://public.api.bsky.app',
+		self::ATPROTO_APPVIEW_AUTH => 'https://api.bsky.app',
+		self::ATPROTO_APPVIEW_DID => 'did:web:api.bsky.app',
 		self::ATPROTO_JETSTREAM => '',
 		self::ATPROTO_SYNC_CEILING => '200',
 		self::ATPROTO_FIREHOSE_STATUS => '',
