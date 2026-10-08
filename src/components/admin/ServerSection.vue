@@ -3,10 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Server')"
-		:description="description">
+	<div>
 		<div class="server">
+			<h4 class="server__heading">
+				{{ t('social', 'How this server presents itself') }}
+			</h4>
 			<NcTextField
 				v-model="form.contactEmail"
 				class="server__field"
@@ -29,6 +30,9 @@
 				:placeholder="t('social', 'Who runs this server, who it is for, and what is expected of the people on it.')"
 				rows="4" />
 
+			<h4 class="server__heading">
+				{{ t('social', 'Uploads') }}
+			</h4>
 			<div class="server__sizes">
 				<NcTextField
 					v-model="form.maxSize"
@@ -54,7 +58,7 @@
 					min="0"
 					max="16384"
 					:label="t('social', 'Shrink pictures to (pixels)')"
-					:helperText="t('social', '0 stores every upload exactly as it arrived, which is the default and the only setting that loses nothing. A ceiling saves disk and bandwidth; a picture 8000 pixels wide is not being looked at at 8000 pixels.')" />
+					:helperText="t('social', '0 keeps every upload exactly as it arrived, which is the default. A ceiling saves disk and bandwidth.')" />
 				<NcTextField
 					v-model="form.imageQuality"
 					class="server__number"
@@ -65,6 +69,10 @@
 					:helperText="t('social', 'Only used when a ceiling is set above, because otherwise nothing is re-encoded.')" />
 			</div>
 
+			<h4 class="server__heading">
+				{{ t('social', 'Videos') }}
+			</h4>
+
 			<!-- the one thing that decides whether a video posted here plays
 			     anywhere else: Pixelfed's default accepts video/mp4 and
 			     nothing else, so a .mov straight off a phone is dropped by its
@@ -73,7 +81,7 @@
 				{{ t('social', 'Convert videos to MP4 in the background') }}
 			</NcCheckboxRadioSwitch>
 			<p class="server__hint">
-				{{ t('social', 'On by default when ffmpeg is installed on the server; without it nothing happens. A background job converts iPhone .mov videos, HEVC and the other formats that do not travel to H.264 in an MP4 — the only format Pixelfed accepts and the only one every browser plays. An MP4 that is already H.264 is never touched. The converted file replaces the original, which is deleted: re-encoding is lossy, so switch this off if the uploaded files must be kept exactly as they are. Uploads are never held up. A new post with such a video waits up to ten minutes for its conversion before it is sent to other servers, so that it arrives in a format they accept.') }}
+				{{ t('social', 'On by default when ffmpeg is installed on the server. Converts .mov, HEVC and other formats to an H.264 MP4, the one format every browser and Pixelfed plays. An MP4 that is already H.264 is never touched. The converted file replaces the original, which is deleted, so switch this off if uploads must be kept exactly as they are. A new post waits up to ten minutes for its video to be converted before it goes to other servers.') }}
 			</p>
 			<NcTextField
 				v-if="form.videoTranscode"
@@ -91,7 +99,7 @@
 				{{ t('social', 'Build a ladder of video sizes') }}
 			</NcCheckboxRadioSwitch>
 			<p class="server__hint">
-				{{ t('social', 'Off by default, because it is several encodes per video on this server. On, a background job writes each stored MP4 at a ladder of smaller sizes as HLS, and a player picks the one that fits the connection — which is also the shape PeerTube publishes, so a video from here reaches a PeerTube reader the way a native one does. The original is kept and is what a player without HLS falls back to. Needs ffmpeg and ffprobe; nothing happens without them.') }}
+				{{ t('social', 'Off by default, because it means several encodes per video. Writes each MP4 at smaller sizes as HLS, so a player picks the one that fits the connection, the way PeerTube does. The original is kept. Needs ffmpeg and ffprobe.') }}
 			</p>
 			<NcTextField
 				v-if="form.videoLadder"
@@ -107,12 +115,16 @@
 				min="0"
 				max="10485760"
 				:label="t('social', 'Video one account may keep (MB)')"
-				:helperText="t('social', '0 is no quota, which is what every instance has today: the only limit is the disk. A ceiling on one file is not the same question as a ceiling on a year of them. The ladders this server builds do not count against it.')" />
+				:helperText="t('social', '0 is no quota: the only limit is the disk. The smaller sizes this server writes itself do not count.')" />
+
+			<h4 class="server__heading">
+				{{ t('social', 'Sensitive media') }}
+			</h4>
 
 			<!-- PeerTube's three NSFW policies, under the names Mastodon's own
 			     preference already uses for the same three states -->
 			<label class="server__label" for="social-nsfw-policy">
-				{{ t('social', 'Media marked sensitive') }}
+				{{ t('social', 'Default for media marked sensitive') }}
 			</label>
 			<NcSelect
 				id="social-nsfw-policy"
@@ -125,6 +137,9 @@
 				{{ t('social', 'What a reader who has not chosen for themselves gets. Anybody can override it in their own settings. A content warning is a different thing and always covers its post.') }}
 			</p>
 
+			<h4 class="server__heading">
+				{{ t('social', 'Federation and security') }}
+			</h4>
 			<NcTextField
 				v-model="form.inboxThrottle"
 				class="server__field"
@@ -167,7 +182,7 @@
 				{{ t('social', 'Save') }}
 			</NcButton>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -177,7 +192,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -200,7 +214,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcNoteCard,
-		NcSettingsSection,
 		NcTextArea,
 		NcSelect,
 		NcTextField,
@@ -267,10 +280,6 @@ export default {
 			set(option) {
 				this.form.nsfwPolicy = option?.id ?? 'default'
 			},
-		},
-
-		description() {
-			return t('social', 'What this instance tells other servers and their clients about itself, and the limits it holds them to. Every one of these could only be set with "occ config:app:set social" until now, which meant most of them were never set at all.')
 		},
 	},
 
@@ -350,6 +359,15 @@ export default {
 	// both labels, and then they stack
 	&__number {
 		flex: 1 1 240px;
+	}
+}
+
+.server__heading {
+	margin-block: 16px 0;
+	font-weight: bold;
+
+	&:first-child {
+		margin-block-start: 0;
 	}
 }
 

@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Sections')"
-		:description="t('social', 'What this instance offers the people using it. Turning a section off hides it and stops it being offered; it does not touch what is already there, and turning it back on shows it again.')">
+	<div>
 		<div class="sections">
 			<NcCheckboxRadioSwitch v-model="form.stories" type="switch">
 				{{ t('social', '24-hour shorts') }}
@@ -53,7 +51,7 @@
 				{{ t('social', 'Save') }}
 			</NcButton>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -63,7 +61,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import { errorMessage, sectionsUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
@@ -83,7 +80,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcSelect,
-		NcSettingsSection,
 	},
 
 	props: {

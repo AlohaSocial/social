@@ -314,7 +314,7 @@ occ social:queue:retry --min-tries 16    # give the abandoned ones the full run 
 occ social:queue:retry --flush --min-tries 16   # or drop them, for a peer that is gone
 ```
 
-The **Federation health** section of the Aloha Social settings names the instances
+The **Deliveries** section of the Aloha Social settings names the instances
 the failures are stacked against, with the highest attempt count so far and
 when each was last tried.
 
@@ -389,10 +389,36 @@ it. A refusal there never reaches Nextcloud's log.
 
 ## The administration page
 
-**Administration → Aloha Social.** Cards, grouped by what they are for --
-Overview, External users, Moderation, What people see, What is kept,
-Federation, Server -- with
-a list of them beside the page on a wide screen:
+**Administration → Aloha Social.** The sections are in six groups, by what an
+administrator came to do, and one group is shown at a time:
+
+| Group | Sections |
+| --- | --- |
+| **Overview** | Needs attention, Activity here |
+| **Moderation** | Reports, Posts waiting for review, Accounts, Refused pictures, Server rules |
+| **Sign-ups** | Who may sign up, Waiting and invited, External accounts (only when the server sends them, see [External users](#external-users)) |
+| **Explore and features** | About this server, What may trend, Custom emoji, Announcements, Features, For you |
+| **Federation** | Allowed and blocked servers, Block lists, Relays, Deliveries |
+| **Server** | Server settings, Retention, Storage, Background jobs |
+
+On a wide screen the groups are a list beside the page, each with a line saying
+what is in it, and the sections of the open group are listed under it. On a
+narrow one they are a row of tabs above it. **Find a setting** searches every
+group at once, by a section's name, its description or a word it is known by
+("cron", "spam", "blocklist").
+
+The page opens on **Overview**, and **Needs attention** at the top of it lists
+what is waiting, most urgent first, each line a link to the section that deals
+with it: background jobs that are late or not registered, deliveries close to
+being given up on, open reports, posts waiting for review, sign-ups waiting for
+approval, and deliveries that failed and will be tried again. The groups with
+something waiting carry the number beside their name; a retried delivery is
+listed but not counted, because it needs nobody yet.
+
+Each section has an id, and the address names the one on screen:
+`/settings/admin/social#reports` opens Moderation at Reports. The report
+notification and the Reports dashboard widget link to `#reports`, the
+Federation health widget to `#federation`.
 
 
 - **Reports** — what people here and peers elsewhere have complained about.
@@ -403,13 +429,13 @@ a list of them beside the page on a wide screen:
   week, and how many accounts wrote them. Local posts only: a count that
   included what arrived would be a number about other servers and about this
   one's retention setting.
-- **Posts waiting to be looked at** — the review queue: the first post of a
+- **Posts waiting for review** — the review queue: the first post of a
   new account, and posts that tripped one of the spam rules. Each row carries
   the text, because a held post is in no timeline and there is nowhere else to
   go and read it. *Publish* sends it out; *Refuse* deletes it and tells its
   author. Three switches at the top turn first-post review, the spam rules and
   holding every post with a video on it on and off.
-- **Sections** — what this instance offers the people using it. Three switches,
+- **Features** — what this instance offers the people using it. Three switches,
   **all on by default**: *24-hour shorts* (shorts that only followers see
   and that are gone after a day), and the *Photos* and *Videos*
   timelines. Turning one off takes it out of the sidebar and stops it being
@@ -431,7 +457,7 @@ a list of them beside the page on a wide screen:
   or an attachment fetched from another server. The list shows the newest 100;
   when there are more it says how many, and **Show more** adds the next 100
   below. **Allow again** works on any row, on whichever page.
-- **What this server is about** — a few named subjects, each a handful of
+- **About this server** — a few named subjects, each a handful of
   hashtags, shown at the top of Explore above the trending lists. Trending on
   a small server is four hashtags and a wedding; this is the part of that page
   chosen rather than counted, and it is what makes Explore look like somewhere
@@ -450,7 +476,7 @@ a list of them beside the page on a wide screen:
   `:shortcode:`. They travel with the post, so somebody on another server sees
   them too. The upload goes through the same code `occ social:emoji` uses, so
   what is refused here is exactly what the command refuses.
-- **The rules of this server** — one per line. Every client shows them to
+- **Server rules** — one per line. Every client shows them to
   somebody deciding whether to join, and `/api/v1/instance/rules` serves them.
   Both this and the emoji were `occ`-only until now, which is why most
   instances had neither.
@@ -470,12 +496,12 @@ a list of them beside the page on a wide screen:
   retry can be refused again. A picture that simply took too long to arrive
   while its post was being received is not refused: the background job fetches
   it again, and it and the retry command allow a download two minutes.
-- **Federation health** — what the outbound queue is doing, including how long
+- **Deliveries** — what the outbound queue is doing, including how long
   the longest-failing delivery has been failing: the counts say how much and
   where, and that says whether it started an hour ago or a week ago, which is
   the difference between a peer rebooting and a delivery that is never going to
   happen.
-- **Background work** — when each of this app's cron jobs last ran, and whether
+- **Background jobs** — when each of this app's cron jobs last ran, and whether
   that is later than it should be. Almost everything the app does away from a
   page happens on a schedule: posts go out, 24-hour shorts expire, media is swept,
   videos are transcoded, the storage figures are taken. When cron stops, the
@@ -487,13 +513,13 @@ a list of them beside the page on a wide screen:
   migrations have not run looks like; the page says so rather than showing a
   zero. Read from Nextcloud's own job list, so it cannot drift from what
   actually happened.
-- **Fediverse access** — the block list or the allow list, the same one `occ
-  social:fediverse` manages.
+- **Allowed and blocked servers** — the block list or the allow list, the same
+  one `occ social:fediverse` manages.
 - **Block lists** — import a list of servers to block, with a preview of what it
   would do, or follow one somebody else publishes; see
   [*following a published list*](#commands-by-task) under Moderation below.
 - **Announcements** — a notice every account here is shown once.
-- **Server** — the instance-wide settings below, which had no interface at all
+- **Server settings** — the instance-wide settings below, which had no interface at all
   before and could only be set with `occ config:app:set`.
 - **Relays** — the relays this server subscribes to. A new server sees only
   what the people on it follow, so its federated timeline is empty on the first
@@ -509,14 +535,14 @@ a list of them beside the page on a wide screen:
   wrote it rather than believed from the relay, so it arrives as the post it is
   and not as "relay.example boosted this".
 
-Each section is one settings card, like everywhere else in the administration
-settings, and the three things that cannot be taken back — suspending an
+Each section is one card with its name and a line saying what it is for, and
+the three things that cannot be taken back — suspending an
 account, taking a post down, removing an announcement — ask in a dialog that
 says what they will cost before they do it.
 
 The page can be **delegated**: hand the Aloha Social section to a group under
 *Administration privileges* and that group can moderate without administering
-the server. Server and Relays are the exception — neither is rendered for a
+the server. Server settings and Relays are the exception — neither is rendered for a
 delegate and their endpoints refuse them, because what they hold is a decision
 about the server rather than about a report: a relay changes what every
 federated timeline here holds and where every public post written here is
@@ -529,7 +555,7 @@ sent.
 People without an account on this server can register one themselves, when
 an administrator switches it on. They log in through the normal login page
 and reach Aloha Social and nothing else. It is off by default, and the three cards
-are in the **External users** group of the administration page, for
+are in the **Sign-ups** group of the administration page, for
 administrators proper only: who may have an account here is not a
 moderator's decision.
 
@@ -541,7 +567,7 @@ administrator approves, or only the holders of an invitation link; an
 invitation admits its holder in every mode, without approval. With *Confirm
 the email address* on, which is the default, the account is made when the
 link in the confirmation email is followed, so the server needs working
-mail. The form also asks to accept the server rules (the **Rules** card) and
+mail. The form also asks to accept the server rules (the **Server rules** section) and
 links the privacy policy and legal notice set in Administration → Theming.
 The additional registration and privacy information box is plain text shown
 on the introduction page and beside the form. It starts with a translated
@@ -690,7 +716,7 @@ immediate post takes and dates it now. Refusing deletes it, tells the author,
 and records a takedown strike. One account may have twenty waiting; past that
 its posts are refused outright, because nobody is going to read the fortieth.
 
-**Instances, not accounts.** *Fediverse access* is the instance-wide list.
+**Instances, not accounts.** *Allowed and blocked servers* is the instance-wide list.
 In block-list mode (the default, `access_type=all_but`) everything on it is
 refused, including every subdomain, and blocking a domain queues a purge of
 everything it ever sent. In allow-list mode (`none_but`) the list is the only
@@ -753,7 +779,7 @@ the moderation routes accept.
 | `polls_swept` | `0` | How far the closed-poll sweep has got, as a timestamp. |
 | `story_secret` | *(generated)* | The secret a 24-hour short's fetch capability (the bearcap Pixelfed fetches it with) is derived from, made the first time one is published. Changing it invalidates every outstanding capability at once, which is the only revocation it needs: a 24-hour short lives a day. Never set this by hand. |
 
-### The Server card
+### Server settings
 
 Instance-wide settings. Most of them are on the **Server** section of the
 settings page, which validates the ranges given here; every one can be set with
@@ -762,7 +788,7 @@ settings page, which validates the ranges given here; every one can be set with
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `contact_email` | *(empty)* | Who to write to about this instance. Mastodon's `instance.email`: every client reads it on its first request and shows it on the server's about page. Empty until somebody fills it in, which until now most instances never did, because nothing said it existed. |
-| `contact_account` | *(empty)* | The local Aloha Social account responsible for this instance. Choose a local account by username in the Server card; remote accounts and team accounts without a Nextcloud user are refused. Aloha Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
+| `contact_account` | *(empty)* | The local Aloha Social account responsible for this instance. Choose a local account by username under Server settings; remote accounts and team accounts without a Nextcloud user are refused. Aloha Social stores the owning Nextcloud user id and resolves the current account when it builds `/api/v1/instance` and `/api/v2/instance`, so profile changes are reflected without rewriting the setting. Clearing the field omits the contact account. |
 | `extended_description` | *(empty)* | The long form of what this instance is, for `/api/v1/instance/extended_description`. Up to 10000 characters. |
 | `max_size` | `10` | The largest picture or file an upload may be, in MB. 1–10240. |
 | `max_video_size` | `2048` | The largest video, in MB. 1–102400. A peer will refuse a great deal less than the ceiling. |

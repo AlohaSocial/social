@@ -169,6 +169,6 @@ class SocialReportsWidget implements IAPIWidgetV2, IIconWidget, IButtonWidget, I
 	}
 
 	private function getSettingsUrl(): string {
-		return $this->urlGenerator->linkToRoute('settings.AdminSettings.index', ['section' => 'social']);
+		return $this->urlGenerator->linkToRoute('settings.AdminSettings.index', ['section' => 'social']) . '#reports';
 	}
 }

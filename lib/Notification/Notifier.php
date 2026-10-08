@@ -165,7 +165,7 @@ class Notifier implements INotifier {
 					$l10n->t('Review it in the Aloha Social section of the administration settings.')
 				);
 				$notification->setLink(
-					$this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'social'])
+					$this->url->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => 'social']) . '#reports'
 				);
 				break;
 

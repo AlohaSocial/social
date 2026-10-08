@@ -126,7 +126,7 @@ class SocialReportsWidgetTest extends TestCase {
 		$this->assertSame('spammer@remote.example', $list[0]->getTitle());
 		$this->assertSame('spam – posting casino links', $list[0]->getSubtitle());
 		$this->assertSame('https://remote.example/spammer.png', $list[0]->getIconUrl());
-		$this->assertSame('/settings/admin/social', $list[0]->getLink());
+		$this->assertSame('/settings/admin/social#reports', $list[0]->getLink());
 		$this->assertSame('7', $list[0]->getSinceId());
 		$this->assertSame(
 			'https://remote.example/users/spammer',

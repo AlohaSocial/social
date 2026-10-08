@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Relays')"
-		:description="t('social', 'A new server sees only what the people on it follow, so its federated timeline is empty on the first day and thin for months — and nobody out there has heard of this server either. A relay breaks that circle: it rebroadcasts the public posts of every server subscribed to it, and sends this server\'s public posts on to all of them.')">
+	<div>
 		<p class="social-admin__hint">
 			{{ t('social', 'What is shared is public posts and nothing else: a followers-only post has an audience that was chosen, and a relay is the opposite of a chosen audience. Nothing a person on this server writes privately ever reaches one.') }}
 		</p>
@@ -54,7 +52,7 @@
 				</NcButton>
 			</li>
 		</ul>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -62,7 +60,6 @@ import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { relaysUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
@@ -86,7 +83,6 @@ export default {
 	components: {
 		NcButton,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextField,
 	},
 

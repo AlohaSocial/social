@@ -17,7 +17,6 @@ function mountSection() {
 	return mount(TrendsSection, {
 		global: {
 			stubs: {
-				NcSettingsSection: { template: '<section><slot /></section>' },
 				NcSelect: true,
 			},
 		},

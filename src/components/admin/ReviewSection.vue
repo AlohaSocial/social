@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Posts waiting to be looked at')"
-		:description="t('social', 'The first post of a new account, and posts that tripped one of the spam rules, are kept here instead of going out. Nothing is published until somebody approves it, and nothing is deleted until somebody refuses it.')">
+	<div>
 		<div class="review__switches">
 			<NcCheckboxRadioSwitch
 				type="switch"
@@ -108,7 +106,7 @@
 			:confirmLabel="t('social', 'Refuse')"
 			@update:open="pending = null"
 			@confirm="reject()" />
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -119,7 +117,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
@@ -145,7 +142,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 	},
 
 	props: {

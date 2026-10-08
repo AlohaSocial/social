@@ -13,7 +13,6 @@ const { showError, showSuccess } = vi.hoisted(() => ({ showError: vi.fn(), showS
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess }))
 
 const ROUTE = '/index.php/apps/social/admin/interests'
-const stubs = { NcSettingsSection: { template: '<section><slot /></section>' } }
 const DEFAULTS = { enabled: true, learningDefault: true, halfLife: 30, threshold: 3, cap: 30, window: 7 }
 
 /**
@@ -21,7 +20,7 @@ const DEFAULTS = { enabled: true, learningDefault: true, halfLife: 30, threshold
  * @return {object} the mounted card
  */
 function mountCard(settings = DEFAULTS) {
-	return mount(InterestsSection, { props: { settings }, global: { stubs } })
+	return mount(InterestsSection, { props: { settings } })
 }
 
 const switches = (wrapper) => wrapper.findAllComponents({ name: 'NcCheckboxRadioSwitch' })

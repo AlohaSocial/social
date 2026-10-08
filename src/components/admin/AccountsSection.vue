@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Accounts')"
-		:description="t('social', 'Every account this instance knows, whether or not anybody has complained about it. Search by username, by handle, or by instance.')">
+	<div>
 		<form class="accounts__search" @submit.prevent="search(false)">
 			<NcTextField
 				v-model="query"
@@ -126,7 +124,7 @@
 			:confirmLabel="t('social', 'Suspend')"
 			@update:open="pending = null"
 			@confirm="moderate(pending.account, pending.level)" />
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -137,7 +135,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { stateOf, suspensionWarning } from './moderation.js'
@@ -164,7 +161,6 @@ export default {
 		NcEmptyContent,
 		NcLoadingIcon,
 		NcSelect,
-		NcSettingsSection,
 		NcTextField,
 	},
 

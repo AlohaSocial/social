@@ -3,12 +3,10 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Registrations and invitations')"
-		:description="t('social', 'Registrations waiting for you, when an administrator approves every one, and the invitation links that admit their holder without it.')">
-		<h3 class="requests__heading">
+	<div>
+		<h4 class="requests__heading">
 			{{ t('social', 'Waiting for approval') }}
-		</h3>
+		</h4>
 		<p v-if="requests.length === 0" class="requests__empty">
 			{{ t('social', 'Nobody is waiting.') }}
 		</p>
@@ -50,9 +48,9 @@
 			</table>
 		</div>
 
-		<h3 class="requests__heading">
+		<h4 class="requests__heading">
 			{{ t('social', 'Invitation links') }}
-		</h3>
+		</h4>
 		<form class="requests__invite" @submit.prevent="invite">
 			<NcTextField
 				v-model="note"
@@ -122,7 +120,7 @@
 			<p>{{ t('social', 'The registration is deleted and the person is emailed. You can tell them why.') }}</p>
 			<NcTextArea v-model="reason" :label="t('social', 'Reason (optional)')" rows="3" />
 		</NcDialog>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -130,7 +128,6 @@ import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { externalUrl } from '../../services/externalApi.js'
@@ -143,7 +140,6 @@ export default {
 	components: {
 		NcButton,
 		NcDialog,
-		NcSettingsSection,
 		NcTextArea,
 		NcTextField,
 	},

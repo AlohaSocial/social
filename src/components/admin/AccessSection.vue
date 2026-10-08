@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Fediverse access')"
-		:description="description">
+	<div>
 		<NcSelect
 			v-model="mode"
 			class="access__mode"
@@ -48,7 +46,7 @@
 				{{ t('social', 'Add instance') }}
 			</NcButton>
 		</form>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -57,7 +55,6 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { errorMessage, moderationUrl } from '../../services/adminApi.js'
 import { showError } from '../../services/toast.js'
@@ -75,7 +72,6 @@ export default {
 		NcButton,
 		NcLoadingIcon,
 		NcSelect,
-		NcSettingsSection,
 		NcTextField,
 	},
 
@@ -103,10 +99,6 @@ export default {
 	},
 
 	computed: {
-		description() {
-			return t('social', 'Control which instances this server federates with. The same list is available through "occ social:fediverse".')
-		},
-
 		modes() {
 			return [
 				{

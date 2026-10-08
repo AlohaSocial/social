@@ -12,8 +12,6 @@ vi.mock('@nextcloud/axios', () => ({ default: { get, post, delete: del } }))
 const { showError } = vi.hoisted(() => ({ showError: vi.fn() }))
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess: vi.fn() }))
 
-const stubs = { NcSettingsSection: { template: '<section><slot /></section>' } }
-
 function relay(overrides = {}) {
 	return {
 		id: 3,
@@ -40,7 +38,7 @@ describe('the relays card', () => {
 	})
 
 	it('says plainly when this server is on no relay', async () => {
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 
 		expect(wrapper.text()).toContain('not subscribed to any relay')
@@ -52,7 +50,7 @@ describe('the relays card', () => {
 	 * to subscribe needs that said before they press anything.
 	 */
 	it('says what a relay does and does not carry', () => {
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 
 		expect(wrapper.text()).toContain('public posts and nothing else')
 	})
@@ -62,7 +60,7 @@ describe('the relays card', () => {
 			data: [relay(), relay({ id: 4, host: 'other.example', status: 'pending' })],
 		})
 
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 
 		expect(rows(wrapper)).toHaveLength(2)
@@ -73,7 +71,7 @@ describe('the relays card', () => {
 	it('shows why a relay refused', async () => {
 		get.mockResolvedValue({ data: [relay({ status: 'rejected', error: 'connection refused' })] })
 
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 
 		expect(wrapper.text()).toContain('Refused')
@@ -81,7 +79,7 @@ describe('the relays card', () => {
 	})
 
 	it('subscribes with the address that was typed', async () => {
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 		wrapper.vm.address = '  https://relay.example/actor  '
 		await wrapper.vm.$nextTick()
@@ -99,7 +97,7 @@ describe('the relays card', () => {
 	 * accepted, so the list is re-read rather than told what to show.
 	 */
 	it('re-reads the list after subscribing', async () => {
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 		get.mockClear()
 		wrapper.vm.address = 'https://relay.example/actor'
@@ -113,7 +111,7 @@ describe('the relays card', () => {
 
 	it('shows the reason an address was refused', async () => {
 		post.mockRejectedValue({ response: { data: { error: 'that address did not answer with an actor' } } })
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 		wrapper.vm.address = 'https://nothing.example/actor'
 		await wrapper.vm.$nextTick()
@@ -125,7 +123,7 @@ describe('the relays card', () => {
 
 	it('unsubscribes and takes the row away', async () => {
 		get.mockResolvedValue({ data: [relay()] })
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 		await buttonByText(rows(wrapper)[0], 'Unsubscribe').trigger('click')
 		await flushPromises()
@@ -136,7 +134,7 @@ describe('the relays card', () => {
 
 	it('survives an answer that is not a list', async () => {
 		get.mockResolvedValue({ data: { error: 'nope' } })
-		const wrapper = mount(RelaysSection, { global: { stubs } })
+		const wrapper = mount(RelaysSection)
 		await flushPromises()
 
 		expect(rows(wrapper)).toHaveLength(0)

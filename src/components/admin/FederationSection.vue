@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Federation health')"
-		:description="t('social', 'Posts, follows and likes leave this server through a queue. A delivery that keeps failing is retried on a widening delay and then given up on, so an instance that has quietly stopped hearing from this one looks no different from one nobody has written to. This is where it shows.')">
+	<div>
 		<p class="federation__counts">
 			{{ n('social', '%n delivery waiting to be sent.', '%n deliveries waiting to be sent.', federation.waiting) }}
 			<template v-if="federation.running > 0">
@@ -59,7 +57,7 @@
 			{{ n('social', 'Nothing has been given up on in the last %n day.', 'Nothing has been given up on in the last %n days.', federation.retentionDays) }}
 		</NcNoteCard>
 		<template v-else>
-			<h3>{{ t('social', 'Given up on') }}</h3>
+			<h4>{{ t('social', 'Given up on') }}</h4>
 			<NcNoteCard type="error">
 				<strong>
 					{{ n('social', '%n delivery was given up on: that server never got it.', '%n deliveries were given up on: those servers never got them.', federation.abandoned) }}
@@ -95,13 +93,12 @@
 				{{ t('social', 'Once the reason is fixed, "occ social:queue:retry --instance HOST" puts them back in the queue.') }}
 			</p>
 		</template>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
 /**
  * What the outbound queue is doing.
@@ -114,7 +111,6 @@ export default {
 
 	components: {
 		NcNoteCard,
-		NcSettingsSection,
 	},
 
 	props: {

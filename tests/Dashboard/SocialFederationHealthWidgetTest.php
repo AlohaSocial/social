@@ -123,7 +123,7 @@ class SocialFederationHealthWidgetTest extends TestCase {
 		$this->assertCount(1, $list, 'failures with no attributable host still have to show');
 		$this->assertSame('12 deliveries are failing', $list[0]->getTitle());
 		$this->assertSame('3 at risk of being dropped after 15 tries', $list[0]->getSubtitle());
-		$this->assertSame('/settings/admin/social', $list[0]->getLink());
+		$this->assertSame('/settings/admin/social#federation', $list[0]->getLink());
 	}
 
 	public function testEachFailingInstanceGetsARow(): void {

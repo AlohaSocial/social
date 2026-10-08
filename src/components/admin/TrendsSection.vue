@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'What may trend')"
-		:description="t('social', 'Explore shows whatever is being talked about, counted and nothing else — so the first ugly hashtag to catch on does so on everybody\'s Explore page, and the only thing you could do about it was wait. Keeping one out hides it from every trending list here; the counters keep counting, so letting it back in restores the number it would have had.')">
+	<div>
 		<h4 class="trends__heading">
 			{{ t('social', 'Trending now') }}
 		</h4>
@@ -71,7 +69,7 @@
 				{{ t('social', 'Keep out') }}
 			</NcButton>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -83,7 +81,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError } from '../../services/toast.js'
@@ -108,7 +105,6 @@ export default {
 		NcEmptyContent,
 		NcLoadingIcon,
 		NcSelect,
-		NcSettingsSection,
 		NcTextField,
 	},
 

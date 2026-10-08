@@ -3,9 +3,10 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'External users')"
-		:description="t('social', 'Let people without an account on this server register one themselves. They log in through the normal login page and can use Aloha Social and nothing else: no Files, no Talk, no other app, and nobody outside Aloha Social can find them.')">
+	<div>
+		<p class="social-admin__hint">
+			{{ t('social', 'They sign in on the normal login page and can use Aloha Social and nothing else: no Files, no Talk, and nobody outside Aloha Social can find them.') }}
+		</p>
 		<NcNoteCard v-if="settings.enabled && !settings.restrictionIncludesExternals" type="warning">
 			<p>{{ t('social', 'Aloha Social is limited to some groups, and external users are not in them, so they could register and then not open Aloha Social.') }}</p>
 			<NcButton :disabled="saving" @click="allowInRestriction">
@@ -122,7 +123,7 @@
 					: t('social', 'External users then set up an authenticator app or a security key when they first log in. This is Nextcloud\'s own setting, the same as in Administration → Security.') }}
 			</p>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -132,7 +133,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { confirmPassword, externalUrl } from '../../services/externalApi.js'
@@ -150,7 +150,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
 		NcNoteCard,
-		NcSettingsSection,
 		NcTextArea,
 		NcTextField,
 	},

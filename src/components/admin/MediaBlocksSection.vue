@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Refused pictures')"
-		:description="t('social', 'Files this instance will not store, named by their checksum. Every other tool here acts on an account, and none of them stops a file coming back: the account is suspended, the picture is posted again by the next one, and you are deleting the same image for the third time. A refused file is turned away wherever it arrives — an upload here, or an attachment fetched from another server.')">
+	<div>
 		<div class="media-blocks__add">
 			<NcTextField
 				v-model="hash"
@@ -72,7 +70,7 @@
 				</NcButton>
 			</p>
 		</template>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -82,7 +80,6 @@ import IconCheckCircle from 'vue-material-design-icons/CheckCircle.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError } from '../../services/toast.js'
@@ -102,7 +99,6 @@ export default {
 		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextField,
 	},
 
