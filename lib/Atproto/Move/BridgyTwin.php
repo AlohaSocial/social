@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Move;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Identity\DnsLookup;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -20,7 +21,8 @@ use Throwable;
 
 /**
  * The Bluesky account Bridgy Fed made for a local account (§13.3), its
- * "twin": found by the handle Bridgy gives it, and moved here with Bridgy's
+ * "twin": found by the handle Bridgy gives it — or, renamed, by its DNS
+ * record or Bluesky's search — and moved here with Bridgy's
  * own `migrate-to` command, which the account sends to Bridgy's bot as a
  * direct message. Bridgy then does what a migration tool does, against
  * this server, and stops bridging the account to Bluesky.
@@ -32,10 +34,14 @@ class BridgyTwin {
 	public const BOT = 'bsky.brid.gy@bsky.brid.gy';
 	private const SUFFIX = '.ap.brid.gy';
 
+	/** how many search results are looked at */
+	private const SEARCHED = 10;
+
 	public function __construct(
 		private AppViewClient $appView,
 		private PlcClient $plc,
 		private PostService $posts,
+		private DnsLookup $dns,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -54,24 +60,99 @@ class BridgyTwin {
 	}
 
 	/**
-	 * The account's twin, when Bridgy Fed bridges it to Bluesky.
+	 * The account's twin, when Bridgy Fed bridges it to Bluesky: by the
+	 * handle Bridgy gives it, through the AppView or the DNS record Bridgy
+	 * keeps for it even once the person chose a domain of their own as the
+	 * handle. Asked to search, Bluesky's search is given the account's
+	 * Fediverse address, and a result is taken only when its DID document
+	 * names this account — Bridgy lists the Fediverse actor there.
+	 *
+	 * @return array{handle: string, did: string}|null the twin, under the handle it has now
+	 */
+	public function find(Person $actor, bool $search = false): ?array {
+		$did = $this->resolve(self::handleOf($actor));
+		$twin = $did === '' ? null : $this->twin($did, $actor, false);
+		if ($twin === null && $search) {
+			foreach ($this->searched(ltrim($actor->getAccount(), '@')) as $candidate) {
+				$twin = $this->twin($candidate, $actor, true);
+				if ($twin !== null) {
+					break;
+				}
+			}
+		}
+
+		return $twin;
+	}
+
+	/**
+	 * The DID a Bridgy handle names: the AppView's answer, else the DNS record.
+	 */
+	private function resolve(string $handle): string {
+		try {
+			$did = (string)($this->appView->query('com.atproto.identity.resolveHandle', ['handle' => $handle])['did'] ?? '');
+		} catch (Throwable) {
+			$did = '';
+		}
+		if ($did === '') {
+			foreach ($this->dns->txt('_atproto.' . $handle) as $text) {
+				if (str_starts_with($text, 'did=')) {
+					$did = substr($text, 4);
+					break;
+				}
+			}
+		}
+
+		return str_starts_with($did, 'did:plc:') ? $did : '';
+	}
+
+	/**
+	 * @return list<string> the DIDs Bluesky's search answers for a text
+	 */
+	private function searched(string $text): array {
+		try {
+			$answer = $this->appView->query('app.bsky.actor.searchActors', ['q' => $text, 'limit' => self::SEARCHED]);
+		} catch (Throwable $e) {
+			$this->logger->info('Bluesky search for a Bridgy Fed twin not answered', ['exception' => $e]);
+
+			return [];
+		}
+		$dids = [];
+		foreach (is_array($answer['actors'] ?? null) ? $answer['actors'] : [] as $found) {
+			$did = is_array($found) && is_string($found['did'] ?? null) ? $found['did'] : '';
+			if (str_starts_with($did, 'did:plc:')) {
+				$dids[] = $did;
+			}
+		}
+
+		return $dids;
+	}
+
+	/**
+	 * A DID as the account's twin: on Bridgy's PDS and, where asked, naming
+	 * the account in its document.
 	 *
 	 * @return array{handle: string, did: string}|null
 	 */
-	public function find(Person $actor): ?array {
-		$handle = self::handleOf($actor);
+	private function twin(string $did, Person $actor, bool $mustNameActor): ?array {
 		try {
-			$did = (string)($this->appView->query('com.atproto.identity.resolveHandle', ['handle' => $handle])['did'] ?? '');
-			if (!str_starts_with($did, 'did:plc:') || !self::hosts((string)($this->plc->data($did)['services']['atproto_pds']['endpoint'] ?? ''))) {
-				return null;
-			}
+			$data = $this->plc->data($did);
 		} catch (Throwable $e) {
-			$this->logger->debug('No Bridgy Fed twin found', ['handle' => $handle, 'exception' => $e]);
+			$this->logger->debug('Bridgy Fed twin not read', ['did' => $did, 'exception' => $e]);
 
 			return null;
 		}
+		$aka = is_array($data['alsoKnownAs'] ?? null) ? $data['alsoKnownAs'] : [];
+		if (!self::hosts((string)($data['services']['atproto_pds']['endpoint'] ?? ''))
+			|| ($mustNameActor && !in_array($actor->getId(), $aka, true))) {
+			return null;
+		}
+		foreach ($aka as $uri) {
+			if (is_string($uri) && str_starts_with($uri, 'at://')) {
+				return ['handle' => substr($uri, 5), 'did' => $did];
+			}
+		}
 
-		return ['handle' => $handle, 'did' => $did];
+		return ['handle' => self::handleOf($actor), 'did' => $did];
 	}
 
 	/**

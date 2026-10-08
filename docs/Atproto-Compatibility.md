@@ -1392,8 +1392,12 @@ direction `inbound` in `social_atproto_move`:
   the DID as in 4c (`receive()`, the auto-made DID retired) and a job turns
   its follows into follows here. Bridgy stops bridging the account to
   Bluesky itself.
-- **Not built:** a twin's handle Bridgy derived from a custom domain is not
-  found by the page; it can be named by hand.
+- **A twin under a domain of the person's own** (Bridgy's `username`
+  command) is found by the DNS record Bridgy keeps for the handle it gave
+  first; failing that, and only when the person asks, Bluesky's search is
+  given their Fediverse address, and a result is taken only when its DID
+  document names their Fediverse actor — Bridgy lists it there, and a
+  change of handle keeps it.
 
 **4e as built** — `Move\PostHistory`, `PostImportService::importParsed()`,
 `ImportedPostsRequest::isImported()`; a last step `posts` of both moves here:

@@ -70,9 +70,22 @@
 					</NcButton>
 				</div>
 			</template>
-			<p v-else>
-				{{ t('social', 'A Bluesky account that Bridgy Fed or a migration tool moves can live on this server. Name it, and the server answers what the tool needs.') }}
-			</p>
+			<template v-else>
+				<p>
+					{{ t('social', 'A Bluesky account that Bridgy Fed or a migration tool moves can live on this server. Name it, and the server answers what the tool needs.') }}
+				</p>
+				<p v-if="!searched" class="migration__bluesky-inbound-note">
+					{{ t('social', 'Gave your bridged account a domain of your own as its handle? Bluesky\'s search is asked for your Fediverse address to find it.') }}
+				</p>
+				<p v-else class="migration__bluesky-inbound-note">
+					{{ t('social', 'No account bridged by Bridgy Fed names your Fediverse account.') }}
+				</p>
+				<div v-if="!searched" class="migration__bluesky-inbound-actions">
+					<NcButton :disabled="busy" @click="search">
+						{{ t('social', 'Look for my bridged account on Bluesky') }}
+					</NcButton>
+				</div>
+			</template>
 
 			<details class="migration__bluesky-inbound-other" :open="!twin">
 				<summary>{{ t('social', 'Another account, with a migration tool') }}</summary>
@@ -159,6 +172,8 @@ export default {
 			confirming: '',
 			busy: false,
 			inviteError: '',
+			/** whether Bluesky's search was asked for the twin */
+			searched: false,
 			/** @type {number|null} */
 			pollTimer: null,
 		}
@@ -222,6 +237,24 @@ export default {
 				this.twin = data?.twin ?? null
 			} catch (error) {
 				logger.debug('Could not look for a Bridgy Fed twin', { error })
+			}
+		},
+
+		/**
+		 * Asks Bluesky's search for a twin with a handle of its own.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async search() {
+			this.busy = true
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/bridgy-twin'), { params: { search: 1 } })
+				this.twin = data?.twin ?? null
+			} catch (error) {
+				logger.debug('Could not search for a Bridgy Fed twin', { error })
+			} finally {
+				this.searched = true
+				this.busy = false
 			}
 		},
 
