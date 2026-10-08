@@ -111,8 +111,8 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   video service, a content warning as a self-label), and a relay crawls the instance's firehose. The
   other way too: follow `alice.bsky.social` by its bare handle and read it in your home feed, badged,
   its videos playing here; your likes and boosts reach Bluesky, and their follows, likes, replies and
-  mentions reach your Activities. Bluesky apps sign in here with an app password made in your
-  settings, and post videos as they would on Bluesky. Switched on by the administrator once the requirements
+  mentions reach your Activities. Bluesky apps sign in here with Bluesky sign-in, or with an app
+  password made in your settings, and post videos as they would on Bluesky. Switched on by the administrator once the requirements
   are met; see [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) for what is done and
   what is next.
 - **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
