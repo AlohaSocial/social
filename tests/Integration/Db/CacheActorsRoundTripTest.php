@@ -25,6 +25,8 @@ class CacheActorsRoundTripTest extends TestCase {
 	private const ACTOR = 'https://remote.example/catest/users/erin';
 	private const OTHER = 'https://remote.example/catest/users/frank';
 	private const NO_INBOX = 'https://remote.example/catest/users/ghost';
+	private const QUIET = 'https://quiet-catest.example/users/hal';
+	private const LIVELY = 'https://lively-catest.example/users/ivy';
 
 	private CacheActorsRequest $request;
 
@@ -40,7 +42,7 @@ class CacheActorsRoundTripTest extends TestCase {
 	}
 
 	private function cleanup(): void {
-		foreach ([self::ACTOR, self::OTHER, self::NO_INBOX] as $id) {
+		foreach ([self::ACTOR, self::OTHER, self::NO_INBOX, self::QUIET, self::LIVELY] as $id) {
 			$this->request->deleteCacheById($id);
 		}
 	}
@@ -260,5 +262,36 @@ class CacheActorsRoundTripTest extends TestCase {
 		// '' used to come back and became a delivery addressed to the host ''
 		$this->assertNotContains('', $inboxes);
 		$this->assertContains('https://remote.example/inbox', $inboxes);
+	}
+
+	/**
+	 * An account deletion goes to the servers heard from lately, one shared
+	 * inbox each, not to every inbox this instance ever cached.
+	 */
+	public function testSharedInboxesSeenSinceLeaveOutServersGoneQuiet(): void {
+		foreach ([self::QUIET => 'quiet-catest.example', self::LIVELY => 'lively-catest.example'] as $id => $host) {
+			$person = new Person();
+			$person->setId($id)->setPreferredUsername('catest');
+			$person->setAccount('catest@' . $host)
+				->setInbox($id . '/inbox')
+				->setSharedInbox('https://' . $host . '/inbox');
+			$person->setCreation(1_500_000_000);
+			$this->request->save($person);
+		}
+		$this->request->recordSyncAttempt(self::QUIET, true, 1_550_000_000);
+		$this->request->recordSyncAttempt(self::LIVELY, true, 1_700_000_000);
+
+		$inboxes = $this->request->getSharedInboxesSeenSince(1_650_000_000);
+
+		$this->assertContains('https://lively-catest.example/inbox', $inboxes);
+		$this->assertNotContains('https://quiet-catest.example/inbox', $inboxes);
+		$this->assertSame(array_values(array_unique($inboxes)), $inboxes, 'one entry per inbox');
+
+		$this->request->recordSyncAttempt(self::LIVELY, false, 1_700_000_100);
+		$this->assertNotContains(
+			'https://lively-catest.example/inbox',
+			$this->request->getSharedInboxesSeenSince(1_650_000_000),
+			'a server whose last refresh failed has not been heard from'
+		);
 	}
 }

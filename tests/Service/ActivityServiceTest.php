@@ -814,11 +814,17 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame([], $paths);
 	}
 
-	public function testRequestExpandsAllToEveryKnownSharedInbox(): void {
+	public function testRequestExpandsAllToEveryRecentlySeenSharedInbox(): void {
 		$paths = [];
 		$this->capturePaths($paths);
+		$this->cacheActorsRequest->expects($this->never())->method('getSharedInboxes');
 		$this->cacheActorsRequest->expects($this->once())
-			->method('getSharedInboxes')
+			->method('getSharedInboxesSeenSince')
+			->with($this->callback(function (int $since): bool {
+				$expected = time() - ActivityService::ALL_SEEN_DAYS * 86400;
+
+				return abs($since - $expected) < 60;
+			}))
 			->willReturn(['https://remote.example/inbox', 'https://other.example/inbox']);
 
 		$item = new Update();
@@ -831,6 +837,27 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame('https://remote.example/inbox', $paths[0]->getUri());
 		$this->assertSame(InstancePath::TYPE_GLOBAL, $paths[0]->getType());
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
+	}
+
+	/** A server that is failing right now is not sent an activity addressed to everybody. */
+	public function testRequestToAllSkipsServersWithAnOpenBreaker(): void {
+		$paths = [];
+		$this->capturePaths($paths);
+		$this->breakerRows['dead.example'] = ['strikes' => 3, 'open_until' => time() + 600, 'last_failure' => time() - 10];
+		$this->breakerRows['recovered.example'] = ['strikes' => 1, 'open_until' => time() - 10, 'last_failure' => time() - 100];
+		$this->cacheActorsRequest->method('getSharedInboxesSeenSince')
+			->willReturn(['https://dead.example/inbox', 'https://recovered.example/inbox']);
+
+		$item = new Update();
+		$item->setActorId(self::ALICE_ID);
+		$item->addInstancePath(new InstancePath('https://social.example/', InstancePath::TYPE_ALL, InstancePath::PRIORITY_HIGH));
+
+		$this->service->request($item);
+
+		$this->assertSame(
+			['https://recovered.example/inbox'],
+			array_map(fn (InstancePath $path): string => $path->getUri(), $paths)
+		);
 	}
 
 	public function testRequestCombinesFollowersAndDirectTargets(): void {

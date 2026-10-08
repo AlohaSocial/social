@@ -748,6 +748,62 @@ class CacheActorsRequest extends CacheActorsRequestBuilder {
 	}
 
 	/**
+	 * One shared inbox per server that has answered since `$since`: what an
+	 * activity addressed to everybody — an account deletion — goes to.
+	 *
+	 * Grouped on the indexed `host` rather than a DISTINCT over the TEXT
+	 * `shared_inbox`, which read every cached actor to come back with a few
+	 * thousand inboxes, every one of them delivered to however long ago its
+	 * server was last heard from. A server counts as seen when a refresh of
+	 * one of its accounts worked inside the window (`sync_attempt` with no
+	 * failure since) or one of its accounts was made inside it.
+	 *
+	 * @return string[]
+	 */
+	public function getSharedInboxesSeenSince(int $since): array {
+		$qb = $this->getQueryBuilder();
+		$expr = $qb->expr();
+		$qb->selectAlias($qb->func()->max('ca.nid'), 'nid')
+			->from(self::TABLE_CACHE_ACTORS, 'ca')
+			->where($expr->eq('ca.local', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+			->andWhere($expr->neq('ca.host', $qb->createNamedParameter('')))
+			->andWhere($expr->neq('ca.shared_inbox', $qb->createNamedParameter('')))
+			->andWhere($expr->orX(
+				$expr->andX(
+					$expr->gte('ca.sync_attempt', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)),
+					$expr->eq('ca.sync_failures', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+				),
+				$expr->gte('ca.creation', $qb->createNamedParameter(
+					new DateTime('@' . $since), IQueryBuilder::PARAM_DATE
+				))
+			))
+			->groupBy('ca.host');
+
+		$nids = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$nids[] = (int)$data['nid'];
+		}
+		$cursor->closeCursor();
+
+		$inboxes = [];
+		foreach (array_chunk($nids, 500) as $chunk) {
+			$qb = $this->getQueryBuilder();
+			$qb->select('shared_inbox')
+				->from(self::TABLE_CACHE_ACTORS)
+				->where($qb->expr()->in('nid', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
+
+			$cursor = $qb->executeQuery();
+			while ($data = $cursor->fetch()) {
+				$inboxes[(string)$data['shared_inbox']] = true;
+			}
+			$cursor->closeCursor();
+		}
+
+		return array_map('strval', array_keys($inboxes));
+	}
+
+	/**
 	 * @param ProbeOptions $options
 	 *
 	 * @return Person[]

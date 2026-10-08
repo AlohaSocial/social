@@ -64,6 +64,9 @@ class ActivityService {
 	public const BREAKER_BASE = HostBreaker::BASE;
 	public const BREAKER_MAX = HostBreaker::MAX;
 
+	/** How recently a server must have answered to be sent an activity addressed to everybody. */
+	public const ALL_SEEN_DAYS = 90;
+
 	/** The delivery circuit breaker, as this drain sees it. */
 	private ?HostBreaker $breaker = null;
 
@@ -900,17 +903,34 @@ class ActivityService {
 	}
 
 	/**
+	 * Every server worth telling: one shared inbox per server heard from in
+	 * the last `ALL_SEEN_DAYS`, less the ones whose breaker is open.
+	 *
+	 * An activity addressed to everybody is an account deletion, and it used
+	 * to go to every shared inbox this instance had ever cached — servers gone
+	 * for years among them, each a queue row and, until the breaker learnt of
+	 * it, a timeout. A server that is down right now has its rows held back
+	 * by the breaker anyway, and one not heard from in three months is not
+	 * going to read a deletion either.
+	 *
 	 * @return InstancePath[]
 	 */
 	private function generateInstancePathsAll(): array {
-		$sharedInboxes = $this->cacheActorsRequest->getSharedInboxes();
+		$sharedInboxes = $this->cacheActorsRequest->getSharedInboxesSeenSince(
+			time() - self::ALL_SEEN_DAYS * 86400
+		);
 		$instancePaths = [];
 		foreach ($sharedInboxes as $sharedInbox) {
-			$instancePaths[] = new InstancePath(
+			$instancePath = new InstancePath(
 				$sharedInbox,
 				InstancePath::TYPE_GLOBAL,
 				InstancePath::PRIORITY_LOW
 			);
+			if ($this->breaker()->openUntil($instancePath->getAddress()) > 0) {
+				continue;
+			}
+
+			$instancePaths[] = $instancePath;
 		}
 
 		return $instancePaths;
