@@ -96,6 +96,25 @@ class ImportedPostsRequest extends CoreRequestBuilder {
 		return $known;
 	}
 
+	/**
+	 * Whether a post of this account was brought over rather than written
+	 * here.
+	 */
+	public function isImported(string $actorId, string $streamId): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('ip.id')
+			->from(self::TABLE_IMPORTED_POSTS, 'ip')
+			->where($qb->expr()->eq('ip.actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))))
+			->andWhere($qb->expr()->eq('ip.stream_id_prim', $qb->createNamedParameter($qb->prim($streamId))))
+			->setMaxResults(1);
+
+		$cursor = $qb->executeQuery();
+		$found = $cursor->fetch() !== false;
+		$cursor->closeCursor();
+
+		return $found;
+	}
+
 	/** How many posts this account has brought over, all told. */
 	public function countFor(string $actorId): int {
 		$qb = $this->getQueryBuilder();

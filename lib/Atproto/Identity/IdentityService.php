@@ -227,6 +227,116 @@ class IdentityService {
 	}
 
 	/**
+	 * Hands the DID to another PDS (§13.2): its signing key, its rotation
+	 * keys and its endpoint, as that PDS recommends them, with the person's
+	 * recovery key kept first so the DID stays theirs. Signed with this
+	 * server's rotation key, which the new document no longer lists. Sent at
+	 * once and not left for repair: a move goes on only once the directory
+	 * took it.
+	 *
+	 * @param array $credentials the other PDS's `getRecommendedDidCredentials`
+	 * @throws AtprotoException
+	 */
+	public function handOver(Identity $identity, array $credentials): void {
+		$signing = (string)($credentials['verificationMethods']['atproto'] ?? '');
+		$handle = (string)preg_replace('#^at://#', '', (string)($credentials['alsoKnownAs'][0] ?? ''));
+		$endpoint = (string)($credentials['services']['atproto_pds']['endpoint'] ?? '');
+		$rotation = [];
+		if ($identity->recoveryPublic !== '') {
+			$rotation[] = $identity->recoveryPublic;
+		}
+		foreach (is_array($credentials['rotationKeys'] ?? null) ? $credentials['rotationKeys'] : [] as $key) {
+			if (is_string($key) && str_starts_with($key, 'did:key:') && !in_array($key, $rotation, true)) {
+				$rotation[] = $key;
+			}
+		}
+		$rotation = array_slice($rotation, 0, 5);
+		if (!str_starts_with($signing, 'did:key:') || $handle === '' || !preg_match('#^https?://#', $endpoint) || $rotation === []) {
+			throw new AtprotoException('The other PDS recommended no usable credentials');
+		}
+		$operation = PlcOperation::sign(
+			PlcOperation::build($rotation, $signing, $handle, $endpoint, $this->prev($identity)),
+			$this->instanceKeys->rotationKey(),
+		);
+		$logId = $this->plcLog->record($identity->did, PlcOperation::cid($operation)->toString(), $operation);
+		$this->plcLog->markSent($logId);
+		try {
+			$this->plc->submit($identity->did, $operation);
+		} catch (AtprotoException $e) {
+			// not left for repair(): a move is started again by the person,
+			// never finished behind their back
+			$this->plcLog->remove($logId);
+			throw $e;
+		}
+		$this->plcLog->markConfirmed($logId);
+	}
+
+	/**
+	 * A DID that moved here (§13.1) becomes the account's: the directory takes
+	 * the operation the old PDS signed for it, the DID this server had made
+	 * for the account is retired — tombstoned, its repository dropped — and
+	 * the account's identity row takes the moved DID with the signing key
+	 * made for it here, keeping its handle. The network is told both.
+	 *
+	 * @param array $operation the signed PLC operation that names this PDS
+	 * @return Identity the account's identity, with its new DID
+	 * @throws AtprotoException when the directory refuses the operation; nothing has changed then
+	 */
+	public function adopt(Identity $current, string $did, PrivateKey $signingKey, string $oldPds, array $operation): Identity {
+		$this->submit($did, $operation);
+
+		return $this->receive($current, $did, $signingKey, $oldPds);
+	}
+
+	/**
+	 * Sends an operation someone else signed for a DID moving here, logged
+	 * as this server's own are.
+	 *
+	 * @throws AtprotoException when the directory refuses it; it is not logged then
+	 */
+	public function submit(string $did, array $operation): void {
+		$logId = $this->plcLog->record($did, PlcOperation::cid($operation)->toString(), $operation);
+		$this->plcLog->markSent($logId);
+		try {
+			$this->plc->submit($did, $operation);
+		} catch (AtprotoException $e) {
+			$this->plcLog->remove($logId);
+			throw $e;
+		}
+		$this->plcLog->markConfirmed($logId);
+	}
+
+	/**
+	 * A DID that the other side already pointed here (Bridgy Fed, a migration
+	 * tool) becomes the account's, as in adopt(), with nothing sent to the
+	 * directory.
+	 *
+	 * @return Identity the account's identity, with its new DID
+	 * @throws AtprotoException
+	 */
+	public function receive(Identity $current, string $did, PrivateKey $signingKey, string $oldPds): Identity {
+		if ($current->did !== $did) {
+			$this->tombstone($current);
+		}
+		$this->identityRequest->adoptDid($current->id, $did, $this->cipher->seal($signingKey->secret()), $signingKey->didKey(), $oldPds);
+		$adopted = $this->identityRequest->getByDid($did);
+		$this->events->identity($did, $adopted->handle);
+		$this->events->account($did, true);
+		$this->logger->info('Bluesky account moved here', ['did' => $did, 'retired' => $current->did, 'from' => $oldPds]);
+
+		return $adopted;
+	}
+
+	/**
+	 * The account lives elsewhere now: announced inactive here, nothing more
+	 * published for it, and no new identity made for the local account.
+	 */
+	public function markMovedAway(Identity $identity): void {
+		$this->identityRequest->setState($identity->did, Identity::STATE_MOVED_AWAY);
+		$this->events->account($identity->did, false, 'deactivated');
+	}
+
+	/**
 	 * Ends the identity for good: the DID is tombstoned at the directory,
 	 * the repository and its blobs are dropped, and the firehose says so.
 	 * The row stays, so neither the DID nor the handle is issued again.

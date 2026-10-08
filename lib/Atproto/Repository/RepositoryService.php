@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Commit;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Mst;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoException;
@@ -140,6 +141,49 @@ class RepositoryService {
 		);
 
 		return new CommitResult($did, $commitCid, $rev, $seq, $written);
+	}
+
+	/**
+	 * A repository that moved here (§13.1), written as one commit: the
+	 * records as they were, byte for byte, so each keeps its CID and every
+	 * reference to it stays good, under a commit this server signs with the
+	 * account's new key. Records are not checked against a lexicon: a
+	 * repository holds whatever its owner wrote, of any application. Nothing
+	 * goes on the firehose; the account is announced when it is activated.
+	 *
+	 * @param array<string, string> $records path => record bytes (DAG-CBOR)
+	 * @param string $afterRev the old repository's revision, which this one follows
+	 * @throws AtprotoException when the repository is not empty or a path is not one
+	 */
+	public function import(string $did, PrivateKey $signingKey, array $records, string $afterRev = ''): Cid {
+		if ($this->repoRequest->getHead($did) !== null) {
+			throw new AtprotoException('A repository for ' . $did . ' is here already');
+		}
+		$this->connection->beginTransaction();
+		try {
+			$leaves = [];
+			foreach ($records as $path => $bytes) {
+				[$collection, $rkey] = explode('/', (string)$path, 2) + [1 => ''];
+				if (!Mst::isValidKey((string)$path) || !Syntax::isNsid($collection)) {
+					throw new AtprotoException('Not a record path: ' . $path);
+				}
+				$cid = Cid::forDagCbor($bytes);
+				$this->repoRequest->putRecord($did, $collection, $rkey, $cid, $bytes, '');
+				$leaves[(string)$path] = $cid;
+			}
+			$tree = (new Mst($leaves))->build();
+			$rev = Tid::after($afterRev);
+			$commit = Commit::sign($did, $tree->root, $rev, $signingKey);
+			$this->repoRequest->putBlocks($did, AtprotoRepoRequest::BLOCK_MST, $tree->blocks);
+			$this->repoRequest->putBlocks($did, AtprotoRepoRequest::BLOCK_COMMIT, [$commit->cid()->toString() => $commit->toBytes()]);
+			$this->repoRequest->setHead($did, $commit->cid(), $rev, count($leaves));
+			$this->connection->commit();
+		} catch (Throwable $e) {
+			$this->connection->rollBack();
+			throw $e instanceof AtprotoException ? $e : new AtprotoException('Repository import failed: ' . $e->getMessage(), 0, $e);
+		}
+
+		return $commit->cid();
 	}
 
 	public function getHead(string $did): ?RepoHead {

@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18) and custom handles (4a) are implemented; the rest of phase 4 is specification.**
+**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1256,9 +1256,9 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 
 ### Phase 4 as it lands
 
-Four parts, four pull requests: **4a** custom handles (§4.2), **4b** moving
+Five parts, five pull requests: **4a** custom handles (§4.2), **4b** moving
 away (§13.2), **4c** moving a Bluesky account here (§13.1), **4d** Bridgy
-Fed twins (§13.3).
+Fed twins (§13.3), **4e** the moved posts in the timeline (§13.1, step 6).
 
 **4a as built** — `Identity\HandleVerifier`, `Identity\CustomHandleService`,
 `Identity\DnsLookup`, columns `custom_handle`, `custom_handle_checked`,
@@ -1281,6 +1281,128 @@ Fed twins (§13.3).
   failed two checks in a row is shown as broken in the settings, as
   Bluesky shows the handle as invalid. Nothing is changed for the person:
   the record may only be gone for a while.
+
+**4b as built** — `Move\MoveAwayService`, `Move\PdsClient`,
+`IdentityService::handOver()`/`markMovedAway()`, `Cron\AtprotoMove`, table
+`social_atproto_move`:
+
+- **Driven from here, not from the other side.** §13.2 had this server
+  serve `requestPlcOperationSignature` and `signPlcOperation` to a
+  migration tool. A tool would need a session with account-management
+  rights, which neither app passwords nor `transition:generic` give, and
+  this server holds both the signing key and a rotation key of the DID.
+  So Settings → Migration → *Move your Bluesky account away* does what the
+  tool would: the person names the other PDS, a handle there, an e-mail
+  address and a password (and an invite code if it wants one), confirms
+  with their Nextcloud password, and this server makes the account there
+  with a token the account signs (`createAccount` with the DID). What the
+  other server refuses is said at once.
+- **Then a background job**: `importRepo` with this repository's CAR, every
+  blob `listMissingBlobs` names, the preferences, then
+  `getRecommendedDidCredentials` there and a PLC operation signed with this
+  server's rotation key that hands the DID over — the person's recovery key
+  first among the rotation keys, so the DID stays theirs; this server's key
+  is no longer listed — then `activateAccount` there. Here the identity is
+  `moved_away`, announced inactive on the firehose, and nothing more is
+  published; no new identity is made for the account.
+- **A step that fails stops the move**, and *Try again* starts it from that
+  step. The DID moves only once the repository and the blobs are there, and
+  a hand-over the directory refused is not left for the PLC repair pass:
+  the move is finished by the person, never behind their back. The session
+  on the other PDS is kept sealed while the move runs and dropped after.
+- **The Fediverse account is untouched.** Posts written while the move
+  runs, after the repository was copied, stay here only.
+
+**4c as built** — `Move\MoveInService`, `Move\RepoArchive`,
+`Protocol\MstReader`, `RepositoryService::import()`,
+`IdentityService::adopt()`, `FollowService::adoptBlueskyFollow()`,
+`DocumentService::storeAsIs()`:
+
+- **Driven from here, as moving away is.** Settings → Migration → *Bring
+  your Bluesky account here*: the person names their Bluesky account and
+  types its **password** — the account's own, not an app password, because
+  a PDS signs a change of the DID only for a full session (§13.1 said app
+  password, which cannot work). It is used to sign in and not kept; the
+  session is, sealed, while the move runs. A sign-in the old PDS wants
+  confirmed by an e-mailed code takes that code as well.
+- **The repository** is fetched with `getRepo`, checked — every block
+  against its CID, the commit against the signing key the DID document
+  names — and written here **byte for byte**, every record of every
+  application, under one commit signed with a key made for the account
+  here. Records keep their CIDs, so every reference to them stays good.
+  **Blobs** are fetched with `listBlobs`/`getBlob` and stored as they came,
+  each checked against its CID; nothing is re-encoded. **Preferences** come
+  along. **Follows** become follows here, each tied to the record it came
+  with, so nothing is written twice.
+- **Then the old PDS e-mails a code** (`requestPlcOperationSignature`); the
+  move waits. With the code it signs the operation that names this PDS,
+  this server's rotation key and the account's handle here — checked
+  before it is taken — the directory takes it, and the account **takes the
+  DID**: the account's identity row keeps its handle (and custom handle)
+  and gets the moved DID and its new key, and the DID this server had made
+  for the account is **retired**, tombstoned with its repository. The page
+  says so before the move starts. Last, `deactivateAccount` on the old PDS.
+- **Then the posts** become posts in the timeline here (4e). A wrong code
+  stops the move, and *Try again* asks the old PDS for a new one.
+
+**4d as built** — `Move\InboundMoveService`, `Move\BridgyTwin`,
+`ServiceAuth::verify()`, `IdentityService::receive()`/`submit()`; moves of
+direction `inbound` in `social_atproto_move`:
+
+- **This server as the new PDS of the protocol's own migration.** §13.3
+  assumed the 4c flow with Bridgy as the old PDS; but a bridged account has
+  no password — Bridgy holds its keys — and Bridgy moves an account out
+  itself, with the DM command `migrate-to <pds> <email> <handle> <password>
+  [invite]`, doing what a migration tool does against the new PDS. So 4d
+  serves that side, and every standard tool (`goat account migrate`, say)
+  can move an account here the same way.
+- **Invited first.** Settings → Migration → *Bring your bridged Bluesky
+  account here* finds the twin (the handle Bridgy gives the Fediverse
+  address, resolving to a DID whose PDS is `atproto.brid.gy`); a person can
+  also name any other account. Inviting, after the Nextcloud password, makes
+  a one-time code, kept only as a hash, good for a day. A twin's move is
+  then asked for by a direct message from the account to Bridgy's bot with
+  the command; for anything else the page shows the server, the handle,
+  the e-mail address and the code, once.
+- **`createAccount`** takes only an invited DID, with the code (as password
+  or invite code) and a service-auth token the DID signs for this server's
+  `did:web`, checked against the key the directory names; the handle asked
+  for is ignored — the account goes by its handle here. What it gets is a
+  session that can only move the account: `importRepo` (checked as in 4c,
+  replacing what came before, up to 64 MB), `listMissingBlobs`, `uploadBlob`
+  (kept byte for byte, also after activation, as Bridgy sends blobs last),
+  `getRecommendedDidCredentials` (this server's rotation key, the handle
+  here, a key made for the account here, this PDS), `submitPlcOperation`
+  for a tool that leaves the directory to the new PDS, `checkAccountStatus`,
+  preferences, `refreshSession`. Seven days, then it ends.
+- **`activateAccount`** checks the directory names this PDS, the
+  recommended key and this server's rotation key; then the account takes
+  the DID as in 4c (`receive()`, the auto-made DID retired) and a job turns
+  its follows into follows here. Bridgy stops bridging the account to
+  Bluesky itself.
+- **Not built:** a twin's handle Bridgy derived from a custom domain is not
+  found by the page; it can be named by hand.
+
+**4e as built** — `Move\PostHistory`, `PostImportService::importParsed()`,
+`ImportedPostsRequest::isImported()`; a last step `posts` of both moves here:
+
+- **The moved posts become the account's posts here**, through the import
+  path every archive import takes, so nothing is federated: dated when they
+  were written, the whole link where the app shortened it, the hashtags the
+  facets name, the language, a warning where the post carried a label for
+  one, a reply under its parent when that is one of the account's own
+  posts too, the pictures or the video from the blobs held here.
+- **Each is tied to the record it came from**, so a like, a repost or a reply
+  on Bluesky reaches it here, and nothing is published again: the publisher
+  leaves an imported post alone — neither rewrites its record when it is
+  younger than the edit grace, nor publishes an archive import dated in the
+  last day as new, which it did before.
+- **The account has moved by then**: a post that cannot be imported is
+  logged, and the move is done regardless. Running it again picks up only
+  what is left.
+- **Not built**: the account's likes and reposts are on Bluesky, as records
+  of the repository, but are not actions in this app; a reply to somebody
+  else's post stands alone here, the thread being on Bluesky.
 
 ## 19. Open questions
 

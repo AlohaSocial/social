@@ -179,6 +179,94 @@ class IdentityServiceTest extends TestCase {
 		$this->assertTrue(PlcOperation::verify($update, $this->rotation->publicKey()));
 	}
 
+	public function testHandingOverPointsTheDidAtTheOtherPdsAndKeepsTheRecoveryKeyFirst(): void {
+		$identity = $this->service->forActor(self::actor('mover'));
+		$this->assertNotNull($identity);
+		$recovery = PrivateKey::generate(Curve::K256)->didKey();
+		$withRecovery = new Identity($identity->id, $identity->actorId, $identity->did, $identity->handle, $identity->sealedSigningKey, $identity->signingPublic, $recovery, Identity::STATE_ACTIVE, '', $identity->creation);
+		$theirs = PrivateKey::generate(Curve::K256)->didKey();
+		$signing = PrivateKey::generate(Curve::K256)->didKey();
+		$this->plc->expects($this->once())->method('submit')->with($identity->did, $this->callback(fn (array $operation): bool => $operation['rotationKeys'] === [$recovery, $theirs]
+			&& $operation['verificationMethods'] === ['atproto' => $signing]
+			&& $operation['alsoKnownAs'] === ['at://mover.pds.example.com']
+			&& $operation['services']['atproto_pds']['endpoint'] === 'https://pds.example.com'
+			&& $operation['prev'] === $this->logged[0]['cid']
+			&& PlcOperation::verify($operation, $this->rotation->publicKey())));
+		$this->plcLog->expects($this->once())->method('markConfirmed');
+
+		$this->service->handOver($withRecovery, [
+			'rotationKeys' => [$theirs],
+			'verificationMethods' => ['atproto' => $signing],
+			'alsoKnownAs' => ['at://mover.pds.example.com'],
+			'services' => ['atproto_pds' => ['type' => 'AtprotoPersonalDataServer', 'endpoint' => 'https://pds.example.com']],
+		]);
+	}
+
+	public function testADidThatMovedHereBecomesTheAccountsAndRetiresTheOldOne(): void {
+		$old = $this->service->forActor(self::actor('arriving'));
+		$this->assertNotNull($old);
+		$moved = 'did:plc:z72i7hdynmk6r22z27h6tvur';
+		$key = PrivateKey::generate(Curve::K256);
+		$operation = ['type' => 'plc_operation', 'rotationKeys' => [$this->rotation->didKey()], 'verificationMethods' => ['atproto' => $key->didKey()], 'alsoKnownAs' => ['at://arriving.social.test'], 'services' => ['atproto_pds' => ['type' => 'AtprotoPersonalDataServer', 'endpoint' => 'https://social.test']], 'prev' => 'bafyreiprev', 'sig' => 'c2ln'];
+		$submitted = [];
+		$this->plc->method('submit')->willReturnCallback(static function (string $did, array $op) use (&$submitted): void {
+			$submitted[] = [$did, $op['type']];
+		});
+		$this->identityRequest->method('adoptDid')->willReturnCallback(function (int $id, string $did, string $sealed, string $public, string $from) use ($old): void {
+			$this->stored[$did] = new Identity($id, $old->actorId, $did, $old->handle, $sealed, $public, '', Identity::STATE_ACTIVE, $from, $old->creation);
+		});
+		$this->repositories->expects($this->once())->method('delete')->with($old->did);
+		$announced = [];
+		$this->events->method('account')->willReturnCallback(static function (string $did, bool $active) use (&$announced): int {
+			$announced[] = [$did, $active];
+
+			return 1;
+		});
+
+		$adopted = $this->service->adopt($old, $moved, $key, 'https://pds.example.com', $operation);
+
+		$this->assertSame([[$moved, 'plc_operation'], [$old->did, 'plc_tombstone']], $submitted, 'the directory takes the move first, then the old DID is retired');
+		$this->assertSame($moved, $adopted->did);
+		$this->assertSame('arriving.social.test', $adopted->handle, 'the handle stays');
+		$this->assertSame($key->didKey(), $adopted->signingPublic);
+		$this->assertSame($key->secret(), $this->service->signingKey($adopted)->secret(), 'signed with the key made for it here');
+		$this->assertSame([[$old->did, false], [$moved, true]], $announced, 'the old DID is announced gone, the moved one active');
+	}
+
+	public function testADidTheOtherSidePointedHereIsTakenWithNothingSent(): void {
+		$old = $this->service->forActor(self::actor('bridged'));
+		$this->assertNotNull($old);
+		$moved = 'did:plc:3guzzweuqraryl3rdkimjamk';
+		$key = PrivateKey::generate(Curve::K256);
+		$submitted = [];
+		$this->plc->method('submit')->willReturnCallback(static function (string $did, array $op) use (&$submitted): void {
+			$submitted[] = [$did, $op['type']];
+		});
+		$this->identityRequest->method('adoptDid')->willReturnCallback(function (int $id, string $did, string $sealed, string $public, string $from) use ($old): void {
+			$this->stored[$did] = new Identity($id, $old->actorId, $did, $old->handle, $sealed, $public, '', Identity::STATE_ACTIVE, $from, $old->creation);
+		});
+
+		$received = $this->service->receive($old, $moved, $key, 'https://atproto.brid.gy');
+
+		$this->assertSame([[$old->did, 'plc_tombstone']], $submitted, 'only the old DID is retired');
+		$this->assertSame([$moved, 'https://atproto.brid.gy'], [$received->did, $received->movedFromPds]);
+	}
+
+	public function testAHandOverTheDirectoryRefusedIsNotSentAgainByRepair(): void {
+		$identity = $this->service->forActor(self::actor('stayer'));
+		$this->assertNotNull($identity);
+		$this->plc->method('submit')->willThrowException(new \OCA\Social\Exceptions\AtprotoException('refused'));
+		$this->plcLog->expects($this->once())->method('remove')->with(2);
+
+		$this->expectException(\OCA\Social\Exceptions\AtprotoException::class);
+		$this->service->handOver($identity, [
+			'rotationKeys' => [PrivateKey::generate(Curve::K256)->didKey()],
+			'verificationMethods' => ['atproto' => PrivateKey::generate(Curve::K256)->didKey()],
+			'alsoKnownAs' => ['at://stayer.pds.example.com'],
+			'services' => ['atproto_pds' => ['endpoint' => 'https://pds.example.com']],
+		]);
+	}
+
 	public function testSwitchingOffAnnouncesTheAccountInactiveAndOnAgainActive(): void {
 		$identity = $this->service->forActor(self::actor('erin'));
 		$this->assertNotNull($identity);

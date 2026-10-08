@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\DpopNonce;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
@@ -82,6 +83,9 @@ class AtprotoXrpcController extends Controller {
 			if ($method === ClientXrpc::UPLOAD) {
 				return $this->upload();
 			}
+			if ($method === ClientXrpc::IMPORT) {
+				return $this->importRepo();
+			}
 			$raw = file_get_contents('php://input', false, null, 0, ClientXrpc::MAX_BLOB + 1);
 			$raw = $raw === false ? '' : $raw;
 			$answer = $this->client->procedure($method, $raw, $this->headers(), $this->request->getRemoteAddress());
@@ -108,27 +112,54 @@ class AtprotoXrpcController extends Controller {
 	 * @throws XrpcException
 	 */
 	private function upload(): Response {
-		$path = tempnam(sys_get_temp_dir(), 'social-atproto-upload-');
-		if ($path === false) {
-			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
-		}
+		$path = $this->received(ClientXrpc::MAX_UPLOAD, new XrpcException(413, 'BlobTooLarge', 'This file is too large'));
 		try {
-			$in = fopen('php://input', 'rb');
-			$out = fopen($path, 'wb');
-			if ($in === false || $out === false) {
-				throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
-			}
-			$copied = stream_copy_to_stream($in, $out, ClientXrpc::MAX_UPLOAD + 1);
-			fclose($in);
-			fclose($out);
-			if ($copied === false || $copied > ClientXrpc::MAX_UPLOAD) {
-				throw new XrpcException(413, 'BlobTooLarge', 'This file is too large');
-			}
-
 			return $this->answer($this->client->upload($path, $this->headers()));
 		} finally {
 			@unlink($path);
 		}
+	}
+
+	/**
+	 * `com.atproto.repo.importRepo`: the CAR is copied to a file as it
+	 * arrives, and refused past the largest repository taken.
+	 *
+	 * @throws XrpcException
+	 */
+	private function importRepo(): Response {
+		$path = $this->received(InboundMoveService::MAX_REPO, new XrpcException(413, 'PayloadTooLarge', 'This repository is too large to move here'));
+		try {
+			return $this->answer($this->client->importRepo($path, $this->headers()));
+		} finally {
+			@unlink($path);
+		}
+	}
+
+	/**
+	 * The request body, in a temporary file the caller removes.
+	 *
+	 * @throws XrpcException $tooLarge past $limit bytes
+	 */
+	private function received(int $limit, XrpcException $tooLarge): string {
+		$path = tempnam(sys_get_temp_dir(), 'social-atproto-upload-');
+		if ($path === false) {
+			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
+		}
+		$in = fopen('php://input', 'rb');
+		$out = fopen($path, 'wb');
+		if ($in === false || $out === false) {
+			@unlink($path);
+			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
+		}
+		$copied = stream_copy_to_stream($in, $out, $limit + 1);
+		fclose($in);
+		fclose($out);
+		if ($copied === false || $copied > $limit) {
+			@unlink($path);
+			throw $tooLarge;
+		}
+
+		return $path;
 	}
 
 	/**

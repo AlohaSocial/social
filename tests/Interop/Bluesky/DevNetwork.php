@@ -203,6 +203,103 @@ final class DevNetwork {
 	}
 
 	/**
+	 * The signed-in user posts a picture, uploaded to its own PDS as a blob.
+	 *
+	 * @return string the picture's CID
+	 */
+	public function postPicture(string $text, string $bytes, string $mime): string {
+		[$status, $body] = $this->request('POST', $this->pds . '/xrpc/com.atproto.repo.uploadBlob', $bytes, [
+			'Content-Type: ' . $mime, 'Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt,
+		]);
+		$blob = json_decode($body, true)['blob'] ?? null;
+		if ($status !== 200 || !is_array($blob)) {
+			throw new RuntimeException('uploadBlob answered ' . $status . ': ' . $body);
+		}
+		$this->post($this->pds, 'com.atproto.repo.createRecord', [
+			'repo' => $this->did,
+			'collection' => 'app.bsky.feed.post',
+			'record' => [
+				'$type' => 'app.bsky.feed.post',
+				'text' => $text,
+				'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+				'embed' => ['$type' => 'app.bsky.embed.images', 'images' => [['image' => $blob, 'alt' => 'A test pattern']]],
+			],
+		], true);
+
+		return (string)($blob['ref']['$link'] ?? '');
+	}
+
+	/**
+	 * A service-auth token the dev PDS signs as the signed-in user.
+	 */
+	public function serviceAuth(string $audience, string $method): string {
+		[$status, $answer] = $this->asUser('GET', 'com.atproto.server.getServiceAuth', null, ['aud' => $audience, 'lxm' => $method]);
+		if ($status !== 200) {
+			throw new RuntimeException('getServiceAuth answered ' . $status . ': ' . json_encode($answer));
+		}
+
+		return (string)($answer['token'] ?? '');
+	}
+
+	/**
+	 * A call to the dev PDS as the signed-in user. A method without input
+	 * takes no body at all, and an empty input goes as an object.
+	 *
+	 * @return array{0: int, 1: array} the status and the decoded answer
+	 */
+	public function asUser(string $verb, string $method, ?array $body = null, array $query = []): array {
+		$headers = ['Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt];
+		$payload = null;
+		if ($body !== null) {
+			$headers[] = 'Content-Type: application/json';
+			$payload = (string)json_encode($body === [] ? new \stdClass() : $body, JSON_UNESCAPED_SLASHES);
+		}
+		[$status, $answer] = $this->request($verb, $this->pds . '/xrpc/' . $method . ($query === [] ? '' : '?' . http_build_query($query)), $payload, $headers);
+		$decoded = json_decode($answer, true);
+
+		return [$status, is_array($decoded) ? $decoded : []];
+	}
+
+	/**
+	 * Bytes the dev PDS serves anyone: a repository, a blob.
+	 */
+	public function pdsBytes(string $method, array $query): string {
+		[$status, $body] = $this->request('GET', $this->pds . '/xrpc/' . $method . '?' . http_build_query($query), null, []);
+		if ($status !== 200) {
+			throw new RuntimeException($method . ' answered ' . $status . ': ' . $body);
+		}
+
+		return $body;
+	}
+
+	/**
+	 * The records of a collection in a repository, as the dev PDS holds it.
+	 *
+	 * @return list<array{uri: string, value: array}>
+	 */
+	public function pdsRecords(string $did, string $collection): array {
+		$answer = $this->get($this->pds, 'com.atproto.repo.listRecords', ['repo' => $did, 'collection' => $collection, 'limit' => 100]);
+
+		return is_array($answer['records'] ?? null) ? $answer['records'] : [];
+	}
+
+	/**
+	 * Signs in on the dev PDS and answers who it says that is.
+	 */
+	public function signInAs(string $identifier, string $password): array {
+		return $this->post($this->pds, 'com.atproto.server.createSession', ['identifier' => $identifier, 'password' => $password]);
+	}
+
+	/**
+	 * The code the dev PDS would have e-mailed an account for a PLC operation.
+	 */
+	public function plcToken(string $did): string {
+		[$status, $body] = $this->request('GET', $this->handleServer . '/plc-token?did=' . rawurlencode($did), null, []);
+
+		return $status === 200 ? trim($body) : '';
+	}
+
+	/**
 	 * Puts a DID in the handle server's `/.well-known/atproto-did`, as a
 	 * person does on their own domain.
 	 */

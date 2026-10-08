@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Atproto\Reader;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\BlueskyGraphService;
+use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\AtprotoException;
@@ -33,6 +34,8 @@ class BlueskyGraphServiceTest extends TestCase {
 	private AtprotoWatchRequest $watches;
 	/** @var FollowsRequest&MockObject */
 	private FollowsRequest $follows;
+	/** @var AtprotoRepoRequest&MockObject */
+	private AtprotoRepoRequest $repoRequest;
 	private BlueskyGraphService $service;
 	private Person $alice;
 	private Person $bob;
@@ -44,7 +47,8 @@ class BlueskyGraphServiceTest extends TestCase {
 		$this->follows = $this->createMock(FollowsRequest::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
-		$this->service = new BlueskyGraphService($this->publisher, $this->watches, $this->follows, $time, new NullLogger());
+		$this->repoRequest = $this->createMock(AtprotoRepoRequest::class);
+		$this->service = new BlueskyGraphService($this->publisher, $this->watches, $this->follows, $this->repoRequest, $time, new NullLogger());
 		$this->alice = new Person();
 		$this->alice->setId('https://social.test/@alice');
 		$this->alice->setLocal(true);
@@ -62,6 +66,14 @@ class BlueskyGraphServiceTest extends TestCase {
 		$this->watches->expects($this->once())->method('add')->with(self::DID, 'bob.bsky.social');
 
 		$this->service->follow($this->alice, $this->bob, $this->follow);
+	}
+
+	public function testAFollowThatMovedHereLinksItsRecordAndWritesNothing(): void {
+		$this->publisher->expects($this->never())->method('writeRecord');
+		$this->repoRequest->expects($this->once())->method('setLocalId')->with('did:plc:moved', RecordMapper::FOLLOW, '3kfollow', 'https://social.test/follow/1');
+		$this->watches->expects($this->once())->method('add')->with(self::DID, 'bob.bsky.social');
+
+		$this->service->adopt('did:plc:moved', '3kfollow', $this->bob, $this->follow);
 	}
 
 	public function testTheWatchIsKeptWhenTheRecordCannotBeWritten(): void {

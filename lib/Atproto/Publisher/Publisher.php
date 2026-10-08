@@ -18,6 +18,7 @@ use OCA\Social\Atproto\Repository\CommitResult;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Db\ImportedPostsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\StreamNotFoundException;
@@ -54,6 +55,7 @@ class Publisher {
 		private CacheActorService $cacheActorService,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ImportedPostsRequest $imported,
 	) {
 	}
 
@@ -240,6 +242,11 @@ class Publisher {
 		$since = $this->time->getTime() - self::RECONCILE_WINDOW;
 		foreach ($this->streamRequest->getLocalPublicSince($since, $limit) as $post) {
 			try {
+				// an import is federated nowhere, and one that came with its
+				// record keeps that record as it was
+				if ($this->imported->isImported($post->getAttributedTo(), $post->getId())) {
+					continue;
+				}
 				$record = $this->recordOf($post->getId());
 				if ($record === null) {
 					$done += $this->publishPost($post) !== null ? 1 : 0;

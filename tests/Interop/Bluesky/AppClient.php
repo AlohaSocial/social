@@ -58,7 +58,16 @@ final class AppClient {
 	 * @return array{0: int, 1: array}
 	 */
 	public function upload(string $bytes, string $mime): array {
-		return $this->call('POST', 'com.atproto.repo.uploadBlob', $bytes, $this->accessJwt, $mime);
+		return $this->send('com.atproto.repo.uploadBlob', $bytes, $mime);
+	}
+
+	/**
+	 * A procedure whose input is bytes: a blob, a repository.
+	 *
+	 * @return array{0: int, 1: array}
+	 */
+	public function send(string $method, string $bytes, string $mime): array {
+		return $this->call('POST', $method, $bytes, $this->accessJwt, $mime);
 	}
 
 	/**

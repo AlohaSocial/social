@@ -14,10 +14,16 @@ use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Model\Move;
 use OCA\Social\Atproto\Moderation\LabelerService;
+use OCA\Social\Atproto\Move\BridgyTwin;
+use OCA\Social\Atproto\Move\InboundMoveService;
+use OCA\Social\Atproto\Move\MoveAwayService;
+use OCA\Social\Atproto\Move\MoveInService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Service\AccountService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -45,6 +51,10 @@ class AtprotoAccountController extends Controller {
 		private AppPasswordService $appPasswords,
 		private AuthorizationServer $oauth,
 		private CustomHandleService $customHandles,
+		private MoveAwayService $moveAway,
+		private MoveInService $moveIn,
+		private InboundMoveService $inbound,
+		private BridgyTwin $bridgy,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -243,6 +253,148 @@ class AtprotoAccountController extends Controller {
 			return new DataResponse(self::export($this->customHandles->clear($identity)));
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * The viewer's latest move of their Bluesky account, or null.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/move')]
+	public function move(): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+
+		return new DataResponse(['move' => $this->inbound->latest($this->userId())?->export()]);
+	}
+
+	/**
+	 * Moves the viewer's Bluesky account to another PDS: the account is made
+	 * there now, the rest follows in the background.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move')]
+	public function moveAway(string $pds, string $handle, string $email, string $password, string $inviteCode = ''): DataResponse {
+		$identity = $this->ownIdentity();
+		if ($identity === null) {
+			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			return new DataResponse(['move' => $this->moveAway->start($this->userId(), $identity, $pds, $handle, $email, $password, $inviteCode)->export()]);
+		} catch (\InvalidArgumentException|AtprotoException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Starts a failed move again, from where it stopped.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/retry')]
+	public function retryMove(): DataResponse {
+		try {
+			$latest = $this->moveAway->latest($this->userId());
+			$move = $latest !== null && $latest->direction === Move::IN
+				? $this->moveIn->retry($latest)
+				: $this->moveAway->retry($this->userId());
+
+			return new DataResponse(['move' => $move->export()]);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * Moves a Bluesky account here: the viewer signs in to it with its own
+	 * password, which is not kept, and the copy starts in the background.
+	 * Their Bluesky account here so far is replaced once the move is done.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move-in')]
+	public function moveIn(string $handle, string $password, string $authFactorToken = ''): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			return new DataResponse(['move' => $this->moveIn->start($this->userId(), $handle, $password, $authFactorToken)->export()]);
+		} catch (\InvalidArgumentException|AtprotoException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * The code the old Bluesky server e-mailed: the move here goes on.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move/code')]
+	public function moveCode(string $code): DataResponse {
+		try {
+			return new DataResponse(['move' => $this->moveIn->code($this->userId(), $code)->export()]);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	/**
+	 * The Bluesky account Bridgy Fed made for the viewer's Fediverse account,
+	 * or null.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/bridgy-twin')]
+	public function bridgyTwin(): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+
+		try {
+			$actor = $this->accountService->getActorFromUserId($this->userId(), true);
+		} catch (Throwable) {
+			return new DataResponse(['twin' => null]);
+		}
+
+		return new DataResponse(['twin' => $this->bridgy->find($actor)]);
+	}
+
+	/**
+	 * Invites a Bluesky account to move here, driven by the other side: a
+	 * Bridgy Fed twin is asked to by Bridgy, for anything else the answer
+	 * carries what a migration tool needs, the one-time code once.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/move-invite')]
+	public function moveInvite(string $account): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$invited = $this->inbound->invite($this->userId(), $account);
+
+			return new DataResponse(['move' => $invited['move']->export()] + $invited);
+		} catch (\InvalidArgumentException|AtprotoException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Calls off a move here the other side has not finished.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/bluesky/move-invite')]
+	public function cancelMoveInvite(): DataResponse {
+		try {
+			return new DataResponse(['move' => $this->inbound->cancel($this->userId())->export()]);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 

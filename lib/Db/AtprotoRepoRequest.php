@@ -214,16 +214,16 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	 * Every record's bytes, for `getRepo`; streamed through the callback so
 	 * a large repository is never whole in memory.
 	 *
-	 * @param callable(Cid, string): void $each
+	 * @param callable(Cid, string, string): void $each the CID, the bytes and the record's path
 	 */
 	public function eachRecordBytes(string $did, callable $each): void {
 		$qb = $this->getQueryBuilder();
-		$qb->select('cid', 'bytes')
+		$qb->select('cid', 'bytes', 'collection', 'rkey')
 			->from(self::TABLE_ATPROTO_RECORD)
 			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		$cursor = $qb->executeQuery();
 		while ($row = $cursor->fetch()) {
-			$each(Cid::parse((string)$row['cid']), self::bytes($row['bytes']));
+			$each(Cid::parse((string)$row['cid']), self::bytes($row['bytes']), $row['collection'] . '/' . $row['rkey']);
 		}
 		$cursor->closeCursor();
 	}
@@ -238,6 +238,21 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 		$cursor->closeCursor();
 
 		return (int)($row['n'] ?? 0);
+	}
+
+	/**
+	 * Names the Social object a record stands for, as a record that moved
+	 * here learns it when its follow is made here.
+	 */
+	public function setLocalId(string $did, string $collection, string $rkey, string $localId): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_ATPROTO_RECORD)
+			->set('local_id', $qb->createNamedParameter($localId))
+			->set('local_id_prim', $qb->createNamedParameter($localId === '' ? '' : md5($localId)))
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))
+			->andWhere($qb->expr()->eq('rkey', $qb->createNamedParameter($rkey)));
+		$qb->executeStatement();
 	}
 
 	public function putRecord(string $did, string $collection, string $rkey, Cid $cid, string $bytes, string $localId): void {

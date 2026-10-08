@@ -468,6 +468,27 @@ class PostImportService {
 	}
 
 	/**
+	 * Writes posts another reader made into the shape `parse()` makes — a
+	 * Bluesky repository's, which this server already holds — with the same
+	 * rules and writes as every import. An attachment may name a `path`, a
+	 * temporary file of its bytes, which is used instead of its `url` and
+	 * removed once stored.
+	 *
+	 * @param array<int, array<string, mixed>> $parsed
+	 * @return array{imported: int, skipped: int, already: int, media: int, failed: int, failures: array<string, string>, total: int, capped: bool}
+	 * @psalm-suppress InvalidReturnType the tally is built by reference through the writers
+	 */
+	public function importParsed(Person $actor, array $parsed): array {
+		$tally = [
+			'imported' => 0, 'skipped' => 0, 'already' => 0,
+			'media' => 0, 'failed' => 0, 'failures' => [], 'total' => count($parsed), 'capped' => false,
+		];
+
+		/** @psalm-suppress InvalidReturnStatement the shape is the one declared above */
+		return $this->writeParsed($actor, $parsed, null, false, PHP_INT_MAX, null, $tally);
+	}
+
+	/**
 	 * Writes the parsed posts, oldest first, skipping what is here already.
 	 *
 	 * @param array<int, array<string, mixed>> $parsed
@@ -1420,7 +1441,7 @@ class PostImportService {
 		$stored = [];
 
 		foreach ($post['attachments'] as $attachment) {
-			$temp = $this->fetch($attachment['url'], $zip, $fetchMedia);
+			$temp = isset($attachment['path']) ? (string)$attachment['path'] : $this->fetch($attachment['url'], $zip, $fetchMedia);
 			if ($temp === null) {
 				// a picture that was asked for and could not be had failed; one
 				// the reader declined to fetch was simply not fetched
