@@ -14,7 +14,9 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Exceptions\CardNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Question;
@@ -28,9 +30,10 @@ use Throwable;
  * This is the one place that decides what leaves for Bluesky: a public
  * post's text with facets, cut to fit and linked back when it does not;
  * `CW: …` and a `!warn` self-label for a content warning; a poll as its
- * question and options; the first four pictures as blobs; a reply to a
- * post that is itself on Bluesky as a reply there, any other reply or
- * quote as a link. Nothing else is ever written.
+ * question and options; the first four pictures as blobs; a reply to or
+ * quote of a post that is on Bluesky — a published local post or a
+ * Bluesky post read here — as a reply or record embed there, any other as
+ * a link; a link preview as an external card. Nothing else is ever written.
  */
 class RecordMapper {
 	public const POST = 'app.bsky.feed.post';
@@ -39,6 +42,7 @@ class RecordMapper {
 	public const FOLLOW = 'app.bsky.graph.follow';
 	public const LIKE = 'app.bsky.feed.like';
 	public const REPOST = 'app.bsky.feed.repost';
+	public const POSTGATE = 'app.bsky.feed.postgate';
 
 	public function __construct(
 		private TextMapper $text,
@@ -46,6 +50,8 @@ class RecordMapper {
 		private DocumentService $documents,
 		private IdentityService $identities,
 		private RepositoryService $repositories,
+		private PostRefs $refs,
+		private StreamCardsRequest $cards,
 	) {
 	}
 
@@ -75,11 +81,12 @@ class RecordMapper {
 		}
 
 		$quote = trim($post->getQuote());
-		if ($quote !== '' && $this->onBluesky($quote) === null) {
+		$quoted = $quote === '' ? null : $this->refs->strongRef($quote);
+		if ($quote !== '' && $quoted === null) {
 			$extra[] = $quote;
 		}
 		$parent = trim($post->getInReplyTo());
-		$reply = $parent === '' ? null : $this->replyRefs($parent);
+		$reply = $parent === '' ? null : $this->refs->replyRefs($parent);
 		if ($parent !== '' && $reply === null) {
 			$extra[] = $parent;
 		}
@@ -134,14 +141,36 @@ class RecordMapper {
 		if ($reply !== null) {
 			$record['reply'] = $reply;
 		}
-		if ($images !== []) {
-			$record['embed'] = ['$type' => 'app.bsky.embed.images', 'images' => $images];
+		$embed = $this->embed($post, $images, $quoted);
+		if ($embed !== null) {
+			$record['embed'] = $embed;
 		}
 		if ($labels !== []) {
 			$record['labels'] = ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => $labels];
 		}
 
 		return ['record' => $record, 'truncated' => $fit['truncated']];
+	}
+
+	/**
+	 * The postgate of a post whose author restricts quoting: Bluesky can
+	 * only switch quoting off, so a followers-only quote policy is kept the
+	 * stricter way rather than opened to everybody. Null when anybody may
+	 * quote.
+	 *
+	 * @param string $postUri the post's `at://` URI
+	 */
+	public function postgate(Stream $post, string $postUri): ?array {
+		if (!in_array($post->getQuotePolicy(), [Stream::QUOTE_POLICY_FOLLOWERS, Stream::QUOTE_POLICY_NOBODY], true)) {
+			return null;
+		}
+
+		return [
+			'$type' => self::POSTGATE,
+			'post' => $postUri,
+			'embeddingRules' => [['$type' => self::POSTGATE . '#disableRule']],
+			'createdAt' => Syntax::datetime(self::publishedAt($post)),
+		];
 	}
 
 	/**
@@ -169,45 +198,47 @@ class RecordMapper {
 	}
 
 	/**
-	 * The strong reference of a local post that is on Bluesky, or of a
-	 * Bluesky post, or null.
+	 * Pictures, a quoted post, or the link preview — Bluesky takes one embed,
+	 * or pictures with a quoted post together.
 	 *
-	 * @return array{uri: string, cid: string}|null
+	 * @param list<array> $images
+	 * @param array{uri: string, cid: string}|null $quoted
 	 */
-	public function onBluesky(string $postId): ?array {
-		foreach ($this->repositories->getRecordsByLocalId($postId) as $record) {
-			if ($record->collection === self::POST) {
-				return ['uri' => $record->uri(), 'cid' => $record->cid->toString()];
-			}
+	private function embed(Stream $post, array $images, ?array $quoted): ?array {
+		$pictures = $images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images];
+		if ($quoted !== null) {
+			$record = ['$type' => 'app.bsky.embed.record', 'record' => $quoted];
+
+			return $pictures === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $pictures];
+		}
+		if ($pictures !== null) {
+			return $pictures;
 		}
 
-		return null;
+		return $this->linkCard($post);
 	}
 
 	/**
-	 * `reply.root` and `reply.parent` for a reply to a post that is on
-	 * Bluesky: the parent's own root when it has one, else the parent.
-	 *
-	 * @return array{root: array{uri: string, cid: string}, parent: array{uri: string, cid: string}}|null
+	 * The post's link preview as an external card, when there is one with a
+	 * title: the address, the title and the description, no thumbnail.
 	 */
-	private function replyRefs(string $parentId): ?array {
-		$parent = null;
-		foreach ($this->repositories->getRecordsByLocalId($parentId) as $record) {
-			if ($record->collection === self::POST) {
-				$parent = $record;
-				break;
-			}
-		}
-		if ($parent === null) {
+	private function linkCard(Stream $post): ?array {
+		try {
+			$card = $this->cards->getByStreamId($post->getId());
+		} catch (CardNotFoundException) {
 			return null;
 		}
-		$ref = ['uri' => $parent->uri(), 'cid' => $parent->cid->toString()];
-		$value = $parent->value();
-		$root = isset($value['reply']['root']['uri'], $value['reply']['root']['cid'])
-			? ['uri' => $value['reply']['root']['uri'], 'cid' => $value['reply']['root']['cid']]
-			: $ref;
+		$uri = trim($card->getUrl());
+		$title = trim($card->getTitle());
+		if ($title === '' || preg_match('#^https?://#i', $uri) !== 1) {
+			return null;
+		}
 
-		return ['root' => $root, 'parent' => $ref];
+		return ['$type' => 'app.bsky.embed.external', 'external' => [
+			'uri' => $uri,
+			'title' => self::clip($title, 300, 3000),
+			'description' => self::clip(trim($card->getDescription()), 300, 3000),
+		]];
 	}
 
 	/**

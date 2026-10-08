@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Firehose\EventService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Atproto\Publisher\Publisher;
+use OCA\Social\Atproto\Reader\DeletionSweep;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
@@ -22,7 +23,8 @@ use Throwable;
 /**
  * The Bluesky housekeeping: publishes what the listener missed, resends
  * PLC operations the directory never confirmed, prunes the firehose past
- * its replay window and drops retired keys past theirs.
+ * its replay window, drops retired keys past theirs, and removes a page of
+ * the Bluesky posts read here that were deleted there.
  */
 class AtprotoMaintenance extends TimedJob {
 	private const INTERVAL = 5 * 60;
@@ -34,6 +36,7 @@ class AtprotoMaintenance extends TimedJob {
 		private IdentityService $identities,
 		private EventService $events,
 		private InstanceKeyService $instanceKeys,
+		private DeletionSweep $deletions,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -50,6 +53,7 @@ class AtprotoMaintenance extends TimedJob {
 			'repair' => fn (): int => $this->identities->repair(),
 			'prune events' => fn (): int => $this->events->prune(),
 			'prune keys' => fn (): int => $this->instanceKeys->pruneRetired($this->time->getTime()),
+			'deleted on Bluesky' => fn (): int => $this->deletions->run(),
 		] as $step => $run) {
 			try {
 				$run();

@@ -149,6 +149,8 @@ class PostMapper {
 				'quotes' => (int)($post['quoteCount'] ?? 0),
 				'labels' => $labels,
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
+				// what a reply from here names as its thread's root
+				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
 			],
 		];
 		if ($quote !== '') {
@@ -269,6 +271,17 @@ class PostMapper {
 		}
 
 		return implode(', ', array_unique($named));
+	}
+
+	/**
+	 * @return array{uri: string, cid: string}|null
+	 */
+	private static function strongRef(mixed $value): ?array {
+		if (!is_array($value) || !is_string($value['uri'] ?? null) || !is_string($value['cid'] ?? null) || !Syntax::isAtUri($value['uri'])) {
+			return null;
+		}
+
+		return ['uri' => $value['uri'], 'cid' => $value['cid']];
 	}
 
 	/** An ISO instant for the import, from the record's time or the index time. */

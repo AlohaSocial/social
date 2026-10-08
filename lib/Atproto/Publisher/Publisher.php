@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Repository\CommitResult;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
@@ -77,8 +78,10 @@ class Publisher {
 		$this->ensureProfile($author, $identity);
 
 		$mapped = $this->mapper->post($post, $identity, $author);
+		$rkey = Tid::next();
 		$result = $this->repositories->write($identity->did, $this->identities->signingKey($identity), [
-			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId()),
+			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId(), $rkey),
+			...$this->gateWrites($post, $identity->did, $rkey),
 		]);
 		$this->logger->info('Post published to Bluesky', ['post' => $post->getId(), 'did' => $identity->did, 'truncated' => $mapped['truncated']]);
 
@@ -99,6 +102,7 @@ class Publisher {
 		$identity = $this->identities->getByDid($record->did);
 		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
 			RepoWrite::delete($record->collection, $record->rkey),
+			...$this->gateDeletes($postId),
 		]);
 		$this->logger->info('Post removed from Bluesky', ['post' => $postId, 'did' => $identity->did]);
 
@@ -309,13 +313,42 @@ class Publisher {
 		if (DagCbor::encode($mapped['record']) === $record->bytes) {
 			return false;
 		}
+		$rkey = Tid::next();
 		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
 			RepoWrite::delete($record->collection, $record->rkey),
-			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId()),
+			...$this->gateDeletes($post->getId()),
+			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId(), $rkey),
+			...$this->gateWrites($post, $identity->did, $rkey),
 		]);
 		$this->logger->info('Post edit published to Bluesky', ['post' => $post->getId(), 'did' => $identity->did]);
 
 		return true;
+	}
+
+	/**
+	 * The postgate a post needs beside it, under the post's own rkey, as the
+	 * lexicon requires.
+	 *
+	 * @return RepoWrite[]
+	 */
+	private function gateWrites(Stream $post, string $did, string $rkey): array {
+		$gate = $this->mapper->postgate($post, 'at://' . $did . '/' . RecordMapper::POST . '/' . $rkey);
+
+		return $gate === null ? [] : [RepoWrite::create(RecordMapper::POSTGATE, $gate, $post->getId(), $rkey)];
+	}
+
+	/**
+	 * @return RepoWrite[]
+	 */
+	private function gateDeletes(string $postId): array {
+		$deletes = [];
+		foreach ($this->repositories->getRecordsByLocalId($postId) as $record) {
+			if ($record->collection === RecordMapper::POSTGATE) {
+				$deletes[] = RepoWrite::delete($record->collection, $record->rkey);
+			}
+		}
+
+		return $deletes;
 	}
 
 	private function recordOf(string $postId): ?StoredRecord {

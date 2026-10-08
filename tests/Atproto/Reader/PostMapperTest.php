@@ -47,7 +47,7 @@ class PostMapperTest extends TestCase {
 		$this->assertCount(2, $note['attachment']);
 		$this->assertSame(['type' => 'Image', 'mediaType' => 'image/jpeg', 'url' => 'https://cdn.bsky.app/img/feed_fullsize/plain/' . self::DID . '/bafkreipic1@jpeg', 'name' => 'a cat', 'width' => 1000, 'height' => 750], $note['attachment'][0]);
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kparent', $note['inReplyTo']);
-		$this->assertSame(['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', 'cid' => 'bafyreipost', 'likes' => 3, 'reposts' => 1, 'replies' => 2, 'quotes' => 0, 'labels' => [], 'indexed_at' => '2026-10-08T10:00:01.000Z'], $note['_atproto']);
+		$this->assertSame(['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', 'cid' => 'bafyreipost', 'likes' => 3, 'reposts' => 1, 'replies' => 2, 'quotes' => 0, 'labels' => [], 'indexed_at' => '2026-10-08T10:00:01.000Z', 'reply_root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent', 'cid' => 'bafyr']], $note['_atproto']);
 		$this->assertArrayNotHasKey('quote', $note);
 	}
 
