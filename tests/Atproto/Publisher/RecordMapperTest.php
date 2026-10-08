@@ -357,6 +357,18 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($record);
 	}
 
+	public function testAMentionOfABlueskyAccountIsAMentionFacetWithItsDid(): void {
+		$post = $this->post('<p>hi <span class="h-card"><a href="https://bsky.app/profile/' . self::OTHER . '" class="u-url mention">@<span>bob.bsky.social</span></a></span></p>');
+		$post->addTag(['type' => 'Mention', 'href' => 'https://bsky.app/profile/' . self::OTHER, 'name' => '@bob.bsky.social']);
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$mentions = array_values(array_filter($record['facets'] ?? [], static fn (array $f): bool => $f['features'][0]['$type'] === 'app.bsky.richtext.facet#mention'));
+		$this->assertCount(1, $mentions);
+		$this->assertSame(self::OTHER, $mentions[0]['features'][0]['did']);
+		$this->lexicon->validateRecord($record);
+	}
+
 	public function testAProfile(): void {
 		$this->author->setDisplayName('Alice ' . str_repeat('x', 100));
 		$this->author->setDescription('<p>I run <a href="https://nextcloud.com">Nextcloud</a></p>');

@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
@@ -242,8 +243,8 @@ class RecordMapper {
 	}
 
 	/**
-	 * A mention's DID: a local actor's own identity. Anybody else is linked
-	 * to their profile instead.
+	 * A mention's DID: a local actor's own identity, or a Bluesky account's.
+	 * Anybody else is linked to their profile instead.
 	 *
 	 * @return callable(string, string): ?string
 	 */
@@ -251,6 +252,10 @@ class RecordMapper {
 		return function (string $text, string $href): ?string {
 			if ($href === '') {
 				return null;
+			}
+			$did = BlueskyIds::didOf($href);
+			if ($did !== '' && BlueskyIds::isActorId($href)) {
+				return $did;
 			}
 			try {
 				$identity = $this->identities->getByActorId($href);

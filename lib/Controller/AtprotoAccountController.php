@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\LabelerService;
@@ -39,6 +40,7 @@ class AtprotoAccountController extends Controller {
 		private IdentityService $identities,
 		private Publisher $publisher,
 		private LabelerService $labelers,
+		private AppPasswordService $appPasswords,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -157,6 +159,50 @@ class AtprotoAccountController extends Controller {
 		}
 
 		return new DataResponse(['labelers' => $this->labelers->forUser($this->userId())]);
+	}
+
+	/**
+	 * The viewer's app passwords for Bluesky apps, by name; never the
+	 * passwords themselves.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/app-passwords')]
+	public function appPasswords(): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+
+		return new DataResponse(['app_passwords' => $this->appPasswords->list($this->userId())]);
+	}
+
+	/**
+	 * A new app password: the answer is the only time it is seen.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/app-passwords')]
+	public function createAppPassword(string $name): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$created = $this->appPasswords->create($this->userId(), $name);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse($created + ['app_passwords' => $this->appPasswords->list($this->userId())]);
+	}
+
+	/**
+	 * Revokes an app password, and every Bluesky app signed in with it.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/bluesky/app-passwords/{id}')]
+	public function revokeAppPassword(int $id): DataResponse {
+		$this->appPasswords->revoke($this->userId(), $id);
+
+		return new DataResponse(['app_passwords' => $this->appPasswords->list($this->userId())]);
 	}
 
 	#[NoAdminRequired]

@@ -10,6 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Service;
 
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Db\AtprotoClientRequest;
+use OCA\Social\Db\AtprotoLabelerRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -25,6 +28,9 @@ use Throwable;
 class AtprotoCascade {
 	public function __construct(
 		private IdentityService $identities,
+		private AtprotoClientRequest $clients,
+		private AtprotoLabelerRequest $labelers,
+		private ActorsRequest $actors,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -32,6 +38,16 @@ class AtprotoCascade {
 	public function purge(string $actorId, bool $reversible): void {
 		if ($reversible) {
 			return;
+		}
+		try {
+			// the account's app passwords, its apps' sessions and its
+			// labelers are its own and go with it
+			$userId = $this->actors->getFromId($actorId)->getUserId();
+			if ($userId !== '') {
+				$this->clients->deleteByUser($userId);
+				$this->labelers->deleteByUser($userId);
+			}
+		} catch (Throwable) {
 		}
 		try {
 			$identity = $this->identities->getByActorId($actorId);
