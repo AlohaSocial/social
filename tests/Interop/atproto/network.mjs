@@ -46,6 +46,7 @@ const OZONE_PORT = 2587
 const INTROSPECT_PORT = 2581
 const VIDEO_PORT = 2590
 const HANDLE_PORT = 2591
+const CUSTOM_HANDLE = 'me.handles.test'
 const VIDEO_HOST = 'https://video.interop.test'
 
 async function resolveSocialHandle(handle) {
@@ -60,11 +61,22 @@ async function resolveSocialHandle(handle) {
 	return body
 }
 
+// The custom-handle domain's own well-known file, read with a plain fetch:
+// the resolvers' guarded fetch refuses the address the runner gives it.
+async function resolveWellKnown(handle) {
+	const res = await fetch(`https://${handle}/.well-known/atproto-did`, { redirect: 'follow' })
+	const body = (await res.text()).trim()
+	return res.status === 200 && body.startsWith('did:') ? body : undefined
+}
+
 function patchHandleResolver(idResolver) {
 	const original = idResolver.handle.resolve.bind(idResolver.handle)
 	idResolver.handle.resolve = async (handle) => {
 		if (handle.endsWith('.' + SOCIAL_HOST)) {
 			return resolveSocialHandle(handle)
+		}
+		if (handle === CUSTOM_HANDLE) {
+			return resolveWellKnown(handle).catch(() => undefined)
 		}
 		return original(handle)
 	}
@@ -171,7 +183,7 @@ const addresses = {
 	videoService: `http://127.0.0.1:${VIDEO_PORT}`,
 	videoHost: VIDEO_HOST,
 	handleServer: `http://127.0.0.1:${HANDLE_PORT}`,
-	customHandle: 'me.handles.test',
+	customHandle: CUSTOM_HANDLE,
 }
 writeFileSync(NETWORK_FILE, JSON.stringify(addresses, null, 2))
 console.log('dev network up', addresses)
