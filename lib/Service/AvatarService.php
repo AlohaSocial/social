@@ -65,19 +65,7 @@ class AvatarService {
 	 *                                are not a picture this can store
 	 */
 	public function checkUpload(string $userId, array $upload): string {
-		$user = $this->userManager->get($userId);
-		if ($user === null) {
-			throw new InvalidActionException('unknown account');
-		}
-
-		// LDAP, SAML and friends serve the picture from elsewhere. Saying so is
-		// the point: the profile looks unchanged either way, and only a refusal
-		// tells the user why.
-		if (!$user->canChangeAvatar()) {
-			throw new InvalidActionException(
-				'the avatar of this account is managed outside Nextcloud and cannot be changed here'
-			);
-		}
+		$this->assertChangeable($userId);
 
 		$tmpPath = $upload['tmp_name'] ?? '';
 		if (!is_string($tmpPath) || $tmpPath === '' || !$this->multipartBodyService->isUpload($tmpPath)) {
@@ -104,16 +92,7 @@ class AvatarService {
 	 * @throws InvalidActionException the backend owns the avatar
 	 */
 	public function remove(string $userId): void {
-		$user = $this->userManager->get($userId);
-		if ($user === null) {
-			throw new InvalidActionException('unknown account');
-		}
-
-		if (!$user->canChangeAvatar()) {
-			throw new InvalidActionException(
-				'the avatar of this account is managed outside Nextcloud and cannot be changed here'
-			);
-		}
+		$this->assertChangeable($userId);
 
 		try {
 			$this->avatarManager->getAvatar($userId)->remove();
@@ -130,6 +109,20 @@ class AvatarService {
 		$this->accountService->cacheLocalActorByUsername(
 			$this->accountService->getActorFromUserId($userId)->getPreferredUsername()
 		);
+	}
+
+	/**
+	 * Stores a file this server already holds as the account's avatar: the
+	 * picture a Bluesky app uploaded for the profile it then saves. The same
+	 * checks as an upload, but no upload to be one.
+	 *
+	 * @throws InvalidActionException the backend owns the avatar, or the bytes
+	 *                                are not a picture this can store
+	 */
+	public function setFromFile(string $userId, string $path): void {
+		$this->assertChangeable($userId);
+		$this->checkFile($path);
+		$this->write($userId, $path);
 	}
 
 	/**
@@ -163,6 +156,25 @@ class AvatarService {
 		$this->write($userId, $tmpPath);
 
 		return true;
+	}
+
+	/**
+	 * @throws InvalidActionException the account is unknown, or its backend owns the avatar
+	 */
+	private function assertChangeable(string $userId): void {
+		$user = $this->userManager->get($userId);
+		if ($user === null) {
+			throw new InvalidActionException('unknown account');
+		}
+
+		// LDAP, SAML and friends serve the picture from elsewhere. Saying so is
+		// the point: the profile looks unchanged either way, and only a refusal
+		// tells the user why.
+		if (!$user->canChangeAvatar()) {
+			throw new InvalidActionException(
+				'the avatar of this account is managed outside Nextcloud and cannot be changed here'
+			);
+		}
 	}
 
 	/**

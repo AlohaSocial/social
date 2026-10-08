@@ -166,6 +166,26 @@ class AvatarServiceTest extends TestCase {
 		$this->assertSame([self::USER], $this->refreshed);
 	}
 
+	/** A Bluesky app's picture is a file this server holds, not an upload of this request. */
+	public function testAFileThisServerHoldsBecomesTheAvatarWithTheSameChecks(): void {
+		$this->service->setFromFile(self::USER, $this->png());
+		$this->assertNotNull($this->stored);
+		$this->assertSame([self::USER], $this->refreshed);
+
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('JPEG, PNG, GIF or WebP');
+		$this->service->setFromFile(self::USER, $this->file('<?php phpinfo();'));
+	}
+
+	public function testAFileThisServerHoldsIsNotTheAvatarOfAnAccountWhoseAvatarLivesElsewhere(): void {
+		$this->userManager = $this->createStub(IUserManager::class);
+		$this->userManager->method('get')->willReturn($this->user(false));
+
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('managed outside Nextcloud');
+		$this->build()->setFromFile(self::USER, $this->png());
+	}
+
 	/** A path the request did not upload is never read, whatever it holds. */
 	public function testAFileTheRequestDidNotUploadIsRefused(): void {
 		$this->expectException(InvalidActionException::class);
