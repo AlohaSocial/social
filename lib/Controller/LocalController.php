@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
@@ -922,8 +923,8 @@ class LocalController extends Controller {
 		}
 		try {
 			$identity = $this->atprotoIdentities->getByActorId($actor->getId());
-			if ($identity->isActive()) {
-				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle]);
+			if ($identity->state !== Identity::STATE_TOMBSTONED) {
+				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle, 'native' => false, 'active' => $identity->isActive()]);
 			}
 		} catch (AtprotoIdentityNotFoundException) {
 		} catch (Throwable $e) {

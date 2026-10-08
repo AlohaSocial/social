@@ -70,6 +70,35 @@ class AtprotoAccountController extends Controller {
 	 * the first, or a new one that replaces the last. Shown once, never
 	 * stored, so the password is asked for first.
 	 */
+	/**
+	 * Switches the viewer's own Bluesky presence off or on: deactivated, the
+	 * account is announced inactive and nothing more goes to Bluesky; the
+	 * DID and the repository stay theirs for switching back on.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/state')]
+	public function state(bool $active): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$actor = $this->accountService->getActorFromUserId($this->userId(), true);
+			$identity = $this->identities->forActor($actor, false);
+			if ($identity === null) {
+				return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
+			}
+			if ($active) {
+				$this->identities->activate($identity);
+			} else {
+				$this->identities->deactivate($identity);
+			}
+
+			return new DataResponse(self::export($this->identities->getByDid($identity->did)));
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/recovery')]
