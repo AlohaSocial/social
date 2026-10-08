@@ -16,8 +16,8 @@ use OCP\AppFramework\Utility\ITimeFactory;
 /**
  * Inter-service authentication tokens: the JWT a PDS mints so an AppView
  * answers a request as one of its users. Signed with the user's signing
- * key, addressed to one service and valid for one method and one minute,
- * as `com.atproto.server.getServiceAuth` would hand out.
+ * key, addressed to one service and valid for one method, for a minute
+ * unless asked for longer, as `com.atproto.server.getServiceAuth` hands out.
  */
 class ServiceAuth {
 	public const LIFETIME = 60;
@@ -31,8 +31,9 @@ class ServiceAuth {
 	 * @param string $did the user, the token's issuer
 	 * @param string $audience the service's DID
 	 * @param string $method the lexicon method the token is good for
+	 * @param int $lifetime seconds until it expires
 	 */
-	public function token(PrivateKey $key, string $did, string $audience, string $method): string {
+	public function token(PrivateKey $key, string $did, string $audience, string $method, int $lifetime = self::LIFETIME): string {
 		$now = $this->time->getTime();
 		$header = Encoding::base64UrlEncode((string)json_encode(['typ' => 'JWT', 'alg' => $key->publicKey()->curve->jwtAlgorithm()]));
 		$payload = Encoding::base64UrlEncode((string)json_encode([
@@ -41,7 +42,7 @@ class ServiceAuth {
 			'lxm' => $method,
 			'jti' => bin2hex(random_bytes(16)),
 			'iat' => $now,
-			'exp' => $now + self::LIFETIME,
+			'exp' => $now + $lifetime,
 		], JSON_UNESCAPED_SLASHES));
 		$signature = $key->sign($header . '.' . $payload);
 

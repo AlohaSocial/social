@@ -183,6 +183,28 @@ class LocalAccount {
 	}
 
 	/**
+	 * Publishes a public post with one file, uploaded as the web client
+	 * uploads it, with no expectation of the transcoder.
+	 *
+	 * @return array<string, mixed> the status
+	 */
+	public function postFile(string $path, string $mime, string $words): array {
+		$media = $this->request('POST', '/api/v1/media', [
+			'file' => new CURLFile($path, $mime, 'interop-' . bin2hex(random_bytes(4)) . '.' . pathinfo($path, PATHINFO_EXTENSION)),
+			'description' => 'an interop test file',
+		], true);
+		if (($media['id'] ?? '') === '') {
+			throw new RuntimeException('the upload made no attachment: ' . json_encode($media));
+		}
+
+		return $this->post('/api/v1/statuses', [
+			'status' => $words,
+			'media_ids' => [(string)$media['id']],
+			'visibility' => 'public',
+		]);
+	}
+
+	/**
 	 * Publishes a post, or a reply when `$inReplyTo` names a status.
 	 *
 	 * @param array<string, mixed> $extra anything else the call takes

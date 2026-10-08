@@ -115,6 +115,7 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_LABELER = 'social_atproto_labeler';
 	public const TABLE_ATPROTO_APP_PASSWORD = 'social_atproto_app_password';
 	public const TABLE_ATPROTO_SESSION = 'social_atproto_session';
+	public const TABLE_ATPROTO_VIDEO = 'social_atproto_video';
 
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
@@ -134,6 +135,7 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_LABELER => ['id', 'user_id', 'did', 'settings', 'creation'],
 		self::TABLE_ATPROTO_APP_PASSWORD => ['id', 'user_id', 'name', 'hash', 'creation', 'last_used'],
 		self::TABLE_ATPROTO_SESSION => ['id', 'jti', 'user_id', 'did', 'app_password_id', 'expires', 'creation'],
+		self::TABLE_ATPROTO_VIDEO => ['id', 'post_id', 'post_id_prim', 'did', 'document_id', 'state', 'job_id', 'blob_cid', 'attempts', 'error', 'creation', 'updated'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

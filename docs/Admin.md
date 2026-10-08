@@ -493,6 +493,14 @@ accounts with *forward* ticked go to Bluesky's moderation service
 (`atproto_moderation_did`, Bluesky's own by default), sent by this server, not
 in the reporter's name.
 
+**Video.** A video posted here goes to Bluesky as a Bluesky video: it is sent
+to Bluesky's video service (`atproto_video_service`, `https://video.bsky.app`
+by default, and `atproto_video_service_did`) in the poster's name, and the
+post follows once the service has made it, usually within a few minutes.
+A video Bluesky does not take — over 100 MB or three minutes, or past the
+account's daily limit — goes out as a link to the post here. Set
+`atproto_video_service` to an empty value to publish every video as a link.
+
 **Keys and backups.** Each account's signing key and the instance's rotation and
 service keys are stored sealed with the instance secret, like actor keys. They
 are the identities: a DID whose keys are lost can no longer be updated, and the

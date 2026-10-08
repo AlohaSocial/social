@@ -30,6 +30,8 @@ final class DevNetwork {
 	public string $relay = '';
 	public string $ozone = '';
 	public string $ozoneDid = '';
+	/** where the AppView says a video's playlist is */
+	public string $videoHost = '';
 
 	/** null when the job did not start the network */
 	public static function fromEnvironment(): ?self {
@@ -49,6 +51,7 @@ final class DevNetwork {
 		$network->relay = rtrim((string)getenv('ATPROTO_RELAY_URL'), '/');
 		$network->ozone = rtrim((string)($addresses['ozone'] ?? ''), '/');
 		$network->ozoneDid = (string)($addresses['ozoneDid'] ?? '');
+		$network->videoHost = (string)($addresses['videoHost'] ?? '');
 
 		return $network;
 	}
@@ -162,6 +165,33 @@ final class DevNetwork {
 			'repo' => $this->did,
 			'collection' => 'app.bsky.feed.post',
 			'record' => $record,
+		], true);
+
+		return ['uri' => (string)($answer['uri'] ?? ''), 'cid' => (string)($answer['cid'] ?? '')];
+	}
+
+	/**
+	 * The signed-in user posts a video, uploaded to its own PDS as a blob.
+	 *
+	 * @return array{uri: string, cid: string}
+	 */
+	public function postVideo(string $text, string $path): array {
+		[$status, $body] = $this->request('POST', $this->pds . '/xrpc/com.atproto.repo.uploadBlob', (string)file_get_contents($path), [
+			'Content-Type: video/mp4', 'Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt,
+		]);
+		$blob = json_decode($body, true)['blob'] ?? null;
+		if ($status !== 200 || !is_array($blob)) {
+			throw new RuntimeException('uploadBlob answered ' . $status . ': ' . $body);
+		}
+		$answer = $this->post($this->pds, 'com.atproto.repo.createRecord', [
+			'repo' => $this->did,
+			'collection' => 'app.bsky.feed.post',
+			'record' => [
+				'$type' => 'app.bsky.feed.post',
+				'text' => $text,
+				'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+				'embed' => ['$type' => 'app.bsky.embed.video', 'video' => $blob, 'alt' => 'A test pattern', 'aspectRatio' => ['width' => 320, 'height' => 240]],
+			],
 		], true);
 
 		return ['uri' => (string)($answer['uri'] ?? ''), 'cid' => (string)($answer['cid'] ?? '')];

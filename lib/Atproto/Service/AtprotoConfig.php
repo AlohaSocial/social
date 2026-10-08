@@ -89,6 +89,19 @@ class AtprotoConfig {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_APPVIEW_DID);
 	}
 
+	/**
+	 * Bluesky's video service, which turns a video into the stream Bluesky's
+	 * apps play: its address, '' to publish a video post as a link instead.
+	 */
+	public function videoService(): string {
+		return rtrim($this->configService->getAppValue(ConfigService::ATPROTO_VIDEO_SERVICE), '/');
+	}
+
+	/** The DID of that video service: the audience of the tokens it is handed. */
+	public function videoServiceDid(): string {
+		return $this->configService->getAppValue(ConfigService::ATPROTO_VIDEO_SERVICE_DID);
+	}
+
 	public function jetstream(): string {
 		return $this->configService->getAppValue(ConfigService::ATPROTO_JETSTREAM);
 	}
