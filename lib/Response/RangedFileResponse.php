@@ -60,17 +60,7 @@ class RangedFileResponse extends Response implements ICallbackResponse {
 		$this->length = $this->size;
 
 		$this->addHeader('Content-Type', $contentType);
-		// A file somebody else wrote, served from this instance's own origin.
-		// A browser must not be allowed to sniff past the type this states,
-		// and anything that is not a picture, a video or a sound is handed
-		// over as a download rather than rendered: a peer that declares
-		// `text/html` over bytes beginning `GIF89a` is otherwise a page on
-		// this origin, framed and same-origin, whatever the content security
-		// policy says about the scripts in it.
-		$this->addHeader('X-Content-Type-Options', 'nosniff');
-		if (!self::isRenderable($contentType)) {
-			$this->addHeader('Content-Disposition', 'attachment');
-		}
+		self::guardStoredFile($this, $contentType);
 
 		// the offer has to be made before a browser will make use of it
 		$this->addHeader('Accept-Ranges', 'bytes');
@@ -117,6 +107,26 @@ class RangedFileResponse extends Response implements ICallbackResponse {
 			'Content-Range',
 			'bytes ' . $this->offset . '-' . ($this->offset + $this->length - 1) . '/' . $this->size
 		);
+	}
+
+	/**
+	 * The headers every stored file is served with.
+	 *
+	 * A file somebody else wrote, served from this instance's own origin. A
+	 * browser must not be allowed to sniff past the type this states, and
+	 * anything that is not a picture, a video or a sound is handed over as a
+	 * download rather than rendered: a peer that declares `text/html` over
+	 * bytes beginning `GIF89a` is otherwise a page on this origin, framed and
+	 * same-origin, whatever the content security policy says about the
+	 * scripts in it. A download is also sandboxed, for the browser that opens
+	 * a text file in a tab all the same.
+	 */
+	public static function guardStoredFile(Response $response, string $contentType): void {
+		$response->addHeader('X-Content-Type-Options', 'nosniff');
+		if (!self::isRenderable($contentType)) {
+			$response->addHeader('Content-Disposition', 'attachment');
+			$response->addHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+		}
 	}
 
 	/**

@@ -17,6 +17,7 @@ use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
@@ -525,6 +526,50 @@ class NavigationControllerTest extends TestCase {
 		$this->cachedFile('getFromCache', 'image/png', true);
 
 		$this->assertServes($this->controller(null)->documentGetPublic('doc-1'), 'image/png');
+	}
+
+	/** @return iterable<string, array{string}> */
+	public static function fileMimes(): iterable {
+		foreach (CacheDocumentService::DOCUMENT_MIME_TYPES as $mime) {
+			yield $mime => [$mime];
+		}
+	}
+
+	/**
+	 * A text, Markdown, CSV, PDF, zip or office file is somebody else's
+	 * bytes on this server's origin: a download, sandboxed should a browser
+	 * open it anyway, never a page.
+	 */
+	#[DataProvider('fileMimes')]
+	public function testAPublicFileIsASandboxedDownload(string $mime): void {
+		$this->publicClock();
+		$this->cachedFile('getFromCache', $mime, true);
+
+		$headers = $this->controller(null)->documentGetPublic('doc-1')->getHeaders();
+
+		$this->assertSame('attachment', $headers['Content-Disposition']);
+		$this->assertSame("sandbox; default-src 'none'", $headers['Content-Security-Policy']);
+		$this->assertSame('nosniff', $headers['X-Content-Type-Options']);
+	}
+
+	public function testAFileShownToItsViewerIsASandboxedDownloadToo(): void {
+		$this->cachedFileAsViewer('getFromCacheAsViewer', 'text/markdown', null);
+
+		$headers = $this->controller(null)->documentGet('doc-1')->getHeaders();
+
+		$this->assertSame('attachment', $headers['Content-Disposition']);
+		$this->assertStringStartsWith('sandbox', $headers['Content-Security-Policy']);
+	}
+
+	public function testAPublicPictureStaysInline(): void {
+		$this->publicClock();
+		$this->cachedFile('getFromCache', 'image/png', true);
+
+		$headers = $this->controller(null)->documentGetPublic('doc-1')->getHeaders();
+
+		$this->assertStringStartsWith('inline', $headers['Content-Disposition']);
+		$this->assertStringNotContainsString('sandbox', $headers['Content-Security-Policy']);
+		$this->assertSame('nosniff', $headers['X-Content-Type-Options']);
 	}
 
 	/**
