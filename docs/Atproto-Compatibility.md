@@ -1162,8 +1162,11 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   gates. `uploadBlob` stores a picture as any upload is, named by its CID,
   for the post that uses it. A report an app files is a report here, passed
   on in this server's name (3b).
-- Not yet: the account's avatar and banner from the app's profile editor.
-  `getServiceAuth` came with 3d.
+- The app's profile editor sets the avatar and the banner too: a picture
+  the app uploaded becomes the account's — the avatar is the Nextcloud
+  account's own picture, refused where its backend owns it — and one left
+  out is taken away. An app sends the whole profile every time, so a
+  picture it did not change is left alone. `getServiceAuth` came with 3d.
 - A mention of a Bluesky account in a post published from here — the
   composer's `@alice.bsky.social` — is now a mention facet with the DID,
   where it was a link.
