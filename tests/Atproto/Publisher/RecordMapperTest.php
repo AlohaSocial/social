@@ -24,9 +24,11 @@ use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\TextMapper;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\CardNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -36,6 +38,7 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\PinService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -67,6 +70,10 @@ class RecordMapperTest extends TestCase {
 	private StreamCardsRequest $cards;
 	/** @var CardThumbnail&MockObject */
 	private CardThumbnail $thumbnails;
+	/** @var CacheDocumentsRequest&MockObject */
+	private CacheDocumentsRequest $cacheDocuments;
+	/** @var PinService&MockObject */
+	private PinService $pins;
 	private RecordMapper $mapper;
 	private Identity $identity;
 	private Person $author;
@@ -85,6 +92,9 @@ class RecordMapperTest extends TestCase {
 		$this->cards = $this->createMock(StreamCardsRequest::class);
 		$this->cards->method('getByStreamId')->willThrowException(new CardNotFoundException());
 		$this->thumbnails = $this->createMock(CardThumbnail::class);
+		$this->cacheDocuments = $this->createMock(CacheDocumentsRequest::class);
+		$this->cacheDocuments->method('getByUrl')->willThrowException(new CacheDocumentDoesNotExistException());
+		$this->pins = $this->createMock(PinService::class);
 		$this->mapper = $this->mapper();
 		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', 'did:key:z', '', Identity::STATE_ACTIVE, '', 1700000000);
 		$this->author = new Person();
@@ -428,7 +438,7 @@ class RecordMapperTest extends TestCase {
 
 	public function testAProfileCarriesTheAccountsOwnAvatar(): void {
 		$avatar = new BlobRef(self::DID, Cid::forRaw('avatar'), 'https://social.test/doc/avatar', 'image/png', 6);
-		$this->pictures->method('avatarBlob')->with($this->identity, $this->author)->willReturn(['blob' => $avatar, 'width' => 4, 'height' => 4]);
+		$this->pictures->method('avatarBlob')->with($this->identity, $this->author, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES)->willReturn(['blob' => $avatar, 'width' => 4, 'height' => 4]);
 
 		$record = $this->mapper->profile($this->author, $this->identity);
 
@@ -436,10 +446,33 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($record);
 	}
 
+	public function testAProfileCarriesItsBannerAndItsNewestPinOnBlueskyWithinTheProfilesLimits(): void {
+		$banner = new Document();
+		$banner->setId('https://social.test/documents/header/1');
+		$banner->setLocalCopy('5f0c3e4a-1d2b-4c3d-8e9f-0a1b2c3d4e5f');
+		$this->author->setHeader('https://social.test/media/banner.png');
+		$this->cacheDocuments = $this->createMock(CacheDocumentsRequest::class);
+		$this->cacheDocuments->method('getByUrl')->with('https://social.test/media/banner.png')->willReturn($banner);
+		$blob = new BlobRef(self::DID, Cid::forRaw('the sea'), $banner->getId(), 'image/jpeg', 7);
+		$this->pictures->expects($this->once())->method('blobFor')
+			->with($this->identity, $this->author, $banner, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES)
+			->willReturn(['blob' => $blob, 'width' => 1500, 'height' => 500]);
+		$this->pins->method('getPinnedIds')->willReturn(['https://social.test/@alice/not-on-bluesky', self::POST_ID]);
+		$pinned = new StoredRecord(self::DID, RecordMapper::POST, '3kpinned', Cid::forRaw('pinned'), '', self::POST_ID, 0);
+		$this->repositories = $this->createMock(RepositoryService::class);
+		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(static fn (string $id): array => $id === self::POST_ID ? [$pinned] : []);
+
+		$record = $this->mapper()->profile($this->author, $this->identity);
+
+		$this->assertSame($blob->toRecordValue(), $record['banner']);
+		$this->assertSame(['uri' => $pinned->uri(), 'cid' => $pinned->cid->toString()], $record['pinnedPost'], 'the newest pin that is on Bluesky');
+		$this->lexicon->validateRecord($record);
+	}
+
 	private function mapper(): RecordMapper {
 		$refs = new PostRefs($this->repositories, $this->streams, $this->appView, new NullLogger());
 
-		return new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories, $refs, $this->cards, $this->thumbnails);
+		return new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories, $refs, $this->cards, $this->thumbnails, $this->cacheDocuments, $this->pins);
 	}
 
 	private function blueskyPost(string $rkey, ?array $replyRoot = null): Note {

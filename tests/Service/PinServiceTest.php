@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\SignatureService;
@@ -38,6 +39,8 @@ class PinServiceTest extends TestCase {
 	private ActivityService|MockObject $activityService;
 	private SignatureService|Stub $signatureService;
 	private ActorsRequest|Stub $actorsRequest;
+	/** @var AccountService&MockObject */
+	private AccountService $accounts;
 	private PinService $service;
 	private Person $author;
 
@@ -49,13 +52,15 @@ class PinServiceTest extends TestCase {
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->signatureService = $this->createStub(SignatureService::class);
 		$this->actorsRequest = $this->createStub(ActorsRequest::class);
+		$this->accounts = $this->createMock(AccountService::class);
 		$this->service = new PinService(
 			$this->streamRequest,
 			$this->actionsRequest,
 			$this->activityService,
 			$this->signatureService,
 			$this->actorsRequest,
-			new NullLogger()
+			new NullLogger(),
+			$this->accounts,
 		);
 
 		$this->author = new Person();
@@ -124,6 +129,15 @@ class PinServiceTest extends TestCase {
 		$this->assertSame(self::AUTHOR, $sent->getActorId());
 	}
 
+	public function testPinningAndUnpinningHaveTheBlueskyProfileWrittenAgain(): void {
+		$this->streamRequest->method('getStreamByNid')->willReturn($this->ownPost());
+		$this->actionsRequest->method('getAction')->willThrowException(new ActionDoesNotExistException());
+		$this->accounts->expects($this->exactly(2))->method('queueBlueskyProfile')->with($this->author);
+
+		$this->service->pin($this->author, 42);
+		$this->service->unpin($this->author, 42);
+	}
+
 	public function testUnpinningTellsThemToo(): void {
 		$this->streamRequest->method('getStreamByNid')->willReturn($this->ownPost());
 		$sent = null;
@@ -178,7 +192,8 @@ class PinServiceTest extends TestCase {
 			$this->activityService,
 			$this->signatureService,
 			$this->actorsRequest,
-			new NullLogger()
+			new NullLogger(),
+			$this->accounts,
 		);
 		$this->streamRequest->method('getStreamByNid')->willReturn($this->ownPost());
 

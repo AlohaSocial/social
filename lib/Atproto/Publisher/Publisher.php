@@ -115,6 +115,7 @@ class Publisher {
 			...$this->gateDeletes($postId),
 		]);
 		$this->logger->info('Post removed from Bluesky', ['post' => $postId, 'did' => $identity->did]);
+		$this->repin($identity, $record);
 
 		return true;
 	}
@@ -340,8 +341,26 @@ class Publisher {
 			...$this->gateWrites($post, $identity->did, $rkey),
 		]);
 		$this->logger->info('Post edit published to Bluesky', ['post' => $post->getId(), 'did' => $identity->did]);
+		$this->repin($identity, $record);
 
 		return true;
+	}
+
+	/**
+	 * The profile again when its pinned post was a record that is gone —
+	 * replaced by an edit or deleted — so it names the record there is now.
+	 */
+	private function repin(Identity $identity, StoredRecord $gone): void {
+		$profile = $this->repositories->getRecord($identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
+		$value = $profile === null ? null : DagCbor::decode($profile->bytes);
+		if (!is_array($value) || ($value['pinnedPost']['uri'] ?? '') !== $gone->uri()) {
+			return;
+		}
+		try {
+			$this->writeProfile($this->cacheActorService->getFromId($identity->actorId), $identity);
+		} catch (Throwable $e) {
+			$this->logger->warning('Pinned post not updated on the Bluesky profile', ['did' => $identity->did, 'exception' => $e]);
+		}
 	}
 
 	/**

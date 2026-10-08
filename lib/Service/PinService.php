@@ -32,7 +32,7 @@ use Psr\Log\LoggerInterface;
  * collection, the same way Mastodon publishes them.
  *
  * Only the author can pin, so `pinned` is a property of the post rather than
- * of the viewer.
+ * of the viewer. On Bluesky the newest pin is the profile's `pinnedPost`.
  */
 class PinService {
 	public const TYPE = 'Pin';
@@ -47,6 +47,7 @@ class PinService {
 		private SignatureService $signatureService,
 		private ActorsRequest $actorsRequest,
 		private LoggerInterface $logger,
+		private AccountService $accountService,
 	) {
 	}
 
@@ -82,6 +83,7 @@ class PinService {
 		$pin->setObjectId($post->getId());
 		$this->actionsRequest->save($pin);
 		$this->federate($actor, $post, new Add());
+		$this->accountService->queueBlueskyProfile($actor);
 
 		return $post->setPinned(true);
 	}
@@ -94,6 +96,7 @@ class PinService {
 		$post = $this->ownPost($actor, $nid);
 		$this->actionsRequest->deleteAction($actor->getId(), $post->getId(), self::TYPE);
 		$this->federate($actor, $post, new Remove());
+		$this->accountService->queueBlueskyProfile($actor);
 
 		return $post->setPinned(false);
 	}

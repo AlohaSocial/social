@@ -106,14 +106,26 @@ class FeaturedCollection {
 			}
 		}
 
-		// the pins that are no longer in the collection come down
+		return $this->match($actor, array_keys($wanted));
+	}
+
+	/**
+	 * Makes a remote account's pins these posts, which are here: the pins
+	 * that are not among them come down. What a Bluesky profile's
+	 * `pinnedPost` names is kept the same way.
+	 *
+	 * @param string[] $postIds
+	 * @return int how many pins stand afterwards
+	 */
+	public function match(Person $actor, array $postIds): int {
+		$wanted = array_fill_keys($postIds, true);
 		foreach ($this->actionsRequest->getActionsByActor($actor->getId(), PinService::TYPE) as $pin) {
 			if (!isset($wanted[$pin->getObjectId()])) {
 				$this->actionsRequest->deleteAction($actor->getId(), $pin->getObjectId(), PinService::TYPE);
 			}
 		}
 		foreach (array_keys($wanted) as $postId) {
-			$this->pin($actor, $postId);
+			$this->pin($actor, (string)$postId);
 		}
 
 		return count($wanted);

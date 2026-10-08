@@ -181,6 +181,21 @@ class PictureServiceTest extends TestCase {
 		return (string)ob_get_clean();
 	}
 
+	public function testAPictureOfATypeTheProfileDoesNotTakeIsMadeAJpegForIt(): void {
+		$image = imagecreatetruecolor(40, 40);
+		ob_start();
+		imagewebp($image);
+		$webp = (string)ob_get_clean();
+		$pictures = $this->pictures($webp);
+		$document = $this->document();
+		$document->setMimeType('image/webp');
+		$pictures->blobFor($this->identity(), new Person(), $document);
+
+		$blob = $pictures->blobFor($this->identity(), new Person(), $document, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES)['blob'] ?? null;
+
+		$this->assertSame('image/jpeg', $blob?->mime, 'not the WebP blob a post may use');
+	}
+
 	private function identity(): Identity {
 		return new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0);
 	}

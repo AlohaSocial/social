@@ -237,7 +237,7 @@ Collection → written when:
 
 | Collection | Written | Content |
 |---|---|---|
-| `app.bsky.actor.profile` (rkey `self`) | account created or profile edited | `displayName`, `description` (plain text, bio), `avatar` and `banner` blobs, `createdAt` |
+| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName`, `description` (plain text, bio), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
 | `app.bsky.feed.post` | public post created (D8) | §8 |
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
@@ -509,7 +509,8 @@ result is a **cached actor** (`social_cache_actor`) with id `at://<did>`,
 account `alice.bsky.social` (the handle, no `@…@` form), type `Person`,
 `host` the handle's host, the profile fields mapped (`displayName` →
 name, `description` → summary as plain text, avatar and banner as cached
-documents, `followersCount`/`followsCount`/`postsCount` into the counts),
+documents, `followersCount`/`followsCount`/`postsCount` into the counts,
+the profile's `pinnedPost` a pin as a Fediverse account's pins are),
 and a `details.atproto` block with the DID, the PDS endpoint and the
 labels. The cache refresh cron (`manageCacheRemoteActors`) refreshes it
 through `getProfile` the way it refreshes an ActivityPub actor through its

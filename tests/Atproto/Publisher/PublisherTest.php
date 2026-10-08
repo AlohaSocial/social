@@ -62,6 +62,8 @@ class PublisherTest extends TestCase {
 	private Identity $identity;
 	/** @var StoredRecord[] */
 	private array $records = [];
+	/** the profile record as stored */
+	private array $profile = ['$type' => RecordMapper::PROFILE];
 	/** @var string[] the posts that were brought over rather than written here */
 	private array $importedPosts = [];
 	/** @var ImportedPostsRequest&MockObject */
@@ -77,7 +79,7 @@ class PublisherTest extends TestCase {
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(fn (string $id): array => array_values(array_filter($this->records, static fn (StoredRecord $r): bool => $r->localId === $id)));
-		$this->repositories->method('getRecord')->willReturn(new StoredRecord(self::DID, RecordMapper::PROFILE, 'self', Cid::forRaw('p'), DagCbor::encode(['$type' => RecordMapper::PROFILE]), '', 0));
+		$this->repositories->method('getRecord')->willReturnCallback(fn (): StoredRecord => new StoredRecord(self::DID, RecordMapper::PROFILE, 'self', Cid::forRaw('p'), DagCbor::encode($this->profile), '', 0));
 		$this->mapper = $this->createMock(RecordMapper::class);
 		$this->mapper->method('post')->willReturn(['record' => ['$type' => RecordMapper::POST, 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z'], 'truncated' => false]);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
@@ -238,6 +240,23 @@ class PublisherTest extends TestCase {
 		$this->assertSame(RepoWrite::DELETE . ' 3kznmn7xqxl22', $writes[0][0], 'the stale record goes');
 		$this->assertSame(RepoWrite::CREATE, explode(' ', $writes[0][1])[0], 'and the edit takes its place');
 		$this->assertSame([RepoWrite::DELETE . ' 3kznmn7xqxl33'], $writes[1], 'the orphan record is removed');
+	}
+
+	public function testDeletingThePinnedPostWritesTheProfileAgain(): void {
+		$record = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), $this->mappedBytes(), self::POST, 0);
+		$this->records[] = $record;
+		$this->profile['pinnedPost'] = ['uri' => $record->uri(), 'cid' => $record->cid->toString()];
+		$this->mapper->method('profile')->willReturn(['$type' => RecordMapper::PROFILE]);
+		$writes = [];
+		$this->repositories->expects($this->exactly(2))->method('write')->willReturnCallback(function (string $did, $key, array $batch) use (&$writes): CommitResult {
+			$writes[] = $batch[0]->collection . ' ' . $batch[0]->action;
+
+			return $this->written();
+		});
+
+		$this->publisher->deletePost(self::POST);
+
+		$this->assertSame([RecordMapper::POST . ' ' . RepoWrite::DELETE, RecordMapper::PROFILE . ' ' . RepoWrite::UPDATE], $writes, 'the profile no longer names it');
 	}
 
 	public function testReconcileLeavesAnImportedPostAsItCame(): void {
