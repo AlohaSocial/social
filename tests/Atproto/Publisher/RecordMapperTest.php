@@ -307,6 +307,30 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($withMedia);
 	}
 
+	public function testAVideoTheVideoServiceMadeIsAVideoEmbed(): void {
+		$post = $this->post('<p>At the beach</p>');
+		$blob = new BlobRef(self::DID, Cid::forRaw('a video'), 'https://social.test/documents/local/8', 'video/mp4', 4000000);
+
+		$record = $this->mapper->post($post, $this->identity, $this->author, ['state' => 'ready', 'blob' => $blob, 'alt' => 'Waves', 'width' => 1080, 'height' => 1920])['record'];
+
+		$this->assertSame('At the beach', $record['text'], 'nothing to link: the video is there');
+		$this->assertSame([
+			'$type' => 'app.bsky.embed.video',
+			'video' => $blob->toRecordValue(),
+			'alt' => 'Waves',
+			'aspectRatio' => ['width' => 1080, 'height' => 1920],
+		], $record['embed']);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testAVideoThatIsNotABlueskyVideoLinksToThePost(): void {
+		$record = $this->mapper->post($this->post('<p>At the beach</p>'), $this->identity, $this->author, ['state' => 'link'])['record'];
+
+		$this->assertSame("At the beach\n\n" . self::POST_ID, $record['text']);
+		$this->assertSame(self::POST_ID, end($record['facets'])['features'][0]['uri']);
+		$this->assertArrayNotHasKey('embed', $record);
+	}
+
 	public function testALinkPreviewIsAnExternalCardWhenThereAreNoPictures(): void {
 		$card = new StreamCard(self::POST_ID, 'https://nextcloud.com/blog/');
 		$card->setTitle('Nextcloud Hub');

@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Db\AtprotoLabelerRequest;
+use OCA\Social\Db\AtprotoVideoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -30,6 +31,7 @@ class AtprotoCascade {
 		private IdentityService $identities,
 		private AtprotoClientRequest $clients,
 		private AtprotoLabelerRequest $labelers,
+		private AtprotoVideoRequest $videos,
 		private ActorsRequest $actors,
 		private LoggerInterface $logger,
 	) {
@@ -54,6 +56,7 @@ class AtprotoCascade {
 		} catch (AtprotoIdentityNotFoundException) {
 			return;
 		}
+		$this->videos->removeByDid($identity->did);
 		try {
 			$this->identities->tombstone($identity);
 		} catch (Throwable $e) {

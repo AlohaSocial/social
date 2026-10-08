@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Publisher;
 
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
@@ -59,7 +60,7 @@ class RecordMapper {
 	/**
 	 * @return array{record: array<string, mixed>, truncated: bool}
 	 */
-	public function post(Stream $post, Identity $identity, Person $author): array {
+	public function post(Stream $post, Identity $identity, Person $author, array $video = ['state' => 'none']): array {
 		$mapped = $this->text->fromHtml($post->getContent(), $this->mentionResolver());
 		$text = $mapped['text'];
 		$facets = $mapped['facets'];
@@ -94,7 +95,15 @@ class RecordMapper {
 
 		$images = [];
 		$dropped = 0;
-		foreach ($this->pictureDocuments($post, $author) as $i => $document) {
+		$pictures = $this->pictureDocuments($post, $author);
+		$videoEmbed = self::videoEmbed($video);
+		if ($videoEmbed !== null) {
+			// one media embed to a post: beside a video, the pictures are
+			// what the link to the post here is for
+			$dropped = count($pictures);
+			$pictures = [];
+		}
+		foreach ($pictures as $i => $document) {
 			if ($i >= PictureService::MAX_PER_POST) {
 				$dropped++;
 				continue;
@@ -112,12 +121,14 @@ class RecordMapper {
 		if ($dropped > 0) {
 			$extra[] = '+' . $dropped . ' more ' . ($dropped === 1 ? 'picture' : 'pictures');
 		}
-		if ($images !== [] && $post->isSensitive() && $warning === '') {
+		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive() && $warning === '') {
 			$labels[] = ['val' => 'graphic-media'];
 		}
 
 		$extra = array_values(array_filter($extra, static fn (string $line): bool => $line !== ''));
-		$fit = $this->text->fit($text, $facets, $post->pageUrl(), $extra, $isPoll);
+		// a video that is not a Bluesky video is watched here
+		$linksHere = $isPoll || $video['state'] === 'link';
+		$fit = $this->text->fit($text, $facets, $post->pageUrl(), $extra, $linksHere);
 		foreach ($extra as $line) {
 			if (preg_match('#^https?://#', $line) === 1) {
 				$at = strrpos($fit['text'], $line);
@@ -142,7 +153,7 @@ class RecordMapper {
 		if ($reply !== null) {
 			$record['reply'] = $reply;
 		}
-		$embed = $this->embed($post, $images, $quoted);
+		$embed = $this->embed($post, $images, $quoted, $videoEmbed);
 		if ($embed !== null) {
 			$record['embed'] = $embed;
 		}
@@ -205,8 +216,8 @@ class RecordMapper {
 	 * @param list<array> $images
 	 * @param array{uri: string, cid: string}|null $quoted
 	 */
-	private function embed(Stream $post, array $images, ?array $quoted): ?array {
-		$pictures = $images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images];
+	private function embed(Stream $post, array $images, ?array $quoted, ?array $video = null): ?array {
+		$pictures = $video ?? ($images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images]);
 		if ($quoted !== null) {
 			$record = ['$type' => 'app.bsky.embed.record', 'record' => $quoted];
 
@@ -217,6 +228,28 @@ class RecordMapper {
 		}
 
 		return $this->linkCard($post);
+	}
+
+	/**
+	 * A post's video as an `app.bsky.embed.video`, when it is ready to be one.
+	 *
+	 * @param array{state: string, blob?: BlobRef, alt?: string, width?: int, height?: int} $video
+	 */
+	private static function videoEmbed(array $video): ?array {
+		$blob = $video['blob'] ?? null;
+		if ($video['state'] !== 'ready' || !$blob instanceof BlobRef) {
+			return null;
+		}
+		$embed = ['$type' => 'app.bsky.embed.video', 'video' => $blob->toRecordValue()];
+		$alt = trim((string)($video['alt'] ?? ''));
+		if ($alt !== '') {
+			$embed['alt'] = self::clip($alt, 1000, 10000);
+		}
+		if (($video['width'] ?? 0) > 0 && ($video['height'] ?? 0) > 0) {
+			$embed['aspectRatio'] = ['width' => (int)$video['width'], 'height' => (int)$video['height']];
+		}
+
+		return $embed;
 	}
 
 	/**

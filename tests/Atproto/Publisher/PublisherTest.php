@@ -12,12 +12,14 @@ namespace OCA\Social\Tests\Atproto\Publisher;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Publisher\VideoUploadService;
 use OCA\Social\Atproto\Repository\CommitResult;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
@@ -43,6 +45,10 @@ class PublisherTest extends TestCase {
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 	private const POST = 'https://social.test/@alice/1';
 
+	/** @var VideoUploadService&MockObject */
+	private VideoUploadService $videos;
+	/** what the post's video is, as the upload service says */
+	private array $video = ['state' => 'none'];
 	/** @var RepositoryService&MockObject */
 	private RepositoryService $repositories;
 	/** @var RecordMapper&MockObject */
@@ -77,7 +83,9 @@ class PublisherTest extends TestCase {
 		$actors->method('getFromId')->willReturn($actor);
 		$this->time = $this->createMock(ITimeFactory::class);
 		$this->time->method('getTime')->willReturn(1760000000);
-		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->streamRequest, $actors, $this->time, new NullLogger());
+		$this->videos = $this->createMock(VideoUploadService::class);
+		$this->videos->method('forPost')->willReturnCallback(fn (): array => $this->video);
+		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->videos, $this->streamRequest, $actors, $this->time, new NullLogger());
 	}
 
 	public function testAPublicPostIsWrittenOnce(): void {
@@ -91,6 +99,28 @@ class PublisherTest extends TestCase {
 
 		$this->assertNotNull($this->publisher->publishPost($this->post()));
 		$this->assertNull($this->publisher->publishPost($this->post()), 'already there');
+	}
+
+	public function testAPostWaitsForItsVideoAndGoesWithIt(): void {
+		$this->video = ['state' => 'waiting'];
+		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, PrivateKey $key, array $writes): CommitResult {
+			$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, $writes[0]->rkey, Cid::forRaw('r'), '', self::POST, 0);
+
+			return $this->written();
+		});
+		$this->assertNull($this->publisher->publishPost($this->post()), 'the video service is making the video');
+
+		$blob = new BlobRef(self::DID, Cid::forRaw('v'), 'https://social.test/documents/local/8', 'video/mp4', 10);
+		$this->video = ['state' => 'ready', 'blob' => $blob, 'alt' => '', 'width' => 0, 'height' => 0];
+		$this->mapper->expects($this->once())->method('post')->with($this->anything(), $this->anything(), $this->anything(), $this->video)
+			->willReturn(['record' => ['$type' => RecordMapper::POST, 'text' => 'x', 'createdAt' => '2026-10-08T10:00:00.000Z'], 'truncated' => false]);
+		$this->assertNotNull($this->publisher->publishPost($this->post()));
+	}
+
+	public function testDeletingAPostForgetsItsVideo(): void {
+		$this->videos->expects($this->once())->method('forget')->with(self::POST);
+
+		$this->assertFalse($this->publisher->deletePost(self::POST));
 	}
 
 	public function testOnlyPublicLocalPostsGo(): void {
