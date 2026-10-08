@@ -44,7 +44,7 @@ Aloha Social (see [Managing your account](#managing-your-account)).
 On the first visit the app shows a four-step introduction: your address with a
 copy button, people to follow, a way to bring the follows you already have from
 another server, and a button that puts you in the composer. Every step can be
-skipped; once closed it stays closed, and **Settings → Introduction** shows it
+skipped; once closed it stays closed, and **Settings → Help → Introduction** shows it
 again.
 
 ### Registering without a Nextcloud account
@@ -61,11 +61,11 @@ two-factor authentication if you set it up or the server requires it, and
 land in Aloha Social. Your personal settings for your details, password, security,
 appearance and notifications are there; Files, Talk and the other apps are
 not, and Nextcloud's own desktop and mobile clients are refused. Mastodon apps
-can. **Settings → Your storage** shows how much of the space the server gives
+can. **Settings → Apps and account → Your storage** shows how much of the space the server gives
 each such account your pictures and videos take up. Deleting your Aloha Social
 account deletes the whole account.
 
-Where the administrators let everybody invite people, **Settings → Invite
+Where the administrators let everybody invite people, **Settings → Apps and account → Invite
 people** makes an invitation link: it works once and for a week.
 
 ## Finding and following people
@@ -184,7 +184,7 @@ starting one does not take the place of a post you were still writing.
   and on other servers.
 - **Send it later.** The clock button turns **Post** into **Schedule**: pick a
   time at least five minutes from now and the post waits on the server until
-  then. What is waiting is listed under **Settings → Scheduled posts**, where
+  then. What is waiting is listed under **Settings → Your posts → Scheduled posts**, where
   one can be cancelled or moved: the clock beside an entry opens the same
   picker at the time it has, and **Save** sends the new one. The five-minute
   rule applies again, and so does the limit of 25 posts a day; a time the
@@ -217,7 +217,7 @@ A post you no longer want on your profile does not have to be deleted. **Archive
 in the post's own `…` menu, takes it off your profile and out of every timeline,
 search and hashtag page on this server, and leaves it exactly where it is
 otherwise: nobody is told, nothing is sent anywhere, and you can put it back at
-any time from **Settings → Archived posts**.
+any time from **Settings → Your posts → Archived posts**.
 
 What archiving is not is a way to take a post back from the fediverse. Other
 servers that received it still have it, and somebody who kept the link still
@@ -237,7 +237,7 @@ person the queue is waiting for.
 When it happens the app says so at once, and your writing is kept — there is
 no need to write it again, and writing it again only finds the copy already
 waiting. Nobody but you and the moderators can see it in the meantime: it is
-in no timeline, not even your own. **Settings → Waiting to be looked at** is
+in no timeline, not even your own. **Settings → Your posts → Waiting for review** is
 where yours are, and you can take one back from there, which deletes it and
 tells nobody.
 
@@ -259,7 +259,7 @@ can see the post. Comments from anybody else who can open the file stay on this
 server, as they always did. Editing or deleting your comment edits or deletes
 the reply.
 
-This is on unless you turn it off: **Settings → Replies in Files**. Followers-only
+This is on unless you turn it off: **Settings → Your posts → Replies in Files**. Followers-only
 posts and direct messages are never linked.
 
 ### Where it was taken
@@ -368,7 +368,7 @@ The sidebar is the map:
   its own; a Nextcloud group you belong to (up to 500 members) is a list too
   when your administrator has chosen that group for it — none are, until they
   do — kept in step with the group, and your own are made in
-  **Settings → Lists**. Explore shows as much as the sidebar has room for and
+  **Settings → Reading → Lists**. Explore shows as much as the sidebar has room for and
   no more — make the window taller and more appears. What you follow is never
   pushed out by what happens to be trending: the trending tags take only the
   room the rest leave, and a tag you already follow is not offered twice.
@@ -420,7 +420,7 @@ opening a post counts.
 counts its hashtags down. On the feed itself the post goes at once and *Undo*
 brings it back. Muting somebody from one of their posts counts too.
 
-**Where you change it.** **Settings → For you** shows the list as a cloud:
+**Where you change it.** **Settings → Reading → For you** shows the list as a cloud:
 the bigger and bolder a hashtag, the more it counts. Drag one to where you want
 it, or click it for *Higher priority*, *Lower priority*, *Move to top*, *Pin*
 and *Remove*; with the keyboard, the arrow keys move between hashtags, Enter
@@ -588,7 +588,7 @@ An administrator makes one with `occ social:team <group> <username>`.
 
 ### A page of your work
 
-**Settings → Portfolio** makes a page with its own address, to put on a CV.
+**Settings → Profile and privacy → Portfolio** makes a page with its own address, to put on a CV.
 A profile is a feed: everything you posted, newest first, with the follow
 button and the boosts and the replies around it. A portfolio is the opposite —
 a title, a sentence, the pictures you chose, and nothing else on it.
@@ -630,7 +630,7 @@ under the post takes your name off, and needs nobody's permission.
 
 ### Who may reach you, and requests
 
-**Settings → Notifications**, under **Who may reach you**, is one place for
+**Settings → Notifications → Who may reach you** is one place for
 everything about being interrupted: the digests and quiet hours first, then
 who may reach you at all. Five rows, each answered **Allow** or **Hold for
 review**:
@@ -678,7 +678,7 @@ Under the rows, **Always allowed** lists everybody you accepted, each with
 until you accept somebody.
 
 **Digests and quiet hours.** Who may reach you is about *whether* you are
-told; the first part of **Settings → Notifications** is about *when* the Nextcloud
+told; **Settings → Notifications → When to tell you** is about *when* the Nextcloud
 bell — and with it the mobile app and the notification mail — rings for what
 happens in Aloha Social. Left at **instant**, it rings the moment somebody
 mentions, favourites, boosts or follows you, as it always did. Set to
@@ -791,6 +791,13 @@ for anybody else reading the same post.
 
 ## Managing your account
 
+**Settings** (in the account menu at the foot of the sidebar) has six groups:
+**Profile and privacy**, **Reading**, **Notifications**, **Your posts**, **Apps
+and account** and **Help**. Pick a group on the left (at the top on a phone) to
+see its settings, or type into **Find a setting** to search all of them at once.
+Every change is saved as you make it; there is no Save button to forget, except
+in a form you fill in, such as the portfolio.
+
 **Pronouns and a support link.** Two of the four profile fields on **Edit
 profile** have boxes of their own, because this app draws them differently: the
 pronouns appear beside your name rather than in the table at the bottom, and a
@@ -803,12 +810,12 @@ hand, it is picked up as one.
 - **Likes and followers.** You are not shown how many likes, dislikes, boosts,
   replies or followers anything has — not on your posts, not on anybody else's, not on
   any profile. A number next to a post is a score, and a score is pressure.
-  **Settings → Likes and followers → Show the numbers** brings them back. It
+  **Settings → Reading → Likes and followers → Show the numbers** brings them back. It
   belongs to your account, so your phone apps follow it too: they are sent
   zero for each of those numbers while they are hidden. Who liked or boosted a
   post is still there to look at, and so is every reply; following and post
   counts are not hidden.
-- **Sound and touch.** **Settings → Sound and touch** has three switches:
+- **Sound and touch.** **Settings → Reading → Sound and touch** has three switches:
   **Play sounds** (a tick on a like, a breath of air when a post goes out, a
   chime when a direct message arrives; off until you turn it on, with
   **Listen** to hear them first), **Vibrate** (a short tap on a phone; on
@@ -859,7 +866,7 @@ hand, it is picked up as one.
   drops that field's tick straight away — the tick belongs to the address, not
   to the row — and it returns once the page at the new address has been
   checked. Your other fields keep theirs.
-- **Featured hashtags.** **Settings → Featured hashtags** decides which tags sit under
+- **Featured hashtags.** **Settings → Profile and privacy → Featured hashtags** decides which tags sit under
   your bio — up to ten, and anybody reading your profile can click one to see what you
   posted under it. It opens with the hashtags you post with most and have not featured
   yet, so you pick from your own writing rather than guessing; anything else goes in
@@ -875,7 +882,7 @@ hand, it is picked up as one.
 - **Follow requests.** When your account is locked, people asking to follow
   you appear under **Follow requests** in the sidebar — **Accept** or
   **Reject** — and on the Nextcloud bell. Locking the account itself is the
-  **Approve who follows you** switch under **Settings → Your account**, which
+  **Approve who follows you** switch under **Settings → Profile and privacy**, which
   is `locked` on `PATCH /api/v1/accounts/update_credentials` underneath.
 - **Reporting.** **Report** in a post's menu sends the post, with an optional
   note, to the moderators of this instance. From the web client it is never
@@ -894,7 +901,7 @@ hand, it is picked up as one.
   changing the setting does not take back a quote somebody has already posted
   and other people have read. Detaching tells the other server, which then
   shows the quote as withdrawn; the post itself is theirs and stays where it is.
-- **Authorized apps.** **Settings → Authorized apps** lists every app you have
+- **Authorized apps.** **Settings → Apps and account → Authorized apps** lists every app you have
   signed in to with this account — a phone client, a cross-poster, anything
   that asked — with what it may do, when you granted it and when it was last
   used. **Sign this app out** takes the key back, and the app asks you to sign
@@ -986,10 +993,10 @@ hand, it is picked up as one.
   captions and the hashtags you wrote in them. Two things are worth knowing
   before you press it. An Instagram post does not record who could see it, so
   every one of them is posted here with **your own default visibility** — set
-  that first, in **Settings → Your account**, if you would rather they were not
+  that first, in **Settings → Profile and privacy**, if you would rather they were not
   public. And **what Instagram showed for only a day, your archived posts and
   anything you deleted are not imported**: you put those away on purpose.
-- **Leaving.** **Settings → Delete your Aloha Social account** deletes your fediverse
+- **Leaving.** **Settings → Apps and account → Delete your Aloha Social account** deletes your fediverse
   account and keeps your Nextcloud one. Everything you posted goes, your
   followers and the people you follow are let go, and every server that knew
   the account is told it is gone — a post already on somebody else's server is
@@ -1004,7 +1011,7 @@ hand, it is picked up as one.
 
 ## Keyboard shortcuts
 
-Press `?` anywhere, or open **Settings → Keyboard shortcuts**, for the list.
+Press `?` anywhere, or open **Settings → Help → Keyboard shortcuts**, for the list.
 Shortcuts are off while you are typing in a field or the composer, and while a
 modifier key is held.
 

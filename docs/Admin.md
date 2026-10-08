@@ -710,7 +710,7 @@ against — that account is being dealt with by the decision.
 Nothing is published, and nothing is deleted, without somebody pressing
 something. A held post is stored as the *request* the client sent, not as a
 post: it is in no timeline, no profile, no outbox and no search, not even its
-author's, and their own copy of it is in **Settings → Waiting to be looked at**,
+author's, and their own copy of it is in **Settings → Your posts → Waiting for review**,
 where they can take it back. Approving replays the request down the path an
 immediate post takes and dates it now. Refusing deletes it, tells the author,
 and records a takedown strike. One account may have twenty waiting; past that
