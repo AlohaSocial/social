@@ -47,6 +47,9 @@ class IndexCoverageTest extends TestCase {
 		yield 'the posts of one account' => [
 			'social_stream', ['attributed_to_prim'],
 		];
+		yield 'a page of one account\'s posts, newest first' => [
+			'social_stream', ['attributed_to_prim', 'nid'],
+		];
 		yield 'the replies under a post' => [
 			'social_stream', ['in_reply_to_prim'],
 		];
