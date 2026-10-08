@@ -116,6 +116,9 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_APP_PASSWORD = 'social_atproto_app_password';
 	public const TABLE_ATPROTO_SESSION = 'social_atproto_session';
 	public const TABLE_ATPROTO_VIDEO = 'social_atproto_video';
+	public const TABLE_ATPROTO_OAUTH_REQUEST = 'social_atproto_oauth_request';
+	public const TABLE_ATPROTO_OAUTH_SESSION = 'social_atproto_oauth_session';
+	public const TABLE_ATPROTO_OAUTH_REPLAY = 'social_atproto_oauth_replay';
 
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
@@ -136,6 +139,9 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_APP_PASSWORD => ['id', 'user_id', 'name', 'hash', 'creation', 'last_used'],
 		self::TABLE_ATPROTO_SESSION => ['id', 'jti', 'user_id', 'did', 'app_password_id', 'expires', 'creation'],
 		self::TABLE_ATPROTO_VIDEO => ['id', 'post_id', 'post_id_prim', 'did', 'document_id', 'state', 'job_id', 'blob_cid', 'attempts', 'error', 'creation', 'updated'],
+		self::TABLE_ATPROTO_OAUTH_REQUEST => ['id', 'request_id', 'client_id', 'client_auth', 'params', 'dpop_jkt', 'code_challenge', 'user_id', 'did', 'code_hash', 'session_id', 'expires', 'creation'],
+		self::TABLE_ATPROTO_OAUTH_SESSION => ['id', 'session_id', 'user_id', 'did', 'client_id', 'client_auth', 'scope', 'dpop_jkt', 'refresh_hash', 'previous_hash', 'refresh_expires', 'expires', 'creation', 'last_used'],
+		self::TABLE_ATPROTO_OAUTH_REPLAY => ['id', 'hash', 'expires'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',
