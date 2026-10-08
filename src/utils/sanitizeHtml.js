@@ -12,13 +12,13 @@ import DOMPurify from 'dompurify'
  * is the authority, this is the belt to its braces for anything that reaches
  * the DOM through a path the server did not clean.
  */
-const ALLOWED_SCHEMES = ['http', 'https', 'dat', 'dweb', 'ipfs', 'ipns', 'ssb', 'gopher', 'xmpp', 'magnet', 'gemini']
+export const ALLOWED_SCHEMES = ['http', 'https', 'dat', 'dweb', 'ipfs', 'ipns', 'ssb', 'gopher', 'xmpp', 'magnet', 'gemini']
 
 /**
  * Elements remote HTML may contain, matching the server-side allowlist and
  * what Mastodon itself accepts.
  */
-const ALLOWED_TAGS = [
+export const ALLOWED_TAGS = [
 	'p',
 	'br',
 	'span',
@@ -42,6 +42,24 @@ const ALLOWED_TAGS = [
 	'h4',
 	'h5',
 	'h6',
+]
+
+/**
+ * Class names a remote element may carry, the same list as
+ * `HtmlSanitizer::ALLOWED_CLASSES`: Mastodon's markers for mentions, hashtags
+ * and shortened links. Anything else could dress remote markup up as this
+ * app's or Nextcloud's own interface.
+ */
+export const ALLOWED_CLASSES = [
+	'mention',
+	'hashtag',
+	'ellipsis',
+	'invisible',
+	'h-card',
+	'u-url',
+	'p-name',
+	'p-author',
+	'quote-inline',
 ]
 
 const ALLOWED_ATTR = ['href', 'rel', 'class', 'translate', 'cite', 'start', 'reversed', 'value', 'target']
@@ -81,6 +99,14 @@ const purifier = DOMPurify
 purifier.addHook('uponSanitizeAttribute', (node, data) => {
 	if ((data.attrName === 'href' || data.attrName === 'cite') && !isAllowedUrl(data.attrValue)) {
 		data.keepAttr = false
+	}
+	if (data.attrName === 'class') {
+		const classes = data.attrValue.split(/\s+/).filter((name) => ALLOWED_CLASSES.includes(name))
+		if (classes.length === 0) {
+			data.keepAttr = false
+		} else {
+			data.attrValue = classes.join(' ')
+		}
 	}
 })
 

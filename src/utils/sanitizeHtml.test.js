@@ -5,7 +5,9 @@
  * @jest-environment jsdom
  */
 
-import { isAllowedUrl, sanitizeHtml } from './sanitizeHtml.js'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { ALLOWED_CLASSES, ALLOWED_SCHEMES, ALLOWED_TAGS, isAllowedUrl, sanitizeHtml } from './sanitizeHtml.js'
 
 describe('isAllowedUrl', () => {
 	test('accepts web and fediverse schemes', () => {
@@ -72,9 +74,50 @@ describe('sanitizeHtml', () => {
 		expect(sanitizeHtml('<p style="position:fixed" id="app">x</p>')).toBe('<p>x</p>')
 	})
 
+	test('keeps only the classes the server keeps', () => {
+		const out = sanitizeHtml('<span class="h-card icon-delete"><a href="https://e.org/@a" class="u-url mention button-vue">@a</a></span><span class="app-navigation">x</span>')
+		expect(out).toContain('<span class="h-card">')
+		expect(out).toContain('class="u-url mention"')
+		expect(out).toContain('<span>x</span>')
+		expect(out).not.toContain('icon-delete')
+		expect(out).not.toContain('button-vue')
+		expect(out).not.toContain('app-navigation')
+	})
+
 	test('returns an empty string for non-strings and empty input', () => {
 		expect(sanitizeHtml('')).toBe('')
 		expect(sanitizeHtml(null)).toBe('')
 		expect(sanitizeHtml(undefined)).toBe('')
+	})
+})
+
+/**
+ * The body of a constant array in `lib/Security/HtmlSanitizer.php`, read from
+ * the source: the two sanitisers are only belt and braces while they agree.
+ *
+ * @param {string} name - The constant's name
+ * @return {string}
+ */
+function serverConstant(name) {
+	const source = readFileSync(resolve(process.cwd(), 'lib/Security/HtmlSanitizer.php'), 'utf8')
+	const body = source.match(new RegExp(`const ${name} = \\[\\n([\\s\\S]*?)\\n\\t\\];`))
+	expect(body, name).not.toBeNull()
+	return body[1]
+}
+
+describe('the server-side sanitiser', () => {
+	const strings = (body) => [...body.matchAll(/^\t\t'([^']+)',$/gm)].map((entry) => entry[1]).sort()
+
+	test('allows the same classes', () => {
+		expect([...ALLOWED_CLASSES].sort()).toEqual(strings(serverConstant('ALLOWED_CLASSES')))
+	})
+
+	test('allows the same schemes', () => {
+		expect([...ALLOWED_SCHEMES].sort()).toEqual(strings(serverConstant('ALLOWED_SCHEMES')))
+	})
+
+	test('allows the same elements', () => {
+		const keys = [...serverConstant('ALLOWED_ELEMENTS').matchAll(/^\t\t'([^']+)' =>/gm)].map((entry) => entry[1]).sort()
+		expect([...ALLOWED_TAGS].sort()).toEqual(keys)
 	})
 })

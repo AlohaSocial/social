@@ -117,11 +117,12 @@ final class HtmlSanitizer {
 	 *
 	 * Mastodon marks mentions, hashtags and shortened links this way, and the
 	 * frontend renders them accordingly. Anything else is stripped so remote
-	 * markup cannot borrow the look of local UI.
+	 * markup cannot borrow the look of local UI. `src/utils/sanitizeHtml.js`
+	 * keeps the same list, and its test reads this one to hold them in step.
 	 *
 	 * @var list<string>
 	 */
-	public const ALLOWED_CLASSES = [
+	private const ALLOWED_CLASSES = [
 		'mention',
 		'hashtag',
 		'ellipsis',
