@@ -14,7 +14,6 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
-use OCP\IAvatarManager;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -119,14 +118,16 @@ class AtprotoAppsTest extends TestCase {
 		$this->assertSame(400, $status);
 		$this->assertStringContainsString('never published', (string)($refused['message'] ?? ''));
 
-		// the app's profile editor: a new picture becomes the account's avatar
-		$this->assertFalse(Server::get(IAvatarManager::class)->getAvatar($this->alice->userId)->isCustomAvatar());
+		// the app's profile editor: a new picture becomes the account's avatar,
+		// asked of the server (this process keeps the account's settings cached
+		// from before the app's request)
+		$before = (string)($this->alice->get('/api/v1/accounts/verify_credentials')['avatar'] ?? '');
 		[$status, $saved] = $app->procedure('com.atproto.repo.putRecord', [
 			'repo' => $identity->did, 'collection' => 'app.bsky.actor.profile', 'rkey' => 'self',
 			'record' => ['$type' => 'app.bsky.actor.profile', 'displayName' => 'Alice from an app', 'avatar' => $uploaded['blob']],
 		]);
 		$this->assertSame(200, $status, json_encode($saved));
-		$this->assertTrue(Server::get(IAvatarManager::class)->getAvatar($this->alice->userId)->isCustomAvatar(), 'the picture is the account\'s avatar');
+		$this->assertNotSame($before, (string)($this->alice->get('/api/v1/accounts/verify_credentials')['avatar'] ?? ''), 'the picture is the account\'s avatar');
 		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($identity->did)['avatar'] ?? '') !== '' ? true : null), 'and the AppView shows it');
 
 		// deleting the post's record deletes the post here
