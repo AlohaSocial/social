@@ -122,7 +122,10 @@ class BlueskyActorService {
 		return '';
 	}
 
-	private function store(Person $person): void {
+	/**
+	 * Keeps a mapped account: saved when new, updated when known, counts set.
+	 */
+	public function store(Person $person): void {
 		try {
 			$this->cacheActorsRequest->getFromId($person->getId());
 			$this->actorService->update($person);

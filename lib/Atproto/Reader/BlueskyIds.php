@@ -88,6 +88,10 @@ final class BlueskyIds {
 		return self::profileUrl($handleOrDid) . '/post/' . $rkey;
 	}
 
+	public static function hashtagUrl(string $tag): string {
+		return self::ORIGIN . '/hashtag/' . rawurlencode($tag);
+	}
+
 	/**
 	 * Whether an account string is a Bluesky handle rather than a Fediverse
 	 * address: no `@` and a domain shape with a real top-level domain.
