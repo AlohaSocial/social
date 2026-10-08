@@ -355,11 +355,22 @@ class RequestQueueRequest extends RequestQueueRequestBuilder {
 	}
 
 	/**
+	 * Marks a delivered row, and drops the body it carried.
+	 *
+	 * The row is kept for `RequestQueueService::RETENTION_SECONDS` to say that
+	 * this server got the post; the signed activity itself is never read
+	 * again — nothing re-sends a delivered row, `social:queue:retry` included
+	 * — and kept per inbox it was the bulk of the table: one copy of the whole
+	 * document per recipient server, for a week. An abandoned row keeps its
+	 * body, because handing it back to the queue is what `social:queue:retry`
+	 * is for.
+	 *
 	 * @throws QueueStatusException|Exception
 	 */
 	public function setAsSuccess(RequestQueue &$queue): void {
 		$qb = $this->getRequestQueueUpdateSql();
 		$qb->set('status', $qb->createNamedParameter(RequestQueue::STATUS_SUCCESS));
+		$qb->set('activity', $qb->createNamedParameter(''));
 		$qb->limitToId($queue->getId());
 		$qb->limitToStatus(RequestQueue::STATUS_RUNNING);
 

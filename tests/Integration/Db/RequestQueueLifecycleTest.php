@@ -107,6 +107,7 @@ class RequestQueueLifecycleTest extends TestCase {
 		$kept = $this->service->getRequestFromToken($token);
 		$this->assertCount(1, $kept, 'a delivered request is kept: it is the record that this server got the post');
 		$this->assertSame(RequestQueue::STATUS_SUCCESS, $kept[0]->getStatus());
+		$this->assertSame('', $kept[0]->getActivity(), 'the record is kept, the signed body is not');
 
 		// not yet: the retention has not passed
 		$this->service->purgeFinished();
