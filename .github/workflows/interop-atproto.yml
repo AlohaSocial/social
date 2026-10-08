@@ -74,6 +74,7 @@ jobs:
       # is being tested without a commit here saying so
       RELAY_IMAGE: ghcr.io/bluesky-social/indigo:relay-ae9297b7d0f4b61f778306aedbdf72b346d6f234
       ATPROTO_NETWORK_FILE: /tmp/atproto-network.json
+      ATPROTO_VIDEO: /tmp/atproto-video.mp4
       DB_POSTGRES_URL: postgresql://pg:password@127.0.0.1:5433/postgres
       REDIS_HOST: 127.0.0.1:6380
 
@@ -102,6 +103,14 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+
+      - name: Make a test video
+        # two seconds of H.264 in an MP4, the kind Bluesky's video service takes
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+          ffmpeg -loglevel error -y -f lavfi -i testsrc=duration=2:size=320x240:rate=15 \
+            -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$ATPROTO_VIDEO"
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/social
@@ -235,12 +244,15 @@ jobs:
           cat /tmp/network.log
           exit 1
 
-      - name: Point the app at the dev AppView as the authenticated one too
+      - name: Point the app at the dev AppView as the authenticated one too, and at the video service
         # the notifications of local accounts are asked for as the user,
         # with a token addressed to the AppView's DID
         run: |
           ./occ config:app:set social atproto_appview_auth --value http://127.0.0.1:2584
           ./occ config:app:set social atproto_appview_did --value "$(python3 -c 'import json; print(json.load(open("/tmp/atproto-network.json"))["bskyDid"])')"
+          # the network's stand-in for Bluesky's video service
+          ./occ config:app:set social atproto_video_service --value http://127.0.0.1:2590
+          ./occ config:app:set social atproto_video_service_did --value did:web:video.interop.test
 
       - name: Start the relay
         # The official relay, told to crawl this app. It verifies every
@@ -271,7 +283,7 @@ jobs:
         working-directory: apps/social
         run: |
           composer i
-          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest'
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest'
 
       - name: What each side saw, when it went wrong
         if: failure()
