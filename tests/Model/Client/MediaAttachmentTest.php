@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Model\Client;
 
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\Client\AttachmentMeta;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCP\IURLGenerator;
@@ -25,7 +26,7 @@ class MediaAttachmentTest extends TestCase {
 		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(
 			fn (string $route, array $args): string => isset($args['nid'])
-				? 'https://cloud.example.org/media/stream/' . $args['nid']
+				? 'https://cloud.example.org/media/' . ($route === 'social.MediaApi.mediaPlaylist' ? 'playlist/' : 'stream/') . $args['nid']
 				: 'https://cloud.example.org/media/' . ($args['uuid'] ?? '')
 		);
 		\OC::$server->register(IURLGenerator::class, $urlGenerator);
@@ -266,9 +267,38 @@ class MediaAttachmentTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A video that is nothing but an HLS playlist is played through the route
+	 * that points the addresses in it back through this server, including a
+	 * stored attachment that still names the byte route.
+	 */
+	public function testAStreamedPlaylistIsLinkedToThePlaylistRoute(): void {
+		$this->withUrlGenerator();
+		$media = new MediaAttachment();
+		$media->import([
+			'id' => '712',
+			'type' => 'video',
+			'media_type' => 'application/x-mpegURL',
+			'url' => 'http://devel/nextcloud/index.php/apps/social/media/stream/712',
+		]);
+
+		$this->assertSame('https://cloud.example.org/media/playlist/712', $media->asLocal()['url']);
+
+		$document = new Document();
+		$document->setNid(712);
+		$document->setMediaType('application/vnd.apple.mpegurl');
+		$this->assertSame('https://cloud.example.org/media/playlist/712', $document->streamUrl(\OCP\Server::get(IURLGenerator::class)));
+		$document->setMediaType('video/mp4');
+		$this->assertSame('https://cloud.example.org/media/stream/712', $document->streamUrl(\OCP\Server::get(IURLGenerator::class)));
+	}
+
 	/** Somebody else's path that happens to end that way is not ours. */
 	public function testARemoteLinkEndingInStreamIsLeftAlone(): void {
 		$this->withUrlGenerator();
+		$media = new MediaAttachment();
+		$media->import(['id' => '1', 'url' => 'https://peertube.example/live/stream/42']);
+		$this->assertSame('https://peertube.example/live/stream/42', $media->asLocal()['url']);
+
 		$media = new MediaAttachment();
 		$media->import(['id' => '1', 'url' => 'https://peertube.example/live/stream/42x']);
 
