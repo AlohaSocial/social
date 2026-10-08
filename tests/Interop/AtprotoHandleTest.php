@@ -53,9 +53,10 @@ class AtprotoHandleTest extends TestCase {
 		$this->assertSame($assigned, $updated->assignedHandle());
 
 		$this->assertSame('at://' . $this->network->customHandle, $this->network->didDocument($identity->did)['alsoKnownAs'][0] ?? null, 'the DID document names the domain');
-		$this->assertSame($identity->did, $this->network->resolveHandle($this->network->customHandle), 'the network resolves it');
+		// the AppView takes the new handle from the firehose's #identity, in its own time
 		$shown = $this->network->await(fn () => ($this->network->profile($identity->did)['handle'] ?? '') === $this->network->customHandle ? true : null);
 		$this->assertNotNull($shown, 'the AppView shows the new handle: ' . json_encode($this->network->profile($identity->did)));
+		$this->assertSame($identity->did, $this->network->await(fn () => $this->network->resolveHandle($this->network->customHandle) ?: null), 'the network resolves it');
 		$this->assertSame($identity->did, Server::get(IdentityService::class)->getByHandle($assigned)->did, 'the assigned handle still resolves here');
 
 		$back = $handles->clear($updated);
