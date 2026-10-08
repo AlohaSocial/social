@@ -130,6 +130,7 @@ RewriteRule ^/?api/(.*)$   http://127.0.0.1/index.php/apps/social/api/$1   [P,QS
 RewriteRule ^/?oauth/(.*)$ http://127.0.0.1/index.php/apps/social/oauth/$1 [P,QSA,L]
 RewriteRule ^/?\.well-known/host-meta$ http://127.0.0.1/index.php/.well-known/host-meta [P,QSA,L]
 RewriteRule ^/?\.well-known/oauth-authorization-server$ http://127.0.0.1/index.php/apps/social/.well-known/oauth-authorization-server [P,QSA,L]
+RewriteRule ^/?\.well-known/oauth-protected-resource$ http://127.0.0.1/index.php/apps/social/.well-known/oauth-protected-resource [P,QSA,L]
 ```
 
 `mod_proxy`, `mod_proxy_http`, `mod_rewrite` and `mod_headers` have to be enabled. This cannot
@@ -187,6 +188,7 @@ They map three things onto the app:
 | `/oauth/…` | registering the app, the consent screen, the token |
 | `/.well-known/host-meta` | some clients ask for it before anything else |
 | `/.well-known/oauth-authorization-server` | RFC 8414 discovery; a Mastodon 4.3 client asks for it before it registers anything, and reads a 404 as "not a server I can sign in to" |
+| `/.well-known/oauth-protected-resource` | Bluesky apps signing in with Bluesky sign-in (OAuth) ask it which authorization server the accounts here use; with Bluesky on, `/.well-known/oauth-authorization-server` then describes both kinds of sign-in |
 
 **Use an internal rewrite, not a redirect.** Nextcloud routes on the address
 the request arrived at, so a plain internal rewrite to `/index.php/apps/social`

@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Db\AtprotoLabelerRequest;
+use OCA\Social\Db\AtprotoOAuthRequest;
 use OCA\Social\Db\AtprotoVideoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use Psr\Log\LoggerInterface;
@@ -32,6 +33,7 @@ class AtprotoCascade {
 		private AtprotoClientRequest $clients,
 		private AtprotoLabelerRequest $labelers,
 		private AtprotoVideoRequest $videos,
+		private AtprotoOAuthRequest $oauth,
 		private ActorsRequest $actors,
 		private LoggerInterface $logger,
 	) {
@@ -42,11 +44,12 @@ class AtprotoCascade {
 			return;
 		}
 		try {
-			// the account's app passwords, its apps' sessions and its
-			// labelers are its own and go with it
+			// the account's app passwords, its apps' sessions — app password
+			// and OAuth — and its labelers are its own and go with it
 			$userId = $this->actors->getFromId($actorId)->getUserId();
 			if ($userId !== '') {
 				$this->clients->deleteByUser($userId);
+				$this->oauth->deleteByUser($userId);
 				$this->labelers->deleteByUser($userId);
 			}
 		} catch (Throwable) {

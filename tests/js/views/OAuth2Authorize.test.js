@@ -20,6 +20,7 @@ describe('OAuth2Authorize', () => {
 		setState('appWebsite', '')
 		setState('account', null)
 		setState('scopes', [])
+		setState('protocol', '')
 		wrapper = mount(OAuth2Authorize)
 	})
 
@@ -161,6 +162,50 @@ describe('OAuth2Authorize', () => {
 	it('picks up a different app name from the initial state', () => {
 		setState('appName', 'Ivory')
 		expect(mount(OAuth2Authorize).find('p').text()).toContain('Ivory would like permission')
+	})
+
+	describe('a Bluesky app', () => {
+		const CLIENT_ID = 'https://bsky.app/oauth-client-metadata.json'
+
+		beforeEach(() => {
+			setState('protocol', 'atproto')
+			setState('appName', 'Bluesky')
+			setState('appWebsite', CLIENT_ID)
+		})
+
+		it('explains the atproto scopes, and marks the one that acts as you', () => {
+			setState('scopes', ['atproto', 'transition:generic', 'transition:email'])
+			const view = mount(OAuth2Authorize)
+			const items = view.findAll('.scopes__item')
+
+			expect(items).toHaveLength(3)
+			expect(items[0].text()).toContain('Know which account you are')
+			expect(items[1].text()).toContain('Post, like, follow, upload and read as you, everywhere on Bluesky')
+			expect(items[2].text()).toContain('See your e-mail address')
+			expect(view.findAll('.scopes__icon').map((icon) => icon.classes('scopes__icon--write')))
+				.toEqual([false, true, false])
+		})
+
+		/** The client_id is what the app is known by; its name is not checked. */
+		it('shows the client_id as plain text, with a note, and no link', () => {
+			const view = mount(OAuth2Authorize)
+
+			expect(view.find('.oauth__client-id').text()).toBe(CLIENT_ID)
+			expect(view.find('.oauth__client-id').element.tagName).not.toBe('A')
+			expect(view.find('.oauth__client-note').text())
+				.toBe('This address is what the app is known by; its name is not checked.')
+			expect(view.find('.oauth__website').exists()).toBe(false)
+			expect(view.find(`a[href="${CLIENT_ID}"]`).exists()).toBe(false)
+		})
+	})
+
+	it('shows neither the client_id nor the note for a Mastodon app', () => {
+		setState('appWebsite', 'https://tusky.app/')
+		const view = mount(OAuth2Authorize)
+
+		expect(view.find('.oauth__client-id').exists()).toBe(false)
+		expect(view.text()).not.toContain('its name is not checked')
+		expect(view.find('.oauth__website').text()).toContain('tusky.app')
 	})
 
 	describe('after the code has been granted', () => {

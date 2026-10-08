@@ -140,7 +140,7 @@ class SessionService {
 			'did' => $session->identity->did,
 			'didDoc' => $this->identities->document($session->identity),
 			'active' => $session->identity->isActive(),
-		] + $this->email($session->userId);
+		] + ($session->may(ClientSession::EMAIL) ? $this->email($session->userId) : ['emailConfirmed' => false]);
 	}
 
 	/**

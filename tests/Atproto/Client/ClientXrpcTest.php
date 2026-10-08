@@ -17,6 +17,8 @@ use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\OAuth\AuthorizationServer;
+use OCA\Social\Atproto\OAuth\OAuthException;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
@@ -37,6 +39,8 @@ class ClientXrpcTest extends TestCase {
 	private ModerationService $moderation;
 	/** @var ServiceAuthGrant&MockObject */
 	private ServiceAuthGrant $grants;
+	/** @var AuthorizationServer&MockObject */
+	private AuthorizationServer $oauth;
 	/** @var string[] */
 	private array $files = [];
 	private ClientXrpc $client;
@@ -52,7 +56,9 @@ class ClientXrpcTest extends TestCase {
 		$this->writes = $this->createMock(WriteService::class);
 		$this->moderation = $this->createMock(ModerationService::class);
 		$this->grants = $this->createMock(ServiceAuthGrant::class);
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->moderation);
+		$this->oauth = $this->createMock(AuthorizationServer::class);
+		$this->oauth->method('issuer')->willReturn('https://social.test');
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation);
 	}
 
 	protected function tearDown(): void {
@@ -126,6 +132,45 @@ class ClientXrpcTest extends TestCase {
 
 		$this->expectException(XrpcException::class);
 		$this->client->upload($this->file('video'), ['authorization' => 'Bearer service-token']);
+	}
+
+	public function testAnOAuthAppIsSignedInByItsDpopBoundToken(): void {
+		$oauthSession = new ClientSession('alice', $this->session->identity, 'sid', ['atproto', ClientSession::GENERIC]);
+		$this->oauth->expects($this->once())->method('authenticate')
+			->with('DPoP token', 'proof', 'GET', 'https://social.test/xrpc/app.bsky.feed.getTimeline')
+			->willReturn($oauthSession);
+		$this->sessions->expects($this->never())->method('authenticate');
+		$this->proxy->expects($this->once())->method('forward')->with($oauthSession)->willReturn(new XrpcBytes('{}', 'application/json'));
+
+		$this->client->query('app.bsky.feed.getTimeline', '', ['authorization' => 'DPoP token', 'dpop' => 'proof']);
+	}
+
+	public function testANonceChallengeReachesTheApp(): void {
+		$this->oauth->method('authenticate')->willThrowException(new OAuthException('use_dpop_nonce', 'Use the nonce', 401, ['DPoP-Nonce' => 'n2', 'WWW-Authenticate' => 'DPoP error="use_dpop_nonce"']));
+
+		try {
+			$this->client->query('app.bsky.feed.getTimeline', '', ['authorization' => 'DPoP token', 'dpop' => 'proof']);
+			$this->fail('answered');
+		} catch (XrpcException $e) {
+			$this->assertSame(401, $e->status);
+			$this->assertSame('UseDpopNonce', $e->error);
+			$this->assertSame('n2', $e->headers['DPoP-Nonce']);
+		}
+	}
+
+	public function testAnAppGivenOnlyTheAtprotoScopeMayOnlyAskWhoItIs(): void {
+		$this->oauth->method('authenticate')->willReturn(new ClientSession('alice', $this->session->identity, 'sid', ['atproto']));
+		$this->sessions->method('describe')->willReturn(['did' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz']);
+		$headers = ['authorization' => 'DPoP token', 'dpop' => 'proof'];
+
+		$this->assertSame(['did' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz'], $this->client->query('com.atproto.server.getSession', '', $headers));
+		try {
+			$this->client->procedure('com.atproto.repo.createRecord', '{}', $headers, '1.2.3.4');
+			$this->fail('written');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+			$this->assertSame('InsufficientScope', $e->error);
+		}
 	}
 
 	public function testASuspendedAccountsAppIsTurnedAway(): void {

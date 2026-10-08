@@ -12,14 +12,18 @@ namespace OCA\Social\Atproto\Xrpc;
 use Exception;
 
 /**
- * An XRPC error, as the answer carries it: a status, an error name and a
- * message.
+ * An XRPC error, as the answer carries it: a status, an error name, a
+ * message, and the headers a client needs to act on it (a DPoP challenge).
  */
 class XrpcException extends Exception {
+	/**
+	 * @param array<string, string> $headers
+	 */
 	public function __construct(
 		public readonly int $status,
 		public readonly string $error,
 		string $message = '',
+		public readonly array $headers = [],
 	) {
 		parent::__construct($message === '' ? $error : $message);
 	}

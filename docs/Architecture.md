@@ -248,6 +248,9 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_app_password` | The app passwords a person made for Bluesky apps, by name, stored as password hashes only — the password is shown once. Good for this app's Bluesky surface and nothing else of Nextcloud |
 | `social_atproto_session` | The sessions Bluesky apps opened with those passwords, by the id of their refresh token, with the password that opened them: ending a session, or revoking its password, ends its tokens |
 | `social_atproto_video` | A local post's video on its way through Bluesky's video service: the post and its video document, the state (`queued`, `processing`, `done`, `failed`), the service's job, the blob it stored here, the tries and the reason it failed. The post goes to Bluesky once the row has ended — naming the blob, or as a link — and ended rows are pruned after a week |
+| `social_atproto_oauth_request` | Bluesky sign-in (OAuth) requests a Bluesky app pushed: the app's `client_id`, how it authenticated, what it asked for, the DPoP key it asked with and its PKCE challenge; once the person agreed, who agreed and the hash of the code handed out, and once that code was exchanged, the session it started — so a second exchange ends that session. Kept a day past expiry, so a PKCE challenge is not taken twice |
+| `social_atproto_oauth_session` | The Bluesky apps signed in through OAuth: account, app, granted scopes, the DPoP key every token is bound to, the hash of the one refresh token that is good and of the one it replaced (presenting that one ends the session), and when it ends — two weeks for a public app, never for a confidential one |
+| `social_atproto_oauth_replay` | One-time values that may not be used twice — DPoP proof ids, client assertion ids — by hash, until they could no longer be fresh |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
@@ -2004,8 +2007,9 @@ into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
 `#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
 `#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`
 where the server gives every account a Bluesky identity — `BlueskySettings.vue`,
-the handle, the DID, the pause switch, the recovery phrase and the app
-passwords Bluesky apps sign in with —, `#invites`, `#storage`,
+the handle, the DID, the pause switch, the recovery phrase, the app
+passwords Bluesky apps sign in with and the apps signed in with Bluesky
+sign-in —, `#invites`, `#storage`,
 `#delete`, last because it cannot be undone) and **Help**
 (`#introduction`, `#shortcuts`). One group is drawn at a time. The rail lists the
 groups and, under the open one, its sections; on a narrow screen the groups are a
