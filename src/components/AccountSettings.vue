@@ -105,6 +105,150 @@
 								: t('social', 'Twelve words that prove this Bluesky identity is yours even without this server. They are shown once, for you to write down.') }}
 						</p>
 					</div>
+					<!-- the domain only has to name the DID: the account, its
+					     followers and the assigned handle stay as they are -->
+					<div v-if="bluesky.active !== false && bluesky.assigned_handle" class="account-settings__custom-handle">
+						<h4 class="account-settings__bluesky-title">
+							{{ t('social', 'Your own domain as your handle') }}
+						</h4>
+						<p class="account-settings__hint account-settings__hint--block">
+							{{ t('social', 'If you own a domain, it can be your Bluesky handle. Your followers stay with you; {assigned} keeps working too.', { assigned: bluesky.assigned_handle }) }}
+						</p>
+						<template v-if="bluesky.custom_handle">
+							<p class="account-settings__custom-handle-current">
+								{{ t('social', 'Your handle is {handle}.', { handle: bluesky.custom_handle }) }}
+							</p>
+							<NcNoteCard v-if="bluesky.custom_handle_broken" type="warning">
+								{{ t('social', '{handle} no longer names your account. Bluesky shows it as invalid until the DNS record or file is back.', { handle: bluesky.custom_handle }) }}
+							</NcNoteCard>
+							<div v-if="confirmingAssignedHandle" class="account-settings__app-password-actions">
+								<p class="account-settings__hint account-settings__hint--block">
+									{{ t('social', 'Bluesky shows {assigned} as your handle again.', { assigned: bluesky.assigned_handle }) }}
+								</p>
+								<NcButton
+									variant="primary"
+									:disabled="changingHandle"
+									@click="useAssignedHandle">
+									{{ t('social', 'Use it again') }}
+								</NcButton>
+								<NcButton :disabled="changingHandle" @click="confirmingAssignedHandle = false">
+									{{ t('social', 'Keep my domain') }}
+								</NcButton>
+							</div>
+							<div v-else class="account-settings__app-password-actions">
+								<NcButton @click="confirmingAssignedHandle = true">
+									{{ t('social', 'Use {assigned} again', { assigned: bluesky.assigned_handle }) }}
+								</NcButton>
+							</div>
+						</template>
+						<template v-else>
+							<!-- inside the account form too: Enter checks the domain
+							     instead of saving the settings below -->
+							<NcTextField
+								v-model="customHandle"
+								class="account-settings__custom-handle-field"
+								:label="t('social', 'Domain to use as your handle')"
+								placeholder="alice.example.org"
+								:error="customHandleError !== ''"
+								:helperText="customHandleError"
+								maxlength="253"
+								:showTrailingButton="false"
+								@update:modelValue="customHandleError = ''"
+								@keydown.enter.prevent="setCustomHandle" />
+							<div v-if="customHandleDomain !== ''" class="account-settings__custom-handle-steps">
+								<p class="account-settings__hint account-settings__hint--block">
+									{{ t('social', 'Add one of these, then check it:') }}
+								</p>
+								<p class="account-settings__custom-handle-option">
+									{{ t('social', 'A DNS TXT record') }}
+								</p>
+								<dl class="account-settings__identity">
+									<div class="account-settings__identity-row">
+										<dt>{{ t('social', 'Name') }}</dt>
+										<dd>
+											<code class="account-settings__code">{{ dnsRecordName }}</code>
+											<NcButton
+												variant="tertiary"
+												:title="blueskyCopied === 'dns-name' ? t('social', 'Copied') : t('social', 'Copy')"
+												:aria-label="blueskyCopied === 'dns-name' ? t('social', 'Copied') : t('social', 'Copy the record name')"
+												@click="copyBluesky('dns-name', dnsRecordName)">
+												<template #icon>
+													<Check v-if="blueskyCopied === 'dns-name'" :size="16" />
+													<ContentCopy v-else :size="16" />
+												</template>
+											</NcButton>
+										</dd>
+									</div>
+									<div class="account-settings__identity-row">
+										<dt>{{ t('social', 'Value') }}</dt>
+										<dd>
+											<code class="account-settings__code">{{ dnsRecordValue }}</code>
+											<NcButton
+												variant="tertiary"
+												:title="blueskyCopied === 'dns-value' ? t('social', 'Copied') : t('social', 'Copy')"
+												:aria-label="blueskyCopied === 'dns-value' ? t('social', 'Copied') : t('social', 'Copy the record value')"
+												@click="copyBluesky('dns-value', dnsRecordValue)">
+												<template #icon>
+													<Check v-if="blueskyCopied === 'dns-value'" :size="16" />
+													<ContentCopy v-else :size="16" />
+												</template>
+											</NcButton>
+										</dd>
+									</div>
+								</dl>
+								<p class="account-settings__custom-handle-option">
+									{{ t('social', 'Or a file on the domain’s web server') }}
+								</p>
+								<dl class="account-settings__identity">
+									<div class="account-settings__identity-row">
+										<dt>{{ t('social', 'Address') }}</dt>
+										<dd>
+											<code class="account-settings__code">{{ didFileAddress }}</code>
+											<NcButton
+												variant="tertiary"
+												:title="blueskyCopied === 'file-address' ? t('social', 'Copied') : t('social', 'Copy')"
+												:aria-label="blueskyCopied === 'file-address' ? t('social', 'Copied') : t('social', 'Copy the file address')"
+												@click="copyBluesky('file-address', didFileAddress)">
+												<template #icon>
+													<Check v-if="blueskyCopied === 'file-address'" :size="16" />
+													<ContentCopy v-else :size="16" />
+												</template>
+											</NcButton>
+										</dd>
+									</div>
+									<div class="account-settings__identity-row">
+										<dt>{{ t('social', 'Content') }}</dt>
+										<dd>
+											<code class="account-settings__code">{{ bluesky.did }}</code>
+											<NcButton
+												variant="tertiary"
+												:title="blueskyCopied === 'file-content' ? t('social', 'Copied') : t('social', 'Copy')"
+												:aria-label="blueskyCopied === 'file-content' ? t('social', 'Copied') : t('social', 'Copy the file content')"
+												@click="copyBluesky('file-content', bluesky.did)">
+												<template #icon>
+													<Check v-if="blueskyCopied === 'file-content'" :size="16" />
+													<ContentCopy v-else :size="16" />
+												</template>
+											</NcButton>
+										</dd>
+									</div>
+								</dl>
+								<p class="account-settings__hint account-settings__hint--block">
+									{{ t('social', 'The file holds only the DID, as plain text.') }}
+								</p>
+							</div>
+							<NcButton
+								class="account-settings__custom-handle-check"
+								:disabled="customHandleDomain === '' || changingHandle"
+								@click="setCustomHandle">
+								<template #icon>
+									<NcLoadingIcon v-if="changingHandle" :size="20" />
+									<Check v-else :size="20" />
+								</template>
+								{{ t('social', 'Check and use it') }}
+							</NcButton>
+						</template>
+					</div>
 					<!-- what a Bluesky app signs in with: this server is its
 					     hosting provider, and the Nextcloud password is never
 					     handed to it -->
@@ -456,19 +600,27 @@ export default {
 			/**
 			 * The Bluesky identity, once asked for; null until it comes
 			 *
-			 * @type {{handle: string, did: string, url: string, state: string, recovery_key: boolean, active: boolean}|null}
+			 * @type {{handle: string, did: string, url: string, state: string, recovery_key: boolean, active: boolean, assigned_handle?: string, custom_handle?: string, custom_handle_broken?: boolean}|null}
 			 */
 			bluesky: null,
 			blueskyError: '',
 			/** the pause switch: it moves at once, and comes back if the server refuses */
 			blueskyActive: true,
 			switchingBluesky: false,
-			/** what was just copied: 'handle', 'did', 'phrase', 'password' or '' */
+			/** what was just copied: one of the copyBluesky names, or '' */
 			blueskyCopied: '',
 			blueskyCopyTimer: null,
 			recovering: false,
 			/** the twelve words, for as long as the dialog shows them */
 			phrase: '',
+			/** the domain as typed into the own-handle field */
+			customHandle: '',
+			/** what the server said about the domain, under the field */
+			customHandleError: '',
+			/** a handle change is out */
+			changingHandle: false,
+			/** going back to the assigned handle is asking to be confirmed */
+			confirmingAssignedHandle: false,
 
 			/**
 			 * The app passwords for Bluesky apps; null until they come
@@ -550,6 +702,26 @@ export default {
 		/** @return {boolean} whether this instance gives every account a Bluesky identity */
 		blueskyOffered() {
 			return this.serverData?.bluesky?.enabled === true
+		},
+
+		/** @return {string} the typed domain the way a handle is written: trimmed, lower case, without the leading at sign */
+		customHandleDomain() {
+			return this.customHandle.trim().replace(/^@/, '').toLowerCase()
+		},
+
+		/** @return {string} the TXT record the domain names the DID with */
+		dnsRecordName() {
+			return '_atproto.' + this.customHandleDomain
+		},
+
+		/** @return {string} */
+		dnsRecordValue() {
+			return 'did=' + (this.bluesky?.did ?? '')
+		},
+
+		/** @return {string} the file that names the DID instead of a record */
+		didFileAddress() {
+			return 'https://' + this.customHandleDomain + '/.well-known/atproto-did'
 		},
 
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
@@ -721,7 +893,7 @@ export default {
 		},
 
 		/**
-		 * @param {'handle'|'did'|'phrase'|'password'} which what was asked for
+		 * @param {'handle'|'did'|'phrase'|'password'|'dns-name'|'dns-value'|'file-address'|'file-content'} which what was asked for
 		 * @param {string} text what goes onto the clipboard
 		 */
 		async copyBluesky(which, text) {
@@ -769,6 +941,58 @@ export default {
 
 		closePhrase() {
 			this.phrase = ''
+		},
+
+		/**
+		 * Makes the typed domain the handle, after the password: the server
+		 * checks that the domain names the DID before it takes it.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async setCustomHandle() {
+			const handle = this.customHandleDomain
+			if (handle === '' || this.changingHandle) {
+				return
+			}
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.changingHandle = true
+			this.customHandleError = ''
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/handle'), { handle })
+				this.takeIdentity(data)
+				this.customHandle = ''
+				showSuccess(t('social', 'Your handle is now {handle}', { handle: data.handle }))
+			} catch (error) {
+				const status = error?.response?.status
+				if (status === 422) {
+					this.customHandleError = error.response.data?.error || t('social', 'Could not set the handle')
+				} else {
+					showError(status === 403
+						? t('social', 'Confirm your password again and retry.')
+						: t('social', 'Could not set the handle'))
+				}
+			} finally {
+				this.changingHandle = false
+			}
+		},
+
+		/** @return {Promise<void>} */
+		async useAssignedHandle() {
+			this.changingHandle = true
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/social/bluesky/handle'))
+				this.takeIdentity(data)
+				this.confirmingAssignedHandle = false
+			} catch (error) {
+				logger.debug('Could not go back to the assigned handle', { error })
+				showError(t('social', 'Could not change the handle'))
+			} finally {
+				this.changingHandle = false
+			}
 		},
 
 		/**
@@ -1061,9 +1285,32 @@ export default {
 		margin-top: 4px;
 	}
 
+	&__custom-handle,
 	&__app-passwords,
 	&__oauth-sessions {
 		margin-top: 12px;
+	}
+
+	&__custom-handle-current {
+		margin: 8px 0 0;
+		overflow-wrap: anywhere;
+	}
+
+	&__custom-handle-field {
+		margin-top: 8px;
+	}
+
+	&__custom-handle-steps {
+		margin-top: 8px;
+	}
+
+	&__custom-handle-option {
+		margin: 8px 0 0;
+		font-weight: bold;
+	}
+
+	&__custom-handle-check {
+		margin-top: 8px;
 	}
 
 	&__new-password {

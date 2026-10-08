@@ -481,6 +481,247 @@ describe('AccountSettings', () => {
 		 * What a Bluesky app signs in with: a password of its own, shown once,
 		 * so the Nextcloud password is never typed into it.
 		 */
+		describe('your own domain as your handle', () => {
+			const HANDLE = '/index.php/apps/social/api/v1/social/bluesky/handle'
+
+			/** @param {object} overrides what differs from an identity on its assigned handle */
+			function handleIdentity(overrides = {}) {
+				return identity({
+					active: true,
+					assigned_handle: 'alice.cloud.example.org',
+					custom_handle: '',
+					custom_handle_broken: false,
+					...overrides,
+				})
+			}
+
+			const OWN = { handle: 'alice.example.org', custom_handle: 'alice.example.org', url: 'https://bsky.app/profile/alice.example.org' }
+
+			const section = (wrapper) => wrapper.find('.account-settings__custom-handle')
+			const domainField = (wrapper) => section(wrapper).find('input')
+			const steps = (wrapper) => section(wrapper).find('.account-settings__custom-handle-steps')
+			const codes = (wrapper) => steps(wrapper).findAll('code').map((code) => code.text())
+
+			it('says what it is for, with the assigned handle that keeps working', async () => {
+				serverHas(handleIdentity())
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('Your own domain as your handle')
+				expect(section(wrapper).text()).toContain('If you own a domain, it can be your Bluesky handle. Your followers stay with you; alice.cloud.example.org keeps working too.')
+				expect(steps(wrapper).exists()).toBe(false)
+			})
+
+			it('spells out the record and the file for the domain as typed, with the DID', async () => {
+				serverHas(handleIdentity())
+				const writeText = vi.fn().mockResolvedValue(undefined)
+				Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('  @Alice.Example.ORG ')
+
+				expect(steps(wrapper).text()).toContain('Add one of these, then check it:')
+				expect(steps(wrapper).text()).toContain('A DNS TXT record')
+				expect(steps(wrapper).text()).toContain('Or a file on the domain’s web server')
+				expect(codes(wrapper)).toEqual([
+					'_atproto.alice.example.org',
+					'did=did:plc:abc123',
+					'https://alice.example.org/.well-known/atproto-did',
+					'did:plc:abc123',
+				])
+
+				await domainField(wrapper).setValue('bob.example.net')
+				expect(codes(wrapper)[0]).toBe('_atproto.bob.example.net')
+
+				await buttonByLabel(wrapper, 'Copy the record name').trigger('click')
+				await flushPromises()
+				expect(writeText).toHaveBeenCalledWith('_atproto.bob.example.net')
+				await buttonByLabel(wrapper, 'Copy the record value').trigger('click')
+				await flushPromises()
+				expect(writeText).toHaveBeenCalledWith('did=did:plc:abc123')
+				await buttonByLabel(wrapper, 'Copy the file address').trigger('click')
+				await flushPromises()
+				expect(writeText).toHaveBeenCalledWith('https://bob.example.net/.well-known/atproto-did')
+				await buttonByLabel(wrapper, 'Copy the file content').trigger('click')
+				await flushPromises()
+				expect(writeText).toHaveBeenCalledWith('did:plc:abc123')
+			})
+
+			it('cannot be checked without a domain', async () => {
+				serverHas(handleIdentity())
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(buttonByText(wrapper, 'Check and use it').attributes('disabled')).toBeDefined()
+				await domainField(wrapper).setValue(' @ ')
+				expect(buttonByText(wrapper, 'Check and use it').attributes('disabled')).toBeDefined()
+				expect(steps(wrapper).exists()).toBe(false)
+			})
+
+			it('asks for the password, then sets the domain and shows it everywhere', async () => {
+				serverHas(handleIdentity())
+				axios.post.mockResolvedValue({ data: handleIdentity(OWN) })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('@Alice.Example.org')
+				await buttonByText(wrapper, 'Check and use it').trigger('click')
+				await flushPromises()
+
+				expect(confirmPassword).toHaveBeenCalled()
+				expect(axios.post).toHaveBeenCalledWith(HANDLE, { handle: 'alice.example.org' })
+				expect(showSuccess).toHaveBeenCalledWith('Your handle is now alice.example.org')
+				expect(block(wrapper).find('a.account-settings__code').text()).toBe('@alice.example.org')
+				expect(section(wrapper).text()).toContain('Your handle is alice.example.org.')
+				expect(section(wrapper).find('input').exists()).toBe(false)
+			})
+
+			it('sends nothing when the password dialog is dismissed', async () => {
+				serverHas(handleIdentity())
+				vi.mocked(confirmPassword).mockRejectedValueOnce(new Error('dismissed'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('alice.example.org')
+				await buttonByText(wrapper, 'Check and use it').trigger('click')
+				await flushPromises()
+
+				expect(axios.post).not.toHaveBeenCalled()
+				expect(domainField(wrapper).element.value).toBe('alice.example.org')
+			})
+
+			it('says what was wrong with the domain under the field', async () => {
+				serverHas(handleIdentity())
+				axios.post.mockRejectedValue({ response: { status: 422, data: { error: 'alice.example.org does not name your account yet.' } } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('alice.example.org')
+				await buttonByText(wrapper, 'Check and use it').trigger('click')
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('alice.example.org does not name your account yet.')
+				expect(showError).not.toHaveBeenCalled()
+				expect(showSuccess).not.toHaveBeenCalled()
+				expect(domainField(wrapper).element.value).toBe('alice.example.org')
+			})
+
+			it('asks for the password again when the server says the confirmation ran out', async () => {
+				serverHas(handleIdentity())
+				axios.post.mockRejectedValue({ response: { status: 403 } })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('alice.example.org')
+				await buttonByText(wrapper, 'Check and use it').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Confirm your password again and retry.')
+			})
+
+			it('says so when the handle could not be set', async () => {
+				serverHas(handleIdentity())
+				axios.post.mockRejectedValue(new Error('offline'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('alice.example.org')
+				await buttonByText(wrapper, 'Check and use it').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Could not set the handle')
+			})
+
+			it('sets it on Enter without saving the account form', async () => {
+				serverHas(handleIdentity())
+				axios.post.mockResolvedValue({ data: handleIdentity(OWN) })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await domainField(wrapper).setValue('alice.example.org')
+				await domainField(wrapper).trigger('keydown', { key: 'Enter' })
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith(HANDLE, { handle: 'alice.example.org' })
+				expect(axios.patch).not.toHaveBeenCalled()
+			})
+
+			it('shows the domain in use, and nothing more while it still names the account', async () => {
+				serverHas(handleIdentity(OWN))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('Your handle is alice.example.org.')
+				expect(section(wrapper).text()).not.toContain('no longer names your account')
+				expect(buttonByText(wrapper, 'Use alice.cloud.example.org again')).toBeDefined()
+				expect(section(wrapper).find('input').exists()).toBe(false)
+			})
+
+			it('warns when the domain stopped naming the account', async () => {
+				serverHas(handleIdentity({ ...OWN, custom_handle_broken: true }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(section(wrapper).text()).toContain('alice.example.org no longer names your account. Bluesky shows it as invalid until the DNS record or file is back.')
+			})
+
+			it('goes back to the assigned handle after asking, and follows what the server answered', async () => {
+				serverHas(handleIdentity(OWN))
+				axios.delete.mockResolvedValue({ data: handleIdentity() })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await buttonByText(wrapper, 'Use alice.cloud.example.org again').trigger('click')
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(section(wrapper).text()).toContain('Bluesky shows alice.cloud.example.org as your handle again.')
+
+				await buttonByText(wrapper, 'Use it again').trigger('click')
+				await flushPromises()
+
+				expect(axios.delete).toHaveBeenCalledWith(HANDLE)
+				expect(block(wrapper).find('a.account-settings__code').text()).toBe('@alice.cloud.example.org')
+				expect(section(wrapper).text()).not.toContain('Your handle is alice.example.org.')
+				expect(domainField(wrapper).exists()).toBe(true)
+			})
+
+			it('keeps the domain when going back is called off', async () => {
+				serverHas(handleIdentity(OWN))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await buttonByText(wrapper, 'Use alice.cloud.example.org again').trigger('click')
+				await buttonByText(wrapper, 'Keep my domain').trigger('click')
+
+				expect(axios.delete).not.toHaveBeenCalled()
+				expect(buttonByText(wrapper, 'Use it again')).toBeUndefined()
+				expect(section(wrapper).text()).toContain('Your handle is alice.example.org.')
+			})
+
+			it('says so when the handle could not be changed back', async () => {
+				serverHas(handleIdentity(OWN))
+				axios.delete.mockRejectedValue(new Error('offline'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await buttonByText(wrapper, 'Use alice.cloud.example.org again').trigger('click')
+				await buttonByText(wrapper, 'Use it again').trigger('click')
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Could not change the handle')
+				expect(section(wrapper).text()).toContain('Your handle is alice.example.org.')
+			})
+
+			it('is not drawn while the account is paused on Bluesky', async () => {
+				serverHas(handleIdentity({ active: false }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(block(wrapper).exists()).toBe(true)
+				expect(section(wrapper).exists()).toBe(false)
+			})
+		})
+
 		describe('app passwords for Bluesky apps', () => {
 			const APP_PASSWORDS = '/index.php/apps/social/api/v1/social/bluesky/app-passwords'
 			const PASSWORD = 'abcd-efgh-ijkl-mnop'
