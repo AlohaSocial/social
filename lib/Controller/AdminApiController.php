@@ -161,6 +161,11 @@ class AdminApiController extends AdminApiControllerBase {
 	 * making the client send a second call for it leaves the two able to
 	 * disagree.
 	 *
+	 * A report about some other account is a 404 with nothing done, as on
+	 * Mastodon, which looks it up among the target's own reports: otherwise
+	 * any open report could be closed as a side effect of an unrelated
+	 * decision.
+	 *
 	 * @param string $type `silence`, `suspend` or `none`
 	 * @param string $text the moderator's note, kept as the comment on the
 	 *                     decision
@@ -183,6 +188,10 @@ class AdminApiController extends AdminApiControllerBase {
 			$this->initAdmin(['admin:write']);
 
 			$account = $this->actionable($id);
+			if ($report_id > 0) {
+				$this->adminApiService->assertReportConcerns($report_id, $account->getActorId());
+			}
+
 			$this->adminApiService->act($account, $type, $text, $report_id);
 
 			if ($report_id > 0) {

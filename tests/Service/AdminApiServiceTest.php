@@ -376,6 +376,17 @@ class AdminApiServiceTest extends TestCase {
 		$this->addToAssertionCount(1);
 	}
 
+	public function testAReportConcernsOnlyTheAccountItWasFiledAbout(): void {
+		$this->reportsRequest->method('getById')
+			->willReturn((new Report())->setId(4)->setAccountId(self::LOCAL));
+		$service = $this->service();
+
+		$service->assertReportConcerns(4, self::LOCAL);
+
+		$this->expectException(ReportNotFoundException::class);
+		$service->assertReportConcerns(4, self::REMOTE);
+	}
+
 	public function testANextcloudAdministratorAlwaysCounts(): void {
 		$this->groupManager->method('isAdmin')
 			->willReturnCallback(static fn (string $userId): bool => $userId === 'root');

@@ -195,6 +195,18 @@ class AdminApiService {
 		}
 	}
 
+	/**
+	 * Refuses a report that is not about the account being acted on, so that
+	 * a decision cannot close an unrelated report as a side effect.
+	 *
+	 * @throws ReportNotFoundException no such report, or not about this account
+	 */
+	public function assertReportConcerns(int $reportId, string $actorId): void {
+		if ($this->reportsRequest->getById($reportId)->getAccountId() !== $actorId) {
+			throw new ReportNotFoundException('report ' . $reportId . ' is not about this account');
+		}
+	}
+
 	/** The Nextcloud user behind a local account, or '' for anything else. */
 	private function localUserOf(string $actorId): string {
 		try {

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Controller;
 use OCA\Social\Controller\AdminApiController;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ModerationNotAllowedException;
+use OCA\Social\Exceptions\ReportNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\AdminAccount;
 use OCA\Social\Model\Client\AdminDomainBlock;
@@ -448,6 +449,20 @@ class AdminApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertEquals(new \stdClass(), $response->getData());
+	}
+
+	/** An unrelated report must not be closed as a side effect of this decision. */
+	public function testAReportAboutAnotherAccountIsNotFoundAndNothingIsDone(): void {
+		$this->adminApiService->method('account')->willReturn($this->account());
+		$this->adminApiService->expects($this->once())->method('assertReportConcerns')
+			->with(5, self::ACTOR)
+			->willThrowException(new ReportNotFoundException('report 5 is not about this account'));
+		$this->adminApiService->expects($this->never())->method('act');
+		$this->adminApiService->expects($this->never())->method('resolveReport');
+
+		$response = $this->controller()->accountAction('7', 'silence', 'enough', 5);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
 	}
 
 	public function testAnActionOnItsOwnResolvesNothing(): void {
