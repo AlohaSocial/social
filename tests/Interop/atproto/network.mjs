@@ -82,6 +82,8 @@ const addresses = {
 	bsky: network.bsky.url,
 	bskyDid: network.bsky.serverDid,
 	pdsDid: network.pds.ctx.cfg.service.did,
+	ozone: network.ozone?.url ?? '',
+	ozoneDid: network.ozone?.ctx?.cfg?.service?.did ?? '',
 }
 writeFileSync(NETWORK_FILE, JSON.stringify(addresses, null, 2))
 console.log('dev network up', addresses)

@@ -28,6 +28,8 @@ final class DevNetwork {
 	public string $pds = '';
 	public string $appView = '';
 	public string $relay = '';
+	public string $ozone = '';
+	public string $ozoneDid = '';
 
 	/** null when the job did not start the network */
 	public static function fromEnvironment(): ?self {
@@ -45,6 +47,8 @@ final class DevNetwork {
 		$network->pds = rtrim((string)$addresses['pds'], '/');
 		$network->appView = rtrim((string)$addresses['bsky'], '/');
 		$network->relay = rtrim((string)getenv('ATPROTO_RELAY_URL'), '/');
+		$network->ozone = rtrim((string)($addresses['ozone'] ?? ''), '/');
+		$network->ozoneDid = (string)($addresses['ozoneDid'] ?? '');
 
 		return $network;
 	}
@@ -209,6 +213,25 @@ final class DevNetwork {
 			'collection' => 'app.bsky.feed.post',
 			'rkey' => substr($uri, (int)strrpos($uri, '/') + 1),
 		], true);
+	}
+
+	/**
+	 * The reports the development moderation service received, newest first,
+	 * as its administrator sees them.
+	 *
+	 * @return list<array>
+	 */
+	public function moderationReports(): array {
+		if ($this->ozone === '') {
+			return [];
+		}
+		[$status, $body] = $this->request('GET', $this->ozone . '/xrpc/tools.ozone.moderation.queryEvents?types=' . rawurlencode('tools.ozone.moderation.defs#modEventReport') . '&limit=50', null, [
+			'Accept: application/json',
+			'Authorization: Basic ' . base64_encode('admin:admin-pass'),
+		]);
+		$decoded = json_decode($body, true);
+
+		return $status === 200 && is_array($decoded['events'] ?? null) ? $decoded['events'] : [];
 	}
 
 	/** The signed-in user likes a post. */
