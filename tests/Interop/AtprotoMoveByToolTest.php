@@ -27,7 +27,8 @@ use PHPUnit\Framework\TestCase;
  * test, as the tool, makes the account on this server with the code and a
  * token the development PDS signs, sends the repository and the blobs,
  * has the old PDS sign the operation this server recommends, submits it
- * here and activates the account, then switches it off on the old PDS.
+ * here and activates the account, sees the AppView follow it here, then
+ * switches it off on the old PDS.
  */
 class AtprotoMoveByToolTest extends TestCase {
 	private DevNetwork $network;
@@ -81,6 +82,15 @@ class AtprotoMoveByToolTest extends TestCase {
 		$this->assertSame(200, $status, 'submitPlcOperation: ' . json_encode($answer));
 		[$status, $answer] = $here->procedure('com.atproto.server.activateAccount', []);
 		$this->assertSame(200, $status, 'activateAccount: ' . json_encode($answer));
+		// before the old account is switched off: the dev AppView reads each PDS
+		// directly, with no relay to drop the old host's events for a DID that
+		// moved, so its deactivation could otherwise hide the account
+		$seen = null;
+		$followed = $this->network->await(function () use ($did, $before, &$seen) {
+			$seen = $this->network->profile($did);
+			return ($seen['handle'] ?? '') === $before->handle ? true : null;
+		});
+		$this->assertNotNull($followed, 'the AppView follows the DID here, but shows ' . json_encode($seen));
 		[$status] = $this->network->asUser('POST', 'com.atproto.server.deactivateAccount', []);
 		$this->assertSame(200, $status);
 
@@ -96,8 +106,6 @@ class AtprotoMoveByToolTest extends TestCase {
 		$texts = array_map(static fn ($record): string => (string)(DagCbor::decode($record->bytes)['text'] ?? ''), Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50));
 		$this->assertContains($words, $texts, 'the posts are here');
 		$this->assertSame($picture, $here->blob($did, $pictureCid), 'the picture is served here, byte for byte');
-
-		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($did)['handle'] ?? '') === $before->handle ? true : null), 'the AppView follows the DID here');
 	}
 
 	/** A small PNG, made here so the test carries no binary file. */
