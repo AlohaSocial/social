@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Reader\NotificationPoller;
 use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\BackgroundJob\IJobList;
 use OCP\Server;
@@ -50,7 +51,8 @@ class AtprotoReadingTest extends TestCase {
 		// resolving a handle with no `@` makes a cached actor out of the
 		// AppView's profile; following it is accepted at once and watched
 		$bobId = $this->network->await(fn () => $this->tryResolve($bobHandle));
-		$this->assertSame('https://bsky.app/profile/' . $bobDid, $bobId, 'the account id is the bsky.app profile by DID');
+		$this->assertNotNull($bobId, 'the handle resolved');
+		$this->assertSame('https://bsky.app/profile/' . $bobDid, Server::get(CacheActorService::class)->getFromAccount($bobHandle, false)->getId(), 'the cached actor is the bsky.app profile by DID');
 		$this->alice->follow($bobId);
 		$this->assertTrue($this->alice->relationship($bobId)['following']);
 		$account = $this->alice->account($bobId);
