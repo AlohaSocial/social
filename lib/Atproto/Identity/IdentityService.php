@@ -206,6 +206,27 @@ class IdentityService {
 	}
 
 	/**
+	 * Gives the account another handle, or with '' its assigned one back:
+	 * the DID document names it, and the firehose tells the network to
+	 * resolve it again. The handle is checked by the caller.
+	 *
+	 * @return Identity the identity as it is now
+	 * @throws AtprotoException
+	 */
+	public function useCustomHandle(Identity $identity, string $handle): Identity {
+		$this->identityRequest->setCustomHandle($identity->did, $handle);
+		$updated = $this->identityRequest->getByDid($identity->did);
+		$keys = [$this->instanceKeys->rotationKey()->didKey()];
+		if ($updated->recoveryPublic !== '') {
+			$keys[] = $updated->recoveryPublic;
+		}
+		$this->update($updated, $keys, $updated->handle, $this->config->pdsEndpoint());
+		$this->events->identity($updated->did, $updated->handle);
+
+		return $updated;
+	}
+
+	/**
 	 * Ends the identity for good: the DID is tombstoned at the directory,
 	 * the repository and its blobs are dropped, and the firehose says so.
 	 * The row stays, so neither the DID nor the handle is issued again.

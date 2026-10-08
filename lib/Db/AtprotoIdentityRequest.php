@@ -19,7 +19,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * The AT Protocol identities of local actors, and the instance's own keys.
  */
 class AtprotoIdentityRequest extends CoreRequestBuilder {
-	private const FIELDS = ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'creation'];
+	private const FIELDS = ['id', 'actor_id', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public', 'state', 'moved_from_pds', 'creation', 'custom_handle', 'custom_handle_failures'];
 
 	/**
 	 * @param string $sealedSigningKey the private half, already sealed
@@ -72,17 +72,20 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 	 */
 	public function getByHandle(string $handle): Identity {
 		$qb = $this->getQueryBuilder();
+		$handle = $qb->createNamedParameter(strtolower($handle));
 		$qb->select(...self::FIELDS)->from(self::TABLE_ATPROTO_IDENTITY)
-			->where($qb->expr()->eq('handle', $qb->createNamedParameter(strtolower($handle))));
+			->where($qb->expr()->orX($qb->expr()->eq('handle', $handle), $qb->expr()->eq('custom_handle', $handle)))
+			->setMaxResults(1);
 
 		return $this->one($qb);
 	}
 
-	/** whether the handle is already somebody's, however it is cased */
+	/** whether the handle is already somebody's, assigned or custom, however it is cased */
 	public function handleExists(string $handle): bool {
 		$qb = $this->getQueryBuilder();
+		$handle = $qb->createNamedParameter(strtolower($handle));
 		$qb->select('id')->from(self::TABLE_ATPROTO_IDENTITY)
-			->where($qb->expr()->eq('handle', $qb->createNamedParameter(strtolower($handle))))
+			->where($qb->expr()->orX($qb->expr()->eq('handle', $handle), $qb->expr()->eq('custom_handle', $handle)))
 			->setMaxResults(1);
 		$cursor = $qb->executeQuery();
 		$exists = $cursor->fetch() !== false;
@@ -136,6 +139,58 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 			->set('updated', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
 			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		$qb->executeStatement();
+	}
+
+	/**
+	 * Sets or, with '', clears an account's custom handle; it counts as
+	 * checked now.
+	 */
+	public function setCustomHandle(string $did, string $handle): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_ATPROTO_IDENTITY)
+			->set('custom_handle', $qb->createNamedParameter(strtolower($handle)))
+			->set('custom_handle_checked', $qb->createNamedParameter($handle === '' ? null : new DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->set('custom_handle_failures', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+			->set('updated', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->executeStatement();
+	}
+
+	/**
+	 * Records a check of a custom handle: a failure counts up, a success
+	 * starts the count again.
+	 */
+	public function customHandleChecked(string $did, bool $ok): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_ATPROTO_IDENTITY)
+			->set('custom_handle_checked', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->set('custom_handle_failures', $ok ? $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT) : $qb->createFunction('custom_handle_failures + 1'))
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
+		$qb->executeStatement();
+	}
+
+	/**
+	 * @return Identity[] the active identities with a custom handle not checked since a time, oldest check first
+	 */
+	public function getCustomHandlesDue(int $before, int $limit): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select(...self::FIELDS)->from(self::TABLE_ATPROTO_IDENTITY)
+			->where($qb->expr()->neq('custom_handle', $qb->createNamedParameter('')))
+			->andWhere($qb->expr()->eq('state', $qb->createNamedParameter(Identity::STATE_ACTIVE)))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->isNull('custom_handle_checked'),
+				$qb->expr()->lt('custom_handle_checked', $qb->createNamedParameter(new DateTime('@' . $before), IQueryBuilder::PARAM_DATE)),
+			))
+			->orderBy('custom_handle_checked', 'asc')
+			->setMaxResults($limit);
+		$identities = [];
+		$cursor = $qb->executeQuery();
+		while ($row = $cursor->fetch()) {
+			$identities[] = $this->identity($row);
+		}
+		$cursor->closeCursor();
+
+		return $identities;
 	}
 
 	public function setRecoveryPublic(string $did, string $recoveryPublic): void {
@@ -238,17 +293,22 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 	}
 
 	private function identity(array $row): Identity {
+		$custom = (string)($row['custom_handle'] ?? '');
+
 		return new Identity(
 			(int)$row['id'],
 			(string)$row['actor_id'],
 			(string)$row['did'],
-			(string)$row['handle'],
+			$custom !== '' ? $custom : (string)$row['handle'],
 			(string)$row['signing_key'],
 			(string)$row['signing_public'],
 			(string)$row['recovery_public'],
 			(string)$row['state'],
 			(string)$row['moved_from_pds'],
 			self::time($row['creation']),
+			(string)$row['handle'],
+			$custom,
+			(int)($row['custom_handle_failures'] ?? 0),
 		);
 	}
 
