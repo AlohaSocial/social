@@ -444,4 +444,22 @@ class CacheTest extends TestCase {
 
 		$this->job->start($this->jobList);
 	}
+
+	/**
+	 * Each step reads the actors it touches afresh: cron.php is one process
+	 * for every job, and an actor memoised earlier would hide what a step wrote.
+	 */
+	public function testTheActorMemoIsForgottenBeforeEveryStep(): void {
+		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([]);
+		$forgotten = 0;
+		$this->cacheActorService->method('forgetMemoised')
+			->willReturnCallback(function () use (&$forgotten): void {
+				$forgotten++;
+			});
+
+		$this->job->start($this->jobList);
+
+		$steps = (new \ReflectionMethod(Cache::class, 'steps'))->invoke($this->job, time() + 60);
+		$this->assertSame(count($steps), $forgotten);
+	}
 }

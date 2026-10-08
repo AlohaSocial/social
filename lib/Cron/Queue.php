@@ -12,6 +12,7 @@ namespace OCA\Social\Cron;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\StreamQueueService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -57,6 +58,7 @@ class Queue extends TimedJob {
 		StreamQueueService $streamQueueService,
 		ActivityService $activityService,
 		LoggerInterface $logger,
+		private ?CacheActorService $cacheActorService = null,
 	) {
 		parent::__construct($time);
 		$this->setInterval(12 * 60);
@@ -103,6 +105,9 @@ class Queue extends TimedJob {
 				break;
 			}
 
+			// cron.php runs every job in one process, so what an earlier batch
+			// resolved — a sender's key among it — is forgotten between batches
+			$this->cacheActorService?->forgetMemoised();
 			$this->activityService->manageInit();
 			$this->activityService->manageRequests(
 				$requests,
@@ -173,6 +178,7 @@ class Queue extends TimedJob {
 		// twice.
 		$seen = [];
 		for ($batch = 0; $batch < self::MAX_BATCHES && $this->time->getTime() < $deadline; $batch++) {
+			$this->cacheActorService?->forgetMemoised();
 			$fresh = 0;
 			foreach ($this->streamQueueService->getRequestStandby() as $item) {
 				if ($this->time->getTime() >= $deadline) {

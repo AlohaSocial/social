@@ -272,6 +272,10 @@ class Cache extends TimedJob {
 	 * one broke.
 	 */
 	private function step(string $step, callable $work): void {
+		// each step reads the actors it touches afresh: cron.php is one process
+		// for every job it runs, and an actor memoised by an earlier step
+		// would hide what that step wrote
+		$this->cacheActorService->forgetMemoised();
 		try {
 			$work();
 		} catch (\Throwable $e) {

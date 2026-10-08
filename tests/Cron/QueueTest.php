@@ -15,6 +15,7 @@ use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Model\StreamQueue;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\StreamQueueService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -367,5 +368,35 @@ class QueueTest extends TestCase {
 		$this->streamQueueService->expects($this->never())->method('getRequestStandby');
 
 		$this->job->start($this->jobList);
+	}
+
+	/**
+	 * cron.php runs every job in one process, so the actors one batch
+	 * resolved — a sender's key among them — are forgotten before the next.
+	 */
+	public function testTheActorMemoIsForgottenBeforeEachBatch(): void {
+		$cacheActorService = $this->createMock(CacheActorService::class);
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$job = new Queue(
+			$time,
+			$this->requestQueueService,
+			$this->streamQueueService,
+			$this->activityService,
+			$this->logger,
+			$cacheActorService
+		);
+		$this->requestQueueService->method('getRequestStandby')->willReturnOnConsecutiveCalls(
+			[(new RequestQueue())->setId(1)],
+			[(new RequestQueue())->setId(2)],
+			[],
+		);
+		$this->streamQueueService->method('getRequestStandby')->willReturn([]);
+		$this->draining(fn () => null);
+
+		// two delivery batches and the inbound queue
+		$cacheActorService->expects($this->exactly(3))->method('forgetMemoised');
+
+		$job->start($this->jobList);
 	}
 }
