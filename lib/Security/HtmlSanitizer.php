@@ -217,6 +217,7 @@ final class HtmlSanitizer {
 
 		$result = '';
 		foreach ($root->childNodes as $child) {
+			/** @psalm-suppress InvalidArgument the node comes from this document, so from the same parser */
 			$result .= $document->saveHTML($child);
 		}
 
@@ -240,6 +241,7 @@ final class HtmlSanitizer {
 				self::sanitizeNode($child, $base);
 			} elseif (!self::isText($child)) {
 				// Comments, processing instructions, CDATA: nothing a post needs
+				/** @psalm-suppress InvalidArgument a child comes from the same parser as its parent */
 				$parent->removeChild($child);
 			}
 		}
