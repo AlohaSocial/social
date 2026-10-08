@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\Server;
@@ -60,12 +61,24 @@ class AtprotoAppsTest extends TestCase {
 		$this->assertSame(200, $status, 'the proxied timeline: ' . json_encode($timeline));
 		$this->assertArrayHasKey('feed', $timeline);
 
+		// a picture is stored as any upload, and served under the CID the
+		// answer names, which is the stored copy's
+		[$status, $uploaded] = $app->upload(self::picture(), 'image/png');
+		$this->assertSame(200, $status, json_encode($uploaded));
+		$cid = (string)$uploaded['blob']['ref']['$link'];
+		$served = $app->blob($identity->did, $cid);
+		$this->assertNotSame('', $served, 'getBlob serves it');
+		$this->assertSame($cid, Cid::forRaw($served)->toString(), 'under the CID of its bytes');
+
 		// a post written by the app is a Social post, and reaches the AppView
 		$words = 'Posted from a Bluesky app ' . bin2hex(random_bytes(4));
 		[$status, $created] = $app->procedure('com.atproto.repo.createRecord', [
 			'repo' => $identity->did,
 			'collection' => 'app.bsky.feed.post',
-			'record' => ['$type' => 'app.bsky.feed.post', 'text' => $words, 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')],
+			'record' => [
+				'$type' => 'app.bsky.feed.post', 'text' => $words, 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+				'embed' => ['$type' => 'app.bsky.embed.images', 'images' => [['alt' => 'A red square', 'image' => $uploaded['blob']]]],
+			],
 		]);
 		$this->assertSame(200, $status, json_encode($created));
 		$this->assertStringStartsWith('at://' . $identity->did . '/app.bsky.feed.post/', $created['uri']);
@@ -81,6 +94,9 @@ class AtprotoAppsTest extends TestCase {
 			return null;
 		});
 		$this->assertNotNull($onAppView, 'and on the AppView');
+		$this->assertCount(1, $mine[0]['media_attachments'] ?? [], 'with its picture here');
+		$this->assertSame('A red square', $mine[0]['media_attachments'][0]['description'] ?? null);
+		$this->assertSame('app.bsky.embed.images#view', $onAppView['embed']['$type'] ?? null, 'and there');
 
 		// a like of a dev user's post, not read here before
 		$this->network->createUser('appsbob' . bin2hex(random_bytes(3)));
@@ -112,5 +128,15 @@ class AtprotoAppsTest extends TestCase {
 		$this->assertSame(200, $status);
 		[$status] = $app->query('com.atproto.server.getSession');
 		$this->assertGreaterThanOrEqual(400, $status, 'the access token went with the session');
+	}
+
+	/** A small PNG, made here so the test carries no binary file. */
+	private static function picture(): string {
+		$image = imagecreatetruecolor(64, 48);
+		imagefill($image, 0, 0, (int)imagecolorallocate($image, 200, 30, 40));
+		ob_start();
+		imagepng($image);
+
+		return (string)ob_get_clean();
 	}
 }

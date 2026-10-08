@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
+use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\BlueskyIds;
@@ -69,6 +70,7 @@ class WriteService {
 		private ReportService $reports,
 		private DocumentService $documents,
 		private Publisher $publisher,
+		private PictureService $pictures,
 		private InteractionPublisher $interactions,
 		private RepositoryService $repositories,
 		private LocalRecordResolver $local,
@@ -191,8 +193,10 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.uploadBlob`: a picture for a post to come, stored as
-	 * any upload of the account is, and named by the CID of its bytes.
+	 * `com.atproto.repo.uploadBlob`: stored as any upload is, and named by
+	 * the CID of what was stored. Storing takes the camera's metadata off and
+	 * may re-encode a picture to fit Bluesky, so the bytes the app sent are
+	 * not the bytes `getBlob` serves, and the answer names the stored ones.
 	 *
 	 * @throws XrpcException
 	 */
@@ -204,9 +208,10 @@ class WriteService {
 		if ($path === false) {
 			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
 		}
+		$actor = $this->actor($session);
 		try {
 			file_put_contents($path, $bytes);
-			$document = $this->documents->storeLocalAttachment($this->actor($session), $path);
+			$document = $this->documents->storeLocalAttachment($actor, $path);
 		} catch (Throwable $e) {
 			$this->logger->notice('Blob from a Bluesky app refused', ['exception' => $e]);
 
@@ -214,14 +219,16 @@ class WriteService {
 		} finally {
 			@unlink($path);
 		}
-		$cid = Cid::forRaw($bytes);
-		$this->blobs->put(new \OCA\Social\Atproto\Model\BlobRef($session->identity->did, $cid, $document->getId(), $document->getMimeType() !== '' ? $document->getMimeType() : $mime, strlen($bytes)));
+		$blob = $this->pictures->blobFor($session->identity, $actor, $document)['blob'] ?? null;
+		if ($blob === null) {
+			throw XrpcException::invalidRequest('This file cannot be shown on Bluesky');
+		}
 
 		return ['blob' => [
 			'$type' => 'blob',
-			'ref' => ['$link' => $cid->toString()],
-			'mimeType' => $document->getMimeType() !== '' ? $document->getMimeType() : $mime,
-			'size' => strlen($bytes),
+			'ref' => ['$link' => $blob->cid->toString()],
+			'mimeType' => $blob->mime,
+			'size' => $blob->size,
 		]];
 	}
 

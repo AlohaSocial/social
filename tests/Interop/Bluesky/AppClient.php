@@ -62,6 +62,18 @@ final class AppClient {
 	}
 
 	/**
+	 * The bytes of a blob this server serves, as anyone reads them.
+	 */
+	public function blob(string $did, string $cid): string {
+		$handle = curl_init($this->pds . '/xrpc/com.atproto.sync.getBlob?' . http_build_query(['did' => $did, 'cid' => $cid]));
+		curl_setopt($handle, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($handle, CURLOPT_TIMEOUT, 60);
+		$answer = curl_exec($handle);
+
+		return (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE) === 200 && is_string($answer) ? $answer : '';
+	}
+
+	/**
 	 * @return array{0: int, 1: array}
 	 */
 	private function call(string $verb, string $method, array|string|null $body, string $token, string $mime = 'application/json'): array {

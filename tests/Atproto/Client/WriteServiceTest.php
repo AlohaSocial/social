@@ -11,12 +11,14 @@ namespace OCA\Social\Tests\Atproto\Client;
 
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\RepoHead;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
+use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
@@ -26,6 +28,7 @@ use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Post;
@@ -65,6 +68,10 @@ class WriteServiceTest extends TestCase {
 	private PostStore $postStore;
 	/** @var Publisher&MockObject */
 	private Publisher $publisher;
+	/** @var PictureService&MockObject */
+	private PictureService $pictures;
+	/** @var DocumentService&MockObject */
+	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
 	private LocalRecordResolver $local;
 	private WriteService $writes;
@@ -89,6 +96,8 @@ class WriteServiceTest extends TestCase {
 		$this->repositories->method('getHead')->willReturn(new RepoHead(self::DID, 'bafyreicommit', '3kzrev', 3, 0, 0));
 		$this->postStore = $this->createMock(PostStore::class);
 		$this->publisher = $this->createMock(Publisher::class);
+		$this->pictures = $this->createMock(PictureService::class);
+		$this->documents = $this->createMock(DocumentService::class);
 		$this->local = $this->createMock(LocalRecordResolver::class);
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
 			'at://' . self::DID . '/app.bsky.feed.post/3kmine' => 'https://social.test/@alice/1',
@@ -97,8 +106,8 @@ class WriteServiceTest extends TestCase {
 		});
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
-			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->createMock(DocumentService::class),
-			$this->publisher, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
+			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->documents,
+			$this->publisher, $this->pictures, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->createMock(AtprotoBlobRequest::class), $this->createMock(IURLGenerator::class), new NullLogger(),
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
@@ -164,6 +173,28 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame(400, $e->status);
 			$this->assertStringContainsString('waiting for a moderator', $e->getMessage());
 		}
+	}
+
+	public function testAnUploadIsNamedByTheCidOfWhatWasStored(): void {
+		$stored = new Document();
+		$stored->setId('https://social.test/documents/local/1');
+		$this->documents->expects($this->once())->method('storeLocalAttachment')->with($this->alice)->willReturn($stored);
+		$cid = Cid::forRaw('the stored bytes, metadata removed');
+		$this->pictures->expects($this->once())->method('blobFor')->with($this->session->identity, $this->alice, $stored)
+			->willReturn(['blob' => new BlobRef(self::DID, $cid, $stored->getId(), 'image/jpeg', 34), 'width' => 10, 'height' => 10]);
+
+		$answer = $this->writes->upload($this->session, 'the bytes the app sent, with GPS', 'image/jpeg');
+
+		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 34], $answer['blob']);
+	}
+
+	public function testAnUploadBlueskyCannotShowIsRefused(): void {
+		$this->documents->method('storeLocalAttachment')->willReturn(new Document());
+		$this->pictures->method('blobFor')->willReturn(null);
+
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('cannot be shown on Bluesky');
+		$this->writes->upload($this->session, 'bytes', 'application/pdf');
 	}
 
 	public function testALikeOfABlueskyPostNotReadHereFetchesItFirst(): void {
