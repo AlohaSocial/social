@@ -519,13 +519,7 @@ class StreamQueueService {
 	 * NoteInterface::updateDetails() counts them when the parent came first.
 	 */
 	private function countStoredReplies(Stream $note): void {
-		$stored = $this->streamRequest->countRepliesTo($note->getId());
-		if ($stored === 0) {
-			return;
-		}
-
-		$note->setDetailInt(Details::REPLIES, $note->getDetailInt(Details::REMOTE_REPLIES) + $stored);
-		$this->streamRequest->updateDetails($note);
+		$this->streamRequest->recount($note, Details::REPLIES);
 	}
 
 	/**

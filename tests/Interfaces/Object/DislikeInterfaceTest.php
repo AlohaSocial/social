@@ -57,16 +57,15 @@ class DislikeInterfaceTest extends TestCase {
 		$this->actionsRequest->method('getActionFromItem')
 			->willThrowException(new ActionDoesNotExistException());
 		$this->actionsRequest->expects($this->once())->method('save');
-		$this->actionsRequest->method('countActions')->with(self::POST, 'Dislike')->willReturn(4);
 
 		$post = new Note();
 		$post->setId(self::POST);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->streamRequest->expects($this->once())->method('updateDetails');
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($post), 'dislikes');
+		$this->streamRequest->expects($this->never())->method('updateDetails');
 
 		$this->handler->processIncomingRequest($this->dislike());
-
-		$this->assertSame(4, $post->getDetailInt('dislikes'));
 	}
 
 	/** A redelivered dislike is the same dislike, not a second one. */
@@ -86,17 +85,16 @@ class DislikeInterfaceTest extends TestCase {
 
 	public function testUndoingADislikeRecountsThePost(): void {
 		$this->actionsRequest->expects($this->once())->method('delete');
-		$this->actionsRequest->method('countActions')->willReturn(3);
 		$post = new Note();
 		$post->setId(self::POST);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($post), 'dislikes');
 
 		$undo = new \OCA\Social\Model\ActivityPub\Activity\Undo();
 		$undo->setOrigin('peertube.example', SignatureService::ORIGIN_HEADER, time());
 
 		$this->handler->activity($undo, $this->dislike());
-
-		$this->assertSame(3, $post->getDetailInt('dislikes'));
 	}
 
 	/**

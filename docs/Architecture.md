@@ -178,7 +178,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_instance` | Known federated instances (version, metadata) |
 | `social_req_queue` | Outbound ActivityPub delivery queue, indexed for the drain's own sort on `(status, priority, tries, last)` |
 | `social_host_breaker` | The delivery circuit breaker: one row per peer that failed within the last hour, with its consecutive failures and the moment it is worth asking again, in unix seconds. Read once per drain by `ActivityService` and by `StreamQueueService` (`HostBreaker`), so a row addressed to a dead peer is held back without spending a timeout; cleared when the peer answers, forgotten an hour after its last failure (`Cron\Queue`) |
-| `social_stream` | Core content table: posts, notes, activities. Nine JSON-in-TEXT columns (`to_array`, `cc`, `bcc`, `hashtags`, `tags`, `details`, `instances`, `attachments`, `cache`) beside the scalar ones; `source` holds the ActivityPub wire object verbatim, and `archived` — a post its author has put away |
+| `social_stream` | Core content table: posts, notes, activities. Nine JSON-in-TEXT columns (`to_array`, `cc`, `bcc`, `hashtags`, `tags`, `details`, `instances`, `attachments`, `cache`) beside the scalar ones; `source` holds the ActivityPub wire object verbatim, and `archived` — a post its author has put away. `count_replies`, `count_likes`, `count_boosts` and `count_dislikes` (INTEGER, default 0) are the post's counters, written only by `StreamRequest::recount()` and laid over the matching `details` keys on read |
 | `social_discover_cat` | The subjects an instance says Explore is about: a name and the hashtags it means, in the order an administrator put them in |
 | `social_trend_review` | What a moderator has decided about something that is trending: one row per rejected (or approved) tag, link or status |
 | `social_relay` | The relays this instance subscribes to: one row per subscription, with the `Follow` it sent, the inbox to deliver to and whether the relay answered |
@@ -2389,10 +2389,29 @@ compared the number with the thread. Both deletes now recount:
 `StreamService::deleteLocalItem()` for your own post, which never passes through
 that interface at all. The arithmetic itself is `StreamRequest::recountReplies()`
 — `remote_replies` (what the post's own instance reported, which nothing here can
-see) plus `countRepliesTo()` — which is a recount rather than a bump, because the
+see) plus the replies stored here, counted in the same statement — which is a recount rather than a bump, because the
 two things that move the number cannot both be expressed as one, and a recount
 repairs a count that has already drifted instead of tracking one. It runs after
 the row is gone, or it counts the reply it has just removed.
+
+**The counters are columns** (`Version1000Date20261008000600`). Replies, likes,
+boosts and dislikes used to be keys of the `details` JSON, and every writer of
+that blob — a like, a boost, a reply, a dislike, the remote-count refresh, but
+also a quote approval or a reply approval — read the whole of it and wrote the
+whole of it back, so two landing on one post together kept whichever wrote last.
+Each counter is now a column of `social_stream`, and `StreamRequest::recount()`
+is its one writer: `SET count_x = <origin's half> + (SELECT COUNT(*) …)` in a
+single statement, so no writer carries a number it counted earlier and the last
+statement to run includes everything committed before it. Replies are counted
+from the table being updated, through a derived table (`SELECT c FROM (SELECT
+COUNT(*) AS c …)`), which is what MySQL needs to allow that. The origin's halves
+(`remote_likes`, `remote_boosts`, `remote_replies`) are absolute numbers written
+by `RemoteCountService` and stay in `details`. `Stream::importFromDatabase()` lays
+the columns over the `details` keys, so every reader — the client and Mastodon
+APIs, the ActivityPub collections, statistics, the annual report — is unchanged;
+a column at zero adds no key the blob did not have. The JSON keys are no longer
+written by the counter writers and go stale; nothing reads them past the overlay.
+The upgrade fills the columns from the JSON in pages of `nid`.
 
 **A post is a link to itself.** Pressing anywhere on a post in a timeline opens
 the post with its replies — the card, its picture, its video. `TimelinePost`

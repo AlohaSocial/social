@@ -148,6 +148,18 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 */
 	public const REMOTE_COUNT_CEILING = 10000000;
 
+	/**
+	 * The counters that are columns of `social_stream`: `details` key => column.
+	 * Written by `StreamRequest::recount()`, read back over `details` by
+	 * `importFromDatabase()`.
+	 */
+	public const COUNTER_COLUMNS = [
+		Details::REPLIES => 'count_replies',
+		Details::LIKES => 'count_likes',
+		Details::BOOSTS => 'count_boosts',
+		Details::DISLIKES => 'count_dislikes',
+	];
+
 	/** The interactions an author can speak about, in this app's own names. */
 	public const INTERACTION_REPLY = 'reply';
 	public const INTERACTION_BOOST = 'boost';
@@ -1638,6 +1650,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$this->setAttributedTo($this->validate(self::AS_ID, 'attributed_to', $data, ''));
 		$this->setInReplyTo($this->validate(self::AS_ID, 'in_reply_to', $data));
 		$this->setDetailsAll($this->getArray('details', $data, []));
+		$this->overlayCounters($data);
 
 		// Five fields that used to be read out of the stored wire object and
 		// nowhere else, because none of them had a column;
@@ -1733,6 +1746,29 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$cache = new Cache();
 		$cache->import($this->getArray('cache', $data, []));
 		$this->setCache($cache);
+	}
+
+	/**
+	 * The counter columns, laid over the keys of `details` they replaced —
+	 * which is where every reader of a count still asks for it.
+	 *
+	 * The JSON keys stop moving once the column exists, so the column wins
+	 * wherever the row has one. A column at zero adds no key the blob did not
+	 * have, which keeps a post nobody has interacted with reading exactly as
+	 * it did.
+	 */
+	private function overlayCounters(array $data): void {
+		$details = $this->getDetailsAll();
+		foreach (self::COUNTER_COLUMNS as $key => $column) {
+			if (!array_key_exists($column, $data) || !is_numeric($data[$column])) {
+				continue;
+			}
+
+			$value = max(0, (int)$data[$column]);
+			if ($value > 0 || array_key_exists($key, $details)) {
+				$this->setDetailInt($key, $value);
+			}
+		}
 	}
 
 	#[\Override]

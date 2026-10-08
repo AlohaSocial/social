@@ -153,7 +153,10 @@ class RemoteCountService {
 		$this->applyCount($post, Details::BOOSTS, Details::REMOTE_BOOSTS, Stream::statedCount($data, 'shares'), $localBoosts);
 		$this->applyCount($post, Details::REPLIES, Details::REMOTE_REPLIES, Stream::statedCount($data, 'replies'), $localReplies);
 
+		// the origin's halves are `details` keys, the totals are columns that
+		// add what is counted here to them, in the statement that writes them
 		$this->streamRequest->updateDetails($post, $when);
+		$this->streamRequest->recount($post, Details::LIKES, Details::BOOSTS, Details::REPLIES);
 
 		return true;
 	}

@@ -24,6 +24,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
@@ -120,15 +121,14 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 		$this->noNotificationYet();
 		$post = $this->post(true, 2);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->actionsRequest->method('countActions')->with(self::POST, Like::TYPE)->willReturn(3);
 
-		$updated = null;
-		$this->capture($this->streamRequest, 'updateDetails', $updated);
+		// recounted in the statement that stores it, never written as a number
+		// counted beforehand: see StreamRecountTest
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($post), Details::LIKES);
+		$this->streamRequest->expects($this->never())->method('updateDetails');
 
 		$this->handler->processIncomingRequest($this->incomingLike());
-
-		$this->assertSame($post, $updated);
-		$this->assertSame(5, $post->getDetailInt('likes'));
 	}
 
 	public function testLikeOnALocalPostNotifiesItsAuthor(): void {
@@ -171,7 +171,7 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 		$this->noStoredLike();
 		$this->streamRequest->method('getStreamById')->willReturn($this->post(false));
 
-		$this->streamRequest->expects($this->once())->method('updateDetails');
+		$this->streamRequest->expects($this->once())->method('recount');
 		$this->notificationInterface->expects($this->never())->method('save');
 		$this->notificationInterface->expects($this->never())->method('update');
 
@@ -183,7 +183,7 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 		$this->actionsRequest->method('getActionFromItem')->willReturn($like);
 
 		$this->actionsRequest->expects($this->never())->method('save');
-		$this->streamRequest->expects($this->never())->method('updateDetails');
+		$this->streamRequest->expects($this->never())->method('recount');
 
 		$this->handler->processIncomingRequest($like);
 	}
@@ -202,7 +202,7 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
 
 		$this->actionsRequest->expects($this->once())->method('save');
-		$this->streamRequest->expects($this->never())->method('updateDetails');
+		$this->streamRequest->expects($this->never())->method('recount');
 		$this->notificationInterface->expects($this->never())->method('save');
 
 		$this->handler->processIncomingRequest($this->incomingLike());
@@ -221,15 +221,13 @@ class LikeInterfaceTest extends ActivityPubTestCase {
 		$undo = $this->incoming(Undo::TYPE, self::REMOTE_URL . '/undo/1', $this->bob->getId(), $like);
 		$post = $this->post(true, 1);
 		$this->streamRequest->method('getStreamById')->willReturn($post);
-		$this->actionsRequest->method('countActions')->willReturn(0);
 		$this->noNotificationYet();
 
 		$this->actionsRequest->expects($this->once())->method('delete')->with($this->identicalTo($like));
-		$this->streamRequest->expects($this->once())->method('updateDetails')->with($this->identicalTo($post));
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($post), Details::LIKES);
 
 		$this->handler->activity($undo, $like);
-
-		$this->assertSame(1, $post->getDetailInt('likes'));
 	}
 
 	public function testUndoRemovesTheLikerFromTheNotificationAndDropsItWhenNobodyIsLeft(): void {

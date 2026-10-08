@@ -248,11 +248,7 @@ class AnnounceInterface extends AbstractActivityPubInterface implements IActivit
 	}
 
 	private function updateDetails(Stream $post): void {
-		$remoteBoosts = $post->getDetailInt(Details::REMOTE_BOOSTS);
-		$localBoosts = $this->actionsRequest->countActions($post->getId(), Announce::TYPE);
-		$post->setDetailInt(Details::BOOSTS, $remoteBoosts + $localBoosts);
-
-		$this->streamRequest->updateDetails($post);
+		$this->streamRequest->recount($post, Details::BOOSTS);
 	}
 
 	/**

@@ -103,8 +103,7 @@ class DislikeInterface extends AbstractActivityPubInterface implements IActivity
 	private function recount(string $objectId): void {
 		try {
 			$post = $this->streamRequest->getStreamById($objectId, false, ACore::FORMAT_LOCAL);
-			$post->setDetailInt(Details::DISLIKES, $this->actionsRequest->countActions($objectId, Dislike::TYPE));
-			$this->streamRequest->updateDetails($post);
+			$this->streamRequest->recount($post, Details::DISLIKES);
 		} catch (Exception $e) {
 			// a dislike of a post this instance does not hold: the row is
 			// stored and there is nothing here to count it onto

@@ -402,13 +402,11 @@ class StreamQueueServiceTest extends TestCase {
 			$saved = true;
 		});
 		$this->ap->method('getInterfaceForItem')->willReturn($noteInterface);
-		$this->streamRequest->method('countRepliesTo')->with(self::PARENT_URL)->willReturn(2);
-
-		$this->streamRequest->expects($this->once())->method('updateDetails')->with($this->identicalTo($parent));
+		$this->streamRequest->expects($this->once())->method('recount')
+			->with($this->identicalTo($parent), Details::REPLIES);
+		$this->streamRequest->expects($this->never())->method('updateDetails');
 
 		$this->service->manageStreamQueue($this->queue());
-
-		$this->assertSame(7, $parent->getDetailInt('replies'));
 	}
 
 	public function testReplyWithMismatchingIdIsRemovedFromTheCache(): void {

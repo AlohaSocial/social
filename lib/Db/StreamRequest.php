@@ -19,7 +19,9 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Internal\SocialAppNotification;
 use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Dislike;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -378,6 +380,18 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The counters {@see self::recount()} writes: `details` key => its column,
+	 * the `details` key holding the origin's half ('' for none), and the type
+	 * of action counted here ('' for replies, which are posts).
+	 */
+	private const COUNTERS = [
+		Details::REPLIES => [Stream::COUNTER_COLUMNS[Details::REPLIES], Details::REMOTE_REPLIES, ''],
+		Details::LIKES => [Stream::COUNTER_COLUMNS[Details::LIKES], Details::REMOTE_LIKES, Like::TYPE],
+		Details::BOOSTS => [Stream::COUNTER_COLUMNS[Details::BOOSTS], Details::REMOTE_BOOSTS, Announce::TYPE],
+		Details::DISLIKES => [Stream::COUNTER_COLUMNS[Details::DISLIKES], '', Dislike::TYPE],
+	];
+
+	/**
 	 * Counts the replies to a post again and stores the total on it.
 	 *
 	 * A recount rather than a bump, because the two things that change it —
@@ -398,10 +412,94 @@ class StreamRequest extends StreamRequestBuilder {
 			return;
 		}
 
-		$parent->setDetailInt(
-			Details::REPLIES, $parent->getDetailInt(Details::REMOTE_REPLIES) + $this->countRepliesTo($inReplyTo)
-		);
-		$this->updateDetails($parent);
+		$this->recount($parent, Details::REPLIES);
+	}
+
+	/**
+	 * Recounts some of a post's counters and stores them, each in its column.
+	 *
+	 * A counter is the origin's half — what the post's own server last said,
+	 * kept in `details` — plus what this instance holds of it, and the second
+	 * half is counted inside the UPDATE rather than before it. That is what
+	 * makes two of these on one post safe to run together: neither carries a
+	 * number it counted earlier, so whichever runs last writes a count that
+	 * includes everything committed before it. The counters used to be keys of
+	 * the `details` JSON, written back whole by every writer of any key, and
+	 * two likes — or a like and a boost — arriving together kept one of them.
+	 *
+	 * The stored values are read back onto `$post`, so a caller that goes on
+	 * to use it (a notification carries a copy of the post) has the numbers
+	 * the row has.
+	 *
+	 * @param string ...$counters keys of {@see self::COUNTERS}
+	 */
+	public function recount(Stream $post, string ...$counters): void {
+		$qb = $this->getStreamUpdateSql();
+		$prim = $qb->prim($post->getId());
+		if ($prim === '') {
+			return;
+		}
+
+		$columns = [];
+		foreach ($counters as $counter) {
+			if (!array_key_exists($counter, self::COUNTERS)) {
+				continue;
+			}
+
+			[$column, $remote, $type] = self::COUNTERS[$counter];
+			$origin = ($remote === '') ? 0 : $post->getDetailInt($remote);
+			$qb->set($column, $qb->createFunction(
+				(string)$qb->createNamedParameter($origin, IQueryBuilder::PARAM_INT)
+				. ' + ' . $this->countedHereSql($qb, $prim, $type)
+			));
+			$columns[$counter] = $column;
+		}
+
+		if ($columns === []) {
+			return;
+		}
+
+		$qb->limitToIdPrim($prim);
+		$qb->executeStatement();
+
+		$read = $this->getQueryBuilder();
+		$read->select(...array_values($columns))
+			->from(self::TABLE_STREAM)
+			->where($read->expr()->eq('id_prim', $read->createNamedParameter($prim)))
+			->setMaxResults(1);
+		$cursor = $read->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		if (!is_array($row)) {
+			return;
+		}
+
+		foreach ($columns as $counter => $column) {
+			$post->setDetailInt($counter, max(0, (int)($row[$column] ?? 0)));
+		}
+	}
+
+	/**
+	 * What this instance holds of one counter of a post, as a scalar subquery.
+	 *
+	 * Replies are rows of the table being updated, which MySQL refuses to read
+	 * in the same statement unless the read is materialised first; an
+	 * aggregate inside a derived table is never merged into the outer query,
+	 * so it always is.
+	 *
+	 * @param string $type the action counted, or '' for replies
+	 */
+	private function countedHereSql(SocialQueryBuilder $qb, string $prim, string $type): string {
+		if ($type === '') {
+			return '(SELECT `c` FROM (SELECT COUNT(*) AS `c` FROM ' . $qb->getTableName(self::TABLE_STREAM)
+				. ' WHERE ' . $qb->getColumnName('in_reply_to_prim') . ' = ' . (string)$qb->createNamedParameter($prim)
+				. ') `replies`)';
+		}
+
+		return '(SELECT COUNT(*) FROM ' . $qb->getTableName(self::TABLE_ACTIONS)
+			. ' WHERE ' . $qb->getColumnName('object_id_prim') . ' = ' . (string)$qb->createNamedParameter($prim)
+			. ' AND ' . $qb->getColumnName('type') . ' = ' . (string)$qb->createNamedParameter($type) . ')';
 	}
 
 	/**
@@ -2546,6 +2644,10 @@ class StreamRequest extends StreamRequestBuilder {
 			)
 			->setValue('local', $qb->createNamedParameter(($stream->isLocal()) ? '1' : '0'));
 
+		// the counts a remote post arrived with, as the origin stated them
+		foreach (Stream::COUNTER_COLUMNS as $key => $column) {
+			$qb->setValue($column, $qb->createNamedParameter(max(0, $stream->getDetailInt($key)), IQueryBuilder::PARAM_INT));
+		}
 		$this->setPostFields($qb, $stream, true);
 
 		try {
