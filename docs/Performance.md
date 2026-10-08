@@ -115,10 +115,11 @@ column, then `streamsByNids()` for exactly those rows
 (`tests/Db/TwoQueryTimelinesTest.php` pins the shape for the three moved last).
 What still pairs `selectDistinct('s.id')` with the full stream column set is
 the single-row lookups (`getStreamById()` and friends, which return one row and
-have nothing to deduplicate), `searchContent()`, `getDescendants()` /
+have nothing to deduplicate), `searchContent()` (which hydrates only the nids
+the word index picked, but still through the wide select), `getDescendants()` /
 `getRepliesTo()`, `getAnnouncesAndRepliesTo()`, and the `*_dep()` methods behind
-the uncalled Custom Local API routes. Of those, search and the thread walk are
-the ones worth moving next; the `_dep` ones go with their routes.
+the uncalled Custom Local API routes. Of those, the thread walk is the one worth
+moving next; the `_dep` ones go with their routes.
 
 ### Lookups that cannot use an index
 
@@ -366,10 +367,11 @@ What is left, in order of how much it would cost to try:
 
 ## What to do next
 
-1. **Move `searchContent()` and the thread walk (`getDescendants()`,
-   `getRepliesTo()`) onto `getStreamNidsSelectSql()`.** Every timeline is on it
-   now; these two are what is left of the wide `SELECT DISTINCT`, and the thread
-   walk is also the one read that is still a query per level.
+1. **Move the thread walk (`getDescendants()`, `getRepliesTo()`) onto
+   `getStreamNidsSelectSql()`.** Every timeline is on it now, and the search
+   picks its page from the word index before it hydrates; the thread walk is
+   what is left of the wide `SELECT DISTINCT`, and also the one read that is
+   still a query per level.
 2. **Retire the `*_dep()` methods with the Custom Local API routes** that call
    them (Technical-Debt.md, item 2): that removes the last wide timeline reads
    without rewriting them.

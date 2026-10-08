@@ -19,8 +19,9 @@ use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Full-text search against the real database: the LIKE match is
- * case-insensitive, and — the part that matters — the viewer bound holds:
+ * Full-text search against the real database, through the word index or the
+ * scan it replaces: the match is case-insensitive, and — the part that
+ * matters — the viewer bound holds:
  * public posts and the viewer's own DMs are found, somebody else's DMs never.
  */
 class StreamContentSearchTest extends TestCase {
@@ -116,8 +117,8 @@ class StreamContentSearchTest extends TestCase {
 	}
 
 	public function testATooShortTermReturnsNothing(): void {
-		$this->note('public', '<p>ab match</p>', ACore::CONTEXT_PUBLIC);
+		$this->note('public', '<p>a match</p>', ACore::CONTEXT_PUBLIC);
 
-		$this->assertSame([], $this->found('ab'));
+		$this->assertSame([], $this->found('a'));
 	}
 }

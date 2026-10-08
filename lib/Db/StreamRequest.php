@@ -32,6 +32,7 @@ use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\Exceptions\DateTimeException;
 use OCA\Social\Tools\Model\Cache;
 use OCA\Social\Tools\Nid;
+use OCA\Social\Tools\SearchTerms;
 use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -121,6 +122,13 @@ class StreamRequest extends StreamRequestBuilder {
 	 */
 	public const SEARCH_MAX_OFFSET = 400;
 
+	/**
+	 * How many rounds of candidates one page of a search reads before it
+	 * answers with what it has: a word common in posts the viewer cannot see
+	 * is otherwise a walk down the whole index.
+	 */
+	private const SEARCH_ROUNDS = 5;
+
 	/** Whether the recipient rows carry their post's nid yet; asked once per request. */
 	private ?bool $recipientNidsFilled = null;
 
@@ -159,6 +167,7 @@ class StreamRequest extends StreamRequestBuilder {
 		private ConversationsRequest $conversationsRequest,
 		private RenditionsRequest $renditionsRequest,
 		private FollowsRequest $followsRequest,
+		private SearchTermsRequest $searchTermsRequest,
 	) {
 		parent::__construct($connection, $logger, $urlGenerator, $configService, $miscService);
 	}
@@ -210,6 +219,7 @@ class StreamRequest extends StreamRequestBuilder {
 
 					$this->streamDestRequest->generateStreamDest($stream);
 					$this->streamTagsRequest->generateStreamTags($stream);
+					$this->searchTermsRequest->index($stream);
 
 					$this->dbConnection->commit();
 				} catch (\Throwable $t) {
@@ -336,6 +346,9 @@ class StreamRequest extends StreamRequestBuilder {
 				$this->streamDestRequest->generateStreamDest($stream);
 			}
 			$this->streamTagsRequest->replaceStreamTags($stream);
+			// and its words, for the same reason: an edit that took a word
+			// out left the post answering a search for it
+			$this->searchTermsRequest->reindex($stream);
 
 			$this->dbConnection->commit();
 		} catch (\Throwable $t) {
@@ -732,9 +745,20 @@ class StreamRequest extends StreamRequestBuilder {
 	 */
 	/**
 	 * Full-text search over the statuses the viewer is allowed to see: their
-	 * own posts, public/unlisted content, and what is addressed to them. A
-	 * plain (case-insensitive) substring match — fine at the instance sizes
-	 * this app targets; no external search engine required.
+	 * own posts, public/unlisted content, and what is addressed to them.
+	 *
+	 * Words, looked up in `social_search_term`: every word of the query must
+	 * be in the post, and the last one may be the beginning of a word, so a
+	 * search typed a letter at a time finds as it goes. Newest first, by nid.
+	 *
+	 * The index hands over candidates in nid order and the viewer's
+	 * visibility decides which are answers, so a page is read in rounds: a
+	 * round that the visibility emptied is followed by the candidates below
+	 * its last one, up to SEARCH_ROUNDS of them.
+	 *
+	 * Until `Cron\SearchIndex` has put every stored post in the index the
+	 * older posts are not in it, and the search keeps the scan it had before
+	 * — see `scanContent()`.
 	 *
 	 * `$authorId` narrows the answers to one account's posts, still within
 	 * what the viewer may see. `$offset` skips that many answers, up to
@@ -748,7 +772,99 @@ class StreamRequest extends StreamRequestBuilder {
 		int|string $maxId = 0, int|string $minId = 0,
 	): array {
 		$offset = max(0, $offset);
-		if (strlen($term) < 3 || $offset > self::SEARCH_MAX_OFFSET) {
+		if ($limit < 1 || $offset > self::SEARCH_MAX_OFFSET) {
+			return [];
+		}
+
+		if (!$this->searchTermsRequest->isReady()) {
+			return $this->scanContent($term, $limit, $offset, $authorId, $maxId, $minId);
+		}
+
+		['whole' => $whole, 'prefix' => $prefix] = SearchTerms::ofQuery($term);
+		if ($whole === [] && $prefix === '') {
+			return [];
+		}
+
+		// a lone prefix is read through its head, and a head as common as
+		// `the` is nearly every post: it is bounded the way the scan was. A
+		// whole word is not
+		$since = ($whole === []) ? $this->searchWindowStart() : 0;
+		$sinceNid = ($since > 0) ? Nid::fromPublishedTime($since, 0, self::NID_LIMIT) : '0';
+		$authorPrim = ($authorId === '') ? '' : $this->getQueryBuilder()->prim($authorId);
+		if ($authorId !== '' && $authorPrim === '') {
+			return [];
+		}
+
+		$want = $offset + $limit;
+		$window = min(self::SEARCH_OVERREAD_MAX, max($want, $limit * self::SEARCH_OVERREAD));
+		$answers = [];
+		$before = $maxId;
+		for ($round = 0; $round < self::SEARCH_ROUNDS; $round++) {
+			$nids = $this->searchTermsRequest->candidateNids(
+				$whole, ($whole === []) ? $prefix : '', $before, $minId, $sinceNid, $authorPrim, $window
+			);
+			if ($nids === []) {
+				break;
+			}
+
+			$answers = array_merge($answers, $this->searchHits($nids, ($whole === []) ? '' : $prefix));
+			if (count($answers) >= $want || count($nids) < $window) {
+				break;
+			}
+
+			$before = $nids[count($nids) - 1];
+		}
+
+		return array_slice($answers, $offset, $limit);
+	}
+
+	/**
+	 * The candidates the viewer may see, newest first, hydrated — and, when
+	 * the query ended in a word beginning, only those holding a word that
+	 * begins so.
+	 *
+	 * @param list<string> $nids
+	 *
+	 * @return Stream[]
+	 */
+	protected function searchHits(array $nids, string $prefix): array {
+		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
+		$qb->limitToStatusTypes();
+		$qb->andWhere($qb->expr()->in('s.nid', $qb->createNamedParameter($nids, IQueryBuilder::PARAM_STR_ARRAY)));
+		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
+		$qb->leftJoinStreamAction();
+		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
+		$qb->orderBy('s.nid', 'desc');
+
+		$hits = $this->getStreamsFromRequest($qb);
+		if ($prefix === '') {
+			return $hits;
+		}
+
+		return array_values(array_filter($hits, static function (Stream $post) use ($prefix): bool {
+			foreach (SearchTerms::ofHtml($post->getContent()) as $word) {
+				if (str_starts_with($word, $prefix)) {
+					return true;
+				}
+			}
+
+			return false;
+		}));
+	}
+
+	/**
+	 * The search as it was before the word index: a case-insensitive
+	 * substring match on the stored markup, bounded to the recent past.
+	 *
+	 * What a search does while `Cron\SearchIndex` has not yet reached the
+	 * newest post, and only then.
+	 *
+	 * @return Stream[]
+	 */
+	protected function scanContent(
+		string $term, int $limit, int $offset, string $authorId, int|string $maxId, int|string $minId,
+	): array {
+		if (strlen($term) < 3) {
 			return [];
 		}
 
@@ -790,9 +906,8 @@ class StreamRequest extends StreamRequestBuilder {
 		// `published_time` is indexed and is what the result is ordered by, so
 		// a range on it is both the narrowing and the ordering. Searching the
 		// recent past and saying so is a different promise from searching
-		// everything and timing out; a full-text index is what would let this
-		// promise more, and it is a per-database feature this app has nowhere
-		// else — see `SearchService`.
+		// everything and timing out; the word index, once complete, is what
+		// lets `searchContent()` promise more.
 		$since = $this->searchWindowStart();
 		if ($since > 0) {
 			$qb->andWhere($expr->gt(
@@ -2219,6 +2334,9 @@ class StreamRequest extends StreamRequestBuilder {
 			// any source id it remembers, so a deleted import could never be
 			// brought over again
 			[self::TABLE_IMPORTED_POSTS, 'stream_id_prim'],
+			// and its words, which would otherwise keep answering a search
+			// for a post that is gone
+			[self::TABLE_SEARCH_TERMS, 'stream_id_prim'],
 		] as [$table, $field]) {
 			$qb = $this->getQueryBuilder();
 			$qb->delete($table)

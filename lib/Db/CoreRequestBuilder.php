@@ -68,6 +68,7 @@ class CoreRequestBuilder {
 	public const TABLE_REPORTS = 'social_report';
 	public const TABLE_REACTIONS = 'social_reaction';
 	public const TABLE_REQUEST_QUEUE = 'social_req_queue';
+	public const TABLE_SEARCH_TERMS = 'social_search_term';
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_SCHEDULED = 'social_scheduled';
@@ -778,6 +779,13 @@ class CoreRequestBuilder {
 			'status',
 			'tries',
 			'last'
+		],
+		self::TABLE_SEARCH_TERMS => [
+			'id',
+			'term',
+			'head',
+			'nid',
+			'stream_id_prim'
 		],
 		self::TABLE_STREAM_TAGS => [
 			'stream_id',

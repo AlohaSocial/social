@@ -581,10 +581,11 @@ Genuinely absent, in rough order of how much they would be missed:
    `suspend`, `AdminDomainBlock` reports every entry as `suspend`, and silenced
    domains are not in that list at all. An admin moving from Mastodon finds the
    feature present in the web UI and absent from their tooling.
-4. Search is a substring match, not an index. `StreamRequest::searchContent()`
-   is an unanchored `ILIKE` over `content`, which is honest at the instance
-   sizes this app targets and will not survive a large one; see
-   [Performance.md](Performance.md).
+4. Search is by word, not by substring. `StreamRequest::searchContent()` looks
+   every word of the query up in `social_search_term` and matches the last one
+   as a word beginning; a fragment from the middle of a word finds nothing, as
+   on Mastodon. Script written without spaces between words is indexed in runs
+   of up to 32 characters and found from the beginning of a run only.
 5. `tootctl` equivalents for `preview_cards remove` and media-only sweeps.
    `accounts cull` and `accounts prune` no longer belong on this list: the cache
    cron gives up on an unreachable remote actor after ten failed refreshes

@@ -27,7 +27,8 @@ use ReflectionClass;
 class BackgroundJobsRegisteredTest extends TestCase {
 	/**
 	 * Jobs that are added on demand with an argument and must not be in
-	 * info.xml, which would add them once, at install, with none.
+	 * info.xml, which would add them once, at install, with none — and
+	 * `SearchIndex`, a one-off queued by the migration that creates its table.
 	 */
 	private const QUEUED_ONLY = [
 		'OCA\\Social\\Cron\\ActorCleanup',
@@ -35,6 +36,7 @@ class BackgroundJobsRegisteredTest extends TestCase {
 		'OCA\\Social\\Cron\\ExternalPromoted',
 		'OCA\\Social\\Cron\\ResolveActor',
 		'OCA\\Social\\Cron\\RunImport',
+		'OCA\\Social\\Cron\\SearchIndex',
 		'OCA\\Social\\Cron\\SyncRemoteTimeline',
 		'OCA\\Social\\Cron\\TranscodeBeforeDelivery',
 	];
