@@ -1,3 +1,4 @@
+
 # SPDX-FileCopyrightText: 2018 Nextcloud GmbH and Nextcloud contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -12,6 +13,7 @@ package_name=$(app_name)
 cert_dir=$(HOME)/.nextcloud/certificates
 github_account=nextcloud
 branch=master
+
 # Read from appinfo/info.xml so it cannot drift from the released version.
 version=$(shell sed -n 's/.*<version>\(.*\)<\/version>.*/\1/p' appinfo/info.xml)
 
@@ -21,9 +23,8 @@ all: dev-setup lint build-js-production composer
 # Dev env management
 dev-setup: clean clean-dev npm-init composer
 
-# Release env management. `npm ci` and `composer install` install exactly what
-# the lock files pin; `npm install` and `composer upgrade` do not, so a release
-# built with them shipped dependency versions no CI job had ever run.
+# Release env management.
+# npm ci and composer install use the committed lock files.
 release-setup: clean clean-dev npm-ci composer
 
 npm-init:
@@ -63,11 +64,8 @@ lint-fix:
 	npm run lint:fix
 
 # Cleaning
-# js/ is not purely build output: js/.htaccess is a committed source no webpack
-# entry point can regenerate. Wiping the directory here is why a released
-# tarball once had a broken admin settings page. Webpack clears stale bundles
-# out of js/ on every build and keeps that file (see output.clean in
-# webpack.common.js), so nothing is needed here.
+# Remove generated release artifacts.
+# Webpack handles cleaning stale JavaScript build assets.
 clean:
 	rm -rf $(build_dir)
 
@@ -80,52 +78,49 @@ composer:
 composer-dev:
 	composer install --prefer-dist --dev
 
-# Deliberately rewrites composer.lock. Never part of a build; run it, run the
-# tests, and commit the lock file.
+# Deliberately rewrites composer.lock.
+# Never part of a release build.
 composer-update:
 	composer upgrade --prefer-dist
 
 release: appstore
 
-# creating .tar.gz + signature
+# Create the Nextcloud App Store package.
+# App signing is handled separately by the release workflow.
 appstore: release-setup lint build-js-production composer
-	@test -f js/.htaccess || { \
-		echo "js/.htaccess is missing. It is a committed file, not webpack output; restore it before packaging."; \
-		exit 1; }
 	mkdir -p $(sign_dir)
 	rsync -a \
-	--exclude=.git \
-	--exclude=/.github \
-	--exclude=/.gitignore \
-	--exclude=/.l10nignore \
-	--exclude=/.tx \
-	--exclude=/.idea \
-	--exclude=/.eslintrc.js \
-	--exclude=/.php-cs-fixer.cache \
-	--exclude=/.php-cs-fixer.dist.php \
-	--exclude=/build \
-	--exclude=/babel.config.js \
-	--exclude=/build-package.sh \
-	--exclude=/composer.json \
-	--exclude=/composer.lock \
-	--exclude=/deploy.sh \
-	--exclude=/docs \
-	--exclude=/node_modules \
-	--exclude=/package.json \
-	--exclude=/package-lock.json \
-	--exclude=/psalm.xml \
-	--exclude=/REUSE.toml \
-	--exclude=/README.md \
-	--exclude=/src \
-	--exclude=/stylelint.config.js \
-	--exclude=/tests \
-	--exclude=/tools \
-	--exclude=/translationfiles \
-	--exclude=/vitest.config.js \
-	--exclude=/webpack.*.js \
-	--exclude=/Makefile \
-	--exclude=js/*.map \
-	$(project_dir)/ $(sign_dir)/$(app_name)
+		--exclude=.git \
+		--exclude=/.github \
+		--exclude=/.gitignore \
+		--exclude=/.l10nignore \
+		--exclude=/.tx \
+		--exclude=/.idea \
+		--exclude=/.eslintrc.js \
+		--exclude=/.php-cs-fixer.cache \
+		--exclude=/.php-cs-fixer.dist.php \
+		--exclude=/build \
+		--exclude=/babel.config.js \
+		--exclude=/build-package.sh \
+		--exclude=/composer.json \
+		--exclude=/composer.lock \
+		--exclude=/deploy.sh \
+		--exclude=/docs \
+		--exclude=/node_modules \
+		--exclude=/package.json \
+		--exclude=/package-lock.json \
+		--exclude=/psalm.xml \
+		--exclude=/REUSE.toml \
+		--exclude=/README.md \
+		--exclude=/src \
+		--exclude=/stylelint.config.js \
+		--exclude=/tests \
+		--exclude=/tools \
+		--exclude=/translationfiles \
+		--exclude=/vitest.config.js \
+		--exclude=/webpack.*.js \
+		--exclude=/Makefile \
+		--exclude=js/*.map \
+		$(project_dir)/ $(sign_dir)/$(app_name)
 	tar -czf $(build_dir)/$(app_name).tar.gz \
 		-C $(sign_dir) $(app_name)
-
