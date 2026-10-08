@@ -160,7 +160,8 @@ class RecordMapperTest extends TestCase {
 			$attachments[] = $attachment;
 		}
 		$post->setAttachments($attachments);
-		$this->documents->method('getMediaFromArray')->willReturn($documents);
+		$this->documents->expects($this->once())->method('getMediaFromArray')
+			->with(['1', '2', '3', '4', '5', '6'], 'alice')->willReturn($documents);
 		$this->pictures->method('blobFor')->willReturnCallback(function (Identity $identity, Person $owner, Document $document): array {
 			return ['blob' => new BlobRef(self::DID, Cid::forRaw($document->getId()), $document->getId(), 'image/jpeg', 100), 'width' => 40, 'height' => 30];
 		});

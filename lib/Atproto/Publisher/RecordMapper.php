@@ -94,7 +94,7 @@ class RecordMapper {
 
 		$images = [];
 		$dropped = 0;
-		foreach ($this->pictureDocuments($post) as $i => $document) {
+		foreach ($this->pictureDocuments($post, $author) as $i => $document) {
 			if ($i >= PictureService::MAX_PER_POST) {
 				$dropped++;
 				continue;
@@ -270,7 +270,7 @@ class RecordMapper {
 	/**
 	 * @return Document[] the post's pictures, in order
 	 */
-	private function pictureDocuments(Stream $post): array {
+	private function pictureDocuments(Stream $post, Person $author): array {
 		$ids = [];
 		foreach ($post->getAttachments() as $attachment) {
 			if ($attachment->getType() === 'image') {
@@ -281,7 +281,9 @@ class RecordMapper {
 			return [];
 		}
 		try {
-			$documents = $this->documents->getMediaFromArray($ids);
+			// the author's own uploads: the lookup matches the account, and
+			// an empty one matches no stored document at all
+			$documents = $this->documents->getMediaFromArray($ids, $author->getPreferredUsername());
 		} catch (Throwable) {
 			return [];
 		}
