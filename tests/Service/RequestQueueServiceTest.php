@@ -268,18 +268,20 @@ class RequestQueueServiceTest extends TestCase {
 		$this->service->getPriorityRequest('tok');
 	}
 
-	public function testGetRequestStandbyAppliesTheRetryBackoff(): void {
+	public function testGetRequestStandbyHandsOnWhatTheQueryFoundDue(): void {
+		// the backoff and the give-up threshold are the query's alone: a second
+		// filter here could only disagree with it and drop due rows
 		$now = time();
 		$fresh = $this->queued(InstancePath::PRIORITY_LOW)->setTries(0)->setLast($now - 1);
-		$retriedRecently = $this->queued(InstancePath::PRIORITY_LOW)->setTries(3)->setLast($now - 10); // delay 96s
-		$retriedLongAgo = $this->queued(InstancePath::PRIORITY_LOW)->setTries(3)->setLast($now - 120);
-		$this->requestQueueRequest->method('getStandby')->willReturn([$fresh, $retriedRecently, $retriedLongAgo]);
+		$retried = $this->queued(InstancePath::PRIORITY_LOW)->setTries(3)->setLast($now - 120);
+		$this->requestQueueRequest->method('getStandby')->willReturn([$fresh, $retried]);
+		$this->requestQueueRequest->expects($this->never())->method('setAsAbandoned');
 
 		$total = 0;
 		$ready = $this->service->getRequestStandby($total);
 
-		$this->assertSame(3, $total);
-		$this->assertSame([$fresh, $retriedLongAgo], $ready);
+		$this->assertSame(2, $total);
+		$this->assertSame([$fresh, $retried], $ready);
 	}
 
 	public function testGetRequestFromTokenSkipsTheDatabaseForAnEmptyToken(): void {
@@ -385,37 +387,6 @@ class RequestQueueServiceTest extends TestCase {
 		$this->requestQueueRequest->expects($this->once())->method('delete')->with($this->identicalTo($queue));
 
 		$this->service->deleteRequest($queue);
-	}
-
-	public function testGetRequestStandbyAbandonsRequestsPastTheRetryCap(): void {
-		$now = time();
-		// A request that has burned through MAX_TRIES is marked abandoned and never
-		// handed back, so a dead host cannot keep it on standby forever -- marked,
-		// not deleted, so the author can still see that server never got the post.
-		$exhausted = $this->queued(InstancePath::PRIORITY_LOW)->setTries(RequestQueueService::MAX_TRIES)->setLast($now - 100000);
-		$ready = $this->queued(InstancePath::PRIORITY_LOW)->setTries(2)->setLast($now - 60); // delay 31s, elapsed
-		$this->requestQueueRequest->method('getStandby')->willReturn([$exhausted, $ready]);
-		$this->requestQueueRequest->expects($this->once())->method('setAsAbandoned')->with($this->identicalTo($exhausted));
-		$this->requestQueueRequest->expects($this->never())->method('delete');
-
-		$total = 0;
-		$result = $this->service->getRequestStandby($total);
-
-		$this->assertSame(2, $total);
-		$this->assertSame([$ready], $result);
-		$this->assertNotContains($exhausted, $result);
-	}
-
-	public function testGetRequestStandbyHoldsARequestStillInsideItsBackoff(): void {
-		// four failures wait 4^4 + 15 = 271 seconds; the old tries^4/3 schedule
-		// (85 s) handed this one back already
-		$waiting = $this->queued(InstancePath::PRIORITY_LOW)->setTries(4)->setLast(time() - 100);
-		$this->requestQueueRequest->method('getStandby')->willReturn([$waiting]);
-		$this->requestQueueRequest->expects($this->never())->method('delete');
-
-		$total = 0;
-		$this->assertSame([], $this->service->getRequestStandby($total));
-		$this->assertSame(1, $total);
 	}
 
 	public function testRetryScheduleKeepsEarlyRetriesQuickAndSpansAboutTwoDays(): void {

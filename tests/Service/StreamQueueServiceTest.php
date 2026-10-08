@@ -125,17 +125,18 @@ class StreamQueueServiceTest extends TestCase {
 		$this->service->generateStreamQueue('tok', StreamQueue::TYPE_CACHE, self::STREAM_ID);
 	}
 
-	public function testGetRequestStandbyAppliesTheRetryBackoff(): void {
+	public function testGetRequestStandbyHandsOnWhatTheQueryFoundDue(): void {
+		// the backoff is the query's (Backoff::inbound()); filtering again here
+		// could only disagree with it
 		$now = time();
 		$fresh = $this->queue()->setTries(0)->setLast($now - 1);
-		$recent = $this->queue()->setTries(3)->setLast($now - 10); // delay 27s
 		$old = $this->queue()->setTries(3)->setLast($now - 60);
-		$this->streamQueueRequest->method('getStandby')->willReturn([$fresh, $recent, $old]);
+		$this->streamQueueRequest->method('getStandby')->willReturn([$fresh, $old]);
 
 		$total = 0;
 		$ready = $this->service->getRequestStandby($total);
 
-		$this->assertSame(3, $total);
+		$this->assertSame(2, $total);
 		$this->assertSame([$fresh, $old], $ready);
 	}
 

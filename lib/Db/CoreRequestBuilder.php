@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Db;
 
-use DateTime;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
@@ -19,7 +18,6 @@ use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\MiscService;
 use OCA\Social\Tools\IExtendedQueryBuilder;
 use OCP\DB\Exception;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
@@ -1023,42 +1021,16 @@ class CoreRequestBuilder {
 
 	/**
 	 * Limit a queue drain to the rows that are actually due: the retry backoff
-	 * and the give-up threshold, in SQL.
+	 * and the give-up threshold, in SQL (see `Backoff::limitToDue()`).
 	 *
 	 * Both queues used to take the oldest N rows and then drop most of them in
 	 * PHP on exactly these two conditions, which means the rows of one dead
 	 * instance permanently occupy the window and nothing behind them is ever
 	 * delivered.
-	 *
-	 * The delay grows as tries^4/3, which is not something a portable query
-	 * can compute from the column, so it is unrolled into one branch per try
-	 * count — $maxTries of them, and the give-up threshold falls out of the
-	 * same expression. A row that has never been attempted has a NULL `last`.
-	 *
-	 * @param int $maxTries the try count at which a row is abandoned
 	 */
-	protected function limitToQueueDue(IExtendedQueryBuilder $qb, int $maxTries): void {
-		$expr = $qb->expr();
+	protected function limitToQueueDue(IExtendedQueryBuilder $qb, Backoff $backoff): void {
 		$pf = ($qb->getType() === IExtendedQueryBuilder::SELECT) ? $this->defaultSelectAlias . '.' : '';
-		$now = time();
-
-		// built first and passed in one go: an empty orX() is deprecated and
-		// will throw
-		$due = [];
-		for ($tries = 0; $tries < $maxTries; $tries++) {
-			$delay = (int)floor($tries ** 4 / 3);
-			$cutoff = new DateTime('@' . ($now - $delay));
-
-			$due[] = $expr->andX(
-				$expr->eq($pf . 'tries', $qb->createNamedParameter($tries, IQueryBuilder::PARAM_INT)),
-				$expr->orX(
-					$expr->isNull($pf . 'last'),
-					$expr->lte($pf . 'last', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE))
-				)
-			);
-		}
-
-		$qb->andWhere($expr->orX(...$due));
+		$backoff->limitToDue($qb, $pf, time());
 	}
 
 	//

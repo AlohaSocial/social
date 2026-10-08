@@ -24,7 +24,7 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 	public const STANDBY_BATCH = 200;
 
 	/** An item is abandoned after this many failed attempts. */
-	public const MAX_TRIES = 10;
+	public const MAX_TRIES = Backoff::INBOUND_MAX_TRIES;
 
 	/**
 	 * create a new Queue in the database.
@@ -56,7 +56,7 @@ class StreamQueueRequest extends StreamQueueRequestBuilder {
 		// the backoff and the give-up threshold belong in the query: filtering
 		// them in PHP means the items of one unreachable host sit in the
 		// window forever and nothing behind them is ever cached
-		$this->limitToQueueDue($qb, self::MAX_TRIES);
+		$this->limitToQueueDue($qb, Backoff::inbound());
 		$qb->orderBy('qs.id', 'asc');
 		$qb->setMaxResults(self::STANDBY_BATCH);
 

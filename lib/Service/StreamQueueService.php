@@ -114,6 +114,9 @@ class StreamQueueService {
 	}
 
 	/**
+	 * The items that are due. The backoff and the give-up threshold are the
+	 * query's (`StreamQueueRequest::getStandby()`).
+	 *
 	 * @param int $total
 	 *
 	 * @return StreamQueue[]
@@ -122,15 +125,7 @@ class StreamQueueService {
 		$queue = $this->streamQueueRequest->getStandby();
 		$total = sizeof($queue);
 
-		$result = [];
-		foreach ($queue as $request) {
-			$delay = floor(pow($request->getTries(), 4) / 3);
-			if ($request->getLast() < (time() - $delay)) {
-				$result[] = $request;
-			}
-		}
-
-		return $result;
+		return $queue;
 	}
 
 	/**

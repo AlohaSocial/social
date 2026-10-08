@@ -18,11 +18,6 @@
       <code><![CDATA[(bool)($this->cache->get(self::CACHE_PREFIX . 'wellknown') === 'true')]]></code>
     </RedundantCast>
   </file>
-  <file src="lib/Service/StreamQueueService.php">
-    <InvalidOperand>
-      <code><![CDATA[time() - $delay]]></code>
-    </InvalidOperand>
-  </file>
   <file src="lib/Tools/Traits/TAsync.php">
     <InvalidOperand>
       <code><![CDATA[$size]]></code>

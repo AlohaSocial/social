@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Db\Backoff;
 use OCA\Social\Db\RequestQueueRequest;
 use OCA\Social\Exceptions\EmptyQueueException;
 use OCA\Social\Exceptions\NoHighPriorityRequestException;
@@ -52,11 +53,11 @@ class RequestQueueService {
 	 *
 	 * Total: 178 537 s, 49.6 hours, plus up to one cron interval per attempt.
 	 *
-	 * The same schedule has to be applied by the query that reads the queue
-	 * (`RequestQueueRequest::limitToQueueDue()`), so both sides call
-	 * `retryDelay()`.
+	 * The schedule lives in `Backoff::outbound()`, which both this and the
+	 * query that reads the queue (`RequestQueueRequest::getStandby()`) take it
+	 * from.
 	 */
-	public const MAX_TRIES = 16;
+	public const MAX_TRIES = Backoff::OUTBOUND_MAX_TRIES;
 
 	/**
 	 * How long a delivered or abandoned request is kept before it is purged.
@@ -75,11 +76,7 @@ class RequestQueueService {
 	 * on MAX_TRIES. `tries` is the count of failed attempts so far.
 	 */
 	public static function retryDelay(int $tries): int {
-		if ($tries < 1) {
-			return 0;
-		}
-
-		return $tries ** 4 + 15;
+		return Backoff::outbound()->delay($tries);
 	}
 
 	/** A `running` request older than this (seconds) is treated as stranded. */
@@ -232,6 +229,10 @@ class RequestQueueService {
 	}
 
 	/**
+	 * The requests that are due. The backoff and the give-up threshold are
+	 * the query's (`RequestQueueRequest::getStandby()`), which also marks the
+	 * exhausted rows abandoned before it reads.
+	 *
 	 * @param int $total
 	 *
 	 * @return RequestQueue[]
@@ -240,23 +241,7 @@ class RequestQueueService {
 		$requests = $this->requestQueueRequest->getStandby();
 		$total = sizeof($requests);
 
-		$result = [];
-		foreach ($requests as $request) {
-			// A request that has exhausted its retries is abandoned rather than kept
-			// on standby forever against a host that is never coming back -- marked,
-			// not deleted, so the author can see that server never got the post.
-			if ($request->getTries() >= self::MAX_TRIES) {
-				$this->abandonRequest($request);
-				continue;
-			}
-
-			$delay = self::retryDelay($request->getTries());
-			if ($request->getLast() < (time() - $delay)) {
-				$result[] = $request;
-			}
-		}
-
-		return $result;
+		return $requests;
 	}
 
 	/**
