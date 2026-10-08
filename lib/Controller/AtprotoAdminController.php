@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Moderation\BlocklistManager;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Service\AtprotoStatusService;
 use OCA\Social\Atproto\Service\RelayClient;
@@ -33,6 +35,8 @@ class AtprotoAdminController extends Controller {
 		private ConfigService $configService,
 		private AtprotoStatusService $status,
 		private RelayClient $relays,
+		private Blocklist $blocklist,
+		private BlocklistManager $blocklistManager,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -126,5 +130,42 @@ class AtprotoAdminController extends Controller {
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_BAD_GATEWAY);
 		}
+	}
+
+	/**
+	 * `GET /admin/bluesky/blocks`: the block list.
+	 */
+	#[FrontpageRoute(verb: 'GET', url: '/admin/bluesky/blocks')]
+	public function blocks(): DataResponse {
+		return new DataResponse(['blocks' => $this->blocklist->list()]);
+	}
+
+	/**
+	 * `POST /admin/bluesky/blocks`: blocks a DID or a PDS host and purges
+	 * the accounts of it that are followed here.
+	 */
+	#[FrontpageRoute(verb: 'POST', url: '/admin/bluesky/blocks')]
+	public function block(string $target, string $reason = ''): DataResponse {
+		try {
+			$purged = $this->blocklistManager->block($target, $reason);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['blocks' => $this->blocklist->list(), 'purged' => $purged]);
+	}
+
+	/**
+	 * `DELETE /admin/bluesky/blocks`: takes a target off the list.
+	 */
+	#[FrontpageRoute(verb: 'DELETE', url: '/admin/bluesky/blocks')]
+	public function unblock(string $target): DataResponse {
+		try {
+			$this->blocklistManager->unblock($target);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+
+		return new DataResponse(['blocks' => $this->blocklist->list()]);
 	}
 }

@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\ActorMapper;
@@ -107,7 +108,7 @@ class NotificationPollerTest extends TestCase {
 		});
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
-		$this->poller = new NotificationPoller($config, $this->identities, $this->cursors, $this->appView, $this->store, new LocalRecordResolver($identityRequest, $records), new ActorMapper(), $this->actors, $import, $time, new NullLogger());
+		$this->poller = new NotificationPoller($config, $this->identities, $this->cursors, $this->appView, $this->store, new LocalRecordResolver($identityRequest, $records), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $import, $time, new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -170,11 +171,21 @@ class NotificationPollerTest extends TestCase {
 		$gone = new Identity(1, 'https://social.test/@alice', self::LOCAL, 'alice.social.test', 'sealed', '', '', Identity::STATE_DEACTIVATED, '', 0);
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('getByDid')->willReturn($gone);
-		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $this->createMock(ImportService::class), $this->createMock(ITimeFactory::class), new NullLogger());
+		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(ImportService::class), $this->createMock(ITimeFactory::class), new NullLogger());
 		$this->cursors->expects($this->once())->method('remove')->with(self::LOCAL, self::TABLE);
 		$this->appView->expects($this->never())->method('queryAs');
 
 		$this->assertSame(0, $poller->pollAccount(new Watch(self::LOCAL, '', '', 0, 0, 0, '', 0)));
+	}
+
+	public function testABlockedAccountsInteractionsAreDroppedOnArrival(): void {
+		$blocklist = $this->createMock(Blocklist::class);
+		$blocklist->method('isBlockedDid')->willReturn(true);
+		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $this->identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $blocklist, $this->createMock(ImportService::class), $this->createMock(ITimeFactory::class), new NullLogger());
+		$this->store->expects($this->never())->method('storeByUri');
+
+		$this->assertFalse($poller->handle($this->alice, $this->notification('follow', 'app.bsky.graph.follow', '3kf')));
+		$this->assertFalse($poller->handle($this->alice, $this->notification('reply', RecordMapper::POST, '3kr')));
 	}
 
 	private function notification(string $reason, string $collection, string $rkey, string $subject = '', string $indexedAt = '2026-10-08T12:00:00.000Z'): array {

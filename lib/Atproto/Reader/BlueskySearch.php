@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use Psr\Log\LoggerInterface;
@@ -29,6 +30,7 @@ class BlueskySearch {
 		private AtprotoConfig $config,
 		private AppViewClient $appView,
 		private ActorMapper $mapper,
+		private Blocklist $blocklist,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -64,7 +66,7 @@ class BlueskySearch {
 		}
 		$people = [];
 		foreach (is_array($answer['actors'] ?? null) ? $answer['actors'] : [] as $actor) {
-			if (!is_array($actor) || ($actor['did'] ?? '') === '' || ($actor['handle'] ?? '') === '') {
+			if (!is_array($actor) || ($actor['did'] ?? '') === '' || ($actor['handle'] ?? '') === '' || $this->blocklist->isBlockedDid((string)$actor['did'])) {
 				continue;
 			}
 			try {

@@ -7,8 +7,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import BlueskySection from '../../../../src/components/admin/BlueskySection.vue'
 
-const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
-vi.mock('@nextcloud/axios', () => ({ default: { get, post } }))
+const { get, post, del } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn() }))
+vi.mock('@nextcloud/axios', () => ({ default: { get, post, delete: del } }))
 const { showError, showSuccess } = vi.hoisted(() => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess }))
 
@@ -73,6 +73,7 @@ describe('the Bluesky card', () => {
 	beforeEach(() => {
 		get.mockReset().mockResolvedValue({ data: admin() })
 		post.mockReset().mockResolvedValue({ data: admin() })
+		del.mockReset()
 		showError.mockReset()
 		showSuccess.mockReset()
 	})
@@ -258,6 +259,82 @@ describe('the Bluesky card', () => {
 
 			expect(buttonByText(wrapper, 'Tell the relays now').attributes('disabled')).toBeDefined()
 			expect(wrapper.text()).toContain('Save the list first')
+		})
+	})
+
+	describe('the block list', () => {
+		const spammer = { kind: 'did', value: 'did:plc:spammer', reason: 'reply spam', creation: 1790000000 }
+		const badHost = { kind: 'host', value: 'pds.bad.example', reason: '', creation: 1790000100 }
+		const blockRows = (wrapper) => wrapper.findAll('.bluesky__block')
+		const blockForm = (wrapper) => wrapper.find('.bluesky__block-form')
+
+		it('lists what is blocked, each with its kind and reason', () => {
+			const wrapper = mountCard(admin({ status: { blocks: [spammer, badHost] } }))
+
+			expect(blockRows(wrapper).map((row) => [
+				row.find('.bluesky__block-kind').text(),
+				row.find('.bluesky__block-value').text(),
+				row.find('.bluesky__block-reason').exists() ? row.find('.bluesky__block-reason').text() : '',
+			])).toEqual([
+				['Account', 'did:plc:spammer', 'reply spam'],
+				['Data server', 'pds.bad.example', ''],
+			])
+		})
+
+		it('says so when nothing is blocked', () => {
+			const wrapper = mountCard()
+
+			expect(blockRows(wrapper)).toHaveLength(0)
+			expect(wrapper.text()).toContain('Nothing is blocked.')
+		})
+
+		it('blocks a target with its reason, and says how many follows went with it', async () => {
+			post.mockResolvedValue({ data: { blocks: [spammer], purged: 3 } })
+			const wrapper = mountCard()
+
+			await fieldByLabel(wrapper, 'DID or host to block').find('input').setValue(' did:plc:spammer ')
+			await fieldByLabel(wrapper, 'Reason (optional)').find('input').setValue('reply spam')
+			await blockForm(wrapper).trigger('submit')
+			await flushPromises()
+
+			expect(post).toHaveBeenCalledWith(ROUTE + '/blocks', { target: 'did:plc:spammer', reason: 'reply spam' })
+			expect(blockRows(wrapper)).toHaveLength(1)
+			expect(wrapper.text()).toContain('3 followed accounts removed')
+			expect(fieldByLabel(wrapper, 'DID or host to block').find('input').element.value).toBe('')
+		})
+
+		it('says nothing about follows when none went', async () => {
+			post.mockResolvedValue({ data: { blocks: [badHost], purged: 0 } })
+			const wrapper = mountCard()
+
+			await fieldByLabel(wrapper, 'DID or host to block').find('input').setValue('pds.bad.example')
+			await blockForm(wrapper).trigger('submit')
+			await flushPromises()
+
+			expect(wrapper.text()).not.toContain('followed account')
+		})
+
+		it('shows why the server would not take a target, beside the form', async () => {
+			post.mockRejectedValue({ response: { status: 422, data: { error: 'not a DID or a host' } } })
+			const wrapper = mountCard()
+
+			await fieldByLabel(wrapper, 'DID or host to block').find('input').setValue('nonsense here')
+			await blockForm(wrapper).trigger('submit')
+			await flushPromises()
+
+			expect(wrapper.find('.bluesky__block-error').text()).toBe('not a DID or a host')
+			expect(fieldByLabel(wrapper, 'DID or host to block').find('input').element.value).toBe('nonsense here')
+		})
+
+		it('takes a target off the list', async () => {
+			del.mockResolvedValue({ data: { blocks: [badHost] } })
+			const wrapper = mountCard(admin({ status: { blocks: [spammer, badHost] } }))
+
+			await buttonByText(blockRows(wrapper)[0], 'Remove').trigger('click')
+			await flushPromises()
+
+			expect(del).toHaveBeenCalledWith(ROUTE + '/blocks', { data: { target: 'did:plc:spammer' } })
+			expect(blockRows(wrapper).map((row) => row.find('.bluesky__block-value').text())).toEqual(['pds.bad.example'])
 		})
 	})
 })

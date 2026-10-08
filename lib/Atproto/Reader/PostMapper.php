@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Details;
 
 /**
  * A Bluesky post, as the AppView shows it in a feed, as the `Create` of a
@@ -26,7 +27,7 @@ use OCA\Social\Model\ActivityPub\ACore;
  * home timeline joins on. Counts and the `at://` URI ride in `details`.
  */
 class PostMapper {
-	public const DETAIL = 'atproto';
+	public const DETAIL = Details::ATPROTO;
 
 	public function __construct(
 		private LocalRecordResolver $local,
@@ -148,6 +149,9 @@ class PostMapper {
 				'replies' => (int)($post['replyCount'] ?? 0),
 				'quotes' => (int)($post['quoteCount'] ?? 0),
 				'labels' => $labels,
+				// each label with the labeler that applied it, for the choices a
+				// person made per labeler (LabelerService::results())
+				'label_sources' => self::labelSources($post['labels'] ?? []),
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
@@ -271,6 +275,20 @@ class PostMapper {
 		}
 
 		return implode(', ', array_unique($named));
+	}
+
+	/**
+	 * @return list<array{src: string, val: string}>
+	 */
+	private static function labelSources(mixed $labels): array {
+		$sources = [];
+		foreach (is_array($labels) ? $labels : [] as $label) {
+			if (is_array($label) && is_string($label['src'] ?? null) && is_string($label['val'] ?? null) && $label['val'] !== '' && Syntax::isDid($label['src'])) {
+				$sources[] = ['src' => $label['src'], 'val' => $label['val']];
+			}
+		}
+
+		return $sources;
 	}
 
 	/**

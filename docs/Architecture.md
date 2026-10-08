@@ -243,6 +243,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
 | `social_atproto_watch` | One row per Bluesky author somebody here follows: the author-feed cursor the poller continues from, when it last read and when it is due again (`next_sync`, backed off after empty pages), failures and the last error |
 | `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
+| `social_atproto_blocklist` | The administrator's Bluesky block list: a PDS host or a DID, with the reason. A blocked account is not resolved, read or heard from; a blocked host blocks every account whose PDS it is |
+| `social_atproto_labeler` | The Bluesky labelers each person subscribes to, by DID, with their choice per label value (`ignore`, `warn`, `hide`) as JSON; Bluesky's own moderation service is always applied and needs no row |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |

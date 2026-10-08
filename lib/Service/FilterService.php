@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use JsonSerializable;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Db\FiltersRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -48,6 +49,7 @@ class FilterService {
 	public function __construct(
 		private FiltersRequest $filtersRequest,
 		private AiContentService $aiContentService,
+		private ?LabelerService $labelers = null,
 	) {
 	}
 
@@ -99,14 +101,34 @@ class FilterService {
 			if ($hidesAi && $this->aiContentService->isLabelled($exported)) {
 				continue;
 			}
+			$labelled = $this->labelResults($exported, $viewer);
+			if ($this->isHidden($labelled)) {
+				continue;
+			}
 
-			$status = $this->applyToExported($exported, $filters);
+			$status = $this->applyToExported($exported, $filters, $labelled);
 			if ($status !== null) {
 				$statuses[] = $status;
 			}
 		}
 
 		return $statuses;
+	}
+
+	/**
+	 * What the labels on a Bluesky post — or on the one a boost carries — do
+	 * for this viewer, by the labelers they subscribe to (§12.2).
+	 */
+	private function labelResults(array $status, ?Person $viewer): array {
+		if ($this->labelers === null || $viewer === null) {
+			return [];
+		}
+		$bluesky = $status['bluesky'] ?? (is_array($status['reblog'] ?? null) ? ($status['reblog']['bluesky'] ?? null) : null);
+		if (!is_array($bluesky) || !is_array($bluesky['labels'] ?? null) || $bluesky['labels'] === []) {
+			return [];
+		}
+
+		return $this->labelers->results($viewer->getUserId(), $bluesky['labels']);
 	}
 
 	/** Whether this viewer asked for posts made with AI to be dropped. */
@@ -335,8 +357,8 @@ class FilterService {
 	/**
 	 * @param Filter[] $filters
 	 */
-	private function applyToExported(array $status, array $filters): ?array {
-		$results = $this->results($status, $filters);
+	private function applyToExported(array $status, array $filters, array $extra = []): ?array {
+		$results = [...$this->results($status, $filters), ...$extra];
 		if ($this->isHidden($results)) {
 			return null;
 		}

@@ -319,6 +319,12 @@ that post's thread on the AppView (parent and root), a quote of it is a
 record embed, and when the author deletes it on Bluesky the deletion check
 removes it here.
 
+`AtprotoModerationTest` is phase 3b: a report about a dev-PDS post, with
+`forward`, reaches the development network's Ozone as a report made by
+`did:web:nextcloud.test` — the token checked against this app's own DID
+document — and an account the administrator blocks is purged here and its
+watch dropped.
+
 What it cannot prove: indexing by `bsky.app` itself, which needs a public
 https host with wildcard DNS and is done by hand; and anything of reading
 Bluesky from here, which is phase 2.

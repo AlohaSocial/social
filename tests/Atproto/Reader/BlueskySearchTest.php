@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Atproto\Reader;
 
 use OCA\Social\AP;
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -48,7 +49,7 @@ class BlueskySearchTest extends TestCase {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(true);
 		$this->appView = $this->createMock(AppViewClient::class);
-		$this->search = new BlueskySearch($config, $this->appView, new ActorMapper(), new NullLogger());
+		$this->search = new BlueskySearch($config, $this->appView, new ActorMapper(), $this->createMock(Blocklist::class), new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -65,7 +66,7 @@ class BlueskySearchTest extends TestCase {
 		$this->assertFalse($this->search->isCandidate(''));
 		$off = $this->createMock(AtprotoConfig::class);
 		$off->method('isEnabled')->willReturn(false);
-		$this->assertFalse((new BlueskySearch($off, $this->appView, new ActorMapper(), new NullLogger()))->isCandidate('alice.bsky.social'));
+		$this->assertFalse((new BlueskySearch($off, $this->appView, new ActorMapper(), $this->createMock(Blocklist::class), new NullLogger()))->isCandidate('alice.bsky.social'));
 	}
 
 	public function testTheTypeaheadAnswersUnstoredAccounts(): void {
@@ -96,5 +97,18 @@ class BlueskySearchTest extends TestCase {
 		$other = new Person();
 		$other->setId('https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur');
 		$this->assertSame([$cached, $other], SearchService::withBluesky([$cached], [$same, $other]));
+	}
+
+	public function testABlockedAccountIsNotOffered(): void {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$blocklist = $this->createMock(Blocklist::class);
+		$blocklist->method('isBlockedDid')->willReturnCallback(static fn (string $did): bool => $did === 'did:plc:z72i7hdynmk6r22z27h6tvur');
+		$this->appView->method('query')->willReturn(['actors' => [
+			['did' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'handle' => 'alice.bsky.social'],
+			['did' => 'did:plc:z72i7hdynmk6r22z27h6tvur', 'handle' => 'alice.evil.example'],
+		]]);
+		$people = (new BlueskySearch($config, $this->appView, new ActorMapper(), $blocklist, new NullLogger()))->typeahead('alice.');
+		$this->assertSame(['alice.bsky.social'], array_map(static fn ($p): string => $p->getAccount(), $people));
 	}
 }

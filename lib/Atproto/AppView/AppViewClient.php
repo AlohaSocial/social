@@ -40,12 +40,13 @@ class AppViewClient {
 	 * A public query, unauthenticated.
 	 *
 	 * @param array<string, string|int|string[]> $params
+	 * @param array<string, string> $headers such as `atproto-accept-labelers`
 	 * @return array the decoded answer
 	 * @throws AppViewNotFoundException when the AppView says the thing is not there
 	 * @throws AtprotoException for every other refusal, and when the AppView cannot be reached
 	 */
-	public function query(string $method, array $params = []): array {
-		return $this->get($this->config->appView(), $method, $params, []);
+	public function query(string $method, array $params = [], array $headers = []): array {
+		return $this->get($this->config->appView(), $method, $params, $headers);
 	}
 
 	/**

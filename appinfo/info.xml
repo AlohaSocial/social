@@ -161,6 +161,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<command>OCA\Social\Command\AtprotoRepo</command>
 		<command>OCA\Social\Command\AtprotoCrawl</command>
 		<command>OCA\Social\Command\AtprotoRotateKey</command>
+		<command>OCA\Social\Command\AtprotoBlock</command>
 	</commands>
 
 	<settings>
