@@ -10,13 +10,15 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Publisher;
 
 use OCA\Social\Atproto\Protocol\Syntax;
-use OCA\Social\Atproto\Reader\BlueskyIds;
-use OCA\Social\Atproto\Reader\PostMapper;
-use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCP\AppFramework\Utility\ITimeFactory;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Likes and boosts of posts that exist on Bluesky (§8.6): a local like of
@@ -27,10 +29,15 @@ use OCP\AppFramework\Utility\ITimeFactory;
  * networks — the viewer flags the status carries are the same either way.
  */
 class InteractionPublisher {
+	/** the most records one deleted post takes with it in one run */
+	private const CASCADE_LIMIT = 500;
+
 	public function __construct(
 		private Publisher $publisher,
-		private RepositoryService $repositories,
+		private PostRefs $refs,
+		private ActionsRequest $actions,
 		private ITimeFactory $time,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -65,26 +72,35 @@ class InteractionPublisher {
 	}
 
 	/**
+	 * Removes the like and repost records local accounts made of a post that
+	 * is gone (§8.5): the likes and boosts here outlive the post, and so
+	 * would their records on Bluesky.
+	 *
+	 * @return int how many records were removed
+	 */
+	public function removeAllOf(string $postId): int {
+		$removed = 0;
+		foreach ([Like::TYPE => RecordMapper::LIKE, Announce::TYPE => RecordMapper::REPOST] as $type => $collection) {
+			foreach ($this->actions->getActionsOnObject($postId, $type, self::CASCADE_LIMIT) as $action) {
+				try {
+					$removed += $this->publisher->removeRecord($collection, $action->getId()) ? 1 : 0;
+				} catch (Throwable $e) {
+					$this->logger->warning('Bluesky record not removed', ['action' => $action->getId(), 'exception' => $e]);
+				}
+			}
+		}
+
+		return $removed;
+	}
+
+	/**
 	 * The strong reference a like or repost names: the post's `at://` URI
 	 * and CID when it is a Bluesky post, or a local post with a record.
 	 *
 	 * @return array{uri: string, cid: string}|null
 	 */
 	public function subjectOf(Stream $post): ?array {
-		if (BlueskyIds::isPostId($post->getId())) {
-			$details = $post->getDetails(PostMapper::DETAIL);
-			$uri = (string)($details['uri'] ?? '');
-			$cid = (string)($details['cid'] ?? '');
-
-			return $uri !== '' && $cid !== '' && Syntax::isAtUri($uri) ? ['uri' => $uri, 'cid' => $cid] : null;
-		}
-		foreach ($this->repositories->getRecordsByLocalId($post->getId()) as $record) {
-			if ($record->collection === RecordMapper::POST) {
-				return ['uri' => $record->uri(), 'cid' => $record->cid->toString()];
-			}
-		}
-
-		return null;
+		return $this->refs->strongRef($post->getId());
 	}
 
 	/**

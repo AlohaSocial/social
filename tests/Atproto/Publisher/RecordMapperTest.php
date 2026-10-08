@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Publisher;
 
+use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Model\BlobRef;
@@ -17,19 +18,27 @@ use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Publisher\PictureService;
+use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\TextMapper;
+use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\StreamCardsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Exceptions\CardNotFoundException;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\DocumentService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 /**
  * Every rule of what a post becomes on Bluesky, and that each result fits
@@ -39,6 +48,7 @@ use PHPUnit\Framework\TestCase;
 class RecordMapperTest extends TestCase {
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 	private const POST_ID = 'https://social.test/@alice/1';
+	private const OTHER = 'did:plc:z72i7hdynmk6r22z27h6tvur';
 
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
@@ -48,6 +58,12 @@ class RecordMapperTest extends TestCase {
 	private IdentityService $identities;
 	/** @var RepositoryService&MockObject */
 	private RepositoryService $repositories;
+	/** @var StreamRequest&MockObject */
+	private StreamRequest $streams;
+	/** @var AppViewClient&MockObject */
+	private AppViewClient $appView;
+	/** @var StreamCardsRequest&MockObject */
+	private StreamCardsRequest $cards;
 	private RecordMapper $mapper;
 	private Identity $identity;
 	private Person $author;
@@ -60,7 +76,12 @@ class RecordMapperTest extends TestCase {
 		$this->identities->method('getByActorId')->willThrowException(new AtprotoIdentityNotFoundException());
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$this->repositories->method('getRecordsByLocalId')->willReturn([]);
-		$this->mapper = new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories);
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->appView = $this->createMock(AppViewClient::class);
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->willThrowException(new CardNotFoundException());
+		$this->mapper = $this->mapper();
 		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', 'did:key:z', '', Identity::STATE_ACTIVE, '', 1700000000);
 		$this->author = new Person();
 		$this->author->setId('https://social.test/@alice');
@@ -178,7 +199,7 @@ class RecordMapperTest extends TestCase {
 		$parent = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forDagCbor($parentBytes), $parentBytes, 'https://social.test/@alice/0', 0);
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(static fn (string $id): array => $id === 'https://social.test/@alice/0' ? [$parent] : []);
-		$this->mapper = new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories);
+		$this->mapper = $this->mapper();
 		$post = $this->post('<p>an answer</p>');
 		$post->setInReplyTo('https://social.test/@alice/0');
 
@@ -212,12 +233,127 @@ class RecordMapperTest extends TestCase {
 			}
 			throw new AtprotoIdentityNotFoundException();
 		});
-		$this->mapper = new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories);
+		$this->mapper = $this->mapper();
 		$post = $this->post('<p><a href="https://social.test/@bob" class="u-url mention">@bob</a> hi</p>');
 
 		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
 
 		$this->assertSame(['$type' => 'app.bsky.richtext.facet#mention', 'did' => $bob->did], $record['facets'][0]['features'][0]);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testAReplyToABlueskyPostNamesItAndItsThreadsRoot(): void {
+		$root = ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kroot', 'cid' => Cid::forRaw('3kroot')->toString()];
+		$parent = $this->blueskyPost('3kparent', $root);
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturnCallback(static fn (string $id): Note => $id === $parent->getId() ? $parent : throw new StreamNotFoundException());
+		$this->appView->expects($this->never())->method('query');
+		$this->mapper = $this->mapper();
+		$post = $this->post('<p>an answer</p>');
+		$post->setInReplyTo($parent->getId());
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$this->assertSame(['root' => $root, 'parent' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent', 'cid' => Cid::forRaw('3kparent')->toString()]], $record['reply']);
+		$this->assertSame('an answer', $record['text']);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testAnUnknownRootIsAskedOfTheAppViewAndTheParentStandsInWhenItIsARoot(): void {
+		$parent = $this->blueskyPost('3kparent');
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturn($parent);
+		$this->appView->expects($this->exactly(2))->method('query')->with('app.bsky.feed.getPosts', ['uris' => ['at://' . self::OTHER . '/app.bsky.feed.post/3kparent']])
+			->willReturnOnConsecutiveCalls(
+				['posts' => [['record' => ['reply' => ['root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kfar', 'cid' => Cid::forRaw('3kfar')->toString()]]]]]],
+				['posts' => [['record' => ['text' => 'a root']]]],
+			);
+		$this->mapper = $this->mapper();
+		$post = $this->post('<p>an answer</p>');
+		$post->setInReplyTo($parent->getId());
+
+		$this->assertSame('at://' . self::OTHER . '/app.bsky.feed.post/3kfar', $this->mapper->post($post, $this->identity, $this->author)['record']['reply']['root']['uri']);
+		$this->assertSame('at://' . self::OTHER . '/app.bsky.feed.post/3kparent', $this->mapper->post($post, $this->identity, $this->author)['record']['reply']['root']['uri']);
+	}
+
+	public function testAQuoteOfABlueskyPostIsARecordEmbedAndWithPicturesBoth(): void {
+		$quoted = $this->blueskyPost('3kquoted');
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturn($quoted);
+		$this->mapper = $this->mapper();
+		$post = $this->post('<p>look at this</p>');
+		$post->setQuote($quoted->getId());
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+		$ref = ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'cid' => Cid::forRaw('3kquoted')->toString()];
+		$this->assertSame(['$type' => 'app.bsky.embed.record', 'record' => $ref], $record['embed']);
+		$this->assertSame('look at this', $record['text'], 'no link: the quote is embedded');
+		$this->lexicon->validateRecord($record);
+
+		$document = new Document();
+		$document->setNid(1);
+		$document->setId('https://social.test/doc/1');
+		$attachment = new MediaAttachment();
+		$attachment->setId('1');
+		$attachment->setType('image');
+		$post->setAttachments([$attachment]);
+		$this->documents->method('getMediaFromArray')->willReturn([$document]);
+		$this->pictures->method('blobFor')->willReturn(['blob' => new BlobRef(self::DID, Cid::forRaw('x'), 'https://social.test/doc/1', 'image/jpeg', 100), 'width' => 4, 'height' => 3]);
+		$withMedia = $this->mapper->post($post, $this->identity, $this->author)['record'];
+		$this->assertSame('app.bsky.embed.recordWithMedia', $withMedia['embed']['$type']);
+		$this->assertSame(['$type' => 'app.bsky.embed.record', 'record' => $ref], $withMedia['embed']['record']);
+		$this->assertSame('app.bsky.embed.images', $withMedia['embed']['media']['$type']);
+		$this->lexicon->validateRecord($withMedia);
+	}
+
+	public function testALinkPreviewIsAnExternalCardWhenThereAreNoPictures(): void {
+		$card = new StreamCard(self::POST_ID, 'https://nextcloud.com/blog/');
+		$card->setTitle('Nextcloud Hub');
+		$card->setDescription(str_repeat('A long description. ', 40));
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->with(self::POST_ID)->willReturn($card);
+		$this->mapper = $this->mapper();
+
+		$record = $this->mapper->post($this->post('<p>read <a href="https://nextcloud.com/blog/">this</a></p>'), $this->identity, $this->author)['record'];
+
+		$this->assertSame('app.bsky.embed.external', $record['embed']['$type']);
+		$this->assertSame('https://nextcloud.com/blog/', $record['embed']['external']['uri']);
+		$this->assertSame('Nextcloud Hub', $record['embed']['external']['title']);
+		$this->assertLessThanOrEqual(300, mb_strlen($record['embed']['external']['description']));
+		$this->lexicon->validateRecord($record);
+
+		$untitled = new StreamCard(self::POST_ID, 'https://nextcloud.com/');
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->willReturn($untitled);
+		$this->assertArrayNotHasKey('embed', $this->mapper()->post($this->post('<p>x</p>'), $this->identity, $this->author)['record'], 'a card with no title is no card');
+	}
+
+	public function testARestrictedQuotePolicyIsAPostgate(): void {
+		$post = $this->post('<p>mine</p>');
+		$this->assertNull($this->mapper->postgate($post, 'at://' . self::DID . '/app.bsky.feed.post/3k'));
+		$post->setQuotePolicy('public');
+		$this->assertNull($this->mapper->postgate($post, 'at://' . self::DID . '/app.bsky.feed.post/3k'));
+		foreach (['followers', 'nobody'] as $policy) {
+			$post->setQuotePolicy($policy);
+			$gate = $this->mapper->postgate($post, 'at://' . self::DID . '/app.bsky.feed.post/3k');
+			$this->assertSame([['$type' => 'app.bsky.feed.postgate#disableRule']], $gate['embeddingRules'], $policy);
+			$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3k', $gate['post']);
+			$this->lexicon->validateRecord($gate);
+		}
+	}
+
+	public function testAReferenceWithABrokenCidIsNotOnBluesky(): void {
+		$quoted = new Note();
+		$quoted->setId('https://bsky.app/profile/' . self::OTHER . '/post/3kbad');
+		$quoted->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kbad', 'cid' => 'not-a-cid']);
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturn($quoted);
+		$post = $this->post('<p>see</p>');
+		$post->setQuote($quoted->getId());
+
+		$record = $this->mapper()->post($post, $this->identity, $this->author)['record'];
+		$this->assertArrayNotHasKey('embed', $record, 'linked instead of embedded');
+		$this->assertStringContainsString($quoted->getId(), $record['text']);
 		$this->lexicon->validateRecord($record);
 	}
 
@@ -231,6 +367,20 @@ class RecordMapperTest extends TestCase {
 		$this->assertSame('I run Nextcloud (https://nextcloud.com)', $record['description']);
 		$this->assertArrayNotHasKey('avatar', $record);
 		$this->lexicon->validateRecord($record);
+	}
+
+	private function mapper(): RecordMapper {
+		$refs = new PostRefs($this->repositories, $this->streams, $this->appView, new NullLogger());
+
+		return new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories, $refs, $this->cards);
+	}
+
+	private function blueskyPost(string $rkey, ?array $replyRoot = null): Note {
+		$note = new Note();
+		$note->setId('https://bsky.app/profile/' . self::OTHER . '/post/' . $rkey);
+		$note->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/' . $rkey, 'cid' => Cid::forRaw($rkey)->toString(), 'reply_root' => $replyRoot]);
+
+		return $note;
 	}
 
 	private function post(string $html): Note {

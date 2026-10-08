@@ -174,7 +174,7 @@ class NotificationPoller {
 			case 'reply':
 			case 'mention':
 			case 'quote':
-				return $this->storePostOf($uri);
+				return $this->store->storeByUri($uri);
 		}
 
 		return false;
@@ -190,23 +190,6 @@ class NotificationPoller {
 				$this->cursors->add($identity->did, $identity->handle, self::TABLE);
 			}
 		}
-	}
-
-	/**
-	 * The post a reply, mention or quote is: fetched from the public AppView
-	 * and stored like any post read off a feed.
-	 */
-	private function storePostOf(string $uri): bool {
-		try {
-			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => [$uri]]);
-		} catch (Throwable $e) {
-			$this->logger->notice('Bluesky post not fetched', ['uri' => $uri, 'exception' => $e]);
-
-			return false;
-		}
-		$post = is_array($answer['posts'][0] ?? null) ? $answer['posts'][0] : null;
-
-		return $post !== null && $this->store->storePost($post);
 	}
 
 	private function ensureActor(array $profile): bool {

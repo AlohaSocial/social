@@ -1050,7 +1050,10 @@ appears with a butterfly badge next to its name, its profile page is
 follow requests). Their posts then come into your home feed within minutes,
 badged but otherwise ordinary: like, boost, reply and quote them as you would
 any post — a like or boost reaches Bluesky, a reply lands in their thread
-there. *Open on Bluesky* in the post menu leads to the post on bsky.app. When
+there, and a quote shows their post inside yours. A post they delete on
+Bluesky disappears here too, once the server's regular check reaches it. If you limit who may quote a post
+of yours (followers only, or nobody), nobody on Bluesky can quote it —
+Bluesky has no "followers only". *Open on Bluesky* in the post menu leads to the post on bsky.app. When
 somebody on Bluesky follows you, likes, boosts, answers or mentions you, it
 shows in Activities like anything else, under your notification policy.
 

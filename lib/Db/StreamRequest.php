@@ -812,6 +812,33 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The ids of stored Bluesky posts published since a moment, after a
+	 * stream number, in order: what the check for posts deleted on Bluesky
+	 * walks through a page at a time.
+	 *
+	 * @return array<int, string> id by nid
+	 */
+	public function getBlueskyPostIds(int $since, int $afterNid, int $limit): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select('nid', 'id')
+			->from(self::TABLE_STREAM)
+			->where($qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%')))
+			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter(Note::TYPE)))
+			->andWhere($qb->expr()->gt('nid', $qb->createNamedParameter($afterNid, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->gte('published_time', $qb->createNamedParameter(new \DateTime('@' . $since), IQueryBuilder::PARAM_DATE)))
+			->orderBy('nid', 'asc')
+			->setMaxResults(max(1, $limit));
+		$ids = [];
+		$result = $qb->executeQuery();
+		while ($row = $result->fetch()) {
+			$ids[(int)$row['nid']] = (string)$row['id'];
+		}
+		$result->closeCursor();
+
+		return $ids;
+	}
+
+	/**
 	 * The public posts local accounts made since a point in time, newest
 	 * first: what the Bluesky reconcile pass checks for a missing record.
 	 *

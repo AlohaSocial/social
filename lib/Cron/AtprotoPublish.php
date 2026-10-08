@@ -55,6 +55,7 @@ class AtprotoPublish extends QueuedJob {
 			}
 			if ($action === 'delete') {
 				$this->publisher->deletePost($id);
+				$this->interactions->removeAllOf($id);
 
 				return;
 			}

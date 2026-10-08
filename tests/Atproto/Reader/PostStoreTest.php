@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
@@ -18,6 +20,7 @@ use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -47,6 +50,10 @@ class PostStoreTest extends TestCase {
 	/** @var BlueskyActorService&MockObject */
 	private BlueskyActorService $actors;
 	private PostStore $store;
+	/** @var AppViewClient&MockObject */
+	private AppViewClient $appView;
+	/** @var InteractionPublisher&MockObject */
+	private InteractionPublisher $interactions;
 	/** @var string[] ids the stream already has */
 	private array $known = [];
 	/** @var ACore[] what reached the import path */
@@ -87,7 +94,9 @@ class PostStoreTest extends TestCase {
 		$this->actors = $this->createMock(BlueskyActorService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
-		$this->store = new PostStore(new PostMapper($this->resolver()), new ActorMapper(), $this->actors, $this->import, $this->streams, $time, new NullLogger());
+		$this->appView = $this->createMock(AppViewClient::class);
+		$this->interactions = $this->createMock(InteractionPublisher::class);
+		$this->store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->import, $this->streams, $time, new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -141,6 +150,47 @@ class PostStoreTest extends TestCase {
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER, $announce->getActorId());
 		$this->assertSame('https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22', $announce->getObjectId());
 		$this->assertSame('bsky.app', $announce->getOrigin());
+	}
+
+	public function testAReplyWhoseParentIsNotHereFetchesTheParentOneHopUp(): void {
+		$this->actors->method('cached')->willReturnCallback(fn (string $did): ?Person => $this->person($did));
+		$reply = $this->postView();
+		$reply['uri'] = 'at://' . self::DID . '/app.bsky.feed.post/3kreply';
+		$reply['record']['reply'] = [
+			'root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kroot', 'cid' => 'bafyroot'],
+			'parent' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent', 'cid' => 'bafyparent'],
+		];
+		$parent = $this->postView();
+		$parent['uri'] = 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent';
+		$parent['author'] = ['did' => self::OTHER, 'handle' => 'bob.bsky.social'];
+		$parent['record']['reply'] = ['root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kroot', 'cid' => 'bafyroot'], 'parent' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kroot', 'cid' => 'bafyroot']];
+		$this->appView->expects($this->once())->method('query')->with('app.bsky.feed.getPosts', ['uris' => ['at://' . self::OTHER . '/app.bsky.feed.post/3kparent']])->willReturn(['posts' => [$parent]]);
+
+		$this->assertTrue($this->store->storePost($reply));
+		$this->assertCount(2, $this->imported, 'the parent, then the reply; the parent\'s own parent is not fetched');
+		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kparent', $this->imported[0]->getObject()->getId());
+		$this->assertSame('https://bsky.app/profile/' . self::DID . '/post/3kreply', $this->imported[1]->getObject()->getId());
+	}
+
+	public function testPostsTheAppViewNoLongerHasAreDeletedAndTheirRecordsWithThem(): void {
+		$kept = 'https://bsky.app/profile/' . self::DID . '/post/3kkept';
+		$gone = 'https://bsky.app/profile/' . self::DID . '/post/3kgone';
+		$this->known = [$kept, $gone];
+		$this->appView->expects($this->once())->method('query')->with('app.bsky.feed.getPosts', ['uris' => ['at://' . self::DID . '/app.bsky.feed.post/3kkept', 'at://' . self::DID . '/app.bsky.feed.post/3kgone']])
+			->willReturn(['posts' => [['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kkept']]]);
+		$this->interactions->expects($this->once())->method('removeAllOf')->with($gone);
+
+		$this->assertSame(1, $this->store->deleteGone([$kept, $gone, 'https://mastodon.test/x']));
+		$this->assertCount(1, $this->imported);
+		$this->assertSame($gone, $this->imported[0]->getObjectId());
+	}
+
+	public function testNothingIsConcludedFromAnAppViewThatDidNotAnswer(): void {
+		$this->known = ['https://bsky.app/profile/' . self::DID . '/post/3k'];
+		$this->appView->method('query')->willThrowException(new AtprotoException('down'));
+		$this->assertSame(0, $this->store->deleteGone($this->known));
+		$this->appView = $this->createMock(AppViewClient::class);
+		$this->assertSame([], $this->imported);
 	}
 
 	public function testADeleteIsSentForAKnownPostOnly(): void {
