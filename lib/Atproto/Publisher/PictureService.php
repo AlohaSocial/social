@@ -53,12 +53,13 @@ class PictureService {
 	/**
 	 * The blob for a picture, made the first time it is asked for.
 	 *
+	 * @param int $maxBytes what the blob may weigh: a post's picture, or less for a link card's
 	 * @return array{blob: BlobRef, width: int, height: int}|null null when the picture cannot be shown on Bluesky
 	 */
-	public function blobFor(Identity $identity, Person $owner, Document $document): ?array {
+	public function blobFor(Identity $identity, Person $owner, Document $document, int $maxBytes = self::MAX_BYTES): ?array {
 		$existing = $this->blobRequest->getByDocument($identity->did, $document->getId());
 		[$width, $height] = $document->getLocalCopySize();
-		if ($existing !== null) {
+		if ($existing !== null && $existing->size <= $maxBytes) {
 			return ['blob' => $existing, 'width' => (int)$width, 'height' => (int)$height];
 		}
 
@@ -71,8 +72,8 @@ class PictureService {
 		}
 		$mime = $document->getMimeType();
 		$storedId = $document->getId();
-		if (strlen($bytes) > self::MAX_BYTES || !in_array($mime, self::SHOWN_TYPES, true)) {
-			$encoded = $this->reencode($bytes);
+		if (strlen($bytes) > $maxBytes || !in_array($mime, self::SHOWN_TYPES, true)) {
+			$encoded = $this->reencode($bytes, $maxBytes);
 			if ($encoded === null) {
 				return null;
 			}
@@ -114,7 +115,7 @@ class PictureService {
 	/**
 	 * @return array{0: string, 1: int, 2: int}|null bytes, width, height
 	 */
-	private function reencode(string $original): ?array {
+	private function reencode(string $original, int $maxBytes): ?array {
 		foreach (self::WIDTHS as $width) {
 			foreach (self::QUALITIES as $quality) {
 				try {
@@ -127,7 +128,7 @@ class PictureService {
 
 					return null;
 				}
-				if (strlen($bytes) <= self::MAX_BYTES) {
+				if (strlen($bytes) <= $maxBytes) {
 					return [$bytes, (int)$image->getDestWidth(), (int)$image->getDestHeight()];
 				}
 			}

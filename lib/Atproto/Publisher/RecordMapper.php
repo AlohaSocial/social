@@ -54,6 +54,7 @@ class RecordMapper {
 		private RepositoryService $repositories,
 		private PostRefs $refs,
 		private StreamCardsRequest $cards,
+		private CardThumbnail $thumbnails,
 	) {
 	}
 
@@ -153,7 +154,7 @@ class RecordMapper {
 		if ($reply !== null) {
 			$record['reply'] = $reply;
 		}
-		$embed = $this->embed($post, $images, $quoted, $videoEmbed);
+		$embed = $this->embed($post, $identity, $author, $images, $quoted, $videoEmbed);
 		if ($embed !== null) {
 			$record['embed'] = $embed;
 		}
@@ -216,7 +217,7 @@ class RecordMapper {
 	 * @param list<array> $images
 	 * @param array{uri: string, cid: string}|null $quoted
 	 */
-	private function embed(Stream $post, array $images, ?array $quoted, ?array $video = null): ?array {
+	private function embed(Stream $post, Identity $identity, Person $author, array $images, ?array $quoted, ?array $video = null): ?array {
 		$pictures = $video ?? ($images === [] ? null : ['$type' => 'app.bsky.embed.images', 'images' => $images]);
 		if ($quoted !== null) {
 			$record = ['$type' => 'app.bsky.embed.record', 'record' => $quoted];
@@ -227,7 +228,7 @@ class RecordMapper {
 			return $pictures;
 		}
 
-		return $this->linkCard($post);
+		return $this->linkCard($post, $identity, $author);
 	}
 
 	/**
@@ -254,9 +255,10 @@ class RecordMapper {
 
 	/**
 	 * The post's link preview as an external card, when there is one with a
-	 * title: the address, the title and the description, no thumbnail.
+	 * title: the address, the title, the description, and the page's picture
+	 * when it can be had.
 	 */
-	private function linkCard(Stream $post): ?array {
+	private function linkCard(Stream $post, Identity $identity, Person $author): ?array {
 		try {
 			$card = $this->cards->getByStreamId($post->getId());
 		} catch (CardNotFoundException) {
@@ -268,11 +270,17 @@ class RecordMapper {
 			return null;
 		}
 
-		return ['$type' => 'app.bsky.embed.external', 'external' => [
+		$external = [
 			'uri' => $uri,
 			'title' => self::clip($title, 300, 3000),
 			'description' => self::clip(trim($card->getDescription()), 300, 3000),
-		]];
+		];
+		$thumb = $this->thumbnails->blobFor($identity, $author, $card);
+		if ($thumb !== null) {
+			$external['thumb'] = $thumb->toRecordValue();
+		}
+
+		return ['$type' => 'app.bsky.embed.external', 'external' => $external];
 	}
 
 	/**
