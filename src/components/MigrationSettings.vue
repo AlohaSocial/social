@@ -412,7 +412,7 @@
 				</li>
 				<li>
 					<strong>{{ t('social', 'Bluesky and X') }}</strong>
-					{{ t('social', '— neither carries a follow list this can read: X exports the accounts it follows as numbers rather than names, and nothing on either side federates a follow. X posts can still be imported with the button above. Bluesky accounts can be followed through a bridge if the other side has opted in.') }}
+					{{ t('social', '— neither carries a follow list this can read: X exports the accounts it follows as numbers rather than names, and nothing on either side federates a follow. X posts can still be imported with the button above. A Bluesky account of your own moves here whole, followers and all, with Bring your Bluesky account here below.') }}
 				</li>
 			</ul>
 
@@ -513,6 +513,7 @@
 			</template>
 		</section>
 
+		<BlueskyMoveIn />
 		<BlueskyMoveAway />
 	</div>
 </template>
@@ -523,6 +524,7 @@ import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess } from '../services/toast.js'
 import { confirmPassword } from '../services/externalApi.js'
 import BlueskyMoveAway from './BlueskyMoveAway.vue'
+import BlueskyMoveIn from './BlueskyMoveIn.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -552,6 +554,7 @@ export default {
 
 	components: {
 		BlueskyMoveAway,
+		BlueskyMoveIn,
 		IconAccountArrowLeft,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,

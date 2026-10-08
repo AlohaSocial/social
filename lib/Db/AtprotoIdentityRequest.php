@@ -193,6 +193,25 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 		return $identities;
 	}
 
+	/**
+	 * Gives an identity row the DID that moved here (§13.1), with the
+	 * signing key made for it here: the actor keeps one row, its handle and
+	 * its custom handle; the DID it had is retired by the caller.
+	 */
+	public function adoptDid(int $id, string $did, string $sealedSigningKey, string $signingPublic, string $movedFromPds): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_ATPROTO_IDENTITY)
+			->set('did', $qb->createNamedParameter($did))
+			->set('signing_key', $qb->createNamedParameter($sealedSigningKey))
+			->set('signing_public', $qb->createNamedParameter($signingPublic))
+			->set('recovery_public', $qb->createNamedParameter(''))
+			->set('state', $qb->createNamedParameter(Identity::STATE_ACTIVE))
+			->set('moved_from_pds', $qb->createNamedParameter($movedFromPds))
+			->set('updated', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		$qb->executeStatement();
+	}
+
 	public function setRecoveryPublic(string $did, string $recoveryPublic): void {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_ATPROTO_IDENTITY)

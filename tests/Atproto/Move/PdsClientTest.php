@@ -11,7 +11,9 @@ namespace OCA\Social\Tests\Atproto\Move;
 
 use OCA\Social\Atproto\Move\PdsClient;
 use OCA\Social\Exceptions\AtprotoException;
+use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +40,26 @@ class PdsClientTest extends TestCase {
 				$this->addToAssertionCount(1);
 			}
 		}
+	}
+
+	public function testAnEmptyInputIsSentAsAnObject(): void {
+		$sent = [];
+		$response = $this->createMock(IResponse::class);
+		$response->method('getStatusCode')->willReturn(200);
+		$response->method('getBody')->willReturn('{}');
+		$http = $this->createMock(IClient::class);
+		$http->method('post')->willReturnCallback(function (string $url, array $options) use (&$sent, $response) {
+			$sent[] = $options['body'];
+			return $response;
+		});
+		$clients = $this->createMock(IClientService::class);
+		$clients->method('newClient')->willReturn($http);
+		$client = new PdsClient($clients, $this->createMock(IConfig::class));
+
+		$client->call('https://pds.example.com', 'com.atproto.server.deactivateAccount', 'POST', [], []);
+		$client->call('https://pds.example.com', 'com.atproto.repo.createRecord', 'POST', [], ['repo' => 'did:plc:a']);
+
+		$this->assertSame(['{}', '{"repo":"did:plc:a"}'], $sent);
 	}
 
 	public function testPlainHttpOnlyOnAServerThatTalksToLocalOnes(): void {

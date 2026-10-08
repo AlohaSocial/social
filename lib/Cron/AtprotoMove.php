@@ -9,18 +9,25 @@ declare(strict_types=1);
 
 namespace OCA\Social\Cron;
 
+use OCA\Social\Atproto\Model\Move;
 use OCA\Social\Atproto\Move\MoveAwayService;
+use OCA\Social\Atproto\Move\MoveInService;
+use OCA\Social\Db\AtprotoMoveRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 
 /**
- * Carries a move of a Bluesky account away on (§13.2): the repository, the
- * blobs, the preferences, the DID, the activation — whatever is left of it.
+ * Carries a move of a Bluesky account on (§13), whatever is left of it:
+ * away — the repository, the blobs, the preferences, the DID, the
+ * activation — or here — the repository, the blobs, the preferences, the
+ * follows, then, once the person entered the e-mailed code, the DID.
  */
 class AtprotoMove extends QueuedJob {
 	public function __construct(
 		ITimeFactory $time,
-		private MoveAwayService $moves,
+		private AtprotoMoveRequest $moves,
+		private MoveAwayService $away,
+		private MoveInService $in,
 	) {
 		parent::__construct($time);
 	}
@@ -28,8 +35,14 @@ class AtprotoMove extends QueuedJob {
 	#[\Override]
 	protected function run($argument): void {
 		$moveId = is_array($argument) ? (int)($argument['move'] ?? 0) : 0;
-		if ($moveId > 0) {
-			$this->moves->run($moveId);
+		$move = $moveId > 0 ? $this->moves->get($moveId) : null;
+		if ($move === null) {
+			return;
+		}
+		if ($move->direction === Move::IN) {
+			$this->in->run($move);
+		} else {
+			$this->away->run($moveId);
 		}
 	}
 }

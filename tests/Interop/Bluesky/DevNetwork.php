@@ -221,6 +221,15 @@ final class DevNetwork {
 	}
 
 	/**
+	 * The code the dev PDS would have e-mailed an account for a PLC operation.
+	 */
+	public function plcToken(string $did): string {
+		[$status, $body] = $this->request('GET', $this->handleServer . '/plc-token?did=' . rawurlencode($did), null, []);
+
+		return $status === 200 ? trim($body) : '';
+	}
+
+	/**
 	 * Puts a DID in the handle server's `/.well-known/atproto-did`, as a
 	 * person does on their own domain.
 	 */

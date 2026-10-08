@@ -360,7 +360,18 @@ class FollowService {
 	 * @throws FollowSameAccountException
 	 * @throws InvalidResourceException when Bluesky is switched off
 	 */
-	private function followBluesky(Person $actor, Person $remoteActor): bool {
+	/**
+	 * A follow of a Bluesky account that moved here with the person's
+	 * repository (§13.1): saved here, linked to the record that is there
+	 * already, nothing written to Bluesky.
+	 *
+	 * @return bool whether the follow was made now
+	 */
+	public function adoptBlueskyFollow(Person $actor, Person $remoteActor, string $did, string $rkey): bool {
+		return $this->followBluesky($actor, $remoteActor, $did, $rkey);
+	}
+
+	private function followBluesky(Person $actor, Person $remoteActor, string $adoptDid = '', string $adoptRkey = ''): bool {
 		if ($this->blueskyGraph === null) {
 			throw new InvalidResourceException('Bluesky is not available here');
 		}
@@ -381,7 +392,11 @@ class FollowService {
 		$this->followsRequest->accepted($follow);
 		$this->accountService->bumpActorCount($remoteActor->getId(), 'count_followers', 1);
 		$this->timelineRevisionService->bumpForActor($actor->getId());
-		$this->blueskyGraph->follow($actor, $remoteActor, $follow);
+		if ($adoptRkey !== '') {
+			$this->blueskyGraph->adopt($adoptDid, $adoptRkey, $remoteActor, $follow);
+		} else {
+			$this->blueskyGraph->follow($actor, $remoteActor, $follow);
+		}
 		$this->logger->info('FollowService::followAccount - following a Bluesky account', ['actor' => $actor->getId(), 'object' => $remoteActor->getId()]);
 
 		return true;

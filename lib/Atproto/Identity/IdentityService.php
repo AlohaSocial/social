@@ -272,6 +272,40 @@ class IdentityService {
 	}
 
 	/**
+	 * A DID that moved here (§13.1) becomes the account's: the directory takes
+	 * the operation the old PDS signed for it, the DID this server had made
+	 * for the account is retired — tombstoned, its repository dropped — and
+	 * the account's identity row takes the moved DID with the signing key
+	 * made for it here, keeping its handle. The network is told both.
+	 *
+	 * @param array $operation the signed PLC operation that names this PDS
+	 * @return Identity the account's identity, with its new DID
+	 * @throws AtprotoException when the directory refuses the operation; nothing has changed then
+	 */
+	public function adopt(Identity $current, string $did, PrivateKey $signingKey, string $oldPds, array $operation): Identity {
+		$logId = $this->plcLog->record($did, PlcOperation::cid($operation)->toString(), $operation);
+		$this->plcLog->markSent($logId);
+		try {
+			$this->plc->submit($did, $operation);
+		} catch (AtprotoException $e) {
+			$this->plcLog->remove($logId);
+			throw $e;
+		}
+		$this->plcLog->markConfirmed($logId);
+
+		if ($current->did !== $did) {
+			$this->tombstone($current);
+		}
+		$this->identityRequest->adoptDid($current->id, $did, $this->cipher->seal($signingKey->secret()), $signingKey->didKey(), $oldPds);
+		$adopted = $this->identityRequest->getByDid($did);
+		$this->events->identity($did, $adopted->handle);
+		$this->events->account($did, true);
+		$this->logger->info('Bluesky account moved here', ['did' => $did, 'retired' => $current->did, 'from' => $oldPds]);
+
+		return $adopted;
+	}
+
+	/**
 	 * The account lives elsewhere now: announced inactive here, nothing more
 	 * published for it, and no new identity made for the local account.
 	 */

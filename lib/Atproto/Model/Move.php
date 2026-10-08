@@ -11,15 +11,21 @@ namespace OCA\Social\Atproto\Model;
 
 /**
  * A move of a Bluesky account between this server and another PDS (§13):
- * where to, the step it has reached, and how it ended.
+ * where to or from, the step it has reached, and how it ended.
  *
  * Moving away goes through the steps in order: the account is made on the
  * other PDS when the move starts, then its repository, its blobs and its
  * preferences are copied there, the DID is pointed there, the account is
  * activated there and switched off here.
+ *
+ * Moving here: the repository, the blobs, the preferences and the follows
+ * are copied from the old PDS, the old PDS e-mails the person a code, and
+ * with it signs the operation that points the DID here; the account then
+ * takes the DID, and is switched off there.
  */
 final class Move {
 	public const AWAY = 'away';
+	public const IN = 'in';
 
 	public const STEP_REPO = 'repo';
 	public const STEP_BLOBS = 'blobs';
@@ -27,13 +33,19 @@ final class Move {
 	public const STEP_IDENTITY = 'identity';
 	public const STEP_ACTIVATE = 'activate';
 	public const STEP_DONE = 'done';
+	/** moving here: the account's follows become follows here */
+	public const STEP_FOLLOWS = 'follows';
+	/** moving here: the old PDS e-mailed a code, and the person enters it */
+	public const STEP_CODE = 'code';
 
 	public const RUNNING = 'running';
+	/** waiting for the person: the code the old PDS e-mailed them */
+	public const WAITING = 'waiting';
 	public const FAILED = 'failed';
 	public const DONE = 'done';
 
 	/**
-	 * @param array{blobs?: int, blobs_total?: int} $progress
+	 * @param array{blobs?: int, records?: int, follows?: int} $progress counts of what was copied
 	 */
 	public function __construct(
 		public readonly int $id,
@@ -51,6 +63,19 @@ final class Move {
 		public readonly int $creation = 0,
 		public readonly int $updated = 0,
 	) {
+	}
+
+	/** The step after one when moving here; the last is done. */
+	public static function nextIn(string $step): string {
+		return match ($step) {
+			self::STEP_REPO => self::STEP_BLOBS,
+			self::STEP_BLOBS => self::STEP_PREFERENCES,
+			self::STEP_PREFERENCES => self::STEP_FOLLOWS,
+			self::STEP_FOLLOWS => self::STEP_CODE,
+			self::STEP_CODE => self::STEP_IDENTITY,
+			self::STEP_IDENTITY => self::STEP_ACTIVATE,
+			default => self::STEP_DONE,
+		};
 	}
 
 	/** The step after one; the last is done. */

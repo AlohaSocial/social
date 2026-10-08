@@ -305,6 +305,32 @@ class CacheDocumentService {
 	}
 
 	/**
+	 * Stores a file byte for byte: the blob of a Bluesky repository that
+	 * moved here, which its records name by the hash of exactly these bytes.
+	 * The type, size and quota checks of any upload apply; nothing is
+	 * stripped or converted.
+	 *
+	 * @throws CacheContentMimeTypeException
+	 * @throws CacheContentSizeException
+	 * @throws NotFoundException
+	 * @throws NotPermittedException
+	 */
+	public function saveAsIsFromTemp(Document $document, string $tmpPath): void {
+		$mime = (string)mime_content_type($tmpPath);
+		$this->filterMimeTypes($mime);
+		$size = (int)filesize($tmpPath);
+		$this->filterSize($mime, $size);
+		$this->filterQuota($document, $mime, $size);
+		$this->filterBlockedMedia($tmpPath);
+
+		$document->setMediaType($mime);
+		$document->setMimeType($mime);
+		$document->setLocalCopy($this->generateFileFromPath($tmpPath));
+		$document->setSizeBytes($size);
+		$this->recordDomainQuota($document, $size);
+	}
+
+	/**
 	 * @throws CacheContentDecodeException
 	 * @throws CacheContentMimeTypeException
 	 * @throws CacheContentSizeException
