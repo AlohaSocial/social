@@ -33,6 +33,8 @@ use OCA\Social\Service\SuggestionService;
 use OCA\Social\Service\TeamService;
 use OCA\Social\Service\TrendService;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserSession;
@@ -463,5 +465,23 @@ class PixelfedControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->composeTag($wide, ['bob@cloud.example'])->getStatus());
 		$this->assertSame(Http::STATUS_OK, $this->controller()->composeUntagMe($wide)->getStatus());
+	}
+
+	/**
+	 * Nextcloud applies `UserRateLimit` only to a caller with a session, and
+	 * every caller of this API is an app holding a token, which Nextcloud
+	 * counts as anonymous: a route with only that attribute is unlimited for
+	 * exactly the callers it was written for.
+	 */
+	public function testEveryRateLimitedRouteAlsoLimitsSessionlessCallers(): void {
+		$bare = [];
+		foreach ((new \ReflectionClass(PixelfedController::class))->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
+			if ($method->getAttributes(UserRateLimit::class) !== []
+				&& $method->getAttributes(AnonRateLimit::class) === []) {
+				$bare[] = $method->getName();
+			}
+		}
+
+		$this->assertSame([], $bare, 'these routes are unthrottled for a bearer-token client');
 	}
 }

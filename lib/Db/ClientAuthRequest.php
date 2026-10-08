@@ -88,6 +88,15 @@ class ClientAuthRequest extends ClientRequestBuilder {
 			->setValue('last_update', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
 		$qb->executeStatement();
+
+		// the app row's own last_update marks it as having been authorized at
+		// least once, which keeps it out of ClientRequest::deleteNeverAuthorized();
+		// a second on, so an app authorized the second it registered differs too
+		$app = $this->getQueryBuilder();
+		$app->update(self::TABLE_CLIENT)
+			->set('last_update', $app->createNamedParameter(new DateTime('+1 second'), IQueryBuilder::PARAM_DATE))
+			->where($app->expr()->eq('id', $app->createNamedParameter($clientId, IQueryBuilder::PARAM_INT)));
+		$app->executeStatement();
 	}
 
 	/**

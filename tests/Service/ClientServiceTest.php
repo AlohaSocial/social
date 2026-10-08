@@ -50,6 +50,20 @@ class ClientServiceTest extends TestCase {
 		return $client;
 	}
 
+	/**
+	 * Expired authorizations used to go only when somebody presented one, and
+	 * registrations nobody signed in with never went at all.
+	 */
+	public function testTheSweepTakesExpiredAuthorizationsAndUnusedRegistrations(): void {
+		$this->clientAuthRequest->expects($this->once())->method('deprecate');
+		$this->clientRequest->expects($this->once())->method('deleteNeverAuthorized')
+			->with($this->callback(static fn (int $before): bool
+				=> abs($before - (time() - ClientService::TIME_UNUSED_APP_TTL)) <= 5))
+			->willReturn(3);
+
+		$this->assertSame(3, $this->service->sweep());
+	}
+
 	public function testCreateAppGeneratesCredentialsAndSaves(): void {
 		$client = $this->registeredClient();
 		$this->clientRequest->expects($this->once())

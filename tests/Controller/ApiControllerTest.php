@@ -5434,6 +5434,14 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame([], $bare, 'these routes are unthrottled for a bearer-token client');
 	}
 
+	/** Every report notifies the moderators, so filing them is limited for every caller. */
+	public function testFilingAReportIsRateLimited(): void {
+		$method = new ReflectionMethod(ApiController::class, 'reportNew');
+
+		$this->assertNotSame([], $method->getAttributes(AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(UserRateLimit::class));
+	}
+
 	/**
 	 * The durable cache on its table backend — as on an instance with no
 	 * memcache — so the Idempotency-Key round trip is exercised there.

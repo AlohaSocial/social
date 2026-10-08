@@ -106,9 +106,13 @@ class ApiController extends MastodonApiController {
 	 * Files a moderation report about an account (and optionally some of its
 	 * statuses) for the instance admins.
 	 *
+	 * Limited per hour: every report lands in front of a moderator and
+	 * notifies them, so a client filing them in a loop floods both.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/reports')]
 	public function reportNew(): DataResponse {
 		try {

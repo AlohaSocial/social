@@ -32,6 +32,13 @@ class ClientService {
 	// looks like there is no token refresh. token must have been used in the last year.
 	public const TIME_TOKEN_TTL = 30672000; // 1y
 
+	/**
+	 * How long a registration nobody has authorized is kept. Mastodon vacuums
+	 * those after a day; a week leaves room for somebody who registered a
+	 * client and comes back to sign in with it later.
+	 */
+	public const TIME_UNUSED_APP_TTL = 604800; // 7d
+
 	// an authorization code is single-use plumbing; it expires quickly
 	public const TIME_CODE_TTL = 600; // 10m
 
@@ -313,6 +320,22 @@ class ClientService {
 		}
 
 		return $client;
+	}
+
+	/**
+	 * The housekeeping `Cron\Cache` runs: authorizations idle past the TTL,
+	 * and app registrations nobody ever authorized.
+	 *
+	 * The first used to happen only when an expired token was presented, so a
+	 * token whose holder never came back stayed in the table for good; the
+	 * second is what keeps the public `POST /api/v1/apps` from filling it.
+	 *
+	 * @return int how many unused registrations were removed
+	 */
+	public function sweep(): int {
+		$this->clientAuthRequest->deprecate();
+
+		return $this->clientRequest->deleteNeverAuthorized(time() - self::TIME_UNUSED_APP_TTL);
 	}
 
 	/**

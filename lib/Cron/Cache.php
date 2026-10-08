@@ -14,6 +14,7 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheActorSweepService;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
@@ -98,6 +99,7 @@ class Cache extends TimedJob {
 		private ?DurableCache $durableCache = null,
 		private ?FediverseDirectoryService $fediverseDirectoryService = null,
 		private ?RemoteCountService $remoteCountService = null,
+		private ?ClientService $clientService = null,
 	) {
 		parent::__construct($time);
 		$this->setInterval(12 * 60);
@@ -189,6 +191,11 @@ class Cache extends TimedJob {
 				// a read already ignores an expired row; this keeps the table
 				// the size of what is live
 				$this->durableCache?->purgeExpired();
+			},
+			'sweepClients' => function (): void {
+				// expired authorizations, and the registrations the public
+				// app endpoint left that nobody ever signed in with
+				$this->clientService?->sweep();
 			},
 		];
 	}

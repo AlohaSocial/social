@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\CacheActorSweepService;
+use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
@@ -318,6 +319,29 @@ class CacheTest extends TestCase {
 		$this->job->start($this->jobList);
 	}
 
+	public function testTheClientTablesAreSweptOnEveryPass(): void {
+		$clientService = $this->createMock(ClientService::class);
+		$clientService->expects($this->once())->method('sweep')->willReturn(0);
+		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([]);
+
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$job = new Cache(
+			$time,
+			$this->accountService,
+			$this->cacheActorService,
+			$this->documentService,
+			$this->hashtagService,
+			$this->streamService,
+			$this->streamPruneService,
+			$this->cacheActorsRequest,
+			$this->pollService,
+			$this->logger,
+			clientService: $clientService,
+		);
+		$job->start($this->jobList);
+	}
+
 	/** The Discover page reads what this finds out, and never asks itself. */
 	public function testTheDirectorySourcesAreRefreshedHere(): void {
 		$this->cacheActorsRequest->method('getRemoteActorsToSync')->willReturn([]);
@@ -356,7 +380,7 @@ class CacheTest extends TestCase {
 			'nothing after the step that ran out of time may run'
 		);
 		$this->assertCount(1, $this->warnings);
-		$this->assertStringContainsString('15 step(s) skipped', $this->warnings[0]['message']);
+		$this->assertStringContainsString('16 step(s) skipped', $this->warnings[0]['message']);
 		$this->assertStringContainsString('manageCacheLocalActors', $this->warnings[0]['message']);
 	}
 

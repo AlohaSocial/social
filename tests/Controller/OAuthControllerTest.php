@@ -1315,4 +1315,16 @@ class OAuthControllerTest extends TestCase {
 		unset($two['version'], $twoOne['version'], $two['software'], $twoOne['software']);
 		$this->assertSame($two, $twoOne);
 	}
+
+	/**
+	 * Registration is public and every call is a row, so it is limited for a
+	 * caller without a session — which is every client registering itself —
+	 * as well as for one with.
+	 */
+	public function testRegistrationIsRateLimitedForEveryCaller(): void {
+		$method = new \ReflectionMethod(OAuthController::class, 'apps');
+
+		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\AnonRateLimit::class));
+		$this->assertNotSame([], $method->getAttributes(\OCP\AppFramework\Http\Attribute\UserRateLimit::class));
+	}
 }
