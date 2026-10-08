@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Cron\ResolveActor;
+use OCA\Social\Cron\SyncRemoteTimeline;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCP\BackgroundJob\IJobList;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -31,10 +33,47 @@ class RemoteFetchQueue {
 	/** The most jobs one call queues; more than one page of anything names. */
 	public const MAX_PER_CALL = 20;
 
+	/** Seconds between two syncs of one account's outbox asked for by its profile. */
+	public const TIMELINE_SYNC_INTERVAL = 900;
+
+	private const TIMELINE_SYNCED = 'social.outboxsync';
+
 	public function __construct(
 		private IJobList $jobList,
+		private DurableCache $durableCache,
 		private LoggerInterface $logger,
 	) {
+	}
+
+	/**
+	 * Queues a sync of a remote account's outbox, at most once per
+	 * `TIMELINE_SYNC_INTERVAL` per account.
+	 *
+	 * The interval is stamped when the job is queued rather than when it ran:
+	 * what it bounds is how often a profile being looked at makes this
+	 * instance read somebody's outbox, however many people look.
+	 *
+	 * @return bool whether a sync was asked for
+	 */
+	public function syncTimeline(Person $actor): bool {
+		if ($actor->isLocal() || $actor->getId() === '') {
+			return false;
+		}
+
+		$key = md5($actor->getId());
+		try {
+			if ($this->durableCache->get(self::TIMELINE_SYNCED, $key) !== null) {
+				return false;
+			}
+			$this->durableCache->set(self::TIMELINE_SYNCED, $key, 1, self::TIMELINE_SYNC_INTERVAL);
+		} catch (Throwable $e) {
+			// without the stamp the job list's own dedupe still holds: one
+			// pending sync per account
+		}
+
+		$this->queue(SyncRemoteTimeline::class, ['actor' => $actor->getId()]);
+
+		return true;
 	}
 
 	/**

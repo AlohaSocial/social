@@ -10,8 +10,14 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Cron\ResolveActor;
+use OCA\Social\Cron\SyncRemoteTimeline;
+use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\RemoteFetchQueue;
+use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
+use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -22,10 +28,68 @@ use Psr\Log\NullLogger;
 class RemoteFetchQueueTest extends TestCase {
 	private IJobList|MockObject $jobList;
 	private RemoteFetchQueue $queue;
+	private int $now = 1790000000;
 
 	protected function setUp(): void {
 		$this->jobList = $this->createMock(IJobList::class);
-		$this->queue = new RemoteFetchQueue($this->jobList, new NullLogger());
+		// the table backend, as on an instance with no memcache
+		$factory = $this->createStub(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(false);
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+		$durableCache = new DurableCache($factory, new InMemoryDurableCacheRequest(), $time);
+		$this->queue = new RemoteFetchQueue($this->jobList, $durableCache, new NullLogger());
+	}
+
+	private function remote(string $id = 'https://remote.example/users/bob'): Person {
+		$person = new Person();
+		$person->setId($id);
+
+		return $person;
+	}
+
+	/**
+	 * However many people open a profile, its server is asked for the outbox
+	 * at most once per interval.
+	 */
+	public function testATimelineIsSyncedAtMostOncePerInterval(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add')
+			->with(SyncRemoteTimeline::class, ['actor' => 'https://remote.example/users/bob']);
+
+		$this->assertTrue($this->queue->syncTimeline($this->remote()));
+		$this->assertFalse($this->queue->syncTimeline($this->remote()));
+
+		$this->now += RemoteFetchQueue::TIMELINE_SYNC_INTERVAL - 1;
+		$this->assertFalse($this->queue->syncTimeline($this->remote()));
+
+		$this->now += 2;
+		$this->assertTrue($this->queue->syncTimeline($this->remote()));
+	}
+
+	public function testEachAccountHasItsOwnInterval(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add');
+
+		$this->assertTrue($this->queue->syncTimeline($this->remote('https://remote.example/users/bob')));
+		$this->assertTrue($this->queue->syncTimeline($this->remote('https://remote.example/users/carol')));
+	}
+
+	public function testALocalAccountHasNoOutboxToSync(): void {
+		$alice = $this->remote('https://cloud.example/apps/social/@alice');
+		$alice->setLocal(true);
+		$this->jobList->expects($this->never())->method('add');
+
+		$this->assertFalse($this->queue->syncTimeline($alice));
+	}
+
+	public function testASyncStillPendingIsNotQueuedTwice(): void {
+		$this->jobList->method('has')
+			->with(SyncRemoteTimeline::class, ['actor' => 'https://remote.example/users/bob'])
+			->willReturn(true);
+		$this->jobList->expects($this->never())->method('add');
+
+		$this->queue->syncTimeline($this->remote());
 	}
 
 	public function testEachActorIsQueuedOnceWithoutItsKeyFragment(): void {

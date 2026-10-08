@@ -3140,12 +3140,43 @@ class ApiControllerTest extends TestCase {
 		);
 	}
 
-	public function testAccountStatusesSyncsThenProbesTheAccountTimeline(): void {
+	/**
+	 * The first page asks for the outbox to be synced in the background and
+	 * answers with what is stored; the sync used to run first, on every page,
+	 * while the caller waited.
+	 */
+	public function testAccountStatusesFirstPageQueuesASyncAndAnswersWhatIsStored(): void {
 		$this->loggedInAs();
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
-		$this->streamService->expects($this->once())->method('syncRemoteTimeline')->with($actor);
+		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
+		$this->remoteFetchQueue->expects($this->once())->method('syncTimeline')->with($actor);
+		$this->captureTimelineOptions(['p']);
+
+		$this->assertSame(['p'], $this->controller()->accountStatuses('bob@remote.example')->getData());
+	}
+
+	/** Scrolling down a profile is reading what is stored, not a reason to sync again. */
+	public function testAccountStatusesLaterPagesDoNotSync(): void {
+		$this->loggedInAs();
+		$actor = $this->createStub(Person::class);
+		$actor->method('getId')->willReturn('https://remote.example/users/bob');
+		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
+		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->captureTimelineOptions([]);
+
+		$this->controller()->accountStatuses('bob@remote.example', 20, 40);
+		$this->controller()->accountStatuses('bob@remote.example', 20, 0, 10);
+		$this->controller()->accountStatuses('bob@remote.example', 20, 0, 0, '20');
+	}
+
+	public function testAccountStatusesProbesTheAccountTimeline(): void {
+		$this->loggedInAs();
+		$actor = $this->createStub(Person::class);
+		$actor->method('getId')->willReturn('https://remote.example/users/bob');
+		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$options = $this->captureTimelineOptions(['p']);
 
 		$response = $this->controller()->accountStatuses('bob@remote.example', 5, 40, 10, 20);
@@ -3208,6 +3239,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
 		$this->streamService->expects($this->never())->method('getTimeline');
 		$this->pinService->expects($this->once())->method('getPinnedPosts')
 			->with('https://remote.example/users/bob')->willReturn(['pinned']);
@@ -3650,6 +3682,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
 		$this->captureTimelineOptions([]);
 
 		$this->controller()->accountStatuses('bob@remote.example');

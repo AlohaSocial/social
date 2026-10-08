@@ -796,9 +796,12 @@ class AccountApiController extends MastodonApiController {
 			// only for a caller with a session: a sync fetches the account's
 			// outbox from its server and stores every post of it, so an
 			// anonymous caller could make this instance fetch and keep the
-			// posts of any account they can name
-			if ($this->viewer !== null) {
-				$this->streamService->syncRemoteTimeline($local);
+			// posts of any account they can name. Only for the first page,
+			// which is where new posts appear, and in the background, at most
+			// once a quarter-hour per account: this page answers with what is
+			// stored, and the next look has what the sync found.
+			if ($this->viewer !== null && !$max_id && !$min_id && !$since_id) {
+				$this->remoteFetchQueue->syncTimeline($local);
 			}
 
 			$options = new ProbeOptions($this->request);
