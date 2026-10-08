@@ -611,6 +611,53 @@ class SignatureServiceTest extends TestCase {
 		$this->service->checkRequest($this->incomingRequest($headers), $body);
 	}
 
+	public function testARejectedDateIsQuotedEscapedAndShortened(): void {
+		$body = '{"type":"Follow"}';
+		$date = "now\x1b[31m" . str_repeat('A', 5000);
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => $date]);
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('an unparsable date was accepted');
+		} catch (DateTimeException $e) {
+			$this->assertStringContainsString('now\033[31m', $e->getMessage());
+			$this->assertStringNotContainsString("\x1b", $e->getMessage());
+			$this->assertLessThan(400, strlen($e->getMessage()));
+			$this->assertStringContainsString('more bytes', $e->getMessage());
+		}
+	}
+
+	public function testAFailedSignatureNamesTheKeyAndTheBaseButNotTheRawBytes(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$otherPublicKey));
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('a signature from another key was accepted');
+		} catch (SignatureException $e) {
+			$message = $e->getMessage();
+			$this->assertStringContainsString(self::REMOTE_KEY_ID, $message);
+			$this->assertStringContainsString('(request-target): post /apps/social/@alice/inbox\\nhost: ', $message);
+			$this->assertStringNotContainsString("\n", $message);
+			$this->assertStringNotContainsString('BEGIN PUBLIC KEY', $message);
+			$this->assertTrue(mb_check_encoding($message, 'ASCII'), 'no raw signature bytes');
+		}
+	}
+
+	public function testAMismatchedDigestIsQuotedShortened(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['digest' => 'SHA-256=' . str_repeat('x', 5000)]);
+
+		try {
+			$this->service->checkRequest($this->incomingRequest($headers), $body);
+			$this->fail('a wrong digest was accepted');
+		} catch (SignatureException $e) {
+			$this->assertStringContainsString('digest does not match', $e->getMessage());
+			$this->assertLessThan(400, strlen($e->getMessage()));
+		}
+	}
+
 	public function testCheckRequestAcceptsADateWithASingleDigitDay(): void {
 		$body = '{"type":"Follow"}';
 		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => gmdate('D, j M Y H:i:s \G\M\T')]);

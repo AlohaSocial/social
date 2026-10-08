@@ -133,6 +133,12 @@ class SignatureService {
 		'sha512' => 'sha512',
 	];
 
+	/** How much of a sender-written value an exception message quotes. */
+	private const EXCERPT = 200;
+
+	/** How much of a signature base an exception message quotes. */
+	private const EXCERPT_BASE = 1000;
+
 	/** The shortest interval between two forced refreshes of the same keyId. */
 	public const KEY_REFRESH_INTERVAL = 300;
 
@@ -309,7 +315,7 @@ class SignatureService {
 
 		$time = self::parseHttpDate($header);
 		if ($time === null) {
-			throw new DateTimeException('date header is not an HTTP date: ' . $header);
+			throw new DateTimeException('date header is not an HTTP date: ' . self::excerpt($header));
 		}
 
 		if ($time < (time() - self::DATE_PAST)) {
@@ -383,6 +389,21 @@ class SignatureService {
 	}
 
 	/**
+	 * A value the sender wrote, made fit for an exception message: control
+	 * characters and bytes outside printable ASCII escaped, and cut at `$max`
+	 * bytes with the length that was left out. These messages reach the log,
+	 * and what goes into them is chosen by whoever sent the request.
+	 */
+	private static function excerpt(string $value, int $max = self::EXCERPT): string {
+		$escaped = addcslashes($value, "\0..\37\177..\377");
+		if (strlen($escaped) <= $max) {
+			return $escaped;
+		}
+
+		return substr($escaped, 0, $max) . '… (' . (strlen($escaped) - $max) . ' more bytes)';
+	}
+
+	/**
 	 * The RFC 9421 signature this request is verified against, or null when
 	 * the request carries no Signature-Input and is a draft-cavage one.
 	 *
@@ -415,7 +436,7 @@ class SignatureService {
 
 		if ($candidates === []) {
 			throw new SignatureException(
-				'no usable signature: every label lacks a signature value or a keyid - ' . $inputHeader
+				'no usable signature: every label lacks a signature value or a keyid - ' . self::excerpt($inputHeader)
 			);
 		}
 
@@ -428,7 +449,7 @@ class SignatureService {
 		// the same refusal, by name, that the draft-cavage path gives an
 		// algorithm it cannot verify: an Ed25519 key has no place to live here
 		throw new SignatureException(
-			'unsupported signature algorithm: ' . $this->messageSignatureAlgorithm($candidates[0])
+			'unsupported signature algorithm: ' . self::excerpt($this->messageSignatureAlgorithm($candidates[0]))
 		);
 	}
 
@@ -533,11 +554,12 @@ class SignatureService {
 		);
 		$algorithm = $this->messageSignatureAlgorithm($signature);
 
-		$this->verifyWithKey($keyId, function (string $publicKey) use ($algorithm, $base, $signature): void {
+		$this->verifyWithKey($keyId, function (string $publicKey) use ($algorithm, $base, $signature, $keyId): void {
 			if (!$this->messageSignatures->verify($algorithm, $publicKey, $base, $signature['signature'])) {
 				throw new SignatureException(
-					'signature cannot be checked - label: ' . $signature['label'] . ' - key: ' . $publicKey
-					. ' - algo: ' . $algorithm . ' - base: ' . $base
+					'signature cannot be checked - label: ' . self::excerpt($signature['label'])
+					. ' - keyId: ' . self::excerpt($keyId) . ' - algo: ' . $algorithm
+					. ' - base: ' . self::excerpt($base, self::EXCERPT_BASE)
 				);
 			}
 		});
@@ -639,7 +661,7 @@ class SignatureService {
 
 		if (strlen($data) !== (int)$length) {
 			throw new SignatureException(
-				'content-length does not match the body -- sent: ' . $length
+				'content-length does not match the body -- sent: ' . self::excerpt($length)
 				. ', body: ' . strlen($data)
 			);
 		}
@@ -684,14 +706,14 @@ class SignatureService {
 			if (!hash_equals(base64_encode(hash($expected, $data, true)), $sent)) {
 				throw new SignatureException(
 					'digest does not match the body -- algorithm: ' . $algorithm
-					. ', sent: ' . $sent
+					. ', sent: ' . self::excerpt($sent)
 				);
 			}
 		}
 
 		if ($checked === 0) {
 			throw new SignatureException(
-				'no digest algorithm we can compute: ' . implode(', ', array_keys($digests))
+				'no digest algorithm we can compute: ' . self::excerpt(implode(', ', array_keys($digests)))
 			);
 		}
 	}
@@ -766,7 +788,7 @@ class SignatureService {
 			// an absent `created` is refused by the window check below
 			$time = ($signature->getCreated() === '') ? 0 : self::parseObjectDate($signature->getCreated());
 			if ($time === null) {
-				throw new DateTimeException('signature created is not a date: ' . $signature->getCreated());
+				throw new DateTimeException('signature created is not a date: ' . self::excerpt($signature->getCreated()));
 			}
 
 			// An LD signature stays valid forever on its own, so any instance
@@ -970,8 +992,9 @@ class SignatureService {
 		if ($publicKey === ''
 			|| openssl_verify($estimated, $signed, $publicKey, $algorithm) !== 1) {
 			throw new SignatureException(
-				'signature cannot be checked - signed: ' . $signed . ' - key: ' . $publicKey
-				. ' - algo: ' . $algorithm . ' - estimated: ' . $estimated
+				'signature cannot be checked - keyId: ' . self::excerpt((string)($sign['keyId'] ?? ''))
+				. ($publicKey === '' ? ' - the actor publishes no key' : '')
+				. ' - algo: ' . $algorithm . ' - estimated: ' . self::excerpt($estimated, self::EXCERPT_BASE)
 			);
 		}
 	}
@@ -1096,7 +1119,7 @@ class SignatureService {
 			// temporary by construction: the caller has to answer something that
 			// asks the peer to deliver this again rather than to give up on it
 			throw new SignatureException(
-				'key retrieval for ' . $id . ' was attempted too recently',
+				'key retrieval for ' . self::excerpt($id) . ' was attempted too recently',
 				Http::STATUS_SERVICE_UNAVAILABLE
 			);
 		}
@@ -1200,7 +1223,7 @@ class SignatureService {
 
 		if (strtolower($signer) !== strtolower($actor)) {
 			throw new InvalidOriginException(
-				'the key that signed this request belongs to ' . $signer . ', not to ' . $actor
+				'the key that signed this request belongs to ' . self::excerpt($signer) . ', not to ' . self::excerpt($actor)
 			);
 		}
 	}
@@ -1212,7 +1235,7 @@ class SignatureService {
 		}
 
 		throw new InvalidOriginException(
-			'SignatureService::getKeyOrigin - host: ' . $host . ' - id: ' . $id
+			'SignatureService::getKeyOrigin - id: ' . self::excerpt($id)
 		);
 	}
 
@@ -1244,7 +1267,7 @@ class SignatureService {
 				return 'sha256';
 			default:
 				throw new SignatureException(
-					'unsupported signature algorithm: ' . $algorithm
+					'unsupported signature algorithm: ' . self::excerpt($algorithm)
 				);
 		}
 	}
