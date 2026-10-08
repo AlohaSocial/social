@@ -39,6 +39,20 @@ final class Cid {
 	}
 
 	/**
+	 * The CID of a blob from its SHA-256, for a file hashed as it is read
+	 * rather than held in memory.
+	 *
+	 * @throws InvalidArgumentException when it is not a SHA-256 digest
+	 */
+	public static function forRawDigest(string $sha256): self {
+		if (strlen($sha256) !== 32) {
+			throw new InvalidArgumentException('Not a SHA-256 digest');
+		}
+
+		return new self(self::PREFIX_RAW . $sha256);
+	}
+
+	/**
 	 * @param string $bytes the binary CID (36 bytes), e.g. from a CAR file or a CBOR link
 	 * @throws InvalidArgumentException when it is not a CID this protocol allows
 	 */

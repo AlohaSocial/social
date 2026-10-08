@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Publisher\PictureService;
+use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
@@ -49,6 +50,8 @@ class XrpcServiceTest extends TestCase {
 	private AtprotoBlobRequest $blobRequest;
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
+	/** @var VideoBlobService&MockObject */
+	private VideoBlobService $videos;
 	private XrpcService $xrpc;
 	private Identity $alice;
 
@@ -64,7 +67,8 @@ class XrpcServiceTest extends TestCase {
 		$configService = $this->createMock(ConfigService::class);
 		$configService->method('getAppValue')->willReturn('1.0');
 		$configService->method('getCloudUrl')->willReturn('https://social.test');
-		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $configService);
+		$this->videos = $this->createMock(VideoBlobService::class);
+		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService);
 
 		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0);
 		$this->identities->method('getByDid')->willReturnCallback(fn (string $did): Identity => $did === self::DID ? $this->alice : throw new AtprotoIdentityNotFoundException());
@@ -156,6 +160,20 @@ class XrpcServiceTest extends TestCase {
 		$this->assertSame('pixels', $answer->bytes);
 	}
 
+	public function testAVideoBlobIsAStream(): void {
+		$blob = new BlobRef(self::DID, Cid::forRaw('film'), 'https://social.test/doc/2', 'video/mp4', 4);
+		$this->blobRequest->method('get')->willReturn($blob);
+		$stream = fopen('php://memory', 'rb');
+		$this->videos->method('open')->with($blob)->willReturn(['stream' => $stream, 'size' => 4]);
+		$this->pictures->expects($this->never())->method('read');
+
+		$answer = $this->xrpc->query('com.atproto.sync.getBlob', ['did' => self::DID, 'cid' => $blob->cid->toString()]);
+
+		$this->assertSame($stream, $answer->stream);
+		$this->assertSame(4, $answer->length);
+		$this->assertSame('video/mp4', $answer->contentType);
+	}
+
 	public function testListRepos(): void {
 		$this->repoRequest->method('getHeads')->willReturn([new RepoHead(self::DID, 'bafy', '3kznmn7xqxl22', 1, 0, 0)]);
 
@@ -203,7 +221,7 @@ class XrpcServiceTest extends TestCase {
 	public function testNothingIsServedWhenBlueskyIsOff(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(false);
-		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(ConfigService::class));
+		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(VideoBlobService::class), $this->createMock(ConfigService::class));
 
 		$this->expectException(XrpcException::class);
 		$xrpc->query('com.atproto.server.describeServer', []);

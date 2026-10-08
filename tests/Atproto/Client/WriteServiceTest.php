@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
@@ -68,8 +69,12 @@ class WriteServiceTest extends TestCase {
 	private PostStore $postStore;
 	/** @var Publisher&MockObject */
 	private Publisher $publisher;
+	/** @var AtprotoBlobRequest&MockObject */
+	private AtprotoBlobRequest $blobs;
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
+	/** @var VideoBlobService&MockObject */
+	private VideoBlobService $videos;
 	/** @var DocumentService&MockObject */
 	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
@@ -97,6 +102,8 @@ class WriteServiceTest extends TestCase {
 		$this->postStore = $this->createMock(PostStore::class);
 		$this->publisher = $this->createMock(Publisher::class);
 		$this->pictures = $this->createMock(PictureService::class);
+		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
+		$this->videos = $this->createMock(VideoBlobService::class);
 		$this->documents = $this->createMock(DocumentService::class);
 		$this->local = $this->createMock(LocalRecordResolver::class);
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
@@ -107,8 +114,8 @@ class WriteServiceTest extends TestCase {
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
 			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->documents,
-			$this->publisher, $this->pictures, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
-			$this->createMock(AtprotoBlobRequest::class), $this->createMock(IURLGenerator::class), new NullLogger(),
+			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
+			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(),
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -183,7 +190,7 @@ class WriteServiceTest extends TestCase {
 		$this->pictures->expects($this->once())->method('blobFor')->with($this->session->identity, $this->alice, $stored)
 			->willReturn(['blob' => new BlobRef(self::DID, $cid, $stored->getId(), 'image/jpeg', 34), 'width' => 10, 'height' => 10]);
 
-		$answer = $this->writes->upload($this->session, 'the bytes the app sent, with GPS', 'image/jpeg');
+		$answer = $this->writes->upload($this->session, $this->file('the bytes the app sent, with GPS'), 'image/jpeg');
 
 		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 34], $answer['blob']);
 	}
@@ -194,7 +201,65 @@ class WriteServiceTest extends TestCase {
 
 		$this->expectException(XrpcException::class);
 		$this->expectExceptionMessage('cannot be shown on Bluesky');
-		$this->writes->upload($this->session, 'bytes', 'application/pdf');
+		$this->writes->upload($this->session, $this->file('bytes'), 'application/pdf');
+	}
+
+	public function testAVideoUploadIsStoredAsItCame(): void {
+		$stored = new Document();
+		$stored->setId('https://social.test/documents/local/2');
+		$stored->setMimeType('video/mp4');
+		$this->documents->method('storeLocalAttachment')->willReturn($stored);
+		$cid = Cid::forRaw('a video');
+		$this->videos->expects($this->once())->method('blobFor')->with($this->session->identity, $stored)
+			->willReturn(new BlobRef(self::DID, $cid, $stored->getId(), 'video/mp4', 7));
+		$this->pictures->expects($this->never())->method('blobFor');
+
+		$answer = $this->writes->upload($this->session, $this->file('a video'), 'video/mp4');
+
+		$this->assertSame($cid->toString(), $answer['blob']['ref']['$link']);
+		$this->assertSame('video/mp4', $answer['blob']['mimeType']);
+	}
+
+	public function testAPostWithAVideoIsASocialPostWithThatVideo(): void {
+		$cid = Cid::forRaw('a video');
+		$video = new Document();
+		$video->setNid(9);
+		$video->setId('https://social.test/documents/local/2');
+		$video->setMimeType('video/mp4');
+		$video->setMediaType('video/mp4');
+		$this->blobs->method('get')->with(self::DID, $cid->toString())->willReturn(new BlobRef(self::DID, $cid, $video->getId(), 'video/mp4', 7));
+		$this->documents->method('getDocumentById')->with($video->getId())->willReturn($video);
+		$this->documents->expects($this->once())->method('updateDescription')->with($this->callback(static fn (Document $d): bool => $d->getDescription() === 'Waves'));
+		$made = new Note();
+		$made->setId('https://social.test/@alice/3');
+		$this->posts->expects($this->once())->method('createPost')->with($this->callback(function (Post $post): bool {
+			$this->assertCount(1, $post->getMedias());
+			$this->assertSame('9', $post->getMedias()[0]->getId());
+
+			return true;
+		}))->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kvid', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+
+		$answer = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+			'$type' => RecordMapper::POST, 'text' => 'At the beach', 'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.video', 'alt' => 'Waves', 'video' => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'video/mp4', 'size' => 7]],
+		]]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kvid', $answer['uri']);
+	}
+
+	private function file(string $bytes): string {
+		$path = (string)tempnam(sys_get_temp_dir(), 'social-test-');
+		file_put_contents($path, $bytes);
+		register_shutdown_function(static fn () => @unlink($path));
+
+		return $path;
 	}
 
 	public function testALikeOfABlueskyPostNotReadHereFetchesItFirst(): void {

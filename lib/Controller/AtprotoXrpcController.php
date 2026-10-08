@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Client\ClientXrpc;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Atproto\Xrpc\XrpcService;
+use OCA\Social\Response\StreamedRemoteResponse;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -76,6 +77,9 @@ class AtprotoXrpcController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/xrpc/{method}', requirements: ['method' => '[a-zA-Z0-9._-]+'], postfix: 'procedure')]
 	public function procedure(string $method): Response {
 		try {
+			if ($method === ClientXrpc::UPLOAD) {
+				return $this->upload();
+			}
 			$raw = file_get_contents('php://input', false, null, 0, ClientXrpc::MAX_BLOB + 1);
 			$raw = $raw === false ? '' : $raw;
 			$answer = $this->client->procedure($method, $raw, $this->headers(), $this->request->getRemoteAddress());
@@ -91,6 +95,37 @@ class AtprotoXrpcController extends Controller {
 			$this->logger->error('XRPC procedure failed', ['method' => $method, 'exception' => $e]);
 
 			return $this->refuse(new XrpcException(500, 'InternalServerError', 'Internal server error'));
+		}
+	}
+
+	/**
+	 * `com.atproto.repo.uploadBlob`: the body is copied to a file as it
+	 * arrives, never held in memory, and refused past the largest blob a
+	 * record may name.
+	 *
+	 * @throws XrpcException
+	 */
+	private function upload(): Response {
+		$path = tempnam(sys_get_temp_dir(), 'social-atproto-upload-');
+		if ($path === false) {
+			throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
+		}
+		try {
+			$in = fopen('php://input', 'rb');
+			$out = fopen($path, 'wb');
+			if ($in === false || $out === false) {
+				throw new XrpcException(500, 'InternalServerError', 'No room for the upload');
+			}
+			$copied = stream_copy_to_stream($in, $out, ClientXrpc::MAX_UPLOAD + 1);
+			fclose($in);
+			fclose($out);
+			if ($copied === false || $copied > ClientXrpc::MAX_UPLOAD) {
+				throw new XrpcException(413, 'BlobTooLarge', 'This file is too large');
+			}
+
+			return $this->answer($this->client->upload($path, $this->headers()));
+		} finally {
+			@unlink($path);
 		}
 	}
 
@@ -122,6 +157,16 @@ class AtprotoXrpcController extends Controller {
 	}
 
 	private function answer(array|XrpcBytes $result): Response {
+		if ($result instanceof XrpcBytes && is_resource($result->stream)) {
+			$headers = ['Content-Type' => $result->contentType, 'X-Content-Type-Options' => 'nosniff'];
+			if ($result->length >= 0) {
+				$headers['Content-Length'] = (string)$result->length;
+			}
+			$response = new StreamedRemoteResponse($result->stream, $result->status, $headers);
+			$response->cacheFor(60, false, true);
+
+			return $this->cors($response);
+		}
 		if ($result instanceof XrpcBytes) {
 			$response = new DataDisplayResponse($result->bytes, $result->status, ['Content-Type' => $result->contentType]);
 			if ($result->status === Http::STATUS_OK) {

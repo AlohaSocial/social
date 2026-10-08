@@ -464,6 +464,8 @@ class ConfigService {
 	public const ATPROTO_FIREHOSE_STATUS = 'atproto_firehose_status';
 	public const ATPROTO_DELETE_CURSOR = 'atproto_delete_cursor';
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
+	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
+	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
 
 	public array $defaults = [
 		self::ATPROTO_ENABLED => '0',
@@ -477,6 +479,8 @@ class ConfigService {
 		self::ATPROTO_FIREHOSE_STATUS => '',
 		self::ATPROTO_DELETE_CURSOR => '0',
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
+		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
+		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
 		self::SOCIAL_ADDRESS => '',

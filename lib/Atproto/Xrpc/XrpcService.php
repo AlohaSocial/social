@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Mst;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\PictureService;
+use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoBlobRequest;
@@ -40,6 +41,7 @@ class XrpcService {
 		private AtprotoRepoRequest $repoRequest,
 		private AtprotoBlobRequest $blobRequest,
 		private PictureService $pictures,
+		private VideoBlobService $videos,
 		private ConfigService $configService,
 	) {
 	}
@@ -191,6 +193,12 @@ class XrpcService {
 			throw new XrpcException(404, 'BlobNotFound', 'Blob not found');
 		}
 		try {
+			if (str_starts_with($blob->mime, 'video/')) {
+				$opened = $this->videos->open($blob);
+
+				return new XrpcBytes('', $blob->mime, 200, $opened['stream'], $opened['size']);
+			}
+
 			return new XrpcBytes($this->pictures->read($blob), $blob->mime);
 		} catch (AtprotoException) {
 			throw new XrpcException(404, 'BlobNotFound', 'Blob not found');

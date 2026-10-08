@@ -140,8 +140,21 @@ class SessionService {
 			'did' => $session->identity->did,
 			'didDoc' => $this->identities->document($session->identity),
 			'active' => $session->identity->isActive(),
-			'emailConfirmed' => false,
-		];
+		] + $this->email($session->userId);
+	}
+
+	/**
+	 * The account's e-mail address, as the Nextcloud account has it. It
+	 * counts as confirmed: the account is one an administrator or the
+	 * person manages, and Bluesky's apps offer video only to an account
+	 * whose address is confirmed.
+	 *
+	 * @return array{email?: string, emailConfirmed: bool}
+	 */
+	private function email(string $userId): array {
+		$email = (string)$this->userManager->get($userId)?->getEMailAddress();
+
+		return $email === '' ? ['emailConfirmed' => false] : ['email' => $email, 'emailConfirmed' => true];
 	}
 
 	/**
@@ -159,7 +172,7 @@ class SessionService {
 			'did' => $identity->did,
 			'didDoc' => $this->identities->document($identity),
 			'active' => $identity->isActive(),
-		];
+		] + $this->email($userId);
 	}
 
 	private function sign(array $claims): string {
