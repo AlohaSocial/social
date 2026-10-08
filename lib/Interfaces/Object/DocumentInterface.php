@@ -21,6 +21,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\CacheDocumentService;
+use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCP\Files\NotFoundException;
@@ -33,6 +34,7 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 	public function __construct(
 		protected CacheDocumentService $cacheDocumentService,
 		protected CacheDocumentsRequest $cacheDocumentsRequest,
+		protected ConfigService $configService,
 		protected LoggerInterface $logger = new NullLogger(),
 	) {
 	}
@@ -59,48 +61,62 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 
 		try {
 			$known = $this->cacheDocumentsRequest->getById($item->getId());
-			$this->keepWhatOnlyTheRowKnows($item, $known);
-			$this->cacheDocumentsRequest->update($item);
-		} catch (CacheDocumentDoesNotExistException $e) {
-			// An attachment without a wire id receives a fresh generated id on
-			// every import. Find its existing row by URL and parent before any
-			// download, otherwise a retry creates orphaned bytes and points the
-			// post at a media id that does not exist.
-			$addressed = ($item->getUrl() !== '' && $item->getParentId() !== '');
-			if ($addressed) {
-				try {
-					$known = $this->cacheDocumentsRequest->getByUrlAndParent($item->getUrl(), $item->getParentId());
+			if ($this->mayRewrite($item, $known)) {
+				$this->keepWhatOnlyTheRowKnows($item, $known);
+				$this->cacheDocumentsRequest->update($item);
+
+				return;
+			}
+
+			$this->takeFreshIdentity($item, $known);
+		} catch (CacheDocumentDoesNotExistException) {
+			// not stored under that id: a new document, or one without a wire
+			// id of its own, which the lookup below finds
+		}
+
+		// An attachment without a wire id receives a fresh generated id on
+		// every import. Find its existing row by URL and parent before any
+		// download, otherwise a retry creates orphaned bytes and points the
+		// post at a media id that does not exist.
+		$addressed = ($item->getUrl() !== '' && $item->getParentId() !== '');
+		if ($addressed) {
+			try {
+				$known = $this->cacheDocumentsRequest->getByUrlAndParent($item->getUrl(), $item->getParentId());
+				if ($this->mayRewrite($item, $known, true)) {
 					$item->setId($known->getId());
 					$this->keepWhatOnlyTheRowKnows($item, $known);
-					// and written, as the id path above writes it. The sender
-					// may have added a description, a blurhash or a corrected
-					// type since the row was made; without this the merge lived
-					// in the object this request happened to hold and the row
-					// kept what it first heard, for good.
+					// and written, as the id path above writes it. The
+					// sender may have added a description, a blurhash or
+					// a corrected type since the row was made; without
+					// this the merge lived in the object this request
+					// happened to hold and the row kept what it first
+					// heard, for good.
 					$this->cacheDocumentsRequest->update($item);
 
 					return;
-				} catch (CacheDocumentDoesNotExistException) {
-					// that lookup is the whole of isDuplicate(), and it missed:
-					// this document is new, and asking again below would be the
-					// same query with the same answer
 				}
-			}
 
-			// a streamed document is a pointer at somebody else's file and
-			// stays one -- see Document::COPY_STREAMED. Fetching it is the one
-			// thing that must not happen here.
-			if (!$item->isLocal() && !$item->isStreamed()) {
-				$this->fetch($item);
+				$this->takeFreshIdentity($item, $known);
+			} catch (CacheDocumentDoesNotExistException) {
+				// that lookup is the whole of isDuplicate(), and it missed:
+				// this document is new, and asking again below would be the
+				// same query with the same answer
 			}
+		}
 
-			// parentId / url can only be empty on new document, meaning owner cannot be empty here
-			$isNew = $addressed
-				|| ($item->getUrl() === '' && $item->getParentId() === '' && $item->getAccount() !== '')
-				|| !$this->cacheDocumentsRequest->isDuplicate($item);
-			if ($isNew) {
-				$this->cacheDocumentsRequest->save($item);
-			}
+		// a streamed document is a pointer at somebody else's file and
+		// stays one -- see Document::COPY_STREAMED. Fetching it is the one
+		// thing that must not happen here.
+		if (!$item->isLocal() && !$item->isStreamed()) {
+			$this->fetch($item);
+		}
+
+		// parentId / url can only be empty on new document, meaning owner cannot be empty here
+		$isNew = $addressed
+			|| ($item->getUrl() === '' && $item->getParentId() === '' && $item->getAccount() !== '')
+			|| !$this->cacheDocumentsRequest->isDuplicate($item);
+		if ($isNew) {
+			$this->cacheDocumentsRequest->save($item);
 		}
 	}
 
@@ -165,6 +181,82 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 			// which is what the caching cron exists to come back to
 			default => 0,
 		};
+	}
+
+	/**
+	 * Whether a document that came in from elsewhere may be written over a
+	 * row already stored.
+	 *
+	 * An attachment keeps the id it arrived with (see `Document::import()`),
+	 * and that id is the key `save()` updates by -- so without this, a peer
+	 * naming the id of somebody else's row as its attachment's rewrote that
+	 * row's url, parent, type and `public` flag: a local user's upload, or a
+	 * picture that belongs to a third server's post. And it is decided before
+	 * anything about the sender is known: attachments are stored while the
+	 * post is imported, which is before the inbox has held the signer to the
+	 * activity.
+	 *
+	 * So a row may only be rewritten by the post it hangs off -- a redelivery,
+	 * an `Update` -- or by the server whose id it carries, re-using its own
+	 * media on another of its posts. A row of this instance's own is never
+	 * rewritten from outside: one a local account owns, one hanging off a
+	 * local post, or, by id, anything named on this host, which no peer has a
+	 * reason to name.
+	 *
+	 * @param bool $byUrl the row was found by url and parent rather than by
+	 *                    the incoming id, so it hangs off the same post and
+	 *                    its id is one this instance gave it
+	 */
+	private function mayRewrite(Document $item, Document $known, bool $byUrl = false): bool {
+		if ($item->isLocal()) {
+			return true;
+		}
+
+		$here = strtolower($this->configService->getCloudHost());
+		if ($known->getAccount() !== '' || self::hostOf($known->getParentId()) === $here) {
+			return false;
+		}
+
+		if ($byUrl) {
+			return true;
+		}
+
+		$host = self::hostOf($item->getId());
+		if ($host === '' || $host === $here) {
+			return false;
+		}
+
+		if ($known->getParentId() === $item->getParentId()) {
+			return true;
+		}
+
+		return self::hostOf($known->getParentId()) === $host
+			&& self::hostOf($item->getParentId()) === $host;
+	}
+
+	/**
+	 * Gives an incoming document that may not touch the row it named an id
+	 * of its own, as `Document::import()` does for one that arrived without
+	 * any: it is then stored as the new document it is, and the row it named
+	 * is left as it was.
+	 */
+	private function takeFreshIdentity(Document $item, Document $known): void {
+		$this->logger->warning('an incoming document named a stored row it does not own', [
+			'document' => $item->getId(),
+			'parent' => $item->getParentId(),
+			'row parent' => $known->getParentId(),
+		]);
+
+		if ($item->getUrlCloud() === '') {
+			$item->setUrlCloud($this->configService->getCloudUrl());
+		}
+		$item->generateUniqueId('/documents/g');
+	}
+
+	private static function hostOf(string $id): string {
+		$host = parse_url($id, PHP_URL_HOST);
+
+		return is_string($host) ? strtolower($host) : '';
 	}
 
 	/**

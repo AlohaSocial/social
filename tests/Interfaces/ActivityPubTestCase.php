@@ -156,6 +156,7 @@ abstract class ActivityPubTestCase extends TestCase {
 		// locally (the Accept answering a Follow, for instance) are built from it.
 		$this->configService = $this->createMock(ConfigService::class);
 		$this->configService->method('getCloudUrl')->willReturn(self::LOCAL_URL);
+		$this->configService->method('getCloudHost')->willReturn('local.example');
 
 		$this->ap = new AP(
 			$this->acceptInterface,
