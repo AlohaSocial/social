@@ -249,7 +249,8 @@ export default {
 		 * @param {object|null|undefined} move the move as the server answers it
 		 */
 		takeMove(move) {
-			this.move = move ?? null
+			// a move here is the other card's
+			this.move = move?.direction === 'away' ? move : null
 			if (this.move?.state === 'running') {
 				this.schedulePoll()
 			} else {
