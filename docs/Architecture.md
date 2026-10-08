@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.140
+**App version:** 0.26.141
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -210,6 +210,14 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_place` | Places: one row per distinct place this instance has seen, deduplicated on (name, country). No geocoder — see the migration |
 | `social_import_post` | What an account has brought over from another server: one row per (account, original id), unique on the pair, naming the local post it became |
 | `social_import` | The imports an account asked for — a kept upload or a server to pull from — with where the run got to and what it came to; `Cron\RunImport` works a row off and the Migration page polls it |
+| `social_atproto_identity` | One row per local account that is also a Bluesky account: its `did:plc`, its handle (`alice.<host>`, stored, never recomputed), its signing key sealed with the instance secret, the public halves, and its state (`active`, `deactivated`, `moved_away`, `tombstoned`) |
+| `social_atproto_instance_key` | The instance's own keys: the rotation key listed first on every account's DID and the service key its `did:web` names, sealed; a rotated rotation key stays, retired, for the PLC's 72-hour window |
+| `social_atproto_repo` | Each repository's signed head: the commit CID and revision, the record count and the blob bytes — written last in a commit, so a failure half-way leaves the previous commit as the repository |
+| `social_atproto_record` | The live records of every repository with their DAG-CBOR bytes, the collection and rkey (unique by the hash of the path), and the Social object each came from (`local_id`), so a post maps to its record and back in one lookup |
+| `social_atproto_block` | The Merkle search tree nodes and the commits, by CID: what `getRepo` and the firehose serve. Records are not duplicated here; they are read from their own table |
+| `social_atproto_blob` | The pictures a repository refers to: a CID naming one of the app's stored documents, its type and size |
+| `social_atproto_event` | The firehose, one frame per commit, identity or account change, numbered by the database (`seq`) and kept for the 72-hour replay window; `occ social:atproto:serve` reads it |
+| `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
