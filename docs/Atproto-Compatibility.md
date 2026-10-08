@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18), custom handles (4a) and moving away (4b) are implemented; moving here (4c) and Bridgy twins (4d) are specification.**
+**Status: phases 1, 2 and 3 (§18), custom handles (4a), moving away (4b) and moving here (4c) are implemented; Bridgy twins (4d) are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1312,6 +1312,40 @@ Fed twins (§13.3).
   on the other PDS is kept sealed while the move runs and dropped after.
 - **The Fediverse account is untouched.** Posts written while the move
   runs, after the repository was copied, stay here only.
+
+**4c as built** — `Move\MoveInService`, `Move\RepoArchive`,
+`Protocol\MstReader`, `RepositoryService::import()`,
+`IdentityService::adopt()`, `FollowService::adoptBlueskyFollow()`,
+`DocumentService::storeAsIs()`:
+
+- **Driven from here, as moving away is.** Settings → Migration → *Bring
+  your Bluesky account here*: the person names their Bluesky account and
+  types its **password** — the account's own, not an app password, because
+  a PDS signs a change of the DID only for a full session (§13.1 said app
+  password, which cannot work). It is used to sign in and not kept; the
+  session is, sealed, while the move runs. A sign-in the old PDS wants
+  confirmed by an e-mailed code takes that code as well.
+- **The repository** is fetched with `getRepo`, checked — every block
+  against its CID, the commit against the signing key the DID document
+  names — and written here **byte for byte**, every record of every
+  application, under one commit signed with a key made for the account
+  here. Records keep their CIDs, so every reference to them stays good.
+  **Blobs** are fetched with `listBlobs`/`getBlob` and stored as they came,
+  each checked against its CID; nothing is re-encoded. **Preferences** come
+  along. **Follows** become follows here, each tied to the record it came
+  with, so nothing is written twice.
+- **Then the old PDS e-mails a code** (`requestPlcOperationSignature`); the
+  move waits. With the code it signs the operation that names this PDS,
+  this server's rotation key and the account's handle here — checked
+  before it is taken — the directory takes it, and the account **takes the
+  DID**: the account's identity row keeps its handle (and custom handle)
+  and gets the moved DID and its new key, and the DID this server had made
+  for the account is **retired**, tombstoned with its repository. The page
+  says so before the move starts. Last, `deactivateAccount` on the old PDS.
+- **Not yet:** the old posts, likes and reposts appear on Bluesky from
+  here, but are not turned into Social posts in this app's timelines
+  (§13.1, step 6); only the follows are. A wrong code stops the move, and
+  *Try again* asks the old PDS for a new one.
 
 ## 19. Open questions
 
