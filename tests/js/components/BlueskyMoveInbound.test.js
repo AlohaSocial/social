@@ -155,6 +155,14 @@ describe('BlueskyMoveInbound', () => {
 		expect(wrapper.text()).toContain('Your Bluesky account now lives here, as alice.social.test.')
 	})
 
+	it('says when the posts are being put in the timeline', async () => {
+		server({ moves: [moveOf('running', 'posts')] })
+		const wrapper = await mountCard()
+
+		expect(wrapper.text()).toContain('Putting your posts in your timeline here')
+		expect(wrapper.text()).not.toContain('Call it off')
+	})
+
 	it('calls a move off that has not finished', async () => {
 		server({ moves: [moveOf('waiting')] })
 		axios.delete.mockResolvedValue({ data: { move: moveOf('failed', 'invited', { error: 'Called off' }) } })

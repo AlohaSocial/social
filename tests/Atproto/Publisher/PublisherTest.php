@@ -24,6 +24,7 @@ use OCA\Social\Atproto\Repository\CommitResult;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Db\ImportedPostsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -61,6 +62,10 @@ class PublisherTest extends TestCase {
 	private Identity $identity;
 	/** @var StoredRecord[] */
 	private array $records = [];
+	/** @var string[] the posts that were brought over rather than written here */
+	private array $importedPosts = [];
+	/** @var ImportedPostsRequest&MockObject */
+	private ImportedPostsRequest $imported;
 
 	protected function setUp(): void {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -85,7 +90,9 @@ class PublisherTest extends TestCase {
 		$this->time->method('getTime')->willReturn(1760000000);
 		$this->videos = $this->createMock(VideoUploadService::class);
 		$this->videos->method('forPost')->willReturnCallback(fn (): array => $this->video);
-		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->videos, $this->streamRequest, $actors, $this->time, new NullLogger());
+		$this->imported = $this->createMock(ImportedPostsRequest::class);
+		$this->imported->method('isImported')->willReturnCallback(fn (string $actor, string $post): bool => in_array($post, $this->importedPosts, true));
+		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->videos, $this->streamRequest, $actors, $this->time, new NullLogger(), $this->imported);
 	}
 
 	public function testAPublicPostIsWrittenOnce(): void {
@@ -231,6 +238,18 @@ class PublisherTest extends TestCase {
 		$this->assertSame(RepoWrite::DELETE . ' 3kznmn7xqxl22', $writes[0][0], 'the stale record goes');
 		$this->assertSame(RepoWrite::CREATE, explode(' ', $writes[0][1])[0], 'and the edit takes its place');
 		$this->assertSame([RepoWrite::DELETE . ' 3kznmn7xqxl33'], $writes[1], 'the orphan record is removed');
+	}
+
+	public function testReconcileLeavesAnImportedPostAsItCame(): void {
+		$moved = $this->post(1760000000 - 60);
+		$archived = $this->post(1760000000 - 60);
+		$archived->setId('https://social.test/@alice/2');
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'as Bluesky had it']), self::POST, 0);
+		$this->importedPosts = [self::POST, 'https://social.test/@alice/2'];
+		$this->streamRequest->method('getLocalPublicSince')->willReturn([$moved, $archived]);
+		$this->repositories->expects($this->never())->method('write');
+
+		$this->assertSame(0, $this->publisher->reconcile(), 'neither the moved record is rewritten nor the archived post published');
 	}
 
 	public function testReconcileLeavesAnUnchangedRecordAlone(): void {

@@ -60,7 +60,7 @@ use Throwable;
  * Then the old PDS e-mails the person a code; with it, it signs the
  * operation that points the DID here, and the account takes the DID: the
  * one this server had made for it is retired. Last, the account is switched
- * off on the old PDS.
+ * off on the old PDS, and its posts become posts in its timeline here.
  */
 class MoveInService {
 	private const PAGE = 500;
@@ -79,6 +79,7 @@ class MoveInService {
 		private Preferences $preferences,
 		private BlueskyActorService $blueskyActors,
 		private FollowService $follows,
+		private PostHistory $history,
 		private ActorsRequest $actors,
 		private AtprotoMoveRequest $moves,
 		private ICrypto $crypto,
@@ -244,6 +245,9 @@ class MoveInService {
 			case Move::STEP_ACTIVATE:
 				$this->authed($move, 'com.atproto.server.deactivateAccount', 'POST', [], []);
 				break;
+			case Move::STEP_POSTS:
+				$this->importPosts($move);
+				break;
 		}
 
 		return true;
@@ -301,6 +305,18 @@ class MoveInService {
 			$move->progress = ['blobs' => $copied] + $move->progress;
 			$this->moves->update($move);
 		} while ($cursor !== '');
+	}
+
+	/**
+	 * The account's posts become posts in its timeline here. The account has
+	 * moved by then, so a failure here does not fail the move.
+	 */
+	public function importPosts(Move $move): void {
+		try {
+			$move->progress = ['posts' => $this->history->import($this->actors->getFromUserId($move->userId), $move->did)] + $move->progress;
+		} catch (Throwable $e) {
+			$this->logger->warning('Posts of a Bluesky account that moved here not imported', ['did' => $move->did, 'exception' => $e]);
+		}
 	}
 
 	/**

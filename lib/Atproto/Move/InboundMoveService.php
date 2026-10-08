@@ -348,17 +348,23 @@ class InboundMoveService {
 	}
 
 	/**
-	 * After activation: the follows become follows here, and the move is done.
+	 * After activation: the follows become follows here, the posts posts
+	 * here, and the move is done.
 	 */
 	public function run(Move $move): void {
-		if ($move->direction !== Move::INBOUND || $move->state !== Move::RUNNING || $move->step !== Move::STEP_FOLLOWS) {
+		if ($move->direction !== Move::INBOUND || $move->state !== Move::RUNNING || !in_array($move->step, [Move::STEP_FOLLOWS, Move::STEP_POSTS], true)) {
 			return;
 		}
-		try {
-			$this->moveIn->adoptFollows($move);
-		} catch (Throwable $e) {
-			$this->logger->warning('Follows of a Bluesky account that moved here not taken over', ['did' => $move->did, 'exception' => $e]);
+		if ($move->step === Move::STEP_FOLLOWS) {
+			try {
+				$this->moveIn->adoptFollows($move);
+			} catch (Throwable $e) {
+				$this->logger->warning('Follows of a Bluesky account that moved here not taken over', ['did' => $move->did, 'exception' => $e]);
+			}
+			$move->step = Move::STEP_POSTS;
+			$this->moves->update($move);
 		}
+		$this->moveIn->importPosts($move);
 		// the key lives on in the identity; what the session still needs is kept
 		$sealed = $this->unseal($move->session);
 		$move->session = $this->seal(['sid' => $sealed['sid'] ?? '', 'until' => $sealed['until'] ?? 0, 'public' => $sealed['public'] ?? '']);
@@ -540,7 +546,7 @@ class InboundMoveService {
 	}
 
 	private function isActivated(Move $move): bool {
-		return in_array($move->step, [Move::STEP_FOLLOWS, Move::STEP_DONE], true);
+		return in_array($move->step, [Move::STEP_FOLLOWS, Move::STEP_POSTS, Move::STEP_DONE], true);
 	}
 
 	/**

@@ -209,6 +209,26 @@ class PostImportServiceTest extends TestCase {
 		$this->assertSame(self::ALICE, $this->written[0]->getAttributedTo());
 	}
 
+	public function testPostsAnotherReaderParsedAreWrittenWithTheirFilesFromHere(): void {
+		$file = (string)tempnam(sys_get_temp_dir(), 'import');
+		file_put_contents($file, 'the blob');
+		$parsed = static fn (string $source, string $replyTo, array $attachments, string $published): array => [
+			'source' => $source, 'text' => 'From Bluesky', 'published' => strtotime($published), 'visibility' => Stream::TYPE_PUBLIC,
+			'sensitive' => false, 'spoiler' => '', 'language' => 'en', 'replyTo' => $replyTo, 'attachments' => $attachments, 'hashtags' => [],
+		];
+		$this->cacheDocumentService->expects($this->never())->method('retrieveContent');
+
+		$tally = $this->service->importParsed($this->alice(), [
+			$parsed('at://did:plc:a/app.bsky.feed.post/2', 'at://did:plc:a/app.bsky.feed.post/1', [], '2025-03-05T05:06:07Z'),
+			$parsed('at://did:plc:a/app.bsky.feed.post/1', '', [['url' => 'at://did:plc:a/blob/x', 'name' => 'The sea', 'path' => $file]], '2025-03-04T05:06:07Z'),
+		]);
+
+		$this->assertSame([2, 1], [$tally['imported'], $tally['media']]);
+		$this->assertCount(1, $this->written[0]->getAttachments(), 'the file came from the path, nothing was fetched');
+		$this->assertSame($this->written[0]->getId(), $this->written[1]->getInReplyTo(), 'the reply hangs off the post it answers');
+		$this->assertFileDoesNotExist($file);
+	}
+
 	/** The whole point of not federating: nothing is queued, ever. */
 	public function testNotOneDeliveryIsQueued(): void {
 		$path = $this->outbox([$this->note('https://old.example/1')]);

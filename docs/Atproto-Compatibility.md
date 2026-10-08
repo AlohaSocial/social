@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c) and Bridgy twins with any migration tool (4d) — are implemented.**
+**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1256,9 +1256,9 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 
 ### Phase 4 as it lands
 
-Four parts, four pull requests: **4a** custom handles (§4.2), **4b** moving
+Five parts, five pull requests: **4a** custom handles (§4.2), **4b** moving
 away (§13.2), **4c** moving a Bluesky account here (§13.1), **4d** Bridgy
-Fed twins (§13.3).
+Fed twins (§13.3), **4e** the moved posts in the timeline (§13.1, step 6).
 
 **4a as built** — `Identity\HandleVerifier`, `Identity\CustomHandleService`,
 `Identity\DnsLookup`, columns `custom_handle`, `custom_handle_checked`,
@@ -1342,10 +1342,8 @@ Fed twins (§13.3).
   and gets the moved DID and its new key, and the DID this server had made
   for the account is **retired**, tombstoned with its repository. The page
   says so before the move starts. Last, `deactivateAccount` on the old PDS.
-- **Not yet:** the old posts, likes and reposts appear on Bluesky from
-  here, but are not turned into Social posts in this app's timelines
-  (§13.1, step 6); only the follows are. A wrong code stops the move, and
-  *Try again* asks the old PDS for a new one.
+- **Then the posts** become posts in the timeline here (4e). A wrong code
+  stops the move, and *Try again* asks the old PDS for a new one.
 
 **4d as built** — `Move\InboundMoveService`, `Move\BridgyTwin`,
 `ServiceAuth::verify()`, `IdentityService::receive()`/`submit()`; moves of
@@ -1382,9 +1380,29 @@ direction `inbound` in `social_atproto_move`:
   the DID as in 4c (`receive()`, the auto-made DID retired) and a job turns
   its follows into follows here. Bridgy stops bridging the account to
   Bluesky itself.
-- **Not built:** the old posts still are not turned into Social posts in
-  this app's timelines (as in 4c). A twin's handle Bridgy derived from a
-  custom domain is not found by the page; it can be named by hand.
+- **Not built:** a twin's handle Bridgy derived from a custom domain is not
+  found by the page; it can be named by hand.
+
+**4e as built** — `Move\PostHistory`, `PostImportService::importParsed()`,
+`ImportedPostsRequest::isImported()`; a last step `posts` of both moves here:
+
+- **The moved posts become the account's posts here**, through the import
+  path every archive import takes, so nothing is federated: dated when they
+  were written, the whole link where the app shortened it, the hashtags the
+  facets name, the language, a warning where the post carried a label for
+  one, a reply under its parent when that is one of the account's own
+  posts too, the pictures or the video from the blobs held here.
+- **Each is tied to the record it came from**, so a like, a repost or a reply
+  on Bluesky reaches it here, and nothing is published again: the publisher
+  leaves an imported post alone — neither rewrites its record when it is
+  younger than the edit grace, nor publishes an archive import dated in the
+  last day as new, which it did before.
+- **The account has moved by then**: a post that cannot be imported is
+  logged, and the move is done regardless. Running it again picks up only
+  what is left.
+- **Not built**: the account's likes and reposts are on Bluesky, as records
+  of the repository, but are not actions in this app; a reply to somebody
+  else's post stands alone here, the thread being on Bluesky.
 
 ## 19. Open questions
 

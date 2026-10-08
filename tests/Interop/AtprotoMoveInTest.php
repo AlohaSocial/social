@@ -12,9 +12,11 @@ namespace OCA\Social\Tests\Interop;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Move;
 use OCA\Social\Atproto\Move\MoveInService;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Db\AtprotoMoveRequest;
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -24,7 +26,8 @@ use PHPUnit\Framework\TestCase;
  * driven from here: this server signs in to the old PDS with the account's
  * password, copies the repository and the follows, and with the code the
  * old PDS e-mails — read here from its inbox — has the DID pointed here.
- * The local account then is that Bluesky account, under its handle here.
+ * The local account then is that Bluesky account, under its handle here,
+ * and its posts are posts in its timeline here.
  */
 class AtprotoMoveInTest extends TestCase {
 	private DevNetwork $network;
@@ -74,8 +77,13 @@ class AtprotoMoveInTest extends TestCase {
 		$this->assertSame('at://' . $before->handle, $document['alsoKnownAs'][0] ?? null);
 		$this->assertSame((string)(getenv('NEXTCLOUD_URL') ?: 'https://nextcloud.test'), rtrim((string)($document['service'][0]['serviceEndpoint'] ?? ''), '/'), 'the DID names this server');
 
-		$texts = array_map(static fn ($record): string => (string)(\OCA\Social\Atproto\Protocol\DagCbor::decode($record->bytes)['text'] ?? ''), Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50));
+		$texts = array_map(static fn ($record): string => (string)(DagCbor::decode($record->bytes)['text'] ?? ''), Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50));
 		$this->assertContains($words, $texts, 'the posts are here');
+		$record = array_values(array_filter(Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.post', 50), static fn ($r): bool => str_contains((string)(DagCbor::decode($r->bytes)['text'] ?? ''), $words)))[0] ?? null;
+		$this->assertNotSame('', $record?->localId ?? '', 'the post is tied to a post here');
+		$post = Server::get(StreamRequest::class)->getStreamById((string)$record->localId);
+		$this->assertSame([$this->alice->actor->getId(), true], [$post->getAttributedTo(), $post->isLocal()], 'as the account\'s own post');
+		$this->assertStringContainsString($words, $post->getContent());
 		Server::get(FollowsRequest::class)->getByPersons($this->alice->actor->getId(), 'https://bsky.app/profile/' . $followedDid);
 
 		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($did)['handle'] ?? '') === $before->handle ? true : null), 'the AppView follows the DID here');

@@ -21,13 +21,13 @@ namespace OCA\Social\Atproto\Model;
  * Moving here: the repository, the blobs, the preferences and the follows
  * are copied from the old PDS, the old PDS e-mails the person a code, and
  * with it signs the operation that points the DID here; the account then
- * takes the DID, and is switched off there.
+ * takes the DID, and is switched off there; its posts become posts here.
  *
  * Moving here inbound, the other side drives — Bridgy Fed for a bridged
  * account, or a migration tool: the person invites the DID with a one-time
  * code, the other side makes the account here with it, sends the
  * repository and the blobs, points the DID here and activates the account;
- * then its follows become follows here.
+ * then its follows become follows here, and its posts posts here.
  */
 final class Move {
 	public const AWAY = 'away';
@@ -45,6 +45,8 @@ final class Move {
 	public const STEP_FOLLOWS = 'follows';
 	/** moving here: the old PDS e-mailed a code, and the person enters it */
 	public const STEP_CODE = 'code';
+	/** moving here: the account's posts become posts in its timeline here */
+	public const STEP_POSTS = 'posts';
 	/** moving here inbound: the account is not made here yet */
 	public const STEP_INVITED = 'invited';
 
@@ -55,7 +57,7 @@ final class Move {
 	public const DONE = 'done';
 
 	/**
-	 * @param array{blobs?: int, records?: int, follows?: int, expectedBlobs?: int} $progress counts of what was copied
+	 * @param array{blobs?: int, records?: int, follows?: int, expectedBlobs?: int, posts?: int} $progress counts of what was copied
 	 */
 	public function __construct(
 		public readonly int $id,
@@ -84,6 +86,7 @@ final class Move {
 			self::STEP_FOLLOWS => self::STEP_CODE,
 			self::STEP_CODE => self::STEP_IDENTITY,
 			self::STEP_IDENTITY => self::STEP_ACTIVATE,
+			self::STEP_ACTIVATE => self::STEP_POSTS,
 			default => self::STEP_DONE,
 		};
 	}
