@@ -24,6 +24,7 @@ use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
+use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -34,6 +35,8 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\LikeService;
+use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamService;
@@ -50,6 +53,8 @@ class WriteServiceTest extends TestCase {
 
 	/** @var PostService&MockObject */
 	private PostService $posts;
+	/** @var PostReviewService&MockObject */
+	private PostReviewService $review;
 	/** @var LikeService&MockObject */
 	private LikeService $likes;
 	/** @var StreamService&MockObject */
@@ -76,6 +81,7 @@ class WriteServiceTest extends TestCase {
 		$accounts->method('getActorFromUserId')->willReturn($this->alice);
 		$this->posts = $this->createMock(PostService::class);
 		$this->streams = $this->createMock(StreamService::class);
+		$this->review = $this->createMock(PostReviewService::class);
 		$this->likes = $this->createMock(LikeService::class);
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(fn (string $id): array => array_values(array_filter($this->records, static fn (StoredRecord $r): bool => $r->localId === $id)));
@@ -90,7 +96,7 @@ class WriteServiceTest extends TestCase {
 			default => '',
 		});
 		$this->writes = new WriteService(
-			$accounts, $this->posts, $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
+			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
 			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->createMock(DocumentService::class),
 			$this->publisher, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->createMock(AtprotoBlobRequest::class), $this->createMock(IURLGenerator::class), new NullLogger(),
@@ -109,11 +115,14 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame('https://bsky.app/profile/' . self::BOB . '/post/3kbob', $post->getReplyTo());
 
 			return true;
-		}))->willReturnCallback(function () use ($made): Note {
+		}))->willReturnCallback(function () use ($made): Create {
 			$this->records[] = $this->record(RecordMapper::POST, '3knew', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
 
-			return $made;
+			return $activity;
 		});
+		$this->streams->method('getStreamById')->willReturnCallback(static fn (string $id): Note => $made);
 		$this->publisher->expects($this->once())->method('publishPost')->with($made);
 		$text = 'Read example.com/a/very/lo… now @bob.bsky.social';
 		$start = strpos($text, 'example');
@@ -131,6 +140,30 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3knew', $answer['uri']);
 		$this->assertSame(['cid' => 'bafyreicommit', 'rev' => '3kzrev'], $answer['commit']);
 		$this->assertSame('valid', $answer['validationStatus']);
+	}
+
+	public function testAPostTheReviewRulesHoldIsKeptAndNotPublished(): void {
+		$this->review->method('assess')->willReturn('first_post');
+		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(function (array $params): bool {
+			$this->assertSame('Hello from an app', $params['text']);
+			$this->assertSame('public', $params['visibility']);
+			$this->assertSame([], $params['media_ids']);
+			$this->assertNull($params['in_reply_to_id']);
+
+			return true;
+		}), 'first_post');
+		$this->posts->expects($this->never())->method('createPost');
+		$this->publisher->expects($this->never())->method('publishPost');
+
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+				'$type' => RecordMapper::POST, 'text' => 'Hello from an app', 'createdAt' => '2026-10-08T10:00:00.000Z',
+			]]);
+			$this->fail('a held post is not made');
+		} catch (XrpcException $e) {
+			$this->assertSame(400, $e->status);
+			$this->assertStringContainsString('waiting for a moderator', $e->getMessage());
+		}
 	}
 
 	public function testALikeOfABlueskyPostNotReadHereFetchesItFirst(): void {

@@ -21,7 +21,9 @@ use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\Report;
@@ -31,6 +33,9 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\LikeService;
+use OCA\Social\Service\ModerationService;
+use OCA\Social\Service\PeerTubeService;
+use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamService;
@@ -54,6 +59,8 @@ class WriteService {
 	public function __construct(
 		private AccountService $accounts,
 		private PostService $posts,
+		private PostReviewService $review,
+		private ModerationService $moderation,
 		private StreamService $streams,
 		private LikeService $likes,
 		private BoostService $boosts,
@@ -280,16 +287,20 @@ class WriteService {
 			$post->setQuotedId($this->knownPost($quoted));
 		}
 		$images = $embed['images'] ?? $embed['media']['images'] ?? [];
-		if (is_array($images) && $images !== []) {
-			$post->setMedias($this->medias($session, $images));
-		}
+		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
+		$post->setMedias(array_map(
+			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
+			$documents
+		));
 		foreach (is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [] as $label) {
 			if (in_array($label['val'] ?? '', ['porn', 'sexual', 'nudity', 'graphic-media'], true)) {
 				$post->setSensitive(true);
 			}
 		}
+		$this->holdForReview($actor, $post, $documents);
 		try {
-			$note = $this->posts->createPost($post);
+			$activity = $this->posts->createPost($post);
+			$note = $activity === null ? null : $this->streams->getStreamById($activity->getObjectId());
 		} catch (XrpcException $e) {
 			throw $e;
 		} catch (Throwable $e) {
@@ -418,13 +429,47 @@ class WriteService {
 	}
 
 	/**
-	 * The uploads a post's pictures name, in order, with their alt text.
+	 * A post the review rules hold is kept for a moderator, as one from the
+	 * web interface or a Mastodon app is, and the app is told so. It is not
+	 * published until it is approved.
 	 *
-	 * @return array the media attachments
+	 * @param Document[] $documents
 	 * @throws XrpcException
 	 */
-	private function medias(ClientSession $session, array $images): array {
-		$medias = [];
+	private function holdForReview(Person $actor, Post $post, array $documents): void {
+		try {
+			$this->moderation->assertNotMoved($actor);
+			$reason = $this->review->assess($actor, $post->getContent(), $post->getType(), PeerTubeService::soleVideo($post->getMedias()) !== null);
+			if ($reason === '') {
+				return;
+			}
+			$replyTo = $post->getReplyTo() === '' ? null : (string)$this->streams->getStreamById($post->getReplyTo())->getNid();
+			$this->review->hold($actor, [
+				'text' => $post->getContent(),
+				'media_ids' => array_map(static fn (Document $document): string => (string)$document->getNid(), $documents),
+				'poll' => [],
+				'in_reply_to_id' => $replyTo,
+				'quoted_status_id' => $post->getQuotedId() !== '' ? $post->getQuotedId() : null,
+				'sensitive' => $post->isSensitive(),
+				'spoiler_text' => '',
+				'visibility' => $post->getType(),
+				'language' => $post->getLanguage(),
+			], $reason);
+		} catch (Throwable $e) {
+			throw XrpcException::invalidRequest($e->getMessage());
+		}
+
+		throw XrpcException::invalidRequest('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.');
+	}
+
+	/**
+	 * The uploads a post's pictures name, in order, with their alt text.
+	 *
+	 * @return Document[]
+	 * @throws XrpcException
+	 */
+	private function pictures(ClientSession $session, array $images): array {
+		$documents = [];
 		foreach (array_slice($images, 0, 4) as $image) {
 			$cid = (string)($image['image']['ref']['$link'] ?? '');
 			$blob = $cid === '' ? null : $this->blobs->get($session->identity->did, $cid);
@@ -441,10 +486,10 @@ class WriteService {
 				$document->setDescription(mb_substr($alt, 0, 1500));
 				$this->documents->updateDescription($document);
 			}
-			$medias[] = $document->convertToMediaAttachment($this->urlGenerator, \OCA\Social\Model\ActivityPub\ACore::FORMAT_ACTIVITYPUB);
+			$documents[] = $document;
 		}
 
-		return $medias;
+		return $documents;
 	}
 
 	/**
