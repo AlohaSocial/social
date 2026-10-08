@@ -25,6 +25,9 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 class ActionsRequest extends ActionsRequestBuilder {
 	use TArrayTools;
 
+	/** What a vote's object adds to the poll's id: `<poll>#option-<n>`. */
+	public const VOTE_OPTION = '#option-';
+
 	/**
 	 * Insert a new Note in the database.
 	 */
@@ -36,7 +39,10 @@ class ActionsRequest extends ActionsRequestBuilder {
 			->setValue('actor_id_prim', $qb->createNamedParameter($qb->prim($like->getActorId())))
 			->setValue('type', $qb->createNamedParameter($like->getType()))
 			->setValue('object_id', $qb->createNamedParameter($like->getObjectId()))
-			->setValue('object_id_prim', $qb->createNamedParameter($qb->prim($like->getObjectId())));
+			->setValue('object_id_prim', $qb->createNamedParameter($qb->prim($like->getObjectId())))
+			->setValue('poll_prim', $qb->createNamedParameter(
+				$qb->prim(self::pollOfVote($like->getType(), $like->getObjectId()))
+			));
 
 		try {
 			$qb->setValue(
@@ -201,41 +207,70 @@ class ActionsRequest extends ActionsRequestBuilder {
 	}
 
 	/**
-	 * Who voted in a poll.
+	 * The poll a vote was cast in, or '' for any other action.
 	 *
 	 * A vote is a `Vote` action whose object is the poll's id with an option
-	 * suffix, so the poll is matched by prefix — the one place in this app
-	 * where a `LIKE` on an id is the right shape, because the suffix is this
-	 * app's own and the prefix is an exact id rather than a host.
-	 *
-	 * @return string[] actor ids, each once however many options they chose
+	 * suffix of this app's own making; the poll is what is left without it.
 	 */
-	public function votersOf(string $pollId, int $limit = 1000): array {
-		$qb = $this->getQueryBuilder();
-		$qb->selectDistinct('actor_id')
-			->from(self::TABLE_ACTIONS)
-			->where($qb->expr()->eq('type', $qb->createNamedParameter('Vote')))
-			->andWhere($qb->expr()->like(
-				'object_id',
-				$qb->createNamedParameter(
-					$this->escapeLikeValue($pollId) . '#option-%'
-				)
-			))
-			->setMaxResults(max(1, $limit));
+	public static function pollOfVote(string $type, string $objectId): string {
+		if ($type !== 'Vote') {
+			return '';
+		}
 
+		$at = strrpos($objectId, self::VOTE_OPTION);
+
+		return ($at === false) ? '' : substr($objectId, 0, $at);
+	}
+
+	/**
+	 * Who voted in each of several polls, in one query.
+	 *
+	 * Matched on `poll_prim`, the poll a vote row was written for, which is
+	 * indexed: the closed-poll sweep asks this for every poll it announces,
+	 * and the vote rows are a few among every like and boost in the table.
+	 *
+	 * @param string[] $pollIds
+	 * @param int $limit the most voters read per poll, on average
+	 *
+	 * @return array<string, string[]> poll id => actor ids, each once however
+	 *                                 many options they chose; a poll nobody
+	 *                                 voted in has an empty list
+	 */
+	public function votersOfPolls(array $pollIds, int $limit = 1000): array {
+		$byPrim = [];
 		$voters = [];
+		$qb = $this->getQueryBuilder();
+		foreach ($pollIds as $pollId) {
+			$voters[$pollId] = [];
+			$prim = $qb->prim($pollId);
+			if ($prim !== '') {
+				$byPrim[$prim] = $pollId;
+			}
+		}
+
+		if ($byPrim === []) {
+			return $voters;
+		}
+
+		$qb->selectDistinct(['poll_prim', 'actor_id'])
+			->from(self::TABLE_ACTIONS)
+			->where($qb->expr()->in(
+				'poll_prim',
+				$qb->createNamedParameter(array_keys($byPrim), IQueryBuilder::PARAM_STR_ARRAY)
+			))
+			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter('Vote')))
+			->setMaxResults(max(1, $limit) * count($byPrim));
+
 		$cursor = $qb->executeQuery();
 		while ($data = $cursor->fetch()) {
-			$voters[] = (string)$data['actor_id'];
+			$pollId = $byPrim[(string)$data['poll_prim']] ?? null;
+			if ($pollId !== null) {
+				$voters[$pollId][] = (string)$data['actor_id'];
+			}
 		}
 		$cursor->closeCursor();
 
 		return $voters;
-	}
-
-	/** `%`, `_` and the escape itself are literals inside an id. */
-	private function escapeLikeValue(string $value): string {
-		return str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $value);
 	}
 
 	/**

@@ -168,7 +168,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 
 | Table | Purpose |
 |-------|---------|
-| `social_action` | Like/Announce actions as ActivityPub objects (actor → object, with type) |
+| `social_action` | Like/Announce actions as ActivityPub objects (actor → object, with type); a `Vote` row also carries `poll_prim`, the md5 of the poll it was cast in (indexed, `''` on every other action), so the closed-poll sweep reads the voters of all its polls in one `IN` |
 | `social_actor` | Local user actors (tied to NC accounts, holds the RSA key pair) |
 | `social_cache_actor` | Cached remote federated actors (inbox/outbox URLs, public keys, counts), the refresh bookkeeping `sync_attempt`/`sync_failures`, and `account_lower`, the handle lowercased and indexed (`social_ca_al`) for the account search and the lookup by handle |
 | `social_cache_doc` | Cached remote and local media attachments. `ai_source` (SMALLINT, default 0) is the machine-generation provenance the picture's metadata stated when it was stored — `1` IPTC's `trainedAlgorithmicMedia`, `2` its `compositeWithTrainedAlgorithmicMedia` — read by `ImageMetadataService::digitalSourceType()` *before* the metadata is stripped, because the stored bytes no longer say it; rows from before the column read as 0 |

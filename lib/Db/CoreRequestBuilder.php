@@ -110,6 +110,7 @@ class CoreRequestBuilder {
 			'actor_id_prim',
 			'object_id',
 			'object_id_prim',
+			'poll_prim',
 			'creation'
 		],
 		self::TABLE_GIFS => [

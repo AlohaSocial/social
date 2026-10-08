@@ -227,7 +227,7 @@ class PollService {
 
 	private function alreadyVoted(string $voter, string $pollId, int $option): bool {
 		try {
-			$this->actionsRequest->getAction($voter, $pollId . '#option-' . $option, 'Vote');
+			$this->actionsRequest->getAction($voter, $pollId . ActionsRequest::VOTE_OPTION . $option, 'Vote');
 
 			return true;
 		} catch (\Exception $e) {
@@ -250,7 +250,7 @@ class PollService {
 		$vote->setType('Vote');
 		$vote->setId($this->voteId($voter, $pollId, $option));
 		$vote->setActorId($voter);
-		$vote->setObjectId($pollId . '#option-' . $option);
+		$vote->setObjectId($pollId . ActionsRequest::VOTE_OPTION . $option);
 		$this->actionsRequest->save($vote);
 	}
 
@@ -295,11 +295,16 @@ class PollService {
 	public function announceClosedPolls(int $limit = 50): int {
 		$announced = 0;
 
-		foreach ($this->streamRequest->getPollsClosedSince($this->lastSweep(), $limit) as $poll) {
+		$polls = $this->streamRequest->getPollsClosedSince($this->lastSweep(), $limit);
+		// the voters of every poll in one indexed read; a failure here throws
+		// before the sweep is recorded, so the whole pass is tried again
+		$voters = $this->actionsRequest->votersOfPolls(
+			array_map(static fn (Question $poll): string => $poll->getId(), $polls)
+		);
+
+		foreach ($polls as $poll) {
 			try {
-				$this->notificationService->onPollClosed(
-					$poll, $this->actionsRequest->votersOf($poll->getId())
-				);
+				$this->notificationService->onPollClosed($poll, $voters[$poll->getId()] ?? []);
 				$announced++;
 			} catch (\Throwable $e) {
 				// one poll that cannot be announced must not stop the sweep:

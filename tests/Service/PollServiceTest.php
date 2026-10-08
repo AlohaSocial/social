@@ -455,6 +455,17 @@ class PollServiceTest extends TestCase {
 
 	// the closed-poll sweep
 
+	/** The service again, over whatever the test has replaced. */
+	private function rebuild(): void {
+		$this->service = new PollService(
+			$this->streamRequest, $this->actionsRequest, $this->accountService,
+			$this->cacheActorService, $this->activityService,
+			$this->createStub(SignatureService::class),
+			$this->streamActionService, $this->streamActionsRequest,
+			$this->notificationService, $this->configService, new NullLogger()
+		);
+	}
+
 	private function closedPoll(string $id, int $endedAt): Question {
 		$poll = new Question();
 		$poll->setId($id)->setAttributedTo('https://cloud.example/users/alice');
@@ -473,7 +484,9 @@ class PollServiceTest extends TestCase {
 	public function testTheSweepAnnouncesEveryPollThatClosed(): void {
 		$poll = $this->closedPoll('https://cloud.example/polls/1', time() - 60);
 		$this->streamRequest->method('getPollsClosedSince')->willReturn([$poll]);
-		$this->actionsRequest->method('votersOf')->willReturn(['https://cloud.example/users/bob']);
+		$this->actionsRequest->method('votersOfPolls')->willReturn([
+			'https://cloud.example/polls/1' => ['https://cloud.example/users/bob'],
+		]);
 
 		$this->assertSame(1, $this->service->announceClosedPolls());
 		$this->assertSame([[
@@ -534,16 +547,59 @@ class PollServiceTest extends TestCase {
 		$first = $this->closedPoll('https://cloud.example/polls/1', time() - 60);
 		$second = $this->closedPoll('https://cloud.example/polls/2', time() - 30);
 		$this->streamRequest->method('getPollsClosedSince')->willReturn([$first, $second]);
-		$this->actionsRequest->method('votersOf')->willReturnCallback(
-			static function (string $pollId): array {
-				if (str_ends_with($pollId, '/1')) {
-					throw new \Exception('no voters to be had');
+		$this->actionsRequest->method('votersOfPolls')->willReturn([]);
+		$this->notificationService = $this->createStub(NotificationService::class);
+		$this->notificationService->method('onPollClosed')->willReturnCallback(
+			static function (Question $poll): void {
+				if (str_ends_with($poll->getId(), '/1')) {
+					throw new \Exception('no notification to be had');
 				}
-
-				return [];
 			}
 		);
+		$this->rebuild();
 
 		$this->assertSame(1, $this->service->announceClosedPolls());
+	}
+
+	/**
+	 * The voters of every closed poll are read in one query rather than one
+	 * per poll, and each poll is announced to its own.
+	 */
+	public function testTheVotersOfEveryPollAreReadAtOnce(): void {
+		$first = $this->closedPoll('https://cloud.example/polls/1', time() - 60);
+		$second = $this->closedPoll('https://cloud.example/polls/2', time() - 30);
+		$this->streamRequest->method('getPollsClosedSince')->willReturn([$first, $second]);
+		$actionsRequest = $this->createMock(ActionsRequest::class);
+		$actionsRequest->expects($this->once())->method('votersOfPolls')
+			->with(['https://cloud.example/polls/1', 'https://cloud.example/polls/2'])
+			->willReturn([
+				'https://cloud.example/polls/1' => ['https://cloud.example/users/bob'],
+				'https://cloud.example/polls/2' => [],
+			]);
+		$this->actionsRequest = $actionsRequest;
+		$this->rebuild();
+
+		$this->assertSame(2, $this->service->announceClosedPolls());
+		$this->assertSame([
+			['poll' => 'https://cloud.example/polls/1', 'voters' => ['https://cloud.example/users/bob']],
+			['poll' => 'https://cloud.example/polls/2', 'voters' => []],
+		], $this->announced);
+	}
+
+	/** A sweep whose voters cannot be read is not recorded, so it is tried again. */
+	public function testASweepThatCannotReadTheVotersIsTriedAgain(): void {
+		$this->stored[\OCA\Social\Service\ConfigService::SOCIAL_POLLS_SWEPT] = (string)(time() - 600);
+		$poll = $this->closedPoll('https://cloud.example/polls/1', time() - 60);
+		$this->streamRequest->method('getPollsClosedSince')->willReturn([$poll]);
+		$this->actionsRequest->method('votersOfPolls')->willThrowException(new \Exception('database gone'));
+
+		try {
+			$this->service->announceClosedPolls();
+			$this->fail('the failure was swallowed');
+		} catch (\Exception) {
+		}
+
+		$this->assertSame((string)(time() - 600), $this->stored[\OCA\Social\Service\ConfigService::SOCIAL_POLLS_SWEPT]);
+		$this->assertSame([], $this->announced);
 	}
 }

@@ -62,6 +62,9 @@ class IndexCoverageTest extends TestCase {
 		yield 'the outbound queue a drain reads' => [
 			'social_req_queue', ['status'],
 		];
+		yield 'the voters of the polls a sweep announces' => [
+			'social_action', ['poll_prim'],
+		];
 	}
 
 	/**
