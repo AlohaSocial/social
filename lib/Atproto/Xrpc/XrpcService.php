@@ -74,11 +74,12 @@ class XrpcService {
 	}
 
 	/**
-	 * A procedure (POST). Writes and sessions are later phases; a relay's
-	 * `requestCrawl` is not something a PDS answers.
+	 * A procedure (POST) nobody signed in made. A signed-in app's sessions
+	 * and writes are `ClientXrpc`'s; what reaches here asks to be signed in,
+	 * or is not something this PDS answers — a relay's `requestCrawl`, say.
 	 *
 	 * @throws XrpcException
-	 * @psalm-suppress NoValue every procedure is refused until a later phase writes through here
+	 * @psalm-suppress NoValue every procedure that reaches here is refused
 	 */
 	public function procedure(string $method, array $body): array {
 		if (!$this->config->isEnabled()) {

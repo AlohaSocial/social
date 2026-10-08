@@ -113,6 +113,8 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atproto_notify_cursor';
 	public const TABLE_ATPROTO_BLOCKLIST = 'social_atproto_blocklist';
 	public const TABLE_ATPROTO_LABELER = 'social_atproto_labeler';
+	public const TABLE_ATPROTO_APP_PASSWORD = 'social_atproto_app_password';
+	public const TABLE_ATPROTO_SESSION = 'social_atproto_session';
 
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
@@ -130,6 +132,8 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_NOTIFY_CURSOR => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error', 'creation'],
 		self::TABLE_ATPROTO_BLOCKLIST => ['id', 'kind', 'value', 'reason', 'creation'],
 		self::TABLE_ATPROTO_LABELER => ['id', 'user_id', 'did', 'settings', 'creation'],
+		self::TABLE_ATPROTO_APP_PASSWORD => ['id', 'user_id', 'name', 'hash', 'creation', 'last_used'],
+		self::TABLE_ATPROTO_SESSION => ['id', 'jti', 'user_id', 'did', 'app_password_id', 'expires', 'creation'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

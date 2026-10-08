@@ -80,6 +80,102 @@
 						: t('social', 'Twelve words that prove this Bluesky identity is yours even without this server. They are shown once, for you to write down.') }}
 				</p>
 			</div>
+			<!-- what a Bluesky app signs in with: this server is its
+			     hosting provider, and the Nextcloud password is never
+			     handed to it -->
+			<div v-if="bluesky.active !== false && !appPasswordsHidden" class="bluesky-settings__app-passwords">
+				<h5 class="bluesky-settings__title">
+					{{ t('social', 'App passwords for Bluesky apps') }}
+				</h5>
+				<p class="bluesky-settings__hint">
+					{{ t('social', 'To use a Bluesky app with this account, sign in there with your Bluesky handle and an app password made here, and choose this server as your hosting provider: {server}.', { server: origin }) }}
+				</p>
+				<p v-if="appPasswordsError" class="bluesky-settings__hint">
+					{{ appPasswordsError }}
+				</p>
+				<p v-else-if="appPasswords === null" class="bluesky-settings__hint">
+					{{ t('social', 'Loading …') }}
+				</p>
+				<template v-else>
+					<div v-if="newAppPassword" class="bluesky-settings__new-password" role="status">
+						<p class="bluesky-settings__new-password-title">
+							{{ t('social', 'New app password for {name}', { name: newAppPassword.name }) }}
+						</p>
+						<p class="bluesky-settings__new-password-value">
+							<code class="bluesky-settings__code">{{ newAppPassword.password }}</code>
+							<NcButton
+								variant="tertiary"
+								:title="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy')"
+								:aria-label="blueskyCopied === 'password' ? t('social', 'Copied') : t('social', 'Copy the app password')"
+								@click="copyBluesky('password', newAppPassword.password)">
+								<template #icon>
+									<Check v-if="blueskyCopied === 'password'" :size="16" />
+									<ContentCopy v-else :size="16" />
+								</template>
+							</NcButton>
+						</p>
+						<p class="bluesky-settings__hint">
+							{{ t('social', 'Copy it now: it is not shown again.') }}
+						</p>
+						<NcButton class="bluesky-settings__new-password-done" @click="newAppPassword = null">
+							{{ t('social', 'Done') }}
+						</NcButton>
+					</div>
+					<ul v-if="appPasswords.length > 0" class="bluesky-settings__app-password-list">
+						<li v-for="appPassword in appPasswords" :key="appPassword.id" class="bluesky-settings__app-password">
+							<span class="bluesky-settings__app-password-name">{{ appPassword.name }}</span>
+							<span class="bluesky-settings__hint">
+								{{ t('social', 'Made {date}', { date: madeOn(appPassword.creation) }) }}
+								·
+								{{ appPassword.last_used > 0
+									? t('social', 'Last used {when}', { when: lastUsed(appPassword.last_used) })
+									: t('social', 'Never used') }}
+							</span>
+							<div v-if="confirmingRevoke === appPassword.id" class="bluesky-settings__app-password-actions">
+								<p class="bluesky-settings__hint">
+									{{ t('social', 'Every app signed in with this password is signed out and cannot use it again.') }}
+								</p>
+								<NcButton
+									variant="error"
+									:disabled="revoking === appPassword.id"
+									@click="revokeAppPassword(appPassword)">
+									{{ t('social', 'Revoke it') }}
+								</NcButton>
+								<NcButton :disabled="revoking === appPassword.id" @click="confirmingRevoke = 0">
+									{{ t('social', 'Keep it') }}
+								</NcButton>
+							</div>
+							<div v-else class="bluesky-settings__app-password-actions">
+								<NcButton @click="confirmingRevoke = appPassword.id">
+									{{ t('social', 'Revoke') }}
+								</NcButton>
+							</div>
+						</li>
+					</ul>
+					<div class="bluesky-settings__app-password-create">
+						<NcTextField
+							v-model="appPasswordName"
+							class="bluesky-settings__app-password-field"
+							:label="t('social', 'Name of the new app password')"
+							:placeholder="t('social', 'The app it is for')"
+							:error="appPasswordNameError !== ''"
+							:helperText="appPasswordNameError"
+							maxlength="64"
+							:showTrailingButton="false"
+							@update:modelValue="appPasswordNameError = ''"
+							@keydown.enter.prevent="createAppPassword" />
+						<NcButton
+							:disabled="appPasswordName.trim() === '' || makingAppPassword"
+							@click="createAppPassword">
+							<template #icon>
+								<NcLoadingIcon v-if="makingAppPassword" :size="20" />
+								<KeyOutline v-else :size="20" />
+							</template>
+							{{ t('social', 'Make an app password') }}
+						</NcButton>
+					</div>
+				</template>
+			</div>
 		</template>
 		<NcDialog
 			:open="phrase !== ''"
@@ -104,6 +200,7 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import Check from 'vue-material-design-icons/Check.vue'
 import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
 import KeyOutline from 'vue-material-design-icons/KeyOutline.vue'
@@ -111,6 +208,7 @@ import { translate as t } from '@nextcloud/l10n'
 import { confirmPassword } from '../services/externalApi.js'
 import logger from '../services/logger.js'
 import { showError } from '../services/toast.js'
+import { fromNow, fullDate } from '../utils/relativeTime.js'
 
 /**
  * The account's Bluesky identity: its handle and DID, and the recovery
@@ -131,6 +229,7 @@ export default {
 		NcDialog,
 		NcLoadingIcon,
 		NcNoteCard,
+		NcTextField,
 	},
 
 	data() {
@@ -145,16 +244,51 @@ export default {
 			/** the pause switch: it moves at once, and comes back if the server refuses */
 			blueskyActive: true,
 			switchingBluesky: false,
-			/** which of the two was just copied: 'handle', 'did' or '' */
+			/** what was just copied: 'handle', 'did', 'phrase', 'password' or '' */
 			blueskyCopied: '',
 			blueskyCopyTimer: null,
 			recovering: false,
 			/** the twelve words, for as long as the dialog shows them */
 			phrase: '',
+
+			/**
+			 * The app passwords for Bluesky apps; null until they come
+			 *
+			 * @type {Array<{id: number, name: string, creation: number, last_used: number}>|null}
+			 */
+			appPasswords: null,
+			/** the server has no such route: Bluesky is off there */
+			appPasswordsHidden: false,
+			appPasswordsError: '',
+			appPasswordName: '',
+			/** what the server said about the name, under the field */
+			appPasswordNameError: '',
+			makingAppPassword: false,
+			/**
+			 * The password just made, until it is dismissed; it is never
+			 * fetched again
+			 *
+			 * @type {{name: string, password: string}|null}
+			 */
+			newAppPassword: null,
+			/** the row asking to be confirmed, or 0 */
+			confirmingRevoke: 0,
+			/** the row a revocation is out for, or 0 */
+			revoking: 0,
 		}
 	},
 
 	computed: {
+		/** @return {string} the address a Bluesky app is given as the hosting provider */
+		origin() {
+			return window.location.origin
+		},
+
+		/** @return {boolean} whether the identity is here and live, which app passwords need */
+		blueskyLive() {
+			return this.bluesky !== null && this.bluesky.active !== false
+		},
+
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
 		phraseButtons() {
 			return [
@@ -168,6 +302,16 @@ export default {
 					callback: () => this.closePhrase(),
 				},
 			]
+		},
+	},
+
+	watch: {
+		// asked for the first time the identity is live, whether on load or
+		// when it is switched back on
+		blueskyLive(live) {
+			if (live && this.appPasswords === null && !this.appPasswordsHidden) {
+				this.loadAppPasswords()
+			}
 		},
 	},
 
@@ -199,7 +343,7 @@ export default {
 		},
 
 		/**
-		 * @param {'handle'|'did'|'phrase'} which what was asked for
+		 * @param {'handle'|'did'|'phrase'|'password'} which what was asked for
 		 * @param {string} text what goes onto the clipboard
 		 */
 		async copyBluesky(which, text) {
@@ -255,6 +399,93 @@ export default {
 		takeIdentity(identity) {
 			this.bluesky = identity
 			this.blueskyActive = identity?.active !== false
+		},
+
+		/**
+		 * @param {number} seconds a unix timestamp, as the server writes them
+		 * @return {string} the day it stands for
+		 */
+		madeOn(seconds) {
+			return fullDate(seconds * 1000)
+		},
+
+		/**
+		 * @param {number} seconds a unix timestamp, as the server writes them
+		 * @return {string} how long ago that was
+		 */
+		lastUsed(seconds) {
+			return fromNow(seconds * 1000)
+		},
+
+		/** @return {Promise<void>} */
+		async loadAppPasswords() {
+			this.appPasswordsError = ''
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/app-passwords'))
+				this.appPasswords = data?.app_passwords ?? []
+			} catch (error) {
+				if (error?.response?.status === 404) {
+					this.appPasswordsHidden = true
+					return
+				}
+				logger.debug('Could not load the app passwords', { error })
+				this.appPasswordsError = t('social', 'Could not read your app passwords right now.')
+			}
+		},
+
+		/**
+		 * Makes an app password, after the Nextcloud password: whoever holds
+		 * one can post as this account.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async createAppPassword() {
+			const name = this.appPasswordName.trim()
+			if (name === '' || this.makingAppPassword) {
+				return
+			}
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.makingAppPassword = true
+			this.appPasswordNameError = ''
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/app-passwords'), { name })
+				this.appPasswords = data.app_passwords
+				this.newAppPassword = { name: data.name, password: data.password }
+				this.appPasswordName = ''
+			} catch (error) {
+				const status = error?.response?.status
+				if (status === 422) {
+					this.appPasswordNameError = error.response.data?.error || t('social', 'Could not make an app password with that name')
+				} else {
+					showError(status === 403
+						? t('social', 'Confirm your password again and retry.')
+						: t('social', 'Could not make an app password'))
+				}
+			} finally {
+				this.makingAppPassword = false
+			}
+		},
+
+		/**
+		 * @param {{id: number}} appPassword the row to revoke
+		 * @return {Promise<void>}
+		 */
+		async revokeAppPassword(appPassword) {
+			this.revoking = appPassword.id
+			try {
+				const { data } = await axios.delete(generateUrl('apps/social/api/v1/social/bluesky/app-passwords/{id}', { id: appPassword.id }))
+				this.appPasswords = data.app_passwords
+				this.confirmingRevoke = 0
+			} catch (error) {
+				logger.debug('Could not revoke an app password', { error })
+				showError(t('social', 'Could not revoke that app password'))
+			} finally {
+				this.revoking = 0
+			}
 		},
 
 		/**
@@ -331,6 +562,87 @@ export default {
 
 	&__recovery {
 		margin-top: 4px;
+	}
+
+	&__app-passwords {
+		margin-top: 12px;
+	}
+
+	&__new-password {
+		margin-top: 8px;
+		padding: 12px;
+		border: 2px solid var(--color-warning);
+		border-radius: var(--border-radius-element, 8px);
+		background: var(--color-background-dark);
+	}
+
+	&__new-password-title {
+		margin: 0;
+		font-weight: bold;
+	}
+
+	&__new-password-value {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		margin: 4px 0 0;
+
+		code {
+			font-size: 16px;
+		}
+	}
+
+	&__new-password-done {
+		margin-top: 8px;
+	}
+
+	&__app-password-list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin: 8px 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__app-password {
+		padding: 8px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-element, 8px);
+	}
+
+	&__app-password-name {
+		font-weight: bold;
+		overflow-wrap: anywhere;
+	}
+
+	&__app-password-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-top: 8px;
+
+		p {
+			flex-basis: 100%;
+			margin: 0;
+		}
+	}
+
+	&__app-password-create {
+		display: flex;
+		align-items: flex-end;
+		gap: 8px;
+		margin-top: 8px;
+	}
+
+	&__app-password-field {
+		flex: 1 1 auto;
+	}
+
+	&__title {
+		margin: 0;
+		font-size: 15px;
+		font-weight: bold;
 	}
 
 	&__phrase {

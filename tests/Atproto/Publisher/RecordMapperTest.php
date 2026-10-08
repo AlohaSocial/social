@@ -160,7 +160,8 @@ class RecordMapperTest extends TestCase {
 			$attachments[] = $attachment;
 		}
 		$post->setAttachments($attachments);
-		$this->documents->method('getMediaFromArray')->willReturn($documents);
+		$this->documents->expects($this->once())->method('getMediaFromArray')
+			->with(['1', '2', '3', '4', '5', '6'], 'alice')->willReturn($documents);
 		$this->pictures->method('blobFor')->willReturnCallback(function (Identity $identity, Person $owner, Document $document): array {
 			return ['blob' => new BlobRef(self::DID, Cid::forRaw($document->getId()), $document->getId(), 'image/jpeg', 100), 'width' => 40, 'height' => 30];
 		});
@@ -354,6 +355,18 @@ class RecordMapperTest extends TestCase {
 		$record = $this->mapper()->post($post, $this->identity, $this->author)['record'];
 		$this->assertArrayNotHasKey('embed', $record, 'linked instead of embedded');
 		$this->assertStringContainsString($quoted->getId(), $record['text']);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testAMentionOfABlueskyAccountIsAMentionFacetWithItsDid(): void {
+		$post = $this->post('<p>hi <span class="h-card"><a href="https://bsky.app/profile/' . self::OTHER . '" class="u-url mention">@<span>bob.bsky.social</span></a></span></p>');
+		$post->addTag(['type' => 'Mention', 'href' => 'https://bsky.app/profile/' . self::OTHER, 'name' => '@bob.bsky.social']);
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$mentions = array_values(array_filter($record['facets'] ?? [], static fn (array $f): bool => $f['features'][0]['$type'] === 'app.bsky.richtext.facet#mention'));
+		$this->assertCount(1, $mentions);
+		$this->assertSame(self::OTHER, $mentions[0]['features'][0]['did']);
 		$this->lexicon->validateRecord($record);
 	}
 

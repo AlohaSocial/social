@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\Client\ClientXrpc;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Atproto\Xrpc\XrpcService;
@@ -39,6 +40,7 @@ class AtprotoXrpcController extends Controller {
 	public function __construct(
 		IRequest $request,
 		private XrpcService $xrpc,
+		private ClientXrpc $client,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -53,7 +55,9 @@ class AtprotoXrpcController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/xrpc/{method}', requirements: ['method' => '[a-zA-Z0-9._-]+'])]
 	public function query(string $method): Response {
 		try {
-			return $this->answer($this->xrpc->query($method, $this->request->getParams()));
+			$answer = $this->client->query($method, $_SERVER['QUERY_STRING'] ?? '', $this->headers());
+
+			return $this->answer($answer ?? $this->xrpc->query($method, $this->request->getParams()));
 		} catch (XrpcException $e) {
 			return $this->refuse($e);
 		} catch (Throwable $e) {
@@ -72,7 +76,13 @@ class AtprotoXrpcController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/xrpc/{method}', requirements: ['method' => '[a-zA-Z0-9._-]+'], postfix: 'procedure')]
 	public function procedure(string $method): Response {
 		try {
-			$body = json_decode((string)file_get_contents('php://input'), true);
+			$raw = file_get_contents('php://input', false, null, 0, ClientXrpc::MAX_BLOB + 1);
+			$raw = $raw === false ? '' : $raw;
+			$answer = $this->client->procedure($method, $raw, $this->headers(), $this->request->getRemoteAddress());
+			if ($answer !== null) {
+				return $this->answer($answer);
+			}
+			$body = json_decode($raw, true);
 
 			return $this->answer($this->xrpc->procedure($method, is_array($body) ? $body : []));
 		} catch (XrpcException $e) {
@@ -94,10 +104,29 @@ class AtprotoXrpcController extends Controller {
 		return $this->cors(new DataResponse(null, Http::STATUS_NO_CONTENT));
 	}
 
+	/**
+	 * The headers a signed-in call and the AppView proxy read.
+	 *
+	 * @return array<string, string>
+	 */
+	private function headers(): array {
+		$headers = [];
+		foreach (['authorization', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
+			$value = $this->request->getHeader($name);
+			if ($value !== '') {
+				$headers[$name] = $value;
+			}
+		}
+
+		return $headers;
+	}
+
 	private function answer(array|XrpcBytes $result): Response {
 		if ($result instanceof XrpcBytes) {
-			$response = new DataDisplayResponse($result->bytes, Http::STATUS_OK, ['Content-Type' => $result->contentType]);
-			$response->cacheFor(60, false, true);
+			$response = new DataDisplayResponse($result->bytes, $result->status, ['Content-Type' => $result->contentType]);
+			if ($result->status === Http::STATUS_OK) {
+				$response->cacheFor(60, false, true);
+			}
 
 			return $this->cors($response);
 		}
