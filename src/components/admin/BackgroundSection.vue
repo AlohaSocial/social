@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Background work')"
-		:description="t('social', 'Almost everything this app does away from a page happens on a schedule: posts go out, 24-hour shorts expire, media is swept, videos are transcoded, the storage figures are taken. When cron stops, the symptom is a post that never arrives and a disk that never shrinks — and nothing in the app said so. This is when each job last ran.')">
+	<div>
 		<NcNoteCard v-if="unregistered" type="warning">
 			{{ t('social', 'Some jobs are not registered at all. That is what an upgrade whose migrations have not run looks like; occ upgrade registers them.') }}
 		</NcNoteCard>
@@ -37,13 +35,12 @@
 				</tbody>
 			</table>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
 /**
  * Whether the work that happens away from a request is happening.
@@ -58,7 +55,6 @@ export default {
 
 	components: {
 		NcNoteCard,
-		NcSettingsSection,
 	},
 
 	props: {

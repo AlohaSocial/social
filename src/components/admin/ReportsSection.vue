@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Reports')"
-		:description="t('social', 'Reports filed by the people on this instance and reports received from other instances. The open ones are here; the ones somebody has already dealt with are below them, folded away.')">
+	<div>
 		<NcEmptyContent v-if="open.length === 0" :name="t('social', 'No open reports.')">
 			<template #icon>
 				<IconCheckCircle :size="20" />
@@ -66,7 +64,7 @@
 			:confirmLabel="pending.confirmLabel"
 			@update:open="pending = null"
 			@confirm="pending.go()" />
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -77,7 +75,6 @@ import IconChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import ConfirmDialog from './ConfirmDialog.vue'
 import ReportsTable from './ReportsTable.vue'
 import { moderationUrl } from '../../services/adminApi.js'
@@ -101,7 +98,6 @@ export default {
 		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 		ReportsTable,
 	},
 

@@ -13,8 +13,6 @@ vi.mock('@nextcloud/axios', () => ({ default: { get, post, delete: del } }))
 const { showError } = vi.hoisted(() => ({ showError: vi.fn() }))
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess: vi.fn() }))
 
-const stubs = { NcSettingsSection: { template: '<section><slot /></section>' } }
-
 describe('the custom emoji card', () => {
 	beforeEach(() => {
 		get.mockReset().mockResolvedValue({ data: { emojis: [] } })
@@ -24,7 +22,7 @@ describe('the custom emoji card', () => {
 	})
 
 	it('says so when the server has none of its own', async () => {
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 
 		expect(wrapper.text()).toContain('This server has no emoji of its own.')
@@ -35,7 +33,7 @@ describe('the custom emoji card', () => {
 			data: { emojis: [{ shortcode: 'blobcat', url: 'https://cloud.example/e/1.png', category: 'cats' }] },
 		})
 
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 
 		expect(wrapper.text()).toContain(':blobcat:')
@@ -44,7 +42,7 @@ describe('the custom emoji card', () => {
 
 	/** Nothing is sent until there is both a name and a picture to send. */
 	it('cannot be submitted without a picture', async () => {
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 
 		await wrapper.vm.add()
@@ -53,7 +51,7 @@ describe('the custom emoji card', () => {
 	})
 
 	it('sends the picture as a form upload', async () => {
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 
 		wrapper.vm.shortcode = 'blobcat'
@@ -71,7 +69,7 @@ describe('the custom emoji card', () => {
 	it('repeats what the server would not take', async () => {
 		post.mockRejectedValue({ response: { data: { error: 'a shortcode is 2 to 64 characters' } } })
 
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 		wrapper.vm.shortcode = 'x'
 		wrapper.vm.picture = new File(['x'], 'x.png', { type: 'image/png' })
@@ -83,7 +81,7 @@ describe('the custom emoji card', () => {
 	it('removes one by its shortcode', async () => {
 		get.mockResolvedValue({ data: { emojis: [{ shortcode: 'blobcat', url: '', category: '' }] } })
 
-		const wrapper = mount(EmojiSection, { global: { stubs } })
+		const wrapper = mount(EmojiSection)
 		await flushPromises()
 		await wrapper.find('.emoji__item button').trigger('click')
 		await flushPromises()
@@ -104,14 +102,14 @@ describe('the rules card', () => {
 	it('shows what is stored, one rule per line', async () => {
 		get.mockResolvedValue({ data: { rules: 'Be kind.\nNo harassment.' } })
 
-		const wrapper = mount(RulesSection, { global: { stubs } })
+		const wrapper = mount(RulesSection)
 		await flushPromises()
 
 		expect(wrapper.vm.rules).toBe('Be kind.\nNo harassment.')
 	})
 
 	it('writes them back and says so', async () => {
-		const wrapper = mount(RulesSection, { global: { stubs } })
+		const wrapper = mount(RulesSection)
 		await flushPromises()
 		wrapper.vm.rules = 'Be kind.'
 

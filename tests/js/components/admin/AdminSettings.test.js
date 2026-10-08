@@ -5,7 +5,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import axios from '@nextcloud/axios'
 
@@ -60,19 +60,58 @@ const STATE = {
 	},
 }
 
+/** the pages mounted by a test, unmounted after it so their listeners go too */
+const mounted = []
+
+afterEach(() => {
+	mounted.splice(0).forEach((wrapper) => wrapper.unmount())
+})
+
 /**
  * @param {object} state what the server provided
+ * @param {string} hash the address's fragment when the page opens
  * @return {Promise<object>} the mounted page
  */
-async function mountPage(state) {
+async function mountPage(state, hash = '') {
 	// loadState memoises what it read on the window; a second page in the same
 	// test file would otherwise get the first one's state
 	delete globalThis._nc_initial_state
 	globalThis.setInitialState('social', 'adminSettings', state)
-	const wrapper = mount(AdminSettings)
+	window.history.replaceState(null, '', `/settings/admin/social${hash}`)
+	const wrapper = mount(AdminSettings, { attachTo: document.body })
+	mounted.push(wrapper)
 	await flushPromises()
 
 	return wrapper
+}
+
+/**
+ * @param {object} wrapper the page
+ * @return {string[]} the names of the groups in the navigation
+ */
+function groupNames(wrapper) {
+	return wrapper.findAll('.social-admin__group-title').map((title) => title.text())
+}
+
+/**
+ * @param {object} wrapper the page
+ * @return {string[]} the headings of the sections drawn
+ */
+function sectionHeadings(wrapper) {
+	return wrapper.findAll('.social-admin__section-heading').map((heading) => heading.text())
+}
+
+/**
+ * Opens a group as a click on it in the navigation does.
+ *
+ * @param {object} wrapper the page
+ * @param {string} name the group's name
+ */
+async function openGroup(wrapper, name) {
+	const link = wrapper.findAll('.social-admin__group-link')
+		.find((one) => one.find('.social-admin__group-title').text() === name)
+	await link.trigger('click')
+	await flushPromises()
 }
 
 describe('the administration page', () => {
@@ -81,75 +120,76 @@ describe('the administration page', () => {
 		axios.get.mockResolvedValue({ data: { accounts: [], cursors: [], announcements: [] } })
 	})
 
-	/**
-	 * Seventeen cards in one run is a list nobody reads to the end of, so they
-	 * are grouped by what they are for. The order inside a group is the order
-	 * they were in; the groups are what changed.
-	 */
-	it('is the nineteen cards, grouped by what they are for', async () => {
+	it('opens on the overview, with what needs attention above the activity', async () => {
 		const wrapper = await mountPage(STATE)
-		const headings = wrapper.findAll('h2').map((heading) => heading.text())
 
-		expect(headings).toEqual([
-			'Activity here',
-			'Reports',
-			'Posts waiting to be looked at',
-			'Accounts',
-			'Refused pictures',
-			'The rules of this server',
-			'What this server is about',
-			'What may trend',
-			'Custom emoji',
-			'Announcements',
-			'Sections',
-			'Retention',
-			'Storage',
-			'Federation health',
-			'Background work',
-			'Fediverse access',
-			'Block lists',
-			'Relays',
-			'Server',
-		])
+		expect(wrapper.find('.social-admin__group-heading').text()).toBe('Overview')
+		expect(sectionHeadings(wrapper)).toEqual(['Needs attention', 'Activity here'])
+		expect(wrapper.text()).toContain('Nothing is waiting for you.')
 	})
 
-	it('names every group, and gives every card an anchor of its own', async () => {
+	/**
+	 * Twenty sections in one run were more than anybody reads to the end of;
+	 * they are in groups by what an administrator came to do, one at a time.
+	 */
+	it('puts every section in exactly one group, shown one group at a time', async () => {
 		const wrapper = await mountPage(STATE)
 
-		expect(wrapper.findAll('.social-admin__group-name').map((h) => h.text()))
-			.toEqual(['Overview', 'Moderation', 'What people see', 'What is kept', 'Federation', 'Server'])
-		// the rail is the same list, so it cannot drift from the page
-		expect(wrapper.findAll('.social-admin__rail-link')).toHaveLength(19)
-		expect(wrapper.findAll('.social-admin__card').map((card) => card.attributes('id')))
-			.toEqual(wrapper.findAll('.social-admin__rail-link').map((link) => link.attributes('href').slice(1)))
+		expect(groupNames(wrapper)).toEqual(['Overview', 'Moderation', 'Explore and features', 'Federation', 'Server'])
+
+		const seen = {}
+		for (const name of groupNames(wrapper)) {
+			await openGroup(wrapper, name)
+			expect(wrapper.find('.social-admin__group-heading').text()).toBe(name)
+			seen[name] = sectionHeadings(wrapper)
+		}
+
+		expect(seen).toEqual({
+			Overview: ['Needs attention', 'Activity here'],
+			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Refused pictures', 'Server rules'],
+			'Explore and features': ['About this server', 'What may trend', 'Custom emoji', 'Announcements', 'Features'],
+			Federation: ['Allowed and blocked servers', 'Block lists', 'Relays', 'Deliveries'],
+			Server: ['Server settings', 'Retention', 'Storage', 'Background jobs'],
+		})
+	})
+
+	it('lists the sections of the open group beside it, each a link to its section', async () => {
+		const wrapper = await mountPage(STATE)
+		await openGroup(wrapper, 'Moderation')
+
+		const links = wrapper.findAll('.social-admin__toc-link')
+		expect(links.map((link) => link.text())).toEqual(sectionHeadings(wrapper))
+		expect(links.map((link) => link.attributes('href').slice(1)))
+			.toEqual(wrapper.findAll('.social-admin__section').map((section) => section.attributes('id')))
 	})
 
 	/**
 	 * A delegate moderates; they do not administer. `AdminSettings` sends no
-	 * server settings to one, so there is nothing for the card to draw.
+	 * server settings to one, so there is nothing for those sections to draw.
 	 */
-	it('leaves the Server card out for a delegated administrator', async () => {
+	it('leaves out what a delegated administrator is not sent', async () => {
 		const wrapper = await mountPage({ ...STATE, server: null, sections: null, groups: null })
-		const headings = wrapper.findAll('h2').map((heading) => heading.text())
+		const all = []
+		for (const name of groupNames(wrapper)) {
+			await openGroup(wrapper, name)
+			all.push(...sectionHeadings(wrapper))
+		}
 
-		expect(headings).not.toContain('Server')
+		expect(all).not.toContain('Server settings')
 		// nor the relays, which change what every federated timeline here
 		// holds and where every public post written here is sent
-		expect(headings).not.toContain('Relays')
+		expect(all).not.toContain('Relays')
+		expect(all).not.toContain('Block lists')
 		// nor what the app offers everybody, which is a decision about the
 		// instance rather than about a report
-		expect(headings).not.toContain('Sections')
-		// and the fourteen cards a delegate does hold are all still there
-		expect(wrapper.findAll('h2')).toHaveLength(15)
-		// with the group that has nothing left in it drawing no heading
-		expect(wrapper.findAll('.social-admin__group-name').map((h) => h.text()))
-			.not.toContain('Server')
+		expect(all).not.toContain('Features')
+		expect(all).toHaveLength(16)
 	})
 
 	/** Who may have an account here is an administrator's decision; a delegate is sent none of it. */
-	it('draws the External users group above moderation when the server sends it', async () => {
+	it('draws the Sign-ups group after moderation when the server sends it', async () => {
 		const external = {
-			settings: { enabled: false, max: 100, quota: 1024, mode: 'approval', verifyEmail: true, minAge: 16, reserved: [], userInvites: false, signupNotice: '', count: 0, awaitingApproval: 0, restricted: false, restrictionIncludesExternals: true },
+			settings: { enabled: false, max: 100, quota: 1024, mode: 'approval', verifyEmail: true, minAge: 16, reserved: [], userInvites: false, signupNotice: '', count: 0, awaitingApproval: 2, restricted: false, restrictionIncludesExternals: true },
 			twoFactor: { enforced: false, everybody: false },
 			requests: [],
 			invites: [],
@@ -157,19 +197,126 @@ describe('the administration page', () => {
 		}
 		const wrapper = await mountPage({ ...STATE, external })
 
-		expect(wrapper.findAll('.social-admin__group-name').map((h) => h.text()).slice(0, 3))
-			.toEqual(['Overview', 'External users', 'Moderation'])
-		expect(wrapper.findAll('h2').map((heading) => heading.text()).slice(1, 4))
-			.toEqual(['External users', 'Registrations and invitations', 'External accounts'])
+		expect(groupNames(wrapper).slice(0, 3)).toEqual(['Overview', 'Moderation', 'Sign-ups'])
+		await openGroup(wrapper, 'Sign-ups')
+		expect(sectionHeadings(wrapper)).toEqual(['Who may sign up', 'Waiting and invited', 'External accounts'])
 
 		const without = await mountPage(STATE)
-		expect(without.findAll('.social-admin__group-name').map((h) => h.text())).not.toContain('External users')
+		expect(groupNames(without)).not.toContain('Sign-ups')
 	})
 
 	it('draws a page the server told nothing about without breaking', async () => {
-		const wrapper = await mountPage({})
+		const wrapper = await mountPage({}, '#reports')
 
 		expect(wrapper.text()).toContain('No open reports.')
+	})
+
+	/**
+	 * Old links, the dashboard widgets and the report notification name a
+	 * section; the page opens the group it is in.
+	 */
+	it('opens the group of the section the address names', async () => {
+		const wrapper = await mountPage(STATE, '#relays')
+
+		expect(wrapper.find('.social-admin__group-heading').text()).toBe('Federation')
+		expect(wrapper.find('#relays').exists()).toBe(true)
+
+		window.location.hash = '#retention'
+		window.dispatchEvent(new HashChangeEvent('hashchange'))
+		await flushPromises()
+		expect(wrapper.find('.social-admin__group-heading').text()).toBe('Server')
+	})
+
+	it('puts the group opened in the address, so a reload comes back to it', async () => {
+		const wrapper = await mountPage(STATE)
+		await openGroup(wrapper, 'Federation')
+
+		expect(window.location.hash).toBe('#access')
+	})
+})
+
+describe('what needs attention', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		axios.get.mockResolvedValue({ data: { accounts: [], cursors: [], announcements: [] } })
+	})
+
+	const BUSY = {
+		...STATE,
+		openReports: 3,
+		reviewTotal: 2,
+		background: { jobs: [], late: 1, worst: 3600 },
+		federation: { ...STATE.federation, failing: 4, atRisk: 0 },
+	}
+
+	it('lists each kind of waiting work with its count, the most urgent first', async () => {
+		const wrapper = await mountPage(BUSY)
+		const items = wrapper.findAll('.attention__item')
+
+		expect(items.map((item) => [item.find('.attention__count').text(), item.attributes('href')])).toEqual([
+			['1', '#background'],
+			['3', '#reports'],
+			['2', '#review'],
+			['4', '#federation'],
+		])
+	})
+
+	it('takes the administrator to the section that deals with it', async () => {
+		const wrapper = await mountPage(BUSY)
+		await wrapper.find('.attention__item[href="#reports"]').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.find('.social-admin__group-heading').text()).toBe('Moderation')
+		expect(window.location.hash).toBe('#reports')
+	})
+
+	/** A delivery that will be retried is information, not a job; it puts no number on its group. */
+	it('counts what waits on a group beside its name', async () => {
+		const wrapper = await mountPage(BUSY)
+		const badges = Object.fromEntries(wrapper.findAll('.social-admin__group-link').map((link) => [
+			link.find('.social-admin__group-title').text(),
+			link.find('.social-admin__badge').exists() ? link.find('.social-admin__badge').text() : '',
+		]))
+
+		expect(badges).toEqual({ Overview: '', Moderation: '5', 'Explore and features': '', Federation: '', Server: '1' })
+	})
+})
+
+describe('the search', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+		axios.get.mockResolvedValue({ data: { accounts: [], cursors: [], announcements: [] } })
+	})
+
+	/**
+	 * @param {object} wrapper the page
+	 * @param {string} query what to type
+	 */
+	async function search(wrapper, query) {
+		await wrapper.find('input[type="search"]').setValue(query)
+		await flushPromises()
+	}
+
+	it('finds a section in any group by its name, its description or a word it is known by', async () => {
+		const wrapper = await mountPage(STATE)
+
+		await search(wrapper, 'cron')
+		expect(sectionHeadings(wrapper)).toEqual(['Background jobs'])
+		expect(wrapper.find('.social-admin__section-group').text()).toBe('Server')
+
+		await search(wrapper, 'blocklist')
+		expect(sectionHeadings(wrapper)).toContain('Allowed and blocked servers')
+
+		await search(wrapper, 'spam')
+		expect(sectionHeadings(wrapper)).toContain('Posts waiting for review')
+	})
+
+	it('says so when nothing matches', async () => {
+		const wrapper = await mountPage(STATE)
+		await search(wrapper, 'nothing like this')
+
+		expect(sectionHeadings(wrapper)).toEqual([])
+		expect(wrapper.find('.social-admin__results').text()).toContain('No setting matches')
 	})
 })
 
@@ -209,7 +356,7 @@ describe('the escaping of what a peer sent', () => {
 				level: '',
 			}],
 			openReports: 1,
-		})
+		}, '#reports')
 
 		expect(wrapper.find('table').html()).not.toContain('<img src=x')
 		expect(wrapper.text()).toContain('<img src=x onerror=alert(1)>')
@@ -234,7 +381,7 @@ describe('the escaping of what a peer sent', () => {
 				level: '',
 			}],
 			openReports: 1,
-		})
+		}, '#reports')
 
 		const table = wrapper.find('table')
 		const linked = table.findAll('a').map((link) => link.attributes('href'))
@@ -245,19 +392,19 @@ describe('the escaping of what a peer sent', () => {
 		expect(table.text()).toContain('javascript:alert(2)')
 	})
 	/**
-	 * For you is decided for the whole instance, like the sections, so
+	 * For you is decided for the whole instance, like the features, so
 	 * it sits with them — and only when the server sent its settings, which
 	 * it does not for a delegate.
 	 */
-	it('draws the For you card next to the sections when it has its settings', async () => {
+	it('draws the For you section next to the features when it has its settings', async () => {
 		const interests = { enabled: true, learningDefault: true, halfLife: 30, threshold: 3, cap: 30, window: 7 }
-		const wrapper = await mountPage({ ...STATE, interests })
-		const ids = wrapper.findAll('.social-admin__card').map((card) => card.attributes('id'))
+		const wrapper = await mountPage({ ...STATE, interests }, '#sections')
+		const ids = wrapper.findAll('.social-admin__section').map((section) => section.attributes('id'))
 
 		expect(ids.indexOf('interests')).toBe(ids.indexOf('sections') + 1)
-		expect(wrapper.findAll('.social-admin__rail-link').map((link) => link.text())).toContain('For you')
+		expect(wrapper.findAll('.social-admin__toc-link').map((link) => link.text())).toContain('For you')
 
-		const without = await mountPage({ ...STATE, interests: null })
+		const without = await mountPage({ ...STATE, interests: null }, '#sections')
 		expect(without.find('#interests').exists()).toBe(false)
 	})
 })

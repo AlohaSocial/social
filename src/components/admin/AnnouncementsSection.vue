@@ -3,9 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Announcements')"
-		:description="t('social', 'A notice every account on this instance is shown once in its client, until they dismiss it. Give it a start and an end and it is only shown between them — both or neither. An announcement that has run out stops being shown the moment it does; removing it here takes it away from everybody, read or not.')">
+	<div>
+		<p class="social-admin__hint">
+			{{ t('social', 'Give one a start and an end to show it only between them. Removing one takes it away from everybody, read or not.') }}
+		</p>
+
 		<NcLoadingIcon v-if="loading" :size="20" />
 
 		<NcEmptyContent
@@ -89,7 +91,7 @@
 			:confirmLabel="t('social', 'Remove')"
 			@update:open="pending = null"
 			@confirm="remove(pending)" />
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -101,7 +103,6 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcDateTimePickerNative from '@nextcloud/vue/components/NcDateTimePickerNative'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { announcementsUrl, errorMessage } from '../../services/adminApi.js'
@@ -125,7 +126,6 @@ export default {
 		NcDateTimePickerNative,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextArea,
 	},
 

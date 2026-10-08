@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'For you')"
-		:description="t('social', 'A feed of posts carrying the hashtags each person reads most, learned from how they read here. What is learned stays on this server and is only ever shown to the person it is about — not to other users, and not to administrators.')">
+	<div>
 		<div class="interests-admin">
 			<NcCheckboxRadioSwitch v-model="form.enabled" type="switch">
 				{{ t('social', 'Enable For you') }}
@@ -44,7 +42,7 @@
 				{{ t('social', 'Save') }}
 			</NcButton>
 		</div>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -53,7 +51,6 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { errorMessage, interestsUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
@@ -128,7 +125,6 @@ export default {
 		NcButton,
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextField,
 	},
 

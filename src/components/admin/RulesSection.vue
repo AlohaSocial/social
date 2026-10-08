@@ -3,9 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'The rules of this server')"
-		:description="t('social', 'One per line. Every client shows them to somebody deciding whether to join, other servers read them from this instance\'s public description, and until now they could only be set with occ — which meant most instances had none and showed a blank space where their rules should be.')">
+	<div>
+		<p class="rules__readers">
+			{{ t('social', 'Every app shows them to somebody deciding whether to join, and other servers read them from this server\'s public description.') }}
+		</p>
+
 		<NcTextArea
 			v-model="rules"
 			class="rules__field"
@@ -24,7 +26,7 @@
 			</template>
 			{{ t('social', 'Save') }}
 		</NcButton>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -32,7 +34,6 @@ import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
@@ -50,7 +51,6 @@ export default {
 	components: {
 		NcButton,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextArea,
 	},
 
@@ -114,6 +114,11 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+.rules__readers {
+	margin-block: 0 8px;
+	color: var(--color-text-maxcontrast);
+}
+
 .rules__field {
 	max-width: 640px;
 	margin-block-end: 8px;

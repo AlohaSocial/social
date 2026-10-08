@@ -181,6 +181,6 @@ class SocialFederationHealthWidget implements IAPIWidgetV2, IIconWidget, IButton
 	}
 
 	private function getSettingsUrl(): string {
-		return $this->urlGenerator->linkToRoute('settings.AdminSettings.index', ['section' => 'social']);
+		return $this->urlGenerator->linkToRoute('settings.AdminSettings.index', ['section' => 'social']) . '#federation';
 	}
 }

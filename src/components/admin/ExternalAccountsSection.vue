@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'External accounts')"
-		:description="t('social', 'The accounts people registered themselves. Promoting one makes it an ordinary account of this server, with the same username, password and Aloha Social account; the groups and apps you give it are then up to you.')">
+	<div>
 		<form class="external-accounts__search" @submit.prevent="load(false)">
 			<NcTextField
 				v-model="query"
@@ -151,14 +149,13 @@
 			:confirmLabel="asking?.action === 'delete' ? t('social', 'Delete it') : t('social', 'Promote it')"
 			@update:open="asking = null"
 			@confirm="confirmed" />
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
 import axios from '@nextcloud/axios'
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { confirmPassword, externalUrl } from '../../services/externalApi.js'
@@ -174,7 +171,6 @@ export default {
 	components: {
 		ConfirmDialog,
 		NcButton,
-		NcSettingsSection,
 		NcTextField,
 	},
 

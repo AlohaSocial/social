@@ -3,9 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Block lists')"
-		:description="t('social', 'Import a list of servers to block, or follow one that somebody else publishes. What a list says is applied as it says it: an entry marked suspend blocks the server, an entry marked silence keeps it out of the public timelines. Blocking a server also deletes what this instance holds of it, so read a list before you apply it.')">
+	<div>
+		<p class="social-admin__hint">
+			{{ t('social', 'Blocking a server also deletes everything this server holds from it, so read a list before you apply it.') }}
+		</p>
+
 		<h4 class="blocklist__heading">
 			{{ t('social', 'Import a file') }}
 		</h4>
@@ -91,7 +93,7 @@
 				</p>
 			</li>
 		</ul>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -100,7 +102,6 @@ import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import { errorMessage, moderationUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
 
@@ -123,7 +124,6 @@ export default {
 		NcButton,
 		NcCheckboxRadioSwitch,
 		NcLoadingIcon,
-		NcSettingsSection,
 	},
 
 	/** the access list above this card has to be told when one is applied */

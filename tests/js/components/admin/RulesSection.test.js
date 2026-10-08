@@ -13,12 +13,6 @@ const { showError, showSuccess } = vi.hoisted(() => ({ showError: vi.fn(), showS
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess }))
 
 const ROUTE = '/index.php/apps/social/moderation/rules'
-const NcSettingsSection = {
-	name: 'NcSettingsSection',
-	props: ['name', 'description'],
-	template: '<section><slot /></section>',
-}
-const stubs = { NcSettingsSection }
 
 const field = (wrapper) => wrapper.find('.rules__field textarea')
 const saveButton = (wrapper) => wrapper.findComponent({ name: 'NcButton' })
@@ -29,7 +23,7 @@ const saveButton = (wrapper) => wrapper.findComponent({ name: 'NcButton' })
  */
 async function mountCard(rules = '') {
 	get.mockResolvedValue({ data: { rules } })
-	const wrapper = mount(RulesSection, { global: { stubs } })
+	const wrapper = mount(RulesSection)
 	await flushPromises()
 
 	return wrapper
@@ -56,8 +50,8 @@ describe('the rules card', () => {
 
 	/** Why it is worth filling in: clients and other servers both read it. */
 	it('says who will read them', async () => {
-		expect((await mountCard()).findComponent(NcSettingsSection).props('description'))
-			.toContain('Every client shows them to somebody deciding whether to join')
+		expect((await mountCard()).find('.rules__readers').text())
+			.toContain('Every app shows them to somebody deciding whether to join')
 	})
 
 	/** A blank field with no example is a page most administrators skip. */
@@ -157,7 +151,7 @@ describe('the rules card', () => {
 
 	it('says so when the rules could not be read', async () => {
 		get.mockRejectedValue(new Error('offline'))
-		mount(RulesSection, { global: { stubs } })
+		mount(RulesSection)
 		await flushPromises()
 
 		expect(showError).toHaveBeenCalledWith('Could not load the rules')
@@ -166,7 +160,7 @@ describe('the rules card', () => {
 	/** An instance with no rules yet: an empty field, not the word "null". */
 	it('starts empty when the server holds nothing', async () => {
 		get.mockResolvedValue({ data: {} })
-		const wrapper = mount(RulesSection, { global: { stubs } })
+		const wrapper = mount(RulesSection)
 		await flushPromises()
 
 		expect(field(wrapper).element.value).toBe('')

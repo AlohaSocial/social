@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Storage')"
-		:description="t('social', 'What this app is keeping on disk, and which half of it you can do something about. Added up by the background job once a day: counting it is one file lookup per stored file, which is not something to do while a settings page loads.')">
+	<div>
 		<p v-if="!storage" class="social-admin__hint">
 			{{ t('social', 'Nothing has been measured yet. The background job adds this up once a day; it will appear after the next run.') }}
 		</p>
@@ -36,9 +34,9 @@
 		<!-- who is holding the video. "Social is using 400 GB" is not
 		     actionable; "this account is holding 380 of it" is -->
 		<template v-if="videoStorage">
-			<h3 class="storage__heading">
+			<h4 class="storage__heading">
 				{{ t('social', 'Video') }}
-			</h3>
+			</h4>
 			<p class="social-admin__hint">
 				{{ quotaLine }}
 				<span v-if="videoStorage.renditions > 0">
@@ -81,13 +79,12 @@
 				{{ t('social', 'Counted from the size recorded on each stored file. A video uploaded before this app recorded sizes counts as nothing until the background job has been past it, which it does once a day.') }}
 			</p>
 		</template>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
 import { humanSize } from '../../utils/humanSize.js'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
 /**
  * Two numbers about disk, and which of them an administrator can act on.
@@ -100,7 +97,6 @@ export default {
 	name: 'StorageSection',
 
 	components: {
-		NcSettingsSection,
 	},
 
 	props: {

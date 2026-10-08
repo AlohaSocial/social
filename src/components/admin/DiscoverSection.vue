@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'What this server is about')"
-		:description="t('social', 'A few named subjects, each a handful of hashtags, shown at the top of Explore. Trending on a small server is four hashtags and a wedding; this is the part of that page you choose rather than count, and it is what makes Explore look like somewhere to start rather than somewhere abandoned.')">
+	<div>
 		<div class="discover__add">
 			<NcTextField
 				v-model="name"
@@ -47,7 +45,7 @@
 				</NcButton>
 			</li>
 		</ul>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -57,7 +55,6 @@ import IconCompass from 'vue-material-design-icons/Compass.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError } from '../../services/toast.js'
@@ -71,7 +68,6 @@ export default {
 		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextField,
 	},
 

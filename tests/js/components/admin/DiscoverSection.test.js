@@ -14,7 +14,6 @@ vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess: vi
 
 const ROUTE = '/index.php/apps/social/moderation/discover/categories'
 const stubs = {
-	NcSettingsSection: { template: '<section><slot /></section>' },
 	NcEmptyContent: { props: ['name', 'description'], template: '<div class="empty">{{ name }} {{ description }}</div>' },
 }
 

@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Activity here')"
-		:description="t('social', 'What the people on this server have been writing. Posts that arrived from elsewhere are not counted: those are a number about other servers and about how long this one keeps what they send.')">
+	<div>
 		<div class="activity">
 			<div class="activity__figure">
 				<span class="activity__number">{{ day.posts }}</span>
@@ -25,12 +23,11 @@
 		<p v-if="week.posts === 0" class="social-admin__hint">
 			{{ t('social', 'Nobody here has posted this week. A server nobody posts from is also a server nobody follows back, so this is the number to move first.') }}
 		</p>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 
 /**
  * Two numbers, and what they are counting.
@@ -44,7 +41,6 @@ export default {
 	name: 'ActivitySection',
 
 	components: {
-		NcSettingsSection,
 	},
 
 	props: {

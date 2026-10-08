@@ -243,7 +243,7 @@ class NotifierTest extends TestCase {
 		$notification->expects($this->once())->method('setParsedMessage')
 			->with($this->stringContains('administration settings'));
 		$notification->expects($this->once())->method('setLink')
-			->with('https://cloud.example/settings/admin/social');
+			->with('https://cloud.example/settings/admin/social#reports');
 
 		$this->assertSame($notification, $this->notifier->prepare($notification, 'en'));
 	}

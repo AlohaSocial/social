@@ -607,8 +607,11 @@ are synthesised in the browser, so there is nothing to download.
 
 ![The administration page](img/readme/admin.png)
 
-Everything in Administration → Aloha Social, built out of the same components as the rest of
-the administration settings:
+Everything in Administration → Aloha Social, in six groups — Overview, Moderation,
+Sign-ups, Explore and features, Federation and Server — with a search across all of them.
+It opens on what needs you: open reports, posts waiting for review, sign-ups to approve,
+deliveries about to be given up on and late background jobs, each a link to where it is
+dealt with.
 
 - **Reports** with **Silence**, **Suspend**, **Lift** and take-a-post-down, each
   recorded with the moderator who did it and written to Nextcloud's audit log.
@@ -637,7 +640,7 @@ the administration settings:
   share dialog, the contacts menu or the address book. Mastodon apps work for them. One
   click makes one an ordinary account of this server, password and Aloha Social account kept.
   `occ social:external` lists, adds and promotes them.
-- **Federation health** — how many deliveries are waiting, how many keep failing, which
+- **Deliveries** — how many deliveries are waiting, how many keep failing, which
   instances they are stacked up against, how close each is to being abandoned (**16
   attempts**), and which instances have been given up on in the last seven days.
   `occ social:queue:status` prints the same summary and

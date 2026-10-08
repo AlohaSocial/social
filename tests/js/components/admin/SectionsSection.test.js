@@ -13,7 +13,6 @@ const { showError, showSuccess } = vi.hoisted(() => ({ showError: vi.fn(), showS
 vi.mock('../../../../src/services/toast.js', () => ({ showError, showSuccess }))
 
 const ROUTE = '/index.php/apps/social/admin/sections'
-const stubs = { NcSettingsSection: { template: '<section><slot /></section>' } }
 
 const GROUPS = [
 	{ id: 'staff', name: 'Staff' },
@@ -26,7 +25,7 @@ const GROUPS = [
  * @return {object} the mounted card
  */
 function mountCard(settings = {}, groups = GROUPS) {
-	return mount(SectionsSection, { props: { settings, groups }, global: { stubs } })
+	return mount(SectionsSection, { props: { settings, groups } })
 }
 
 const switches = (wrapper) => wrapper.findAllComponents({ name: 'NcCheckboxRadioSwitch' })

@@ -491,7 +491,7 @@ being sent, how many have already failed at least once and how many are close to
 being abandoned (a delivery is dropped after 16 attempts), followed by the worst
 instances — how many deliveries are stacked up for each, the highest attempt
 count so far and when it was last tried. The same figures appear in the
-Federation health section of the administration settings.
+Deliveries section of the administration settings.
 
 Then the half that matters most: what this instance has **given up on**. An
 abandoned delivery used to appear nowhere — it left the failing count the moment

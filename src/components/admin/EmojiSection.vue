@@ -3,9 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcSettingsSection
-		:name="t('social', 'Custom emoji')"
-		:description="t('social', 'The pictures people here can write into a post as :shortcode:. They travel with the post, so somebody on another server sees them too. Until now they could only be added with occ, which meant most instances had none.')">
+	<div>
 		<form class="emoji__add" @submit.prevent="add">
 			<NcTextField
 				v-model="shortcode"
@@ -59,7 +57,7 @@
 				</NcButton>
 			</li>
 		</ul>
-	</NcSettingsSection>
+	</div>
 </template>
 
 <script>
@@ -70,7 +68,6 @@ import IconUpload from 'vue-material-design-icons/Upload.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { moderationUrl } from '../../services/adminApi.js'
 import { showError, showSuccess } from '../../services/toast.js'
@@ -91,7 +88,6 @@ export default {
 		NcButton,
 		NcEmptyContent,
 		NcLoadingIcon,
-		NcSettingsSection,
 		NcTextField,
 	},
 

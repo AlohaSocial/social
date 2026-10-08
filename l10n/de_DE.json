@@ -819,6 +819,7 @@
     "@{handle} was deleted" : "@{handle} wurde gelöscht.",
     "External users" : "Externe Benutzer",
     "Let people without an account on this server register one themselves. They log in through the normal login page and can use Aloha Social and nothing else: no Files, no Talk, no other app, and nobody outside Aloha Social can find them." : "Ermöglichen Sie Personen ohne Konto auf diesem Server, sich selbst zu registrieren. Sie melden sich über die normale Anmeldeseite an und können ausschließlich Aloha Social verwenden: keine Dateien, kein Talk und keine anderen Apps. Außerhalb von Aloha Social sind sie nicht auffindbar.",
+    "They sign in on the normal login page and can use Aloha Social and nothing else: no Files, no Talk, and nobody outside Aloha Social can find them." : "Sie melden sich über die normale Anmeldeseite an und können ausschließlich Aloha Social verwenden: keine Dateien, kein Talk, und außerhalb von Aloha Social sind sie nicht auffindbar.",
     "Aloha Social is limited to some groups, and external users are not in them, so they could register and then not open Aloha Social." : "Der Zugriff auf Aloha Social ist auf bestimmte Gruppen beschränkt. Externe Benutzer gehören diesen Gruppen nicht an und könnten sich daher registrieren, ohne Aloha Social anschließend öffnen zu können.",
     "Let external users open Aloha Social" : "Externen Benutzern Zugriff auf Aloha Social gewähren",
     "of at most {max}" : "von höchstens {max}",
