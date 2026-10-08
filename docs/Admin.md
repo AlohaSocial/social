@@ -452,7 +452,8 @@ checks, and the card refuses to switch Bluesky on while one fails:
   date with the last day's public posts — a post the listener missed is
   published, an edit within the grace period is replaced, a deleted post's
   record is removed — resends directory operations, prunes the firehose
-  past its window and drops retired keys. The ordinary cron requirement
+  past its window, drops retired keys, and removes Bluesky posts read here
+  that their authors deleted there. The ordinary cron requirement
   covers it.
 
 **Switching on.** The Bluesky card checks the requirements and flips the switch.
