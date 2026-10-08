@@ -137,7 +137,7 @@ class PostMapper {
 			'content' => $content,
 			'summary' => $warning,
 			'sensitive' => $adult || $warning !== '',
-			'tag' => $this->tags($record['facets'] ?? []),
+			'tag' => $this->tags($record['facets'] ?? [], (string)($record['reply']['parent']['uri'] ?? '')),
 			'attachment' => $attachments,
 			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
 			'_atproto' => [
@@ -229,8 +229,17 @@ class PostMapper {
 	 *
 	 * @return list<array{type: string, href: string, name: string}>
 	 */
-	private function tags(mixed $facets): array {
+	private function tags(mixed $facets, string $parentUri = ''): array {
 		$tags = [];
+		// a reply to a local post addresses its author, which is what makes
+		// the notification here; Bluesky names nobody in the reply itself
+		$parent = Syntax::parseAtUri($parentUri);
+		if ($parent !== null) {
+			$author = $this->local->actorId($parent['authority']);
+			if ($author !== '') {
+				$tags[] = ['type' => 'Mention', 'href' => $author, 'name' => '@' . $parent['authority']];
+			}
+		}
 		foreach (is_array($facets) ? $facets : [] as $facet) {
 			foreach (is_array($facet['features'] ?? null) ? $facet['features'] : [] as $feature) {
 				$type = (string)($feature['$type'] ?? '');

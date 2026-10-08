@@ -9,6 +9,9 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Reader;
 
+use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Model\StoredRecord;
+use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Db\AtprotoIdentityRequest;
@@ -100,6 +103,19 @@ class PostMapperTest extends TestCase {
 		], $announce);
 		$this->assertNull($mapper->announce(['post' => $this->postView()]), 'no reason, no repost');
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/repost/3kznmn7xqxl22', $mapper->announce(['post' => $this->postView(), 'reason' => ['$type' => 'app.bsky.feed.defs#reasonRepost', 'by' => ['did' => self::OTHER]]])['id'], 'without the repost URI the post rkey stands in');
+	}
+
+	public function testAReplyToALocalPostMentionsItsAuthor(): void {
+		$identities = $this->createMock(AtprotoIdentityRequest::class);
+		$identities->method('getByDid')->willReturnCallback(static fn (string $did): Identity => $did === self::OTHER
+			? new Identity(1, 'https://social.test/@alice', self::OTHER, 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0)
+			: throw new AtprotoIdentityNotFoundException());
+		$records = $this->createMock(AtprotoRepoRequest::class);
+		$records->method('getRecord')->willReturn(new StoredRecord(self::OTHER, 'app.bsky.feed.post', '3kparent', Cid::forRaw('p'), '', 'https://social.test/@alice/7', 0));
+		$note = (new PostMapper(new LocalRecordResolver($identities, $records)))->note($this->postView());
+
+		$this->assertSame('https://social.test/@alice/7', $note['inReplyTo'], 'the parent is the local post');
+		$this->assertContains(['type' => 'Mention', 'href' => 'https://social.test/@alice', 'name' => '@' . self::OTHER], $note['tag']);
 	}
 
 	private function postView(array $overrides = []): array {
