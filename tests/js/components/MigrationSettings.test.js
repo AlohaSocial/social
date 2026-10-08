@@ -9,6 +9,7 @@ import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '../../../src/services/toast.js'
 
 import Migration from '../../../src/components/MigrationSettings.vue'
+import BlueskyMoveAway from '../../../src/components/BlueskyMoveAway.vue'
 import { confirmPassword } from '../../../src/services/externalApi.js'
 
 vi.mock('@nextcloud/axios', () => ({
@@ -78,6 +79,12 @@ describe('Migration', () => {
 		expect(wrapper.text()).toContain('Export your data')
 		expect(wrapper.text()).toContain('Import an archive')
 		expect(wrapper.text()).toContain('Coming from another network')
+	})
+
+	it('holds the card that moves the Bluesky account away', () => {
+		const wrapper = mountPage()
+
+		expect(wrapper.findComponent(BlueskyMoveAway).exists()).toBe(true)
 	})
 
 	/**
