@@ -186,6 +186,33 @@ describe('the administration page', () => {
 		expect(all).toHaveLength(16)
 	})
 
+	/**
+	 * The Bluesky side of the server is administration: it changes what the
+	 * server is to the outside, so a delegate is sent nothing for it, and an
+	 * instance whose server told nothing draws no card.
+	 */
+	it('draws the Bluesky card with the federation when the server sends it', async () => {
+		const bluesky = {
+			settings: { enabled: false, relays: [], plc_directory: 'https://plc.directory', appview: 'https://public.api.bsky.app', jetstream: '', sync_ceiling: 200 },
+			status: { handle_host: 'cloud.example.org', pds_endpoint: 'https://cloud.example.org', service_did: 'did:web:cloud.example.org', identities: 0, repositories: 0, events_in_window: 0, head_seq: 0, rotation_key_age: 0, daemon: null },
+			checks: [],
+		}
+		const wrapper = await mountPage({ ...STATE, bluesky })
+		await openGroup(wrapper, 'Federation')
+
+		expect(sectionHeadings(wrapper)).toEqual(['Allowed and blocked servers', 'Block lists', 'Relays', 'Bluesky', 'Deliveries'])
+		expect(wrapper.findComponent({ name: 'BlueskySection' }).props('settings')).toEqual(bluesky)
+		expect(wrapper.find('#bluesky').exists()).toBe(true)
+
+		const delegate = await mountPage({ ...STATE, bluesky, server: null })
+		await openGroup(delegate, 'Federation')
+		expect(sectionHeadings(delegate)).not.toContain('Bluesky')
+
+		const without = await mountPage(STATE)
+		await openGroup(without, 'Federation')
+		expect(sectionHeadings(without)).not.toContain('Bluesky')
+	})
+
 	/** Who may have an account here is an administrator's decision; a delegate is sent none of it. */
 	it('draws the Sign-ups group after moderation when the server sends it', async () => {
 		const external = {

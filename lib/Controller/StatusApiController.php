@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use Exception;
+use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -111,6 +112,7 @@ class StatusApiController extends MastodonApiController {
 		private WatchService $watchService,
 		private IFactory $l10nFactory,
 		private DurableCache $durableCache,
+		private Publisher $atprotoPublisher,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -659,7 +661,7 @@ class StatusApiController extends MastodonApiController {
 			}
 
 			return new DataResponse(
-				['id' => (string)$item->getNid()] + $this->deliveryService->forObject($item->getId()),
+				['id' => (string)$item->getNid()] + $this->deliveryService->forObject($item->getId()) + ['bluesky' => $this->atprotoPublisher->statusOf($item)],
 				Http::STATUS_OK
 			);
 		} catch (Throwable $e) {

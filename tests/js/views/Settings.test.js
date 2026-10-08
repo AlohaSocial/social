@@ -46,6 +46,8 @@ const asyncStubs = {
 	FilesCommentsSettings: { name: 'FilesCommentsSettings', template: '<section class="files-comments-settings-stub" />' },
 	// reads nothing, but travels in the same chunk as the rest
 	SensitiveMediaSettings: { name: 'SensitiveMediaSettings', template: '<section class="sensitive-media-settings-stub" />' },
+	// reads the Bluesky identity on mount
+	BlueskySettings: { name: 'BlueskySettings', template: '<section class="bluesky-settings-stub" />' },
 }
 
 /**
@@ -423,5 +425,21 @@ describe('Settings', () => {
 
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Reading')
 		expect(wrapper.find('#sensitive .sensitive-media-settings-stub').exists()).toBe(true)
+	})
+
+	/**
+	 * The identity exists because this server offers one; on a server that
+	 * offers none, a section about it would describe somebody else's server.
+	 */
+	it('shows the Bluesky identity only where the server offers one, with the apps', async () => {
+		const off = await mountSettings({ hash: '#apps' })
+		expect(off.find('#bluesky').exists()).toBe(false)
+
+		useSettingsStore().setServerData({ bluesky: { enabled: true, host: 'cloud.example.org' } })
+		const on = await mountSettings({ hash: '#bluesky' })
+
+		expect(on.find('.settings__group-heading').text()).toBe('Apps and account')
+		expect(on.find('#bluesky .settings__section-lede').text()).toBe('This account is also reachable on Bluesky, because this server offers one.')
+		expect(on.find('#bluesky .bluesky-settings-stub').exists()).toBe(true)
 	})
 })

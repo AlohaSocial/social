@@ -150,6 +150,7 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->request(CacheDocumentsRequest::class),
 			$this->request(CacheActorsRequest::class),
 			$this->cacheDocumentService,
+			$this->createMock(\OCA\Social\Atproto\Service\AtprotoCascade::class),
 			$logger ?? new NullLogger(),
 		);
 	}

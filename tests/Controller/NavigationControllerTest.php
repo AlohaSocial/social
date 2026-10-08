@@ -202,6 +202,7 @@ class NavigationControllerTest extends TestCase {
 			'externalMedia' => null,
 			// and whether people may invite others to register; not here
 			'externalInvites' => false,
+			'bluesky' => ['enabled' => false, 'host' => ''],
 			'cloudAddress' => 'https://cloud.example/index.php',
 		], $this->serverData());
 	}

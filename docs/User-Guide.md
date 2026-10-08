@@ -1012,6 +1012,37 @@ hand, it is picked up as one.
   Deleting the Nextcloud user does the same thing to the Aloha Social account along
   the way.
 
+### Bluesky
+
+If the administrator has switched Bluesky on, your account is a Bluesky account
+too, hosted here: your handle there is `yourname.<this server>`, and anybody on
+Bluesky who looks it up sees your profile and your public posts, can follow you
+and like, reply to and quote what you wrote. Nothing is asked of you — no
+Bluesky account, no password, no switch.
+
+Every **public** post goes to Bluesky as you publish it. Bluesky posts hold 300
+characters, so a longer post is cut at a word before 280 and the rest is a link
+to the post here; the composer tells you so under the counter. The first four
+pictures go with it, with their descriptions; a content warning becomes a
+warning label and a `CW:` line; a poll becomes its question and options with a
+link to vote here. An edit within five minutes replaces the Bluesky copy; a
+later one leaves the Bluesky copy as it was, with its link leading to the
+current text here. Deleting a post deletes it there too. Followers-only,
+unlisted and direct posts never leave this server, and a reply to a post that
+is not on Bluesky goes out as a post with a link to what it answers.
+
+Your profile page shows both handles under your name, each with a Copy button,
+and the Bluesky one leads to your profile on bsky.app. **Settings → Apps and
+account → Bluesky** shows the handle and the DID — the permanent identifier your Bluesky
+account has — and offers a **recovery phrase**: twelve words that are a key of
+your own on that identifier, second only to the server's. They are shown once
+and never stored, so write them down; "Create a new recovery phrase" replaces
+them, and the old words stop working. You will not need the phrase in ordinary
+use; it is what lets you take the identity with you if this server ever cannot.
+
+The post menu's *Delivery status* shows whether a post is on Bluesky and opens
+it there.
+
 ## Keyboard shortcuts
 
 Press `?` anywhere, or open **Settings → Help → Keyboard shortcuts**, for the list.

@@ -50,6 +50,50 @@
 				     still federates as one -->
 				<span v-if="pronouns" class="user-profile__pronouns">{{ pronouns }}</span>
 			</h2>
+			<!-- the addresses this account answers to, each with a way to take
+			     it along. One account, two networks: the Bluesky handle is the
+			     same person and leads to where that network shows them -->
+			<div class="user-profile__handles">
+				<span class="user-profile__handle">
+					<code class="user-profile__handle-text">{{ fediverseHandle }}</code>
+					<NcButton
+						variant="tertiary"
+						:title="copiedHandle === 'fediverse' ? t('social', 'Copied') : t('social', 'Copy')"
+						:aria-label="copiedHandle === 'fediverse' ? t('social', 'Copied') : t('social', 'Copy the fediverse handle')"
+						@click="copyHandle('fediverse', fediverseHandle)">
+						<template #icon>
+							<Check v-if="copiedHandle === 'fediverse'" :size="16" />
+							<ContentCopy v-else :size="16" />
+						</template>
+					</NcButton>
+				</span>
+				<span v-if="accountInfo.bluesky" class="user-profile__handle">
+					<svg
+						class="user-profile__butterfly"
+						aria-hidden="true"
+						viewBox="0 0 24 24"
+						width="16"
+						height="16">
+						<title>{{ t('social', 'On Bluesky') }}</title>
+						<path fill="currentColor" d="M5.9 3.6c2.5 1.9 5.2 5.7 6.1 7.7.9-2 3.6-5.8 6.1-7.7 1.8-1.4 4.7-2.4 4.7.9 0 .7-.4 5.6-.6 6.4-.8 2.8-3.6 3.5-6.1 3.1 4.4.7 5.5 3.2 3.1 5.7-4.6 4.7-6.6-1.2-7.1-2.7l-.1-.4-.1.4c-.5 1.5-2.5 7.4-7.1 2.7-2.4-2.5-1.3-5 3.1-5.7-2.5.4-5.3-.3-6.1-3.1-.2-.8-.6-5.7-.6-6.4 0-3.3 2.9-2.3 4.7-.9Z" />
+					</svg>
+					<a
+						class="user-profile__handle-text user-profile__handle-link"
+						:href="accountInfo.bluesky.url"
+						target="_blank"
+						rel="noopener">@{{ accountInfo.bluesky.handle }}</a>
+					<NcButton
+						variant="tertiary"
+						:title="copiedHandle === 'bluesky' ? t('social', 'Copied') : t('social', 'Copy')"
+						:aria-label="copiedHandle === 'bluesky' ? t('social', 'Copied') : t('social', 'Copy the Bluesky handle')"
+						@click="copyHandle('bluesky', '@' + accountInfo.bluesky.handle)">
+						<template #icon>
+							<Check v-if="copiedHandle === 'bluesky'" :size="16" />
+							<ContentCopy v-else :size="16" />
+						</template>
+					</NcButton>
+				</span>
+			</div>
 			<!-- the redirect every other server shows for a moved account; a
 			     local account that moved is the reader's own, and Settings →
 			     Migration is where it is undone -->
@@ -561,11 +605,11 @@ export default {
 	},
 
 	setup(props) {
-		const { serverData } = useServerData()
+		const { serverData, hostname } = useServerData()
 		const { currentUser } = useCurrentUser()
 		const { profileAccount, accountInfo, isLocal, relationship } = useAccount(() => props.uid)
 
-		return { serverData, currentUser, profileAccount, accountInfo, isLocal, relationship }
+		return { serverData, hostname, currentUser, profileAccount, accountInfo, isLocal, relationship }
 	},
 
 	data() {
@@ -596,6 +640,9 @@ export default {
 			fieldVerified: {},
 			snippetCopied: false,
 			snippetCopyTimer: null,
+			/** which of the handles under the name was just copied: 'fediverse', 'bluesky' or '' */
+			copiedHandle: '',
+			handleCopyTimer: null,
 			savingProfile: false,
 			bioDraft: '',
 			/** the bio as it was when the editor opened, to tell a change from a no-op */
@@ -620,6 +667,17 @@ export default {
 
 		displayName() {
 			return this.accountInfo.display_name ?? this.accountInfo.username ?? this.profileAccount
+		},
+
+		/**
+		 * The account's fediverse address, qualified: a local `acct` is the
+		 * bare username, and a handle without a host is not something a
+		 * person on another server can paste anywhere.
+		 *
+		 * @return {string}
+		 */
+		fediverseHandle() {
+			return '@' + (this.isLocal ? this.accountInfo.username + '@' + this.hostname : this.accountInfo.acct)
 		},
 
 		/**
@@ -862,6 +920,7 @@ export default {
 	// so paint any existing header once the ref is available on first render.
 	beforeUnmount() {
 		window.clearTimeout(this.snippetCopyTimer)
+		window.clearTimeout(this.handleCopyTimer)
 	},
 
 	mounted() {
@@ -1047,6 +1106,24 @@ export default {
 		 */
 		fieldLooksLikeAddress(row) {
 			return /^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(row.value.trim())
+		},
+
+		/**
+		 * @param {'fediverse'|'bluesky'} which the handle that was asked for
+		 * @param {string} handle what goes onto the clipboard
+		 */
+		async copyHandle(which, handle) {
+			try {
+				await navigator.clipboard.writeText(handle)
+				this.copiedHandle = which
+				window.clearTimeout(this.handleCopyTimer)
+				this.handleCopyTimer = window.setTimeout(() => {
+					this.copiedHandle = ''
+				}, SNIPPET_COPIED_MS)
+			} catch (error) {
+				logger.debug('Could not copy the handle', { error })
+				await this.showError(translate('social', 'Could not copy — select the address and copy it yourself'))
+			}
 		},
 
 		async copyProfileLinkSnippet() {
@@ -1455,6 +1532,49 @@ export default {
 		font-weight: normal;
 		color: var(--color-text-maxcontrast);
 		white-space: nowrap;
+	}
+
+	// quiet on purpose: the name is what the page is about, and the
+	// addresses under it are there for the moment somebody needs one
+	&__handles {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		margin-block-start: 4px;
+		color: var(--color-text-maxcontrast);
+		font-size: 14px;
+	}
+
+	&__handle {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	&__handle-text {
+		font-family: var(--font-face-monospace, monospace);
+		font-size: 13px;
+		overflow-wrap: anywhere;
+		user-select: all;
+	}
+
+	&__handle-link {
+		color: inherit;
+		text-decoration: none;
+
+		&:hover,
+		&:focus-visible {
+			color: var(--color-main-text);
+			text-decoration: underline;
+		}
+	}
+
+	&__butterfly {
+		flex: none;
+		margin-inline-end: 4px;
+		color: var(--color-text-maxcontrast);
 	}
 
 	&__support {

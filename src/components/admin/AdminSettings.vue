@@ -133,6 +133,7 @@ import IconAnnouncements from 'vue-material-design-icons/BullhornOutline.vue'
 import IconAttention from 'vue-material-design-icons/BellAlertOutline.vue'
 import IconBackground from 'vue-material-design-icons/TimerCogOutline.vue'
 import IconBlocklist from 'vue-material-design-icons/PlaylistRemove.vue'
+import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconDiscover from 'vue-material-design-icons/InformationOutline.vue'
 import IconEmoji from 'vue-material-design-icons/EmoticonOutline.vue'
 import IconExplore from 'vue-material-design-icons/CompassOutline.vue'
@@ -165,6 +166,7 @@ import AnnouncementsSection from './AnnouncementsSection.vue'
 import AttentionSection from './AttentionSection.vue'
 import BackgroundSection from './BackgroundSection.vue'
 import BlocklistSection from './BlocklistSection.vue'
+import BlueskySection from './BlueskySection.vue'
 import DiscoverSection from './DiscoverSection.vue'
 import EmojiSection from './EmojiSection.vue'
 import ExternalAccountsSection from './ExternalAccountsSection.vue'
@@ -218,6 +220,8 @@ const NOTHING = {
 	background: null,
 	/** @type {?object} self-registered external users (`ExternalAdminState`); administrators only */
 	external: null,
+	/** @type {?object} the Bluesky side of this server (`AtprotoStatusService::current()`); administrators only */
+	bluesky: null,
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -262,6 +266,7 @@ export default {
 		AttentionSection,
 		BackgroundSection,
 		BlocklistSection,
+		BlueskySection,
 		DiscoverSection,
 		EmojiSection,
 		ExternalAccountsSection,
@@ -275,6 +280,7 @@ export default {
 		IconAttention,
 		IconBackground,
 		IconBlocklist,
+		IconBluesky,
 		IconDiscover,
 		IconEmoji,
 		IconExplore,
@@ -592,6 +598,18 @@ export default {
 								lede: t('social', 'Swap public posts with other servers through a relay, so the timelines of a new server are not empty.'),
 							},
 						]
+					: []),
+				...(administrator && state.bluesky
+					? [{
+							id: 'bluesky',
+							group: 'federation',
+							icon: 'IconBluesky',
+							component: 'BlueskySection',
+							props: { settings: state.bluesky },
+							title: t('social', 'Bluesky'),
+							lede: t('social', 'Make every account here a Bluesky account too, reachable from any Bluesky app.'),
+							keywords: t('social', 'atproto at protocol pds did handle firehose relay appview'),
+						}]
 					: []),
 				{
 					id: 'federation',

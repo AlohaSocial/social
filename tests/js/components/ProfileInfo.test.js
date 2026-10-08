@@ -1159,4 +1159,80 @@ describe('ProfileInfo', () => {
 			expect(setFollowOptions).toHaveBeenCalledWith({ id: '42', reblogs: false })
 		})
 	})
+
+	/**
+	 * The addresses under the name. One account, two networks: the Bluesky
+	 * handle is the same person seen from the other side, so it is shown
+	 * beside the fediverse one rather than on a page of its own.
+	 */
+	describe('the handles under the name', () => {
+		const bluesky = { handle: 'alice.cloud.example.org', did: 'did:plc:abc123', url: 'https://bsky.app/profile/alice.cloud.example.org' }
+		const handles = (wrapper) => wrapper.findAll('.user-profile__handle-text').map((node) => node.text())
+		const copyButton = (wrapper, label) => wrapper.findAll('.user-profile__handle button')
+			.find((button) => button.attributes('aria-label') === label)
+
+		it('qualifies a local account with this host', () => {
+			expect(handles(mountProfile('alice'))).toEqual(['@alice@cloud.example.org'])
+		})
+
+		it('shows a remote account as the address it came with', () => {
+			expect(handles(mountProfile('bob@remote.example'))).toEqual(['@bob@remote.example'])
+		})
+
+		it('shows no Bluesky handle for an account that has none', () => {
+			const wrapper = mountProfile('alice')
+
+			expect(wrapper.find('.user-profile__butterfly').exists()).toBe(false)
+			expect(copyButton(wrapper, 'Copy the Bluesky handle')).toBeUndefined()
+		})
+
+		it('shows the Bluesky handle, marked and linked to where that network shows it', () => {
+			accountStore.addAccount({ actorId: alice.url, data: { ...alice, bluesky } })
+			const wrapper = mountProfile('alice')
+
+			expect(handles(wrapper)).toEqual(['@alice@cloud.example.org', '@alice.cloud.example.org'])
+			const link = wrapper.find('.user-profile__handle-link')
+			expect(link.attributes('href')).toBe(bluesky.url)
+			expect(link.attributes('target')).toBe('_blank')
+			expect(link.attributes('rel')).toBe('noopener')
+			const glyph = wrapper.find('.user-profile__butterfly')
+			expect(glyph.attributes('aria-hidden')).toBe('true')
+			expect(glyph.find('title').text()).toBe('On Bluesky')
+		})
+
+		it('copies either handle, and says so for a moment', async () => {
+			vi.useFakeTimers()
+			const writeText = vi.fn().mockResolvedValue(undefined)
+			Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+			accountStore.addAccount({ actorId: alice.url, data: { ...alice, bluesky } })
+			const wrapper = mountProfile('alice')
+
+			await copyButton(wrapper, 'Copy the fediverse handle').trigger('click')
+			await flushPromises()
+			expect(writeText).toHaveBeenCalledWith('@alice@cloud.example.org')
+			expect(copyButton(wrapper, 'Copied')).toBeDefined()
+
+			await copyButton(wrapper, 'Copy the Bluesky handle').trigger('click')
+			await flushPromises()
+			expect(writeText).toHaveBeenCalledWith('@alice.cloud.example.org')
+
+			vi.advanceTimersByTime(2000)
+			await nextTick()
+			expect(copyButton(wrapper, 'Copied')).toBeUndefined()
+			vi.useRealTimers()
+		})
+
+		it('says so when the clipboard refuses', async () => {
+			Object.defineProperty(navigator, 'clipboard', {
+				value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+				configurable: true,
+			})
+			const wrapper = mountProfile('alice')
+
+			await copyButton(wrapper, 'Copy the fediverse handle').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Could not copy — select the address and copy it yourself')
+		})
+	})
 })

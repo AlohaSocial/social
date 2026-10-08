@@ -1561,6 +1561,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				// other network reads
 				'pronouns' => $this->getPronouns(),
 				'support_link' => $this->getSupportLink(),
+				// a local account's Bluesky handle and DID, attached by the
+				// controllers that know them (see LocalController::attachBluesky)
+				'bluesky' => (isset($details[Details::BLUESKY]) && is_array($details[Details::BLUESKY])) ? $details[Details::BLUESKY] : null,
 			];
 
 		if ($this->getMovedTo() !== '') {

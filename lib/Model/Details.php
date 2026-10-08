@@ -46,6 +46,8 @@ final class Details {
 
 	/** Handles mentioned in a post, as an array of strings. */
 	public const MENTIONS = 'mentions';
+	/** a local account's Bluesky handle, DID and profile link, for the client */
+	public const BLUESKY = 'bluesky';
 
 	/**
 	 * The page a post is at on the server it came from.

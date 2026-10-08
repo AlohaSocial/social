@@ -138,6 +138,7 @@ import IconAccount from 'vue-material-design-icons/AccountCircleOutline.vue'
 import IconAccountCheck from 'vue-material-design-icons/AccountCheckOutline.vue'
 import IconApps from 'vue-material-design-icons/KeyOutline.vue'
 import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
+import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconBellRing from 'vue-material-design-icons/BellRingOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
 import IconHelp from 'vue-material-design-icons/HelpCircleOutline.vue'
@@ -170,6 +171,7 @@ import { currentSection, scrollToSection, watchSections } from '../services/sect
 // they travel in a chunk of their own rather than in the entry every reader
 // loads.
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
+const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
 const RecapSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/RecapSettings.vue'))
 const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ListsSettings.vue'))
 const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FeaturedTagsSettings.vue'))
@@ -214,6 +216,7 @@ export default {
 		AccountSettings,
 		ArchivedPosts,
 		AuthorizedApps,
+		BlueskySettings,
 		DeleteAccount,
 		ExternalStorage,
 		FeaturedTagsSettings,
@@ -225,6 +228,7 @@ export default {
 		IconAccountCheck,
 		IconApps,
 		IconArchive,
+		IconBluesky,
 		IconBellRing,
 		IconDelete,
 		IconHelp,
@@ -427,6 +431,17 @@ export default {
 					title: t('social', 'Authorized apps'),
 					lede: t('social', 'Apps signed in to your account, such as a phone client. Sign out the ones you no longer use, or all of them after losing a phone.'),
 				},
+				// where this server gives every account a Bluesky identity
+				...(this.serverData?.bluesky?.enabled === true
+					? [{
+							id: 'bluesky',
+							group: 'security',
+							icon: 'IconBluesky',
+							component: 'BlueskySettings',
+							title: t('social', 'Bluesky'),
+							lede: t('social', 'This account is also reachable on Bluesky, because this server offers one.'),
+						}]
+					: []),
 				// where the administrator lets people invite others to register
 				...(this.serverData?.externalInvites === true
 					? [{

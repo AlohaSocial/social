@@ -1,7 +1,7 @@
 {
 	"name": "social",
 	"description": "Nextcloud becomes part of the federated social networks!",
-	"version": "0.26.144",
+	"version": "0.26.145",
 	"authors": [
 		{
 			"name": "Benedikt Schächner",
@@ -72,6 +72,7 @@
 		"@playwright/test": "^1.63.0",
 		"@vitejs/plugin-vue": "^6.0.9",
 		"@vitest/coverage-v8": "^5.0.1",
+		"@vue/compiler-dom": "3.5.43",
 		"@vue/compiler-sfc": "^3.5.43",
 		"@vue/test-utils": "^2.5.1",
 		"babel-loader": "^10.1.1",

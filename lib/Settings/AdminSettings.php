@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Settings;
 
+use OCA\Social\Atproto\Service\AtprotoStatusService;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\BackgroundHealthService;
@@ -84,6 +85,7 @@ class AdminSettings implements IDelegatedSettings {
 		private IInitialState $initialState,
 		private ExternalAdminState $externalAdminState,
 		private NotificationPolicyService $notificationPolicyService,
+		private AtprotoStatusService $atprotoStatus,
 	) {
 	}
 
@@ -123,6 +125,9 @@ class AdminSettings implements IDelegatedSettings {
 			// because a picker showing raw ids is a picker nobody can use.
 			'sections' => $this->isAdministrator() ? $this->sectionsService->current() : null,
 			'groups' => $this->isAdministrator() ? $this->availableGroups() : null,
+			// Bluesky: the switch, the relays and whether the instance is a
+			// working PDS, for the administrator proper
+			'bluesky' => $this->isAdministrator() ? $this->atprotoStatus->current() : null,
 			// For you, for the same administrator proper
 			'interests' => $this->isAdministrator() ? $this->interestService->adminSettings() : null,
 			'accessType' => $this->fediverseService->getAccessType(),

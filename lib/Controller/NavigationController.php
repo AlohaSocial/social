@@ -194,6 +194,12 @@ class NavigationController extends Controller {
 			// whether the administrator lets people invite others to register
 			'externalInvites' => $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_ENABLED) === '1'
 				&& $this->configService->getAppValue(ConfigService::SOCIAL_EXTERNAL_USER_INVITES) === '1',
+			// whether this instance is a Bluesky host, and under which host its
+			// handles are issued (`alice.<host>`)
+			'bluesky' => [
+				'enabled' => $this->configService->getAppValueBool(ConfigService::ATPROTO_ENABLED),
+				'host' => strtolower($this->configService->getSocialAddress()),
+			],
 		];
 
 		$this->logger->debug('[NavigationController] Initial serverData', ['serverData' => $serverData]);

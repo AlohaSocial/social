@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use Exception;
+use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\UploadFailedException;
@@ -104,6 +106,7 @@ class AccountApiController extends MastodonApiController {
 		private InstanceService $instanceService,
 		private RemoteFetchQueue $remoteFetchQueue,
 		private DurableCache $durableCache,
+		private IdentityService $atprotoIdentities,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -381,6 +384,31 @@ class AccountApiController extends MastodonApiController {
 	 * nobody's business but theirs. It used to come out of the model on every
 	 * Account this app emitted, including other people's and anonymous reads.
 	 */
+	/**
+	 * The account's Bluesky handle and DID, for a local account that has
+	 * them; null otherwise.
+	 */
+	private function blueskyOf(Person $account): ?array {
+		if (!$account->isLocal()) {
+			return null;
+		}
+		try {
+			$identity = $this->atprotoIdentities->getByActorId($account->getId());
+		} catch (AtprotoIdentityNotFoundException) {
+			return null;
+		} catch (Throwable $e) {
+			// the Bluesky side must never take the account entity down with it
+			$this->logger->error('could not read the Bluesky identity of an account', ['actor' => $account->getId(), 'exception' => $e]);
+
+			return null;
+		}
+		if (!$identity->isActive()) {
+			return null;
+		}
+
+		return ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle];
+	}
+
 	private function accountEntity(Person $account): array {
 		// the viewer is already in local format, see initViewer()
 		$data = $account->jsonSerialize();
@@ -395,6 +423,7 @@ class AccountApiController extends MastodonApiController {
 		}
 
 		$data['role'] = $this->adminApiService->credentialRole($this->currentSession());
+		$data['bluesky'] = $this->blueskyOf($account);
 
 		if (($data['last_status_at'] ?? null) === '') {
 			$data['last_status_at'] = null;

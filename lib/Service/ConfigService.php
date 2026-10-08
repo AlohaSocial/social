@@ -463,7 +463,30 @@ class ConfigService {
 	public const USER_EXTERNAL_SIGNUP_NOTICE_ACCEPTED = 'external_signup_notice_accepted';
 	public const USER_EXTERNAL_SIGNUP_NOTICE_SNAPSHOT = 'external_signup_notice_snapshot';
 
+	/**
+	 * Bluesky (`Atproto\Service\AtprotoConfig`): whether this instance is a
+	 * PDS at all, the relays told to crawl it (a JSON list), the PLC
+	 * directory that registers its DIDs, the public AppView it reads, the
+	 * Jetstream endpoint an optional listener uses, and how many AppView
+	 * requests one sync pass may make.
+	 */
+	public const ATPROTO_ENABLED = 'atproto_enabled';
+	public const ATPROTO_RELAYS = 'atproto_relays';
+	public const ATPROTO_PLC_DIRECTORY = 'atproto_plc_directory';
+	public const ATPROTO_APPVIEW = 'atproto_appview';
+	public const ATPROTO_JETSTREAM = 'atproto_jetstream';
+	public const ATPROTO_SYNC_CEILING = 'atproto_sync_ceiling';
+	/** the firehose daemon's last report (JSON), written by `occ social:atproto:serve` */
+	public const ATPROTO_FIREHOSE_STATUS = 'atproto_firehose_status';
+
 	public array $defaults = [
+		self::ATPROTO_ENABLED => '0',
+		self::ATPROTO_RELAYS => '["https://bsky.network"]',
+		self::ATPROTO_PLC_DIRECTORY => 'https://plc.directory',
+		self::ATPROTO_APPVIEW => 'https://public.api.bsky.app',
+		self::ATPROTO_JETSTREAM => '',
+		self::ATPROTO_SYNC_CEILING => '200',
+		self::ATPROTO_FIREHOSE_STATUS => '',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
 		self::SOCIAL_ADDRESS => '',

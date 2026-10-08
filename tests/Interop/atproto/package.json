@@ -1,0 +1,13 @@
+{
+  "name": "social-interop-atproto",
+  "private": true,
+  "description": "Starts the official Bluesky development network (PLC, PDS, AppView) for the interop job, with the AppView also reading this app's firehose.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@atproto/bsky": "0.1.4",
+    "@atproto/dev-env": "0.6.14"
+  }
+}

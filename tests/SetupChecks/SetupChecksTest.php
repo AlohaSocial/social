@@ -16,6 +16,7 @@ use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\FederationHealthService;
 use OCA\Social\Service\VideoTranscodeService;
+use OCA\Social\SetupChecks\BlueskyReady;
 use OCA\Social\SetupChecks\ClientApiAtRoot;
 use OCA\Social\SetupChecks\CloudAddressMatches;
 use OCA\Social\SetupChecks\CronRanRecently;
@@ -362,6 +363,7 @@ class SetupChecksTest extends TestCase {
 			OutboundQueueNotStuck::DOC,
 			MemcacheConfigured::DOC,
 			VideoConverter::DOC,
+			BlueskyReady::DOC,
 		] as $link) {
 			$this->assertStringStartsWith(Docs::ADMIN_GUIDE . '#', $link);
 			$anchor = substr($link, strlen(Docs::ADMIN_GUIDE) + 1);

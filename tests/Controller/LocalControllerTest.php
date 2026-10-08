@@ -181,6 +181,12 @@ class LocalControllerTest extends TestCase {
 			$this->bannerService,
 			$this->userManager ?? $this->createStub(\OCP\IUserManager::class),
 			$this->userSession ?? $this->createStub(\OCP\IUserSession::class),
+			(function () {
+				$identities = $this->createStub(\OCA\Social\Atproto\Identity\IdentityService::class);
+				$identities->method('getByActorId')->willThrowException(new \OCA\Social\Exceptions\AtprotoIdentityNotFoundException());
+
+				return $identities;
+			})(),
 		);
 	}
 
