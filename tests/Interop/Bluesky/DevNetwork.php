@@ -141,6 +141,16 @@ final class DevNetwork {
 	 */
 	public function postText(string $text, ?array $reply = null): array {
 		$record = ['$type' => 'app.bsky.feed.post', 'text' => $text, 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')];
+		// a PDS stores what it is given; the hashtag facets are the client's
+		// to write, as the Bluesky app does
+		if (preg_match_all('/#(\w+)/u', $text, $tags, PREG_OFFSET_CAPTURE) > 0) {
+			foreach ($tags[0] as $i => [$whole, $at]) {
+				$record['facets'][] = [
+					'index' => ['byteStart' => $at, 'byteEnd' => $at + strlen($whole)],
+					'features' => [['$type' => 'app.bsky.richtext.facet#tag', 'tag' => $tags[1][$i][0]]],
+				];
+			}
+		}
 		if ($reply !== null) {
 			$record['reply'] = ['root' => $reply['root'] ?? $reply['parent'], 'parent' => $reply['parent']];
 		}
