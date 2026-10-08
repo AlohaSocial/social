@@ -387,6 +387,102 @@ it. A refusal there never reaches Nextcloud's log.
 
 ---
 
+## Bluesky
+
+Every account on this instance can be a Bluesky account as well: this Nextcloud
+is its personal data server (PDS), `alice.<host>` its handle, and a Bluesky
+relay reads what it publishes. Nothing is asked of the person; the
+administrator switches it on once, on the administration page, after the
+requirements below are met. The design and what each phase delivers is in
+[docs/Atproto-Compatibility.md](Atproto-Compatibility.md).
+
+**Requirements**, each a check on the Bluesky card and in the Overview's setup
+checks, and the card refuses to switch Bluesky on while one fails:
+
+- **https** on the instance host. A PDS is reached by relays and apps on the
+  public network, and a plain-http one is not a PDS to them; the one exception is
+  a development server nobody else talks to.
+- **A wildcard host for the handles.** Every account's handle is
+  `alice.<host>` and is resolved by `GET https://alice.<host>/.well-known/atproto-did`,
+  so a DNS record `*.<host>` must point at this server and the certificate must
+  cover it (a Let's Encrypt wildcard needs the DNS-01 challenge). The
+  web-server rules for that host are in `contrib/webserver` (the handles block
+  at the end of each file).
+- **`*.<host>` in `trusted_domains`.** Nextcloud answers a request for a host it
+  does not trust with an error page, before the app sees it:
+
+  ```
+  php occ config:system:set trusted_domains 3 --value='*.social.example.com'
+  ```
+- **The root rules.** The DID document names the bare host as the PDS, so
+  `/xrpc/` has to be served at the root exactly as `/api/` is for Mastodon apps,
+  along with `/.well-known/did.json`. The rules are in the same files:
+
+  ```
+  RewriteRule ^/?xrpc/com\.atproto\.sync\.subscribeRepos$ ws://127.0.0.1:8787/xrpc/com.atproto.sync.subscribeRepos [P,QSA,L]
+  RewriteRule ^/?xrpc/(.*)$ http://127.0.0.1/index.php/apps/social/xrpc/$1 [P,QSA,L]
+  RewriteRule ^/?\.well-known/did\.json$ http://127.0.0.1/index.php/apps/social/.well-known/did.json [P,QSA,L]
+  ```
+
+  Apache needs `mod_proxy_wstunnel` for the first of them; nginx the
+  `Upgrade`/`Connection` headers the shipped block sets.
+- **The firehose daemon.** `occ social:atproto:serve` is a long-running process
+  that serves the event stream relays subscribe to. Under systemd:
+
+  ```
+  [Unit]
+  Description=Aloha Social Bluesky firehose
+  After=network.target mariadb.service
+
+  [Service]
+  User=www-data
+  WorkingDirectory=/var/www/nextcloud
+  ExecStart=/usr/bin/php occ social:atproto:serve --bind 127.0.0.1:8787
+  Restart=always
+  RestartSec=5
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+  In a container, the same command under the container's supervisor. The daemon
+  reports to the card every fifteen seconds; a report older than a minute shows
+  as "not running".
+- **Cron.** The maintenance job (every five minutes) publishes what the
+  listener missed, resends directory operations, prunes the firehose past its
+  window and drops retired keys. The ordinary cron requirement covers it.
+
+**Switching on.** The Bluesky card checks the requirements and flips the switch.
+Then `php occ social:atproto:identities` gives every existing account its
+identity (new accounts, and any account the command missed, get one on their
+first public post), and `php occ social:atproto:crawl` tells the relays to
+subscribe. From then on every public post of every account goes to Bluesky as
+it is made, edits within five minutes replace the Bluesky copy and later ones
+leave it standing with its link to the current post here, and a deleted post is
+deleted there. Direct, followers-only and unlisted posts never leave.
+
+**What the card shows.** The handle host, the PDS endpoint and the instance's
+`did:web`; the relays (`https://bsky.network` by default; "Tell the relays now"
+sends the crawl request again); the PLC directory and the AppView the instance
+talks to (the defaults are Bluesky's; the interop job points them at its own);
+how many identities and repositories there are, how many events the replay
+window holds and the head sequence number; the daemon's last report; and the
+age of the instance rotation key.
+
+**Keys and backups.** Each account's signing key and the instance's rotation and
+service keys are stored sealed with the instance secret, like actor keys. They
+are the identities: a DID whose keys are lost can no longer be updated, and the
+person's recovery phrase (Settings → Your account) is their own way back. Back
+up the database *and* `config.php`'s `secret` together. After a restore from an
+older backup the firehose sequence goes backwards; run `php occ
+social:atproto:crawl` and the relays re-read every repository.
+`php occ social:atproto:rotate-key` replaces the instance rotation key; the old
+one stays valid for the directory's 72-hour window.
+
+**Switching off** keeps every identity and repository and stops the daemon's
+work, the maintenance job and the publisher; the handles stop resolving until
+it is switched on again.
+
 ## The administration page
 
 **Administration → Aloha Social.** Cards, grouped by what they are for --

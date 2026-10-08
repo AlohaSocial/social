@@ -247,7 +247,7 @@ class ApiContractTest extends TestCase {
 		// — and so are `avatar_default` and `header_default`, which say whether
 		// either picture is a placeholder rather than one the account set
 		$expected = [
-			'acct', 'avatar', 'avatar_default', 'avatar_static', 'bot', 'created_at', 'discoverable',
+			'acct', 'avatar', 'avatar_default', 'avatar_static', 'bluesky', 'bot', 'created_at', 'discoverable',
 			'display_name', 'emojis', 'fields', 'followers_count', 'following_count',
 			'group', 'header', 'header_default', 'header_static', 'id', 'indexable', 'last_status_at', 'locked',
 			'nid', 'note', 'pronouns', 'statuses_count', 'support_link', 'url', 'username',

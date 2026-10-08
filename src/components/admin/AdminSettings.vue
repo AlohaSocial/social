@@ -103,6 +103,7 @@
 								:addresses="state.accessList" />
 							<BlocklistSection v-else-if="card.id === 'blocklist'" @changed="onListChanged" />
 							<RelaysSection v-else-if="card.id === 'relays'" />
+							<BlueskySection v-else-if="card.id === 'bluesky'" :settings="state.bluesky" />
 							<ServerSection v-else-if="card.id === 'server'" :settings="state.server" />
 						</div>
 					</div>
@@ -118,6 +119,7 @@ import { translate as t } from '@nextcloud/l10n'
 import { currentSection, scrollToSection, watchSections } from '../../services/sectionRail.js'
 import AccessSection from './AccessSection.vue'
 import BlocklistSection from './BlocklistSection.vue'
+import BlueskySection from './BlueskySection.vue'
 import ActivitySection from './ActivitySection.vue'
 import AccountsSection from './AccountsSection.vue'
 import AnnouncementsSection from './AnnouncementsSection.vue'
@@ -175,6 +177,8 @@ const NOTHING = {
 	background: null,
 	/** @type {?object} self-registered external users (`ExternalAdminState`); administrators only */
 	external: null,
+	/** @type {?object} the Bluesky side of this server (`AtprotoStatusService::current()`); administrators only */
+	bluesky: null,
 	federation: {
 		waiting: 0,
 		running: 0,
@@ -205,6 +209,7 @@ export default {
 	components: {
 		AccessSection,
 		BlocklistSection,
+		BlueskySection,
 		ActivitySection,
 		AccountsSection,
 		AnnouncementsSection,
@@ -312,6 +317,7 @@ export default {
 						{ id: 'access', title: t('social', 'Fediverse access') },
 						...(administrator ? [{ id: 'blocklist', title: t('social', 'Block lists') }] : []),
 						...(administrator ? [{ id: 'relays', title: t('social', 'Relays') }] : []),
+						...(administrator && this.state.bluesky ? [{ id: 'bluesky', title: t('social', 'Bluesky') }] : []),
 					],
 				},
 				{

@@ -457,6 +457,124 @@ exactly the behaviour it has; one that will gets the throughput.
 
 ---
 
+### `social:atproto:serve`
+
+Serve the Bluesky firehose: the WebSocket a relay subscribes to.
+
+```
+php occ social:atproto:serve [--bind ADDRESS:PORT] [--max-seconds SECONDS] [--once]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--bind` | string (127.0.0.1:8787) | Where to listen; the web server proxies `/xrpc/com.atproto.sync.subscribeRepos` here with the WebSocket upgrade |
+| `--max-seconds` | int (0) | Stop after this long, so a supervisor can restart it; `0` runs until stopped |
+| `--once` | none | Serve what is queued now to whoever is connected and return — what a test wants |
+
+**Why it matters:** a PDS is only a PDS while something serves its event stream. The
+web requests append frames to `social_atproto_event`; this process reads them in
+order and hands each to every connected relay, replaying from the cursor a relay
+reconnects with out of the 72-hour window the table keeps. Run it under systemd
+(see [Admin.md](Admin.md#bluesky)); the setup checks say when it is not running.
+
+### `social:atproto:identities`
+
+Give every local account its Bluesky identity now, rather than on first need.
+
+```
+php occ social:atproto:identities [--user USER] [--list]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--user` | string | Only this Nextcloud user |
+| `--list` | none | List the identities there are instead of making any |
+
+An identity is a `did:plc` registered with the PLC directory, a handle
+`alice.<host>` and a signing key, and the profile record is written with it. An
+account that already has one is left alone, so the command is safe to run
+again; a registration the directory refused is logged and resent by the
+maintenance job and by `social:atproto:plc --repair`.
+
+### `social:atproto:plc`
+
+This app's log of PLC directory operations beside what the directory holds, or
+the resend of what never got through.
+
+```
+php occ social:atproto:plc [DID] [--repair]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `did` | No | The DID or handle to show; none with `--repair` |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--repair` | none | Send every operation the directory never confirmed again |
+
+### `social:atproto:resolve`
+
+What a handle or DID is: the local identity, and the DID document the directory
+serves.
+
+```
+php occ social:atproto:resolve IDENTIFIER
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `identifier` | Yes | A handle (`alice.social.example.com`) or a `did:plc` |
+
+Exits 1 when neither this instance nor the directory knows it.
+
+### `social:atproto:repo`
+
+A user's Bluesky repository: its head commit, what it holds, and whether it
+checks out.
+
+```
+php occ social:atproto:repo USER [--verify]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `user` | Yes | The Nextcloud user id, the handle or the DID |
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--verify` | none | Recompute the Merkle search tree from the records and check the head's signature; exits 1 when either differs |
+
+### `social:atproto:crawl`
+
+Ask the configured relays to subscribe to this instance's firehose now.
+
+```
+php occ social:atproto:crawl
+```
+
+Sends `com.atproto.sync.requestCrawl` to every relay in `atproto_relays`. A relay
+keeps the subscription from then on; this is for the first time, and for after
+the daemon was down longer than the replay window.
+
+### `social:atproto:rotate-key`
+
+A new instance rotation key, and a PLC update for every identity so the new key
+is the one in charge.
+
+```
+php occ social:atproto:rotate-key [--force]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--force` | none | Do it without asking |
+
+The old key is kept, retired, for the PLC's 72-hour recovery window and dropped
+by the maintenance job after it. Each identity gets one directory operation,
+paced so the directory's limits are respected; one the directory does not
+confirm is resent by the maintenance job.
+
 ### `social:queue:process`
 
 Process both queues once: the outbound request queue (federation delivery) and the

@@ -177,6 +177,59 @@ describe('where a post got to', () => {
 		})
 	})
 
+	/**
+	 * A public post written here is also a post on Bluesky, when this server
+	 * offers one. It is not a server among the servers, so it has a row of
+	 * its own at the end, and it is the one row that can be opened.
+	 */
+	describe('the Bluesky row', () => {
+		const blueskyRow = (wrapper) => wrapper.find('.delivery-list__row--bluesky')
+
+		it('is not drawn for a post that was never meant for Bluesky', async () => {
+			const wrapper = await mountDialog(record({ bluesky: { state: 'not_applicable', uri: '', url: '' } }))
+
+			expect(blueskyRow(wrapper).exists()).toBe(false)
+			expect(wrapper.find('.delivery-hint--muted').exists()).toBe(true)
+		})
+
+		it('is not drawn when the queue says nothing about Bluesky', async () => {
+			expect(blueskyRow(await mountDialog(record())).exists()).toBe(false)
+		})
+
+		it('links a published post to where Bluesky shows it', async () => {
+			const wrapper = await mountDialog(record({
+				total: 1,
+				delivered: 1,
+				instances: [{ host: 'fine.example', state: 'delivered', tries: 1, last: 1 }],
+				bluesky: {
+					state: 'published',
+					uri: 'at://did:plc:abc/app.bsky.feed.post/3k',
+					url: 'https://bsky.app/profile/alice.cloud.example.org/post/3k',
+				},
+			}))
+
+			// after the servers, not among them
+			expect(rows(wrapper).at(-1).classes()).toContain('delivery-list__row--bluesky')
+			expect(blueskyRow(wrapper).classes()).toContain('delivery-list__row--delivered')
+			expect(blueskyRow(wrapper).find('.delivery-list__host').text()).toBe('Bluesky')
+			const link = blueskyRow(wrapper).find('a')
+			expect(link.text()).toContain('Open on Bluesky')
+			expect(link.attributes('href')).toBe('https://bsky.app/profile/alice.cloud.example.org/post/3k')
+			expect(link.attributes('target')).toBe('_blank')
+			expect(link.attributes('rel')).toBe('noopener')
+		})
+
+		it('says a post is waiting, with nothing to open yet', async () => {
+			const wrapper = await mountDialog(record({ bluesky: { state: 'waiting', uri: '', url: '' } }))
+
+			expect(blueskyRow(wrapper).classes()).toContain('delivery-list__row--waiting')
+			expect(blueskyRow(wrapper).find('.delivery-list__state').text()).toBe('Waiting')
+			expect(blueskyRow(wrapper).find('a').exists()).toBe(false)
+			// the list exists for the one row, and the hint still explains the empty server list
+			expect(wrapper.find('.delivery-hint--muted').exists()).toBe(true)
+		})
+	})
+
 	it('says so when the queue could not be reached', async () => {
 		const wrapper = await mountDialog(new Error('offline'))
 

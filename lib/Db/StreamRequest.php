@@ -1366,6 +1366,25 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The public posts local accounts made since a point in time, newest
+	 * first: what the Bluesky reconcile pass checks for a missing record.
+	 *
+	 * @return Stream[]
+	 */
+	public function getLocalPublicSince(int $since, int $limit): array {
+		$qb = $this->getStreamSelectSql();
+		$qb->limitToStatusTypes();
+		$qb->limitToLocal(true);
+		$qb->andWhere($qb->expr()->eq('s.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)));
+		$qb->andWhere($qb->expr()->gt('s.published_time', $qb->createNamedParameter(new \DateTime('@' . $since), IQueryBuilder::PARAM_DATE)));
+		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
+		$qb->orderBy('s.nid', 'desc');
+		$qb->setMaxResults(max(1, $limit));
+
+		return $this->getStreamsFromRequest($qb);
+	}
+
+	/**
 	 * When each of an author's public posts was published, since a point in
 	 * time.
 	 *

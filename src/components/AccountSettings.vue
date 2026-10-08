@@ -22,6 +22,91 @@
 				</a>
 			</p>
 
+			<!-- the same account as the other network sees it. Nothing here is a
+			     setting: the identity exists because this server offers one, and
+			     the one thing the person can take away is the phrase that proves
+			     it is theirs without this server -->
+			<section v-if="blueskyOffered" class="account-settings__bluesky">
+				<h3 class="account-settings__bluesky-title">
+					{{ t('social', 'Bluesky') }}
+				</h3>
+				<p class="account-settings__hint account-settings__hint--block">
+					{{ t('social', 'This account is also reachable on Bluesky, because this server offers one.') }}
+				</p>
+				<p v-if="blueskyError" class="account-settings__hint account-settings__hint--block">
+					{{ blueskyError }}
+				</p>
+				<p v-else-if="!bluesky" class="account-settings__hint account-settings__hint--block">
+					{{ t('social', 'Loading …') }}
+				</p>
+				<template v-else>
+					<dl class="account-settings__identity">
+						<div class="account-settings__identity-row">
+							<dt>{{ t('social', 'Handle') }}</dt>
+							<dd>
+								<a
+									class="account-settings__code"
+									:href="bluesky.url"
+									target="_blank"
+									rel="noopener">@{{ bluesky.handle }}</a>
+								<NcButton
+									variant="tertiary"
+									:title="blueskyCopied === 'handle' ? t('social', 'Copied') : t('social', 'Copy')"
+									:aria-label="blueskyCopied === 'handle' ? t('social', 'Copied') : t('social', 'Copy the Bluesky handle')"
+									@click="copyBluesky('handle', '@' + bluesky.handle)">
+									<template #icon>
+										<Check v-if="blueskyCopied === 'handle'" :size="16" />
+										<ContentCopy v-else :size="16" />
+									</template>
+								</NcButton>
+							</dd>
+						</div>
+						<div class="account-settings__identity-row">
+							<dt>{{ t('social', 'DID') }}</dt>
+							<dd>
+								<code class="account-settings__code">{{ bluesky.did }}</code>
+								<NcButton
+									variant="tertiary"
+									:title="blueskyCopied === 'did' ? t('social', 'Copied') : t('social', 'Copy')"
+									:aria-label="blueskyCopied === 'did' ? t('social', 'Copied') : t('social', 'Copy the DID')"
+									@click="copyBluesky('did', bluesky.did)">
+									<template #icon>
+										<Check v-if="blueskyCopied === 'did'" :size="16" />
+										<ContentCopy v-else :size="16" />
+									</template>
+								</NcButton>
+							</dd>
+						</div>
+					</dl>
+					<div class="account-settings__recovery">
+						<NcButton :disabled="recovering" @click="createRecoveryPhrase">
+							<template #icon>
+								<NcLoadingIcon v-if="recovering" :size="20" />
+								<KeyOutline v-else :size="20" />
+							</template>
+							{{ bluesky.recovery_key ? t('social', 'Create a new recovery phrase') : t('social', 'Create recovery phrase') }}
+						</NcButton>
+						<p class="account-settings__hint account-settings__hint--block">
+							{{ bluesky.recovery_key
+								? t('social', 'The phrase you have stops working the moment a new one is made.')
+								: t('social', 'Twelve words that prove this Bluesky identity is yours even without this server. They are shown once, for you to write down.') }}
+						</p>
+					</div>
+				</template>
+				<NcDialog
+					:open="phrase !== ''"
+					:name="t('social', 'Your recovery phrase')"
+					:buttons="phraseButtons"
+					@update:open="closePhrase">
+					<NcNoteCard type="warning">
+						{{ t('social', 'These twelve words are shown once and never again. Write them down and keep them where only you can find them.') }}
+					</NcNoteCard>
+					<p class="account-settings__phrase">
+						<code>{{ phrase }}</code>
+					</p>
+				</NcDialog>
+			</section>
+
 			<!-- the settings that shape how others reach the account; each is
 			     one sentence about what it does, since the Mastodon names
 			     (locked, discoverable, indexable) mean nothing to anybody -->
@@ -117,13 +202,20 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
+import Check from 'vue-material-design-icons/Check.vue'
+import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
 import ContentSave from 'vue-material-design-icons/ContentSave.vue'
+import KeyOutline from 'vue-material-design-icons/KeyOutline.vue'
 import { translate as t } from '@nextcloud/l10n'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
+import { confirmPassword } from '../services/externalApi.js'
+import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
 import visibilitiesInfo from './Visibility/VisibilitiesInfos.js'
 import VisibilityIcon from './Visibility/VisibilityIcon.vue'
@@ -144,10 +236,15 @@ export default {
 	name: 'AccountSettings',
 
 	components: {
+		Check,
+		ContentCopy,
 		ContentSave,
+		KeyOutline,
 		NcButton,
 		NcCheckboxRadioSwitch,
+		NcDialog,
 		NcLoadingIcon,
+		NcNoteCard,
 		NcSelect,
 		VisibilityIcon,
 	},
@@ -183,6 +280,20 @@ export default {
 			savingSensitive: false,
 
 			saving: false,
+
+			/**
+			 * The Bluesky identity, once asked for; null until it comes
+			 *
+			 * @type {{handle: string, did: string, url: string, state: string, recovery_key: boolean}|null}
+			 */
+			bluesky: null,
+			blueskyError: '',
+			/** which of the two was just copied: 'handle', 'did' or '' */
+			blueskyCopied: '',
+			blueskyCopyTimer: null,
+			recovering: false,
+			/** the twelve words, for as long as the dialog shows them */
+			phrase: '',
 		}
 	},
 
@@ -210,6 +321,26 @@ export default {
 		/** @return {string} where the name actually lives */
 		personalSettings() {
 			return generateUrl('/settings/user')
+		},
+
+		/** @return {boolean} whether this instance gives every account a Bluesky identity */
+		blueskyOffered() {
+			return this.serverData?.bluesky?.enabled === true
+		},
+
+		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
+		phraseButtons() {
+			return [
+				{
+					label: t('social', 'Copy the words'),
+					callback: () => this.copyBluesky('phrase', this.phrase),
+				},
+				{
+					label: t('social', 'I have written them down'),
+					variant: 'primary',
+					callback: () => this.closePhrase(),
+				},
+			]
 		},
 
 		/**
@@ -288,6 +419,13 @@ export default {
 		if (!this.loaded) {
 			this.accountStore.fetchCredentials()
 		}
+		if (this.blueskyOffered) {
+			this.loadBluesky()
+		}
+	},
+
+	beforeUnmount() {
+		window.clearTimeout(this.blueskyCopyTimer)
 	},
 
 	methods: {
@@ -329,6 +467,73 @@ export default {
 			} finally {
 				this.savingSensitive = false
 			}
+		},
+
+		/**
+		 * Asks for the identity, which the server makes on first asking.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async loadBluesky() {
+			this.blueskyError = ''
+			try {
+				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/identity'))
+				this.bluesky = data
+			} catch (error) {
+				logger.debug('Could not load the Bluesky identity', { error })
+				this.blueskyError = t('social', 'Could not read your Bluesky identity right now.')
+			}
+		},
+
+		/**
+		 * @param {'handle'|'did'|'phrase'} which what was asked for
+		 * @param {string} text what goes onto the clipboard
+		 */
+		async copyBluesky(which, text) {
+			try {
+				await navigator.clipboard.writeText(text)
+				this.blueskyCopied = which
+				window.clearTimeout(this.blueskyCopyTimer)
+				this.blueskyCopyTimer = window.setTimeout(() => {
+					this.blueskyCopied = ''
+				}, 2000)
+			} catch (error) {
+				logger.debug('Could not copy', { error })
+				showError(t('social', 'Could not copy — select the address and copy it yourself'))
+			}
+		},
+
+		/**
+		 * Makes the phrase, after the password: a new key replaces the old one
+		 * on the directory, so whoever asks for it has to be the person.
+		 *
+		 * @return {Promise<void>}
+		 */
+		async createRecoveryPhrase() {
+			try {
+				await confirmPassword()
+			} catch {
+				return
+			}
+			this.recovering = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/recovery'))
+				const { phrase, ...identity } = data
+				this.bluesky = identity
+				this.phrase = phrase
+			} catch (error) {
+				// the password confirmation of a moment ago has run out, which
+				// the server answers with 403 rather than a dialog
+				showError(error?.response?.status === 403
+					? t('social', 'Confirm your password again and retry.')
+					: t('social', 'Could not create a recovery phrase'))
+			} finally {
+				this.recovering = false
+			}
+		},
+
+		closePhrase() {
+			this.phrase = ''
 		},
 
 		async save() {
@@ -395,6 +600,67 @@ export default {
 	&__privacy {
 		max-width: 420px;
 		margin-top: 8px;
+	}
+
+	&__bluesky {
+		max-width: 420px;
+		margin-bottom: 8px;
+		padding-top: 8px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	&__bluesky-title {
+		margin: 0;
+		font-size: 15px;
+		font-weight: bold;
+	}
+
+	&__identity {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 8px 0;
+	}
+
+	&__identity-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		dt {
+			flex: 0 0 56px;
+			color: var(--color-text-maxcontrast);
+			font-size: 13px;
+		}
+
+		dd {
+			display: flex;
+			align-items: center;
+			gap: 2px;
+			min-width: 0;
+			margin: 0;
+		}
+	}
+
+	&__code {
+		font-family: var(--font-face-monospace, monospace);
+		font-size: 13px;
+		overflow-wrap: anywhere;
+		user-select: all;
+	}
+
+	&__recovery {
+		margin-top: 4px;
+	}
+
+	&__phrase {
+		margin: 0 12px 12px;
+		padding: 12px;
+		border-radius: var(--border-radius-element, 8px);
+		background: var(--color-background-dark);
+		font-size: 16px;
+		line-height: 1.8;
+		user-select: all;
 	}
 
 	&__privacy-option {

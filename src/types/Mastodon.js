@@ -110,6 +110,7 @@
  * @property {CustomEmoji[]} emojis - Ex: []
  * @property {Field[]} fields - Ex: []
  * @property {Account} [moved] - the account this one moved to, when it has
+ * @property {{handle: string, did: string, url: string}|null} [bluesky] - the Bluesky identity of a local account, when this instance offers one
  */
 
 /**

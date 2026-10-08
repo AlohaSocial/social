@@ -105,6 +105,11 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 
 ![For you in the settings](img/readme/interests.png)
 
+- **Bluesky** — every account is a Bluesky account too, hosted here: `alice.<your host>` resolves to a
+  `did:plc` identity, every public post goes to Bluesky as it is made (cut to 300 characters with a link
+  when it is longer, the first four pictures with it, a content warning as a self-label), and a relay
+  crawls the instance's firehose. Switched on by the administrator once the requirements are met; see
+  [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) for what is done and what is next.
 - **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually
   read. Aloha Social notices what you stay on, what you scroll past, and what you like,
   boost, reply to, bookmark and open, and keeps a list of hashtags from it; the feed

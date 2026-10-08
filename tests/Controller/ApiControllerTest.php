@@ -412,6 +412,12 @@ class ApiControllerTest extends TestCase {
 			'userSession' => $this->userSession,
 			'logger' => $logger ?? new NullLogger(),
 			'instanceService' => $this->instanceService,
+			'atprotoIdentities' => (function () {
+				$identities = $this->createStub(\OCA\Social\Atproto\Identity\IdentityService::class);
+				$identities->method('getByActorId')->willThrowException(new \OCA\Social\Exceptions\AtprotoIdentityNotFoundException());
+
+				return $identities;
+			})(),
 			'clientService' => $this->clientService,
 			'accountService' => $this->accountService,
 			'cacheActorService' => $this->cacheActorService,
@@ -477,6 +483,12 @@ class ApiControllerTest extends TestCase {
 				$this->createStub(\OCA\Social\Db\ConversationsRequest::class),
 			),
 			'durableCache' => $this->durableCache(),
+			'atprotoPublisher' => (function () {
+				$publisher = $this->createStub(\OCA\Social\Atproto\Publisher\Publisher::class);
+				$publisher->method('statusOf')->willReturn(['state' => 'not_applicable', 'uri' => '', 'url' => '']);
+
+				return $publisher;
+			})(),
 		]);
 	}
 
@@ -3760,7 +3772,7 @@ class ApiControllerTest extends TestCase {
 		$response = $this->controller()->statusDelivery(7);
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame(['id' => '7'] + $summary, $response->getData());
+		$this->assertSame(['id' => '7'] + $summary + ['bluesky' => ['state' => 'not_applicable', 'uri' => '', 'url' => '']], $response->getData());
 	}
 
 	public function testStatusDeliveryOfSomebodyElsesPostIsA404(): void {

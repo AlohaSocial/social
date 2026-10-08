@@ -11,6 +11,8 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\ChannelsRequest;
@@ -40,6 +42,7 @@ use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Moderation;
 use OCP\Accounts\IAccountManager;
+use OCP\BackgroundJob\IJobList;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
@@ -116,6 +119,8 @@ class AccountService {
 		private ModerationRequest $moderationRequest,
 		private LoggerInterface $logger,
 		private NotificationPolicyService $notificationPolicyService,
+		private IJobList $jobList,
+		private AtprotoConfig $atprotoConfig,
 	) {
 	}
 
@@ -781,6 +786,10 @@ class AccountService {
 		}
 
 		$this->federateActorUpdate($actor);
+		// the Bluesky profile follows, off the request
+		if ($this->atprotoConfig->isEnabled()) {
+			$this->jobList->add(AtprotoPublish::class, ['action' => 'profile', 'id' => $actor->getId()]);
+		}
 	}
 
 	/**

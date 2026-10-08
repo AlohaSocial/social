@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Service\AtprotoCascade;
 use OCA\Social\Db\AccountNotesRequest;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ActorRelationRequest;
@@ -94,6 +95,7 @@ class ActorCascadeService {
 		private CacheDocumentsRequest $cacheDocumentsRequest,
 		private CacheActorsRequest $cacheActorsRequest,
 		private CacheDocumentService $cacheDocumentService,
+		private AtprotoCascade $atproto,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -121,6 +123,9 @@ class ActorCascadeService {
 	 */
 	private function steps(string $actorId, bool $reversible): array {
 		$steps = [
+			// its Bluesky identity: the DID is tombstoned on a deletion and
+			// left alone on a suspension, which can be lifted
+			'atproto' => fn () => $this->atproto->purge($actorId, $reversible),
 			// what it did to other people's posts: its likes and boosts, its
 			// bookmarks and poll votes, its emoji reactions, and what it has
 			// watched — all of which went on counting on posts that are not

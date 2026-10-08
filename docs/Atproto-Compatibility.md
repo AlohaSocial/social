@@ -4,13 +4,14 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: specification. Nothing in this document is implemented.** It is
-the contract for a multi-PR project: the decisions were taken by the
-product owner in two interviews (2026-09-25 and 2026-10-06) and are not to
-be re-derived; the technical facts were checked against the AT Protocol
-specifications and the Bluesky reference implementation on the dates given
-in §20, and the ones marked *verify* have to be checked again before the
-code that depends on them is written.
+**Status: phase 1 (§18) is implemented; phases 2–4 are specification.**
+This document is the contract for a multi-PR project: the decisions were
+taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
+and are not to be re-derived; the technical facts were checked against the
+AT Protocol specifications and the Bluesky reference implementation on the
+dates given in §20, and the ones marked *verify* have to be checked again
+before the code that depends on them is written. What phase 1 built, and
+where it departs from the letter of this document, is in §18.
 
 **Verified against:** Aloha Social master `2eb7b99a9` (0.26.121),
 AT Protocol specifications as of 2026-10-06, Bluesky PDS reference
@@ -935,6 +936,50 @@ Architecture/API/OCC-Commands/Admin/User-Guide as it lands
 
 Each phase has its version bump, its tests per commit, its docs in the
 same change, and its interop job extended before the PR is opened.
+
+### Phase 1 as built
+
+Everything in the phase 1 row, in `lib/Atproto/` (`Protocol`, `Crypto`,
+`Lexicon`, `Identity`, `Repository`, `Firehose`, `Publisher`, `Xrpc`,
+`Service`), with these departures from the letter of the sections above,
+each for a reason:
+
+- **No `paragonie/ecc`, no gmp.** Signing and verification use OpenSSL's
+  secp256k1 and P-256 (`Crypto\PrivateKey`, `Crypto\PublicKey`), which every
+  Nextcloud host has; the little arithmetic OpenSSL does not expose
+  (low-S, point decompression) is a hundred lines of pure PHP
+  (`Crypto\BigNum`). A gmp requirement would have kept Bluesky off hosts
+  that have never needed it.
+- **No `ratchet`/`react`.** The firehose daemon is plain PHP sockets
+  (`Firehose\WebSocketServer`): what a firehose needs of RFC 6455 is a page,
+  and the library would have brought a PSR-7 implementation into the app's
+  bundle beside the server's own.
+- **The recovery key is issued on request**, from Settings → Your account,
+  not at identity creation: an identity made in a background job has nobody
+  there to show the phrase to. The phrase is twelve BIP-39 words (128 bits);
+  the key is derived from them.
+- **Pictures** are the stored original when it fits Bluesky's 2,000,000
+  bytes and is a type Bluesky shows, re-encoded as JPEG otherwise and stored
+  as a document of their own. Link cards (§8.3) are not yet built: a post
+  with a link and no pictures carries the link as a facet only.
+- **Replies** to a post that is on Bluesky — a local post that was published
+  — are replies there (§8.3); to anything else they are a post with the
+  parent linked. Quotes are a link. Both as the section says; the AppView
+  thread walk for remote parents is phase 2.
+- **Edits, deletes, profiles** as §8.5 and §5.1; a profile change is
+  republished when the profile is saved (`AccountService::changingProfile`)
+  and when the identity is first viewed.
+- **Handles** are checked for syntax by `Protocol\Syntax::isHandle()` and,
+  before anything is resolved, for a top-level domain that can exist by
+  `isResolvableHandle()` — `.test` kept, for the interop job.
+- **The interop job** (`interop-atproto.yml`) uses `@atproto/dev-env` with a
+  second AppView subscription to this app's firehose rather than routing the
+  dev PDS through the relay: the stock relay will not crawl a loopback or
+  private address, so the relay in the job crawls this app alone (on a
+  routed address the runner answers on its loopback) and the test treats it
+  as evidence when it is there.
+- **Suspension** leaves the identity alone (it can be lifted, and nothing is
+  told); deletion tombstones the DID.
 
 ## 19. Open questions
 

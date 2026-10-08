@@ -461,6 +461,58 @@ describe('Composer', () => {
 			expect(canPost(wrapper)).toBe(true)
 			expect(input(wrapper).classes()).not.toContain('too-long')
 		})
+
+		/**
+		 * Every public post written here is also a Bluesky post when this
+		 * server offers one, and Bluesky shows 280 of the 500 characters this
+		 * composer allows. The counter is still Social's; the hint is the
+		 * other network's, said once it matters.
+		 */
+		describe('the Bluesky hint', () => {
+			const hint = (wrapper) => wrapper.find('.composer-bluesky-hint')
+			const offersBluesky = () => useSettingsStore().setServerDataEntry({
+				key: 'bluesky',
+				value: { enabled: true, host: 'cloud.example.org' },
+			})
+
+			it('appears once a public post is longer than Bluesky shows', async () => {
+				const { wrapper } = mountComposer()
+				offersBluesky()
+				await selectVisibility(wrapper, 'public')
+				await setContent(wrapper, 'a'.repeat(280))
+				expect(hint(wrapper).exists()).toBe(false)
+
+				await setContent(wrapper, 'a'.repeat(281))
+				expect(hint(wrapper).text()).toBe('Bluesky shows the first 280 characters and a link to the full post.')
+			})
+
+			it('says nothing for a post that is not public, which does not go there', async () => {
+				const { wrapper } = mountComposer()
+				offersBluesky()
+				await selectVisibility(wrapper, 'unlisted')
+				await setContent(wrapper, 'a'.repeat(300))
+
+				expect(hint(wrapper).exists()).toBe(false)
+			})
+
+			it('says nothing on a server that offers no Bluesky', async () => {
+				const { wrapper } = mountComposer()
+				await selectVisibility(wrapper, 'public')
+				await setContent(wrapper, 'a'.repeat(300))
+
+				expect(hint(wrapper).exists()).toBe(false)
+			})
+
+			it('counts what a person sees, not the code points behind a flag', async () => {
+				const { wrapper } = mountComposer()
+				offersBluesky()
+				await selectVisibility(wrapper, 'public')
+				// 280 flags are 560 code points and 280 graphemes: still within
+				await setContent(wrapper, '🇳🇱'.repeat(280))
+
+				expect(hint(wrapper).exists()).toBe(false)
+			})
+		})
 	})
 
 	describe('author', () => {

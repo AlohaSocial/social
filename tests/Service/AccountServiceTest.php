@@ -142,6 +142,8 @@ class AccountServiceTest extends TestCase {
 			$this->moderationRequest,
 			$this->logger = $this->createMock(LoggerInterface::class),
 			$this->notificationPolicyService = $this->createMock(NotificationPolicyService::class),
+			$this->createMock(\OCP\BackgroundJob\IJobList::class),
+			$this->createMock(\OCA\Social\Atproto\Service\AtprotoConfig::class),
 		);
 		error_reporting($this->errorReporting);
 	}
@@ -671,6 +673,8 @@ class AccountServiceTest extends TestCase {
 			$this->moderationRequest,
 			$logger,
 			$this->notificationPolicyService,
+			$this->createMock(\OCP\BackgroundJob\IJobList::class),
+			$this->createMock(\OCA\Social\Atproto\Service\AtprotoConfig::class),
 		);
 
 		$this->actorsRequest->method('getFromUsername')->willThrowException(new ActorDoesNotExistException());

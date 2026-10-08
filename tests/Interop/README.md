@@ -283,3 +283,31 @@ from `url`, so likes and comments on our videos failed there.
 When a run fails, its last step prints our log, our delivery queue and
 uploads, every request through the proxy, Loops' log, failed jobs and queue
 worker, and what Loops' own validators make of our last activities.
+
+## Against Bluesky
+
+`interop-atproto.yml` runs this app as a Bluesky PDS against Bluesky's own
+software: the PLC directory, PDS and AppView of `@atproto/dev-env`
+(`tests/Interop/atproto/network.mjs` starts them on fixed ports, points their
+handle resolution at this app and subscribes the AppView to this app's
+firehose), and the official `indigo` relay, which verifies every commit's
+signature and revision. Nothing of the public network is touched.
+
+`AtprotoVisibleTest` is phase 1 of [docs/Atproto-Compatibility.md](../../docs/Atproto-Compatibility.md)
+demonstrated end to end: a local account's identity is registered with the
+directory and resolved by the dev PDS through this app's handle host; a public
+post reaches the AppView's author feed off the firehose, with its facets; the
+profile is found by handle; a user on the dev PDS follows the account and
+likes the post, both of which the AppView counts; the relay reports the
+repository at this app's own head revision; an edit within the grace period
+is a new record and a delete takes the post off the feed.
+
+What it cannot prove: indexing by `bsky.app` itself, which needs a public
+https host with wildcard DNS and is done by hand; and anything of reading
+Bluesky from here, which is phase 2.
+
+Run it by hand with PostgreSQL and Redis at `DB_POSTGRES_URL` and
+`REDIS_HOST`, `npm install` in `tests/Interop/atproto`, `node network.mjs`
+with `SOCIAL_URL` set to the instance and `NODE_EXTRA_CA_CERTS` to its CA when
+the certificate is private, then `ATPROTO_NETWORK_FILE=/tmp/atproto-network.json
+composer run test:interop -- --filter AtprotoVisibleTest`.

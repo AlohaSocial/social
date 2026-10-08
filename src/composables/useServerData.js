@@ -30,6 +30,7 @@ import { useSettingsStore } from '../store/settings.js'
 /**
  * @typedef {object} ServerData
  * @property {string} account - The account that the user wants to follow (Only in 'OStatus.vue')
+ * @property {{enabled: boolean, host: string}} [bluesky] - Whether this instance offers a Bluesky identity to every account, and the host its handles end in
  * @property {SetupChecks} [checks] - The setup checks, only for an administrator
  * @property {{enabled: boolean, learning: boolean, paused: boolean, noticeAcknowledged: boolean, profile?: boolean}} [interests] - For you: whether the feature is on for this instance, whether this
  *   reader learns, and whether they have paused it (`InterestService::pageState()`)
