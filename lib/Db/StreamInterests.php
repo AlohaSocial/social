@@ -59,8 +59,10 @@ trait StreamInterests {
 	 * one of `$tags`, and neither the viewer's own nor from somebody silenced.
 	 *
 	 * One row per post and matching tag, newest first, at most `$cap` of them.
-	 * The tags are compared lowered, as the hashtag timeline compares them,
-	 * because `social_stream_tag` keeps them as they were written.
+	 * The tags are compared as they stand, as the hashtag timeline compares
+	 * them: `social_stream_tag` holds them normalised
+	 * (`FollowedTagsRequest::normalise()`), and a comparison over `LOWER()` of
+	 * the column is one its index cannot answer.
 	 *
 	 * `$media` narrows them to one kind, on the indexed `media_kind` column the
 	 * Photos and Videos timelines read: `photos` is a post with a picture in
@@ -98,7 +100,7 @@ trait StreamInterests {
 		$qb->joinCacheActors('ca', 's.attributed_to_prim');
 		$qb->linkToStreamTags('st', 's.id_prim');
 		$qb->andWhere($expr->in(
-			$qb->func()->lower('st.hashtag'),
+			'st.hashtag',
 			$qb->createNamedParameter(array_values($tags), IQueryBuilder::PARAM_STR_ARRAY)
 		));
 
