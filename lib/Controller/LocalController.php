@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
@@ -40,6 +41,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\PostService;
+use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
@@ -94,6 +96,7 @@ class LocalController extends Controller {
 		private IUserManager $userManager,
 		private IUserSession $userSession,
 		private IdentityService $atprotoIdentities,
+		private ?BlueskySearch $blueskySearch = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -841,6 +844,9 @@ class LocalController extends Controller {
 
 		try {
 			$accounts = $this->cacheActorService->searchCachedAccounts($search);
+			if ($this->blueskySearch !== null) {
+				$accounts = SearchService::withBluesky($accounts, $this->blueskySearch->typeahead($search));
+			}
 
 			return $this->success(['accounts' => $accounts, 'exact' => $match]);
 		} catch (Exception $e) {

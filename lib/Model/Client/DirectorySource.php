@@ -49,6 +49,7 @@ class DirectorySource implements JsonSerializable {
 	 * the handle comes out of the entry rather than off the host.
 	 */
 	public const KIND_WORDPRESS = 'wordpress';
+	public const KIND_BLUESKY = 'bluesky';
 
 	public const KINDS = [
 		self::KIND_LOCAL,
@@ -56,6 +57,7 @@ class DirectorySource implements JsonSerializable {
 		self::KIND_MISSKEY,
 		self::KIND_LEMMY,
 		self::KIND_WORDPRESS,
+		self::KIND_BLUESKY,
 	];
 
 	/**

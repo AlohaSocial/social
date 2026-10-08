@@ -64,10 +64,18 @@ class DirectoryAccount implements JsonSerializable {
 		return explode('@', $this->acct)[0];
 	}
 
+	/**
+	 * The server the account is on: after the `@`, or, for a Bluesky
+	 * handle, which has none, the handle's own domain.
+	 */
 	public function getHost(): string {
 		$parts = explode('@', $this->acct);
+		if (isset($parts[1])) {
+			return $parts[1];
+		}
+		$dot = strpos($this->acct, '.');
 
-		return $parts[1] ?? '';
+		return $dot === false ? '' : substr($this->acct, $dot + 1);
 	}
 
 	public function getSource(): string {

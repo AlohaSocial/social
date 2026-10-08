@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\InstanceStatsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\DirectoryAccount;
 use OCA\Social\Model\Client\DirectorySource;
+use OCA\Social\Model\Details;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use Psr\Log\LoggerInterface;
@@ -184,6 +187,7 @@ class FediverseDirectoryService {
 		private InstanceStatsRequest $instanceStatsRequest,
 		private LoggerInterface $logger,
 		ICacheFactory $cacheFactory,
+		private ?BlueskySearch $bluesky = null,
 	) {
 		$this->cache = $cacheFactory->createDistributed('social.directories');
 	}
@@ -209,6 +213,9 @@ class FediverseDirectoryService {
 
 		foreach ([...$this->peerSources(), ...$this->discoveredSources()] as $source) {
 			$sources[] = $source;
+		}
+		if ($this->bluesky !== null && $this->bluesky->isCandidate('a.b')) {
+			$sources[] = new DirectorySource(BlueskyIds::HOST, DirectorySource::KIND_BLUESKY, 'Bluesky');
 		}
 
 		return $this->deduplicated($sources);
@@ -574,6 +581,7 @@ class FediverseDirectoryService {
 			DirectorySource::KIND_MISSKEY => $this->askMisskey($source, $query, $limit),
 			DirectorySource::KIND_LEMMY => $this->askLemmy($source, $query, $limit),
 			DirectorySource::KIND_WORDPRESS => $this->askWordpress($source, $query, $limit),
+			DirectorySource::KIND_BLUESKY => $this->askBluesky($source, $query, $limit),
 			default => $this->askMastodon($source, $query, $limit),
 		};
 
@@ -622,6 +630,30 @@ class FediverseDirectoryService {
 				->setUrl($person->getId())
 				->setKnown(true);
 
+			$found[] = $account;
+		}
+
+		return $found;
+	}
+
+	/**
+	 * Bluesky's typeahead: accounts whose handle or name starts like the
+	 * query. Nothing to page through, and nothing for text that is not the
+	 * start of a handle.
+	 *
+	 * @return DirectoryAccount[]
+	 */
+	private function askBluesky(DirectorySource $source, string $query, int $limit): array {
+		$found = [];
+		foreach ($this->bluesky?->typeahead($query, $limit) ?? [] as $person) {
+			$account = new DirectoryAccount($person->getAccount(), $source->getHost(), DirectorySource::KIND_BLUESKY);
+			$count = $person->getDetails(Details::COUNT);
+			$account->setDisplayName($person->getName() ?: $person->getAccount())
+				->setNote($person->getSummary())
+				->setAvatar($person->getAvatar())
+				->setUrl($person->getUrl())
+				->setFollowersCount((int)($count['followers'] ?? -1))
+				->setStatusesCount((int)($count['post'] ?? -1));
 			$found[] = $account;
 		}
 
