@@ -57,7 +57,7 @@ final class Move {
 	public const DONE = 'done';
 
 	/**
-	 * @param array{blobs?: int, records?: int, follows?: int, expectedBlobs?: int, posts?: int} $progress counts of what was copied
+	 * @param array{blobs?: int, records?: int, follows?: int, expectedBlobs?: int, posts?: int, likes?: int, reposts?: int} $progress counts of what was copied
 	 */
 	public function __construct(
 		public readonly int $id,

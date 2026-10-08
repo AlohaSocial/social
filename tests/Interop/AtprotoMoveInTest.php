@@ -44,11 +44,14 @@ class AtprotoMoveInTest extends TestCase {
 
 	public function testABlueskyAccountMovesHereWithItsPostsAndFollows(): void {
 		$followedDid = $this->network->createUser('followed' . bin2hex(random_bytes(3)));
+		$liked = $this->network->postText('A post to like ' . bin2hex(random_bytes(3)));
 		// the follow is taken over through the AppView, which must know the account by then
 		$this->assertNotNull($this->network->await(fn () => $this->network->profile($followedDid)), 'the AppView knows the followed account');
 		$name = 'arriving' . bin2hex(random_bytes(3));
 		$did = $this->network->createUser($name);
 		$this->network->follow($followedDid);
+		$this->network->await(fn () => $this->network->postView($liked['uri']));
+		$this->network->like($liked['uri'], $liked['cid']);
 		$words = 'Written on Bluesky before moving ' . bin2hex(random_bytes(4));
 		$this->network->postText($words);
 
@@ -84,6 +87,9 @@ class AtprotoMoveInTest extends TestCase {
 		$post = Server::get(StreamRequest::class)->getStreamById((string)$record->localId);
 		$this->assertSame([$this->alice->actor->getId(), true], [$post->getAttributedTo(), $post->isLocal()], 'as the account\'s own post');
 		$this->assertStringContainsString($words, $post->getContent());
+		$likes = Server::get(RepositoryService::class)->listRecords($did, 'app.bsky.feed.like', 10);
+		$this->assertCount(1, $likes);
+		$this->assertStringStartsWith($this->alice->actor->getId() . '#like/', $likes[0]->localId, 'the like is a like here, tied to its record');
 		Server::get(FollowsRequest::class)->getByPersons($this->alice->actor->getId(), 'https://bsky.app/profile/' . $followedDid);
 
 		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($did)['handle'] ?? '') === $before->handle ? true : null), 'the AppView follows the DID here');

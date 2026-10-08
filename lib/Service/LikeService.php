@@ -119,6 +119,34 @@ class LikeService {
 	}
 
 	/**
+	 * A like the account made elsewhere, brought over with it: written here,
+	 * dated when it was made, and sent nowhere — its author was told when it
+	 * was made.
+	 *
+	 * @throws StreamNotFoundException
+	 * @throws Exception
+	 */
+	public function recordWithoutSending(Person $actor, string $postId, string $published): ACore {
+		$note = $this->streamService->getStreamById($postId, true);
+		if ($note->getType() !== Note::TYPE) {
+			throw new StreamNotFoundException('Stream is not a Note');
+		}
+
+		/** @var Like $like */
+		$like = AP::instance()->getItemFromType(Like::TYPE);
+		$like->setId($actor->getId() . '#like/' . $this->uuid(8));
+		$like->setActor($actor);
+		$like->setObjectId($note->getId());
+		$like->setTo($note->getAttributedTo());
+		$like->setPublished($published);
+
+		AP::instance()->getInterfaceFromType(Like::TYPE)->save($like);
+		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::LIKED, true);
+
+		return $like;
+	}
+
+	/**
 	 * @param Person $actor
 	 * @param string $postId
 	 * @param string $token

@@ -16,14 +16,21 @@ use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
+use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\ImportedPostsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Announce;
+use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Service\BoostService;
+use OCA\Social\Service\LikeService;
 use OCA\Social\Service\PostImportService;
 use OCP\ITempManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -37,6 +44,12 @@ class PostHistoryTest extends TestCase {
 	private string $picture = 'a picture, byte for byte';
 	/** @var StoredRecord[] */
 	private array $records = [];
+	/** @var array<string, StoredRecord[]> the likes and reposts, by collection */
+	private array $actionRecords = [];
+	/** @var string[] the Bluesky posts known here */
+	private array $known = [];
+	private array $fetched = [];
+	private array $recorded = [];
 	private array $parsed = [];
 	private array $tied = [];
 
@@ -48,7 +61,7 @@ class PostHistoryTest extends TestCase {
 
 	private function history(): PostHistory {
 		$repositories = $this->createMock(RepositoryService::class);
-		$repositories->method('listRecords')->willReturnCallback(fn (string $did, string $collection): array => $collection === RecordMapper::POST ? $this->records : []);
+		$repositories->method('listRecords')->willReturnCallback(fn (string $did, string $collection): array => $collection === RecordMapper::POST ? $this->records : ($this->actionRecords[$collection] ?? []));
 		$repoRequest = $this->createMock(AtprotoRepoRequest::class);
 		$repoRequest->method('setLocalId')->willReturnCallback(function (string $did, string $collection, string $rkey, string $localId): void {
 			$this->tied[$rkey] = $localId;
@@ -80,8 +93,36 @@ class PostHistoryTest extends TestCase {
 		});
 		$temp = $this->createMock(ITempManager::class);
 		$temp->method('getTemporaryFile')->willReturnCallback(static fn (): string => (string)tempnam(sys_get_temp_dir(), 'social-test-'));
+		$local = $this->createMock(LocalRecordResolver::class);
+		$local->method('postId')->willReturnCallback(static fn (string $uri): string => str_starts_with($uri, 'at://' . self::DID . '/')
+			? 'https://social.test/@alice/' . md5($uri)
+			: BlueskyIds::postIdOfUri($uri));
+		$postStore = $this->createMock(PostStore::class);
+		$postStore->method('isKnown')->willReturnCallback(fn (string $id): bool => in_array($id, $this->known, true));
+		$postStore->method('storeByUri')->willReturnCallback(function (string $uri): bool {
+			$this->fetched[] = $uri;
+			$this->known[] = BlueskyIds::postIdOfUri($uri);
 
-		return new PostHistory($repositories, $repoRequest, $blobs, $pictures, $imports, $imported, $streams, $temp, new NullLogger());
+			return true;
+		});
+		$likes = $this->createMock(LikeService::class);
+		$likes->method('recordWithoutSending')->willReturnCallback(function (Person $actor, string $postId, string $when): Like {
+			$this->recorded[] = ['like', $postId, $when];
+			$like = new Like();
+			$like->setId('https://social.test/@alice#like/' . count($this->recorded));
+
+			return $like;
+		});
+		$boosts = $this->createMock(BoostService::class);
+		$boosts->method('recordWithoutSending')->willReturnCallback(function (Person $actor, string $postId, string $when): Announce {
+			$this->recorded[] = ['boost', $postId, $when];
+			$announce = new Announce();
+			$announce->setId('https://social.test/@alice/boost/' . count($this->recorded));
+
+			return $announce;
+		});
+
+		return new PostHistory($repositories, $repoRequest, $blobs, $pictures, $imports, $imported, $streams, $temp, $local, $postStore, $likes, $boosts, new NullLogger());
 	}
 
 	public function testTheMovedPostsBecomePostsHereTiedToTheirRecords(): void {
@@ -114,8 +155,37 @@ class PostHistoryTest extends TestCase {
 		$this->assertFileDoesNotExist($first['attachments'][0]['path'], 'the temporary file is gone');
 		$this->assertSame($first['source'], $reply['replyTo'], 'a reply to the account\'s own post hangs off it');
 		$this->assertSame('', $other['replyTo']);
+		$this->assertSame('https://bsky.app/profile/did:plc:other/post/1', $other['replyToId'], 'a reply to somebody else hangs off their post, fetched');
+		$this->assertSame(['at://did:plc:other/app.bsky.feed.post/1'], $this->fetched);
 		$this->assertCount(3, $this->parsed, 'an empty post is left out, and one that is a post here already');
 		$this->assertSame(['3kaaa', '3kbbb', '3kccc'], array_keys($this->tied));
 		$this->assertSame('https://social.test/@alice/' . md5($first['source']), $this->tied['3kaaa']);
+	}
+
+	public function testTheLatestLikesAndRepostsBecomeLikesAndBoostsTiedToTheirRecords(): void {
+		$action = function (string $collection, string $rkey, string $subject, string $localId = ''): StoredRecord {
+			$bytes = DagCbor::encode(['$type' => $collection, 'subject' => ['uri' => $subject, 'cid' => 'x'], 'createdAt' => '2025-06-07T08:09:10.000Z']);
+
+			return new StoredRecord(self::DID, $collection, $rkey, Cid::forDagCbor($bytes), $bytes, $localId, 0);
+		};
+		$this->known = [BlueskyIds::postIdOfUri('at://did:plc:bob/app.bsky.feed.post/2')];
+		$this->actionRecords = [
+			RecordMapper::LIKE => [
+				$action(RecordMapper::LIKE, '3klike1', 'at://did:plc:bob/app.bsky.feed.post/2'),
+				$action(RecordMapper::LIKE, '3klike2', 'at://' . self::DID . '/app.bsky.feed.post/3kaaa'),
+				$action(RecordMapper::LIKE, '3klike3', 'at://did:plc:bob/app.bsky.feed.post/9', 'https://social.test/@alice#like/old'),
+			],
+			RecordMapper::REPOST => [$action(RecordMapper::REPOST, '3krepost', 'at://did:plc:carol/app.bsky.feed.post/5')],
+		];
+
+		$this->assertSame(['likes' => 2, 'reposts' => 1], $this->history()->importActions(new Person(), self::DID));
+
+		$this->assertSame([
+			['like', 'https://bsky.app/profile/did:plc:bob/post/2', '2025-06-07T08:09:10.000Z'],
+			['like', 'https://social.test/@alice/' . md5('at://' . self::DID . '/app.bsky.feed.post/3kaaa'), '2025-06-07T08:09:10.000Z'],
+			['boost', 'https://bsky.app/profile/did:plc:carol/post/5', '2025-06-07T08:09:10.000Z'],
+		], $this->recorded, 'dated when they were made; one taken over already is left');
+		$this->assertSame(['at://did:plc:carol/app.bsky.feed.post/5'], $this->fetched, 'a post not here is fetched, a known one not');
+		$this->assertSame(['3klike1' => 'https://social.test/@alice#like/1', '3klike2' => 'https://social.test/@alice#like/2', '3krepost' => 'https://social.test/@alice/boost/3'], $this->tied);
 	}
 }

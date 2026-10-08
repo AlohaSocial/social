@@ -1350,6 +1350,9 @@ class PostImportService {
 		$parent = $known[$post['replyTo']] ?? '';
 		if ($post['replyTo'] !== '' && $parent !== '') {
 			$note->setInReplyTo($this->streamIdOf($parent));
+		} elseif (($post['replyToId'] ?? '') !== '') {
+			// a parent the reader found here already, somebody else's post
+			$note->setInReplyTo((string)$post['replyToId']);
 		}
 
 		$this->streamService->addHashtags($note, $post['hashtags']);

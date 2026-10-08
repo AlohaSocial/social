@@ -1416,9 +1416,14 @@ direction `inbound` in `social_atproto_move`:
 - **The account has moved by then**: a post that cannot be imported is
   logged, and the move is done regardless. Running it again picks up only
   what is left.
-- **Not built**: the account's likes and reposts are on Bluesky, as records
-  of the repository, but are not actions in this app; a reply to somebody
-  else's post stands alone here, the thread being on Bluesky.
+- **Replies, likes and reposts.** A reply to somebody else's post hangs
+  off that post here, and the account's latest 200 likes and 200 reposts
+  become likes and boosts here, dated when they were made and sent
+  nowhere (`LikeService`/`BoostService::recordWithoutSending()`), each tied
+  to its record, so an unlike or an unboost here takes it back on Bluesky.
+  A post that is not here is fetched from the AppView, for at most 300 in
+  one move; past that a reply stands alone, and older likes and reposts
+  stay on Bluesky only.
 
 ## 19. Open questions
 

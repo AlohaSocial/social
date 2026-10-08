@@ -119,6 +119,40 @@ class BoostService {
 	}
 
 	/**
+	 * A boost the account made elsewhere, brought over with it: written here,
+	 * dated when it was made, and sent nowhere — a boost of an old post sent
+	 * now would be news to nobody.
+	 *
+	 * @throws StreamNotFoundException
+	 * @throws ItemAlreadyExistsException
+	 * @throws Exception
+	 */
+	public function recordWithoutSending(Person $actor, string $postId, string $published): ACore {
+		$note = $this->streamService->getStreamById($postId, true);
+		if ($note->getType() !== Note::TYPE || !$note->isPublic()) {
+			throw new StreamNotFoundException('Stream is not a public Note');
+		}
+		if ($this->hasAnnounce($actor, $postId)) {
+			throw new ItemAlreadyExistsException('this account has already boosted this post');
+		}
+
+		/** @var Announce $announce */
+		$announce = AP::instance()->getItemFromType(Announce::TYPE);
+		$this->streamService->assignItem($announce, $actor, Stream::TYPE_ANNOUNCE);
+		$announce->setActor($actor);
+		$announce->setTo(ACore::CONTEXT_PUBLIC);
+		$announce->addCc($actor->getFollowers());
+		$announce->setObjectId($note->getId());
+		$announce->setPublished($published);
+		$announce->convertPublished();
+
+		AP::instance()->getInterfaceFromType(Announce::TYPE)->save($announce);
+		$this->streamActionService->setActionBool($actor->getId(), $postId, StreamAction::BOOSTED, true);
+
+		return $announce;
+	}
+
+	/**
 	 * @param string $postId
 	 *
 	 * @return Stream

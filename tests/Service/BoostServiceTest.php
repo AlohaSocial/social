@@ -330,6 +330,20 @@ class BoostServiceTest extends TestCase {
 	}
 
 	/** Boosting twice would make two rows of the same post by the same account. */
+	public function testABoostBroughtOverIsWrittenDatedAndSentNowhere(): void {
+		$this->noBoostStored();
+		$this->streamRequest->method('getStreamById')->willReturn($this->publicNote());
+		$this->announceInterface->expects($this->once())->method('save');
+		$this->streamActionService->expects($this->once())->method('setActionBool')->with(self::ALICE_ID, self::POST_ID, StreamAction::BOOSTED, true);
+		$this->signatureService->expects($this->never())->method('signObject');
+		$this->activityService->expects($this->never())->method('request');
+
+		$announce = $this->service->recordWithoutSending($this->alice(), self::POST_ID, '2025-06-07T08:09:10Z');
+
+		$this->assertSame(self::POST_ID, $announce->getObjectId());
+		$this->assertSame(strtotime('2025-06-07T08:09:10Z'), $announce->getPublishedTime(), 'when it was made');
+	}
+
 	public function testCreateRefusesASecondBoostByTheSameAccount(): void {
 		$this->streamRequest->method('getStreamById')->willReturn($this->publicNote());
 		$this->streamRequest->method('getAnnounceBy')->with(self::POST_ID, self::ALICE_ID)->willReturn($this->storedAnnounce());

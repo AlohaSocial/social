@@ -15,6 +15,9 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
+use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
@@ -22,6 +25,8 @@ use OCA\Social\Db\ImportedPostsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Service\BoostService;
+use OCA\Social\Service\LikeService;
 use OCA\Social\Service\PostImportService;
 use OCP\ITempManager;
 use Psr\Log\LoggerInterface;
@@ -36,9 +41,20 @@ use Throwable;
  * does, and not to Bluesky, where each post is already: every Social post
  * is tied to the record it came from, so likes and replies there reach it
  * here, and the publisher leaves an imported post's record as it came.
+ *
+ * A reply to somebody else's post hangs off it here too, and the account's
+ * latest likes and reposts become likes and boosts here, each tied to its
+ * record so taking it back here takes it back there. Somebody else's post
+ * is fetched from the AppView when it is not here, for at most FETCHES of
+ * them in one run; the rest of the replies stand alone, the rest of the
+ * likes and reposts stay on Bluesky only.
  */
 class PostHistory {
 	private const PAGE = 100;
+	/** how many likes, and how many reposts, become actions here: the latest */
+	public const ACTIONS = 200;
+	/** how many posts that are not here are fetched in one run */
+	public const FETCHES = 300;
 	/** the labels a Bluesky app sets on a post that should be behind a warning */
 	private const SENSITIVE = ['porn', 'sexual', 'nudity', 'graphic-media'];
 
@@ -51,9 +67,16 @@ class PostHistory {
 		private ImportedPostsRequest $imported,
 		private StreamRequest $streams,
 		private ITempManager $tempManager,
+		private LocalRecordResolver $local,
+		private PostStore $postStore,
+		private LikeService $likes,
+		private BoostService $boosts,
 		private LoggerInterface $logger,
 	) {
 	}
+
+	/** how many more posts this run may fetch */
+	private int $fetchesLeft = self::FETCHES;
 
 	/**
 	 * Brings over every post of the repository that is not a Social post
@@ -62,6 +85,7 @@ class PostHistory {
 	 * @return int how many posts are in the timeline now that were not before
 	 */
 	public function import(Person $actor, string $did): int {
+		$this->fetchesLeft = self::FETCHES;
 		$parsed = [];
 		$rkeys = [];
 		$files = [];
@@ -106,6 +130,73 @@ class PostHistory {
 	}
 
 	/**
+	 * The account's latest likes and reposts, as likes and boosts here.
+	 *
+	 * @return array{likes: int, reposts: int} how many there are here now that were not before
+	 */
+	public function importActions(Person $actor, string $did): array {
+		return [
+			'likes' => $this->actions($actor, $did, RecordMapper::LIKE),
+			'reposts' => $this->actions($actor, $did, RecordMapper::REPOST),
+		];
+	}
+
+	private function actions(Person $actor, string $did, string $collection): int {
+		$made = 0;
+		$seen = 0;
+		$cursor = '';
+		do {
+			$page = $this->repositories->listRecords($did, $collection, self::PAGE, $cursor);
+			foreach ($page as $record) {
+				if (++$seen > self::ACTIONS) {
+					return $made;
+				}
+				if ($record->localId !== '') {
+					continue;
+				}
+				try {
+					$value = DagCbor::decode($record->bytes);
+					$subject = is_array($value) ? (string)($value['subject']['uri'] ?? '') : '';
+					$postId = $subject === '' ? '' : $this->postHere($subject);
+					if ($postId === '') {
+						continue;
+					}
+					$when = (string)($value['createdAt'] ?? '');
+					$when = strtotime($when) > 0 ? $when : gmdate('c');
+					$action = $collection === RecordMapper::LIKE
+						? $this->likes->recordWithoutSending($actor, $postId, $when)
+						: $this->boosts->recordWithoutSending($actor, $postId, $when);
+					$this->repoRequest->setLocalId($did, $collection, $record->rkey, $action->getId());
+					$made++;
+				} catch (Throwable $e) {
+					$this->logger->info('Moved ' . $collection . ' not taken over', ['did' => $did, 'rkey' => $record->rkey, 'exception' => $e]);
+				}
+			}
+			$cursor = count($page) === self::PAGE ? end($page)->rkey : '';
+		} while ($cursor !== '');
+
+		return $made;
+	}
+
+	/**
+	 * The post here a Bluesky post URI names: one of this server's, or a
+	 * Bluesky post, fetched from the AppView while the run may; '' when it
+	 * cannot be had.
+	 */
+	private function postHere(string $uri): string {
+		$postId = $this->local->postId($uri);
+		if ($postId === '' || !BlueskyIds::isPostId($postId) || $this->postStore->isKnown($postId)) {
+			return $postId;
+		}
+		if ($this->fetchesLeft <= 0) {
+			return '';
+		}
+		$this->fetchesLeft--;
+
+		return $this->postStore->storeByUri($uri) && $this->postStore->isKnown($postId) ? $postId : '';
+	}
+
+	/**
 	 * One post record in the shape the import path writes, or null for one
 	 * with nothing to show.
 	 *
@@ -139,9 +230,10 @@ class PostHistory {
 			'sensitive' => array_intersect($labels, self::SENSITIVE) !== [],
 			'spoiler' => '',
 			'language' => is_array($langs) && is_string($langs[0] ?? null) && Syntax::isLanguage($langs[0]) ? $langs[0] : '',
-			// a reply to one of the account's own posts hangs off it; to anybody
-			// else's, the thread is on Bluesky and the post stands alone here
+			// a reply to one of the account's own posts hangs off it as it is
+			// imported; to anybody else's, off that post, fetched when needed
 			'replyTo' => str_starts_with($parent, 'at://' . $did . '/') ? $parent : '',
+			'replyToId' => $parent !== '' && !str_starts_with($parent, 'at://' . $did . '/') ? $this->postHere($parent) : '',
 			'attachments' => $attachments,
 			'hashtags' => self::hashtags($record['facets'] ?? []),
 		];
