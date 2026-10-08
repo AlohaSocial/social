@@ -891,7 +891,7 @@ class OAuthControllerTest extends TestCase {
 		$clientRequest = $this->createMock(ClientRequest::class);
 		$clientAuthRequest = $this->createStub(ClientAuthRequest::class);
 		$clientService = new ClientService(
-			$clientRequest, $hasher, $clientAuthRequest
+			$clientRequest, $hasher, $clientAuthRequest, $this->createStub(\OCA\Social\Service\ConfigService::class)
 		);
 
 		// exactly the columns saveApp() writes, read back the way
@@ -1198,6 +1198,7 @@ class OAuthControllerTest extends TestCase {
 			->setAuthScopes(['read', 'write'])->setAuthCreation(1757000000)
 			->setLastUpdate(1757800000)->setToken('hashed');
 		$this->clientService->method('getAuthorizationsOf')->with('alice')->willReturn([$tusky]);
+		$this->clientService->method('expiresAt')->willReturn(1757000000 + 365 * 86400);
 
 		$response = $this->controller->authorizedApps();
 
@@ -1209,6 +1210,7 @@ class OAuthControllerTest extends TestCase {
 			'scopes' => ['read', 'write'],
 			'created_at' => 1757000000,
 			'last_used_at' => 1757800000,
+			'expires_at' => 1757000000 + 365 * 86400,
 			'signed_in' => true,
 		]], $response->getData());
 	}

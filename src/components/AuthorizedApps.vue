@@ -38,6 +38,10 @@
 					<span v-if="app.last_used_at">
 						{{ t('social', 'Last used {when}', { when: when(app.last_used_at) }) }}
 					</span>
+					<!-- however much it is used: the instance's token_max_days -->
+					<span v-if="app.signed_in && app.expires_at" class="apps__expires">
+						{{ t('social', 'Signs out by itself {when}', { when: when(app.expires_at) }) }}
+					</span>
 				</p>
 
 				<p v-if="(app.scopes || []).length" class="apps__scopes">

@@ -18,6 +18,7 @@ use OCA\Social\Exceptions\InvalidGrantException;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Security\SecretHasher;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\ConfigService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -28,14 +29,21 @@ class ClientServiceTest extends TestCase {
 	private ClientRequest|MockObject $clientRequest;
 	private ClientAuthRequest|MockObject $clientAuthRequest;
 	private ClientService $service;
+	private ConfigService $configService;
+	/** What `token_max_days` reads as. */
+	private int $maxDays = 365;
 
 	protected function setUp(): void {
 		$this->clientRequest = $this->createMock(ClientRequest::class);
 		$this->clientAuthRequest = $this->createMock(ClientAuthRequest::class);
+		$this->configService = $this->createStub(ConfigService::class);
+		$this->configService->method('getAppValueInt')
+			->willReturnCallback(fn (string $key): int => $key === ConfigService::SOCIAL_TOKEN_MAX_DAYS ? $this->maxDays : 0);
 		$this->service = new ClientService(
 			$this->clientRequest,
 			new SecretHasher(),
-			$this->clientAuthRequest
+			$this->clientAuthRequest,
+			$this->configService
 		);
 	}
 
@@ -414,6 +422,50 @@ class ClientServiceTest extends TestCase {
 
 		$this->expectException(ClientNotFoundException::class);
 		$this->service->getFromToken('tok');
+	}
+
+	/**
+	 * Use kept a token alive for ever: the sliding TTL is refreshed by every
+	 * request, so a copied token lived as long as whoever held it used it.
+	 */
+	public function testATokenInUseStillStopsAtItsAbsoluteLifetime(): void {
+		$client = $this->registeredClient();
+		$client->setAuthId(11);
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 365 * 86400 - 1);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->clientAuthRequest->expects($this->once())->method('revoke')->with(11);
+
+		$this->expectException(ClientNotFoundException::class);
+		$this->service->getFromToken('tok');
+	}
+
+	public function testATokenInsideItsLifetimeIsAccepted(): void {
+		$client = $this->registeredClient();
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 364 * 86400);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+		$this->clientAuthRequest->expects($this->never())->method('revoke');
+
+		$this->assertSame($client, $this->service->getFromToken('tok'));
+	}
+
+	public function testZeroDaysLetsATokenInUseLiveForEver(): void {
+		$this->maxDays = 0;
+		$client = $this->registeredClient();
+		$client->setLastUpdate(time() - 60);
+		$client->setAuthCreation(time() - 10 * 365 * 86400);
+		$this->clientAuthRequest->method('getByToken')->willReturn($client);
+
+		$this->assertSame($client, $this->service->getFromToken('tok'));
+		$this->assertSame(0, $this->service->expiresAt($client));
+	}
+
+	public function testTheLifetimeIsCountedFromTheGrant(): void {
+		$client = $this->registeredClient();
+		$client->setAuthCreation(1_700_000_000);
+
+		$this->assertSame(1_700_000_000 + 365 * 86400, $this->service->expiresAt($client));
 	}
 
 	public function testGetFromTokenPropagatesUnknownToken(): void {

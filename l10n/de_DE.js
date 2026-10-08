@@ -946,6 +946,7 @@ OC.L10N.register(
     "Aloha Social sent requests to remove your posts to the servers that received them. Those servers control copies they may already have stored." : "Aloha Social hat die Server, die Ihre Beiträge erhalten haben, um deren Löschung gebeten. Diese Server entscheiden selbst über bereits gespeicherte Kopien.",
     "Return to Aloha Social" : "Zurück zu Aloha Social",
     "Go to the sign-in page" : "Zur Anmeldeseite",
+    "Signs out by itself {when}" : "Wird am {when} automatisch abgemeldet",
     "_%n entry_::_%n entries_" : ["%n Eintrag","%n Einträge"]
 },
 "nplurals=2; plural=(n != 1);");

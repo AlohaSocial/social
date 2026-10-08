@@ -95,6 +95,13 @@ class ConfigService {
 	public const SOCIAL_CACHE_ACTOR_DAYS = 'cache_actor_days';
 
 	/**
+	 * Days an OAuth token lives from the moment it was granted, however much
+	 * it is used; 0 lets a token in use live for ever, as it used to. Use
+	 * keeps a token from ageing out inside this, never past it.
+	 */
+	public const SOCIAL_TOKEN_MAX_DAYS = 'token_max_days';
+
+	/**
 	 * Which of `Cron\Cache`'s steps the next pass begins with — bookkeeping,
 	 * not a setting. Written by the job when it runs out of its budget, so the
 	 * steps at the end of the list are not the ones that never run.
@@ -465,6 +472,7 @@ class ConfigService {
 		self::SOCIAL_RETENTION_DAYS => '0',
 		self::SOCIAL_NOTIFICATION_RETENTION_DAYS => '90',
 		self::SOCIAL_CACHE_ACTOR_DAYS => '180',
+		self::SOCIAL_TOKEN_MAX_DAYS => '365',
 		self::SOCIAL_SILENCED_LIST => '[]',
 		self::SOCIAL_BLOCKLIST_SOURCES => '[]',
 		self::SOCIAL_SECURE_MODE => '0',

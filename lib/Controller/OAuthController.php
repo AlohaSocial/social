@@ -892,6 +892,8 @@ class OAuthController extends Controller {
 				// everybody and says nothing about whose phone this is
 				'created_at' => $client->getAuthCreation(),
 				'last_used_at' => $client->getLastUpdate(),
+				// 0 when the instance lets a token in use live for ever
+				'expires_at' => $this->clientService->expiresAt($client),
 				// an authorization whose code was never exchanged: the browser
 				// came back and the app never asked for its token. Worth
 				// showing, because taking it back is still the right thing to
