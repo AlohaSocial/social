@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18) are implemented; phase 4 is specification.**
+**Status: phases 1, 2 and 3 (§18) and custom handles (4a) are implemented; the rest of phase 4 is specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -825,7 +825,7 @@ regenerated schema check that `SchemaConventionsTest` expects:
 
 | Table | Row |
 |---|---|
-| `social_atproto_identity` | one per local actor: `actor_id(_prim)`, `did`, `handle`, `signing_key` (sealed), `signing_public`, `recovery_public`, `state` (`active`/`deactivated`/`moved_away`/`tombstoned`), `moved_from_pds`, timestamps. Unique on actor and on DID |
+| `social_atproto_identity` | one per local actor: `actor_id(_prim)`, `did`, `handle`, `custom_handle` with `custom_handle_checked`/`_failures` (§4.2, phase 4), `signing_key` (sealed), `signing_public`, `recovery_public`, `state` (`active`/`deactivated`/`moved_away`/`tombstoned`), `moved_from_pds`, timestamps. Unique on actor and on DID |
 | `social_atproto_instance_key` | the instance's rotation and service keys, sealed, with `kind` and `created` (rotation keeps the previous one for the PLC window) |
 | `social_atproto_repo` | one per DID: head `commit_cid`, `rev`, `record_count`, `blob_bytes`, `updated` |
 | `social_atproto_record` | `did`, `collection`, `rkey`, `cid`, `bytes` (DAG-CBOR), `local_id(_prim)` (the Social object), `created`. Unique on (did, collection, rkey); index on `local_id_prim` |
@@ -1253,6 +1253,34 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 - **Not built**: the granular permission scopes (`repo:`, `rpc:`,
   `include:`) — an app asking only for those gets `atproto` alone — and a
   list of trusted apps whose names and logos would be shown.
+
+### Phase 4 as it lands
+
+Four parts, four pull requests: **4a** custom handles (§4.2), **4b** moving
+away (§13.2), **4c** moving a Bluesky account here (§13.1), **4d** Bridgy
+Fed twins (§13.3).
+
+**4a as built** — `Identity\HandleVerifier`, `Identity\CustomHandleService`,
+`Identity\DnsLookup`, columns `custom_handle`, `custom_handle_checked`,
+`custom_handle_failures` on `social_atproto_identity`:
+
+- **Settings → Your account → Bluesky** takes a domain, shows the DNS TXT
+  record (`_atproto.<domain>` = `did=<DID>`) and the file
+  (`https://<domain>/.well-known/atproto-did` = the DID) that make it the
+  account's, and checks them: either is enough, as for the AppView. Setting
+  it asks for the Nextcloud password.
+- **Then** the DID document names the domain (a PLC update with the same
+  keys and endpoint) and the firehose sends `#identity`, so relays and
+  AppViews resolve the handle again. The assigned `alice.<host>` keeps
+  resolving here — `resolveHandle`, the well-known, sign-in by handle — as
+  an alias the document does not list; going back to it is one button.
+- **Refused**: a name that is not a resolvable domain, anything under this
+  server's handle host (those are the ones it gives out), another
+  account's handle here.
+- **Checked daily** by the maintenance job, twenty at a time: a domain that
+  failed two checks in a row is shown as broken in the settings, as
+  Bluesky shows the handle as invalid. Nothing is changed for the person:
+  the record may only be gone for a while.
 
 ## 19. Open questions
 

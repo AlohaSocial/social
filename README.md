@@ -106,7 +106,7 @@ you follow, of this instance and of the whole Fediverse are one click apart.
 ![For you in the settings](img/readme/interests.png)
 
 - **Bluesky** — every account is a Bluesky account too, hosted here: `alice.<your host>` resolves to a
-  `did:plc` identity, every public post goes to Bluesky as it is made (cut to 300 characters with a link
+  `did:plc` identity (or a domain you own, as your custom handle), every public post goes to Bluesky as it is made (cut to 300 characters with a link
   when it is longer, the first four pictures with it, a video made into a Bluesky video by Bluesky's
   video service, a content warning as a self-label), and a relay crawls the instance's firehose. The
   other way too: follow `alice.bsky.social` by its bare handle and read it in your home feed, badged,
