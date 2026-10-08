@@ -140,7 +140,7 @@
 </template>
 
 <script>
-import { fromNow, fullDateTime } from '../utils/relativeTime.js'
+import { fullDateTime, shortAgo } from '../utils/relativeTime.js'
 import Bell from 'vue-material-design-icons/Bell.vue'
 import BellOffOutline from 'vue-material-design-icons/BellOffOutline.vue'
 import BellOutline from 'vue-material-design-icons/BellOutline.vue'
@@ -407,7 +407,7 @@ export default {
 
 		/** @return {string} */
 		notificationRelativeTimestamp() {
-			return fromNow(this.notification.created_at, new Date(this.now))
+			return shortAgo(this.notification.created_at, new Date(this.now))
 		},
 
 		/** @return {boolean} */
@@ -602,31 +602,28 @@ export default {
 		opacity: 0;
 	}
 
-	// A notification is a card of its own: it is a thing that happened, and
-	// the post inside it is quoted evidence. A boost is not — it is somebody
-	// else's post with a line saying who passed it on, so giving it a card
-	// too put a box inside a box and inset the post by the outer padding,
-	// leaving boosted posts narrower than every post around them.
-	&.with-header {
-		background: var(--color-main-background);
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		padding: 14px;
+	/* Arrived since the reader last looked: a bar down the row's start edge,
+	   not a dot. The page is read by running down it, and an edge is visible
+	   in peripheral vision where a dot beside the timestamp is not. Out of
+	   the flow, so a new row is not shifted against its read neighbours, and
+	   straight rather than following the row's rounded corners. A
+	   notification is never a reply, so `::before` (a reply's elbow line) is
+	   free here. */
+	&--unread.notification::before {
+		content: '';
+		position: absolute;
+		inset-block: 8px;
+		inset-inline-start: 0;
+		inline-size: 3px;
+		border-radius: 3px;
+		background: var(--color-primary-element);
+		pointer-events: none;
 	}
 
+	// the hairline between rows is the only rule: Nextcloud's notifications
+	// app styles the same class name globally with a bottom border of its own
 	&.notification {
-		margin-bottom: 10px;
-	}
-
-	/* Arrived since the reader last looked. A tint and a bar, not a dot: the
-	   page is read by running down it, and an edge is visible in peripheral
-	   vision where a dot beside the timestamp is not. The border is already
-	   there on a notification card, so this colours it rather than adding a
-	   second one and shifting the card by 3px against its read neighbours. */
-	&--unread.with-header {
-		background: var(--color-primary-element-light);
-		border-inline-start: 3px solid var(--color-primary-element);
-		padding-inline-start: 12px;
+		border: none;
 	}
 }
 
@@ -649,8 +646,24 @@ export default {
 		display: flex;
 		gap: 8px;
 		align-items: center;
-		margin-bottom: 8px;
-		padding-bottom: 4px;
+		margin-bottom: 6px;
+	}
+
+	// what the notification is about hangs under the summary's words rather
+	// than under the face, the way a quoted line does: the face column (24px)
+	// and the gap beside it (12px)
+	> .wrapper,
+	> .user-entry {
+		margin-inline-start: 36px;
+	}
+
+	// the account a follow is about is a line in the row, not a card of its own
+	:deep(.user-entry) {
+		width: auto;
+		margin-bottom: 0;
+		padding: 0;
+		border: none;
+		background: transparent;
 	}
 
 	&__summary {
@@ -808,7 +821,9 @@ export default {
  * leaves for it. Same number as `PHONE_WIDTH` in services/phone.js.
  */
 @include layout.below(layout.$phone) {
-	.wrapper {
+	// a notification has no face in that corner (its faces are in the
+	// summary), and a direct message draws neither face nor header
+	.timeline-entry:not(.notification, .timeline-entry--direct) .wrapper {
 		position: relative;
 		gap: 0;
 
@@ -856,13 +871,14 @@ export default {
  * In a list, a post is a row rather than a card: no frame and no shadow,
  * whitespace and a hairline between one post and the next, and the avatar
  * beside the name inside the row. Ten boxed cards on a screen read as a
- * form. A notification keeps its frame — on Activities the frame is what
- * carries the "new" mark — a direct message keeps its bubble, which
- * DirectMessages.vue draws, and the post component keeps its own look
- * wherever it is drawn outside a list (a quote, the dashboard, a profile
- * card).
+ * form. Activities is the same list: a notification is a row whose summary
+ * line stands where a post's face would, with what it is about quoted
+ * beneath it, and its "new" mark is the bar on its edge. A direct message
+ * keeps its bubble, which DirectMessages.vue draws, and the post component
+ * keeps its own look wherever it is drawn outside a list (a quote, the
+ * dashboard, a profile card).
  */
-.timeline-entry:not(.notification, .timeline-entry--direct) {
+.timeline-entry:not(.timeline-entry--direct) {
 	position: relative;
 	margin-bottom: 13px;
 	padding-block: 14px 13px;
@@ -909,9 +925,12 @@ export default {
 	.wrapper .entry__avatar {
 		margin-top: 2px;
 	}
+}
 
-	// a phone draws the face over the row's corner instead (see below); with
-	// no card padding any more, the corner is the row's own
+// a phone draws a post's face over the row's corner instead; with no card
+// padding any more, the corner is the row's own. A notification has no face
+// there, so none of this is room for one
+.timeline-entry:not(.notification, .timeline-entry--direct) {
 	@include layout.below(layout.$phone) {
 		// the face starts the row here, without the step down it takes
 		// beside the name on a wide screen
@@ -931,7 +950,9 @@ export default {
 			padding-inline-start: 46px;
 		}
 	}
+}
 
+.timeline-entry:not(.timeline-entry--direct) {
 	.wrapper :deep(.post-content),
 	.wrapper :deep(.post-content:hover),
 	.wrapper :deep(.post-content:focus-within) {
@@ -1006,7 +1027,7 @@ export default {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.timeline-entry:not(.notification, .timeline-entry--direct) {
+	.timeline-entry:not(.timeline-entry--direct) {
 		transition: none;
 	}
 }
