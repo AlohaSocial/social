@@ -48,7 +48,16 @@ const nextcloud = {
 	username: 'nextcloud',
 	display_name: 'Nextcloud',
 }
-const known = { 'bob@remote.example': bob, 'carol@cloud.example.org': carol, 'alice@cloud.example.org': alice, 'nextcloud@mastodon.xyz': nextcloud }
+const dana = {
+	id: 'https://bsky.app/profile/did:plc:d',
+	nid: '88',
+	url: 'https://bsky.app/profile/dana.bsky.social',
+	acct: 'dana.bsky.social',
+	username: 'dana.bsky.social',
+	display_name: 'Dana',
+	bluesky: { handle: 'dana.bsky.social', did: 'did:plc:d', url: 'https://bsky.app/profile/dana.bsky.social', native: true },
+}
+const known = { 'bob@remote.example': bob, 'carol@cloud.example.org': carol, 'alice@cloud.example.org': alice, 'nextcloud@mastodon.xyz': nextcloud, 'dana.bsky.social': dana }
 
 let pinia
 let accountStore
@@ -118,6 +127,25 @@ describe('Profile', () => {
 		// without a numeric id the relationship lookup falls back to the actor id
 		expect(accountStore.fetchAccountRelationshipInfo).toHaveBeenCalledWith(['https://cloud.example.org/users/carol'])
 		expect(wrapper.findComponent(ProfileInfoStub).props('uid')).toBe('carol')
+	})
+
+	/** `/@dana.bsky.social`: no host to add, and never the local-only route. */
+	it('asks for a Bluesky handle as it is, through the global lookup, and shows the profile', async () => {
+		const wrapper = mountProfile({ name: 'profile', params: { account: 'dana.bsky.social' } })
+		expect(accountStore.fetchAccountInfo).toHaveBeenCalledWith('dana.bsky.social')
+
+		await flushPromises()
+		expect(accountStore.fetchAccountRelationshipInfo).toHaveBeenCalledWith(['88'])
+		expect(wrapper.findComponent(ProfileInfoStub).props('uid')).toBe('dana.bsky.social')
+	})
+
+	it('uses the global lookup for a Bluesky handle on a public page too', async () => {
+		makeStore({ public: true })
+		mountProfile({ name: 'profile', params: { account: 'dana.bsky.social' } })
+		await flushPromises()
+
+		expect(accountStore.fetchAccountInfo).toHaveBeenCalledWith('dana.bsky.social')
+		expect(accountStore.fetchPublicAccountInfo).not.toHaveBeenCalled()
 	})
 
 	it('stays in the loading state when the account cannot be resolved', async () => {

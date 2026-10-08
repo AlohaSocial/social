@@ -78,6 +78,19 @@
 							</dd>
 						</div>
 					</dl>
+					<!-- off, the account stays and so does its address; nothing
+					     new goes out until it is on again -->
+					<NcCheckboxRadioSwitch
+						:modelValue="blueskyActive"
+						type="switch"
+						class="account-settings__switch account-settings__bluesky-switch"
+						:disabled="switchingBluesky"
+						@update:modelValue="setBlueskyActive">
+						{{ t('social', 'Show my posts on Bluesky') }}
+					</NcCheckboxRadioSwitch>
+					<p v-if="bluesky.active === false" class="account-settings__hint account-settings__hint--block">
+						{{ t('social', 'This account is paused on Bluesky: nothing new is published there until it is switched back on.') }}
+					</p>
 					<div class="account-settings__recovery">
 						<NcButton :disabled="recovering" @click="createRecoveryPhrase">
 							<template #icon>
@@ -284,10 +297,13 @@ export default {
 			/**
 			 * The Bluesky identity, once asked for; null until it comes
 			 *
-			 * @type {{handle: string, did: string, url: string, state: string, recovery_key: boolean}|null}
+			 * @type {{handle: string, did: string, url: string, state: string, recovery_key: boolean, active: boolean}|null}
 			 */
 			bluesky: null,
 			blueskyError: '',
+			/** the pause switch: it moves at once, and comes back if the server refuses */
+			blueskyActive: true,
+			switchingBluesky: false,
 			/** which of the two was just copied: 'handle', 'did' or '' */
 			blueskyCopied: '',
 			blueskyCopyTimer: null,
@@ -478,7 +494,7 @@ export default {
 			this.blueskyError = ''
 			try {
 				const { data } = await axios.get(generateUrl('apps/social/api/v1/social/bluesky/identity'))
-				this.bluesky = data
+				this.takeIdentity(data)
 			} catch (error) {
 				logger.debug('Could not load the Bluesky identity', { error })
 				this.blueskyError = t('social', 'Could not read your Bluesky identity right now.')
@@ -519,7 +535,7 @@ export default {
 			try {
 				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/recovery'))
 				const { phrase, ...identity } = data
-				this.bluesky = identity
+				this.takeIdentity(identity)
 				this.phrase = phrase
 			} catch (error) {
 				// the password confirmation of a moment ago has run out, which
@@ -534,6 +550,36 @@ export default {
 
 		closePhrase() {
 			this.phrase = ''
+		},
+
+		/**
+		 * @param {object} identity what the identity routes answer
+		 */
+		takeIdentity(identity) {
+			this.bluesky = identity
+			this.blueskyActive = identity?.active !== false
+		},
+
+		/**
+		 * Pauses or resumes the account on Bluesky; the block follows what
+		 * the server answered, so the switch never says what did not happen.
+		 *
+		 * @param {boolean} active whether the account should be live there
+		 * @return {Promise<void>}
+		 */
+		async setBlueskyActive(active) {
+			this.blueskyActive = active
+			this.switchingBluesky = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/state'), { active })
+				this.takeIdentity(data)
+			} catch (error) {
+				logger.debug('Could not change the Bluesky state', { error })
+				showError(t('social', 'Could not change whether your posts show on Bluesky'))
+				this.blueskyActive = this.bluesky?.active !== false
+			} finally {
+				this.switchingBluesky = false
+			}
 		},
 
 		async save() {

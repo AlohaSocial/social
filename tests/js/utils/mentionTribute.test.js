@@ -43,7 +43,7 @@ describe('mentionTributeOptions', () => {
 				result: {
 					accounts: [
 						{ preferredUsername: 'alice', account: 'alice@cloud.example', url: 'https://cloud.example/@alice', local: true, id: 'https://cloud.example/users/alice' },
-						{ preferredUsername: 'bob', account: 'bob@remote.example', url: 'https://remote.example/@bob', local: false, id: 'https://remote.example/users/bob' },
+						{ preferredUsername: 'bob', account: 'bob@remote.example', url: 'https://remote.example/@bob', local: false, id: 'https://remote.example/users/bob', icon: { url: 'https://remote.example/avatar.png' } },
 					],
 				},
 			},
@@ -57,6 +57,28 @@ describe('mentionTributeOptions', () => {
 			{ key: 'alice', value: 'alice@cloud.example', url: 'https://cloud.example/@alice', avatar: '//avatar/alice/32' },
 			{ key: 'bob', value: 'bob@remote.example', url: 'https://remote.example/@bob', avatar: '/apps/social/api/v1/global/actor/avatar?id=https%3A%2F%2Fremote.example%2Fusers%2Fbob' },
 		])
+	})
+
+	/** A Bluesky result is not stored here, so the cached-avatar route has nothing for it. */
+	it('shows the picture a Bluesky result carries, and mentions it by its bare handle', async () => {
+		vi.mocked(axios.get).mockResolvedValue({
+			data: {
+				result: {
+					accounts: [
+						{ preferredUsername: 'dana.bsky.social', account: 'dana.bsky.social', url: 'https://bsky.app/profile/dana.bsky.social', local: false, id: 'https://bsky.app/profile/did:plc:d', icon: { url: 'https://cdn.bsky.app/img/avatar/plain/did:plc:d/abc@jpeg' } },
+						{ preferredUsername: 'bob', account: 'bob@remote.example', url: 'https://remote.example/@bob', local: false, id: 'https://remote.example/users/bob' },
+					],
+				},
+			},
+		})
+		const [mention] = mentionTributeOptions().collection
+
+		const shown = await lookUp(mention, 'dana.b')
+
+		expect(shown[0].avatar).toBe('https://cdn.bsky.app/img/avatar/plain/did:plc:d/abc@jpeg')
+		expect(shown[1].avatar).toBe('/apps/social/api/v1/global/actor/avatar?id=https%3A%2F%2Fremote.example%2Fusers%2Fbob')
+		expect(mention.selectTemplate({ original: shown[0] })).toContain('@dana.bsky.social</a>')
+		expect(mention.selectTemplate({ original: shown[0] })).toContain('src="https://cdn.bsky.app/img/avatar/plain/did:plc:d/abc@jpeg"')
 	})
 
 	it('offers the exact hashtag first, then the others', async () => {

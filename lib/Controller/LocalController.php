@@ -13,6 +13,7 @@ use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
@@ -710,7 +711,16 @@ class LocalController extends Controller {
 			}
 
 			if ($isLocal) {
-				$actor = $this->getLocalAccountWithCacheFallback($username);
+				try {
+					$actor = $this->getLocalAccountWithCacheFallback($username);
+				} catch (Exception $e) {
+					// a local user keeps a dotted name; one nobody here holds
+					// that is shaped like a handle is a Bluesky account
+					if ($domain !== '' || !BlueskyIds::isHandle($account)) {
+						throw $e;
+					}
+					$actor = $this->cacheActorService->getFromAccount($account);
+				}
 			} else {
 				$actor = $this->cacheActorService->getFromAccount($account);
 			}

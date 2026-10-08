@@ -321,6 +321,64 @@ describe('AccountSettings', () => {
 			expect(buttonByText(wrapper, 'Create recovery phrase')).toBeUndefined()
 		})
 
+		describe('showing posts on Bluesky', () => {
+			const STATE = '/index.php/apps/social/api/v1/social/bluesky/state'
+			const pauseSwitch = (wrapper) => wrapper.find('.account-settings__bluesky-switch input')
+
+			it('is on while the account is live there, and says nothing more', async () => {
+				serverHas(identity({ active: true }))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				expect(block(wrapper).text()).toContain('Show my posts on Bluesky')
+				expect(pauseSwitch(wrapper).element.checked).toBe(true)
+				expect(block(wrapper).text()).not.toContain('paused on Bluesky')
+			})
+
+			it('pauses the account, and follows what the server answered', async () => {
+				serverHas(identity({ active: true }))
+				axios.post.mockResolvedValue({ data: identity({ active: false }) })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await pauseSwitch(wrapper).setValue(false)
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith(STATE, { active: false })
+				expect(pauseSwitch(wrapper).element.checked).toBe(false)
+				expect(block(wrapper).text()).toContain('This account is paused on Bluesky: nothing new is published there')
+				// the handle stays: the address is still theirs
+				expect(block(wrapper).find('a.account-settings__code').text()).toBe('@alice.cloud.example.org')
+			})
+
+			it('switches back on the same way', async () => {
+				serverHas(identity({ active: false }))
+				axios.post.mockResolvedValue({ data: identity({ active: true }) })
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+				expect(pauseSwitch(wrapper).element.checked).toBe(false)
+
+				await pauseSwitch(wrapper).setValue(true)
+				await flushPromises()
+
+				expect(axios.post).toHaveBeenCalledWith(STATE, { active: true })
+				expect(block(wrapper).text()).not.toContain('paused on Bluesky')
+			})
+
+			it('stays where the server left it when the change is refused', async () => {
+				serverHas(identity({ active: true }))
+				axios.post.mockRejectedValue(new Error('offline'))
+				const wrapper = mountSettings(OFFERED)
+				await flushPromises()
+
+				await pauseSwitch(wrapper).setValue(false)
+				await flushPromises()
+
+				expect(showError).toHaveBeenCalledWith('Could not change whether your posts show on Bluesky')
+				expect(pauseSwitch(wrapper).element.checked).toBe(true)
+			})
+		})
+
 		describe('the recovery phrase', () => {
 			it('offers to create one while there is none', async () => {
 				serverHas(identity({ recovery_key: false }))

@@ -580,6 +580,10 @@ class CacheActorService {
 	}
 
 	public function addRemoteActorDetailCount(Person $actor): void {
+		if (BlueskyIds::isActorId($actor->getId())) {
+			// a Bluesky account's counts come with its profile; it has no collections
+			return;
+		}
 		try {
 			$followers = $this->getCollectionFromId($actor->getFollowers());
 			$following = $this->getCollectionFromId($actor->getFollowing());

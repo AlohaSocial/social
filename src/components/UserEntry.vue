@@ -18,6 +18,7 @@
 				<router-link v-else-if="!serverData.public" :to="{ name: 'profile', params: { account: item.acct }}">
 					<span class="post-author">
 						<DisplayName :text="item.display_name" :emojis="item.emojis" />
+						<BlueskyBadge v-if="isBluesky" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
@@ -32,6 +33,7 @@
 					:rel="isLocal ? undefined : 'noreferrer'">
 					<span class="post-author">
 						{{ item.display_name }}
+						<BlueskyBadge v-if="isBluesky" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
@@ -48,6 +50,7 @@
 
 <script>
 import ActorAvatar from './ActorAvatar.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
 import FollowButton from './FollowButton.vue'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
@@ -56,10 +59,12 @@ import { useAccountStore } from '../store/account.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
+import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 
 export default {
 	name: 'UserEntry',
 	components: {
+		BlueskyBadge,
 		DisplayName,
 		FollowButton,
 		ActorAvatar,
@@ -93,7 +98,12 @@ export default {
 	computed: {
 		...mapStores(useAccountStore),
 		isLocal() {
-			return Boolean(this.item?.acct && !this.item.acct.includes('@') && this.item.username)
+			return Boolean(this.item?.acct && isLocalAccount(this.item) && this.item.username)
+		},
+
+		/** @return {boolean} */
+		isBluesky() {
+			return isBlueskyAccount(this.item)
 		},
 
 		/**

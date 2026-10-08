@@ -58,6 +58,7 @@
 					<span class="account-hover-card__names">
 						<span class="account-hover-card__name">
 							<AccountDisplayName :text="account.display_name || account.username || handle" :emojis="account.emojis" />
+							<BlueskyBadge v-if="isBluesky" />
 						</span>
 						<span class="account-hover-card__handle">@{{ account.acct || handle }}</span>
 						<!-- Where this account lives. It used to be a chip on every
@@ -132,7 +133,9 @@ import NcAvatar from '@nextcloud/vue/components/NcAvatar'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { emojifyPlain } from './MessageContent.js'
+import BlueskyBadge from './BlueskyBadge.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
+import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 import { originOf } from '../utils/instanceIdentity.js'
 import { profileFields } from '../utils/profileFields.js'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
@@ -213,6 +216,7 @@ export default {
 	name: 'AccountHoverCard',
 	components: {
 		AccountDisplayName,
+		BlueskyBadge,
 		NcAvatar,
 		NcPopover,
 		VerifiedCheck,
@@ -300,7 +304,12 @@ export default {
 
 		/** @return {boolean} */
 		isLocal() {
-			return !(this.account?.acct ?? this.handle).includes('@')
+			return isLocalAccount(this.account ?? { acct: this.handle })
+		},
+
+		/** @return {boolean} */
+		isBluesky() {
+			return isBlueskyAccount(this.account)
 		},
 
 		/**
@@ -314,7 +323,7 @@ export default {
 		 * @return {{instance: string, colour: string, local: boolean}}
 		 */
 		origin() {
-			return originOf(this.account?.acct ?? this.handle ?? '')
+			return originOf(this.account ?? this.handle ?? '')
 		},
 
 		/** @return {string} the bio, reduced to markup that is safe to inject */
@@ -352,6 +361,9 @@ export default {
 			}
 			if (this.account?.bot === true) {
 				badges.push(translate('social', 'Automated'))
+			}
+			if (this.isBluesky) {
+				badges.push(translate('social', 'On Bluesky'))
 			}
 
 			return badges

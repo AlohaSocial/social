@@ -117,5 +117,14 @@ describe('originOf', () => {
 
 	it('describes a local account as local, with no colour to show', () => {
 		expect(originOf('alice')).toEqual({ instance: '', colour: '', local: true })
+		expect(originOf({ acct: 'alice', bluesky: null })).toEqual({ instance: '', colour: '', local: true })
+	})
+
+	it('places a Bluesky account under its handle domain, never here', () => {
+		expect(originOf({ acct: 'dana.bsky.social', bluesky: { native: true } })).toEqual({
+			instance: 'bsky.social',
+			colour: instanceColour('bsky.social'),
+			local: false,
+		})
 	})
 })

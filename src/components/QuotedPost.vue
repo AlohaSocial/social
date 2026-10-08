@@ -16,6 +16,7 @@
 				<span class="quoted-post__author">
 					<DisplayName :text="quotedAccount.display_name" :emojis="quotedAccount.emojis" />
 				</span>
+				<BlueskyBadge v-if="isBlueskyAccount(quotedAccount)" />
 				<span class="quoted-post__handle">@{{ quotedAccount.acct }}</span>
 			</router-link>
 			<div class="quoted-post__message">
@@ -39,13 +40,16 @@
 
 <script>
 import ActorAvatar from './ActorAvatar.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
 import MessageContent from './MessageContent.js'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 
 export default {
 	name: 'QuotedPost',
 	components: {
 		ActorAvatar,
+		BlueskyBadge,
 		DisplayName,
 		MessageContent,
 	},
@@ -113,6 +117,10 @@ export default {
 					return t('social', 'The quoted post is not available.')
 			}
 		},
+	},
+
+	methods: {
+		isBlueskyAccount,
 	},
 }
 </script>

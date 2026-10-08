@@ -157,6 +157,32 @@
 				</dd>
 			</div>
 		</dl>
+
+		<!-- the other direction: what this server reads from Bluesky for the
+		     people here, and how far behind the slowest of it is -->
+		<template v-if="reading">
+			<h3 class="bluesky__title">
+				{{ t('social', 'Reading Bluesky') }}
+			</h3>
+			<dl class="bluesky__numbers">
+				<div class="bluesky__number-cell">
+					<dt>{{ t('social', 'Authors followed') }}</dt>
+					<dd>{{ reading.watches }}</dd>
+				</div>
+				<div class="bluesky__number-cell">
+					<dt>{{ t('social', 'Their posts') }}</dt>
+					<dd>{{ lagLabel(reading.lag) }}</dd>
+				</div>
+				<div class="bluesky__number-cell">
+					<dt>{{ t('social', 'Accounts asking for notifications') }}</dt>
+					<dd>{{ reading.accounts }}</dd>
+				</div>
+				<div class="bluesky__number-cell">
+					<dt>{{ t('social', 'Their notifications') }}</dt>
+					<dd>{{ lagLabel(reading.lag_notifications) }}</dd>
+				</div>
+			</dl>
+		</template>
 	</NcSettingsSection>
 </template>
 
@@ -179,7 +205,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
  * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, sync_ceiling: number}} settings - what is set, in the app values' names
- * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch
+ * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
  */
 
@@ -292,6 +318,11 @@ export default {
 			return 'relays' in this.payload
 		},
 
+		/** @return {{watches: number, lag: number, accounts: number, lag_notifications: number}|null} the reading side, on a server that reports it */
+		reading() {
+			return this.current.status.reading ?? null
+		},
+
 		/** @return {boolean} */
 		daemonRunning() {
 			return this.current.status.daemon?.running === true
@@ -362,6 +393,18 @@ export default {
 			}
 
 			return n('social', '%n second', '%n seconds', seconds)
+		},
+
+		/**
+		 * @param {number} seconds how far behind a reader is
+		 * @return {string} that, or that there is nothing to catch up on
+		 */
+		lagLabel(seconds) {
+			if (!(seconds > 0)) {
+				return t('social', 'up to date')
+			}
+
+			return t('social', '{duration} behind', { duration: this.duration(seconds) })
 		},
 
 		/**

@@ -56,6 +56,7 @@ import { translate } from '@nextcloud/l10n'
 import AccountHoverCard from './AccountHoverCard.vue'
 import { originOf } from '../utils/instanceIdentity.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
+import { isLocalAccount } from '../utils/accountLocality.js'
 
 export default {
 	name: 'TimelineAvatar',
@@ -90,7 +91,7 @@ export default {
 
 		/** @return {boolean} */
 		isLocal() {
-			return !this.item.account.acct.includes('@')
+			return isLocalAccount(this.item.account)
 		},
 
 		/**
@@ -138,7 +139,7 @@ export default {
 
 		/** @return {{instance: string, colour: string, local: boolean}} where the author lives */
 		origin() {
-			return originOf(this.item.account.acct)
+			return originOf(this.item.account)
 		},
 	},
 
