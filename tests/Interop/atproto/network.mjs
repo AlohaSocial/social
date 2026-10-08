@@ -8,10 +8,12 @@
  * directory, PDS and AppView from `@atproto/dev-env`, on fixed ports, with
  * two things the job needs on top:
  *
- * - handles under the app's host resolve against the app, where dev-env
- *   would send every `.test` handle to its own PDS. The runner has no
+ * - handles under the app's host resolve against the app. The runner has no
  *   wildcard DNS, so the probe asks the app's own host and names the handle
- *   in the query, which the app accepts for exactly this;
+ *   in the query, which the app accepts for exactly this. The AppView and
+ *   the PDS's own resolver take the patch; the PDS's `resolveHandle` does
+ *   not reach it, as the PDS claims every `.test` handle by configuration
+ *   and refuses the ones it lacks, so the job asks the AppView;
  * - the AppView also subscribes to the app's firehose, so what the PDS
  *   under test publishes is indexed the way a relay's stream would be.
  *

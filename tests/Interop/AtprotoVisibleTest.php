@@ -50,10 +50,10 @@ class AtprotoVisibleTest extends TestCase {
 		$this->assertNotNull($document, 'the directory knows the DID');
 		$this->assertSame(['at://' . $identity->handle], $document['alsoKnownAs']);
 		$this->assertSame('https://nextcloud.test', $document['service'][0]['serviceEndpoint']);
-		// the dev PDS answers from the AppView's index, which learns the
-		// handle off this app's firehose, so it is asked until it knows
+		// the AppView learns the handle off this app's firehose and verifies
+		// it against this app's handle host, so it is asked until it knows
 		$resolved = $this->network->await(fn () => $this->network->resolveHandle($identity->handle) === $identity->did ? $identity->did : null);
-		$this->assertSame($identity->did, $resolved, 'the dev PDS resolves the handle through this app');
+		$this->assertSame($identity->did, $resolved, 'the AppView resolves the handle through this app');
 
 		// a public post goes to Bluesky as it is made; the AppView indexes it
 		// off this app's firehose

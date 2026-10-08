@@ -295,7 +295,9 @@ signature and revision. Nothing of the public network is touched.
 
 `AtprotoVisibleTest` is phase 1 of [docs/Atproto-Compatibility.md](../../docs/Atproto-Compatibility.md)
 demonstrated end to end: a local account's identity is registered with the
-directory and resolved by the dev PDS through this app's handle host; a public
+directory and resolved by the AppView, which verifies the handle against
+this app's handle host (the dev PDS is not asked: it claims every `.test`
+handle as its own by configuration and refuses the ones it lacks); a public
 post reaches the AppView's author feed off the firehose, with its facets; the
 profile is found by handle; a user on the dev PDS follows the account and
 likes the post, both of which the AppView counts; the relay reports the

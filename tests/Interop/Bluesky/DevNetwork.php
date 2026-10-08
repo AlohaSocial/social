@@ -72,9 +72,16 @@ final class DevNetwork {
 		return $this->did;
 	}
 
-	/** The DID a handle resolves to on the development PDS, '' for none. */
+	/**
+	 * The DID a handle resolves to on the development AppView, '' for none.
+	 *
+	 * The AppView answers from its index, which it fills by verifying each
+	 * handle it meets on the firehose against its host. The dev PDS is not
+	 * asked: it treats every `.test` handle as one of its own and refuses the
+	 * ones it does not have, by configuration, before resolving anything.
+	 */
 	public function resolveHandle(string $handle): string {
-		$answer = $this->get($this->pds, 'com.atproto.identity.resolveHandle', ['handle' => $handle]);
+		$answer = $this->get($this->appView, 'com.atproto.identity.resolveHandle', ['handle' => $handle]);
 
 		return (string)($answer['did'] ?? '');
 	}
