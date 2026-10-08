@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use DateTime;
-use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ConfigService;
@@ -26,14 +25,6 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
  * separates the file, not the object.
  */
 trait StreamSearch {
-	/**
-	 * @param string $id
-	 * @param bool $asViewer
-	 * @param int $format
-	 *
-	 * @return Stream
-	 * @throws StreamNotFoundException
-	 */
 	/**
 	 * Full-text search over the statuses the viewer is allowed to see: their
 	 * own posts, public/unlisted content, and what is addressed to them.
