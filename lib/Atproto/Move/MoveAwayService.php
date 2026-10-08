@@ -206,7 +206,8 @@ class MoveAwayService {
 	 * @throws AtprotoException
 	 */
 	private function activate(Move $move, Identity $identity): void {
-		$this->authed($move, 'com.atproto.server.activateAccount', 'POST', [], []);
+		// a procedure without input: a PDS refuses one that is sent a body
+		$this->authed($move, 'com.atproto.server.activateAccount', 'POST');
 		$this->identities->markMovedAway($identity);
 	}
 

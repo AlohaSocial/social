@@ -194,6 +194,8 @@ class MoveAwayServiceTest extends TestCase {
 		$this->assertSame('pixels', $this->call('com.atproto.repo.uploadBlob')['bytes']);
 		$this->assertSame(['limit' => 500, 'cursor' => 'c1'], $this->calls[5]['query']);
 		$this->assertSame('access-1', $this->call('com.atproto.server.activateAccount')['token']);
+		$this->assertNull($this->call('com.atproto.server.activateAccount')['json'], 'activateAccount takes no body');
+		$this->assertNull($this->call('com.atproto.server.activateAccount')['bytes']);
 		$this->assertSame(Move::DONE, $this->rows[1]->state);
 		$this->assertSame('', $this->rows[1]->session, 'the other server\'s session is not kept');
 	}
