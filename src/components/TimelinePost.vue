@@ -459,7 +459,13 @@
 			v-model:open="showReportDialog"
 			:name="t('social', 'Report {account}', { account: item.account.acct })"
 			:buttons="reportButtons">
-			<p class="report-hint">
+			<!-- a Bluesky account has nowhere here to be reported but this
+			     server's moderators and Bluesky's own moderation service, so
+			     passing it on is offered, and ticked, for that one only -->
+			<p v-if="reportsToBluesky" class="report-hint">
+				{{ t('social', 'The report goes to the moderators of this instance. With the box below ticked, this server also passes it on to Bluesky\'s moderation service, in its own name and not yours.') }}
+			</p>
+			<p v-else class="report-hint">
 				{{ t('social', 'The report goes to the moderators of this instance. It is never sent to the reported account or their server.') }}
 			</p>
 			<textarea
@@ -467,6 +473,12 @@
 				class="report-comment"
 				:placeholder="t('social', 'Why are you reporting this post? (optional)')"
 				rows="3" />
+			<NcCheckboxRadioSwitch
+				v-if="reportsToBluesky"
+				v-model="reportForward"
+				class="report-forward">
+				{{ t('social', 'Also report to Bluesky\'s moderation service') }}
+			</NcCheckboxRadioSwitch>
 		</NcDialog>
 		<DeliveryDialog
 			v-model:open="showDeliveryDialog"
@@ -502,6 +514,7 @@ import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import EyeOff from 'vue-material-design-icons/EyeOff.vue'
 import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
@@ -579,6 +592,7 @@ export default {
 		NcDialog,
 		EyeOff,
 		NcButton,
+		NcCheckboxRadioSwitch,
 		Repeat,
 		Reply,
 		Heart,
@@ -666,6 +680,8 @@ export default {
 			translating: false,
 			showDeliveryDialog: false,
 			reportComment: '',
+			/** whether a report about a Bluesky account also goes to Bluesky's moderation service */
+			reportForward: true,
 			localPoll: this.item?.poll ?? null,
 			/** re-read from the shared clock, so "5 minutes ago" stays true */
 			now: Date.now(),
@@ -937,6 +953,11 @@ export default {
 					callback: () => this.blockAuthor(),
 				},
 			]
+		},
+
+		/** @return {boolean} whether a report can be passed on to Bluesky's moderation service */
+		reportsToBluesky() {
+			return isBlueskyAccount(this.item.account)
 		},
 
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
@@ -1408,10 +1429,12 @@ export default {
 					account_id: this.item.account.id,
 					status_ids: [this.item.id],
 					comment: this.reportComment,
+					...(this.reportsToBluesky ? { forward: this.reportForward } : {}),
 				})
 				showSuccess(t('social', 'Post reported to the moderators'))
 				this.showReportDialog = false
 				this.reportComment = ''
+				this.reportForward = true
 			} catch (error) {
 				logger.error('Failed to report the post', { error })
 				showError(t('social', 'Failed to report the post'))

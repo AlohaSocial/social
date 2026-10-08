@@ -186,6 +186,23 @@
 			</NcCheckboxRadioSwitch>
 		</section>
 
+		<!-- the same kind of rule, made by somebody else: a labeler marks
+		     posts on Bluesky, and the reader decides what each mark does -->
+		<section v-if="blueskyOffered && !labelersOff" id="labelers" class="block-card">
+			<header class="block-card__head">
+				<span class="block-card__icon">
+					<TagOutline :size="20" />
+				</span>
+				<h3 class="block-card__title">
+					{{ t('social', 'Bluesky labelers') }}
+				</h3>
+			</header>
+			<p class="block-card__lede">
+				{{ t('social', 'Labelers mark posts on Bluesky. Choose what each label does for you: nothing, a warning, or hiding the post. Bluesky\'s own moderation always applies.') }}
+			</p>
+			<BlueskyLabelersSettings @unavailable="labelersOff = true" />
+		</section>
+
 		<!-- and after the standing rules, the one thing here that is still
 		     waiting on the reader: the senders a notification policy is
 		     holding. It was a sidebar entry of its own, which stayed empty
@@ -224,6 +241,7 @@ import { generateUrl } from '@nextcloud/router'
 import { showError } from '../services/toast.js'
 import { fetchAiContent, saveAiContent } from '../services/aiContent.js'
 import ActorAvatar from '../components/ActorAvatar.vue'
+import BlueskyLabelersSettings from '../components/BlueskyLabelersSettings.vue'
 import FiltersSettings from '../components/FiltersSettings.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -234,17 +252,20 @@ import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import DomainOff from 'vue-material-design-icons/DomainOff.vue'
 import FilterOutline from 'vue-material-design-icons/FilterOutline.vue'
 import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
+import TagOutline from 'vue-material-design-icons/TagOutline.vue'
 import VolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import logger from '../services/logger.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
+import { useServerData } from '../composables/useServerData.js'
 
 export default {
 	name: 'BlockedAccounts',
 	components: {
 		AccountCancelOutline,
 		ActorAvatar,
+		BlueskyLabelersSettings,
 		CreationOutline,
 		DomainOff,
 		FilterOutline,
@@ -254,8 +275,15 @@ export default {
 		NcCheckboxRadioSwitch,
 		NcTextField,
 		Cancel,
+		TagOutline,
 		VolumeHigh,
 		VolumeOff,
+	},
+
+	setup() {
+		const { serverData } = useServerData()
+
+		return { serverData }
 	},
 
 	data() {
@@ -272,11 +300,18 @@ export default {
 			loading: true,
 			/** whether posts made with AI are hidden, as the server last confirmed it */
 			hideAi: false,
+			/** whether the labelers route said Bluesky is off after all */
+			labelersOff: false,
 		}
 	},
 
 	computed: {
 		...mapStores(useAccountStore),
+
+		/** @return {boolean} whether this instance offers Bluesky */
+		blueskyOffered() {
+			return this.serverData?.bluesky?.enabled === true
+		},
 	},
 
 	async mounted() {

@@ -11,6 +11,7 @@ import { showError } from '../../../src/services/toast.js'
 import BlockedAccounts from '../../../src/views/BlockedAccounts.vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAccountStore } from '../../../src/store/account.js'
+import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -49,10 +50,11 @@ function serve(blocked, muted, domains = [], aiContent = { hide: false }) {
 	})
 }
 
-async function mountView({ blocked = [bob], muted = [carol], domains = [], aiContent, dispatch } = {}) {
+async function mountView({ blocked = [bob], muted = [carol], domains = [], aiContent, dispatch, serverData = {} } = {}) {
 	serve(blocked, muted, domains, aiContent)
 	const pinia = createPinia()
 	setActivePinia(pinia)
+	useSettingsStore().setServerData(serverData)
 	const accountStore = useAccountStore()
 	const act = dispatch ?? vi.fn().mockResolvedValue({ id: '22' })
 	vi.spyOn(accountStore, 'unblockAccount').mockImplementation(act)
@@ -69,6 +71,8 @@ async function mountView({ blocked = [bob], muted = [carol], domains = [], aiCon
 				// likewise: it asks the server what is being held, and its own
 				// suite covers what it does with the answer
 				NotificationRequests: { template: '<div class="notification-requests-stub" />' },
+				// it reads the labelers on mount, and its own suite covers them
+				BlueskyLabelersSettings: { name: 'BlueskyLabelersSettings', emits: ['unavailable'], template: '<div class="labelers-stub" />' },
 				RouterLink: RouterLinkStub,
 			},
 		},
@@ -113,6 +117,30 @@ describe('BlockedAccounts', () => {
 		expect(wrapper.find('#filters .filters-settings-stub').exists()).toBe(true)
 		expect(wrapper.findAll('h3').map((heading) => heading.text()))
 			.toEqual(['Blocked', 'Muted', 'Hidden servers', 'Filtered words', 'Posts made with AI', 'Filtered notifications'])
+	})
+
+	describe('Bluesky labelers', () => {
+		it('are a card of their own on a server that offers Bluesky', async () => {
+			const { wrapper } = await mountView({ serverData: { bluesky: { enabled: true, host: 'cloud.example.org' } } })
+
+			expect(wrapper.find('#labelers .labelers-stub').exists()).toBe(true)
+			expect(wrapper.find('#labelers h3').text()).toBe('Bluesky labelers')
+			expect(wrapper.find('#labelers').text()).toContain('Labelers mark posts on Bluesky.')
+		})
+
+		it('are absent on a server that does not', async () => {
+			const { wrapper } = await mountView()
+
+			expect(wrapper.find('#labelers').exists()).toBe(false)
+		})
+
+		it('go away when the server says Bluesky is off after all', async () => {
+			const { wrapper } = await mountView({ serverData: { bluesky: { enabled: true, host: 'cloud.example.org' } } })
+
+			await wrapper.findComponent({ name: 'BlueskyLabelersSettings' }).vm.$emit('unavailable')
+
+			expect(wrapper.find('#labelers').exists()).toBe(false)
+		})
 	})
 
 	/**

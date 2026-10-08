@@ -377,6 +377,8 @@
     "Their posts leave your timelines, they are unfollowed both ways, and they can no longer follow you or see your posts." : "Die Beiträge werden aus deinen Timelines entfernt. Ihr folgt euch nicht mehr gegenseitig. Der Account kann dir nicht mehr folgen und deine Beiträge nicht sehen.",
     "Report {account}" : "{account} melden",
     "The report goes to the moderators of this instance. It is never sent to the reported account or their server." : "Deine Meldung geht an die Moderation dieses Servers. Sie wird weder an den gemeldeten Account noch an dessen Server gesendet.",
+    "The report goes to the moderators of this instance. With the box below ticked, this server also passes it on to Bluesky's moderation service, in its own name and not yours." : "Deine Meldung geht an die Moderation dieses Servers. Ist das Kästchen unten angehakt, gibt dieser Server sie außerdem an die Moderation von Bluesky weiter – in seinem eigenen Namen, nicht in deinem.",
+    "Also report to Bluesky's moderation service" : "Auch an die Moderation von Bluesky melden",
     "Why are you reporting this post? (optional)" : "Warum meldest du diesen Beitrag? (optional)",
     "Delete and write it again?" : "Löschen und neu schreiben?",
     "Delete this post?" : "Diesen Beitrag löschen?",
