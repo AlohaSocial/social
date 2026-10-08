@@ -214,16 +214,16 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	 * Every record's bytes, for `getRepo`; streamed through the callback so
 	 * a large repository is never whole in memory.
 	 *
-	 * @param callable(Cid, string): void $each
+	 * @param callable(Cid, string, string): void $each the CID, the bytes and the record's path
 	 */
 	public function eachRecordBytes(string $did, callable $each): void {
 		$qb = $this->getQueryBuilder();
-		$qb->select('cid', 'bytes')
+		$qb->select('cid', 'bytes', 'collection', 'rkey')
 			->from(self::TABLE_ATPROTO_RECORD)
 			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)));
 		$cursor = $qb->executeQuery();
 		while ($row = $cursor->fetch()) {
-			$each(Cid::parse((string)$row['cid']), self::bytes($row['bytes']));
+			$each(Cid::parse((string)$row['cid']), self::bytes($row['bytes']), $row['collection'] . '/' . $row['rkey']);
 		}
 		$cursor->closeCursor();
 	}

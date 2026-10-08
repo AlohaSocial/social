@@ -227,6 +227,13 @@ class MoveAwayServiceTest extends TestCase {
 		$this->assertSame('access-2', $this->call('com.atproto.server.activateAccount')['token']);
 	}
 
+	public function testOnlyAMoveAwayIsStartedAgainHere(): void {
+		$this->rows[1] = new Move(1, self::DID, 'alice', Move::INBOUND, 'https://atproto.brid.gy', '', 'alice.ap.brid.gy', Move::STEP_REPO, Move::FAILED);
+
+		$this->expectException(InvalidArgumentException::class);
+		$this->moves->retry('alice');
+	}
+
 	public function testOneMoveAtATime(): void {
 		$this->moves->start('alice', $this->alice, 'pds.example.com', 'alice.pds.example.com', 'alice@example.org', 'secret');
 

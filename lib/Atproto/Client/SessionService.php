@@ -175,7 +175,10 @@ class SessionService {
 		] + $this->email($userId);
 	}
 
-	private function sign(array $claims): string {
+	/**
+	 * A token of this server's, addressed to itself.
+	 */
+	public function sign(array $claims): string {
 		$key = $this->instanceKeys->serviceKey();
 		$claims['aud'] = $this->config->serviceDid();
 		$header = Encoding::base64UrlEncode((string)json_encode(['typ' => 'at+jwt', 'alg' => $key->publicKey()->curve->jwtAlgorithm()]));
@@ -189,7 +192,7 @@ class SessionService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function claims(string $authorization, string $scope): array {
+	public function claims(string $authorization, string $scope): array {
 		if (preg_match('/^Bearer\s+([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/', trim($authorization), $m) !== 1) {
 			throw new XrpcException(401, 'AuthenticationRequired', 'A bearer token is required');
 		}

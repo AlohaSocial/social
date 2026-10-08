@@ -16,6 +16,9 @@
  *   and refuses the ones it lacks, so the job asks the AppView;
  * - the AppView also subscribes to the app's firehose, so what the PDS
  *   under test publishes is indexed the way a relay's stream would be;
+ *   and, as a relay does, each subscription takes an account's status only
+ *   from the host that holds the account now, so a moved DID's old PDS
+ *   announcing it inactive does not hide it;
  * - a video's playlist is named on https, as Bluesky's are, so the app
  *   streams it rather than linking to the post;
  * - the web server of a domain a person owns, for a custom handle: it
@@ -108,6 +111,31 @@ const socialFirehose = new RepoSubscription({
 	db: network.bsky.db,
 	idResolver: network.bsky.dataplane.idResolver,
 })
+
+/**
+ * Lets a subscription change an account's status only for the DIDs its
+ * host holds, as a relay passes on only the host's own accounts' events.
+ *
+ * @param {RepoSubscription} sub the subscription to one PDS
+ */
+const keepToOwnAccounts = (sub) => {
+	const host = new URL(sub.service.replace(/^ws/, 'http')).host
+	const holds = async (did) => {
+		try {
+			const { pds } = await sub.idResolver.did.resolveAtprotoData(did, true)
+			return new URL(pds).host === host
+		} catch {
+			// a DID the directory no longer answers for: its last host says so
+			return true
+		}
+	}
+	for (const name of ['updateActorStatus', 'deleteActor']) {
+		const original = sub.indexingSvc[name].bind(sub.indexingSvc)
+		sub.indexingSvc[name] = async (did, ...rest) => (await holds(did) ? original(did, ...rest) : undefined)
+	}
+}
+keepToOwnAccounts(network.bsky.sub)
+keepToOwnAccounts(socialFirehose)
 void socialFirehose.start()
 
 const videoJobs = new Map()

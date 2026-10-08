@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
@@ -23,10 +24,19 @@ use OCA\Social\Service\ModerationService;
  * tokens for Bluesky's video service, preferences, and
  * everything of `app.bsky.*` passed on to the AppView. What is not a
  * signed-in call is the public surface's (`XrpcService`), and is answered
- * there.
+ * there. An account moving here (`createAccount`, and the session that
+ * makes) is `InboundMoveService`'s.
  */
 class ClientXrpc {
 	public const UPLOAD = 'com.atproto.repo.uploadBlob';
+	public const IMPORT = 'com.atproto.repo.importRepo';
+	/** what the session of an account moving here asks, beside what any session may */
+	private const MOVE_QUERIES = [
+		'com.atproto.server.checkAccountStatus', 'com.atproto.identity.getRecommendedDidCredentials', 'com.atproto.repo.listMissingBlobs',
+	];
+	private const MOVE_PROCEDURES = [
+		'com.atproto.server.activateAccount', 'com.atproto.identity.submitPlcOperation',
+	];
 	/** what a picture upload may weigh: Bluesky takes pictures up to two megabytes, and a larger one is made to fit */
 	public const MAX_BLOB = 5242880;
 	/** what any upload may weigh: a video */
@@ -41,6 +51,7 @@ class ClientXrpc {
 		private ServiceAuthGrant $grants,
 		private AuthorizationServer $oauth,
 		private ModerationService $moderation,
+		private InboundMoveService $inbound,
 	) {
 	}
 
@@ -51,12 +62,20 @@ class ClientXrpc {
 	 * @throws XrpcException
 	 */
 	public function query(string $method, string $rawQuery, array $headers): array|XrpcBytes|null {
-		if (!$this->config->isEnabled() || !$this->isClientMethod($method)) {
+		if (!$this->config->isEnabled()) {
+			return null;
+		}
+		$authorization = (string)($headers['authorization'] ?? '');
+		parse_str($rawQuery, $params);
+		if ($this->inbound->owns($authorization)) {
+			return $this->isClientMethod($method) || in_array($method, self::MOVE_QUERIES, true)
+				? $this->inbound->query($method, $params, $authorization)
+				: null;
+		}
+		if (!$this->isClientMethod($method)) {
 			return null;
 		}
 		$session = $this->signedIn($headers, $method, 'GET');
-
-		parse_str($rawQuery, $params);
 
 		return match (true) {
 			$method === 'com.atproto.server.getSession' => $this->sessions->describe($session),
@@ -77,6 +96,16 @@ class ClientXrpc {
 	public function procedure(string $method, string $rawBody, array $headers, string $ip): array|XrpcBytes|null {
 		if (!$this->config->isEnabled()) {
 			return null;
+		}
+		$authorization = (string)($headers['authorization'] ?? '');
+		if ($method === 'com.atproto.server.createAccount') {
+			return $this->inbound->createAccount($authorization, self::json($rawBody), $ip);
+		}
+		if ($this->inbound->owns($authorization)) {
+			return $this->isClientMethod($method) || in_array($method, self::MOVE_PROCEDURES, true)
+				|| in_array($method, ['com.atproto.server.refreshSession', 'com.atproto.server.deleteSession'], true)
+				? $this->inbound->procedure($method, $rawBody === '' ? [] : self::json($rawBody), $authorization)
+				: null;
 		}
 		switch ($method) {
 			case 'com.atproto.server.createSession':
@@ -133,6 +162,9 @@ class ClientXrpc {
 		if (!$this->config->isEnabled()) {
 			throw XrpcException::notImplemented(self::UPLOAD);
 		}
+		if ($this->inbound->owns((string)($headers['authorization'] ?? ''))) {
+			return $this->inbound->upload($path, (string)$headers['authorization'], (string)($headers['content-type'] ?? ''));
+		}
 		$session = $this->grants->uploader((string)($headers['authorization'] ?? ''));
 		if ($session === null) {
 			$session = $this->signedIn($headers, self::UPLOAD, 'POST');
@@ -146,6 +178,26 @@ class ClientXrpc {
 		}
 
 		return $this->writes->upload($session, $path, (string)($headers['content-type'] ?? ''));
+	}
+
+	/**
+	 * `com.atproto.repo.importRepo`, from a file the CAR was copied to: only
+	 * for an account moving here.
+	 *
+	 * @param array<string, string> $headers lower-cased names
+	 * @throws XrpcException
+	 */
+	public function importRepo(string $path, array $headers): array {
+		if (!$this->config->isEnabled()) {
+			throw XrpcException::notImplemented(self::IMPORT);
+		}
+		$authorization = (string)($headers['authorization'] ?? '');
+		if ($this->inbound->owns($authorization)) {
+			return $this->inbound->importRepo($path, $authorization);
+		}
+		$this->signedIn($headers, self::IMPORT, 'POST');
+
+		throw XrpcException::invalidRequest('A repository is imported here only when an account moves here');
 	}
 
 	/**

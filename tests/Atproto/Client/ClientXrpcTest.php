@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -43,6 +44,8 @@ class ClientXrpcTest extends TestCase {
 	private AuthorizationServer $oauth;
 	/** @var string[] */
 	private array $files = [];
+	/** @var InboundMoveService&MockObject */
+	private InboundMoveService $inbound;
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -58,7 +61,9 @@ class ClientXrpcTest extends TestCase {
 		$this->grants = $this->createMock(ServiceAuthGrant::class);
 		$this->oauth = $this->createMock(AuthorizationServer::class);
 		$this->oauth->method('issuer')->willReturn('https://social.test');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation);
+		$this->inbound = $this->createMock(InboundMoveService::class);
+		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound);
 	}
 
 	protected function tearDown(): void {
@@ -104,6 +109,35 @@ class ClientXrpcTest extends TestCase {
 		$this->assertInstanceOf(XrpcBytes::class, $this->client->query('app.bsky.feed.getTimeline', 'limit=5', $headers));
 		$this->assertSame(['uri' => 'at://x'], $this->client->procedure('com.atproto.repo.createRecord', '{"repo":"x"}', $headers, '1.2.3.4'));
 		$this->assertSame(['blob' => []], $this->client->upload($path, $headers + ['content-type' => 'image/png']));
+	}
+
+	public function testAnAccountMovingHereIsAnsweredByTheMoveAlone(): void {
+		$move = ['authorization' => 'Bearer move'];
+		$this->inbound->expects($this->once())->method('createAccount')->with('Bearer service-token', ['did' => 'did:plc:alice'], '203.0.113.5')->willReturn(['did' => 'did:plc:alice']);
+		$this->inbound->expects($this->once())->method('query')->with('com.atproto.server.checkAccountStatus', ['x' => '1'], 'Bearer move')->willReturn(['activated' => false]);
+		$this->inbound->expects($this->exactly(2))->method('procedure')->willReturn([]);
+		$path = $this->file('car');
+		$this->inbound->expects($this->once())->method('importRepo')->with($path, 'Bearer move')->willReturn([]);
+		$this->inbound->expects($this->once())->method('upload')->with($path, 'Bearer move', 'image/png')->willReturn(['blob' => []]);
+		$this->sessions->expects($this->never())->method('authenticate');
+		$this->writes->expects($this->never())->method('upload');
+
+		$this->assertSame(['did' => 'did:plc:alice'], $this->client->procedure('com.atproto.server.createAccount', '{"did":"did:plc:alice"}', ['authorization' => 'Bearer service-token'], '203.0.113.5'));
+		$this->assertSame(['activated' => false], $this->client->query('com.atproto.server.checkAccountStatus', 'x=1', $move));
+		$this->assertNull($this->client->query('com.atproto.sync.getRepo', 'did=x', $move), 'the public surface stays public');
+		$this->client->procedure('com.atproto.server.refreshSession', '', $move, '1.2.3.4');
+		$this->client->procedure('com.atproto.server.activateAccount', '', $move, '1.2.3.4');
+		$this->client->importRepo($path, $move);
+		$this->client->upload($path, $move + ['content-type' => 'image/png']);
+	}
+
+	public function testOnlyAnAccountMovingHereImportsARepository(): void {
+		try {
+			$this->client->importRepo($this->file('car'), ['authorization' => 'Bearer t']);
+			$this->fail('imported');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidRequest', $e->error);
+		}
 	}
 
 	public function testAServiceAuthTokenIsHandedOutForTheVideoService(): void {

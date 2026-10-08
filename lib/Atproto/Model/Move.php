@@ -22,10 +22,18 @@ namespace OCA\Social\Atproto\Model;
  * are copied from the old PDS, the old PDS e-mails the person a code, and
  * with it signs the operation that points the DID here; the account then
  * takes the DID, and is switched off there.
+ *
+ * Moving here inbound, the other side drives — Bridgy Fed for a bridged
+ * account, or a migration tool: the person invites the DID with a one-time
+ * code, the other side makes the account here with it, sends the
+ * repository and the blobs, points the DID here and activates the account;
+ * then its follows become follows here.
  */
 final class Move {
 	public const AWAY = 'away';
 	public const IN = 'in';
+	/** moving here, driven by the other side */
+	public const INBOUND = 'inbound';
 
 	public const STEP_REPO = 'repo';
 	public const STEP_BLOBS = 'blobs';
@@ -37,6 +45,8 @@ final class Move {
 	public const STEP_FOLLOWS = 'follows';
 	/** moving here: the old PDS e-mailed a code, and the person enters it */
 	public const STEP_CODE = 'code';
+	/** moving here inbound: the account is not made here yet */
+	public const STEP_INVITED = 'invited';
 
 	public const RUNNING = 'running';
 	/** waiting for the person: the code the old PDS e-mailed them */
@@ -45,7 +55,7 @@ final class Move {
 	public const DONE = 'done';
 
 	/**
-	 * @param array{blobs?: int, records?: int, follows?: int} $progress counts of what was copied
+	 * @param array{blobs?: int, records?: int, follows?: int, expectedBlobs?: int} $progress counts of what was copied
 	 */
 	public function __construct(
 		public readonly int $id,

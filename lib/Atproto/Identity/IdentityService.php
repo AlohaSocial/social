@@ -283,6 +283,18 @@ class IdentityService {
 	 * @throws AtprotoException when the directory refuses the operation; nothing has changed then
 	 */
 	public function adopt(Identity $current, string $did, PrivateKey $signingKey, string $oldPds, array $operation): Identity {
+		$this->submit($did, $operation);
+
+		return $this->receive($current, $did, $signingKey, $oldPds);
+	}
+
+	/**
+	 * Sends an operation someone else signed for a DID moving here, logged
+	 * as this server's own are.
+	 *
+	 * @throws AtprotoException when the directory refuses it; it is not logged then
+	 */
+	public function submit(string $did, array $operation): void {
 		$logId = $this->plcLog->record($did, PlcOperation::cid($operation)->toString(), $operation);
 		$this->plcLog->markSent($logId);
 		try {
@@ -292,7 +304,17 @@ class IdentityService {
 			throw $e;
 		}
 		$this->plcLog->markConfirmed($logId);
+	}
 
+	/**
+	 * A DID that the other side already pointed here (Bridgy Fed, a migration
+	 * tool) becomes the account's, as in adopt(), with nothing sent to the
+	 * directory.
+	 *
+	 * @return Identity the account's identity, with its new DID
+	 * @throws AtprotoException
+	 */
+	public function receive(Identity $current, string $did, PrivateKey $signingKey, string $oldPds): Identity {
 		if ($current->did !== $did) {
 			$this->tombstone($current);
 		}
