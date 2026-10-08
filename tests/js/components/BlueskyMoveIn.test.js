@@ -170,6 +170,13 @@ describe('BlueskyMoveIn', () => {
 		expect(wrapper.text()).toContain('Your Bluesky account now lives here, as alice.social.test.')
 	})
 
+	it('says when the posts are being put in the timeline', async () => {
+		server({ moves: [moveOf('running', 'posts')] })
+		const wrapper = await mountCard()
+
+		expect(wrapper.text()).toContain('Putting your posts in your timeline here')
+	})
+
 	it('offers to start a failed move again', async () => {
 		server({ moves: [moveOf('failed', 'identity', { error: 'signPlcOperation answered 400 (InvalidToken)' })] })
 		axios.post.mockResolvedValue({ data: { move: moveOf('running', 'code') } })

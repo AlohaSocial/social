@@ -193,6 +193,8 @@ export default {
 					return t('social', 'Pointing your account at this server')
 				case 'activate':
 					return t('social', 'Switching your account off on the old server')
+				case 'posts':
+					return t('social', 'Putting your posts in your timeline here')
 				default:
 					return ''
 			}

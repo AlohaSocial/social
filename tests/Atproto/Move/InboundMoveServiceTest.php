@@ -342,6 +342,7 @@ class InboundMoveServiceTest extends TestCase {
 		$this->assertTrue($this->moves->query('com.atproto.server.checkAccountStatus', [], $auth)['activated']);
 
 		$this->moveIn->expects($this->once())->method('adoptFollows');
+		$this->moveIn->expects($this->once())->method('importPosts')->with($this->callback(fn (Move $move): bool => $move->step === Move::STEP_POSTS));
 		$this->moves->run($this->rows[1]);
 		$this->assertSame(Move::DONE, $this->rows[1]->state);
 		$this->assertTrue($this->moves->query('com.atproto.server.checkAccountStatus', [], $auth)['validDid'], 'still answered once the move is done');
