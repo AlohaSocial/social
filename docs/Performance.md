@@ -124,12 +124,13 @@ moving next; the `_dep` ones go with their routes.
 ### Lookups that cannot use an index
 
 `DomainBlocksRequestBuilder::filterDomainBlocked()` is no longer one of them:
-the four `LIKE`s it built are now compared against constants read once per
-request, and skipped entirely for an account that has blocked nothing. They are
-still `LIKE`s on an unindexed column for an account that has blocked something,
-bounded at `CoreRequestBuilder::BLOCKED_DOMAINS_IN_A_QUERY`; storing the
-author's host in its own indexed column would make them equalities, and would
-serve the silenced-instance filter next door as well.
+the blocked domains are read once per request, skipped entirely for an account
+that has blocked nothing, and compared as one `NOT IN` against
+`social_stream.author_host`, the author's host in its own indexed column. The
+silenced-instance filter next door uses the same column. Both still carry the
+old `LIKE`s on `attributed_to` for rows whose host is NULL, until
+`Cron\StreamAuthorHosts` has filled in every row stored before the column and
+set `stream_author_hosts_filled`.
 
 
 The `*_prim` columns (md5 of the lower-cased id) exist so a lookup can be an

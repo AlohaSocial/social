@@ -37,6 +37,7 @@ class BackgroundJobsRegisteredTest extends TestCase {
 		'OCA\\Social\\Cron\\ResolveActor',
 		'OCA\\Social\\Cron\\RunImport',
 		'OCA\\Social\\Cron\\SearchIndex',
+		'OCA\\Social\\Cron\\StreamAuthorHosts',
 		'OCA\\Social\\Cron\\SyncRemoteTimeline',
 		'OCA\\Social\\Cron\\TranscodeBeforeDelivery',
 	];

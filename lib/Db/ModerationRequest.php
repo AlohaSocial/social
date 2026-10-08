@@ -11,14 +11,42 @@ namespace OCA\Social\Db;
 
 use DateTime;
 use OCA\Social\Model\Moderation;
+use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\MiscService;
 use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\ICache;
+use OCP\ICacheFactory;
+use OCP\IDBConnection;
+use OCP\IURLGenerator;
+use Psr\Log\LoggerInterface;
 
 /**
  * The instance's own decisions about accounts. Small by nature — a moderator
  * acts rarely — so the readers below are content to fetch the whole set.
  */
 class ModerationRequest extends CoreRequestBuilder {
+	/**
+	 * How long a list of the accounts at one level is kept. It is dropped on
+	 * every change; this bounds how long a reader that raced a change can
+	 * keep serving the list from before it.
+	 */
+	private const LEVEL_TTL = 300;
+
+	private ICache $cache;
+
+	public function __construct(
+		IDBConnection $connection,
+		LoggerInterface $logger,
+		IURLGenerator $urlGenerator,
+		ConfigService $configService,
+		MiscService $miscService,
+		ICacheFactory $cacheFactory,
+	) {
+		parent::__construct($connection, $logger, $urlGenerator, $configService, $miscService);
+		$this->cache = $cacheFactory->createDistributed('social.moderation');
+	}
+
 	/**
 	 * Records the decision about an account, replacing any earlier one.
 	 *
@@ -38,6 +66,7 @@ class ModerationRequest extends CoreRequestBuilder {
 
 		try {
 			$qb->executeStatement();
+			$this->forgetLevels();
 
 			return;
 		} catch (DBException $e) {
@@ -59,6 +88,7 @@ class ModerationRequest extends CoreRequestBuilder {
 			));
 
 		$update->executeStatement();
+		$this->forgetLevels();
 	}
 
 	public function delete(string $actorId): void {
@@ -67,6 +97,7 @@ class ModerationRequest extends CoreRequestBuilder {
 			->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
 
 		$qb->executeStatement();
+		$this->forgetLevels();
 	}
 
 	/**
@@ -94,6 +125,11 @@ class ModerationRequest extends CoreRequestBuilder {
 	 * @return string[] the actor ids under that decision
 	 */
 	public function getActorIdsAt(string $level): array {
+		$cached = $this->cache->get('level.' . $level);
+		if (is_array($cached)) {
+			return $cached;
+		}
+
 		$qb = $this->getQueryBuilder();
 		$qb->select('actor_id')
 			->from(self::TABLE_MODERATION)
@@ -106,7 +142,20 @@ class ModerationRequest extends CoreRequestBuilder {
 		}
 		$cursor->closeCursor();
 
+		$this->cache->set('level.' . $level, $ids, self::LEVEL_TTL);
+
 		return $ids;
+	}
+
+	/**
+	 * Drops the cached lists of who is at each level, after a decision has
+	 * been written: the timelines read them on every public page, and a
+	 * decision is rare.
+	 */
+	private function forgetLevels(): void {
+		foreach (Moderation::LEVELS as $level) {
+			$this->cache->remove('level.' . $level);
+		}
 	}
 
 	/** @return string the level, or '' when the instance has decided nothing */

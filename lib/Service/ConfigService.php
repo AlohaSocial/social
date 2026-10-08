@@ -359,6 +359,17 @@ class ConfigService {
 	 */
 	public const SOCIAL_DEST_NID_FILLED = 'dest_nid_filled';
 
+	/**
+	 * Whether every post carries the host of its author in `author_host` yet.
+	 *
+	 * Set by `Cron\StreamAuthorHosts` when its backfill reaches the end of
+	 * the table. Until then the domain-block and silenced-instance filters
+	 * also match a row with no host by its actor id, which is the slow form
+	 * the column replaces; a flag rather than a check for NULL rows for the
+	 * reason `dest_nid_filled` gives.
+	 */
+	public const SOCIAL_STREAM_AUTHOR_HOSTS_FILLED = 'stream_author_hosts_filled';
+
 	public const SOCIAL_SEARCH_WINDOW_DAYS = 'search_window_days';
 
 	public const SOCIAL_NSFW_POLICY = 'nsfw_policy';
@@ -496,6 +507,7 @@ class ConfigService {
 		self::SOCIAL_LOCAL_ACTOR_CURSOR => '',
 		self::SOCIAL_PROFILE_LINK_CURSOR => '',
 		self::SOCIAL_DEST_NID_FILLED => '0',
+		self::SOCIAL_STREAM_AUTHOR_HOSTS_FILLED => '0',
 		self::SOCIAL_SEARCH_WINDOW_DAYS => '365',
 		self::SOCIAL_NSFW_POLICY => 'default',
 		self::SOCIAL_REVIEW_VIDEOS => '0',

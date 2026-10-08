@@ -886,6 +886,7 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb = $this->getStreamUpdateSql();
 		$qb->set('attributed_to', $qb->createNamedParameter($to));
 		$qb->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($to)));
+		$qb->set('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($to)));
 
 		$qb->limitToIdPrim($qb->prim($itemId));
 
@@ -2608,7 +2609,8 @@ class StreamRequest extends StreamRequestBuilder {
 	public function updateAuthor(string $actorId, string $newId) {
 		$qb = $this->getStreamUpdateSql();
 		$qb->set('attributed_to', $qb->createNamedParameter($newId))
-			->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($newId)));
+			->set('attributed_to_prim', $qb->createNamedParameter($qb->prim($newId)))
+			->set('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($newId)));
 		$qb->limitToAttributedTo($actorId, true);
 
 		$qb->executeStatement();
@@ -2719,6 +2721,7 @@ class StreamRequest extends StreamRequestBuilder {
 			->setValue('published', $qb->createNamedParameter($stream->getPublished()))
 			->setValue('attributed_to', $qb->createNamedParameter($attributedTo))
 			->setValue('attributed_to_prim', $qb->createNamedParameter($qb->prim($attributedTo)))
+			->setValue('author_host', $qb->createNamedParameter(DomainBlocksRequestBuilder::authorHostOf($attributedTo)))
 			->setValue('in_reply_to', $qb->createNamedParameter($stream->getInReplyTo()))
 			->setValue('in_reply_to_prim', $qb->createNamedParameter($qb->prim($stream->getInReplyTo())))
 			->setValue('source', $qb->createNamedParameter($stream->getSource()))

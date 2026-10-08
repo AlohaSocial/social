@@ -898,6 +898,8 @@ class CoreRequestBuilder {
 	 */
 	private static array $blockedDomains = [];
 
+	private ?bool $authorHostsFilled = null;
+
 	/** Blocking or unblocking an instance makes the memo wrong; drop it. */
 	public static function forgetBlockedDomains(): void {
 		self::$blockedDomains = [];
@@ -914,10 +916,30 @@ class CoreRequestBuilder {
 
 		if ($this->viewer !== null) {
 			$qb->setViewer($this->viewer);
-			$qb->setBlockedDomains($this->blockedDomainsOf($qb->prim($this->viewer->getId())));
+			$domains = $this->blockedDomainsOf($qb->prim($this->viewer->getId()));
+			$qb->setBlockedDomains($domains);
+			if ($domains !== []) {
+				$qb->setAuthorHostsFilled($this->authorHostsAreFilled());
+			}
 		}
 
 		return $qb;
+	}
+
+	/**
+	 * Whether every `social_stream` row carries the host of its author yet.
+	 *
+	 * A flag `Cron\StreamAuthorHosts` sets when its backfill reaches the end
+	 * of the table, read once per request builder: until it is set, the
+	 * filters on `author_host` keep matching the rows it has not reached by
+	 * their actor id instead.
+	 */
+	protected function authorHostsAreFilled(): bool {
+		$this->authorHostsFilled ??= $this->configService->getAppValueBool(
+			ConfigService::SOCIAL_STREAM_AUTHOR_HOSTS_FILLED
+		);
+
+		return $this->authorHostsFilled;
 	}
 
 	/**

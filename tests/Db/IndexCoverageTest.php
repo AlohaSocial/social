@@ -68,6 +68,9 @@ class IndexCoverageTest extends TestCase {
 		yield 'the polls that closed since the last sweep' => [
 			'social_stream', ['poll_ends_at'],
 		];
+		yield 'the author\'s instance a domain block or a silence compares' => [
+			'social_stream', ['author_host'],
+		];
 	}
 
 	/**
