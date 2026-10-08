@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18), custom handles (4a), moving away (4b) and moving here (4c) are implemented; Bridgy twins (4d) are specification.**
+**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c) and Bridgy twins with any migration tool (4d) — are implemented.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1346,6 +1346,45 @@ Fed twins (§13.3).
   here, but are not turned into Social posts in this app's timelines
   (§13.1, step 6); only the follows are. A wrong code stops the move, and
   *Try again* asks the old PDS for a new one.
+
+**4d as built** — `Move\InboundMoveService`, `Move\BridgyTwin`,
+`ServiceAuth::verify()`, `IdentityService::receive()`/`submit()`; moves of
+direction `inbound` in `social_atproto_move`:
+
+- **This server as the new PDS of the protocol's own migration.** §13.3
+  assumed the 4c flow with Bridgy as the old PDS; but a bridged account has
+  no password — Bridgy holds its keys — and Bridgy moves an account out
+  itself, with the DM command `migrate-to <pds> <email> <handle> <password>
+  [invite]`, doing what a migration tool does against the new PDS. So 4d
+  serves that side, and every standard tool (`goat account migrate`, say)
+  can move an account here the same way.
+- **Invited first.** Settings → Migration → *Bring your bridged Bluesky
+  account here* finds the twin (the handle Bridgy gives the Fediverse
+  address, resolving to a DID whose PDS is `atproto.brid.gy`); a person can
+  also name any other account. Inviting, after the Nextcloud password, makes
+  a one-time code, kept only as a hash, good for a day. A twin's move is
+  then asked for by a direct message from the account to Bridgy's bot with
+  the command; for anything else the page shows the server, the handle,
+  the e-mail address and the code, once.
+- **`createAccount`** takes only an invited DID, with the code (as password
+  or invite code) and a service-auth token the DID signs for this server's
+  `did:web`, checked against the key the directory names; the handle asked
+  for is ignored — the account goes by its handle here. What it gets is a
+  session that can only move the account: `importRepo` (checked as in 4c,
+  replacing what came before, up to 64 MB), `listMissingBlobs`, `uploadBlob`
+  (kept byte for byte, also after activation, as Bridgy sends blobs last),
+  `getRecommendedDidCredentials` (this server's rotation key, the handle
+  here, a key made for the account here, this PDS), `submitPlcOperation`
+  for a tool that leaves the directory to the new PDS, `checkAccountStatus`,
+  preferences, `refreshSession`. Seven days, then it ends.
+- **`activateAccount`** checks the directory names this PDS, the
+  recommended key and this server's rotation key; then the account takes
+  the DID as in 4c (`receive()`, the auto-made DID retired) and a job turns
+  its follows into follows here. Bridgy stops bridging the account to
+  Bluesky itself.
+- **Not built:** the old posts still are not turned into Social posts in
+  this app's timelines (as in 4c). A twin's handle Bridgy derived from a
+  custom domain is not found by the page; it can be named by hand.
 
 ## 19. Open questions
 
