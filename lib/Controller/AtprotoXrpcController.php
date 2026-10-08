@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\OAuth\DpopNonce;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Atproto\Xrpc\XrpcService;
@@ -42,6 +43,7 @@ class AtprotoXrpcController extends Controller {
 		IRequest $request,
 		private XrpcService $xrpc,
 		private ClientXrpc $client,
+		private DpopNonce $dpopNonce,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -146,7 +148,7 @@ class AtprotoXrpcController extends Controller {
 	 */
 	private function headers(): array {
 		$headers = [];
-		foreach (['authorization', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
+		foreach (['authorization', 'dpop', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
 			$value = $this->request->getHeader($name);
 			if ($value !== '') {
 				$headers[$name] = $value;
@@ -180,14 +182,28 @@ class AtprotoXrpcController extends Controller {
 	}
 
 	private function refuse(XrpcException $e): Response {
-		return $this->cors(new DataResponse($e->toArray(), $e->status));
+		$response = new DataResponse($e->toArray(), $e->status);
+		foreach ($e->headers as $name => $value) {
+			$response->addHeader($name, $value);
+		}
+
+		return $this->cors($response);
 	}
 
+	/**
+	 * The CORS headers a browser app needs, and the DPoP nonce on every
+	 * answer to a request that carried a proof, so the app always has the
+	 * current one.
+	 */
 	private function cors(Response $response): Response {
 		$response->addHeader('Access-Control-Allow-Origin', '*');
 		$response->addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, atproto-accept-labelers, atproto-proxy');
+		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, DPoP, atproto-accept-labelers, atproto-proxy');
+		$response->addHeader('Access-Control-Expose-Headers', 'DPoP-Nonce, WWW-Authenticate');
 		$response->addHeader('Access-Control-Max-Age', '600');
+		if ($this->request->getHeader('DPoP') !== '' && !isset($response->getHeaders()['DPoP-Nonce'])) {
+			$response->addHeader('DPoP-Nonce', $this->dpopNonce->current());
+		}
 
 		return $response;
 	}

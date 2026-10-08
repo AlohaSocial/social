@@ -89,6 +89,22 @@ final class PublicKey {
 		return new self($curve, substr($point, 1, 32), substr($point, 33, 32));
 	}
 
+	/** Whether the point is on its curve: a key from a JWK is the sender's claim. */
+	public function isOnCurve(): bool {
+		$p = $this->curve->fieldPrime();
+		$x = BigNum::fromBytes($this->x);
+		$y = BigNum::fromBytes($this->y);
+		if ($x->compare($p) >= 0 || $y->compare($p) >= 0) {
+			return false;
+		}
+		$right = $x->modMultiply($x, $p)->modMultiply($x, $p)
+			->add($this->curve->a()->modMultiply($x, $p))
+			->add($this->curve->b())
+			->mod($p);
+
+		return $y->modMultiply($y, $p)->compare($right) === 0;
+	}
+
 	public function compressed(): string {
 		return (BigNum::fromBytes($this->y)->isOdd() ? "\x03" : "\x02") . $this->x;
 	}
@@ -103,15 +119,20 @@ final class PublicKey {
 	}
 
 	/**
-	 * Whether $signature (raw r || s, 64 bytes, low-S) signs SHA-256 of $message.
+	 * Whether $signature (raw r || s, 64 bytes) signs SHA-256 of $message.
+	 *
+	 * @param bool $lowS whether only the low-S form is accepted, as AT
+	 *                   Protocol requires of its own signatures; a JOSE
+	 *                   signature (DPoP, client assertions) may be either
 	 */
-	public function verify(string $message, string $signature): bool {
+	public function verify(string $message, string $signature, bool $lowS = true): bool {
 		if (strlen($signature) !== 64) {
 			return false;
 		}
 		$r = BigNum::fromBytes(substr($signature, 0, 32));
 		$s = BigNum::fromBytes(substr($signature, 32));
-		if ($r->isZero() || $s->isZero() || $s->compare($this->curve->halfOrder()) > 0 || $r->compare($this->curve->order()) >= 0) {
+		$order = $this->curve->order();
+		if ($r->isZero() || $s->isZero() || $r->compare($order) >= 0 || $s->compare($lowS ? $this->curve->halfOrder() : $order) > 0) {
 			return false;
 		}
 		$der = Der::sequence(Der::unsignedInteger($r) . Der::unsignedInteger($s));

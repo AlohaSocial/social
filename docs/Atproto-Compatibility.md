@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1 and 2 and parts 3a–3d (§18) are implemented; 3e (OAuth for Bluesky apps) and 4 are specification.**
+**Status: phases 1, 2 and 3 (§18) are implemented; phase 4 is specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1209,6 +1209,50 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 - **Departure:** a token handed to the video service is not single-use;
   it is scoped to `uploadBlob` here and expires within thirty minutes, as
   Bluesky's own PDS does it.
+
+**3e as built** — `Atproto\OAuth\` (`AuthorizationServer`, `ClientMetadataService`,
+`ClientAuthenticator`, `DpopVerifier`, `DpopNonce`, `Jwk`, `Jose`),
+`AtprotoOAuthController`, tables `social_atproto_oauth_request`,
+`social_atproto_oauth_session`, `social_atproto_oauth_replay`:
+
+- **Bluesky sign-in is AT Protocol's OAuth profile**: pushed authorization
+  requests only, PKCE S256, DPoP with this server's nonces on every token and
+  every PDS request, client IDs that are the address of the app's metadata
+  (and the profile's `http://localhost` development exception), public and
+  confidential (`private_key_jwt`) clients, the `atproto` scope with
+  `transition:generic` and `transition:email`. `transition:chat.bsky` is
+  listed and never granted (D15).
+- **One issuer with the Mastodon OAuth server.** AT Protocol requires the
+  issuer to be the bare origin, and an origin has one
+  `/.well-known/oauth-authorization-server`. With Bluesky on (and the root
+  rules in place) that document is both servers': Mastodon's fields with AT
+  Protocol's added, the issuer without a trailing slash, as RFC 8414 has it.
+  `/oauth/authorize`, `/oauth/token` and `/oauth/revoke` are shared and tell
+  the two apart by what only AT Protocol sends — a pushed `request_uri`, a
+  `DPoP` proof, a URL as `client_id`; `/oauth/par` and
+  `/.well-known/oauth-protected-resource` are AT Protocol's alone. The
+  tokens, sessions and tables stay apart: a Mastodon token is not good on
+  `/xrpc/`, an OAuth token for Bluesky not on `/api/`.
+- **The consent page is the Mastodon apps' one**, told it is a Bluesky app:
+  it names the app by the host of its client ID and shows the whole
+  address, because an app's own name and logo are what it says of itself
+  and are not shown. A `login_hint` naming another account than the one
+  signed in is refused.
+- **Tokens**: access tokens of fifteen minutes, bound to the DPoP key and
+  checked against their session on every request, so signing an app out
+  stops it at once; refresh tokens used once and rotated, and a replaced
+  one presented again ends the session; a code exchanged twice ends the
+  session the first exchange started. A public app's session ends after two
+  weeks; a confidential one's refresh tokens last 180 days and must be
+  presented with the key that started it, still published.
+- **Settings → Apps and account → Bluesky** lists the apps signed in this way,
+  with their client ID, what they may do and when they were last used, and
+  signs one out. An OAuth app without `transition:generic` may only ask who
+  it is (`getSession`); `getSession` shows the e-mail address only with
+  `transition:email`.
+- **Not built**: the granular permission scopes (`repo:`, `rpc:`,
+  `include:`) — an app asking only for those gets `atproto` alone — and a
+  list of trusted apps whose names and logos would be shown.
 
 ## 19. Open questions
 

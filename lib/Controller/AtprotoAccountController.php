@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\LabelerService;
+use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Service\AccountService;
@@ -41,6 +42,7 @@ class AtprotoAccountController extends Controller {
 		private Publisher $publisher,
 		private LabelerService $labelers,
 		private AppPasswordService $appPasswords,
+		private AuthorizationServer $oauth,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -203,6 +205,30 @@ class AtprotoAccountController extends Controller {
 		$this->appPasswords->revoke($this->userId(), $id);
 
 		return new DataResponse(['app_passwords' => $this->appPasswords->list($this->userId())]);
+	}
+
+	/**
+	 * The Bluesky apps the viewer signed in to through OAuth.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/oauth-sessions')]
+	public function oauthSessions(): DataResponse {
+		if (!$this->config->isEnabled()) {
+			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
+		}
+
+		return new DataResponse(['sessions' => $this->oauth->sessionsOf($this->userId())]);
+	}
+
+	/**
+	 * Signs one of those apps out.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/bluesky/oauth-sessions/{id}')]
+	public function endOAuthSession(int $id): DataResponse {
+		$this->oauth->endSession($this->userId(), $id);
+
+		return new DataResponse(['sessions' => $this->oauth->sessionsOf($this->userId())]);
 	}
 
 	#[NoAdminRequired]

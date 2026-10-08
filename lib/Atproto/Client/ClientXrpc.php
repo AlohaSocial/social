@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use OCA\Social\Atproto\OAuth\AuthorizationServer;
+use OCA\Social\Atproto\OAuth\OAuthException;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
@@ -37,6 +39,7 @@ class ClientXrpc {
 		private Preferences $preferences,
 		private WriteService $writes,
 		private ServiceAuthGrant $grants,
+		private AuthorizationServer $oauth,
 		private ModerationService $moderation,
 	) {
 	}
@@ -51,7 +54,7 @@ class ClientXrpc {
 		if (!$this->config->isEnabled() || !$this->isClientMethod($method)) {
 			return null;
 		}
-		$session = $this->signedIn($headers);
+		$session = $this->signedIn($headers, $method, 'GET');
 
 		parse_str($rawQuery, $params);
 
@@ -90,7 +93,7 @@ class ClientXrpc {
 		if (!$this->isClientMethod($method)) {
 			return null;
 		}
-		$session = $this->signedIn($headers);
+		$session = $this->signedIn($headers, $method, 'POST');
 
 		return match ($method) {
 			'app.bsky.actor.putPreferences' => $this->preferences->put($session, self::json($rawBody)),
@@ -132,7 +135,7 @@ class ClientXrpc {
 		}
 		$session = $this->grants->uploader((string)($headers['authorization'] ?? ''));
 		if ($session === null) {
-			$session = $this->signedIn($headers);
+			$session = $this->signedIn($headers, self::UPLOAD, 'POST');
 		} else {
 			$this->assertNotSuspended($session);
 		}
@@ -146,14 +149,30 @@ class ClientXrpc {
 	}
 
 	/**
+	 * The signed-in account: by an app password session's bearer token, or
+	 * an OAuth session's DPoP-bound one. Anything but `getSession` needs the
+	 * account-wide scope an app password has and an OAuth app may be given.
+	 *
 	 * @throws XrpcException
 	 */
-	private function signedIn(array $headers): ClientSession {
-		$session = $this->sessions->authenticate((string)($headers['authorization'] ?? ''));
+	private function signedIn(array $headers, string $method, string $verb): ClientSession {
+		$authorization = (string)($headers['authorization'] ?? '');
+		if (str_starts_with($authorization, 'DPoP ')) {
+			try {
+				$session = $this->oauth->authenticate($authorization, (string)($headers['dpop'] ?? ''), $verb, $this->oauth->issuer() . '/xrpc/' . $method);
+			} catch (OAuthException $e) {
+				throw new XrpcException($e->status, $e->error === 'use_dpop_nonce' ? 'UseDpopNonce' : 'InvalidToken', $e->getMessage(), $e->headers);
+			}
+		} else {
+			$session = $this->sessions->authenticate($authorization);
+		}
 		if ($session === null) {
 			throw XrpcException::authenticationRequired();
 		}
 		$this->assertNotSuspended($session);
+		if ($method !== 'com.atproto.server.getSession' && !$session->may(ClientSession::GENERIC)) {
+			throw new XrpcException(403, 'InsufficientScope', 'This app was not allowed to act for the account');
+		}
 
 		return $session;
 	}

@@ -10,6 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use ArrayObject;
+use OCA\Social\Atproto\OAuth\AuthorizationServer;
+use OCA\Social\Atproto\OAuth\DpopNonce;
+use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Controller\OAuthController;
 use OCA\Social\Db\ClientAuthRequest;
 use OCA\Social\Db\ClientRequest;
@@ -44,6 +47,10 @@ use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
 class OAuthControllerTest extends TestCase {
+	/** @var AuthorizationServer&MockObject */
+	private AuthorizationServer $atprotoOAuth;
+	/** @var AtprotoConfig&MockObject */
+	private AtprotoConfig $atprotoConfig;
 	private const OOB = 'urn:ietf:wg:oauth:2.0:oob';
 
 	/** @var IUserSession&Stub */
@@ -66,6 +73,8 @@ class OAuthControllerTest extends TestCase {
 	private OAuthController $controller;
 
 	protected function setUp(): void {
+		$this->atprotoOAuth = $this->createMock(AuthorizationServer::class);
+		$this->atprotoConfig = $this->createMock(AtprotoConfig::class);
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->instanceService = $this->createStub(InstanceService::class);
@@ -91,7 +100,10 @@ class OAuthControllerTest extends TestCase {
 			$this->configService,
 			$this->checkService,
 			new NullLogger(),
-			$this->initialState
+			$this->initialState,
+			$this->atprotoOAuth,
+			$this->atprotoConfig,
+			$this->createMock(DpopNonce::class),
 		);
 	}
 

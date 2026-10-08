@@ -34,6 +34,22 @@ function sourceFiles(dir = SRC, found = []) {
 }
 
 /** A comment mentioning prefers-reduced-motion is not a guard. */
+/**
+ * What a file styles: the <style> blocks of a component, or the whole of a
+ * stylesheet. The motion checks are about CSS, and a script that names an
+ * OAuth scope such as `transition:generic` is not a transition.
+ *
+ * @param {string} name the file's path
+ * @param {string} content its text
+ * @return {string}
+ */
+function stylesOf(name, content) {
+	if (!name.endsWith('.vue')) {
+		return content
+	}
+	return [...content.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join('\n')
+}
+
 function withoutComments(content) {
 	return content
 		.replace(/\/\*[\s\S]*?\*\//g, '')
@@ -155,7 +171,7 @@ describe('the frontend is Vue 3, not Vue 2 with a Vue 3 runtime', () => {
 		// dozen animations.
 		const offenders = []
 		for (const { name, content } of files) {
-			const source = withoutComments(content)
+			const source = withoutComments(stylesOf(name, content))
 			const moves = [...source.matchAll(/(?:transition|animation|transition-property|animation-name|scroll-behavior)\s*:\s*(?!none|auto|initial|unset)/g)].length
 			if (moves === 0) {
 				continue
@@ -282,7 +298,7 @@ describe('cards agree on how far off the page they sit', () => {
 	 */
 	it('lets a reader turn off whatever moves', () => {
 		const offenders = files
-			.filter(({ content }) => /@keyframes|animation:|transition:/.test(content))
+			.filter(({ name, content }) => /@keyframes|animation:|transition:/.test(stylesOf(name, content)))
 			.filter(({ content }) => !content.includes('prefers-reduced-motion'))
 			.map(({ name }) => name)
 
