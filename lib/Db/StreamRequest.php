@@ -25,6 +25,7 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\CacheDocumentService;
@@ -214,6 +215,7 @@ class StreamRequest extends StreamRequestBuilder {
 					$this->streamDestRequest->generateStreamDest($stream);
 					$this->streamTagsRequest->generateStreamTags($stream);
 					$this->searchTermsRequest->index($stream);
+					$this->linkLocalMedia($stream, false);
 
 					$this->dbConnection->commit();
 				} catch (\Throwable $t) {
@@ -350,6 +352,7 @@ class StreamRequest extends StreamRequestBuilder {
 			// and its words, for the same reason: an edit that took a word
 			// out left the post answering a search for it
 			$this->searchTermsRequest->reindex($stream);
+			$this->linkLocalMedia($stream, true);
 
 			$this->dbConnection->commit();
 		} catch (\Throwable $t) {
@@ -620,6 +623,14 @@ class StreamRequest extends StreamRequestBuilder {
 		$qb->limitToIdPrim($qb->prim($id));
 
 		$qb->executeStatement();
+
+		// a rewrite that swaps a document — an archive restoring a picture
+		// as a new upload — moves the post's links with it; one that only
+		// rebuilds the same documents' copies leaves them alone
+		$nids = self::documentNidsOf($attachments);
+		if ($nids !== $this->linkedMedia($id)) {
+			$this->linkMedia($id, $nids, true);
+		}
 	}
 
 	/**
@@ -692,28 +703,21 @@ class StreamRequest extends StreamRequestBuilder {
 	 *
 	 * An upload is not tied to its post by `parent_id` the way a fetched
 	 * attachment is — it is uploaded before the post exists — so the posts
-	 * are found by the copy itself, which is keyed by the document's nid. The
-	 * candidates are narrowed first by the indexed `media_kind` (a row the
-	 * backfill has not reached is NULL there, and counts), and only this
-	 * instance's own posts: a remote post names the origin's file, not ours.
+	 * are found through `social_stream_media`, which links each of this
+	 * instance's own posts to the documents it carries, by the document's
+	 * nid. Only this instance's own posts: a remote post names the origin's
+	 * file, not ours.
 	 *
 	 * @return int how many posts were rewritten
 	 */
 	public function updateLocalAttachmentCopies(Document $document): int {
 		$qb = $this->getQueryBuilder();
 		$expr = $qb->expr();
-		$qb->select('id', 'attachments')
-			->from(self::TABLE_STREAM)
-			->where($expr->eq('local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
-			->andWhere($expr->orX(
-				$expr->in('media_kind', $qb->createNamedParameter(
-					['video', Stream::MEDIA_KIND_MIXED], IQueryBuilder::PARAM_STR_ARRAY
-				)),
-				$expr->isNull('media_kind')
-			))
-			->andWhere($expr->like('attachments', $qb->createNamedParameter(
-				'%"id":"' . (string)$document->getNid() . '"%'
-			)));
+		$qb->select('s.id', 's.attachments')
+			->from(self::TABLE_STREAM_MEDIA, 'sm')
+			->innerJoin('sm', self::TABLE_STREAM, 's', $expr->eq('s.id_prim', 'sm.stream_id_prim'))
+			->where($expr->eq('sm.doc_nid', $qb->createNamedParameter((int)$document->getNid(), IQueryBuilder::PARAM_INT)))
+			->andWhere($expr->eq('s.local', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)));
 
 		$rows = [];
 		$cursor = $qb->executeQuery();
@@ -741,6 +745,112 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 
 		return $rewritten;
+	}
+
+	/**
+	 * The documents a list of stored attachment copies names, by nid: the
+	 * `id` of each copy, which for an attachment this instance cached is the
+	 * nid of its `social_cache_doc` row.
+	 *
+	 * @return int[] each once, in ascending order
+	 */
+	public static function documentNidsOf(string $attachments): array {
+		$copies = json_decode($attachments, true);
+		if (!is_array($copies)) {
+			return [];
+		}
+
+		return self::nidsFrom(array_map(
+			static fn ($copy): string => is_array($copy) ? (string)($copy['id'] ?? '') : '', $copies
+		));
+	}
+
+	/**
+	 * @param string[] $ids attachment ids
+	 * @return int[] those that are a nid, each once, in ascending order
+	 */
+	private static function nidsFrom(array $ids): array {
+		$nids = [];
+		foreach ($ids as $id) {
+			if ($id !== '' && ctype_digit($id)) {
+				$nids[] = (int)$id;
+			}
+		}
+
+		$nids = array_values(array_unique($nids));
+		sort($nids);
+
+		return $nids;
+	}
+
+	/**
+	 * Links one of this instance's own posts to the documents it carries; see
+	 * `updateLocalAttachmentCopies()`. A remote post is not linked.
+	 *
+	 * @param bool $replace whether the post already has links that an edit
+	 *                      may have made wrong
+	 */
+	private function linkLocalMedia(Stream $stream, bool $replace): void {
+		if (!$stream instanceof Note || !$stream->isLocal()) {
+			return;
+		}
+
+		$ids = array_map(
+			static fn (MediaAttachment $attachment): string => $attachment->getId(), $stream->getAttachments()
+		);
+		$this->linkMedia($stream->getId(), self::nidsFrom($ids), $replace);
+	}
+
+	/**
+	 * @param int[] $nids
+	 */
+	private function linkMedia(string $streamId, array $nids, bool $replace): void {
+		$prim = $this->getQueryBuilder()->prim($streamId);
+		if ($prim === '') {
+			return;
+		}
+
+		if ($replace) {
+			$qb = $this->getQueryBuilder();
+			$qb->delete(self::TABLE_STREAM_MEDIA)
+				->where($qb->expr()->eq('stream_id_prim', $qb->createNamedParameter($prim)));
+			$qb->executeStatement();
+		}
+
+		// asked to skip a row that is already there rather than to fail on
+		// it: this runs inside the transaction that stores the post, and
+		// PostgreSQL aborts a transaction on any failed statement
+		foreach ($nids as $nid) {
+			$this->dbConnection->insertIgnoreConflict(
+				self::TABLE_STREAM_MEDIA,
+				['stream_id_prim' => $prim, 'doc_nid' => $nid]
+			);
+		}
+	}
+
+	/**
+	 * @return int[] the documents a post is linked to, in ascending order
+	 */
+	private function linkedMedia(string $streamId): array {
+		$prim = $this->getQueryBuilder()->prim($streamId);
+		if ($prim === '') {
+			return [];
+		}
+
+		$qb = $this->getQueryBuilder();
+		$qb->select('doc_nid')
+			->from(self::TABLE_STREAM_MEDIA)
+			->where($qb->expr()->eq('stream_id_prim', $qb->createNamedParameter($prim)))
+			->orderBy('doc_nid', 'asc');
+
+		$nids = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$nids[] = (int)$data['doc_nid'];
+		}
+		$cursor->closeCursor();
+
+		return $nids;
 	}
 
 	/**
@@ -2404,6 +2514,9 @@ class StreamRequest extends StreamRequestBuilder {
 			[self::TABLE_STREAM_VIEWS, 'stream_id_prim'],
 			// and the people named in its pictures
 			[self::TABLE_MEDIA_TAGS, 'stream_id_prim'],
+			// and which documents it carries, which is how a finished
+			// transcode finds it
+			[self::TABLE_STREAM_MEDIA, 'stream_id_prim'],
 			// where readers had got to in it, which is a bookmark into a video
 			// that no longer exists
 			[self::TABLE_WATCH, 'stream_id_prim'],

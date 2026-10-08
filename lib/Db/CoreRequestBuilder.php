@@ -96,6 +96,7 @@ class CoreRequestBuilder {
 	public const TABLE_STRIKES = 'social_strike';
 	public const TABLE_STREAM_QUEUE = 'social_stream_queue';
 	public const TABLE_STREAM_TAGS = 'social_stream_tag';
+	public const TABLE_STREAM_MEDIA = 'social_stream_media';
 	public const TABLE_EXTERNAL_USERS = 'social_ext_user';
 	public const TABLE_EXTERNAL_SIGNUPS = 'social_ext_signup';
 	public const TABLE_EXTERNAL_INVITES = 'social_ext_invite';
@@ -795,6 +796,10 @@ class CoreRequestBuilder {
 		self::TABLE_STREAM_TAGS => [
 			'stream_id',
 			'hashtag'
+		],
+		self::TABLE_STREAM_MEDIA => [
+			'stream_id_prim',
+			'doc_nid'
 		],
 		self::TABLE_EXTERNAL_USERS => [
 			'uid',
