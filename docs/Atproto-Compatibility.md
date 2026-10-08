@@ -459,7 +459,8 @@ when crossed.
 - **Language**: `langs: [<post language>]` when known.
 - **Link card**: when the post has a `StreamCard` and no pictures,
   `app.bsky.embed.external` with title, description and the preview image
-  as a blob (fetched through the cache, resized to ≤ 2 MB).
+  as a blob (fetched through the cache, resized to ≤ 1,000,000 bytes, the
+  lexicon's limit for a card's thumbnail).
 
 ### 8.4 Pictures
 
@@ -963,8 +964,12 @@ each for a reason:
   the key is derived from them.
 - **Pictures** are the stored original when it fits Bluesky's 2,000,000
   bytes and is a type Bluesky shows, re-encoded as JPEG otherwise and stored
-  as a document of their own. Link cards (§8.3) are not yet built: a post
-  with a link and no pictures carries the link as a facet only.
+  as a document of their own. A post with a link and no pictures carries
+  its link card (§8.3) — title and description, and the page's
+  picture: fetched once as a cached remote document, through the guards
+  any remote file passes, and re-encoded when it is over a card's
+  1,000,000 bytes (`Publisher\CardThumbnail`). A picture that cannot be had
+  leaves the card without one.
 - **Replies** to a post that is on Bluesky — a local post that was published
   — are replies there (§8.3); to anything else they are a post with the
   parent linked. Quotes are a link. Both as the section says; the AppView
