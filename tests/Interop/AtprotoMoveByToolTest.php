@@ -81,7 +81,7 @@ class AtprotoMoveByToolTest extends TestCase {
 		$this->assertSame(200, $status, 'submitPlcOperation: ' . json_encode($answer));
 		[$status, $answer] = $here->procedure('com.atproto.server.activateAccount', []);
 		$this->assertSame(200, $status, 'activateAccount: ' . json_encode($answer));
-		[$status] = $this->network->asUser('POST', 'com.atproto.server.deactivateAccount');
+		[$status] = $this->network->asUser('POST', 'com.atproto.server.deactivateAccount', []);
 		$this->assertSame(200, $status);
 
 		Server::get(InboundMoveService::class)->run(Server::get(AtprotoMoveRequest::class)->latestOfUser($userId));

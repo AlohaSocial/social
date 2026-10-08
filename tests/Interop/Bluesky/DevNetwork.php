@@ -242,17 +242,17 @@ final class DevNetwork {
 	}
 
 	/**
-	 * A call to the dev PDS as the signed-in user; an empty body goes as an
-	 * object, as every procedure's input is one.
+	 * A call to the dev PDS as the signed-in user. A method without input
+	 * takes no body at all, and an empty input goes as an object.
 	 *
 	 * @return array{0: int, 1: array} the status and the decoded answer
 	 */
 	public function asUser(string $verb, string $method, ?array $body = null, array $query = []): array {
 		$headers = ['Accept: application/json', 'Authorization: Bearer ' . $this->accessJwt];
 		$payload = null;
-		if ($verb === 'POST') {
+		if ($body !== null) {
 			$headers[] = 'Content-Type: application/json';
-			$payload = (string)json_encode($body === null || $body === [] ? new \stdClass() : $body, JSON_UNESCAPED_SLASHES);
+			$payload = (string)json_encode($body === [] ? new \stdClass() : $body, JSON_UNESCAPED_SLASHES);
 		}
 		[$status, $answer] = $this->request($verb, $this->pds . '/xrpc/' . $method . ($query === [] ? '' : '?' . http_build_query($query)), $payload, $headers);
 		$decoded = json_decode($answer, true);

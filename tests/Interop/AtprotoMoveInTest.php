@@ -41,6 +41,8 @@ class AtprotoMoveInTest extends TestCase {
 
 	public function testABlueskyAccountMovesHereWithItsPostsAndFollows(): void {
 		$followedDid = $this->network->createUser('followed' . bin2hex(random_bytes(3)));
+		// the follow is taken over through the AppView, which must know the account by then
+		$this->assertNotNull($this->network->await(fn () => $this->network->profile($followedDid)), 'the AppView knows the followed account');
 		$name = 'arriving' . bin2hex(random_bytes(3));
 		$did = $this->network->createUser($name);
 		$this->network->follow($followedDid);
