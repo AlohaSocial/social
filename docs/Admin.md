@@ -484,6 +484,15 @@ authors are followed, how many accounts' notifications are asked for, and how
 far behind the slowest of each is. `atproto_sync_ceiling` (default 200) caps
 the AppView requests one sync pass makes.
 
+**Blocking on Bluesky.** The card's *Blocked on Bluesky* list (or `occ
+social:atproto:block`) blocks a Bluesky account by its DID, or a whole PDS
+host and the hosts under it. A blocked account is not resolved, read or heard
+from, and one that people here follow is removed with its posts — the
+Bluesky counterpart of a domain block. Reports people file about Bluesky
+accounts with *forward* ticked go to Bluesky's moderation service
+(`atproto_moderation_did`, Bluesky's own by default), sent by this server, not
+in the reporter's name.
+
 **Keys and backups.** Each account's signing key and the instance's rotation and
 service keys are stored sealed with the instance secret, like actor keys. They
 are the identities: a DID whose keys are lost can no longer be updated, and the

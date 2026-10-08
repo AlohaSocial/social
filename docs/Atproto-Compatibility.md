@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and the first part of 3 (§18) are implemented; the rest of 3, and 4, are specification.**
+**Status: phases 1 and 2 and parts 3a and 3b (§18) are implemented; 3c, 3d and 4 are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1082,6 +1082,41 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   AppView that does not answer proves nothing and nothing is deleted.
 - References are validated before they are written: a CID that is not a
   CID makes the post "not on Bluesky" (linked), never a refused commit.
+
+**3b as built** — `Moderation\Blocklist` (the checks) and
+`Moderation\BlocklistManager` (blocking, unblocking, purging),
+`Moderation\BlueskyReporter`, `Moderation\LabelerService`, tables
+`social_atproto_blocklist` and `social_atproto_labeler`:
+
+- **Instance blocks** (§12.4) by DID or PDS host — a host blocks the hosts
+  under it too. Checked wherever Bluesky comes in: resolution, the feed
+  read (a blocked author's watch is dropped unread), notifications, stored
+  posts, search. Blocking purges the blocked accounts that are followed
+  here with the primitive a domain block uses (`ModerationService::purgeActor()`);
+  a blocked host purges the followed accounts it hosts and refuses the rest
+  as they come. `occ social:atproto:block`, and the admin card.
+- **Reporting** (§12.3) is the `forward` of a Mastodon report: for a
+  Bluesky account, `ReportForwardService` hands it to `BlueskyReporter`,
+  which sends `com.atproto.moderation.createReport` to Bluesky's moderation
+  service (`atproto_moderation_did`), the first reported post that is on
+  Bluesky as the subject, else the account. **Made by this server, not the
+  reporter**: the token is signed by the instance's `did:web` with its
+  service key, which its DID document publishes — the same reason the
+  Fediverse forward is signed as the instance. The report row records that
+  it was forwarded; the Bluesky report id is logged, not stored.
+- **Labelers** (§12.2): Bluesky's moderation service always applies, at read
+  time, as §12.1 says; others are subscribed per person (by handle or DID,
+  checked to be a labeler), each label value set to ignore, warn or hide,
+  the labeler's own default until changed. Because one read of an author's
+  feed serves everybody here who follows them, the read asks for every
+  labeler anybody subscribes to (`atproto-accept-labelers`, at most 20),
+  each post keeps its labels with their labeler (`label_sources`), and the
+  choices apply when a person reads, in `FilterService`: a warn is a filter
+  result naming the label, a hide leaves the post out. The status entity
+  carries `bluesky: {uri, url, labels}` for this. Labeler definitions are
+  read from the AppView once a day.
+- Not done: reading a Bluesky user's public block of a local account
+  (`viewer.blockedBy` is per viewer, and the reads here are anonymous).
 
 ## 19. Open questions
 

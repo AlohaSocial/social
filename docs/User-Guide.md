@@ -1047,6 +1047,14 @@ Bluesky has no "followers only". *Open on Bluesky* in the post menu leads to the
 somebody on Bluesky follows you, likes, boosts, answers or mentions you, it
 shows in Activities like anything else, under your notification policy.
 
+**Labels and reports.** Bluesky's moderation service labels posts, and its
+labels always apply here: a post it hides never arrives, and adult or
+upsetting pictures come with a warning. Under *Settings → Blocking → Bluesky
+labelers* you can add other labelers by their handle and choose, label by
+label, whether it does nothing, shows a warning, or hides the post. When you
+report a Bluesky account or post, *Also report to Bluesky's moderation
+service* passes the report on — sent by this server, not in your name.
+
 **Pausing.** *Show my posts on Bluesky* in Settings → Your account switches
 your presence there off: nothing new is published, Bluesky is told the account
 is inactive, and what you had posted stays until you switch it back on — same
