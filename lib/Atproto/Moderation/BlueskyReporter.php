@@ -87,7 +87,7 @@ class BlueskyReporter {
 		}
 		$decoded = json_decode($answer, true);
 		if ($status < 200 || $status >= 300 || !is_array($decoded)) {
-			$this->logger->warning('Bluesky moderation refused a report', ['report' => $report->getId(), 'status' => $status, 'answer' => substr($answer, 0, 300)]);
+			$this->logger->warning('Bluesky moderation refused a report (' . (int)$status . '): ' . substr(trim($answer), 0, 300), ['report' => $report->getId(), 'status' => $status]);
 
 			return '';
 		}
