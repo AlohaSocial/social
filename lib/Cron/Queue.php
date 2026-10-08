@@ -21,7 +21,7 @@ use Throwable;
 
 class Queue extends TimedJob {
 	/**
-	 * How long one cron run may spend draining, in seconds.
+	 * How long one cron run may spend on each queue, in seconds.
 	 *
 	 * QueueController gives its drain a budget because an HTTP request has to
 	 * return. This job had the same problem with a longer fuse and no budget at
@@ -30,13 +30,19 @@ class Queue extends TimedJob {
 	 * and overlap the next run. Rows left behind stay in standby and are picked
 	 * up by the following run, which is what the queue is for.
 	 *
-	 * Well inside the 12 minute interval below, so two runs cannot overlap.
+	 * One budget per queue rather than one for the run: the deliveries go
+	 * first, and a backlog of them used to spend the whole of a shared deadline
+	 * so that the inbound side — the parents of replies, the posts a delivery
+	 * only named — got nothing, run after run. Together still well inside the
+	 * 12 minute interval below, so two runs cannot overlap.
 	 */
-	public const MAX_DURATION = 300;
+	public const REQUEST_DURATION = 240;
+	public const STREAM_DURATION = 120;
 
 	/**
-	 * The most standby batches one run takes — a guard for a run whose
-	 * deliveries all come back at once; the deadline is what normally ends it.
+	 * The most standby batches one run takes from each queue — a guard for a
+	 * run whose work all comes back at once; the deadline is what normally
+	 * ends it.
 	 */
 	public const MAX_BATCHES = 30;
 
@@ -62,10 +68,8 @@ class Queue extends TimedJob {
 
 	#[\Override]
 	protected function run($argument) {
-		$deadline = time() + self::MAX_DURATION;
-
-		$this->manageRequestQueue($deadline);
-		$this->manageStreamQueue($deadline);
+		$this->manageRequestQueue($this->time->getTime() + self::REQUEST_DURATION);
+		$this->manageStreamQueue($this->time->getTime() + self::STREAM_DURATION);
 	}
 
 	private function manageRequestQueue(int $deadline) {
@@ -82,7 +86,7 @@ class Queue extends TimedJob {
 		// 200 of them take seconds rather than the whole budget, and stopping
 		// after one batch left the rest of the pass idle
 		$seen = [];
-		for ($batch = 0; $batch < self::MAX_BATCHES && time() < $deadline; $batch++) {
+		for ($batch = 0; $batch < self::MAX_BATCHES && $this->time->getTime() < $deadline; $batch++) {
 			$requests = [];
 			foreach ($this->requestQueueService->getRequestStandby() as $request) {
 				// a row this pass already handed out and could not end is not
@@ -162,24 +166,41 @@ class Queue extends TimedJob {
 		// but this ever looks at a running row again
 		$this->streamQueueService->reapStaleRunning();
 
-		$total = 0;
-		$items = $this->streamQueueService->getRequestStandby($total);
+		// batch after batch while there is time, as for the deliveries: one
+		// batch of 200 every twelve minutes could not keep up with a busy
+		// inbox. An item that failed is on standby again at once on its first
+		// tries, so what this pass has already handed out is not handed out
+		// twice.
+		$seen = [];
+		for ($batch = 0; $batch < self::MAX_BATCHES && $this->time->getTime() < $deadline; $batch++) {
+			$fresh = 0;
+			foreach ($this->streamQueueService->getRequestStandby() as $item) {
+				if ($this->time->getTime() >= $deadline) {
+					return;
+				}
 
-		foreach ($items as $item) {
-			if (time() >= $deadline) {
-				break;
+				$key = ($item->getId() > 0) ? 'row' . $item->getId() : 'object' . spl_object_id($item);
+				if (isset($seen[$key])) {
+					continue;
+				}
+				$seen[$key] = true;
+				$fresh++;
+
+				try {
+					$this->streamQueueService->manageStreamQueue($item);
+				} catch (Throwable $e) {
+					// as for the deliveries above: one item costs that item and no
+					// more. The row itself is ended by manageStreamQueue().
+					$this->logger->warning(
+						'[Cron\\Queue] could not resolve queued item ' . $item->getStreamId() . ': '
+						. get_class($e) . ' ' . $e->getMessage(),
+						['exception' => $e, 'streamId' => $item->getStreamId()]
+					);
+				}
 			}
 
-			try {
-				$this->streamQueueService->manageStreamQueue($item);
-			} catch (Throwable $e) {
-				// as for the deliveries above: one item costs that item and no
-				// more. The row itself is ended by manageStreamQueue().
-				$this->logger->warning(
-					'[Cron\\Queue] could not resolve queued item ' . $item->getStreamId() . ': '
-					. get_class($e) . ' ' . $e->getMessage(),
-					['exception' => $e, 'streamId' => $item->getStreamId()]
-				);
+			if ($fresh === 0) {
+				return;
 			}
 		}
 	}

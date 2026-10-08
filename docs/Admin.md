@@ -999,9 +999,9 @@ tenfold cut in the request volume, for one app install. The polls also answer
 index probe and an empty response rather than a rendered page.
 
 **Run delivery workers.** `Cron\Queue` delivers twenty servers at a time and
-takes batch after batch for its 300 seconds: with peers that answer within a
+takes batch after batch for its 240 seconds: with peers that answer within a
 second that is up to 6,000 deliveries a run, some 30,000 an hour, and when every
-batch runs into a dead peer's 30-second timeout still about 200 a run. A peer
+batch runs into a dead peer's 30-second timeout still about 160 a run. A peer
 that fails is left alone — from a minute, doubling to an hour — and that is
 kept in the database (`social_host_breaker`), so it holds without a memcache and
 across runs: a dead server costs one timeout per wait, not one per row. An

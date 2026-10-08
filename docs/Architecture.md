@@ -969,12 +969,17 @@ peer was put behind the breaker. A wave costs about as long as its
 slowest peer, so a dead peer costs its timeout once, beside nineteen
 deliveries, instead of in front of all of them — and then the breaker below
 holds its other rows back without a timeout at all. When a batch is done and
-time is left, the run takes the next one (up to `MAX_BATCHES`, 30).
+time is left, the run takes the next one (up to `MAX_BATCHES`, 30). The
+deliveries have `REQUEST_DURATION` (240 seconds) and the inbound stream queue
+then gets `STREAM_DURATION` (120) of its own, taken the same way, batch after
+batch of 200 with what this run already handed out skipped: under one shared
+deadline a delivery backlog spent all of it and the parents of replies and the
+posts a delivery only named waited behind it run after run.
 
 What that comes to: with peers answering within a second, a wave of twenty
 takes about a second and a run delivers up to its ceiling of 6,000 rows (30
 batches of 200) — some 30,000 an hour against a thousand before. When every
-wave holds a peer that runs into the 30-second timeout it is ten waves, 200
+wave holds a peer that runs into the 30-second timeout it is eight waves, 160
 deliveries a run, against ten. The async drain a new post starts
 (`QueueController`, 90 seconds at a 10-second timeout) goes out the same way,
 twenty servers at a time. Nextcloud runs one `cron.php` at a time, so past that
@@ -2700,7 +2705,7 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | WebFinger / NodeInfo / host-meta | `WebfingerHandler` | `Application::register()` | ActivityPub discovery at the server root |
 | Contacts Menu | `ContactsMenuProvider` | `appinfo/info.xml` | "Follow %s on Aloha Social" entry linking to the actor page |
 | Background Jobs | `Cron\Cache` | `appinfo/info.xml` | 12-minute interval, `MAX_DURATION` of 300 seconds: reaps deleted actors, refreshes local and remote actor caches, caches documents, recomputes hashtag trends, closes polls, prunes remote statuses past retention (bounded to 5000 per run), sweeps cached remote actors nobody refers to (bounded to 500), syncs the timelines of the remote actors a local account follows (`getRemoteActorsToSync()` — accepted follows only, because a synced outbox feeds its followers' home timelines and nothing else reads it; its own batch — the refresh now stamps what it touched, so a shared selection would leave the sync nothing to do on a small instance), verifies profile links, reconciles group lists, finds out which servers the Discover page may ask (`FediverseDirectoryService::refresh()`) and deletes the expired rows of `social_durable_cache`. The budget is threaded through the steps and into the three loops that make a request per remote actor — the actor refresh and the details refresh each get at most `REMOTE_ACTOR_SECONDS` (90) of it and take batch after batch of `SYNC_BATCH` until then (`CacheActorService::walkDue()`), where one batch of fifty a pass could not keep the ten-day lifetime past about 60,000 cached actors; a step that has no time left is skipped and named in the log, and the next run **starts with the first step it skipped** (`cache_cron_start`), so the tail of the list is not the part that never runs |
-| Background Jobs | `Cron\Queue` | `appinfo/info.xml` | 12-minute interval: drains the outbound request queue and the inbound stream queue |
+| Background Jobs | `Cron\Queue` | `appinfo/info.xml` | 12-minute interval: drains the outbound request queue and the inbound stream queue, each on a budget of its own (240 and 120 seconds) |
 | Background Jobs | `Cron\BlocklistSync` | `appinfo/info.xml` | Daily: re-reads the block lists an administrator follows (`BlocklistSubscriptionService::fetchEnabled()`); one app-setting read and nothing else while no source is on |
 | Background Jobs | `Cron\ActorCleanup` | queued by `PersonInterface::delete()` | Finishes detaching a deleted account from the posts that addressed it, when there are more of them than one inbox request should rewrite. Not in `appinfo/info.xml`, for the same reason `Cron\DomainPurge` is not: it is meaningless without an argument. Re-queues itself while rows remain |
 | Background Jobs | `Cron\DomainPurge` | queued by `FediverseService::addAddress()` | Queued with a domain when one is added to the deny list, never registered in `appinfo/info.xml` — a job listed there is added once at install time with no argument, and this one is meaningless without a domain. Runs 10 batches of `DomainPurgeService` per pass and re-queues itself while anything of the domain is left |

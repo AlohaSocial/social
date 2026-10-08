@@ -41,10 +41,13 @@ class QueueTest extends TestCase {
 	/** @var LoggerInterface&MockObject */
 	private $logger;
 	private Queue $job;
+	/** What the job's clock says; a test moves it to spend a budget. */
+	private int $now = self::NOW;
 
 	protected function setUp(): void {
+		$this->now = self::NOW;
 		$time = $this->createStub(ITimeFactory::class);
-		$time->method('getTime')->willReturn(self::NOW);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
 		$this->requestQueueService = $this->createMock(RequestQueueService::class);
 		$this->streamQueueService = $this->createMock(StreamQueueService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
@@ -108,7 +111,7 @@ class QueueTest extends TestCase {
 					$this->assertSame(ActivityService::TIMEOUT_SERVICE, $request->getTimeout());
 					$managed[] = $request->getToken();
 				}
-				$this->assertGreaterThan(time(), $deadline);
+				$this->assertSame(self::NOW + Queue::REQUEST_DURATION, $deadline);
 
 				return count($requests);
 			});
@@ -267,6 +270,62 @@ class QueueTest extends TestCase {
 		$this->job->start($this->jobList);
 
 		$this->assertSame($items, $processed);
+	}
+
+	/**
+	 * A backlog of deliveries that spends its whole budget used to spend the
+	 * run's: the inbound side then got nothing, run after run.
+	 */
+	public function testTheStreamQueueHasABudgetOfItsOwn(): void {
+		$this->requestQueueService->method('getRequestStandby')
+			->willReturnCallback(fn (): array => [(new RequestQueue())->setId($this->now)]);
+		$this->activityService->method('manageRequests')
+			->willReturnCallback(function (array $requests, int $deadline): int {
+				// every batch is slow; the deliveries run into their deadline
+				$this->now += 100;
+
+				return count($requests);
+			});
+		$item = new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'parent');
+		$this->streamQueueService->method('getRequestStandby')->willReturn([$item]);
+		$this->streamQueueService->expects($this->once())->method('manageStreamQueue')->with($item);
+
+		$this->job->start($this->jobList);
+	}
+
+	/** The inbound side takes batch after batch too, and stops when nothing new is due. */
+	public function testTheStreamQueueTakesBatchAfterBatch(): void {
+		$this->requestQueueService->method('getRequestStandby')->willReturn([]);
+		$this->streamQueueService->method('getRequestStandby')->willReturnOnConsecutiveCalls(
+			[(new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'a'))->setId(1), (new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'b'))->setId(2)],
+			// one the first batch could not end, handed out again, and a new one
+			[(new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'b'))->setId(2), (new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'c'))->setId(3)],
+			[(new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'b'))->setId(2)],
+		);
+		$resolved = [];
+		$this->streamQueueService->method('manageStreamQueue')
+			->willReturnCallback(function (StreamQueue $item) use (&$resolved): void {
+				$resolved[] = $item->getStreamId();
+			});
+
+		$this->job->start($this->jobList);
+
+		$this->assertSame(['a', 'b', 'c'], $resolved);
+	}
+
+	public function testTheStreamQueueStopsAtItsDeadline(): void {
+		$this->requestQueueService->method('getRequestStandby')->willReturn([]);
+		$next = 0;
+		$this->streamQueueService->method('getRequestStandby')
+			->willReturnCallback(function () use (&$next): array {
+				return [(new StreamQueue('tok', StreamQueue::TYPE_CACHE, 'x'))->setId(++$next)];
+			});
+		$this->streamQueueService->expects($this->exactly(3))->method('manageStreamQueue')
+			->willReturnCallback(function (): void {
+				$this->now += 50;
+			});
+
+		$this->job->start($this->jobList);
 	}
 
 	/**
