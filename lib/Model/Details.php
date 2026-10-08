@@ -49,6 +49,9 @@ final class Details {
 	/** a local account's Bluesky handle, DID and profile link, for the client */
 	public const BLUESKY = 'bluesky';
 
+	/** a Bluesky account or post read here: its DID or `at://` URI, CID, counts and labels */
+	public const ATPROTO = 'atproto';
+
 	/**
 	 * The page a post is at on the server it came from.
 	 *

@@ -1425,7 +1425,7 @@ class StreamTest extends TestCase {
 		$post = new Stream();
 		$post->setId('https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur/post/3kpost');
 		$post->setDetail(Details::PAGE, 'https://bsky.app/profile/bob.bsky.social/post/3kpost');
-		$post->setDetailArray('atproto', ['uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kpost', 'label_sources' => [['src' => 'did:plc:l', 'val' => 'spoiler'], 'junk']]);
+		$post->setDetailArray(Details::ATPROTO, ['uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kpost', 'label_sources' => [['src' => 'did:plc:l', 'val' => 'spoiler'], 'junk']]);
 		$this->assertSame([
 			'uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3kpost',
 			'url' => 'https://bsky.app/profile/bob.bsky.social/post/3kpost',
@@ -1434,7 +1434,7 @@ class StreamTest extends TestCase {
 
 		$fediverse = new Stream();
 		$fediverse->setId('https://mastodon.test/@bob/1');
-		$fediverse->setDetailArray('atproto', ['uri' => 'at://forged']);
+		$fediverse->setDetailArray(Details::ATPROTO, ['uri' => 'at://forged']);
 		$this->assertNull($fediverse->exportAsLocal()['bluesky'], 'only a post read from Bluesky');
 	}
 }

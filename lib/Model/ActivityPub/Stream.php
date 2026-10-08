@@ -2569,7 +2569,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * @return array{uri: string, url: string, labels: list<array{src: string, val: string}>}|null
 	 */
 	private function exportBluesky(): ?array {
-		$details = $this->getDetails('atproto');
+		$details = $this->getDetails(Details::ATPROTO);
 		$uri = (string)($details['uri'] ?? '');
 		if ($uri === '' || !str_starts_with($this->getId(), 'https://bsky.app/profile/')) {
 			return null;

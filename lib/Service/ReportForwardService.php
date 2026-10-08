@@ -9,8 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
-use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Moderation\BlueskyReporter;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;

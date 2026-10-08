@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Details;
 
 /**
  * A Bluesky post, as the AppView shows it in a feed, as the `Create` of a
@@ -26,7 +27,7 @@ use OCA\Social\Model\ActivityPub\ACore;
  * home timeline joins on. Counts and the `at://` URI ride in `details`.
  */
 class PostMapper {
-	public const DETAIL = 'atproto';
+	public const DETAIL = Details::ATPROTO;
 
 	public function __construct(
 		private LocalRecordResolver $local,

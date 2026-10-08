@@ -10,9 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Model\Watch;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Moderation\LabelerService;
-use OCA\Social\Atproto\Model\Watch;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Exceptions\AppViewNotFoundException;

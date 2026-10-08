@@ -10,9 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Moderation\LabelerService;
-use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;

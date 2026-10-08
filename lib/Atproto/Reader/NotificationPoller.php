@@ -10,11 +10,11 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
-use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;

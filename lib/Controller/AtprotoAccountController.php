@@ -10,9 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
-use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Service\AccountService;
