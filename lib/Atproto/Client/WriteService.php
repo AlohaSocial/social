@@ -136,6 +136,12 @@ class WriteService {
 			$this->profilePicture($session, 'avatar', $record, $was);
 			$this->profilePicture($session, 'banner', $record, $was);
 		});
+		// the actor as the changes left it: a new avatar is a new icon
+		try {
+			$actor = $this->cacheActors->getFromId($actor->getId());
+		} catch (Throwable $e) {
+			$this->logger->info('Changed actor not read back; the profile goes out as it was', ['exception' => $e]);
+		}
 		$this->publisher->publishProfile($actor);
 		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
 		if ($stored === null) {

@@ -83,6 +83,8 @@ class WriteServiceTest extends TestCase {
 	private LocalRecordResolver $local;
 	/** @var AccountService&MockObject */
 	private AccountService $accounts;
+	/** @var CacheActorService&MockObject */
+	private CacheActorService $cacheActors;
 	/** @var AvatarService&MockObject */
 	private AvatarService $avatars;
 	/** @var BannerService&MockObject */
@@ -102,6 +104,7 @@ class WriteServiceTest extends TestCase {
 		$accounts->method('changingProfile')->willReturnCallback(static fn (string $userId, callable $changes): mixed => $changes());
 		$this->accounts = $accounts;
 		$this->avatars = $this->createMock(AvatarService::class);
+		$this->cacheActors = $this->createMock(CacheActorService::class);
 		$this->banners = $this->createMock(BannerService::class);
 		$this->posts = $this->createMock(PostService::class);
 		$this->streams = $this->createMock(StreamService::class);
@@ -125,7 +128,7 @@ class WriteServiceTest extends TestCase {
 		});
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
-			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->documents,
+			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners,
 		);
@@ -150,7 +153,10 @@ class WriteServiceTest extends TestCase {
 		$this->banners->expects($this->never())->method('setFromTempFile');
 		$this->banners->expects($this->never())->method('remove');
 		$this->accounts->expects($this->once())->method('setDisplayName')->with('alice', 'Alice A.');
-		$this->publisher->expects($this->once())->method('publishProfile');
+		$changed = new Person();
+		$changed->setId('https://social.test/@alice');
+		$this->cacheActors->method('getFromId')->willReturn($changed);
+		$this->publisher->expects($this->once())->method('publishProfile')->with($this->identicalTo($changed));
 		$ref = static fn (Cid $cid): array => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 9];
 
 		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
