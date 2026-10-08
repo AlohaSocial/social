@@ -18,6 +18,9 @@
  *   under test publishes is indexed the way a relay's stream would be;
  * - a video's playlist is named on https, as Bluesky's are, so the app
  *   streams it rather than linking to the post;
+ * - the web server of a domain a person owns, for a custom handle: it
+ *   answers `/.well-known/atproto-did` with the DID the test gives it
+ *   (`POST /did`), behind the job's proxy as `https://me.handles.test`;
  * - a stand-in for Bluesky's video service, which does what that service
  *   does for the app: takes a video with the token the account signed,
  *   stores it in the account's repository on its own PDS with that token
@@ -42,6 +45,8 @@ const BSKY_PORT = 2584
 const OZONE_PORT = 2587
 const INTROSPECT_PORT = 2581
 const VIDEO_PORT = 2590
+const HANDLE_PORT = 2591
+const CUSTOM_HANDLE = 'me.handles.test'
 const VIDEO_HOST = 'https://video.interop.test'
 
 async function resolveSocialHandle(handle) {
@@ -56,11 +61,22 @@ async function resolveSocialHandle(handle) {
 	return body
 }
 
+// The custom-handle domain's own well-known file, read with a plain fetch:
+// the resolvers' guarded fetch refuses the address the runner gives it.
+async function resolveWellKnown(handle) {
+	const res = await fetch(`https://${handle}/.well-known/atproto-did`, { redirect: 'follow' })
+	const body = (await res.text()).trim()
+	return res.status === 200 && body.startsWith('did:') ? body : undefined
+}
+
 function patchHandleResolver(idResolver) {
 	const original = idResolver.handle.resolve.bind(idResolver.handle)
 	idResolver.handle.resolve = async (handle) => {
 		if (handle.endsWith('.' + SOCIAL_HOST)) {
 			return resolveSocialHandle(handle)
+		}
+		if (handle === CUSTOM_HANDLE) {
+			return resolveWellKnown(handle).catch(() => undefined)
 		}
 		return original(handle)
 	}
@@ -136,6 +152,26 @@ const videoService = createServer(async (req, res) => {
 })
 videoService.listen(VIDEO_PORT, '127.0.0.1')
 
+let handleDid = ''
+const handleServer = createServer(async (req, res) => {
+	if (req.method === 'POST' && req.url === '/did') {
+		const chunks = []
+		for await (const chunk of req) {
+			chunks.push(chunk)
+		}
+		handleDid = Buffer.concat(chunks).toString().trim()
+		res.writeHead(204)
+		return res.end()
+	}
+	if (req.url === '/.well-known/atproto-did' && handleDid !== '') {
+		res.writeHead(200, { 'content-type': 'text/plain' })
+		return res.end(handleDid)
+	}
+	res.writeHead(404)
+	res.end()
+})
+handleServer.listen(HANDLE_PORT, '127.0.0.1')
+
 const addresses = {
 	plc: network.plc.url,
 	pds: network.pds.url,
@@ -146,12 +182,15 @@ const addresses = {
 	ozoneDid: network.ozone?.ctx?.cfg?.service?.did ?? '',
 	videoService: `http://127.0.0.1:${VIDEO_PORT}`,
 	videoHost: VIDEO_HOST,
+	handleServer: `http://127.0.0.1:${HANDLE_PORT}`,
+	customHandle: CUSTOM_HANDLE,
 }
 writeFileSync(NETWORK_FILE, JSON.stringify(addresses, null, 2))
 console.log('dev network up', addresses)
 
 const stop = async () => {
 	videoService.close()
+	handleServer.close()
 	await socialFirehose.destroy()
 	await network.close()
 	process.exit(0)
