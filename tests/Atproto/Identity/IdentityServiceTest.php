@@ -233,6 +233,25 @@ class IdentityServiceTest extends TestCase {
 		$this->assertSame([[$old->did, false], [$moved, true]], $announced, 'the old DID is announced gone, the moved one active');
 	}
 
+	public function testADidTheOtherSidePointedHereIsTakenWithNothingSent(): void {
+		$old = $this->service->forActor(self::actor('bridged'));
+		$this->assertNotNull($old);
+		$moved = 'did:plc:3guzzweuqraryl3rdkimjamk';
+		$key = PrivateKey::generate(Curve::K256);
+		$submitted = [];
+		$this->plc->method('submit')->willReturnCallback(static function (string $did, array $op) use (&$submitted): void {
+			$submitted[] = [$did, $op['type']];
+		});
+		$this->identityRequest->method('adoptDid')->willReturnCallback(function (int $id, string $did, string $sealed, string $public, string $from) use ($old): void {
+			$this->stored[$did] = new Identity($id, $old->actorId, $did, $old->handle, $sealed, $public, '', Identity::STATE_ACTIVE, $from, $old->creation);
+		});
+
+		$received = $this->service->receive($old, $moved, $key, 'https://atproto.brid.gy');
+
+		$this->assertSame([[$old->did, 'plc_tombstone']], $submitted, 'only the old DID is retired');
+		$this->assertSame([$moved, 'https://atproto.brid.gy'], [$received->did, $received->movedFromPds]);
+	}
+
 	public function testAHandOverTheDirectoryRefusedIsNotSentAgainByRepair(): void {
 		$identity = $this->service->forActor(self::actor('stayer'));
 		$this->assertNotNull($identity);

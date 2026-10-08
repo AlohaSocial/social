@@ -91,7 +91,7 @@ class InMemoryRepoRequest extends AtprotoRepoRequest {
 	#[\Override]
 	public function eachRecordBytes(string $did, callable $each): void {
 		foreach ($this->records[$did] ?? [] as $record) {
-			$each($record->cid, $record->bytes);
+			$each($record->cid, $record->bytes, $record->collection . '/' . $record->rkey);
 		}
 	}
 

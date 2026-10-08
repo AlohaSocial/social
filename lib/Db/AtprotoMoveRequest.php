@@ -70,6 +70,18 @@ class AtprotoMoveRequest extends CoreRequestBuilder {
 		return $this->one($qb);
 	}
 
+	/** The latest move of a DID in one direction. */
+	public function latestOfDid(string $did, string $direction): ?Move {
+		$qb = $this->getQueryBuilder();
+		$qb->select('*')->from(self::TABLE_ATPROTO_MOVE)
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->eq('direction', $qb->createNamedParameter($direction)))
+			->orderBy('id', 'desc')
+			->setMaxResults(1);
+
+		return $this->one($qb);
+	}
+
 	public function deleteByUser(string $userId): void {
 		$qb = $this->getQueryBuilder();
 		$qb->delete(self::TABLE_ATPROTO_MOVE)

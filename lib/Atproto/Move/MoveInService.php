@@ -307,7 +307,7 @@ class MoveInService {
 	 * The account's follows on Bluesky become follows here, each tied to the
 	 * record it came with. An account that cannot be read now is skipped.
 	 */
-	private function adoptFollows(Move $move): void {
+	public function adoptFollows(Move $move): void {
 		$actor = $this->actors->getFromUserId($move->userId);
 		$adopted = 0;
 		$cursor = '';
@@ -380,9 +380,11 @@ class MoveInService {
 	}
 
 	/**
+	 * The did:plc a handle or DID the person typed names.
+	 *
 	 * @throws InvalidArgumentException
 	 */
-	private function didOf(string $typed): string {
+	public function didOf(string $typed): string {
 		$typed = strtolower(trim(ltrim(trim($typed), '@')));
 		if (Syntax::isDid($typed)) {
 			if (!str_starts_with($typed, 'did:plc:')) {

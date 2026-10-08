@@ -116,7 +116,7 @@ class MoveAwayService {
 	 */
 	public function retry(string $userId): Move {
 		$move = $this->moves->latestOfUser($userId);
-		if ($move === null || $move->state !== Move::FAILED) {
+		if ($move === null || $move->state !== Move::FAILED || $move->direction !== Move::AWAY) {
 			throw new InvalidArgumentException('There is no failed move to start again');
 		}
 		$move->state = Move::RUNNING;
