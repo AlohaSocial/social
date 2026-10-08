@@ -179,6 +179,34 @@ class IdentityServiceTest extends TestCase {
 		$this->assertTrue(PlcOperation::verify($update, $this->rotation->publicKey()));
 	}
 
+	public function testSwitchingOffAnnouncesTheAccountInactiveAndOnAgainActive(): void {
+		$identity = $this->service->forActor(self::actor('erin'));
+		$this->assertNotNull($identity);
+		$this->plc->expects($this->never())->method('submit');
+		$this->repositories->expects($this->never())->method('delete');
+		$states = [];
+		$this->identityRequest->method('setState')->willReturnCallback(static function (string $did, string $state) use (&$states): void {
+			$states[] = $state;
+		});
+		$announced = [];
+		$this->events->method('account')->willReturnCallback(static function (string $did, bool $active, string $status = '') use (&$announced): int {
+			$announced[] = [$active, $status];
+
+			return 1;
+		});
+
+		$this->service->deactivate($identity);
+		$this->service->deactivate($identity);
+		$off = new Identity($identity->id, $identity->actorId, $identity->did, $identity->handle, $identity->sealedSigningKey, $identity->signingPublic, '', Identity::STATE_DEACTIVATED, '', $identity->creation);
+		$this->service->deactivate($off);
+		$this->service->activate($off);
+		$this->service->activate($identity);
+
+		$this->assertSame([Identity::STATE_DEACTIVATED, Identity::STATE_DEACTIVATED, Identity::STATE_ACTIVE], $states, 'the DID keeps its state row; only a change is written');
+		$this->assertSame([[false, 'deactivated'], [false, 'deactivated'], [true, '']], $announced);
+		$this->assertSame(['did' => $off->did, 'handle' => $off->handle, 'signing_key' => $off->signingPublic, 'state' => 'deactivated', 'active' => false, 'created_at' => gmdate('Y-m-d\TH:i:s\Z', $off->creation)], $off->toArray());
+	}
+
 	public function testATombstoneEndsEverything(): void {
 		$identity = $this->service->forActor(self::actor('dave'));
 		$this->assertNotNull($identity);

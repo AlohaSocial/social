@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use DateTime;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Publisher\InteractionQueue;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -218,6 +219,27 @@ class LikeServiceTest extends TestCase {
 
 		$this->expectException(InvalidResourceException::class);
 		$this->service->create($this->alice(), self::POST_ID);
+	}
+
+	/**
+	 * A Bluesky post has no inbox to deliver to: the like is kept here and
+	 * queued for its record, and no activity goes anywhere.
+	 */
+	public function testALikeOfABlueskyPostIsKeptAndQueuedForItsRecord(): void {
+		$note = $this->note();
+		$note->setId('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz/post/3kpost');
+		$note->setAttributedTo('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz');
+		$this->streamService->method('getStreamById')->willReturn($note);
+		$this->cacheActorService->expects($this->never())->method('getFromId');
+		$this->likeInterface->expects($this->once())->method('save');
+		$queue = $this->createMock(InteractionQueue::class);
+		$queue->expects($this->once())->method('liked')->with(self::ALICE_ID, $note->getId(), $this->stringStartsWith(self::ALICE_ID . '#like/'));
+		$this->activityService->method('request')->willReturn('');
+		$service = new LikeService($this->streamService, $this->signatureService, $this->activityService, $this->streamActionService, $this->cacheActorService, new NullLogger(), $this->moderationService, $queue);
+
+		$like = $service->create($this->alice(), $note->getId());
+
+		$this->assertSame([], $like->getInstancePaths());
 	}
 
 	/**

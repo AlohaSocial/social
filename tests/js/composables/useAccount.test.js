@@ -56,6 +56,19 @@ describe('useAccount', () => {
 		expect(mountWith('bob@remote.tld').profileAccount).toBe('bob@remote.tld')
 	})
 
+	it('profileAccount keeps a Bluesky handle bare once the store knows it, and isLocal is false', async () => {
+		const dana = { id: '33', acct: 'dana.bsky.social', username: 'dana.bsky.social', url: 'https://bsky.app/profile/dana.bsky.social', bluesky: { handle: 'dana.bsky.social', did: 'did:plc:d', url: 'https://bsky.app/profile/dana.bsky.social', native: true } }
+		const vm = mountWith('dana.bsky.social')
+		expect(vm.profileAccount).toBe('dana.bsky.social@cloud.example.org')
+
+		accountStore.addAccount({ actorId: dana.url, data: dana })
+		await wrapper.vm.$nextTick()
+
+		expect(vm.profileAccount).toBe('dana.bsky.social')
+		expect(vm.accountInfo).toEqual(dana)
+		expect(vm.isLocal).toBe(false)
+	})
+
 	it('profileAccount is empty without a uid', () => {
 		expect(mountWith('').profileAccount).toBe('')
 	})

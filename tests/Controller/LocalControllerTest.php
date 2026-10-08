@@ -710,6 +710,28 @@ class LocalControllerTest extends TestCase {
 		$this->assertSame($actor, $response->getData());
 	}
 
+	public function testGlobalAccountInfoFindsABlueskyHandleNobodyHereHolds(): void {
+		$alice = $this->createStub(Person::class);
+		$alice->method('isLocal')->willReturn(false);
+		$alice->method('getId')->willReturn('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz');
+		$this->accountService->method('getCachedLocalActor')->with('alice.bsky.social')->willThrowException(new CacheActorDoesNotExistException());
+		$this->cacheActorService->expects($this->once())->method('getFromAccount')->with('alice.bsky.social')->willReturn($alice);
+
+		$response = $this->controller(null)->globalAccountInfo('alice.bsky.social');
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame($alice, $response->getData());
+	}
+
+	public function testGlobalAccountInfoKeepsADottedLocalUserLocal(): void {
+		$john = $this->createStub(Person::class);
+		$john->method('isLocal')->willReturn(true);
+		$this->accountService->method('getCachedLocalActor')->with('john.doe')->willReturn($john);
+		$this->cacheActorService->expects($this->never())->method('getFromAccount');
+
+		$this->assertSame($john, $this->controller(null)->globalAccountInfo('john.doe')->getData());
+	}
+
 	public function testGlobalAccountInfoTreatsOwnDomainAsLocal(): void {
 		$this->configService->method('getCloudHost')->willReturn('cloud.example');
 		$this->configService->method('getSocialAddress')->willReturn('social.example');

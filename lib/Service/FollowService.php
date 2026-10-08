@@ -11,6 +11,8 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\BlueskyGraphService;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -77,6 +79,7 @@ class FollowService {
 		private AccountService $accountService,
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
+		private ?BlueskyGraphService $blueskyGraph = null,
 	) {
 	}
 
@@ -264,6 +267,9 @@ class FollowService {
 			throw new FollowSameAccountException("Don't follow yourself, be your own lead");
 		}
 
+		if (BlueskyActorService::isBluesky($remoteActor)) {
+			return $this->followBluesky($actor, $remoteActor);
+		}
 		// Nothing can be delivered to an actor that publishes no inbox:
 		// `addInstancePath()` drops the empty URI, `request()` answers
 		// "<request token not needed>", and the follow row sat pending for
@@ -347,6 +353,41 @@ class FollowService {
 	}
 
 	/**
+	 * A follow of a Bluesky account: accepted at once, since Bluesky has no
+	 * follow requests, written as a record in the local account's repository
+	 * and watched from then on. Nothing is delivered anywhere.
+	 *
+	 * @throws FollowSameAccountException
+	 * @throws InvalidResourceException when Bluesky is switched off
+	 */
+	private function followBluesky(Person $actor, Person $remoteActor): bool {
+		if ($this->blueskyGraph === null) {
+			throw new InvalidResourceException('Bluesky is not available here');
+		}
+		try {
+			$this->followsRequest->getByPersons($actor->getId(), $remoteActor->getId());
+
+			return false;
+		} catch (FollowNotFoundException) {
+		}
+		/** @var Follow $follow */
+		$follow = AP::instance()->getItemFromType(Follow::TYPE);
+		$follow->generateUniqueId();
+		$follow->setActorId($actor->getId());
+		$follow->setObjectId($remoteActor->getId());
+		$follow->setFollowId($remoteActor->getFollowers());
+		$follow->setAccepted(true);
+		$this->followsRequest->save($follow);
+		$this->followsRequest->accepted($follow);
+		$this->accountService->bumpActorCount($remoteActor->getId(), 'count_followers', 1);
+		$this->timelineRevisionService->bumpForActor($actor->getId());
+		$this->blueskyGraph->follow($actor, $remoteActor, $follow);
+		$this->logger->info('FollowService::followAccount - following a Bluesky account', ['actor' => $actor->getId(), 'object' => $remoteActor->getId()]);
+
+		return true;
+	}
+
+	/**
 	 * @param Person $actor
 	 * @param string $account
 	 *
@@ -385,6 +426,11 @@ class FollowService {
 				);
 			}
 
+			if (BlueskyActorService::isBluesky($remoteActor)) {
+				$this->blueskyGraph?->unfollow($actor, $remoteActor, $follow);
+
+				return true;
+			}
 			$undo = AP::instance()->getItemFromType(Undo::TYPE);
 			$follow->setParent($undo);
 			// hung off the local actor, not the cloud root: see

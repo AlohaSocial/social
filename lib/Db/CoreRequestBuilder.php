@@ -109,6 +109,8 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_BLOB = 'social_atproto_blob';
 	public const TABLE_ATPROTO_EVENT = 'social_atproto_event';
 	public const TABLE_ATPROTO_PLC_LOG = 'social_atproto_plc_log';
+	public const TABLE_ATPROTO_WATCH = 'social_atproto_watch';
+	public const TABLE_ATPROTO_NOTIFY_CURSOR = 'social_atproto_notify_cursor';
 
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
@@ -122,6 +124,8 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_BLOB => ['id', 'did', 'cid', 'document_id', 'document_id_prim', 'mime', 'size', 'creation'],
 		self::TABLE_ATPROTO_EVENT => ['seq', 'did', 'kind', 'bytes', 'time'],
 		self::TABLE_ATPROTO_PLC_LOG => ['id', 'did', 'cid', 'operation', 'creation', 'sent', 'confirmed'],
+		self::TABLE_ATPROTO_WATCH => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error', 'creation'],
+		self::TABLE_ATPROTO_NOTIFY_CURSOR => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error', 'creation'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

@@ -13,6 +13,8 @@
  * every session and every instance — no storage, no coordination.
  */
 
+import { isBlueskyAccount } from './accountLocality.js'
+
 /**
  * Spread hues around the wheel; the same host always lands on the same one.
  *
@@ -128,17 +130,33 @@ export function instanceColour(host) {
 }
 
 /**
+ * The domain a Bluesky handle is under: `bsky.social` for `alice.bsky.social`,
+ * the way the server files such an account's host.
+ *
+ * @param {string} handle a Bluesky handle
+ * @return {string} the domain, lowercased, or '' when there is none
+ */
+function blueskyInstanceOf(handle) {
+	const dot = handle.indexOf('.')
+
+	return dot === -1 ? '' : handle.slice(dot + 1).toLowerCase()
+}
+
+/**
  * Everything the UI needs to show where an account lives.
  *
- * @param {string} acct a handle
+ * @param {string|Partial<import('../types/Mastodon.js').Account>} account a handle, or the account itself — which is the only thing that can tell a Bluesky handle from a local user id
  * @return {{instance: string, colour: string, local: boolean}} the account's origin
  */
-export function originOf(acct) {
-	const instance = instanceOf(acct)
+export function originOf(account) {
+	const entity = typeof account === 'string' ? null : account
+	const acct = typeof account === 'string' ? account : String(account?.acct ?? '')
+	const bluesky = isBlueskyAccount(entity)
+	const instance = bluesky ? blueskyInstanceOf(acct) : instanceOf(acct)
 
 	return {
 		instance,
 		colour: instanceColour(instance),
-		local: instance === '',
+		local: instance === '' && !bluesky,
 	}
 }

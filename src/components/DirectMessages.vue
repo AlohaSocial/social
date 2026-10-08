@@ -417,6 +417,7 @@ import { useAccountStore } from '../store/account.js'
 import { fullDateTime, shortAgo } from '../utils/relativeTime.js'
 import { nextCursor } from '../utils/linkHeader.js'
 import { htmlToPlainText } from '../utils/plainText.js'
+import { isLocalAccount } from '../utils/accountLocality.js'
 import logger from '../services/logger.js'
 
 /** How many conversations one request asks for. */
@@ -738,7 +739,7 @@ export default {
 	methods: {
 		isOwnAccount(account) {
 			return account.acct === this.currentUserId
-				|| (account.username === this.currentUserId && !String(account.acct ?? '').includes('@'))
+				|| (account.username === this.currentUserId && isLocalAccount(account))
 		},
 
 		async loadSuggestedAccounts() {
@@ -1242,7 +1243,7 @@ export default {
 				return false
 			}
 			return account.acct === this.currentUserId
-				|| (account.username === this.currentUserId && !String(account.acct ?? '').includes('@'))
+				|| (account.username === this.currentUserId && isLocalAccount(account))
 		},
 
 		/**

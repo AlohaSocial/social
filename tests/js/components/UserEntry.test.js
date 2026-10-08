@@ -127,6 +127,29 @@ describe('UserEntry', () => {
 		expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'profile', params: { account: 'bob@remote.example' } })
 	})
 
+	/** A Bluesky handle has no @ either, so the entity has to say where it lives. */
+	it('marks a Bluesky account with the butterfly and treats it as remote', () => {
+		const bluesky = {
+			id: '1789553297940456499',
+			url: 'https://bsky.app/profile/dana.bsky.social',
+			acct: 'dana.bsky.social',
+			username: 'dana.bsky.social',
+			display_name: 'Dana',
+			avatar: 'https://cdn.bsky.app/img/avatar/plain/did:plc:d/abc@jpeg',
+			bluesky: { handle: 'dana.bsky.social', did: 'did:plc:d', url: 'https://bsky.app/profile/dana.bsky.social', native: true },
+		}
+		const wrapper = mountEntry(bluesky)
+
+		const badge = wrapper.find('.bluesky-badge')
+		expect(badge.exists()).toBe(true)
+		expect(badge.attributes('title')).toBe('On Bluesky')
+		expect(badge.find('svg').attributes('aria-label')).toBe('On Bluesky')
+		expect(wrapper.find('.post-author').text()).toBe('Dana')
+		expect(wrapper.findComponent(NcAvatarStub).props('url')).toBe(bluesky.avatar)
+		expect(wrapper.findComponent(RouterLinkStub).props('to')).toEqual({ name: 'profile', params: { account: 'dana.bsky.social' } })
+		expect(mountEntry(local).find('.bluesky-badge').exists()).toBe(false)
+	})
+
 	it('injects the bio only after sanitising the remote HTML', () => {
 		const bio = mountEntry(remote).find('.user-details p')
 		expect(bio.text()).toBe('Hi link site')

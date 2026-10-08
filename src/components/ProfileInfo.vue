@@ -45,6 +45,7 @@
 				:size="128" />
 			<h2>
 				{{ displayName }}
+				<BlueskyBadge v-if="isBluesky" />
 				<!-- beside the name, which is where a pronoun belongs and where
 				     every other network puts it; it is still a profile field and
 				     still federates as one -->
@@ -54,7 +55,9 @@
 			     it along. One account, two networks: the Bluesky handle is the
 			     same person and leads to where that network shows them -->
 			<div class="user-profile__handles">
-				<span class="user-profile__handle">
+				<!-- a Bluesky account has no fediverse address: its one handle
+				     is the Bluesky one below -->
+				<span v-if="!isBluesky" class="user-profile__handle">
 					<code class="user-profile__handle-text">{{ fediverseHandle }}</code>
 					<NcButton
 						variant="tertiary"
@@ -67,7 +70,8 @@
 						</template>
 					</NcButton>
 				</span>
-				<span v-if="accountInfo.bluesky" class="user-profile__handle">
+				<!-- a paused presence is not an address anybody can reach -->
+				<span v-if="accountInfo.bluesky && accountInfo.bluesky.active !== false" class="user-profile__handle">
 					<svg
 						class="user-profile__butterfly"
 						aria-hidden="true"
@@ -525,7 +529,9 @@ import NcModal from '@nextcloud/vue/components/NcModal'
 import { generateUrl } from '@nextcloud/router'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
+import BlueskyBadge from './BlueskyBadge.vue'
 import FollowButton from './FollowButton.vue'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 import FeaturedTags from './FeaturedTags.vue'
 import ProfileHighlights from './ProfileHighlights.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
@@ -579,6 +585,7 @@ export default {
 		Check,
 		Close,
 		ContentCopy,
+		BlueskyBadge,
 		FollowButton,
 		IconFormatListBulleted,
 		ListMembershipDialog,
@@ -667,6 +674,11 @@ export default {
 
 		displayName() {
 			return this.accountInfo.display_name ?? this.accountInfo.username ?? this.profileAccount
+		},
+
+		/** @return {boolean} whether this is a Bluesky account seen from here */
+		isBluesky() {
+			return isBlueskyAccount(this.accountInfo)
 		},
 
 		/**

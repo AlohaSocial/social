@@ -12,6 +12,9 @@ namespace OCA\Social\Controller;
 use Exception;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
@@ -41,6 +44,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HashtagService;
 use OCA\Social\Service\PostService;
+use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCA\Social\Tools\Traits\TNCDataResponse;
@@ -95,6 +99,7 @@ class LocalController extends Controller {
 		private IUserManager $userManager,
 		private IUserSession $userSession,
 		private IdentityService $atprotoIdentities,
+		private ?BlueskySearch $blueskySearch = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -707,7 +712,16 @@ class LocalController extends Controller {
 			}
 
 			if ($isLocal) {
-				$actor = $this->getLocalAccountWithCacheFallback($username);
+				try {
+					$actor = $this->getLocalAccountWithCacheFallback($username);
+				} catch (Exception $e) {
+					// a local user keeps a dotted name; one nobody here holds
+					// that is shaped like a handle is a Bluesky account
+					if ($domain !== '' || !BlueskyIds::isHandle($account)) {
+						throw $e;
+					}
+					$actor = $this->cacheActorService->getFromAccount($account);
+				}
 			} else {
 				$actor = $this->cacheActorService->getFromAccount($account);
 			}
@@ -843,6 +857,9 @@ class LocalController extends Controller {
 
 		try {
 			$accounts = $this->cacheActorService->searchCachedAccounts($search);
+			if ($this->blueskySearch !== null) {
+				$accounts = SearchService::withBluesky($accounts, $this->blueskySearch->typeahead($search));
+			}
 
 			return $this->success(['accounts' => $accounts, 'exact' => $match]);
 		} catch (Exception $e) {
@@ -918,8 +935,8 @@ class LocalController extends Controller {
 		}
 		try {
 			$identity = $this->atprotoIdentities->getByActorId($actor->getId());
-			if ($identity->isActive()) {
-				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle]);
+			if ($identity->state !== Identity::STATE_TOMBSTONED) {
+				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle, 'native' => false, 'active' => $identity->isActive()]);
 			}
 		} catch (AtprotoIdentityNotFoundException) {
 		} catch (Throwable $e) {

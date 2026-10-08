@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { generateUrl } from '@nextcloud/router'
+import { isLocalAccount } from './accountLocality.js'
 
 /**
  * The native Nextcloud profile URL for an account hosted on this instance.
@@ -16,7 +17,7 @@ import { generateUrl } from '@nextcloud/router'
 export function localProfileUrl(account, statusId = null) {
 	const acct = String(account?.acct ?? '')
 	const username = String(account?.username || acct)
-	if (!acct || acct.includes('@') || !username) {
+	if (!acct || !isLocalAccount(account) || !username) {
 		return ''
 	}
 

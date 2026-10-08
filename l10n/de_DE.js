@@ -383,6 +383,8 @@ OC.L10N.register(
     "Translate" : "Übersetzen",
     "Delivery status" : "Zustellstatus",
     "Open on original instance" : "Auf der Ursprungsinstanz öffnen",
+    "Open on Bluesky" : "Auf Bluesky öffnen",
+    "On Bluesky" : "Auf Bluesky",
     "Remove bookmark" : "Lesezeichen entfernen",
     "Bookmark" : "Lesezeichen",
     "Add to a collection" : "Zu einer Sammlung hinzufügen",

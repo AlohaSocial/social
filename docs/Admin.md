@@ -462,15 +462,26 @@ first public post), and `php occ social:atproto:crawl` tells the relays to
 subscribe. From then on every public post of every account goes to Bluesky as
 it is made, edits within five minutes replace the Bluesky copy and later ones
 leave it standing with its link to the current post here, and a deleted post is
-deleted there. Direct, followers-only and unlisted posts never leave.
+deleted there. Direct, followers-only and unlisted posts never leave. The other
+way, people here follow Bluesky accounts by their bare handle
+(`alice.bsky.social`) and read them in their home feed; the sync job reads the
+followed authors' feeds from Bluesky's public AppView, and asks the AppView,
+as each local account, what Bluesky did to it — follows, likes, reposts,
+replies, mentions — which arrive in Activities like anything else. Each
+person can pause their own Bluesky presence in Settings → Apps and account → Bluesky.
 
 **What the card shows.** The handle host, the PDS endpoint and the instance's
 `did:web`; the relays (`https://bsky.network` by default; "Tell the relays now"
 sends the crawl request again); the PLC directory and the AppView the instance
-talks to (the defaults are Bluesky's; the interop job points them at its own);
-how many identities and repositories there are, how many events the replay
-window holds and the head sequence number; the daemon's last report; and the
-age of the instance rotation key.
+talks to (the defaults are Bluesky's; the interop job points them at its own —
+`atproto_appview` for public reads, `atproto_appview_auth` and
+`atproto_appview_did` for the reads made as a user, which the public AppView
+refuses); how many identities and repositories there are, how many events the
+replay window holds and the head sequence number; the daemon's last report;
+the age of the instance rotation key; and the reading side — how many Bluesky
+authors are followed, how many accounts' notifications are asked for, and how
+far behind the slowest of each is. `atproto_sync_ceiling` (default 200) caps
+the AppView requests one sync pass makes.
 
 **Keys and backups.** Each account's signing key and the instance's rotation and
 service keys are stored sealed with the instance secret, like actor keys. They

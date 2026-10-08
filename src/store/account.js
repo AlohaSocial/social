@@ -12,6 +12,7 @@ import { defineStore } from 'pinia'
 import logger from '../services/logger.js'
 import { useErrorsStore } from './errors.js'
 import { useTimelineStore } from './timeline.js'
+import { isBlueskyAccount } from '../utils/accountLocality.js'
 
 /**
  * How many followers or followed accounts one page holds.
@@ -111,7 +112,8 @@ function indexAccount(state, { actorId, data }) {
 	if (!data.acct) {
 		return
 	}
-	const accountId = (data.acct.indexOf('@') === -1) ? data.acct + '@' + new URL(data.url).hostname : data.acct
+	// a Bluesky handle is whole without a host, and is what every lookup asks by
+	const accountId = (data.acct.indexOf('@') === -1 && !isBlueskyAccount(data)) ? data.acct + '@' + new URL(data.url).hostname : data.acct
 	state.accountIdMap = { ...state.accountIdMap, [accountId]: data.url }
 }
 

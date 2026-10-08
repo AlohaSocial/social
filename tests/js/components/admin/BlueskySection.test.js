@@ -124,6 +124,19 @@ describe('the Bluesky card', () => {
 		expect(text).toContain('Running as pid 4242 for 2 hours, serving 2 subscribers')
 	})
 
+	it('shows the reading side, with each lag as a duration or as caught up', () => {
+		const text = mountCard(admin({ status: { reading: { watches: 7, lag: 0, accounts: 3, lag_notifications: 5400 } } })).text()
+
+		expect(text).toContain('Reading Bluesky')
+		expect(text).toContain('Authors followed')
+		expect(text).toContain('7')
+		expect(text).toContain('Accounts asking for notifications')
+		expect(text).toContain('3')
+		expect(text).toContain('up to date')
+		expect(text).toContain('2 hours behind')
+		expect(mountCard().text()).not.toContain('Reading Bluesky')
+	})
+
 	it('says plainly when the daemon is not running', () => {
 		const wrapper = mountCard(admin({ status: { daemon: null } }))
 

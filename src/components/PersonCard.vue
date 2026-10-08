@@ -43,6 +43,7 @@
 			<span class="person__text">
 				<span class="person__name">
 					{{ account.display_name || account.username }}
+					<BlueskyBadge v-if="isBluesky" />
 					<span v-if="account.bot" class="person__bot">{{ t('social', 'bot') }}</span>
 				</span>
 				<span class="person__handle">@{{ account.acct }}</span>
@@ -75,7 +76,9 @@
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ActorAvatar from './ActorAvatar.vue'
+import BlueskyBadge from './BlueskyBadge.vue'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 
 /**
  * One person, in a list of people.
@@ -97,6 +100,7 @@ export default {
 
 	components: {
 		ActorAvatar,
+		BlueskyBadge,
 		NcButton,
 		NcLoadingIcon,
 	},
@@ -165,7 +169,12 @@ export default {
 		 * fetch
 		 */
 		onThisServer() {
-			return !(this.account.acct ?? '').includes('@')
+			return isLocalAccount(this.account)
+		},
+
+		/** @return {boolean} */
+		isBluesky() {
+			return isBlueskyAccount(this.account)
 		},
 
 		/** @return {string} the letter a blank avatar shows */

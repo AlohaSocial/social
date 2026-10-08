@@ -229,6 +229,26 @@ class PostServiceQuoteTest extends TestCase {
 	}
 
 	/**
+	 * Bluesky asks nobody's permission to quote — the quoted author's
+	 * postgate decides — so the quote stands at once and no QuoteRequest
+	 * waits for an answer that would never come.
+	 */
+	public function testAQuoteOfABlueskyPostStandsAtOnce(): void {
+		$quoted = $this->quoted();
+		$quoted->setId('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz/post/3kpost');
+		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz');
+		$this->holding($quoted);
+		$this->expectCreateActivity($note);
+		$this->activityService->expects($this->never())->method('request');
+
+		$this->service->createPost($this->post('11'));
+
+		$this->assertSame($quoted->getId(), $note->getQuote());
+		$this->assertSame(Stream::QUOTE_ACCEPTED, $note->getQuoteState());
+		$this->assertNotContains($quoted->getAttributedTo(), $note->getCcArray(), 'a Bluesky author is not addressed');
+	}
+
+	/**
 	 * The quoted author has to learn of the quote — it is their post being
 	 * carried into somebody else's audience, and their server that decides
 	 * whether the quote may stand.

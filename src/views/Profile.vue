@@ -36,6 +36,7 @@ import { useAccountStore } from '../store/account.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useAccount } from '../composables/useAccount.js'
 import { useServerData } from '../composables/useServerData.js'
+import { isBlueskyHandle } from '../utils/accountLocality.js'
 
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
@@ -117,15 +118,15 @@ export default {
 				return
 			}
 
-			let fetchMethod
-			if (this.serverData.public) {
-				const requestedHandle = this.$route.params.account || this.serverData.account || ''
-				fetchMethod = requestedHandle.includes('@') ? 'fetchAccountInfo' : 'fetchPublicAccountInfo'
-			} else {
-				fetchMethod = 'fetchAccountInfo'
-			}
+			// a handle with a dot and no host is asked for as it is: it is a
+			// Bluesky handle, or a local user id the server answers for either
+			// way — qualifying it with this host would make it neither
+			const requestedHandle = String(this.$route.params.account || this.serverData.account || '')
+			const remote = requestedHandle.includes('@') || isBlueskyHandle(requestedHandle)
+			const fetchMethod = this.serverData.public && !remote ? 'fetchPublicAccountInfo' : 'fetchAccountInfo'
+			const account = isBlueskyHandle(requestedHandle) ? requestedHandle : this.profileAccount
 
-			const response = await this.accountStore[fetchMethod](this.profileAccount)
+			const response = await this.accountStore[fetchMethod](account)
 			this.lookupFinished = true
 			if (response) {
 				this.uid = response.acct

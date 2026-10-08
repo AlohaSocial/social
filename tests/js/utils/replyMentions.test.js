@@ -14,6 +14,12 @@ describe('fullHandle', () => {
 	it('leaves a remote handle as it is', () => {
 		expect(fullHandle('bob@remote.example', 'cloud.example')).toBe('bob@remote.example')
 	})
+
+	it('takes the account itself, and never adds this server to a Bluesky handle', () => {
+		expect(fullHandle({ acct: 'alice' }, 'cloud.example')).toBe('alice@cloud.example')
+		expect(fullHandle({ acct: 'dana.bsky.social', bluesky: { native: true } }, 'cloud.example')).toBe('dana.bsky.social')
+		expect(fullHandle({ acct: 'alice', bluesky: { native: false, active: true } }, 'cloud.example')).toBe('alice@cloud.example')
+	})
 })
 
 describe('participantsOf', () => {
@@ -53,5 +59,13 @@ describe('mentionPills', () => {
 		expect(space.textContent).toBe('\u00a0')
 		expect(alice.textContent).toBe('@alice@cloud.example')
 		expect(alice.querySelector('img')).toBeNull()
+	})
+
+	it('writes a Bluesky mention as the bare handle', () => {
+		const [dana] = /** @type {HTMLElement[]} */ (mentionPills([
+			{ acct: 'dana.bsky.social', url: 'https://bsky.app/profile/dana.bsky.social', bluesky: { native: true } },
+		], 'cloud.example'))
+
+		expect(dana.textContent).toBe('@dana.bsky.social')
 	})
 })
