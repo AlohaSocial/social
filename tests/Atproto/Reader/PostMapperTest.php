@@ -9,16 +9,22 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Reader;
 
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostMapper;
+use OCA\Social\Db\AtprotoIdentityRequest;
+use OCA\Social\Db\AtprotoRepoRequest;
+use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class PostMapperTest extends TestCase {
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 	private const OTHER = 'did:plc:z72i7hdynmk6r22z27h6tvur';
 
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
-		$create = (new PostMapper())->create($this->postView());
+		$create = (new PostMapper($this->resolver()))->create($this->postView());
 		$this->assertNotNull($create);
 		$this->assertSame('Create', $create['type']);
 		$this->assertSame('https://bsky.app/profile/' . self::DID, $create['actor']);
@@ -43,7 +49,7 @@ class PostMapperTest extends TestCase {
 	}
 
 	public function testLabelsWarnAndHide(): void {
-		$mapper = new PostMapper();
+		$mapper = new PostMapper($this->resolver());
 		$adult = $this->postView(['labels' => [['src' => self::DID, 'uri' => 'at://x', 'val' => 'porn']]]);
 		$note = $mapper->note($adult);
 		$this->assertTrue($note['sensitive']);
@@ -58,7 +64,7 @@ class PostMapperTest extends TestCase {
 	}
 
 	public function testQuotesExternalLinksAndVideoAreAppendedOrLinked(): void {
-		$mapper = new PostMapper();
+		$mapper = new PostMapper($this->resolver());
 		$quote = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.record#view', 'record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'cid' => 'bafyq']]]));
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kquoted', $quote['quote']);
 		$this->assertSame([], $quote['attachment']);
@@ -80,7 +86,7 @@ class PostMapperTest extends TestCase {
 	}
 
 	public function testARepostInAFeedIsAnAnnounceByTheReposter(): void {
-		$mapper = new PostMapper();
+		$mapper = new PostMapper($this->resolver());
 		$item = ['post' => $this->postView(), 'reason' => ['$type' => 'app.bsky.feed.defs#reasonRepost', 'by' => ['did' => self::OTHER, 'handle' => 'bob.bsky.social'], 'indexedAt' => '2026-10-08T11:00:00.000Z', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.repost/3krepost']];
 		$announce = $mapper->announce($item);
 		$this->assertSame([
@@ -120,5 +126,12 @@ class PostMapperTest extends TestCase {
 			'indexedAt' => '2026-10-08T10:00:01.000Z',
 			'labels' => [],
 		], $overrides);
+	}
+
+	private function resolver(): LocalRecordResolver {
+		$identities = $this->createMock(AtprotoIdentityRequest::class);
+		$identities->method('getByDid')->willThrowException(new AtprotoIdentityNotFoundException());
+
+		return new LocalRecordResolver($identities, $this->createMock(AtprotoRepoRequest::class));
 	}
 }

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Cron;
 
 use OCA\Social\Atproto\Reader\FeedPoller;
+use OCA\Social\Atproto\Reader\NotificationPoller;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
@@ -17,8 +18,9 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Reads Bluesky: the feeds of the authors somebody here follows, every two
- * minutes, as many watches as are due within the request ceiling.
+ * Reads Bluesky every two minutes: the feeds of the authors somebody here
+ * follows, then what Bluesky did to local accounts, as many of each as are
+ * due within the request ceiling.
  */
 class AtprotoSync extends TimedJob {
 	private const INTERVAL = 2 * 60;
@@ -27,6 +29,7 @@ class AtprotoSync extends TimedJob {
 		ITimeFactory $time,
 		private AtprotoConfig $config,
 		private FeedPoller $poller,
+		private NotificationPoller $notifications,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -38,13 +41,15 @@ class AtprotoSync extends TimedJob {
 		if (!$this->config->isEnabled()) {
 			return;
 		}
-		try {
-			$result = $this->poller->poll();
-			if ($result['stored'] > 0) {
-				$this->logger->info('Bluesky feeds read', $result);
+		foreach (['feeds' => fn (): array => $this->poller->poll(), 'notifications' => fn (): array => $this->notifications->poll()] as $step => $run) {
+			try {
+				$result = $run();
+				if (($result['stored'] ?? 0) > 0 || ($result['handled'] ?? 0) > 0) {
+					$this->logger->info('Bluesky ' . $step . ' read', $result);
+				}
+			} catch (Throwable $e) {
+				$this->logger->warning('Bluesky sync step failed: ' . $step, ['exception' => $e]);
 			}
-		} catch (Throwable $e) {
-			$this->logger->warning('Bluesky feed sync failed', ['exception' => $e]);
 		}
 	}
 }

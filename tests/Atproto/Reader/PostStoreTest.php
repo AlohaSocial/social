@@ -12,9 +12,13 @@ namespace OCA\Social\Tests\Atproto\Reader;
 use OCA\Social\AP;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\AtprotoIdentityRequest;
+use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Create;
@@ -83,7 +87,7 @@ class PostStoreTest extends TestCase {
 		$this->actors = $this->createMock(BlueskyActorService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
-		$this->store = new PostStore(new PostMapper(), new ActorMapper(), $this->actors, $this->import, $this->streams, $time, new NullLogger());
+		$this->store = new PostStore(new PostMapper($this->resolver()), new ActorMapper(), $this->actors, $this->import, $this->streams, $time, new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -166,5 +170,12 @@ class PostStoreTest extends TestCase {
 			'replyCount' => 0, 'repostCount' => 1, 'likeCount' => 3, 'quoteCount' => 0,
 			'indexedAt' => '2026-10-08T10:00:01.000Z',
 		];
+	}
+
+	private function resolver(): LocalRecordResolver {
+		$identities = $this->createMock(AtprotoIdentityRequest::class);
+		$identities->method('getByDid')->willThrowException(new AtprotoIdentityNotFoundException());
+
+		return new LocalRecordResolver($identities, $this->createMock(AtprotoRepoRequest::class));
 	}
 }

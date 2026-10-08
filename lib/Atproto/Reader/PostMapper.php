@@ -28,6 +28,11 @@ use OCA\Social\Model\ActivityPub\ACore;
 class PostMapper {
 	public const DETAIL = 'atproto';
 
+	public function __construct(
+		private LocalRecordResolver $local,
+	) {
+	}
+
 	private const IMAGES = 'app.bsky.embed.images#view';
 	private const VIDEO = 'app.bsky.embed.video#view';
 	private const EXTERNAL = 'app.bsky.embed.external#view';
@@ -134,7 +139,7 @@ class PostMapper {
 			'sensitive' => $adult || $warning !== '',
 			'tag' => $this->tags($record['facets'] ?? []),
 			'attachment' => $attachments,
-			'inReplyTo' => BlueskyIds::postIdOfUri((string)($record['reply']['parent']['uri'] ?? '')),
+			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
 			'_atproto' => [
 				'uri' => $uri,
 				'cid' => (string)($post['cid'] ?? ''),
@@ -197,7 +202,7 @@ class PostMapper {
 			case self::RECORD:
 				$record = $embed['record'] ?? [];
 				if (is_array($record) && ($record['$type'] ?? '') === self::VIEW_RECORD) {
-					return [[], BlueskyIds::postIdOfUri((string)($record['uri'] ?? '')), ''];
+					return [[], $this->local->postId((string)($record['uri'] ?? '')), ''];
 				}
 
 				return [[], '', ''];
@@ -230,7 +235,7 @@ class PostMapper {
 			foreach (is_array($facet['features'] ?? null) ? $facet['features'] : [] as $feature) {
 				$type = (string)($feature['$type'] ?? '');
 				if ($type === 'app.bsky.richtext.facet#mention' && is_string($feature['did'] ?? null) && $feature['did'] !== '') {
-					$tags[] = ['type' => 'Mention', 'href' => BlueskyIds::actorId($feature['did']), 'name' => '@' . $feature['did']];
+					$tags[] = ['type' => 'Mention', 'href' => $this->local->mentionTarget($feature['did']), 'name' => '@' . $feature['did']];
 				} elseif ($type === 'app.bsky.richtext.facet#tag' && is_string($feature['tag'] ?? null) && $feature['tag'] !== '') {
 					$tags[] = ['type' => 'Hashtag', 'href' => BlueskyIds::hashtagUrl($feature['tag']), 'name' => '#' . $feature['tag']];
 				}
