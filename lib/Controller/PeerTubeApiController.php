@@ -260,6 +260,7 @@ class PeerTubeApiController extends ClientApiController {
 	/** The signed-in account, as PeerTube's `User`. */
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/users/me')]
 	public function me(): DataResponse {

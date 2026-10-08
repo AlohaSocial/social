@@ -103,7 +103,16 @@ and policy in one place. None are `#[ApiRoute]`: that is the OCS type, and the
 server serves OCS routes under `/ocsapp`, which is not where these paths are
 published.
 
-Two things about the order the server reads them in, because two routes of this
+A `#[PublicPage]` route that carries `#[UserRateLimit]` carries a matching
+`#[AnonRateLimit]` as well. A client holding one of this app's OAuth tokens has
+no Nextcloud session, so Nextcloud counts it as anonymous and applies only the
+anonymous limit, and `RateLimitService` leaves the app's default budget off a
+route that declares a limit of its own: with `UserRateLimit` alone, a token
+client would have no limit at all. A route without `#[PublicPage]` is refused
+to a caller who is not signed in before any limit is read, so `UserRateLimit`
+alone is enough there. `RateLimitAttributesTest` holds every controller to it.
+
+Two things about the order the server reads routes in, because two routes of this
 app can match the same url:
 
 - `OC\Route\Router::getAttributeRoutes()` walks `lib/Controller` with a

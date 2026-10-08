@@ -23,6 +23,7 @@ use OCA\Social\Service\FilterService;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestService;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -143,6 +144,7 @@ class InterestsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 30, period: 60)]
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/interests/signals')]
 	public function signals(array|string $events = []): DataResponse {
@@ -201,6 +203,7 @@ class InterestsController extends ClientApiController {
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
+	#[AnonRateLimit(limit: 300, period: 60)]
 	#[UserRateLimit(limit: 300, period: 60)]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/timelines/interests')]
 	public function timeline(

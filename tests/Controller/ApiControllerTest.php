@@ -5416,24 +5416,6 @@ class ApiControllerTest extends TestCase {
 		$this->controller()->gifOpen('noto-1f994');
 	}
 
-	/**
-	 * Nextcloud applies `UserRateLimit` only to a caller with a session. An
-	 * OAuth client has a token and no session, so a route carrying only that
-	 * attribute has no limit at all for the callers it is written for — while
-	 * `RateLimitHeadersMiddleware` tells that same client what its budget is.
-	 */
-	public function testEveryRateLimitedRouteAlsoLimitsSessionlessCallers(): void {
-		$bare = [];
-		foreach (self::apiMethods() as $method) {
-			if ($method->getAttributes(UserRateLimit::class) !== []
-				&& $method->getAttributes(AnonRateLimit::class) === []) {
-				$bare[] = $method->getName();
-			}
-		}
-
-		$this->assertSame([], $bare, 'these routes are unthrottled for a bearer-token client');
-	}
-
 	/** Every report notifies the moderators, so filing them is limited for every caller. */
 	public function testFilingAReportIsRateLimited(): void {
 		$method = new ReflectionMethod(ApiController::class, 'reportNew');
