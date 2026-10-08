@@ -155,19 +155,18 @@ class ActionsRequest extends ActionsRequestBuilder {
 	 *
 	 * @return ACore[]
 	 */
-	public function getActionsOnObject(string $objectId, string $type, int $limit = 0, int $offset = 0): array {
+	public function getActionsOnObject(string $objectId, string $type, int $limit = 0): array {
 		$qb = $this->getActionsSelectSql();
 		$this->limitToPrim($qb, 'object_id_prim', $objectId);
 		$qb->limitToType($type);
 		$this->leftJoinCacheActors($qb, 'actor_id');
 		$qb->orderBy('a.creation', 'desc');
 		// without this the likes made within one second of each other are in
-		// no particular order, and an offset page of `favourited_by` can show
-		// the same account twice while leaving another out entirely
+		// no particular order, and the cut by the limit keeps a different one
+		// of them each time
 		$qb->addOrderBy('a.id_prim', 'desc');
 		if ($limit > 0) {
 			$qb->setMaxResults($limit);
-			$qb->setFirstResult($offset);
 		}
 
 		return $this->getActionsFromRequest($qb);

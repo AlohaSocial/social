@@ -142,7 +142,7 @@ class PagedOrderingTest extends TestCase {
 	}
 
 	public function testAPageOfFavouritesIsOrderedByMoreThanTheSecondItArrivedIn(): void {
-		$this->actions()->getActionsOnObject(self::POST, Like::TYPE, 20, 40);
+		$this->actions()->getActionsOnObject(self::POST, Like::TYPE, 20);
 
 		$this->assertSame('a.creation desc', $this->order[0]);
 		$this->assertTieBroken('a.');

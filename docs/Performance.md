@@ -137,6 +137,28 @@ indexed equality. The hot paths now use them, but `ActorsRequest`'s
 `LOWER(?)` on an unindexed column — the public ActivityPub actor endpoint and
 webfinger both land there.
 
+### Paging by offset
+
+An offset page reads and throws away every row before it, so page *n* costs
+*n* pages. Everything this app walks for itself pages on a keyset: the
+timelines on the nid, the follower and following lists on (`creation`,
+`id_prim`) through `FollowsRequest::cursorAfter()` — which is also how the
+export of both lists and the re-follow after a Move walk them. The offsets
+that are left are ones a contract outside this app asks for:
+
+- the numbered `?page=N` of the ActivityPub outbox, followers, following and
+  replies collections (`getPublicByAuthor()`, `getFollowersByActorId()`,
+  `getFollowingByActorId()`, `getPublicRepliesTo()`), because those are the
+  addresses peers already hold. Every `next` link those pages hand out is a
+  cursor, so a peer that follows them never reads by offset past the first;
+- Mastodon's `offset` on `/api/v1/trends/*` (`TrendsRequest`), where the rows
+  are a ranking over a window and the grouping, not the offset, is the cost;
+- Mastodon's `offset` on `/api/v2/search`, capped at
+  `StreamRequest::SEARCH_MAX_OFFSET`, with `max_id` the way further back.
+
+`favourited_by` and `reblogged_by` answer one page of up to 80 accounts and do
+not page at all.
+
 ### Schema shape
 
 - ~~`social_follow`'s unique indexes lead with the `accepted` boolean~~ —

@@ -626,14 +626,14 @@ class MigrationService {
 		return match ($kind) {
 			'following' => ['following_accounts.csv', self::exportFollowsCsv($this->handlesOfFollows(
 				$actor,
-				fn (int $offset): array => $this->followsRequest->getFollowingByActorId(
-					$actor->getId(), self::EXPORT_PAGE, $offset
+				fn (string $cursor): array => $this->followsRequest->getFollowingByActorId(
+					$actor->getId(), self::EXPORT_PAGE, 0, $cursor
 				)
 			))],
 			'followers' => ['followers.csv', self::exportFollowsCsv($this->handlesOfFollows(
 				$actor,
-				fn (int $offset): array => $this->followsRequest->getFollowersByActorId(
-					$actor->getId(), self::EXPORT_PAGE, $offset
+				fn (string $cursor): array => $this->followsRequest->getFollowersByActorId(
+					$actor->getId(), self::EXPORT_PAGE, 0, $cursor
 				)
 			))],
 			'blocks' => ['blocked_accounts.csv', self::csvOf($this->handlesOfRelations($actor, ActorRelation::TYPE_BLOCK))],
@@ -807,16 +807,16 @@ class MigrationService {
 	 * so both lists name the exporter — and a `following_accounts.csv` naming
 	 * you is a row Mastodon's importer tries to follow you with.
 	 *
-	 * @param callable(int): Follow[] $page
+	 * @param callable(string): Follow[] $page the page after a cursor, '' for the first
 	 *
 	 * @return string[]
 	 */
 	private function handlesOfFollows(Person $actor, callable $page): array {
 		$handles = [];
-		$offset = 0;
+		$cursor = '';
 
 		while (count($handles) < self::EXPORT_MAX) {
-			$follows = $page($offset);
+			$follows = $page($cursor);
 			if ($follows === []) {
 				break;
 			}
@@ -828,7 +828,7 @@ class MigrationService {
 				}
 			}
 
-			$offset += count($follows);
+			$cursor = FollowsRequest::cursorAfter(end($follows));
 		}
 
 		return array_slice($handles, 0, self::EXPORT_MAX);
@@ -1150,21 +1150,25 @@ class MigrationService {
 	 * without one, so a popular account's entire follower set was loaded into
 	 * memory before the first re-follow, and each row then costs a lookup and an
 	 * outbound follow. The page size bounds the memory; the work itself is still
-	 * one account's followers, which is what a Move is.
+	 * one account's followers, which is what a Move is. Each page starts after
+	 * the last one's final follow rather than at an offset, so the walk reads
+	 * every follower once however far it gets.
 	 */
 	private function refollowLocalFollowers(Person $actor, Person $target): void {
-		$offset = 0;
+		$done = 0;
+		$cursor = '';
 
-		while ($offset < self::REFOLLOW_MAX) {
+		while ($done < self::REFOLLOW_MAX) {
 			$page = $this->followsRequest->getFollowersByActorId(
-				$actor->getId(), self::REFOLLOW_PAGE, $offset
+				$actor->getId(), self::REFOLLOW_PAGE, 0, $cursor
 			);
 			if ($page === []) {
 				return;
 			}
 
 			$this->refollowPage($page, $target);
-			$offset += count($page);
+			$done += count($page);
+			$cursor = FollowsRequest::cursorAfter(end($page));
 
 			if (count($page) < self::REFOLLOW_PAGE) {
 				return;

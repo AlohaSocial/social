@@ -355,7 +355,7 @@ class SocialMigratorTest extends TestCase {
 	public function testTheFollowsAreWrittenAsAMastodonFollowingAccountsCsv(): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(fn (string $actorId, int $limit, int $offset): array => $offset === 0
+			->willReturnCallback(fn (string $actorId, int $limit, int $offset, string $cursor): array => $cursor === ''
 				? [$this->follow(self::CAROL, 'carol@remote.example'), $this->follow(self::DAVE, 'dave@other.example')]
 				: []);
 		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
@@ -375,16 +375,23 @@ class SocialMigratorTest extends TestCase {
 		);
 	}
 
-	public function testTheFollowsAreReadInPagesRatherThanAllAtOnce(): void {
+	/**
+	 * Each page starts after the last one's final follow, not at an offset: an
+	 * offset page reads and throws away every row before it.
+	 */
+	public function testTheFollowsAreReadInPagesAfterACursor(): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
-		$offsets = [];
+		$last = $this->follow(self::DAVE, 'dave@other.example');
+		$last->setId(self::ALICE . '#follows/dave');
+		$last->setCreation(1760000000);
+		$calls = [];
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(function (string $actorId, int $limit, int $offset) use (&$offsets): array {
-				$offsets[] = $offset;
+			->willReturnCallback(function (string $actorId, int $limit, int $offset, string $cursor) use (&$calls, $last): array {
+				$calls[] = [$offset, $cursor];
 				$this->assertGreaterThan(0, $limit, 'an unbounded read is the thing being avoided');
 
-				return $offset === 0
-					? array_fill(0, $limit, $this->follow(self::CAROL, 'carol@remote.example'))
+				return $cursor === ''
+					? [...array_fill(0, $limit - 1, $this->follow(self::CAROL, 'carol@remote.example')), $last]
 					: [];
 			});
 		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
@@ -393,14 +400,14 @@ class SocialMigratorTest extends TestCase {
 
 		$this->export();
 
-		$this->assertSame([0, SocialMigrator::PAGE], $offsets);
+		$this->assertSame([[0, ''], [0, FollowsRequest::cursorAfter($last)]], $calls);
 	}
 
 	public function testTheFollowersAreWrittenTooButOnlyToRead(): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->followsRequest->method('getFollowingByActorId')->willReturn([]);
 		$this->followsRequest->method('getFollowersByActorId')
-			->willReturnCallback(fn (string $actorId, int $limit, int $offset): array => $offset === 0
+			->willReturnCallback(fn (string $actorId, int $limit, int $offset, string $cursor): array => $cursor === ''
 				? [$this->follower(self::CAROL, 'carol@remote.example')]
 				: []);
 		$this->actorRelationRequest->method('getByActor')->willReturn([]);
@@ -418,7 +425,7 @@ class SocialMigratorTest extends TestCase {
 		$unknown->setActorId(self::ALICE);
 		$unknown->setObjectId('https://gone.example/users/nobody');
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(fn (string $actorId, int $limit, int $offset): array => $offset === 0
+			->willReturnCallback(fn (string $actorId, int $limit, int $offset, string $cursor): array => $cursor === ''
 				? [$unknown, $this->follow(self::CAROL, 'carol@remote.example')]
 				: []);
 		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);
@@ -1250,7 +1257,7 @@ class SocialMigratorTest extends TestCase {
 	public function testAnExportedArchiveImportsBackIntoTheSameFollowsAndBlocks(): void {
 		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(fn (string $actorId, int $limit, int $offset): array => $offset === 0
+			->willReturnCallback(fn (string $actorId, int $limit, int $offset, string $cursor): array => $cursor === ''
 				? [$this->follow(self::CAROL, 'carol@remote.example')]
 				: []);
 		$this->followsRequest->method('getFollowersByActorId')->willReturn([]);

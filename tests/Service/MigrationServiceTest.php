@@ -421,6 +421,29 @@ class MigrationServiceTest extends TestCase {
 		$this->service->move('alice', self::NEW_ALICE);
 	}
 
+	/** A full page is followed by the page after its last follow, never by an offset. */
+	public function testTheLocalFollowersAreWalkedAfterACursor(): void {
+		$this->accountService->method('getActorFromUserId')->willReturn($this->alice());
+		$this->cacheActorService->method('getFromId')->willReturn($this->newAlice());
+		$this->actorsRequest->method('getFromId')->willThrowException(new ActorDoesNotExistException());
+		$page = [];
+		for ($i = 0; $i < 200; $i++) {
+			$page[] = $this->follow('https://remote.example/users/u' . $i)->setCreation(1760000000 - $i);
+		}
+		$calls = [];
+		$this->followsRequest->method('getFollowersByActorId')->willReturnCallback(
+			function (string $id, int $limit, int $offset, string $cursor) use (&$calls, $page): array {
+				$calls[] = [$offset, $cursor];
+
+				return ($cursor === '') ? $page : [];
+			}
+		);
+
+		$this->service->move('alice', self::NEW_ALICE);
+
+		$this->assertSame([[0, ''], [0, FollowsRequest::cursorAfter($page[199])]], $calls);
+	}
+
 	public function testOneLocalFollowerThatCannotRefollowDoesNotStopTheOthers(): void {
 		$alice = $this->alice();
 		$bob = $this->person(self::BOB, 'bob@cloud.example', true);
@@ -964,7 +987,7 @@ class MigrationServiceTest extends TestCase {
 		$follow = $this->follow(self::CAROL);
 		$follow->setActor($this->person(self::CAROL, 'carol@remote.example'));
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(static fn (string $id, int $limit, int $offset): array => $offset === 0 ? [$follow] : []);
+			->willReturnCallback(static fn (string $id, int $limit, int $offset, string $cursor): array => $cursor === '' ? [$follow] : []);
 
 		[$name, $csv] = $this->service->exportCsv('alice', 'following');
 
@@ -989,7 +1012,7 @@ class MigrationServiceTest extends TestCase {
 		$carol = $this->follow(self::CAROL);
 		$carol->setActor($this->person(self::CAROL, 'carol@remote.example'));
 		$this->followsRequest->method('getFollowingByActorId')
-			->willReturnCallback(static fn (string $id, int $limit, int $offset): array => $offset === 0 ? [$loopback, $carol] : []);
+			->willReturnCallback(static fn (string $id, int $limit, int $offset, string $cursor): array => $cursor === '' ? [$loopback, $carol] : []);
 
 		[, $csv] = $this->service->exportCsv('alice', 'following');
 

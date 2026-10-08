@@ -389,8 +389,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 		try {
 			$following = $this->handlesOfFollows(
 				$actor,
-				fn (int $offset): array => $this->followsRequest->getFollowingByActorId(
-					$actor->getId(), self::PAGE, $offset
+				fn (string $cursor): array => $this->followsRequest->getFollowingByActorId(
+					$actor->getId(), self::PAGE, 0, $cursor
 				)
 			);
 			$exportDestination->addFileContents(
@@ -400,8 +400,8 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 
 			$followers = $this->handlesOfFollows(
 				$actor,
-				fn (int $offset): array => $this->followsRequest->getFollowersByActorId(
-					$actor->getId(), self::PAGE, $offset
+				fn (string $cursor): array => $this->followsRequest->getFollowersByActorId(
+					$actor->getId(), self::PAGE, 0, $cursor
 				)
 			);
 			$exportDestination->addFileContents(
@@ -428,16 +428,16 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 	 * so both lists named the exporter, and a `following_accounts.csv` naming
 	 * you is a row Mastodon's importer tries to follow you with.
 	 *
-	 * @param callable(int):Follow[] $page
+	 * @param callable(string):Follow[] $page the page after a cursor, '' for the first
 	 *
 	 * @return string[]
 	 */
 	private function handlesOfFollows(Person $actor, callable $page): array {
 		$handles = [];
-		$offset = 0;
+		$cursor = '';
 
 		while (true) {
-			$follows = $page($offset);
+			$follows = $page($cursor);
 			if ($follows === []) {
 				return $handles;
 			}
@@ -458,7 +458,7 @@ class SocialMigrator implements IMigrator, ISizeEstimationMigrator {
 				$handles[] = $account;
 			}
 
-			$offset += count($follows);
+			$cursor = FollowsRequest::cursorAfter(end($follows));
 		}
 	}
 

@@ -77,9 +77,9 @@ class ActionService {
 	 *
 	 * @return Person[]
 	 */
-	public function reactedBy(Stream $post, string $type, int $limit, int $offset = 0): array {
+	public function reactedBy(Stream $post, string $type, int $limit): array {
 		$accounts = [];
-		foreach ($this->actionsRequest->getActionsOnObject($post->getId(), $type, $limit, $offset) as $action) {
+		foreach ($this->actionsRequest->getActionsOnObject($post->getId(), $type, $limit) as $action) {
 			if (!$action->hasActor()) {
 				continue;
 			}
