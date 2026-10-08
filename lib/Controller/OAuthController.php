@@ -11,6 +11,10 @@ namespace OCA\Social\Controller;
 
 use Exception;
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\OAuth\AuthorizationServer;
+use OCA\Social\Atproto\OAuth\DpopNonce;
+use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
 use OCA\Social\Exceptions\InstanceDoesNotExistException;
@@ -54,6 +58,9 @@ class OAuthController extends Controller {
 		private CheckService $checkService,
 		private LoggerInterface $logger,
 		private IInitialState $initialState,
+		private AuthorizationServer $atprotoOAuth,
+		private AtprotoConfig $atprotoConfig,
+		private DpopNonce $dpopNonce,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -242,13 +249,17 @@ class OAuthController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/oauth/authorize')]
 	public function authorize(
 		string $client_id,
-		string $redirect_uri,
-		string $response_type,
+		string $redirect_uri = '',
+		string $response_type = '',
 		string $scope = 'read',
 		string $state = '',
 		string $code_challenge = '',
 		string $code_challenge_method = '',
+		string $request_uri = '',
 	): Response {
+		if ($request_uri !== '') {
+			return $this->atprotoAuthorize($client_id, $request_uri);
+		}
 		try {
 			$user = $this->userSession->getUser();
 
@@ -499,13 +510,17 @@ class OAuthController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/authorize')]
 	public function authorizing(
 		string $client_id,
-		string $redirect_uri,
-		string $response_type,
+		string $redirect_uri = '',
+		string $response_type = '',
 		string $scope = 'read',
 		string $state = '',
 		string $code_challenge = '',
 		string $code_challenge_method = '',
+		string $request_uri = '',
 	): Response {
+		if ($request_uri !== '') {
+			return $this->atprotoAuthorizing($client_id, $request_uri);
+		}
 		try {
 			$user = $this->userSession->getUser();
 			$account = $this->accountService->getActorFromUserId($user->getUID());
@@ -617,13 +632,16 @@ class OAuthController extends Controller {
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/token')]
 	public function token(
-		string $redirect_uri,
-		string $grant_type,
+		string $redirect_uri = '',
+		string $grant_type = '',
 		string $client_id = '',
 		string $client_secret = '',
 		string $code = '',
 		string $code_verifier = '',
 	): DataResponse {
+		if ($this->isAtprotoClient($client_id)) {
+			return $this->atprotoToken();
+		}
 		try {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
 			$client = $this->clientService->getFromClientId($client_id);
@@ -716,6 +734,13 @@ class OAuthController extends Controller {
 	#[BruteForceProtection(action: 'socialOauthToken')]
 	#[FrontpageRoute(verb: 'POST', url: '/oauth/revoke')]
 	public function revoke(string $token, string $client_id = '', string $client_secret = ''): DataResponse {
+		if ($this->isAtprotoClient($client_id)) {
+			$this->atprotoOAuth->revoke($token);
+			$response = new DataResponse([], Http::STATUS_OK);
+			AtprotoOAuthController::cors($response);
+
+			return $response;
+		}
 		try {
 			[$client_id, $client_secret] = $this->clientCredentials($client_id, $client_secret);
 			$client = $this->clientService->getFromClientId($client_id);
@@ -795,7 +820,7 @@ class OAuthController extends Controller {
 			$base = rtrim($this->configService->getCloudUrl(true), '/');
 		}
 
-		return new DataResponse([
+		$metadata = [
 			'issuer' => $base . '/',
 			'authorization_endpoint' => $base . '/oauth/authorize',
 			'token_endpoint' => $base . '/oauth/token',
@@ -812,7 +837,117 @@ class OAuthController extends Controller {
 			'token_endpoint_auth_methods_supported' => ['client_secret_post', 'client_secret_basic'],
 			'code_challenge_methods_supported' => ClientService::CODE_CHALLENGE_METHODS,
 			'service_documentation' => self::REPOSITORY,
-		], Http::STATUS_OK);
+		];
+
+		// One origin has one authorization server document, and AT Protocol
+		// requires its issuer to be the bare origin, so with Bluesky on the
+		// document is both servers': the Mastodon one's fields, and AT
+		// Protocol's added to them. A Mastodon client reads what it knows;
+		// the shared endpoints tell the two apart by what only AT Protocol
+		// sends. The issuer loses its trailing slash, which RFC 8414 never
+		// had: it is the address the document was fetched from, minus the
+		// well-known suffix.
+		if ($this->atprotoConfig->isEnabled() && $this->checkService->clientApiRootIsKnownGood()) {
+			$atproto = $this->atprotoOAuth->metadata();
+			$metadata = array_merge($metadata, $atproto, [
+				'scopes_supported' => array_values(array_unique(array_merge(self::SCOPES, AuthorizationServer::SCOPES_LISTED))),
+				'grant_types_supported' => ['authorization_code', 'refresh_token'],
+				'token_endpoint_auth_methods_supported' => ['client_secret_post', 'client_secret_basic', 'none', 'private_key_jwt'],
+			]);
+		}
+
+		$response = new DataResponse($metadata, Http::STATUS_OK);
+		AtprotoOAuthController::cors($response);
+
+		return $response;
+	}
+
+	/**
+	 * Whether a token or revocation request is a Bluesky app's: it proves a
+	 * DPoP key, or names its client by URL. A Mastodon client does neither,
+	 * and AT Protocol requires both.
+	 */
+	private function isAtprotoClient(string $clientId): bool {
+		return $this->atprotoConfig->isEnabled()
+			&& ($this->request->getHeader('DPoP') !== '' || str_starts_with($clientId, 'https://') || str_starts_with($clientId, 'http://localhost'));
+	}
+
+	/**
+	 * The consent page for a Bluesky app's pushed request: the same page a
+	 * Mastodon app's is shown on, told what this one asks for.
+	 */
+	private function atprotoAuthorize(string $clientId, string $requestUri): Response {
+		try {
+			$user = $this->userSession->getUser();
+			if ($user === null || !$this->atprotoConfig->isEnabled()) {
+				throw OAuthException::invalidRequest('Not signed in');
+			}
+			$pending = $this->atprotoOAuth->pending($clientId, $requestUri, $user->getUID());
+		} catch (OAuthException $e) {
+			return $this->invalidRequest($e->getMessage());
+		}
+		$request = $pending['request'];
+		$actor = $this->accountService->getActorFromUserId($user->getUID());
+		$redirectUri = (string)$request->params['redirect_uri'];
+
+		// an app's own name and site are what it says of itself; the address
+		// its metadata is at is the one thing about it that is checked
+		$this->initialState->provideInitialState('appName', parse_url($clientId, PHP_URL_HOST) ?: $clientId);
+		$this->initialState->provideInitialState('appWebsite', $clientId);
+		$this->initialState->provideInitialState('protocol', 'atproto');
+		$this->initialState->provideInitialState('account', [
+			'uid' => $user->getUID(),
+			'displayName' => $this->accountDisplayName($actor, $user),
+			'handle' => '@' . $pending['identity']->handle,
+		]);
+		$this->initialState->provideInitialState('scopes', $pending['scopes']);
+		$this->initialState->provideInitialState('redirectUri', $redirectUri);
+		$this->initialState->provideInitialState('denyUrl', $this->atprotoOAuth->refusal($request));
+		$response = new TemplateResponse(Application::APP_ID, 'oauth2', [], TemplateResponse::RENDER_AS_GUEST);
+		$response->setContentSecurityPolicy($this->consentPolicy($redirectUri));
+
+		return $response;
+	}
+
+	/**
+	 * The person agreed on the consent page: the app gets its code.
+	 */
+	private function atprotoAuthorizing(string $clientId, string $requestUri): Response {
+		try {
+			$user = $this->userSession->getUser();
+			if ($user === null || !$this->atprotoConfig->isEnabled()) {
+				throw OAuthException::invalidRequest('Not signed in');
+			}
+
+			return new RedirectResponse($this->atprotoOAuth->approve($clientId, $requestUri, $user->getUID()));
+		} catch (OAuthException $e) {
+			return $this->invalidRequest($e->getMessage());
+		}
+	}
+
+	/**
+	 * A Bluesky app's token request: a code exchanged or a session refreshed,
+	 * answered with a fresh DPoP nonce whatever the outcome.
+	 */
+	private function atprotoToken(): DataResponse {
+		try {
+			$response = new DataResponse($this->atprotoOAuth->token($this->request->getParams(), $this->request->getHeader('DPoP')), Http::STATUS_OK);
+			$response->addHeader('Cache-Control', 'no-store');
+		} catch (OAuthException $e) {
+			$response = AtprotoOAuthController::error($e);
+			if (in_array($e->error, ['invalid_grant', 'invalid_client'], true)) {
+				$response->throttle(['action' => 'socialOauthToken']);
+			}
+		} catch (Throwable $e) {
+			$this->logger->error('Bluesky OAuth token request failed', ['exception' => $e]);
+			$response = new DataResponse(['error' => 'server_error', 'error_description' => 'Internal server error'], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+		if (!isset($response->getHeaders()['DPoP-Nonce'])) {
+			$response->addHeader('DPoP-Nonce', $this->dpopNonce->current());
+		}
+		AtprotoOAuthController::cors($response);
+
+		return $response;
 	}
 
 	/**
