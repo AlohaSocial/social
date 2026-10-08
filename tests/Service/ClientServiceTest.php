@@ -52,7 +52,8 @@ class ClientServiceTest extends TestCase {
 		$client->setAppName('Tusky');
 		$client->setAppRedirectUris(['urn:ietf:wg:oauth:2.0:oob', 'https://app.example/callback']);
 		$client->setAppScopes(['read', 'write']);
-		$client->setAppClientSecret('s3cret');
+		// stored the way ClientRequest::saveApp() stores it
+		$client->setAppClientSecret((new SecretHasher())->hash('s3cret'));
 		$client->setAuthCode('c0de');
 
 		return $client;
@@ -515,6 +516,16 @@ class ClientServiceTest extends TestCase {
 		$this->expectException(ClientException::class);
 		$this->expectExceptionMessage($message);
 		$this->service->confirmData($this->registeredClient(), $data);
+	}
+
+	/** A secret still stored bare is one the hashing migration missed. */
+	public function testConfirmDataRefusesASecretStoredInPlaintext(): void {
+		$client = $this->registeredClient();
+		$client->setAppClientSecret('s3cret');
+
+		$this->expectException(ClientException::class);
+		$this->expectExceptionMessage('wrong client_secret');
+		$this->service->confirmData($client, ['client_secret' => 's3cret']);
 	}
 
 	public function testConfirmDataAcceptsSecretsStoredHashed(): void {

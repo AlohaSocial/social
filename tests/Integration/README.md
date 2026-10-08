@@ -22,8 +22,8 @@ to stop.
   them idempotently.
 - `Db/ClientCredentialStorageTest` — OAuth secrets/codes/tokens land hashed,
   plaintext tokens resolve through the hashed lookup, re-authorization
-  invalidates the old token, revocation works, HashClientSecrets converts
-  legacy rows.
+  invalidates the old token, revocation works, a legacy plaintext row is
+  refused and the hashing migration converts it.
 - `Db/StreamActionsFlagsTest` — the per-viewer flags are written field-wise and
   idempotently.
 - `Db/ReplyCountTest` — the reply counter on a post: a recount counts what is

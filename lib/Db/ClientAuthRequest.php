@@ -135,19 +135,12 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	 * @throws ClientNotFoundException
 	 */
 	public function getByToken(string $token): SocialClient {
-		// tokens are stored hashed; rows from before hashing hold the bare value
-		foreach ($this->secretHasher->forLookup($token) as $stored) {
-			if ($stored === '') {
-				continue;
-			}
-
-			try {
-				return $this->getOne('a.token', $stored);
-			} catch (ClientNotFoundException $e) {
-			}
+		$stored = $this->secretHasher->forLookup($token);
+		if ($stored === null) {
+			throw new ClientNotFoundException();
 		}
 
-		throw new ClientNotFoundException();
+		return $this->getOne('a.token', $stored);
 	}
 
 	/**
@@ -156,18 +149,16 @@ class ClientAuthRequest extends ClientRequestBuilder {
 	 * @throws ClientNotFoundException
 	 */
 	public function getByCode(int $clientId, string $code): SocialClient {
-		foreach ($this->secretHasher->forLookup($code) as $stored) {
-			if ($stored === '') {
-				continue;
-			}
-
-			try {
-				return $this->getOne('a.code', $stored, $clientId);
-			} catch (ClientNotFoundException $e) {
-			}
+		$stored = $this->secretHasher->forLookup($code);
+		if ($stored === null) {
+			throw new ClientNotFoundException('unknown code');
 		}
 
-		throw new ClientNotFoundException('unknown code');
+		try {
+			return $this->getOne('a.code', $stored, $clientId);
+		} catch (ClientNotFoundException $e) {
+			throw new ClientNotFoundException('unknown code');
+		}
 	}
 
 	/** Keeps a token in use from ageing out, at most once a refresh window. */

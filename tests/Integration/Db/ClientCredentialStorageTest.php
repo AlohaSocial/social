@@ -12,10 +12,9 @@ namespace OCA\Social\Tests\Integration\Db;
 use OCA\Social\Db\ClientRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\ClientNotFoundException;
-use OCA\Social\Migration\HashClientSecrets;
+use OCA\Social\Migration\Version1000Date20261008000100;
 use OCA\Social\Model\Client\SocialClient;
 use OCA\Social\Service\ClientService;
-use OCA\Social\Service\ConfigService;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Server;
@@ -24,8 +23,8 @@ use PHPUnit\Framework\TestCase;
 /**
  * The OAuth credential storage against the real social_client table: secrets,
  * codes and tokens land hashed, the token lookup resolves the plaintext a client
- * presents, legacy plaintext rows keep working until the HashClientSecrets repair
- * converts them, a fresh authorization invalidates the previous token, and
+ * presents, a legacy plaintext row is refused until the hashing migration
+ * converts it, a fresh authorization invalidates the previous token, and
  * revocation works. The unit suite mocks ClientRequest, so none of this SQL runs
  * there.
  */
@@ -188,31 +187,31 @@ class ClientCredentialStorageTest extends TestCase {
 	}
 
 	/**
-	 * A token carried into `social_client_auth` by the migration is still in
-	 * whatever form it was stored in, so the repair has to find it there too —
-	 * reading only `social_client` would leave it in the clear for ever.
+	 * A row still holding the bare token is one the hashing migration missed:
+	 * it is not a credential, however the token is presented.
 	 */
-	public function testALegacyPlaintextTokenStillResolvesUntilTheRepairRuns(): void {
+	public function testALegacyPlaintextTokenNoLongerResolves(): void {
 		$this->registeredClient();
 		$granted = $this->signIn('legacy-user');
 
 		// devolve the row to the pre-hashing format
 		$this->setRawAuth('legacy-user', 'token', $granted->getToken());
 
-		$resolved = $this->clientService->getFromToken($granted->getToken());
-		$this->assertSame('legacy-user', $resolved->getAuthUserId());
+		$this->expectException(ClientNotFoundException::class);
+		$this->clientService->getFromToken($granted->getToken());
+	}
 
-		// the step is one-shot and its marker is set on any instance that has
-		// upgraded, so clearing it is what makes this a test of the repair
-		// rather than of the marker
-		Server::get(ConfigService::class)->setAppValue('migration_client_secrets_hashed', '0');
-		Server::get(HashClientSecrets::class)->run($this->createStub(IOutput::class));
+	/** The migration hashes such a row, and the token then works again. */
+	public function testTheMigrationHashesWhatWasLeftInPlaintext(): void {
+		$this->registeredClient();
+		$granted = $this->signIn('legacy-user');
+		$this->setRawAuth('legacy-user', 'token', $granted->getToken());
 
-		$this->assertStringStartsWith(
-			'sha256:', $this->authRow('legacy-user')['token'], 'the repair hashed the legacy token'
-		);
-		$resolved = $this->clientService->getFromToken($granted->getToken());
-		$this->assertSame('legacy-user', $resolved->getAuthUserId(), 'and the plaintext still resolves');
+		Server::get(Version1000Date20261008000100::class)
+			->postSchemaChange($this->createStub(IOutput::class), fn () => null, []);
+
+		$this->assertStringStartsWith('sha256:', $this->authRow('legacy-user')['token']);
+		$this->assertSame('legacy-user', $this->clientService->getFromToken($granted->getToken())->getAuthUserId());
 	}
 
 	public function testGetFromClientIdRoundTrip(): void {
