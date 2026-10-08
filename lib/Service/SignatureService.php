@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use DateTime;
+use DateTimeZone;
 use Exception;
 use JsonLdException;
 use OCA\Social\Db\CacheActorsRequest;
@@ -301,18 +302,14 @@ class SignatureService {
 	 * @throws SignatureException
 	 */
 	private function checkDateHeader(IRequest $request): int {
-		try {
-			$dTime = new DateTime($request->getHeader('date'));
-			$time = $dTime->getTimestamp();
-		} catch (Exception $e) {
-			throw new DateTimeException(
-				'datetime exception: ' . $e->getMessage() . ' - ' . $request->getHeader('date')
-			);
+		$header = $request->getHeader('date');
+		if ($header === '') {
+			throw new SignatureException('missing date header');
 		}
 
-		if ($request->getHeader('date') === '') {
-			// an absent Date would silently parse as "now" and never age out
-			throw new SignatureException('missing date header');
+		$time = self::parseHttpDate($header);
+		if ($time === null) {
+			throw new DateTimeException('date header is not an HTTP date: ' . $header);
 		}
 
 		if ($time < (time() - self::DATE_PAST)) {
@@ -326,6 +323,63 @@ class SignatureService {
 		}
 
 		return $time;
+	}
+
+	/**
+	 * The timestamp an HTTP `Date` header names, or null when it is not one.
+	 *
+	 * Only RFC 7231's IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`) is read,
+	 * which is what Mastodon, Pixelfed, PeerTube, Misskey, GoToSocial and
+	 * this app send, with `UTC` taken for `GMT` and a day without its leading
+	 * zero. A free-form parse such as `new DateTime()` accepts `now` or
+	 * `+1 hour`, and a request signed over a relative date never ages out of
+	 * the replay window.
+	 */
+	public static function parseHttpDate(string $header): ?int {
+		if (preg_match('/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{1,2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2}) (?:GMT|UTC)$/', trim($header), $m) !== 1) {
+			return null;
+		}
+
+		// the weekday is left out of the parse: PHP moves the date forward to
+		// match a weekday that disagrees with it. `d` takes a day with or
+		// without its leading zero; `!` zeroes what the format does not name
+		$date = DateTime::createFromFormat('!d M Y H:i:s', $m[1], new DateTimeZone('UTC'));
+
+		return self::wellFormed($date) ? $date->getTimestamp() : null;
+	}
+
+	/**
+	 * The timestamp of a Linked Data signature's `created`, or null when it is
+	 * not an RFC 3339 date-time.
+	 *
+	 * Held to the same standard as the `Date` header, for the same reason: a
+	 * relative `created` would keep a signature inside its window for good.
+	 */
+	public static function parseObjectDate(string $created): ?int {
+		if (preg_match('/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/', trim($created), $m) !== 1) {
+			return null;
+		}
+
+		$date = DateTime::createFromFormat('!Y-m-d\TH:i:sP', $m[1] . $m[2]);
+
+		return self::wellFormed($date) ? $date->getTimestamp() : null;
+	}
+
+	/**
+	 * Whether `createFromFormat()` produced a date it did not have to roll
+	 * over: an impossible date such as 31 Feb, or 25:00, is moved on silently
+	 * with nothing but a warning to say so.
+	 *
+	 * @psalm-assert-if-true DateTime $date
+	 */
+	private static function wellFormed(DateTime|false $date): bool {
+		if ($date === false) {
+			return false;
+		}
+
+		$errors = DateTime::getLastErrors();
+
+		return $errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0);
 	}
 
 	/**
@@ -709,13 +763,10 @@ class SignatureService {
 				}
 			}
 
-			try {
-				$dTime = new DateTime($signature->getCreated());
-				$time = $dTime->getTimestamp();
-			} catch (Exception $e) {
-				throw new DateTimeException(
-					'datetime exception: ' . $e->getMessage() . ' - ' . $signature->getCreated()
-				);
+			// an absent `created` is refused by the window check below
+			$time = ($signature->getCreated() === '') ? 0 : self::parseObjectDate($signature->getCreated());
+			if ($time === null) {
+				throw new DateTimeException('signature created is not a date: ' . $signature->getCreated());
 			}
 
 			// An LD signature stays valid forever on its own, so any instance

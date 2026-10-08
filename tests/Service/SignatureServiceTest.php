@@ -577,6 +577,48 @@ class SignatureServiceTest extends TestCase {
 		$this->service->checkRequest($this->incomingRequest($headers), $body);
 	}
 
+	/** @return array<string, array{string, int|null}> */
+	public static function httpDates(): array {
+		return [
+			'IMF-fixdate' => ['Thu, 08 Oct 2026 13:15:31 GMT', 1791465331],
+			'single-digit day' => ['Thu, 8 Oct 2026 13:15:31 GMT', 1791465331],
+			'UTC for GMT' => ['Thu, 08 Oct 2026 13:15:31 UTC', 1791465331],
+			'wrong weekday is not a different date' => ['Mon, 08 Oct 2026 13:15:31 GMT', 1791465331],
+			'now' => ['now', null],
+			'relative' => ['+30 min', null],
+			'relative with a date in front' => ['Thu, 08 Oct 2026 13:15:31 GMT +1 day', null],
+			'RFC 850' => ['Thursday, 08-Oct-26 13:15:31 GMT', null],
+			'asctime' => ['Thu Oct  8 13:15:31 2026', null],
+			'ISO 8601' => ['2026-10-08T13:15:31Z', null],
+			'impossible date' => ['Thu, 31 Feb 2026 13:15:31 GMT', null],
+			'impossible hour' => ['Thu, 08 Oct 2026 25:15:31 GMT', null],
+			'local zone' => ['Thu, 08 Oct 2026 13:15:31 CEST', null],
+		];
+	}
+
+	#[DataProvider('httpDates')]
+	public function testParseHttpDate(string $header, ?int $expected): void {
+		$this->assertSame($expected, SignatureService::parseHttpDate($header));
+	}
+
+	public function testCheckRequestRejectsARelativeDate(): void {
+		// `now` never ages out, so the request stays replayable once the
+		// replay record has expired
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => 'now']);
+
+		$this->expectException(DateTimeException::class);
+		$this->service->checkRequest($this->incomingRequest($headers), $body);
+	}
+
+	public function testCheckRequestAcceptsADateWithASingleDigitDay(): void {
+		$body = '{"type":"Follow"}';
+		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => gmdate('D, j M Y H:i:s \G\M\T')]);
+		$this->cacheActorService->method('getFromId')->willReturn($this->person(self::REMOTE_ACTOR, self::$publicKey));
+
+		$this->assertSame('remote.example', $this->service->checkRequest($this->incomingRequest($headers), $body));
+	}
+
 	public function testCheckRequestRejectsAnUnparsableDate(): void {
 		$body = '{"type":"Follow"}';
 		$headers = $this->signedHeaders($body, self::$privateKey, ['date' => 'not a date']);
@@ -1482,6 +1524,35 @@ class SignatureServiceTest extends TestCase {
 
 		$this->assertFalse($this->service->checkObject($received));
 		$this->assertSame('', $received->getOrigin());
+	}
+
+	public function testCheckObjectRejectsARelativeCreated(): void {
+		// `now` was always inside the window, so the signature never aged out
+		$this->registerContextCache();
+		$received = $this->receivedSignedNote('now');
+		$this->cacheActorService->method('getFromId')
+			->willReturn($this->person(self::LOCAL_ACTOR, self::$publicKey));
+
+		$this->expectException(DateTimeException::class);
+		$this->service->checkObject($received);
+	}
+
+	/** @return array<string, array{string, int|null}> */
+	public static function objectDates(): array {
+		return [
+			'Z' => ['2026-10-08T13:15:31Z', 1791465331],
+			'fraction' => ['2026-10-08T13:15:31.123Z', 1791465331],
+			'offset' => ['2026-10-08T15:15:31+02:00', 1791465331],
+			'relative' => ['now', null],
+			'relative offset' => ['+1 day', null],
+			'no zone' => ['2026-10-08T13:15:31', null],
+			'impossible hour' => ['2026-10-08T25:15:31Z', null],
+		];
+	}
+
+	#[DataProvider('objectDates')]
+	public function testParseObjectDate(string $created, ?int $expected): void {
+		$this->assertSame($expected, SignatureService::parseObjectDate($created));
 	}
 
 	public function testSignRequestWithAnEmptyPrivateKeyFailsLoudly(): void {
