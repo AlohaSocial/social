@@ -43,6 +43,8 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	}
 
 	/**
+	 * Stores the recipient rows of one post, in one statement.
+	 *
 	 * A dest row is what puts a post in a timeline, so a failure here is a post
 	 * that exists and is in nobody's timeline — permanently, and until now
 	 * invisibly. Anything that is not the expected duplicate is raised, not
@@ -50,43 +52,45 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 	 * post, where throwing rolls the whole save back and the post can be saved
 	 * again.
 	 *
-	 * The duplicate is expected and must not reach the database as an error.
-	 * The same recipient routinely appears twice in one post -- `getToAll()`
-	 * returns `to` alongside `toArray`, and the unique index does not include
-	 * the subtype, so a recipient in both `to` and `cc` collides as well.
-	 * Catching that violation and returning quietly is enough on MySQL and
-	 * SQLite but not on PostgreSQL, which aborts the whole transaction on any
-	 * failed statement: the remaining inserts and then the commit fail, and the
-	 * post is lost. `insertIgnoreConflict()` asks the database to skip the row
-	 * instead, so nothing fails in the first place.
+	 * The duplicate is expected and must not reach the database as an error: a
+	 * post addressed again — an edit, a redelivery — names recipients it
+	 * already has rows for. Catching that violation and returning quietly is
+	 * enough on MySQL and SQLite but not on PostgreSQL, which aborts the whole
+	 * transaction on any failed statement: the commit fails, and the post is
+	 * lost. The database is asked to skip the row instead, so nothing fails in
+	 * the first place.
+	 *
+	 * One statement rather than one per recipient, because the locks the
+	 * post's transaction holds are held for every round trip.
+	 *
+	 * @param array<string, array{string, string}> $recipients account => [type, subtype]
 	 */
-	public function create(
-		string $streamId, string $actorId, string $type, string $subType = '', int|string $nid = 0,
-	): void {
+	public function createRecipients(string $streamId, array $recipients, int|string $nid = 0): void {
 		$qb = $this->getQueryBuilder();
+		$streamPrim = $qb->prim($streamId);
 
-		try {
-			$this->dbConnection->insertIgnoreConflict(
-				self::TABLE_STREAM_DEST,
-				[
-					'stream_id' => $qb->prim($streamId),
-					'actor_id' => $qb->prim($actorId),
-					'type' => $type,
-					'subtype' => $subType,
-					// the post's own sort key, copied here because this is the
-					// row a timeline pages over: without it the home page has
-					// to join every one of these rows to `social_stream` to
-					// find out when its post was published, and then sort the
-					// result. See `Version1000Date20260917000001`.
-					'nid' => $nid,
-				]
-			);
-		} catch (DBException $e) {
-			$this->logger->error('could not store the recipient of a stream', [
-				'streamId' => $streamId,
-				'actorId' => $actorId,
+		$rows = [];
+		foreach ($recipients as $actorId => [$type, $subType]) {
+			$rows[] = [
+				'stream_id' => $streamPrim,
+				'actor_id' => $qb->prim((string)$actorId),
 				'type' => $type,
 				'subtype' => $subType,
+				// the post's own sort key, copied here because this is the
+				// row a timeline pages over: without it the home page has
+				// to join every one of these rows to `social_stream` to
+				// find out when its post was published, and then sort the
+				// result. See `Version1000Date20260917000001`.
+				'nid' => $nid,
+			];
+		}
+
+		try {
+			$this->insertIgnoringConflicts(self::TABLE_STREAM_DEST, $rows);
+		} catch (DBException $e) {
+			$this->logger->error('could not store the recipients of a stream', [
+				'streamId' => $streamId,
+				'recipients' => array_keys($recipients),
 				'exception' => $e,
 			]);
 
@@ -168,9 +172,11 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 			]
 		);
 
-		foreach ($recipients as $actorId => $subtype) {
-			$this->create($stream->getId(), $actorId, 'recipient', $subtype, $stream->getNid());
-		}
+		$this->createRecipients(
+			$stream->getId(),
+			array_map(static fn (string $subtype): array => ['recipient', $subtype], $recipients),
+			$stream->getNid()
+		);
 	}
 
 	/**
@@ -214,9 +220,11 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 			}
 		}
 
-		foreach (self::uniqueRecipients(['dm' => $all]) as $actorId => $subtype) {
-			$this->create($stream->getId(), $actorId, $subtype, '', $stream->getNid());
-		}
+		$this->createRecipients(
+			$stream->getId(),
+			array_map(static fn (string $type): array => [$type, ''], self::uniqueRecipients(['dm' => $all])),
+			$stream->getNid()
+		);
 
 		return true;
 	}
@@ -226,9 +234,11 @@ class StreamDestRequest extends StreamDestRequestBuilder {
 			return false;
 		}
 
-		foreach (self::uniqueRecipients(['notif' => $stream->getToAll()]) as $actorId => $type) {
-			$this->create($stream->getId(), $actorId, $type, '', $stream->getNid());
-		}
+		$this->createRecipients(
+			$stream->getId(),
+			array_map(static fn (string $type): array => [$type, ''], self::uniqueRecipients(['notif' => $stream->getToAll()])),
+			$stream->getNid()
+		);
 
 		return true;
 	}

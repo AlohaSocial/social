@@ -955,6 +955,70 @@ class CoreRequestBuilder {
 	}
 
 	/**
+	 * Rows per statement of `insertIgnoringConflicts()`: a recipient row binds
+	 * five parameters, so a chunk stays far inside SQLite's 32,766.
+	 */
+	public const INSERT_IGNORE_CHUNK = 500;
+
+	/**
+	 * Inserts rows that may already be there, in one statement per chunk.
+	 *
+	 * `IDBConnection::insertIgnoreConflict()` takes one row, and a caller
+	 * writing several inside a transaction paid a round trip per row while it
+	 * held the locks. The three databases this app supports each have a
+	 * multi-row form of the same statement — the one `insertIgnoreConflict()`
+	 * itself issues for a single row — so that is used; anything else falls
+	 * back to it row by row.
+	 *
+	 * Every row must carry the same columns, in the same order.
+	 *
+	 * @param string $table without the prefix
+	 * @param list<array<string, int|string>> $rows column => value
+	 *
+	 * @throws Exception
+	 */
+	protected function insertIgnoringConflicts(string $table, array $rows): void {
+		if ($rows === []) {
+			return;
+		}
+
+		$platform = $this->dbConnection->getDatabaseProvider();
+		[$head, $tail] = match ($platform) {
+			IDBConnection::PLATFORM_MYSQL, IDBConnection::PLATFORM_MARIADB => ['INSERT IGNORE INTO', ''],
+			IDBConnection::PLATFORM_POSTGRES => ['INSERT INTO', ' ON CONFLICT DO NOTHING'],
+			IDBConnection::PLATFORM_SQLITE => ['INSERT OR IGNORE INTO', ''],
+			default => ['', ''],
+		};
+		if ($head === '') {
+			foreach ($rows as $row) {
+				$this->dbConnection->insertIgnoreConflict($table, $row);
+			}
+
+			return;
+		}
+
+		$columns = array_keys($rows[0]);
+		$tuple = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
+		// `*PREFIX*` and the backticks are what the connection rewrites for
+		// the platform; there is no public API that hands the prefix over
+		$into = ' `*PREFIX*' . $table . '` (`' . implode('`, `', $columns) . '`) VALUES ';
+
+		foreach (array_chunk($rows, self::INSERT_IGNORE_CHUNK) as $chunk) {
+			$params = [];
+			foreach ($chunk as $row) {
+				foreach ($columns as $column) {
+					$params[] = $row[$column];
+				}
+			}
+
+			$this->dbConnection->executeStatement(
+				$head . $into . implode(', ', array_fill(0, count($chunk), $tuple)) . $tail,
+				$params
+			);
+		}
+	}
+
+	/**
 	 * @param Person $viewer
 	 */
 	public function setViewer(Person $viewer) {

@@ -81,7 +81,7 @@ could still be cheaper, and the schema items at the end.
 ### Transactions
 
 `StreamRequest::save()` is now one transaction: the post, its recipient rows
-and its tags go in together or not at all, and `StreamDestRequest::create()`
+and its tags go in together or not at all, and `StreamDestRequest::createRecipients()`
 raises instead of logging a failure and carrying on. It was the one place where
 a partial write was both permanent and silent — the recipient rows are what put
 a post in a timeline, so the post existed and was in nobody's.
@@ -92,8 +92,12 @@ hashtags repeat in ordinary posts — `getToAll()` returns `to` alongside
 so the same actor in `to` and `cc` collides too — and both inserts used to
 catch the violation and carry on. PostgreSQL aborts the whole transaction on
 any refused statement, so that caught violation took the commit with it and the
-post was lost. Both now use `insertIgnoreConflict()`: the database skips the
-duplicate row, nothing fails, and the raise is left to mean what it says.
+post was lost. Both now ask the database to skip the duplicate row, nothing
+fails, and the raise is left to mean what it says. The recipient rows go in as
+one statement per post (`CoreRequestBuilder::insertIgnoringConflicts()`: the
+multi-row `INSERT IGNORE` / `ON CONFLICT DO NOTHING` / `INSERT OR IGNORE` that
+`insertIgnoreConflict()` issues for one row), not one round trip per recipient
+with the post's locks held.
 
 The two places this section used to name are settled: `StreamActionsRequest::save()`
 inserts first and updates on the unique violation (`StreamActionsFlagsTest` pins
@@ -303,7 +307,7 @@ here so a reader who finds that report knows why the code no longer matches it.
 | One dead instance froze the actor-cache refresh: `getRemoteActorsToUpdate()` took 50 stale rows with no order and no record of having tried, and a failed refresh wrote nothing — so the same 50 unreachable rows came back every twelve minutes and no live profile was refreshed again | Every attempt is stamped in `sync_attempt`, the oldest attempt goes first, a failure doubles the wait from an hour, and after ten failures the refresh leaves the actor alone. Nothing is deleted: the row, its followers and its posts stay, and an on-demand fetch still resets the count |
 | `Cron\Cache` had no wall-clock budget while `Cron\Queue` had one: eleven steps, two of them a request per remote actor, ran until they were done — so a handful of slow peers could hold a cron slot open past the twelve-minute interval | `MAX_DURATION` of 300 seconds, threaded through the steps and into the two loops. A skipped step is named in the log and the next run starts with it, so the tail of the list is not the part that never runs |
 | Nothing ever evicted a cached remote actor: a row was written the first time this instance saw an account and only a remote `Delete` or a domain purge removed one | `CacheActorSweepService`, bounded per cron pass, removes the ones nobody here follows, that follow nobody here, that wrote no stored post and have no pending relation, after `cache_actor_days` (180) — with their avatars. `occ social:media:usage` is what says how much that is worth |
-| `StreamRequest::save()` wrote the post, then its recipients, then its tags, outside any transaction, and the recipient insert swallowed its failure | One transaction, and `StreamDestRequest::create()` raises. A post that cannot have recipients is not stored at all, so the delivery can be retried into a clean state. The duplicate recipient and hashtag rows an ordinary post produces are skipped by the database rather than caught, which a transaction on PostgreSQL does not survive |
+| `StreamRequest::save()` wrote the post, then its recipients, then its tags, outside any transaction, and the recipient insert swallowed its failure | One transaction, and `StreamDestRequest::createRecipients()` raises. A post that cannot have recipients is not stored at all, so the delivery can be retried into a clean state. The duplicate recipient and hashtag rows an ordinary post produces are skipped by the database rather than caught, which a transaction on PostgreSQL does not survive |
 
 ## The home timeline, and one thing that did not work
 
