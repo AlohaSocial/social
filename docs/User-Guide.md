@@ -1055,6 +1055,14 @@ label, whether it does nothing, shows a warning, or hides the post. When you
 report a Bluesky account or post, *Also report to Bluesky's moderation
 service* passes the report on — sent by this server, not in your name.
 
+**Bluesky apps.** You can use the Bluesky app, or any other Bluesky client,
+with this account. In *Settings → Your account → Bluesky* make an **app
+password** and copy it — it is shown once. In the app, choose to sign in with
+a different hosting provider, give this server's address, then your Bluesky
+handle and the app password. What you post, like or follow there happens
+here too, as if you had done it in Aloha Social; blocks stay here and cannot
+be made from the app. Revoking the app password signs the app out.
+
 **Pausing.** *Show my posts on Bluesky* in Settings → Your account switches
 your presence there off: nothing new is published, Bluesky is told the account
 is inactive, and what you had posted stays until you switch it back on — same

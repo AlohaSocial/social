@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1 and 2 and parts 3a and 3b (§18) are implemented; 3c, 3d and 4 are specification.**
+**Status: phases 1 and 2 and parts 3a–3c (§18) are implemented; 3d (video), 3e (OAuth for Bluesky apps) and 4 are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1041,10 +1041,11 @@ Everything in the phase 2 row, in `lib/Atproto/Reader/` (`BlueskyActorService`,
 
 ### Phase 3 as it lands
 
-Phase 3 is four concerns, so it lands as four pull requests in this order:
+Phase 3 is five concerns, so it lands as five pull requests in this order:
 **3a** interaction (threads, quotes, link cards, deletes both ways, quote
-rules), **3b** moderation (§12.2–12.4), **3c** Bluesky apps logging in
-(§6.3, app passwords then OAuth), **3d** video (D11).
+rules), **3b** moderation (§12.2–12.4), **3c** Bluesky apps logging in with
+app passwords (§6.3), **3d** video (D11), **3e** OAuth for Bluesky apps
+(§6.3).
 
 **3a as built** — `Publisher\PostRefs` (the strong reference of a local
 post that was published or of a Bluesky post read here, and a reply's
@@ -1117,6 +1118,47 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   read from the AppView once a day.
 - Not done: reading a Bluesky user's public block of a local account
   (`viewer.blockedBy` is per viewer, and the reads here are anonymous).
+
+**3c as built** — `Atproto\Client\` (`AppPasswordService`, `SessionService`,
+`AppViewProxy`, `Preferences`, `WriteService`, `ClientXrpc`), tables
+`social_atproto_app_password` and `social_atproto_session`:
+
+- **App passwords are this app's, not Nextcloud's.** §6.3 said a Nextcloud
+  app password; that would hand a Bluesky app the whole of Nextcloud —
+  files, WebDAV — and can only be checked through the server's private API.
+  Settings → Your account makes Bluesky-style app passwords instead (four
+  groups of four, shown once, stored as a password hash, at most 25),
+  good for this app's Bluesky surface only. Revoking one ends every session
+  it opened. A wrong password counts against the caller's address in
+  Nextcloud's brute-force protection, and the answer for an unknown account
+  and a wrong password is the same.
+- **Sessions** are JWTs this server signs with its service key: an access
+  token of two hours naming its session, a refresh token of ninety days
+  whose id is the session (`createSession`, `refreshSession`,
+  `getSession`, `deleteSession`). A suspended account's apps are turned
+  away; an account that moved away cannot sign in.
+- **The AppView proxy** (`app.bsky.*`) goes to the configured AppView only —
+  `atproto-proxy` cannot point the account's signature elsewhere — with a
+  token the account's own key signs for the one method; the answer passes
+  through with its status. `chat.bsky.*` is refused (D15).
+  `app.bsky.actor.getPreferences`/`putPreferences` are kept here, per person,
+  within the `app.bsky` namespace and 256 KB.
+- **Writes are Social actions** (§16.5): `createRecord` of a post is a
+  Social post (public; reply, quote, pictures, language; a link the app
+  shortened is its whole address again), a like a like, a repost a boost,
+  a follow a follow — the record the publisher writes for it is the answer,
+  so the app sees what Social published, which may differ (a long post cut
+  with a link). `putRecord` of the profile sets the display name and bio.
+  `deleteRecord` undoes the action. `applyWrites` does the same one by one,
+  not in one commit. Blocks are refused (D16), as are lists, feeds and
+  gates. `uploadBlob` stores a picture as any upload is, named by its CID,
+  for the post that uses it. A report an app files is a report here, passed
+  on in this server's name (3b).
+- Not yet: `getServiceAuth` (the video upload of 3d needs it), and the
+  account's avatar and banner from the app's profile editor.
+- A mention of a Bluesky account in a post published from here — the
+  composer's `@alice.bsky.social` — is now a mention facet with the DID,
+  where it was a link.
 
 ## 19. Open questions
 
