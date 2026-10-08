@@ -21,6 +21,8 @@
  * - the web server of a domain a person owns, for a custom handle: it
  *   answers `/.well-known/atproto-did` with the DID the test gives it
  *   (`POST /did`), behind the job's proxy as `https://me.handles.test`;
+ *   and, on `/plc-token?did=`, the code the dev PDS would have e-mailed an
+ *   account for a PLC operation, which a move here needs;
  * - a stand-in for Bluesky's video service, which does what that service
  *   does for the app: takes a video with the token the account signed,
  *   stores it in the account's repository on its own PDS with that token
@@ -166,6 +168,19 @@ const handleServer = createServer(async (req, res) => {
 	if (req.url === '/.well-known/atproto-did' && handleDid !== '') {
 		res.writeHead(200, { 'content-type': 'text/plain' })
 		return res.end(handleDid)
+	}
+	// the code the dev PDS would have e-mailed for a PLC operation: the
+	// account's inbox, for a test of a move here
+	const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+	if (url.pathname === '/plc-token') {
+		const row = await network.pds.ctx.accountManager.db.db
+			.selectFrom('email_token')
+			.select('token')
+			.where('did', '=', url.searchParams.get('did') ?? '')
+			.where('purpose', '=', 'plc_operation')
+			.executeTakeFirst()
+		res.writeHead(row ? 200 : 404, { 'content-type': 'text/plain' })
+		return res.end(row?.token ?? '')
 	}
 	res.writeHead(404)
 	res.end()
