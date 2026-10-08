@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Cron;
 
 use OCA\Social\Atproto\Firehose\EventService;
+use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Atproto\Publisher\Publisher;
@@ -41,6 +42,7 @@ class AtprotoMaintenance extends TimedJob {
 		private DeletionSweep $deletions,
 		private AtprotoClientRequest $clients,
 		private AtprotoOAuthRequest $oauth,
+		private CustomHandleService $customHandles,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -60,6 +62,7 @@ class AtprotoMaintenance extends TimedJob {
 			'deleted on Bluesky' => fn (): int => $this->deletions->run(),
 			'expired app sessions' => fn (): int => $this->clients->pruneSessions($this->time->getTime()),
 			'expired OAuth requests and sessions' => fn (): int => $this->oauth->prune($this->time->getTime()),
+			'custom handles that no longer resolve' => fn (): int => $this->customHandles->recheck(),
 		] as $step => $run) {
 			try {
 				$run();

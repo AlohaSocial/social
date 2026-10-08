@@ -124,12 +124,14 @@ jobs:
           set -euo pipefail
           sudo ip addr add "$FEDERATION_IP/32" dev lo
           echo "$FEDERATION_IP nextcloud.test" | sudo tee -a /etc/hosts
+          # a domain a person owns, for a custom handle (served by the network script)
+          echo "$FEDERATION_IP me.handles.test" | sudo tee -a /etc/hosts
           mkdir -p /tmp/tls && cd /tmp/tls
           openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj '/CN=Interop CA' \
             -keyout ca.key -out ca.crt \
             -addext 'basicConstraints=critical,CA:true' -addext 'keyUsage=critical,keyCertSign,cRLSign'
           openssl req -newkey rsa:2048 -nodes -subj '/CN=nextcloud.test' -keyout nc.key -out nc.csr
-          printf 'subjectAltName=DNS:nextcloud.test,DNS:*.nextcloud.test\nextendedKeyUsage=serverAuth\n' > nc.ext
+          printf 'subjectAltName=DNS:nextcloud.test,DNS:*.nextcloud.test,DNS:me.handles.test\nextendedKeyUsage=serverAuth\n' > nc.ext
           openssl x509 -req -in nc.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 2 \
             -extfile nc.ext -out nc.crt
           chmod 644 nc.key
@@ -197,6 +199,10 @@ jobs:
               rewrite @wellknown /index.php{path}
               reverse_proxy localhost:8080
             }
+          }
+          me.handles.test:443 {
+            tls /tls/nc.crt /tls/nc.key
+            reverse_proxy 127.0.0.1:2591
           }
           *.nextcloud.test:443 {
             tls /tls/nc.crt /tls/nc.key
@@ -291,7 +297,7 @@ jobs:
         working-directory: apps/social
         run: |
           composer i
-          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest'
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest|AtprotoHandleTest'
 
       - name: What each side saw, when it went wrong
         if: failure()

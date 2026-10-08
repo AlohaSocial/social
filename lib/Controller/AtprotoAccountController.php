@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Client\AppPasswordService;
+use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\LabelerService;
@@ -43,6 +44,7 @@ class AtprotoAccountController extends Controller {
 		private LabelerService $labelers,
 		private AppPasswordService $appPasswords,
 		private AuthorizationServer $oauth,
+		private CustomHandleService $customHandles,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -208,6 +210,43 @@ class AtprotoAccountController extends Controller {
 	}
 
 	/**
+	 * A handle on a domain the viewer owns, once the domain names their DID.
+	 */
+	#[NoAdminRequired]
+	#[PasswordConfirmationRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/handle')]
+	public function setHandle(string $handle): DataResponse {
+		$identity = $this->ownIdentity();
+		if ($identity === null) {
+			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			return new DataResponse(self::export($this->customHandles->set($identity, $handle)));
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * The handle this server assigned, again.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'DELETE', url: '/api/v1/social/bluesky/handle')]
+	public function clearHandle(): DataResponse {
+		$identity = $this->ownIdentity();
+		if ($identity === null) {
+			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			return new DataResponse(self::export($this->customHandles->clear($identity)));
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
 	 * The Bluesky apps the viewer signed in to through OAuth.
 	 */
 	#[NoAdminRequired]
@@ -262,7 +301,26 @@ class AtprotoAccountController extends Controller {
 			'url' => 'https://bsky.app/profile/' . $identity->handle,
 			'state' => $identity->state,
 			'recovery_key' => $identity->recoveryPublic !== '',
+			// the handle this server gave, which keeps resolving, and the one
+			// on the person's own domain when they set one
+			'assigned_handle' => $identity->assignedHandle(),
+			'custom_handle' => $identity->customHandle,
+			'custom_handle_broken' => $identity->customHandleBroken(),
 		];
+	}
+
+	/**
+	 * The viewer's identity, as it is; null when Bluesky is off or there is none.
+	 */
+	private function ownIdentity(): ?Identity {
+		if (!$this->config->isEnabled()) {
+			return null;
+		}
+		try {
+			return $this->identities->forActor($this->accountService->getActorFromUserId($this->userId(), true), false);
+		} catch (Throwable) {
+			return null;
+		}
 	}
 
 	private function userId(): string {

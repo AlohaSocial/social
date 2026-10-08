@@ -123,7 +123,7 @@ class CoreRequestBuilder {
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
 			'id', 'actor_id', 'actor_id_prim', 'did', 'handle', 'signing_key', 'signing_public', 'recovery_public',
-			'state', 'moved_from_pds', 'creation', 'updated',
+			'state', 'moved_from_pds', 'creation', 'updated', 'custom_handle', 'custom_handle_checked', 'custom_handle_failures',
 		],
 		self::TABLE_ATPROTO_INSTANCE_KEY => ['id', 'kind', 'private_key', 'public_key', 'creation', 'retired'],
 		self::TABLE_ATPROTO_REPO => ['id', 'did', 'commit_cid', 'rev', 'record_count', 'blob_bytes', 'updated'],
