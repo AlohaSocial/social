@@ -187,6 +187,30 @@ class AtprotoRepoRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * A collection's records made since a moment, across every repository;
+	 * what the reconcile pass checks against the posts.
+	 *
+	 * @return StoredRecord[]
+	 */
+	public function getRecordsSince(string $collection, int $since, int $limit): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select('did', 'collection', 'rkey', 'cid', 'bytes', 'local_id', 'creation')
+			->from(self::TABLE_ATPROTO_RECORD)
+			->where($qb->expr()->eq('collection', $qb->createNamedParameter($collection)))
+			->andWhere($qb->expr()->gte('creation', $qb->createNamedParameter(new DateTime('@' . $since), IQueryBuilder::PARAM_DATE)))
+			->orderBy('creation', 'asc')
+			->setMaxResults($limit);
+		$records = [];
+		$result = $qb->executeQuery();
+		while ($row = $result->fetch()) {
+			$records[] = $this->record($row);
+		}
+		$result->closeCursor();
+
+		return $records;
+	}
+
+	/**
 	 * Every record's bytes, for `getRepo`; streamed through the callback so
 	 * a large repository is never whole in memory.
 	 *

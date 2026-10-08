@@ -160,6 +160,13 @@ class RepositoryService {
 	/**
 	 * @return StoredRecord[]
 	 */
+	public function getRecordsSince(string $collection, int $since, int $limit): array {
+		return $this->repoRequest->getRecordsSince($collection, $since, $limit);
+	}
+
+	/**
+	 * @return StoredRecord[]
+	 */
 	public function listRecords(string $did, string $collection, int $limit, string $cursor = '', bool $reverse = false): array {
 		return $this->repoRequest->listRecords($did, $collection, $limit, $cursor, $reverse);
 	}

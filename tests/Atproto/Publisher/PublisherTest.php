@@ -23,6 +23,7 @@ use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -147,11 +148,50 @@ class PublisherTest extends TestCase {
 		$published = $this->post();
 		$missing = $this->post();
 		$missing->setId('https://social.test/@alice/2');
-		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), '', self::POST, 0);
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), $this->mappedBytes(), self::POST, 0);
 		$this->streamRequest->method('getLocalPublicSince')->with(1760000000 - Publisher::RECONCILE_WINDOW, 100)->willReturn([$published, $missing]);
 		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->localId === 'https://social.test/@alice/2'))->willReturnCallback(fn (): CommitResult => $this->written());
 
 		$this->assertSame(1, $this->publisher->reconcile());
+	}
+
+	public function testReconcileReplacesAMissedEditAndRemovesADeletedPost(): void {
+		$edited = $this->post(1760000000 - 60);
+		$stale = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'before']), self::POST, 0);
+		$orphan = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl33', Cid::forRaw('o'), $this->mappedBytes(), 'https://social.test/@alice/3', 0);
+		$this->records = [$stale, $orphan];
+		$this->streamRequest->method('getLocalPublicSince')->willReturn([$edited]);
+		$this->repositories->method('getRecordsSince')->with(RecordMapper::POST, 1760000000 - Publisher::RECONCILE_WINDOW, 100)->willReturn([$stale, $orphan]);
+		$this->streamRequest->method('getStreamById')->willReturnCallback(static function (string $id) use ($edited): Note {
+			if ($id === self::POST) {
+				return $edited;
+			}
+			throw new StreamNotFoundException();
+		});
+		$writes = [];
+		$this->repositories->expects($this->exactly(2))->method('write')->willReturnCallback(function (string $did, $key, array $batch) use (&$writes): CommitResult {
+			$writes[] = array_map(static fn (RepoWrite $w): string => $w->action . ' ' . $w->rkey, $batch);
+
+			return $this->written();
+		});
+
+		$this->assertSame(2, $this->publisher->reconcile());
+		$this->assertSame(RepoWrite::DELETE . ' 3kznmn7xqxl22', $writes[0][0], 'the stale record goes');
+		$this->assertSame(RepoWrite::CREATE, explode(' ', $writes[0][1])[0], 'and the edit takes its place');
+		$this->assertSame([RepoWrite::DELETE . ' 3kznmn7xqxl33'], $writes[1], 'the orphan record is removed');
+	}
+
+	public function testReconcileLeavesAnUnchangedRecordAlone(): void {
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), $this->mappedBytes(), self::POST, 0);
+		$this->streamRequest->method('getLocalPublicSince')->willReturn([$this->post(1760000000 - 60)]);
+		$this->repositories->expects($this->never())->method('write');
+
+		$this->assertSame(0, $this->publisher->reconcile());
+		$this->assertSame('kept', $this->publisher->editPost($this->post(1760000000 - 60)), 'an edit that maps to the same record writes nothing');
+	}
+
+	private function mappedBytes(): string {
+		return DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z']);
 	}
 
 	private function post(int $published = 1760000000 - 10): Note {

@@ -107,6 +107,7 @@ class AtprotoVisibleTest extends TestCase {
 		// shows the new text under a new URI
 		$edited = $words . ' (edited)';
 		$this->alice->editStatus((string)$status['id'], $edited);
+		Server::get(Publisher::class)->reconcile();
 		$editedItem = $this->network->await(function () use ($identity, $edited): ?array {
 			foreach ($this->network->authorFeed($identity->did) as $item) {
 				if (($item['post']['record']['text'] ?? '') === $edited || str_starts_with((string)($item['post']['record']['text'] ?? ''), $edited)) {
@@ -121,6 +122,7 @@ class AtprotoVisibleTest extends TestCase {
 
 		// a delete takes it off
 		$this->alice->deleteStatus((string)$status['id']);
+		Server::get(Publisher::class)->reconcile();
 		$gone = $this->network->await(function () use ($identity, $editedItem): ?bool {
 			foreach ($this->network->authorFeed($identity->did) as $item) {
 				if (($item['post']['uri'] ?? '') === $editedItem['uri']) {

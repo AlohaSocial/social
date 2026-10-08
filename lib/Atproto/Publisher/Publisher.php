@@ -19,6 +19,7 @@ use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
@@ -116,18 +117,11 @@ class Publisher {
 		if ($record === null) {
 			return 'none';
 		}
-		if ($post->getPublishedTime() > 0 && $this->time->getTime() - $post->getPublishedTime() > self::EDIT_GRACE) {
+		if ($this->pastGrace($post)) {
 			return 'kept';
 		}
-		$identity = $this->identities->getByDid($record->did);
-		$author = $this->cacheActorService->getFromId($post->getAttributedTo());
-		$mapped = $this->mapper->post($post, $identity, $author);
-		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
-			RepoWrite::delete($record->collection, $record->rkey),
-			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId()),
-		]);
 
-		return 'replaced';
+		return $this->replaceRecord($post, $record) ? 'replaced' : 'kept';
 	}
 
 	/**
@@ -169,28 +163,44 @@ class Publisher {
 	}
 
 	/**
-	 * Publishes the recent public posts that have no record: what a missed
-	 * event or a failed write left behind.
+	 * Brings Bluesky up to date with the recent public posts: what a missed
+	 * event or a failed write left behind — a post without a record, an edit
+	 * within the grace period the record does not show, a record whose post
+	 * is gone.
 	 *
-	 * @return int how many posts were published
+	 * @return int how many records were written or removed
 	 */
 	public function reconcile(int $limit = self::RECONCILE_BATCH): int {
 		if (!$this->config->isEnabled()) {
 			return 0;
 		}
-		$published = 0;
-		$posts = $this->streamRequest->getLocalPublicSince($this->time->getTime() - self::RECONCILE_WINDOW, $limit);
-		foreach ($posts as $post) {
+		$done = 0;
+		$since = $this->time->getTime() - self::RECONCILE_WINDOW;
+		foreach ($this->streamRequest->getLocalPublicSince($since, $limit) as $post) {
 			try {
-				if ($this->publishPost($post) !== null) {
-					$published++;
+				$record = $this->recordOf($post->getId());
+				if ($record === null) {
+					$done += $this->publishPost($post) !== null ? 1 : 0;
+				} elseif (!$this->pastGrace($post)) {
+					$done += $this->replaceRecord($post, $record) ? 1 : 0;
 				}
 			} catch (Throwable $e) {
 				$this->logger->warning('Post not published to Bluesky', ['post' => $post->getId(), 'exception' => $e]);
 			}
 		}
+		foreach ($this->repositories->getRecordsSince(RecordMapper::POST, $since, $limit) as $record) {
+			try {
+				$this->streamRequest->getStreamById($record->localId);
+			} catch (StreamNotFoundException) {
+				try {
+					$done += $this->deletePost($record->localId) ? 1 : 0;
+				} catch (Throwable $e) {
+					$this->logger->warning('Post not removed from Bluesky', ['post' => $record->localId, 'exception' => $e]);
+				}
+			}
+		}
 
-		return $published;
+		return $done;
 	}
 
 	/**
@@ -226,6 +236,34 @@ class Publisher {
 			? RepoWrite::create(RecordMapper::PROFILE, $record, $actor->getId(), RecordMapper::PROFILE_RKEY)
 			: RepoWrite::update(RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY, $record, $actor->getId());
 		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [$write]);
+
+		return true;
+	}
+
+	/** Whether the post is too old for an edit to still replace its record. */
+	private function pastGrace(Stream $post): bool {
+		return $post->getPublishedTime() > 0 && $this->time->getTime() - $post->getPublishedTime() > self::EDIT_GRACE;
+	}
+
+	/**
+	 * Replaces a post's record with what the post maps to now, under a new
+	 * rkey; nothing is written when the record already says the same.
+	 *
+	 * @return bool whether the record was replaced
+	 * @throws AtprotoException
+	 */
+	private function replaceRecord(Stream $post, StoredRecord $record): bool {
+		$identity = $this->identities->getByDid($record->did);
+		$author = $this->cacheActorService->getFromId($post->getAttributedTo());
+		$mapped = $this->mapper->post($post, $identity, $author);
+		if (DagCbor::encode($mapped['record']) === $record->bytes) {
+			return false;
+		}
+		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
+			RepoWrite::delete($record->collection, $record->rkey),
+			RepoWrite::create(RecordMapper::POST, $mapped['record'], $post->getId()),
+		]);
+		$this->logger->info('Post edit published to Bluesky', ['post' => $post->getId(), 'did' => $identity->did]);
 
 		return true;
 	}

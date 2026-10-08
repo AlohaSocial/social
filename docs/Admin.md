@@ -448,9 +448,12 @@ checks, and the card refuses to switch Bluesky on while one fails:
   In a container, the same command under the container's supervisor. The daemon
   reports to the card every fifteen seconds; a report older than a minute shows
   as "not running".
-- **Cron.** The maintenance job (every five minutes) publishes what the
-  listener missed, resends directory operations, prunes the firehose past its
-  window and drops retired keys. The ordinary cron requirement covers it.
+- **Cron.** The maintenance job (every five minutes) brings Bluesky up to
+  date with the last day's public posts — a post the listener missed is
+  published, an edit within the grace period is replaced, a deleted post's
+  record is removed — resends directory operations, prunes the firehose
+  past its window and drops retired keys. The ordinary cron requirement
+  covers it.
 
 **Switching on.** The Bluesky card checks the requirements and flips the switch.
 Then `php occ social:atproto:identities` gives every existing account its
