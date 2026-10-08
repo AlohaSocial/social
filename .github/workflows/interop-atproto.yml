@@ -188,6 +188,11 @@ jobs:
               rewrite @didjson /index.php/apps/social{path}
               @atprotodid path /.well-known/atproto-did
               rewrite @atprotodid /index.php/apps/social{path}
+              # the client API and OAuth — the authorization server Bluesky
+              # sign-in shares with it, and the PDS's protected resource
+              # document — as the root rules make them
+              @oauth path /api/* /oauth/* /.well-known/oauth-authorization-server /.well-known/oauth-protected-resource
+              rewrite @oauth /index.php/apps/social{path}
               @wellknown path /.well-known/*
               rewrite @wellknown /index.php{path}
               reverse_proxy localhost:8080
@@ -253,6 +258,9 @@ jobs:
           # the network's stand-in for Bluesky's video service
           ./occ config:app:set social atproto_video_service --value http://127.0.0.1:2590
           ./occ config:app:set social atproto_video_service_did --value did:web:video.interop.test
+          # the root rules are in place (the proxy above), so the OAuth
+          # discovery document names the root addresses Bluesky apps use
+          ./occ config:app:set social client_api_root --value 1
 
       - name: Start the relay
         # The official relay, told to crawl this app. It verifies every
@@ -283,7 +291,7 @@ jobs:
         working-directory: apps/social
         run: |
           composer i
-          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest'
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest'
 
       - name: What each side saw, when it went wrong
         if: failure()
