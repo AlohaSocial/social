@@ -665,7 +665,9 @@ class PixelfedController extends ClientApiController {
 	 *
 	 * GET and POST on one method because the app uses one URL for both, and
 	 * a POST with no `common` is a read — which is what the app sends when it
-	 * wants to know what is stored without changing it.
+	 * wants to know what is stored without changing it. Storing is a write to
+	 * the account, so it needs the scope that says so; a token that may only
+	 * read could otherwise turn content warnings off in somebody's app.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -673,8 +675,8 @@ class PixelfedController extends ClientApiController {
 	#[FrontpageRoute(verb: 'POST', url: '/api/pixelfed/v1/app/settings', postfix: 'store')]
 	public function appSettings(): DataResponse {
 		try {
-			$this->initViewer(['read']);
 			$common = $this->request->getParam('common');
+			$this->initViewer(is_array($common) ? ['write:accounts'] : ['read']);
 
 			return new DataResponse(
 				is_array($common)
@@ -777,11 +779,29 @@ class PixelfedController extends ClientApiController {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1.1/push/state')]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/disable', postfix: 'disable')]
-	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/update', postfix: 'update')]
 	public function pushState(): DataResponse {
 		try {
 			$this->initViewer(['read']);
+
+			return new DataResponse($this->pixelfedService->pushState($this->viewer()), Http::STATUS_OK);
+		} catch (Throwable $e) {
+			return $this->error($e);
+		}
+	}
+
+	/**
+	 * Turning push off or on. Nothing is stored, since there is no push here
+	 * to switch, but these are the app's requests to change the account and
+	 * are held to the scope a change needs, as Mastodon holds its own push
+	 * subscription to `push`.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/disable', postfix: 'disable')]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1.1/push/update', postfix: 'update')]
+	public function pushChange(): DataResponse {
+		try {
+			$this->initViewer(['write:accounts', 'push']);
 
 			return new DataResponse($this->pixelfedService->pushState($this->viewer()), Http::STATUS_OK);
 		} catch (Throwable $e) {
