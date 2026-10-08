@@ -177,6 +177,19 @@ class AvatarServiceTest extends TestCase {
 		$this->service->setFromFile(self::USER, $this->file('<?php phpinfo();'));
 	}
 
+	public function testAPictureThatIsNotSquareIsCutToItsMiddleSquare(): void {
+		$image = imagecreatetruecolor(64, 48);
+		ob_start();
+		imagepng($image);
+		$wide = $this->file((string)ob_get_clean());
+
+		$this->service->setFromFile(self::USER, $wide);
+
+		$size = getimagesizefromstring((string)$this->stored);
+		$this->assertSame([48, 48], [$size[0] ?? 0, $size[1] ?? 0]);
+		$this->assertSame(64, getimagesize($wide)[0], 'the file it came from is left as it was');
+	}
+
 	public function testAFileThisServerHoldsIsNotTheAvatarOfAnAccountWhoseAvatarLivesElsewhere(): void {
 		$this->userManager = $this->createStub(IUserManager::class);
 		$this->userManager->method('get')->willReturn($this->user(false));

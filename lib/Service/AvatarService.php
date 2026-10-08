@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use Gumlet\ImageResize;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCP\IAvatarManager;
 use OCP\IUserManager;
@@ -114,7 +115,9 @@ class AvatarService {
 	/**
 	 * Stores a file this server already holds as the account's avatar: the
 	 * picture a Bluesky app uploaded for the profile it then saves. The same
-	 * checks as an upload, but no upload to be one.
+	 * checks as an upload, but no upload to be one. Nextcloud keeps square
+	 * avatars only, so one that is not is cut to its middle square, which is
+	 * what Bluesky shows of it in a circle anyway.
 	 *
 	 * @throws InvalidActionException the backend owns the avatar, or the bytes
 	 *                                are not a picture this can store
@@ -122,7 +125,46 @@ class AvatarService {
 	public function setFromFile(string $userId, string $path): void {
 		$this->assertChangeable($userId);
 		$this->checkFile($path);
-		$this->write($userId, $path);
+		$square = $this->squared($path);
+		try {
+			$this->write($userId, $square);
+		} finally {
+			if ($square !== $path) {
+				@unlink($square);
+			}
+		}
+	}
+
+	/**
+	 * The picture's middle square, in a file of its own; the path itself when
+	 * it is square already.
+	 *
+	 * @throws InvalidActionException
+	 */
+	private function squared(string $path): string {
+		$size = @getimagesize($path);
+		if ($size === false || $size[0] === $size[1]) {
+			return $path;
+		}
+		$side = min($size[0], $size[1]);
+		$square = tempnam(sys_get_temp_dir(), 'social-avatar-');
+		try {
+			if ($square === false) {
+				throw new \RuntimeException('no temporary file');
+			}
+			$image = new ImageResize($path);
+			$image->crop($side, $side, false, ImageResize::CROPCENTER);
+			$image->save($square, $size[2] === IMAGETYPE_JPEG ? IMAGETYPE_JPEG : IMAGETYPE_PNG);
+		} catch (\Throwable $e) {
+			if ($square !== false) {
+				@unlink($square);
+			}
+			$this->logger->warning('could not make an avatar square', ['exception' => $e]);
+
+			throw new InvalidActionException('the avatar could not be made square');
+		}
+
+		return $square;
 	}
 
 	/**
