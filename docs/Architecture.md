@@ -218,6 +218,8 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_blob` | The pictures a repository refers to: a CID naming one of the app's stored documents, its type and size |
 | `social_atproto_event` | The firehose, one frame per commit, identity or account change, numbered by the database (`seq`) and kept for the 72-hour replay window; `occ social:atproto:serve` reads it |
 | `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
+| `social_atproto_watch` | One row per Bluesky author somebody here follows: the author-feed cursor the poller continues from, when it last read and when it is due again (`next_sync`, backed off after empty pages), failures and the last error |
+| `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |

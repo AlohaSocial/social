@@ -190,6 +190,42 @@ class PublisherTest extends TestCase {
 		$this->assertSame('kept', $this->publisher->editPost($this->post(1760000000 - 60)), 'an edit that maps to the same record writes nothing');
 	}
 
+	public function testAFollowRecordIsWrittenOncePerObjectAndRemovedByIt(): void {
+		$actor = new Person();
+		$actor->setId('https://social.test/@alice');
+		$actor->setLocal(true);
+		$record = ['$type' => RecordMapper::FOLLOW, 'subject' => 'did:plc:other', 'createdAt' => '2026-10-08T10:00:00.000Z'];
+		$this->repositories->expects($this->exactly(2))->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+			static $n = 0;
+			$n++;
+			if ($n === 1) {
+				$this->assertSame(RepoWrite::CREATE, $writes[0]->action);
+				$this->assertSame(RecordMapper::FOLLOW, $writes[0]->collection);
+				$this->assertSame('https://social.test/follow/1', $writes[0]->localId);
+				$this->records[] = new StoredRecord(self::DID, RecordMapper::FOLLOW, $writes[0]->rkey, Cid::forRaw('f'), '', 'https://social.test/follow/1', 0);
+			} else {
+				$this->assertSame(RepoWrite::DELETE, $writes[0]->action);
+				$this->assertSame($this->records[0]->rkey, $writes[0]->rkey);
+			}
+
+			return $this->written();
+		});
+
+		$this->assertTrue($this->publisher->writeRecord($actor, RecordMapper::FOLLOW, $record, 'https://social.test/follow/1'));
+		$this->assertFalse($this->publisher->writeRecord($actor, RecordMapper::FOLLOW, $record, 'https://social.test/follow/1'), 'written once');
+		$this->assertFalse($this->publisher->removeRecord(RecordMapper::LIKE, 'https://social.test/follow/1'), 'another collection is not it');
+		$this->assertTrue($this->publisher->removeRecord(RecordMapper::FOLLOW, 'https://social.test/follow/1'));
+		$this->records = [];
+		$this->assertFalse($this->publisher->removeRecord(RecordMapper::FOLLOW, 'https://social.test/follow/1'));
+	}
+
+	public function testNoRecordForARemoteActor(): void {
+		$remote = new Person();
+		$remote->setId('https://mastodon.test/users/bob');
+		$this->repositories->expects($this->never())->method('write');
+		$this->assertFalse($this->publisher->writeRecord($remote, RecordMapper::LIKE, ['$type' => RecordMapper::LIKE], 'https://social.test/like/1'));
+	}
+
 	private function mappedBytes(): string {
 		return DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z']);
 	}

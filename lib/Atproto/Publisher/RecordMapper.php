@@ -36,6 +36,9 @@ class RecordMapper {
 	public const POST = 'app.bsky.feed.post';
 	public const PROFILE = 'app.bsky.actor.profile';
 	public const PROFILE_RKEY = 'self';
+	public const FOLLOW = 'app.bsky.graph.follow';
+	public const LIKE = 'app.bsky.feed.like';
+	public const REPOST = 'app.bsky.feed.repost';
 
 	public function __construct(
 		private TextMapper $text,

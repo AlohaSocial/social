@@ -125,6 +125,56 @@ class Publisher {
 	}
 
 	/**
+	 * Writes one record of a local account — a follow, a like, a repost —
+	 * keyed by the Social object it stands for, so it can be removed by it.
+	 *
+	 * @return bool whether it was written; false when the account has no
+	 *              active identity or the record is there already
+	 * @throws AtprotoException
+	 */
+	public function writeRecord(Person $actor, string $collection, array $record, string $localId): bool {
+		if (!$this->config->isEnabled() || !$actor->isLocal()) {
+			return false;
+		}
+		foreach ($this->repositories->getRecordsByLocalId($localId) as $existing) {
+			if ($existing->collection === $collection) {
+				return false;
+			}
+		}
+		$identity = $this->identities->forActor($actor);
+		if ($identity === null || !$identity->isActive()) {
+			return false;
+		}
+		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
+			RepoWrite::create($collection, $record, $localId),
+		]);
+
+		return true;
+	}
+
+	/**
+	 * Removes the record a Social object stands for.
+	 *
+	 * @return bool whether a record was there to remove
+	 * @throws AtprotoException
+	 */
+	public function removeRecord(string $collection, string $localId): bool {
+		foreach ($this->repositories->getRecordsByLocalId($localId) as $record) {
+			if ($record->collection !== $collection) {
+				continue;
+			}
+			$identity = $this->identities->getByDid($record->did);
+			$this->repositories->write($identity->did, $this->identities->signingKey($identity), [
+				RepoWrite::delete($record->collection, $record->rkey),
+			]);
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
 	 * Writes the profile record, or rewrites it when it changed.
 	 *
 	 * @return bool whether anything was written
