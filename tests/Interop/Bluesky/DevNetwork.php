@@ -203,6 +203,24 @@ final class DevNetwork {
 	}
 
 	/**
+	 * The records of a collection in a repository, as the dev PDS holds it.
+	 *
+	 * @return list<array{uri: string, value: array}>
+	 */
+	public function pdsRecords(string $did, string $collection): array {
+		$answer = $this->get($this->pds, 'com.atproto.repo.listRecords', ['repo' => $did, 'collection' => $collection, 'limit' => 100]);
+
+		return is_array($answer['records'] ?? null) ? $answer['records'] : [];
+	}
+
+	/**
+	 * Signs in on the dev PDS and answers who it says that is.
+	 */
+	public function signInAs(string $identifier, string $password): array {
+		return $this->post($this->pds, 'com.atproto.server.createSession', ['identifier' => $identifier, 'password' => $password]);
+	}
+
+	/**
 	 * Puts a DID in the handle server's `/.well-known/atproto-did`, as a
 	 * person does on their own domain.
 	 */

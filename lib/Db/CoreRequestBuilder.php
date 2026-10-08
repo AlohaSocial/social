@@ -119,6 +119,7 @@ class CoreRequestBuilder {
 	public const TABLE_ATPROTO_OAUTH_REQUEST = 'social_atproto_oauth_request';
 	public const TABLE_ATPROTO_OAUTH_SESSION = 'social_atproto_oauth_session';
 	public const TABLE_ATPROTO_OAUTH_REPLAY = 'social_atproto_oauth_replay';
+	public const TABLE_ATPROTO_MOVE = 'social_atproto_move';
 
 	public static array $tables = [
 		self::TABLE_ATPROTO_IDENTITY => [
@@ -142,6 +143,7 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_OAUTH_REQUEST => ['id', 'request_id', 'client_id', 'client_auth', 'params', 'dpop_jkt', 'code_challenge', 'user_id', 'did', 'code_hash', 'session_id', 'expires', 'creation'],
 		self::TABLE_ATPROTO_OAUTH_SESSION => ['id', 'session_id', 'user_id', 'did', 'client_id', 'client_auth', 'scope', 'dpop_jkt', 'refresh_hash', 'previous_hash', 'refresh_expires', 'expires', 'creation', 'last_used'],
 		self::TABLE_ATPROTO_OAUTH_REPLAY => ['id', 'hash', 'expires'],
+		self::TABLE_ATPROTO_MOVE => ['id', 'did', 'user_id', 'direction', 'pds', 'pds_did', 'handle', 'step', 'state', 'session', 'progress', 'error', 'creation', 'updated'],
 		self::TABLE_ACTIONS => [
 			'id_prim',
 			'id',

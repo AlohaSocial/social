@@ -512,6 +512,8 @@
 				</template>
 			</template>
 		</section>
+
+		<BlueskyMoveAway />
 	</div>
 </template>
 
@@ -520,6 +522,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess } from '../services/toast.js'
 import { confirmPassword } from '../services/externalApi.js'
+import BlueskyMoveAway from './BlueskyMoveAway.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -548,6 +551,7 @@ export default {
 	name: 'MigrationSettings',
 
 	components: {
+		BlueskyMoveAway,
 		IconAccountArrowLeft,
 		IconAccountArrowRight,
 		IconAccountMultiplePlus,

@@ -179,6 +179,44 @@ class IdentityServiceTest extends TestCase {
 		$this->assertTrue(PlcOperation::verify($update, $this->rotation->publicKey()));
 	}
 
+	public function testHandingOverPointsTheDidAtTheOtherPdsAndKeepsTheRecoveryKeyFirst(): void {
+		$identity = $this->service->forActor(self::actor('mover'));
+		$this->assertNotNull($identity);
+		$recovery = PrivateKey::generate(Curve::K256)->didKey();
+		$withRecovery = new Identity($identity->id, $identity->actorId, $identity->did, $identity->handle, $identity->sealedSigningKey, $identity->signingPublic, $recovery, Identity::STATE_ACTIVE, '', $identity->creation);
+		$theirs = PrivateKey::generate(Curve::K256)->didKey();
+		$signing = PrivateKey::generate(Curve::K256)->didKey();
+		$this->plc->expects($this->once())->method('submit')->with($identity->did, $this->callback(fn (array $operation): bool => $operation['rotationKeys'] === [$recovery, $theirs]
+			&& $operation['verificationMethods'] === ['atproto' => $signing]
+			&& $operation['alsoKnownAs'] === ['at://mover.pds.example.com']
+			&& $operation['services']['atproto_pds']['endpoint'] === 'https://pds.example.com'
+			&& $operation['prev'] === $this->logged[0]['cid']
+			&& PlcOperation::verify($operation, $this->rotation->publicKey())));
+		$this->plcLog->expects($this->once())->method('markConfirmed');
+
+		$this->service->handOver($withRecovery, [
+			'rotationKeys' => [$theirs],
+			'verificationMethods' => ['atproto' => $signing],
+			'alsoKnownAs' => ['at://mover.pds.example.com'],
+			'services' => ['atproto_pds' => ['type' => 'AtprotoPersonalDataServer', 'endpoint' => 'https://pds.example.com']],
+		]);
+	}
+
+	public function testAHandOverTheDirectoryRefusedIsNotSentAgainByRepair(): void {
+		$identity = $this->service->forActor(self::actor('stayer'));
+		$this->assertNotNull($identity);
+		$this->plc->method('submit')->willThrowException(new \OCA\Social\Exceptions\AtprotoException('refused'));
+		$this->plcLog->expects($this->once())->method('remove')->with(2);
+
+		$this->expectException(\OCA\Social\Exceptions\AtprotoException::class);
+		$this->service->handOver($identity, [
+			'rotationKeys' => [PrivateKey::generate(Curve::K256)->didKey()],
+			'verificationMethods' => ['atproto' => PrivateKey::generate(Curve::K256)->didKey()],
+			'alsoKnownAs' => ['at://stayer.pds.example.com'],
+			'services' => ['atproto_pds' => ['endpoint' => 'https://pds.example.com']],
+		]);
+	}
+
 	public function testSwitchingOffAnnouncesTheAccountInactiveAndOnAgainActive(): void {
 		$identity = $this->service->forActor(self::actor('erin'));
 		$this->assertNotNull($identity);

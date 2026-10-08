@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18) and custom handles (4a) are implemented; the rest of phase 4 is specification.**
+**Status: phases 1, 2 and 3 (§18), custom handles (4a) and moving away (4b) are implemented; moving here (4c) and Bridgy twins (4d) are specification.**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -1281,6 +1281,37 @@ Fed twins (§13.3).
   failed two checks in a row is shown as broken in the settings, as
   Bluesky shows the handle as invalid. Nothing is changed for the person:
   the record may only be gone for a while.
+
+**4b as built** — `Move\MoveAwayService`, `Move\PdsClient`,
+`IdentityService::handOver()`/`markMovedAway()`, `Cron\AtprotoMove`, table
+`social_atproto_move`:
+
+- **Driven from here, not from the other side.** §13.2 had this server
+  serve `requestPlcOperationSignature` and `signPlcOperation` to a
+  migration tool. A tool would need a session with account-management
+  rights, which neither app passwords nor `transition:generic` give, and
+  this server holds both the signing key and a rotation key of the DID.
+  So Settings → Migration → *Move your Bluesky account away* does what the
+  tool would: the person names the other PDS, a handle there, an e-mail
+  address and a password (and an invite code if it wants one), confirms
+  with their Nextcloud password, and this server makes the account there
+  with a token the account signs (`createAccount` with the DID). What the
+  other server refuses is said at once.
+- **Then a background job**: `importRepo` with this repository's CAR, every
+  blob `listMissingBlobs` names, the preferences, then
+  `getRecommendedDidCredentials` there and a PLC operation signed with this
+  server's rotation key that hands the DID over — the person's recovery key
+  first among the rotation keys, so the DID stays theirs; this server's key
+  is no longer listed — then `activateAccount` there. Here the identity is
+  `moved_away`, announced inactive on the firehose, and nothing more is
+  published; no new identity is made for the account.
+- **A step that fails stops the move**, and *Try again* starts it from that
+  step. The DID moves only once the repository and the blobs are there, and
+  a hand-over the directory refused is not left for the PLC repair pass:
+  the move is finished by the person, never behind their back. The session
+  on the other PDS is kept sealed while the move runs and dropped after.
+- **The Fediverse account is untouched.** Posts written while the move
+  runs, after the repository was copied, stay here only.
 
 ## 19. Open questions
 
