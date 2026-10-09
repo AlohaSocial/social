@@ -653,10 +653,10 @@ class DocumentServiceTest extends TestCase {
 		return $alice;
 	}
 
-	private function avatarUrl(): string {
-		$url = 'https://cloud.example.com/avatar/alice/128';
+	private function avatarUrl(int $version): string {
+		$url = 'https://cloud.example.com/avatar/alice/128?v=' . $version;
 		$this->urlGenerator->method('linkToRouteAbsolute')
-			->with('core.avatar.getAvatar', ['userId' => 'alice', 'size' => 128])
+			->with('core.avatar.getAvatar', ['userId' => 'alice', 'size' => 128, 'v' => $version])
 			->willReturn($url);
 
 		return $url;
@@ -671,20 +671,27 @@ class DocumentServiceTest extends TestCase {
 	 * number", because what the call was is the whole of the bug.
 	 */
 	public function testTheAvatarVersionIsAskedForAsANumber(): void {
-		$this->avatarUrl();
+		$this->avatarUrl(0);
 		$this->configService->expects($this->once())->method('getUserValueInt')
 			->with('version', 'alice', 'avatar')->willReturn(0);
 		$this->configService->expects($this->never())->method('getUserValue');
-		$this->cacheDocumentsRequest->method('getByUrl')
-			->willThrowException(new CacheDocumentDoesNotExistException());
+		$cached = new Image();
+		$cached->setId('https://cloud.example.com/documents/avatar/existing');
+		$this->cacheDocumentsRequest->method('getByUrl')->willReturn($cached);
 
-		$this->assertSame('', $this->service->cacheLocalAvatarByUsername($this->alice(0)));
+		$this->assertSame('https://cloud.example.com/documents/avatar/existing', $this->service->cacheLocalAvatarByUsername($this->alice(0)));
 	}
 
-	public function testCacheLocalAvatarCreatesANewImageWhenTheAvatarChanged(): void {
-		$url = $this->avatarUrl();
+	/**
+	 * A new avatar is a new address, which is what makes a peer fetch the
+	 * picture again, and a document of its own: the same address for every
+	 * version made the second one a duplicate that was never saved.
+	 */
+	public function testANewAvatarIsANewLocalDocumentAtAnAddressOfItsOwn(): void {
+		$url = $this->avatarUrl(2);
 		$alice = $this->alice(1);
 		$this->configService->method('getUserValueInt')->with('version', 'alice', 'avatar')->willReturn(2);
+		$this->cacheDocumentsRequest->method('getByUrl')->with($url)->willThrowException(new CacheDocumentDoesNotExistException());
 		$icon = new Image();
 		$icon->setUrlCloud('https://cloud.example.com');
 		$ap = $this->createMock(AP::class);
@@ -694,35 +701,29 @@ class DocumentServiceTest extends TestCase {
 		$ap->method('getInterfaceFromType')->with(Image::TYPE)->willReturn($imageInterface);
 		AP::set($ap);
 		$this->actorsRequest->expects($this->once())->method('update')->with($this->identicalTo($alice));
-		$this->cacheDocumentsRequest->expects($this->never())->method('getByUrl');
 
 		$id = $this->service->cacheLocalAvatarByUsername($alice);
 
 		$this->assertSame($icon->getId(), $id);
 		$this->assertStringStartsWith('https://cloud.example.com/documents/avatar/', $id);
 		$this->assertSame($url, $icon->getUrl());
-		$this->assertSame('avatar', $icon->getLocalCopy());
+		$this->assertSame(Document::COPY_LOCAL_AVATAR, $icon->getLocalCopy());
+		$this->assertTrue($icon->isLocal(), 'not downloaded from this server\'s own address');
 		$this->assertSame(2, $alice->getAvatarVersion());
+		$this->assertSame($url, $icon->getMediaUrl($this->urlGenerator), 'shown at its own address');
 	}
 
-	public function testCacheLocalAvatarReusesTheCachedImageWhenUnchanged(): void {
-		$url = $this->avatarUrl();
-		$alice = $this->alice(2);
+	public function testAnUnchangedAvatarIsTheDocumentItAlreadyHas(): void {
+		$url = $this->avatarUrl(2);
 		$this->configService->method('getUserValueInt')->willReturn(2);
 		$cached = new Image();
 		$cached->setId('https://cloud.example.com/documents/avatar/existing');
+		$cached->setMediaType('image/png');
 		$this->cacheDocumentsRequest->expects($this->once())->method('getByUrl')->with($url)->willReturn($cached);
+		$this->cacheDocumentsRequest->expects($this->never())->method('update');
 		$this->actorsRequest->expects($this->never())->method('update');
 
-		$this->assertSame('https://cloud.example.com/documents/avatar/existing', $this->service->cacheLocalAvatarByUsername($alice));
-	}
-
-	public function testCacheLocalAvatarIsEmptyWhenNothingIsCachedYet(): void {
-		$this->avatarUrl();
-		$this->configService->method('getUserValueInt')->willReturn(0);
-		$this->cacheDocumentsRequest->method('getByUrl')->willThrowException(new CacheDocumentDoesNotExistException());
-
-		$this->assertSame('', $this->service->cacheLocalAvatarByUsername($this->alice(0)));
+		$this->assertSame('https://cloud.example.com/documents/avatar/existing', $this->service->cacheLocalAvatarByUsername($this->alice(2)));
 	}
 
 	/**

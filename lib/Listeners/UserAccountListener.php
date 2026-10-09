@@ -15,11 +15,14 @@ use OCA\Social\Service\AccountService;
 use OCP\Accounts\UserUpdatedEvent;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
+use OCP\User\Events\UserChangedEvent;
 use Psr\Log\LoggerInterface;
 
 /**
  * Republishes a profile — the display name, the picture, the fields — when the
- * Nextcloud account behind it changes.
+ * Nextcloud account behind it changes. A new or removed avatar, whether set
+ * here or in Nextcloud's own settings, is also told to the followers and to
+ * Bluesky: the picture is the Nextcloud account's.
  *
  * @template-implements IEventListener<\OCP\EventDispatcher\Event>
  */
@@ -33,7 +36,14 @@ class UserAccountListener implements IEventListener {
 
 	#[\Override]
 	public function handle(Event $event): void {
-		if (!($event instanceof UserUpdatedEvent)) {
+		if ($event instanceof UserChangedEvent) {
+			if ($event->getFeature() !== 'avatar') {
+				return;
+			}
+			$avatar = true;
+		} elseif ($event instanceof UserUpdatedEvent) {
+			$avatar = false;
+		} else {
 			return;
 		}
 
@@ -60,7 +70,9 @@ class UserAccountListener implements IEventListener {
 		}
 
 		try {
-			$this->accountService->cacheLocalActorByUsername($actor->getPreferredUsername());
+			$avatar
+				? $this->accountService->avatarChanged($userId, $actor->getPreferredUsername())
+				: $this->accountService->cacheLocalActorByUsername($actor->getPreferredUsername());
 		} catch (\Exception $e) {
 			$this->logger->warning('issue while updating user account', ['exception' => $e]);
 		}

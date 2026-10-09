@@ -900,7 +900,7 @@ class CacheDocumentService {
 	 * Same list `cachedFileSize()` keeps, for the same reason.
 	 */
 	public function removeFromCache(string $filename): void {
-		if ($filename === '' || $filename === 'avatar' || $filename === 'header'
+		if ($filename === '' || $filename === Document::COPY_LOCAL_AVATAR || $filename === 'header'
 			|| $filename === Document::COPY_STREAMED) {
 			return;
 		}
@@ -922,7 +922,7 @@ class CacheDocumentService {
 	 * which is the case `occ social:media:usage` reports.
 	 */
 	public function cachedFileSize(string $filename): ?int {
-		if ($filename === '' || $filename === 'avatar' || $filename === 'header'
+		if ($filename === '' || $filename === Document::COPY_LOCAL_AVATAR || $filename === 'header'
 			|| $filename === Document::COPY_STREAMED) {
 			return null;
 		}
@@ -946,7 +946,7 @@ class CacheDocumentService {
 	 * @return string '' when there is no file, or nothing could be made of it
 	 */
 	public function sniffStored(string $uuid): string {
-		if ($uuid === '' || $uuid === 'avatar' || $uuid === 'header'
+		if ($uuid === '' || $uuid === Document::COPY_LOCAL_AVATAR || $uuid === 'header'
 			|| $uuid === Document::COPY_STREAMED) {
 			return '';
 		}
@@ -979,7 +979,7 @@ class CacheDocumentService {
 
 		// right now, we do not handle cache for local avatar, we need to change this
 		// so the current avatar is cached, or a new avatar is uploaded
-		if ($filename === 'avatar') {
+		if ($filename === Document::COPY_LOCAL_AVATAR) {
 			throw new CacheContentException();
 		}
 

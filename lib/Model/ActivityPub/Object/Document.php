@@ -49,6 +49,8 @@ class Document extends ACore implements JsonSerializable {
 	 * off a file that must not be fetched.
 	 */
 	public const COPY_STREAMED = 'stream';
+	/** the local copy of a local account's avatar: Nextcloud's avatar, at the document's own address */
+	public const COPY_LOCAL_AVATAR = 'avatar';
 
 	private string $account = '';
 	private string $mediaType = '';
@@ -509,6 +511,9 @@ class Document extends ACore implements JsonSerializable {
 	public function getMediaUrl(IURLGenerator $urlGenerator, string $mime = ''): string {
 		if ($this->getLocalCopy() === '') {
 			return '';
+		}
+		if ($this->getLocalCopy() === self::COPY_LOCAL_AVATAR) {
+			return $this->getUrl();
 		}
 
 		$ext = '';

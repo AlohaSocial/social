@@ -754,6 +754,16 @@ class AccountService {
 		}
 	}
 
+	/**
+	 * The account's Nextcloud avatar changed: the actor takes the new icon,
+	 * and the followers and Bluesky are told — once, at the end, when the
+	 * change is part of a profile edit (`changingProfile()`).
+	 */
+	public function avatarChanged(string $userId, string $username): void {
+		$this->cacheLocalActorByUsername($username);
+		$this->federateProfile($userId);
+	}
+
 	/** Whether a held change is waiting to be told, forgetting it. */
 	private function takeProfileChanged(): bool {
 		$changed = $this->profileChanged;

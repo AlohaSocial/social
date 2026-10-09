@@ -1424,6 +1424,26 @@ class AccountServiceTest extends TestCase {
 		$this->assertSame('done', $answer);
 	}
 
+	/** A new picture and a new bio in one profile edit are one Update, as the rest are. */
+	public function testANewAvatarInAProfileEditIsToldInTheSameUpdate(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$this->service->changingProfile('alice', function (): void {
+			$this->service->setSummary('alice', 'I keep bees.');
+			$this->service->avatarChanged('alice', 'alice');
+		});
+	}
+
+	public function testANewAvatarOnItsOwnIsTold(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$this->service->avatarChanged('alice', 'alice');
+	}
+
 	public function testNothingChangedTellsNobody(): void {
 		$this->activityService->expects($this->never())->method('updateActivity');
 

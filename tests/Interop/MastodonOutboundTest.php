@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AvatarService;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -350,6 +351,22 @@ class MastodonOutboundTest extends TestCase {
 				'note' => $account['note'] ?? null,
 				'fields' => $account['fields'] ?? null,
 			])
+		);
+
+		// a new picture is a new address, which is what makes Mastodon fetch it
+		$before = (string)($account['avatar'] ?? '');
+		$picture = (string)tempnam(sys_get_temp_dir(), 'interop-avatar-');
+		$image = imagecreatetruecolor(64, 64);
+		imagefill($image, 0, 0, (int)imagecolorallocate($image, random_int(0, 255), random_int(0, 255), random_int(0, 255)));
+		imagepng($image, $picture);
+		Server::get(AccountService::class)->changingProfile(self::PROFILE, static function () use ($picture): void {
+			Server::get(AvatarService::class)->setFromFile(self::PROFILE, $picture);
+		});
+		@unlink($picture);
+		$this->drainQueue();
+		$this->assertNotNull(
+			$this->mastodon->await(fn (): ?bool => (string)($this->mastodon->account($profileThere)['avatar'] ?? '') !== $before ? true : null),
+			'Mastodon still shows the avatar from before: ' . $before
 		);
 	}
 
