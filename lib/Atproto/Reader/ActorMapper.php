@@ -23,6 +23,8 @@ use OCA\Social\Model\Details;
  */
 class ActorMapper {
 	public const DETAIL = Details::ATPROTO;
+	/** Bluesky's own account (bsky.app), the verifier every Bluesky app trusts */
+	public const BLUESKY_DID = 'did:plc:z72i7hdynmk6r22z27h6tvur';
 
 	/** the moderation labels that mark an account rather than a post */
 	private const LIMITING_LABELS = ['!hide', '!takedown'];
@@ -78,9 +80,34 @@ class ActorMapper {
 			'did' => $did,
 			'url' => BlueskyIds::profileUrl($handle !== '' ? $handle : $did),
 			'native' => true,
-		]);
+		] + self::verification($profile['verification'] ?? null));
 
 		return $person;
+	}
+
+	/**
+	 * Whether Bluesky shows the account as verified — by a trusted verifier,
+	 * as the AppView judged it — who verified it, and whether it verifies
+	 * others itself.
+	 *
+	 * @return array{verified: bool, verified_by: list<string>, verified_by_bluesky: bool, trusted_verifier: bool}
+	 */
+	public static function verification(mixed $state): array {
+		$state = is_array($state) ? $state : [];
+		$issuers = [];
+		foreach (is_array($state['verifications'] ?? null) ? $state['verifications'] : [] as $verification) {
+			if (is_array($verification) && ($verification['isValid'] ?? false) === true && is_string($verification['issuer'] ?? null)) {
+				$issuers[] = $verification['issuer'];
+			}
+		}
+		$verified = ($state['verifiedStatus'] ?? '') === 'valid';
+
+		return [
+			'verified' => $verified,
+			'verified_by' => $verified ? array_values(array_unique($issuers)) : [],
+			'verified_by_bluesky' => $verified && in_array(self::BLUESKY_DID, $issuers, true),
+			'trusted_verifier' => ($state['trustedVerifierStatus'] ?? '') === 'valid',
+		];
 	}
 
 	/**

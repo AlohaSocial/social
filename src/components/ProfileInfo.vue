@@ -45,7 +45,7 @@
 				:size="128" />
 			<h2>
 				{{ displayName }}
-				<BlueskyBadge v-if="isBluesky" />
+				<BlueskyBadge v-if="isBluesky" :account="accountInfo" />
 				<!-- beside the name, which is where a pronoun belongs and where
 				     every other network puts it; it is still a profile field and
 				     still federates as one -->

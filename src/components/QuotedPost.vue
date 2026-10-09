@@ -16,7 +16,7 @@
 				<span class="quoted-post__author">
 					<DisplayName :text="quotedAccount.display_name" :emojis="quotedAccount.emojis" />
 				</span>
-				<BlueskyBadge v-if="isBlueskyAccount(quotedAccount)" />
+				<BlueskyBadge v-if="isBlueskyAccount(quotedAccount)" :account="quotedAccount" />
 				<span class="quoted-post__handle">@{{ quotedAccount.acct }}</span>
 			</router-link>
 			<div class="quoted-post__message">

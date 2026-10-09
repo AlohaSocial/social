@@ -20,7 +20,7 @@
 					<span class="post-author">
 						<DisplayName :text="item.account.display_name" :emojis="item.account.emojis" />
 					</span>
-					<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
+					<BlueskyBadge v-if="isBlueskyAccount(item.account)" :account="item.account" />
 					<!-- The handle is what the byline falls back to, not what it
 					     carries: it repeats under the pointer as the wrapper's
 					     own `title`, and again in the card that opens when the

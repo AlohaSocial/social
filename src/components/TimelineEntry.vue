@@ -32,7 +32,7 @@
 						:link="false" />
 				</span>
 				<ActorAvatar v-else :actor="notification.account" :size="24" />
-				<BlueskyBadge v-if="groupedAccounts.length <= 1 && isBlueskyAccount(notification.account)" />
+				<BlueskyBadge v-if="groupedAccounts.length <= 1 && isBlueskyAccount(notification.account)" :account="notification.account" />
 				<Heart v-if="notification.type === 'favourite'" :size="16" />
 				<Repeat v-if="notification.type === 'reblog'" :size="16" />
 				<AccountPlusOutline v-if="notification.type === 'follow'" :size="16" />
@@ -91,7 +91,7 @@
 					<ActorAvatar :actor="item.account" :size="16" :link="false" />
 					<span :title="item.account.acct" class="post-author">
 						{{ item.account.display_name }}
-						<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
+						<BlueskyBadge v-if="isBlueskyAccount(item.account)" :account="item.account" />
 					</span>
 				</router-link>
 				{{ t('social', 'boosted') }}

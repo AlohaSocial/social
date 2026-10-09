@@ -43,7 +43,7 @@
 			<span class="person__text">
 				<span class="person__name">
 					{{ account.display_name || account.username }}
-					<BlueskyBadge v-if="isBluesky" />
+					<BlueskyBadge v-if="isBluesky" :account="account" />
 					<span v-if="account.bot" class="person__bot">{{ t('social', 'bot') }}</span>
 				</span>
 				<span class="person__handle">@{{ account.acct }}</span>

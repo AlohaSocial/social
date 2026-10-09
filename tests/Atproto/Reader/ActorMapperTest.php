@@ -67,7 +67,7 @@ class ActorMapperTest extends TestCase {
 			'did' => self::DID, 'handle' => 'alice.bsky.social', 'pds' => 'https://morel.us-east.host.bsky.network',
 			'labels' => ['!no-unauthenticated'], 'limited' => false, 'indexed_at' => '2026-10-08T10:00:00.000Z',
 		], $person->getDetails(ActorMapper::DETAIL));
-		$this->assertSame(['handle' => 'alice.bsky.social', 'did' => self::DID, 'url' => 'https://bsky.app/profile/alice.bsky.social', 'native' => true], $person->getDetails(Details::BLUESKY));
+		$this->assertSame(['handle' => 'alice.bsky.social', 'did' => self::DID, 'url' => 'https://bsky.app/profile/alice.bsky.social', 'native' => true, 'verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => false], $person->getDetails(Details::BLUESKY));
 	}
 
 	public function testAHiddenAccountIsLimitedAndABareProfileStillMaps(): void {
@@ -100,5 +100,18 @@ class ActorMapperTest extends TestCase {
 			'createdAt' => '2023-11-14T22:13:20.000Z',
 			'labels' => [['src' => self::DID, 'uri' => 'at://' . self::DID . '/app.bsky.actor.profile/self', 'val' => '!no-unauthenticated', 'cts' => '2023-11-14T22:13:20.000Z']],
 		];
+	}
+
+	public function testWhomBlueskyShowsAsVerifiedAndByWhom(): void {
+		$this->assertSame(
+			['verified' => true, 'verified_by' => [ActorMapper::BLUESKY_DID, 'did:plc:nyt'], 'verified_by_bluesky' => true, 'trusted_verifier' => false],
+			ActorMapper::verification(['verifiedStatus' => 'valid', 'trustedVerifierStatus' => 'none', 'verifications' => [
+				['issuer' => ActorMapper::BLUESKY_DID, 'uri' => 'at://x/app.bsky.graph.verification/1', 'isValid' => true, 'createdAt' => '2026-01-01T00:00:00.000Z'],
+				['issuer' => 'did:plc:nyt', 'uri' => 'at://y/app.bsky.graph.verification/2', 'isValid' => true, 'createdAt' => '2026-01-01T00:00:00.000Z'],
+				['issuer' => 'did:plc:old', 'uri' => 'at://z/app.bsky.graph.verification/3', 'isValid' => false, 'createdAt' => '2026-01-01T00:00:00.000Z'],
+			]]),
+		);
+		$this->assertSame(['verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => true], ActorMapper::verification(['verifiedStatus' => 'invalid', 'trustedVerifierStatus' => 'valid', 'verifications' => [['issuer' => 'did:plc:a', 'isValid' => true]]]), 'a verification the AppView no longer judges valid');
+		$this->assertSame(['verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => false], ActorMapper::verification(null));
 	}
 }
