@@ -20,6 +20,8 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\DocumentService;
 use OCP\Files\SimpleFS\ISimpleFile;
+use OCP\IAvatar;
+use OCP\IAvatarManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -32,6 +34,8 @@ class PictureServiceTest extends TestCase {
 	/** @var BlobRef[] */
 	private array $blobs = [];
 	private string $reencoded = '';
+	/** @var string[] what was stored as a document of its own */
+	private array $stored = [];
 
 	/** A PNG of noise, which no encoder makes small: between a card's limit and a post picture's. */
 	private static function noise(): string {
@@ -54,6 +58,7 @@ class PictureServiceTest extends TestCase {
 	private function pictures(string $bytes): PictureService {
 		$blobRequest = $this->createMock(AtprotoBlobRequest::class);
 		$blobRequest->method('getByDocument')->willReturnCallback(fn (string $did, string $documentId): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->documentId === $documentId))[0] ?? null);
+		$blobRequest->method('get')->willReturnCallback(fn (string $did, string $cid): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->cid->toString() === $cid))[0] ?? null);
 		$blobRequest->method('put')->willReturnCallback(function (BlobRef $blob): void {
 			$this->blobs[] = $blob;
 		});
@@ -64,13 +69,19 @@ class PictureServiceTest extends TestCase {
 		$documents = $this->createMock(DocumentService::class);
 		$documents->method('storeLocalAttachment')->willReturnCallback(function (Person $owner, string $path): Document {
 			$this->reencoded = (string)file_get_contents($path);
+			$this->stored[] = $this->reencoded;
 			$copy = new Document();
 			$copy->setId('https://social.test/documents/copy');
 
 			return $copy;
 		});
 
-		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, new NullLogger());
+		$avatar = $this->createMock(IAvatar::class);
+		$avatar->method('getFile')->with(-1)->willReturn($file);
+		$avatars = $this->createMock(IAvatarManager::class);
+		$avatars->method('getAvatar')->with('alice')->willReturn($avatar);
+
+		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, $avatars, new NullLogger());
 	}
 
 	private function document(): Document {
@@ -101,6 +112,40 @@ class PictureServiceTest extends TestCase {
 		$this->assertSame(['https://social.test/documents/copy', 'image/jpeg'], [$blob?->documentId, $blob?->mime]);
 		$this->assertLessThanOrEqual(1000000, $blob->size);
 		$this->assertTrue(Cid::forRaw($this->reencoded)->equals($blob->cid), 'the blob is the stored copy');
+	}
+
+	public function testALocalAvatarIsTheNextcloudAvatarStoredOnce(): void {
+		$alice = new Person();
+		$alice->setUserId('alice');
+		$avatar = new Document();
+		$avatar->setId('https://social.test/documents/avatar/1');
+		$avatar->setLocalCopy('avatar');
+		$pictures = $this->pictures(self::png());
+
+		$blob = $pictures->blobFor($this->identity(), $alice, $avatar);
+		$again = $pictures->blobFor($this->identity(), $alice, $avatar);
+
+		$this->assertSame(['https://social.test/documents/copy', 'image/png', 4, 3], [$blob['blob']->documentId ?? null, $blob['blob']->mime ?? null, $blob['width'] ?? null, $blob['height'] ?? null]);
+		$this->assertTrue(Cid::forRaw(self::png())->equals($blob['blob']->cid));
+		$this->assertSame([self::png()], $this->stored, 'stored once, the second time known by its bytes');
+		$this->assertTrue($again['blob']->cid->equals($blob['blob']->cid));
+	}
+
+	public function testACopyIsStoredOnceHoweverOftenItIsAskedFor(): void {
+		$pictures = $this->pictures(self::noise());
+		$pictures->blobFor($this->identity(), new Person(), $this->document(), 1000000);
+		$pictures->blobFor($this->identity(), new Person(), $this->document(), 1000000);
+
+		$this->assertCount(1, $this->stored);
+	}
+
+	/** A four-by-three PNG. */
+	private static function png(): string {
+		$image = imagecreatetruecolor(4, 3);
+		ob_start();
+		imagepng($image);
+
+		return (string)ob_get_clean();
 	}
 
 	private function identity(): Identity {
