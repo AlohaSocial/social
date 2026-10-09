@@ -23,7 +23,8 @@
 					<span class="post-author">
 						<DisplayName :text="item.account.display_name" :emojis="item.account.emojis" />
 					</span>
-					<BlueskyBadge v-if="isBlueskyAccount(item.account)" :account="item.account" />
+					<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
+					<VerifiedBadge :account="item.account" />
 					<!-- The handle is what the byline falls back to, not what it
 					     carries: it repeats under the pointer as the wrapper's
 					     own `title`, and again in the card that opens when the
@@ -552,6 +553,7 @@ import QuotedPost from './QuotedPost.vue'
 import RollingCount from './RollingCount.vue'
 import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
+import VerifiedBadge from './VerifiedBadge.vue'
 import visibilitiesInfo from './Visibility/VisibilitiesInfos.js'
 import VisibilityIcon from './Visibility/VisibilityIcon.vue'
 import { mapStores } from 'pinia'
@@ -616,6 +618,7 @@ export default {
 		RollingCount,
 		BlueskyBadge,
 		DisplayName,
+		VerifiedBadge,
 		VisibilityIcon,
 	},
 

@@ -492,6 +492,12 @@ class ConfigService {
 	/** the Bluesky apps (client IDs) whose own name and logo the consent page shows */
 	public const ATPROTO_OAUTH_TRUSTED = 'atproto_oauth_trusted';
 
+	/**
+	 * The local account this instance verifies people in the name of
+	 * (`VerificationService`), by actor id; empty for none.
+	 */
+	public const VERIFICATION_ACCOUNT = 'verification_account';
+
 	public array $defaults = [
 		self::ATPROTO_ENABLED => '0',
 		self::ATPROTO_RELAYS => '["https://bsky.network"]',
@@ -511,6 +517,7 @@ class ConfigService {
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
 		self::ATPROTO_OAUTH_TRUSTED => '[]',
+		self::VERIFICATION_ACCOUNT => '',
 		self::CLOUD_URL => '',
 		self::SOCIAL_URL => '',
 		self::SOCIAL_ADDRESS => '',

@@ -666,6 +666,13 @@ dealt with.
   never held**.
 - **An account browser** over every account this instance knows, with the standing
   decision and the strike history against each one.
+- **Verified accounts.** Your server can vouch for people — a company for its own staff,
+  a community for the accounts it knows — and a verified account carries a check beside
+  its name everywhere, saying who verified it. Moderators verify any account, here or
+  elsewhere, from its profile or from the administration page, in the name of an
+  account the administrator chooses. Where the verified person also has an identity on
+  the wider network, the verification is published with it, and apps that trust your
+  server as a verifier show the check too.
 - **Let people without an account join — for Aloha Social only.** Switch on external users
   and people register themselves from a "Create an account" button on the login page:
   a username that becomes their handle, an email address they confirm, the server rules

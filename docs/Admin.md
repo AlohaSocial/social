@@ -560,7 +560,7 @@ administrator came to do, and one group is shown at a time:
 | Group | Sections |
 | --- | --- |
 | **Overview** | Needs attention, Activity here |
-| **Moderation** | Reports, Posts waiting for review, Accounts, Refused pictures, Server rules |
+| **Moderation** | Reports, Posts waiting for review, Accounts, Verified accounts, Refused pictures, Server rules |
 | **Sign-ups** | Who may sign up, Waiting and invited, External accounts (only when the server sends them, see [External users](#external-users)) |
 | **Explore and features** | About this server, What may trend, Custom emoji, Announcements, Features, For you |
 | **Federation** | Allowed and blocked servers, Block lists, Relays, Deliveries |
@@ -837,6 +837,31 @@ except the account itself going. The strike count in the account browser counts
 what stands against the account, so a lift is in the history and not in the
 count.
 
+**Verified accounts.** This server can vouch for accounts — a company verifying
+its own people, a community the accounts it knows — and a verified account
+carries a check beside its name everywhere here, labelled *Verified by* and a
+name. Moderators verify an account under **Moderation → Verified accounts**
+(by its handle, which lists every verified account, who verified it and when)
+or from the account's profile menu (*Verify account*, *Remove verification*).
+Any account can be verified: one here, one on another Fediverse server, one on
+Bluesky.
+
+The name after *Verified by* is the **verifying account**'s, which an
+administrator (not a delegate) chooses in the same section: a local account
+that stands for the server or the organisation. Without one, the checks are
+given in the server's own name (Theming). With Bluesky switched on, the
+verifying account is given a Bluesky identity, and each verification of an
+account that has one — every local account, every Bluesky account — is also
+published from it as a Bluesky verification, written again by itself when the
+verified account changes its handle or display name. **Bluesky apps show those
+checks only once Bluesky trusts the verifying account as a verifier**, which is
+Bluesky's decision and not one this server can make (Bluesky's announcement:
+https://bsky.social/about/blog/04-21-2025-verification); until then they are
+shown here only. A Fediverse account without a Bluesky identity is verified
+here only, and the list says so. Choosing another verifying account moves every
+verification to it in the background; choosing none takes the published ones
+back.
+
 **The audit log.** Suspending, silencing, lifting, taking a post down and
 blocking or unblocking an instance each emit
 `OCP\Log\Audit\CriticalActionPerformedEvent`, so with core's `admin_audit` app
@@ -997,6 +1022,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `publish_video_objects` | `0` | Whether a post that is a video is federated as an ActivityPub `Video` (PeerTube's shape) rather than a `Note` with an attachment. Off by default: Pixelfed's inbox handles only `Note`s and silently drops a `Video`, so with this on no video posted here reaches a Pixelfed follower. Mastodon draws both shapes; PeerTube draws only the `Video`. Turn it on for an instance whose audience is on PeerTube. |
 | `network_stats` | `1` | Whether the statistics page may ask [FediDB](https://fedidb.org) how big the fediverse is — servers, accounts, accounts that posted in the last month — to show beside the number of servers this one federates with. One request every six hours for the whole instance, carrying no account, no query and nothing about this instance; a survey that does not answer is left alone for half an hour. Set it to `0` and the section is absent rather than zeroed: an instance that makes no outbound request to draw a page is a legitimate thing to want. The same value governs the **growth** section below it, which asks [Fediverse Observer](https://fediverse.observer) for the last two years month by month — FediDB publishes a snapshot and no history, so the shape over time comes from a second survey, once a day. The two do not agree about the totals, because they crawl different servers and count dormant accounts differently, so the page keeps them apart and names each: a page that averaged them would produce a number neither survey would stand behind. |
 | `rules` | *(empty)* | The instance rules shown by `/api/v1/instance/rules`, one per line. |
+| `verification_account` | *(empty)* | The local account this server verifies accounts in the name of, by actor id; set under Moderation → Verified accounts (administrators only). See [Moderating](#moderating). |
 | `review_first_post` | `0` | Hold the first post of an account that has published nothing here yet, for a moderator to see before it goes out. Off by default; turn it on where accounts are handed to strangers. An administrator's own posts are never held — a moderator waiting on themselves is a circle, and on a new instance the first post is theirs. |
 | `review_posts` | `1` | How many posts an account must have had published before its posts stop being held. `1` is first-post review as it has always meant. An account graduates by having that many posts approved — a person having looked at it that many times, which is the only measure of trust here that is not a guess. Capped at 20. |
 | `autospam` | `1` | Hold a post that trips one of the spam rules — more than five links in a short post, or more than five mentions from an account nobody follows and that follows nobody. Nothing is ever refused by the rules, only shown to a person. |

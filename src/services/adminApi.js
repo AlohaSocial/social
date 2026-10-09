@@ -81,6 +81,16 @@ export function blueskyUrl(path = '') {
 }
 
 /**
+ * The administrator's choice of the account this instance verifies others in
+ * the name of.
+ *
+ * @return {string} the whole URL
+ */
+export function verifierUrl() {
+	return generateUrl('/apps/social/admin/verifications/verifier')
+}
+
+/**
  * What a refused request said, when it said anything.
  *
  * The endpoints of this page answer a 422 with the field they would not take,

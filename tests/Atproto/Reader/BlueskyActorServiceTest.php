@@ -22,6 +22,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\ActorService;
+use OCA\Social\Service\VerificationService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -148,11 +149,35 @@ class BlueskyActorServiceTest extends TestCase {
 		$pins = $this->createMock(BlueskyPins::class);
 		$pins->expects($this->once())->method('keep')->with($this->isInstanceOf(Person::class), 'at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.feed.post/3kpin');
 		$container = $this->createMock(ContainerInterface::class);
-		$container->method('get')->with(BlueskyPins::class)->willReturn($pins);
+		$container->method('get')->willReturnCallback(fn (string $id): object => $id === BlueskyPins::class ? $pins : $this->createMock(VerificationService::class));
 		$mapper = $this->createMock(ActorMapper::class);
 		$mapper->method('person')->willReturn(new Person());
 		$service = new BlueskyActorService($this->config, $this->appView, $this->plc, $mapper, $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger(), $container);
 
 		$service->resolve('bob.bsky.social', true);
+	}
+
+	/** An account read again may have another handle or name, which a verification of it has to name. */
+	public function testAStoredAccountIsHandedToTheVerificationsToBeIssuedAgain(): void {
+		$person = (new Person())->setId('https://bsky.app/profile/' . self::DID);
+		$verifications = $this->createMock(VerificationService::class);
+		$verifications->expects($this->once())->method('refresh')->with($this->identicalTo($person));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(VerificationService::class)->willReturn($verifications);
+		$service = new BlueskyActorService($this->config, $this->appView, $this->plc, $this->createMock(ActorMapper::class), $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger(), $container);
+
+		$service->store($person);
+	}
+
+	public function testAFailingVerificationDoesNotKeepTheAccountFromBeingStored(): void {
+		$person = (new Person())->setId('https://bsky.app/profile/' . self::DID);
+		$verifications = $this->createMock(VerificationService::class);
+		$verifications->method('refresh')->willThrowException(new \RuntimeException('no repository'));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->willReturn($verifications);
+		$this->actors->expects($this->once())->method('save')->with($person);
+		$service = new BlueskyActorService($this->config, $this->appView, $this->plc, $this->createMock(ActorMapper::class), $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger(), $container);
+
+		$service->store($person);
 	}
 }

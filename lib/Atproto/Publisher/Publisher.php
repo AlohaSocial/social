@@ -26,6 +26,7 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\VerificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -208,8 +209,26 @@ class Publisher {
 		if ($identity === null || !$identity->isActive()) {
 			return false;
 		}
+		$written = $this->writeProfile($actor, $identity);
+		$this->reissueVerification($actor);
 
-		return $this->writeProfile($actor, $identity);
+		return $written;
+	}
+
+	/**
+	 * The instance's verification of the account written again when its
+	 * handle or display name changed (`VerificationService::refresh()`);
+	 * resolved lazily, as that needs this service.
+	 */
+	private function reissueVerification(Person $actor): void {
+		try {
+			$verifications = $this->container?->get(VerificationService::class);
+			if ($verifications instanceof VerificationService) {
+				$verifications->refresh($actor);
+			}
+		} catch (Throwable $e) {
+			$this->logger->warning('Verification not issued again', ['actor' => $actor->getId(), 'exception' => $e]);
+		}
 	}
 
 	/**

@@ -268,9 +268,9 @@ class RecordMapper {
 	 */
 	public function profile(Person $actor, Identity $identity): array {
 		$record = ['$type' => self::PROFILE];
-		$name = trim($actor->getDisplayName());
+		$name = self::displayNameOf($actor);
 		if ($name !== '') {
-			$record['displayName'] = self::clip($name, 64, 640);
+			$record['displayName'] = $name;
 		}
 		$bio = $this->text->fromHtml($actor->getDescription(), static fn (): ?string => null)['text'];
 		if ($bio !== '') {
@@ -501,6 +501,16 @@ class RecordMapper {
 
 			return $facet;
 		}, $facets);
+	}
+
+	/**
+	 * The display name the account's profile record carries, '' for none:
+	 * what a verification of the account names for it to hold.
+	 */
+	public static function displayNameOf(Person $actor): string {
+		$name = trim($actor->getDisplayName());
+
+		return $name === '' ? '' : self::clip($name, 64, 640);
 	}
 
 	/** at most $graphemes characters and $bytes bytes, which the profile lexicon asks */

@@ -516,6 +516,60 @@ describe('ProfileInfo', () => {
 			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
 			expect(menuItems(mountProfile('bob@remote.example'))).toEqual([])
 		})
+
+		/** Verifying is the moderators'; the server says who they are. */
+		it('offers a moderator to verify the account, and nobody else', () => {
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			expect(menuItems(mountProfile('bob@remote.example'))).not.toContain('Verify account')
+
+			makeStore({ canVerify: true })
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			expect(menuItems(mountProfile('bob@remote.example'))).toEqual(['Block', 'Mute', 'Add to list', 'Verify account'])
+		})
+
+		it('verifies the account, and the check is beside its name at once', async () => {
+			makeStore({ canVerify: true })
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			const verification = { by: 'Example Inc', issuer: '', created_at: '2026-10-09T10:00:00.000Z' }
+			const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { actor_id: bob.url, verification } })
+			const wrapper = mountProfile('bob@remote.example')
+
+			await menuItem(wrapper, 'Verify account').trigger('click')
+			await flushPromises()
+
+			expect(post).toHaveBeenCalledWith('/index.php/apps/social/moderation/verifications', { account: bob.url })
+			expect(wrapper.find('h2 .verified-badge').attributes('title')).toBe('Verified by Example Inc')
+			expect(menuItems(wrapper)).toContain('Remove verification')
+			expect(showSuccess).toHaveBeenCalledWith('The account is verified')
+		})
+
+		it('takes a verification back', async () => {
+			makeStore({ canVerify: true })
+			accountStore.addAccount({ actorId: bob.url, data: { verification: { by: 'Example Inc', issuer: '', created_at: '2026-10-09T10:00:00.000Z' } } })
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			const remove = vi.spyOn(axios, 'delete').mockResolvedValue({ data: { actor_id: bob.url, verification: null } })
+			const wrapper = mountProfile('bob@remote.example')
+
+			await menuItem(wrapper, 'Remove verification').trigger('click')
+			await flushPromises()
+
+			expect(remove).toHaveBeenCalledWith('/index.php/apps/social/moderation/verifications', { data: { account: bob.url } })
+			expect(wrapper.find('h2 .verified-badge').exists()).toBe(false)
+			expect(menuItems(wrapper)).toContain('Verify account')
+		})
+
+		it('says so when the account could not be verified', async () => {
+			makeStore({ canVerify: true })
+			accountStore.addRelationship({ actorId: bob.id, data: relationship() })
+			vi.spyOn(axios, 'post').mockRejectedValue(new Error('500'))
+			const wrapper = mountProfile('bob@remote.example')
+
+			await menuItem(wrapper, 'Verify account').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Could not verify the account')
+			expect(wrapper.find('h2 .verified-badge').exists()).toBe(false)
+		})
 	})
 
 	describe('on the public page', () => {

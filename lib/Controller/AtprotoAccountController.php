@@ -248,7 +248,10 @@ class AtprotoAccountController extends Controller {
 			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
 		}
 		try {
-			return new DataResponse(self::export($this->customHandles->set($identity, $handle)));
+			$changed = $this->customHandles->set($identity, $handle);
+			$this->handleChanged();
+
+			return new DataResponse(self::export($changed));
 		} catch (\InvalidArgumentException $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (Throwable $e) {
@@ -267,7 +270,10 @@ class AtprotoAccountController extends Controller {
 			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
 		}
 		try {
-			return new DataResponse(self::export($this->customHandles->clear($identity)));
+			$changed = $this->customHandles->clear($identity);
+			$this->handleChanged();
+
+			return new DataResponse(self::export($changed));
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
@@ -489,6 +495,18 @@ class AtprotoAccountController extends Controller {
 	/**
 	 * The viewer's identity, as it is; null when Bluesky is off or there is none.
 	 */
+	/**
+	 * The profile published again, off the request, after the handle
+	 * changed: a verification of the account goes out again with it, as one
+	 * naming the old handle no longer counts.
+	 */
+	private function handleChanged(): void {
+		try {
+			$this->accountService->queueBlueskyProfile($this->accountService->getActorFromUserId($this->userId()));
+		} catch (Throwable) {
+		}
+	}
+
 	private function ownIdentity(): ?Identity {
 		if (!$this->config->isEnabled()) {
 			return null;

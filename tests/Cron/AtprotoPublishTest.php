@@ -19,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Service\VerificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -67,7 +68,7 @@ class AtprotoPublishTest extends TestCase {
 		$actors->method('getFromId')->willReturnCallback(static fn (string $id): Person => (new Person())->setId($id));
 		$this->job = new AtprotoPublish(
 			$this->createMock(ITimeFactory::class), $this->publisher, $this->interactions, $streams, $actors,
-			new NullLogger(), $this->createMock(ChatSender::class), $this->createMock(ChatState::class), $this->blockedBy,
+			new NullLogger(), $this->createMock(ChatSender::class), $this->createMock(ChatState::class), $this->createMock(VerificationService::class), $this->blockedBy,
 		);
 	}
 

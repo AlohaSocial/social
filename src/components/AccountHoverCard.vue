@@ -58,7 +58,8 @@
 					<span class="account-hover-card__names">
 						<span class="account-hover-card__name">
 							<AccountDisplayName :text="account.display_name || account.username || handle" :emojis="account.emojis" />
-							<BlueskyBadge v-if="isBluesky" :account="account" />
+							<BlueskyBadge v-if="isBluesky" />
+							<VerifiedBadge :account="account" />
 						</span>
 						<span class="account-hover-card__handle">@{{ account.acct || handle }}</span>
 						<!-- Where this account lives. It used to be a chip on every
@@ -134,6 +135,7 @@ import NcPopover from '@nextcloud/vue/components/NcPopover'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { emojifyPlain } from './MessageContent.js'
 import BlueskyBadge from './BlueskyBadge.vue'
+import VerifiedBadge from './VerifiedBadge.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
 import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
 import { originOf } from '../utils/instanceIdentity.js'
@@ -219,6 +221,7 @@ export default {
 		BlueskyBadge,
 		NcAvatar,
 		NcPopover,
+		VerifiedBadge,
 		VerifiedCheck,
 	},
 

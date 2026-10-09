@@ -118,7 +118,7 @@ class NavigationControllerTest extends TestCase {
 		\OC::$server->reset();
 	}
 
-	private function controller(?string $userId = 'alice'): NavigationController {
+	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null): NavigationController {
 		return new NavigationController(
 			$this->request,
 			$userId,
@@ -136,7 +136,8 @@ class NavigationControllerTest extends TestCase {
 			$this->streamService,
 			$this->filterService,
 			$this->createStub(\OCA\Social\Service\ExternalMediaQuota::class),
-			new NullLogger()
+			new NullLogger(),
+			$moderators,
 		);
 	}
 
@@ -179,6 +180,7 @@ class NavigationControllerTest extends TestCase {
 			'needsAccount' => false,
 			'setup' => false,
 			'isAdmin' => false,
+			'canVerify' => false,
 			'cliUrl' => 'https://cloud.example/index.php',
 			// what to do with sensitive media, and what this reader chose —
 			// in the page because the timeline needs both before it draws
@@ -205,6 +207,18 @@ class NavigationControllerTest extends TestCase {
 			'bluesky' => ['enabled' => false, 'host' => ''],
 			'cloudAddress' => 'https://cloud.example/index.php',
 		], $this->serverData());
+	}
+
+	public function testAModeratorIsToldTheyMayVerifyAccounts(): void {
+		$this->systemValues([]);
+		$this->configuredCloud();
+		$this->existingActor();
+		$moderators = $this->createMock(\OCA\Social\Service\ModeratorService::class);
+		$moderators->method('isModerator')->with('alice')->willReturn(true);
+
+		$this->controller('alice', $moderators)->navigate();
+
+		$this->assertTrue($this->serverData()['canVerify']);
 	}
 
 	public function testNavigateServesThePublicTimelineToAnAnonymousVisitor(): void {

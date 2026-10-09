@@ -18,7 +18,8 @@
 				<router-link v-else-if="!serverData.public" :to="{ name: 'profile', params: { account: item.acct }}">
 					<span class="post-author">
 						<DisplayName :text="item.display_name" :emojis="item.emojis" />
-						<BlueskyBadge v-if="isBluesky" :account="item" />
+						<BlueskyBadge v-if="isBluesky" />
+						<VerifiedBadge :account="item" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
@@ -33,7 +34,8 @@
 					:rel="isLocal ? undefined : 'noreferrer'">
 					<span class="post-author">
 						{{ item.display_name }}
-						<BlueskyBadge v-if="isBluesky" :account="item" />
+						<BlueskyBadge v-if="isBluesky" />
+						<VerifiedBadge :account="item" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
@@ -53,6 +55,7 @@ import ActorAvatar from './ActorAvatar.vue'
 import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
 import FollowButton from './FollowButton.vue'
+import VerifiedBadge from './VerifiedBadge.vue'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
@@ -68,6 +71,7 @@ export default {
 		DisplayName,
 		FollowButton,
 		ActorAvatar,
+		VerifiedBadge,
 	},
 
 	props: {
