@@ -49,34 +49,58 @@ class Postgates {
 		if (!$this->config->isEnabled() || !BlueskyIds::isPostId($quoted->getId())) {
 			return '';
 		}
-		$uri = (string)($quoted->getDetails(PostMapper::DETAIL)['uri'] ?? '');
-		$parsed = Syntax::parseAtUri($uri);
-		$author = (string)($parsed['authority'] ?? '');
-		$rkey = (string)($parsed['rkey'] ?? '');
-		if (!str_starts_with($author, 'did:plc:') || $rkey === '') {
-			return '';
-		}
+		$author = (string)(Syntax::parseAtUri(self::uriOf($quoted))['authority'] ?? '');
 		if (($this->identities->forActor($quoter, false)?->did ?? '') === $author) {
 			return '';
 		}
-		try {
-			$endpoint = (string)($this->plc->data($author)['services']['atproto_pds']['endpoint'] ?? '');
-			$answer = $this->pds->call($this->pds->origin($endpoint), 'com.atproto.repo.getRecord', 'GET', ['repo' => $author, 'collection' => self::GATE, 'rkey' => $rkey]);
-		} catch (Throwable $e) {
-			$this->logger->info('Post gate not read; the quote goes out', ['post' => $uri, 'exception' => $e]);
-
-			return '';
-		}
-		$gate = $answer['status'] === 200 && is_array($answer['body']['value'] ?? null) ? $answer['body']['value'] : [];
-		if (($gate['post'] ?? '') !== $uri) {
-			return '';
-		}
-		foreach (is_array($gate['embeddingRules'] ?? null) ? $gate['embeddingRules'] : [] as $rule) {
+		foreach ($this->gateOf($quoted)['embeddingRules'] ?? [] as $rule) {
 			if (is_array($rule) && ($rule['$type'] ?? '') === self::GATE . '#disableRule') {
 				return self::REFUSAL;
 			}
 		}
 
 		return '';
+	}
+
+	/**
+	 * Whether the post's author detached the quote with this `at://` URI:
+	 * their postgate lists it in `detachedEmbeddingUris`.
+	 */
+	public function detached(Stream $quoted, string $quotingUri): bool {
+		if (!$this->config->isEnabled() || !BlueskyIds::isPostId($quoted->getId()) || $quotingUri === '') {
+			return false;
+		}
+		$uris = $this->gateOf($quoted)['detachedEmbeddingUris'] ?? [];
+
+		return is_array($uris) && in_array($quotingUri, $uris, true);
+	}
+
+	/**
+	 * The post's gate as its author's PDS holds it, `[]` for none or when it
+	 * cannot be read.
+	 */
+	private function gateOf(Stream $quoted): array {
+		$uri = self::uriOf($quoted);
+		$parsed = Syntax::parseAtUri($uri);
+		$author = (string)($parsed['authority'] ?? '');
+		$rkey = (string)($parsed['rkey'] ?? '');
+		if (!str_starts_with($author, 'did:plc:') || $rkey === '') {
+			return [];
+		}
+		try {
+			$endpoint = (string)($this->plc->data($author)['services']['atproto_pds']['endpoint'] ?? '');
+			$answer = $this->pds->call($this->pds->origin($endpoint), 'com.atproto.repo.getRecord', 'GET', ['repo' => $author, 'collection' => self::GATE, 'rkey' => $rkey]);
+		} catch (Throwable $e) {
+			$this->logger->info('Post gate not read', ['post' => $uri, 'exception' => $e]);
+
+			return [];
+		}
+		$gate = $answer['status'] === 200 && is_array($answer['body']['value'] ?? null) ? $answer['body']['value'] : [];
+
+		return ($gate['post'] ?? '') === $uri ? $gate : [];
+	}
+
+	private static function uriOf(Stream $post): string {
+		return (string)($post->getDetails(PostMapper::DETAIL)['uri'] ?? '');
 	}
 }

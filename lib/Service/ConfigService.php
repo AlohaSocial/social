@@ -485,6 +485,7 @@ class ConfigService {
 	public const ATPROTO_JETSTREAM_STATUS = 'atproto_jetstream_status';
 	public const ATPROTO_JETSTREAM_CURSOR = 'atproto_jetstream_cursor';
 	public const ATPROTO_DELETE_CURSOR = 'atproto_delete_cursor';
+	public const ATPROTO_DETACH_CURSOR = 'atproto_detach_cursor';
 	public const ATPROTO_MODERATION_DID = 'atproto_moderation_did';
 	public const ATPROTO_VIDEO_SERVICE = 'atproto_video_service';
 	public const ATPROTO_VIDEO_SERVICE_DID = 'atproto_video_service_did';
@@ -505,6 +506,7 @@ class ConfigService {
 		self::ATPROTO_JETSTREAM_STATUS => '',
 		self::ATPROTO_JETSTREAM_CURSOR => '',
 		self::ATPROTO_DELETE_CURSOR => '0',
+		self::ATPROTO_DETACH_CURSOR => '0',
 		self::ATPROTO_MODERATION_DID => 'did:plc:ar7c4by46qjdydhdevvrndac',
 		self::ATPROTO_VIDEO_SERVICE => 'https://video.bsky.app',
 		self::ATPROTO_VIDEO_SERVICE_DID => 'did:web:video.bsky.app',
