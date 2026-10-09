@@ -396,7 +396,10 @@ is its personal data server (PDS), `alice.<host>` its handle, and a Bluesky
 relay reads what it publishes. Nothing is asked of the person; the
 administrator switches it on once, on the administration page, after the
 requirements below are met. The design and what each phase delivers is in
-[docs/Atproto-Compatibility.md](Atproto-Compatibility.md).
+[docs/Atproto-Compatibility.md](Atproto-Compatibility.md). Once it is on,
+`contrib/atproto-live-probe.sh <host> <handle>` checks from outside that the
+network can reach everything it needs, and
+[docs/Atproto-Live-Test.md](Atproto-Live-Test.md) goes through the rest by hand.
 
 **Requirements**, each a check on the Bluesky card and in the Overview's setup
 checks, and the card refuses to switch Bluesky on while one fails:

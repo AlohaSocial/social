@@ -925,6 +925,7 @@ occ social:reset
   instance could move onto it. Its last section is the backlog that follows:
   everything still between this app and a full replacement, in tiers, with what
   each item actually fixes and whether it is done.
+- [docs/Atproto-Live-Test.md](docs/Atproto-Live-Test.md) — testing Bluesky on a live public host: the probe script and the checklist
 - [docs/User-Guide.md](docs/User-Guide.md)
 - [docs/Moving.md](docs/Moving.md) — moving to Aloha Social from another server, and away again, in the order it happens
   is the guide for the people using the app: getting an account, following,
