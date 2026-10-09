@@ -297,7 +297,7 @@ jobs:
         working-directory: apps/social
         run: |
           composer i
-          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest|AtprotoHandleTest|AtprotoMoveAwayTest|AtprotoMoveInTest|AtprotoMoveByToolTest|AtprotoLinkCardTest|AtprotoThreadgateTest|AtprotoFeedsTest|AtprotoPostgateTest'
+          timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest|AtprotoHandleTest|AtprotoMoveAwayTest|AtprotoMoveInTest|AtprotoMoveByToolTest|AtprotoLinkCardTest|AtprotoThreadgateTest|AtprotoFeedsTest|AtprotoPostgateTest|AtprotoStarterPackTest'
 
       - name: What each side saw, when it went wrong
         if: failure()

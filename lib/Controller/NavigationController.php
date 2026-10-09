@@ -133,6 +133,8 @@ class NavigationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/search/{term}', postfix: 'searchterm')]
 	#[FrontpageRoute(verb: 'GET', url: '/collections/{id}', postfix: 'collection', requirements: ['id' => '\\d+'])]
 	#[FrontpageRoute(verb: 'GET', url: '/places/{id}', postfix: 'place', requirements: ['id' => '\\d+'])]
+	// a Bluesky starter pack, at the path bsky.app gives it
+	#[FrontpageRoute(verb: 'GET', url: '/starter-pack/{actor}/{rkey}', postfix: 'starterpack')]
 	public function navigate(string $path = ''): TemplateResponse {
 		// A visitor may read public posts from this instance without an account.
 		// Do this before any account-specific setup or state is requested: the

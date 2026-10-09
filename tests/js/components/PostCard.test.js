@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import PostCard from '../../../src/components/PostCard.vue'
 
 function card(overrides = {}) {
@@ -67,5 +67,20 @@ describe('PostCard', () => {
 		expect(wrapper.find('.post-card__title').text()).toBe('<img src=x onerror=alert(1)>')
 		expect(wrapper.find('.post-card__title').element.querySelector('img')).toBeNull()
 		expect(wrapper.find('.post-card__description').element.querySelector('b')).toBeNull()
+	})
+
+	it('opens a Bluesky starter pack inside the app, where there is a router', async () => {
+		const push = vi.fn()
+		const $router = { push, resolve: (route) => ({ href: `/apps/social/starter-pack/${route.params.actor}/${route.params.rkey}` }) }
+		const pack = card({ url: 'https://bsky.app/starter-pack/bob.test/3ks', provider_name: 'Bluesky starter pack by @bob.test' })
+		const wrapper = mount(PostCard, { props: { card: pack }, global: { mocks: { $router } } })
+		const link = wrapper.find('a')
+
+		expect(link.attributes('href')).toBe('/apps/social/starter-pack/bob.test/3ks')
+		expect(link.attributes('target')).toBeUndefined()
+		await link.trigger('click', { button: 0 })
+		expect(push).toHaveBeenCalledWith({ name: 'starter-pack', params: { actor: 'bob.test', rkey: '3ks' } })
+
+		expect(mountCard(pack).find('a').attributes('href')).toBe('https://bsky.app/starter-pack/bob.test/3ks', 'the dashboard has no router: bsky.app')
 	})
 })
