@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use Exception;
 use OCA\Social\AP;
 use OCA\Social\Atproto\Publisher\BlueskyBlocks;
+use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -89,11 +90,15 @@ class RelationshipService {
 		// their timelines hide different posts from now on, which no id the
 		// ETag is built from reflects — see TimelineRevisionService
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
+		// a Bluesky account's mute is told to the AppView, where a Bluesky
+		// app signed in here reads it
+		$this->container?->get(BlueskyMutes::class)->muted($viewer, $target);
 	}
 
 	public function unmute(Person $viewer, Person $target): void {
 		$this->actorRelationRequest->delete($viewer->getId(), $target->getId(), ActorRelation::TYPE_MUTE);
 		$this->timelineRevisionService->bumpForActor($viewer->getId());
+		$this->container?->get(BlueskyMutes::class)->unmuted($viewer, $target);
 	}
 
 	public function block(Person $viewer, Person $target): void {

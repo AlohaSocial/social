@@ -11,13 +11,15 @@ namespace OCA\Social\Atproto\Client;
 
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Xrpc\XrpcException;
+use OCA\Social\Service\AccountService;
 use OCP\IConfig;
 
 /**
  * A Bluesky app's preferences — saved feeds, content filters, muted words,
  * the threads view — which a PDS keeps for its accounts rather than the
  * AppView. Kept per person as the app wrote them, within Bluesky's own
- * namespace and a size limit; this app reads none of it.
+ * namespace and a size limit — except the muted words, which are the
+ * person's filters here (`MutedWords`), read from them and written to them.
  */
 class Preferences {
 	public const METHODS = ['app.bsky.actor.getPreferences', 'app.bsky.actor.putPreferences'];
@@ -26,13 +28,20 @@ class Preferences {
 
 	public function __construct(
 		private IConfig $config,
+		private MutedWords $mutedWords,
+		private AccountService $accounts,
 	) {
 	}
 
 	public function get(ClientSession $session): array {
 		$stored = json_decode($this->config->getUserValue($session->userId, Application::APP_ID, self::KEY, '[]'), true);
+		$preferences = array_values(array_filter(is_array($stored) ? $stored : [], static fn (mixed $preference): bool => !self::isMutedWords($preference)));
+		$words = $this->mutedWords->pref($this->accounts->getActorFromUserId($session->userId));
+		if ($words !== null) {
+			$preferences[] = $words;
+		}
 
-		return ['preferences' => is_array($stored) ? array_values($stored) : []];
+		return ['preferences' => $preferences];
 	}
 
 	/**
@@ -48,12 +57,26 @@ class Preferences {
 				throw XrpcException::invalidRequest('Some preferences are not in the app.bsky namespace');
 			}
 		}
+		$words = null;
+		foreach ($preferences as $preference) {
+			if (self::isMutedWords($preference)) {
+				$words = $preference;
+			}
+		}
+		$preferences = array_values(array_filter($preferences, static fn (array $preference): bool => !self::isMutedWords($preference)));
 		$encoded = (string)json_encode($preferences, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 		if (strlen($encoded) > self::MAX_BYTES) {
 			throw new XrpcException(413, 'PayloadTooLarge', 'Preferences too large');
 		}
 		$this->config->setUserValue($session->userId, Application::APP_ID, self::KEY, $encoded);
+		if ($words !== null) {
+			$this->mutedWords->apply($this->accounts->getActorFromUserId($session->userId), $words);
+		}
 
 		return [];
+	}
+
+	private static function isMutedWords(mixed $preference): bool {
+		return is_array($preference) && ($preference['$type'] ?? '') === MutedWords::PREF;
 	}
 }

@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\AP;
 use OCA\Social\Atproto\Publisher\BlueskyBlocks;
+use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -259,6 +260,20 @@ class RelationshipServiceTest extends TestCase {
 
 		$service->block($viewer, $bob);
 		$service->unblock($viewer, $bob);
+	}
+
+	public function testAMuteIsToldToBlueskyAndItsUnmuteToo(): void {
+		$mutes = $this->createMock(BlueskyMutes::class);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(BlueskyMutes::class)->willReturn($mutes);
+		$service = new RelationshipService($this->actorRelationRequest, $this->followsRequest, $this->activityService, $this->cacheActorService, $this->configService, $this->timelineRevisionService, $this->logger, $container);
+		$viewer = (new Person())->setId('https://social.test/@alice');
+		$bob = (new Person())->setId('https://bsky.app/profile/did:plc:bob');
+		$mutes->expects($this->once())->method('muted')->with($viewer, $bob);
+		$mutes->expects($this->once())->method('unmuted')->with($viewer, $bob);
+
+		$service->mute($viewer, $bob);
+		$service->unmute($viewer, $bob);
 	}
 
 	public function testBlockingYourselfIsRefused(): void {

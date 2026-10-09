@@ -12,6 +12,7 @@ namespace OCA\Social\Atproto\Client;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
@@ -53,6 +54,7 @@ class ClientXrpc {
 		private AuthorizationServer $oauth,
 		private ModerationService $moderation,
 		private InboundMoveService $inbound,
+		private BlueskyMutes $mutes,
 	) {
 	}
 
@@ -148,8 +150,25 @@ class ClientXrpc {
 			'com.atproto.repo.deleteRecord' => $this->writes->delete($session, self::json($rawBody)),
 			'com.atproto.repo.applyWrites' => $this->writes->apply($session, self::json($rawBody)),
 			'com.atproto.moderation.createReport' => $this->writes->report($session, self::json($rawBody)),
+			BlueskyMutes::MUTE, BlueskyMutes::UNMUTE => $this->mute($session, $method, $rawBody, $headers),
 			default => $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers),
 		};
+	}
+
+	/**
+	 * A mute an app makes: the AppView keeps it, and once it took it, it is
+	 * made here too (`BlueskyMutes`).
+	 *
+	 * @param array<string, string> $headers
+	 * @throws XrpcException
+	 */
+	private function mute(ClientSession $session, string $method, string $rawBody, array $headers): XrpcBytes {
+		$answer = $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers);
+		if ($answer->status === 200) {
+			$this->mutes->fromApp($session, $method, self::json($rawBody));
+		}
+
+		return $answer;
 	}
 
 	/**

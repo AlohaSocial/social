@@ -64,7 +64,8 @@ but otherwise ordinary posts. Nothing is required of the person: no Bluesky
 account, no app password, no switch — the administrator turns Bluesky on for
 the instance once, with a wildcard DNS record and certificate for the handle
 host. Direct, followers-only and unlisted posts never leave ActivityPub;
-blocks and mutes are never published; direct messages stay out of scope. An
+mutes are never published, blocks only when the person chooses to; direct
+messages are Bluesky's chat, reached from a Bluesky app signed in here. An
 existing Bluesky user can later move their account here, keeping their DID
 and their followers.
 
@@ -778,7 +779,13 @@ report id.
 
 Local blocks and mutes of Bluesky accounts work as they do for anybody —
 stored in `social_actor_relation`, applied on read. A mute is never
-published; a block is written as `app.bsky.graph.block` **only when the
+published, but it is kept in step with the AppView, where a Bluesky mute
+lives, privately (`Publisher\BlueskyMutes`): a mute or an unmute of a
+Bluesky account made here is told to it (`app.bsky.graph.muteActor` /
+`unmuteActor`, as the person), and one a Bluesky app signed in here
+makes goes to the AppView and, once it took it, is made here too — so
+the app and Social hide the same accounts. A mute that runs out here is
+not taken back there. A block is written as `app.bsky.graph.block` **only when the
 person chose to publish their blocks** (Settings → Bluesky, off by
 default, because a Bluesky block is public), and only a published one
 keeps the blocked account from replying to, quoting or mentioning them on
@@ -1268,7 +1275,13 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   Bluesky, "Allow direct messages", off by default, as Bluesky's), or an
   OAuth app given `transition:chat.bsky` (D15).
   `app.bsky.actor.getPreferences`/`putPreferences` are kept here, per person,
-  within the `app.bsky` namespace and 256 KB.
+  within the `app.bsky` namespace and 256 KB — except the **muted words**
+  (`mutedWordsPref`), which are the person's filters (`Client\MutedWords`):
+  the app reads every keyword of the filters that apply, a hashtag-only
+  word as `#tag`; a word it takes away removes its keyword, one it changes
+  rewrites it, and one it adds goes into a filter of its own, "Muted
+  words from Bluesky", which hides what it matches everywhere (one per
+  expiry, when the word has one).
 - **Writes are Social actions** (§16.5): `createRecord` of a post is a
   Social post (public; reply, quote, pictures, language; a link the app
   shortened is its whole address again), a like a like, a repost a boost,

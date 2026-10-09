@@ -100,7 +100,7 @@ class BlueskyFeedsTest extends TestCase {
 		$cacheFactory = $this->createMock(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 
-		return new BlueskyFeeds($appView, $identities, new Preferences($config), $this->createMock(PostStore::class), $streams, $cacheFactory, new NullLogger());
+		return new BlueskyFeeds($appView, $identities, new Preferences($config, $this->createMock(\OCA\Social\Atproto\Client\MutedWords::class), $this->createMock(\OCA\Social\Service\AccountService::class)), $this->createMock(PostStore::class), $streams, $cacheFactory, new NullLogger());
 	}
 
 	/** @return list<array> the saved-feeds items as stored */

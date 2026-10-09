@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
@@ -46,6 +47,8 @@ class ClientXrpcTest extends TestCase {
 	private array $files = [];
 	/** @var InboundMoveService&MockObject */
 	private InboundMoveService $inbound;
+	/** @var BlueskyMutes&MockObject */
+	private BlueskyMutes $mutes;
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -64,7 +67,7 @@ class ClientXrpcTest extends TestCase {
 		$this->oauth->method('issuer')->willReturn('https://social.test');
 		$this->inbound = $this->createMock(InboundMoveService::class);
 		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound);
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class));
 	}
 
 	protected function tearDown(): void {
@@ -110,6 +113,15 @@ class ClientXrpcTest extends TestCase {
 		$this->assertInstanceOf(XrpcBytes::class, $this->client->query('app.bsky.feed.getTimeline', 'limit=5', $headers));
 		$this->assertSame(['uri' => 'at://x'], $this->client->procedure('com.atproto.repo.createRecord', '{"repo":"x"}', $headers, '1.2.3.4'));
 		$this->assertSame(['blob' => []], $this->client->upload($path, $headers + ['content-type' => 'image/png']));
+	}
+
+	public function testAMuteAnAppMakesIsMadeHereOnceTheAppViewTookIt(): void {
+		$headers = ['authorization' => 'Bearer t'];
+		$this->proxy->method('forward')->willReturnOnConsecutiveCalls(new XrpcBytes('{}', 'application/json'), new XrpcBytes('{"error":"x"}', 'application/json', 400));
+		$this->mutes->expects($this->once())->method('fromApp')->with($this->session, 'app.bsky.graph.muteActor', ['actor' => 'did:plc:bob']);
+
+		$this->assertSame(200, $this->client->procedure('app.bsky.graph.muteActor', '{"actor":"did:plc:bob"}', $headers, '1.2.3.4')->status);
+		$this->assertSame(400, $this->client->procedure('app.bsky.graph.muteActor', '{"actor":"did:plc:carol"}', $headers, '1.2.3.4')->status, 'refused there, not made here');
 	}
 
 	public function testAnAccountMovingHereIsAnsweredByTheMoveAlone(): void {
