@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Interop;
 use InvalidArgumentException;
 use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Reader\BlueskyDiscovery;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\PostStore;
@@ -127,5 +128,21 @@ class AtprotoFeedsTest extends TestCase {
 			return $page === [] ? null : $page;
 		});
 		$this->assertSame([BlueskyIds::postIdOfUri($post)], self::ids((array)$page), 'the AppView read the list from this server, and its member\'s post');
+	}
+
+	/**
+	 * Discover's Bluesky parts as the development AppView answers them: it
+	 * has no trends service, which is no error here, and suggests accounts
+	 * as the person, never ones they follow.
+	 */
+	public function testDiscoverAsksBlueskyAndAnAppViewWithoutTrendsIsNoError(): void {
+		$this->assertNotNull(Server::get(IdentityService::class)->forActor($this->alice->actor));
+		$discovery = Server::get(BlueskyDiscovery::class);
+
+		$this->assertSame([], $discovery->trends());
+		foreach ($discovery->suggestions($this->alice->actor) as $account) {
+			$this->assertNotSame('', $account['acct']);
+			$this->assertStringStartsWith('https://bsky.app/profile/', $account['url']);
+		}
 	}
 }
