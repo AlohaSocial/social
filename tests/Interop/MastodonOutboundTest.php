@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\AvatarService;
+use OCP\Http\Client\IClientService;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -366,7 +367,7 @@ class MastodonOutboundTest extends TestCase {
 		$this->drainQueue();
 		$this->assertNotNull(
 			$this->mastodon->await(fn (): ?bool => (string)($this->mastodon->account($profileThere)['avatar'] ?? '') !== $before ? true : null),
-			'Mastodon still shows the avatar from before: ' . $before
+			'Mastodon still shows the avatar from before: ' . $before . ' — ' . $this->iconAsServed(self::PROFILE)
 		);
 	}
 
@@ -421,5 +422,23 @@ class MastodonOutboundTest extends TestCase {
 			$followed->awaitRelationship($followerId, 'followed_by', false),
 			'the follow of an earlier run could not be ended first'
 		);
+	}
+
+	/**
+	 * The icon the account's actor document names, and what its address
+	 * answers, for a failure message.
+	 */
+	private function iconAsServed(string $userId): string {
+		$client = Server::get(IClientService::class)->newClient();
+		try {
+			$actor = Server::get(AccountService::class)->getActorFromUserId($userId);
+			$document = json_decode((string)$client->get($actor->getId(), ['headers' => ['Accept' => 'application/activity+json'], 'verify' => false])->getBody(), true);
+			$icon = is_array($document['icon'] ?? null) ? $document['icon'] : null;
+			$status = $icon === null ? 'no icon' : $client->get((string)$icon['url'], ['verify' => false, 'http_errors' => false])->getStatusCode();
+
+			return json_encode(['icon' => $icon, 'status' => $status]);
+		} catch (\Throwable $e) {
+			return 'not read: ' . $e->getMessage();
+		}
 	}
 }
