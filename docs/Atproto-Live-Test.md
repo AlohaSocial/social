@@ -99,7 +99,16 @@ Tick each line, and note the time of any failure, so the server log can be read 
 
 - [ ] Alice makes an app password in Settings → Bluesky. In the Bluesky app, signing in with hosting provider `https://<host>`, the handle `alice.<host>` and that password works. Posting from there shows up here.
 - [ ] Signing in with OAuth works the same way (the app's sign-in without a password).
-- [ ] With an app password made with "Allow direct messages", the Bluesky app's chat opens, and a message to the tester arrives. This is the only test of Bluesky's chat service.
+- [ ] With an app password made with "Allow direct messages", the Bluesky app's chat opens, and a message to the tester arrives.
+
+### 3.6a Direct messages here
+
+The development network has no chat service, so these lines are the only test of the chat bridge against Bluesky's.
+
+- [ ] The tester follows alice and alice follows the tester. Alice writes the tester a direct message from Messages here. It arrives in the tester's Bluesky chat, without the `@` address, its link clickable.
+- [ ] The tester answers in the Bluesky app. Within two minutes the answer is in alice's Messages, in the same conversation, with a notification.
+- [ ] The tester deletes a message in the Bluesky app. It is gone here after the next read.
+- [ ] The tester follows bob. Bob, here, writes one message to the tester and to a Mastodon account. The tester gets it on Bluesky, the Mastodon account over ActivityPub.
 
 ### 3.7 Blocks
 

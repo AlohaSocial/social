@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Cron;
 
+use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Service\CacheActorService;
@@ -22,8 +23,9 @@ use Throwable;
  * One post's trip to Bluesky, queued by the listener the moment the post
  * is made, deleted or edited, so the Fediverse delivery never waits for it.
  *
- * `argument`: `action` (publish, delete, edit, or profile with an actor's
- * id) and the `id`; for a like or repost (`like`, `unlike`, `repost`,
+ * `argument`: `action` (publish, delete, edit, message for a direct
+ * message, or profile with an actor's id) and the `id`; for a like or
+ * repost (`like`, `unlike`, `repost`,
  * `unrepost`) the id is the Like's or Announce's, with the `post` and the
  * `actor` when one is made. A failure is logged and, for a post, left to
  * the reconcile pass.
@@ -36,6 +38,7 @@ class AtprotoPublish extends QueuedJob {
 		private StreamService $streamService,
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
+		private ChatSender $chat,
 	) {
 		parent::__construct($time);
 	}
@@ -56,6 +59,11 @@ class AtprotoPublish extends QueuedJob {
 			if ($action === 'delete') {
 				$this->publisher->deletePost($id);
 				$this->interactions->removeAllOf($id);
+
+				return;
+			}
+			if ($action === 'message') {
+				$this->chat->send($this->streamService->getStreamById($id));
 
 				return;
 			}

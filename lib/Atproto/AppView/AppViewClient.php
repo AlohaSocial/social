@@ -79,6 +79,24 @@ class AppViewClient {
 	}
 
 	/**
+	 * A call to the chat service as a local user (`chat.bsky.*`), a query or,
+	 * with an input, a procedure: the direct messages are kept there, not
+	 * at the AppView.
+	 *
+	 * @param array<string, string|int|string[]> $params
+	 * @throws AppViewNotFoundException
+	 * @throws AtprotoException also when no chat service is configured
+	 */
+	public function chatAs(string $did, PrivateKey $key, string $method, array $params = [], ?array $input = null): array {
+		if ($this->config->chat() === '') {
+			throw new AtprotoException('No chat service is configured');
+		}
+		$token = $this->serviceAuth->token($key, $did, $this->config->chatDid(), $method);
+
+		return $this->get($this->config->chat(), $method, $params, ['Authorization' => 'Bearer ' . $token], $input);
+	}
+
+	/**
 	 * A query, or with an input a procedure.
 	 *
 	 * @param array<string, string|int|string[]> $params

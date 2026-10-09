@@ -468,6 +468,15 @@ checks, and the card refuses to switch Bluesky on while one fails:
   past its window, drops retired keys, and removes Bluesky posts read here
   that their authors deleted there. The ordinary cron requirement
   covers it.
+- **Direct messages (on by default).** The card's chat service
+  (`https://api.bsky.chat`, Bluesky's own) is where people's direct messages
+  with Bluesky accounts are kept. With it set, a message from somebody on
+  Bluesky arrives in the person's Messages here, and one written here to
+  somebody on Bluesky is sent there; the sync cron reads each account's
+  messages every two minutes while it has any and at least every half hour.
+  A Bluesky app signed in here with an app password that allows direct
+  messages reaches the same conversations. Empty turns direct messages with
+  Bluesky off, both here and in the apps.
 
 **Switching on.** The Bluesky card checks the requirements and flips the switch.
 Then `php occ social:atproto:identities` gives every existing account its

@@ -170,6 +170,16 @@ class PostStore {
 	}
 
 	/**
+	 * A direct message's `Create` (`ChatStore`), its author cached already:
+	 * stored through the same door as a post, once.
+	 */
+	public function storeMessage(array $create): bool {
+		$id = (string)($create['object']['id'] ?? '');
+
+		return $id !== '' && !$this->isKnown($id) && $this->process($create);
+	}
+
+	/**
 	 * A post the AppView no longer has, removed the way a remote `Delete` is.
 	 */
 	public function delete(string $postId): bool {

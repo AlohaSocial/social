@@ -65,7 +65,8 @@ account, no app password, no switch — the administrator turns Bluesky on for
 the instance once, with a wildcard DNS record and certificate for the handle
 host. Direct, followers-only and unlisted posts never leave ActivityPub;
 mutes are never published, blocks only when the person chooses to; direct
-messages are Bluesky's chat, reached from a Bluesky app signed in here. An
+messages are Bluesky's chat, and a conversation with somebody on Bluesky
+is a conversation in this app's own messages like any other (§10.1). An
 existing Bluesky user can later move their account here, keeping their DID
 and their followers.
 
@@ -89,7 +90,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D12 | **Inbound** reads by **polling** the public AppView per followed author, with a cap and backoff; **Jetstream** is an optional daemon an administrator may run for instant delivery on a large instance. | 09-25 polling, 10-06 the optional daemon |
 | D13 | Bluesky posts appear **in the same timelines**, their authors addressed as bare `@alice.bsky.social` with a **badge**. | 09-25, confirmed 10-06 |
 | D14 | **All Bluesky interactions** (like, repost, follow, reply, mention, quote) show in Activities like their ActivityPub counterparts, under the same **notification policy** and requests inbox. | 10-06 |
-| D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. They are not bridged into this app's own direct messages. | 10-06, revised 10-09 |
+| D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. Revised again 10-09: they are also this app's own direct messages (§10.1): a message from Bluesky arrives in the person's messages, and a direct message written here to somebody on Bluesky is sent there as a Bluesky direct message. | 10-06, revised 10-09 twice |
 | D16 | **Mutes are never published, and blocks only as the person chooses** (revised 10-09: "Publish my blocks of Bluesky accounts", off by default, since a Bluesky block is public; revised again 10-09: people subscribe to Bluesky's moderation lists, §12.5, and a block list is published as a `listblock` record under the same choice); in scope: honour Bluesky's moderation labels, let users subscribe to labelers, file reports with Bluesky's moderation service, instance-level blocks of PDS hosts and DIDs. | 09-25, extended 10-06 |
 | D17 | The client API is a PDS: Bluesky apps may log in here, with `app.bsky.*` proxied to the AppView; no AppView of our own. | 09-25 |
 | D18 | Bridgy Fed twins of local accounts are folded into the native identity (§13.3). | 09-25 |
@@ -751,6 +752,44 @@ sender like any other: `for_not_following` holds a like from a Bluesky
 account the person does not follow, `for_new_accounts` reads the DID
 document's creation time (the first PLC operation's `createdAt`) as the
 account age, and the requests inbox shows the sender with the badge.
+
+### 10.1 Direct messages
+
+A conversation with somebody on Bluesky is a conversation in **Messages**
+like any other; nothing in it says which network it runs on.
+
+- **Arriving.** `Chat\ChatPoller`, a step of `Cron\AtprotoSync`, reads
+  each local account's chat log (`chat.bsky.convo.getLog`, as the account,
+  with a service-auth token for the chat service, `AppViewClient::chatAs()`)
+  from where it was read up to (`social_atproto_chat_cursor`). An account's
+  first read takes the unread messages (up to 20) of its 20 newest
+  conversations (`listConvos`, `getMessages`). Each message somebody else
+  sent becomes a direct `Note` from its sender to the account, naming it
+  (`Chat\ChatStore`, id `https://bsky.app/profile/<sender>/convo/<convo>/<message>`),
+  through the same import path as a post, so it notifies, pushes and counts
+  as unread like a direct message from the Fediverse, and the notification
+  policy holds it the same way. Each message answers the one before it in
+  the Bluesky conversation, received or sent from here, which is how this
+  app's conversations (threads of direct messages) keep it as one. A
+  message its sender deletes is deleted here. A shared post arrives as its
+  link. An account is read every two minutes while it has messages, less
+  often while it has none but at least every half hour, and on the next
+  run once its owner opens Messages or sends one.
+- **Leaving.** A direct message written here (`PostPublishedEvent`, queued
+  as `AtprotoPublish` with action `message`) goes to the people it is
+  addressed to who are on Bluesky as one Bluesky message
+  (`Chat\ChatSender`): their conversation is found or started
+  (`getConvoForMembers`), and the text — without the mentions that address
+  it, at most 1,000 graphemes, its links and hashtags as facets — is sent
+  (`sendMessage`). Recipients on the Fediverse get it over ActivityPub as
+  before. Pictures are not sent: a Bluesky direct message carries none.
+- **What Bluesky decides.** Whether a message reaches somebody is the chat
+  service's rule: by default only people they follow may write to them. A
+  message the chat service refuses is logged, and stays here.
+- **Not mirrored.** Messages the account sends from a Bluesky app stay in
+  that app; read state is kept separately here and on Bluesky.
+
+Everything stops when the chat service setting is empty (§14.2).
 
 ## 11. What the person sees
 

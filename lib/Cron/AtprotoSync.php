@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Cron;
 
+use OCA\Social\Atproto\Chat\ChatPoller;
 use OCA\Social\Atproto\Reader\FeedPoller;
 use OCA\Social\Atproto\Reader\NotificationPoller;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -19,8 +20,9 @@ use Throwable;
 
 /**
  * Reads Bluesky every two minutes: the feeds of the authors somebody here
- * follows, then what Bluesky did to local accounts, as many of each as are
- * due within the request ceiling.
+ * follows, then what Bluesky did to local accounts, then the direct
+ * messages they received, as many of each as are due within the request
+ * ceiling.
  */
 class AtprotoSync extends TimedJob {
 	private const INTERVAL = 2 * 60;
@@ -30,6 +32,7 @@ class AtprotoSync extends TimedJob {
 		private AtprotoConfig $config,
 		private FeedPoller $poller,
 		private NotificationPoller $notifications,
+		private ChatPoller $chat,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -41,7 +44,12 @@ class AtprotoSync extends TimedJob {
 		if (!$this->config->isEnabled()) {
 			return;
 		}
-		foreach (['feeds' => fn (): array => $this->poller->poll(), 'notifications' => fn (): array => $this->notifications->poll()] as $step => $run) {
+		$steps = [
+			'feeds' => fn (): array => $this->poller->poll(),
+			'notifications' => fn (): array => $this->notifications->poll(),
+			'direct messages' => fn (): array => $this->chat->poll(),
+		];
+		foreach ($steps as $step => $run) {
 			try {
 				$result = $run();
 				if (($result['stored'] ?? 0) > 0 || ($result['handled'] ?? 0) > 0) {
