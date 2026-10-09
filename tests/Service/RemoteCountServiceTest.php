@@ -9,65 +9,56 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
-use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Object\Note;
-use OCA\Social\Model\Details;
-use OCA\Social\Service\CurlService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\RemoteCountService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
- * What the refresh of a remote post's counts writes: the origin's halves into
- * `details`, and the totals through the recount that adds this instance's
- * own share inside the statement that stores them.
+ * The cron's pass over the remote posts nobody looked at: the ones due are
+ * handed to the network each lives on, a round at a time, until the pass's
+ * deadline.
  */
 #[AllowMockObjectsWithoutExpectations]
 class RemoteCountServiceTest extends TestCase {
-	private const POST = 'https://remote.example/notes/1';
+	/** @return Note[] */
+	private function posts(int $count): array {
+		$posts = [];
+		for ($i = 0; $i < $count; $i++) {
+			$post = new Note();
+			$post->setId('https://remote.example/notes/' . $i);
+			$posts[] = $post;
+		}
 
-	public function testTheTotalsAreRecountedNotWrittenAsCountedHere(): void {
-		$post = new Note();
-		$post->setId(self::POST);
+		return $posts;
+	}
 
+	public function testTheDuePostsAreHandedOverARoundAtATime(): void {
 		$streamRequest = $this->createMock(StreamRequest::class);
-		$streamRequest->method('getRemoteStreamsDueForCounts')->willReturn([$post]);
-		$streamRequest->method('getStreamById')->willReturn($post);
-		$streamRequest->method('countRepliesTo')->willReturn(1);
-		$actionsRequest = $this->createMock(ActionsRequest::class);
-		$actionsRequest->method('countActions')->willReturn(2);
-		$curl = $this->createMock(CurlService::class);
-		$curl->method('retrieveObjectsMany')->willReturn([self::POST => [
-			'id' => self::POST,
-			'likes' => ['totalItems' => 10],
-			'shares' => ['totalItems' => 4],
-			'replies' => ['totalItems' => 3],
-		]]);
+		$streamRequest->expects($this->once())->method('getRemoteStreamsDueForCounts')->with($this->anything(), 30)->willReturn($this->posts(30));
+		$counts = $this->createMock(CountService::class);
+		$counts->expects($this->exactly(2))->method('refreshPosts')
+			->willReturnCallback(static fn (array $posts): array => ['asked' => count($posts), 'answered' => 1]);
 
-		$calls = [];
-		$streamRequest->expects($this->once())->method('updateDetails')
-			->willReturnCallback(function () use (&$calls, $post): void {
-				$calls[] = 'details';
-				$this->assertSame(8, $post->getDetailInt(Details::REMOTE_LIKES));
-				$this->assertSame(2, $post->getDetailInt(Details::REMOTE_BOOSTS));
-				$this->assertSame(2, $post->getDetailInt(Details::REMOTE_REPLIES));
-			});
-		$streamRequest->expects($this->once())->method('recount')
-			->with($this->identicalTo($post), Details::LIKES, Details::BOOSTS, Details::REPLIES)
-			->willReturnCallback(function () use (&$calls): void {
-				$calls[] = 'recount';
-			});
+		$service = new RemoteCountService($streamRequest, $counts, $this->createStub(ITimeFactory::class), new NullLogger());
 
-		$service = new RemoteCountService(
-			$streamRequest, $actionsRequest, $curl,
-			$this->createStub(ITimeFactory::class), $this->createStub(LoggerInterface::class)
-		);
-		$this->assertSame(['asked' => 1, 'answered' => 1], $service->refresh(true));
+		$this->assertSame(['asked' => 30, 'answered' => 2], $service->refresh(false, 30));
+	}
 
-		// the halves are stored before the recount that adds to them
-		$this->assertSame(['details', 'recount'], $calls);
+	public function testAPassPastItsDeadlineLeavesTheRestForTheNext(): void {
+		$streamRequest = $this->createMock(StreamRequest::class);
+		$streamRequest->method('getRemoteStreamsDueForCounts')->willReturn($this->posts(RemoteCountService::PARALLEL + 1));
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturnOnConsecutiveCalls(100, 200);
+		$counts = $this->createMock(CountService::class);
+		$counts->expects($this->once())->method('refreshPosts')->willReturn(['asked' => RemoteCountService::PARALLEL, 'answered' => 0]);
+
+		$service = new RemoteCountService($streamRequest, $counts, $time, new NullLogger());
+
+		$this->assertSame(['asked' => RemoteCountService::PARALLEL, 'answered' => 0], $service->refresh(true, 0, 150));
 	}
 }

@@ -13,6 +13,7 @@ use OCA\Social\Cron\FillFollowLists;
 use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
+use OCA\Social\Cron\RefreshCounts;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -62,6 +63,14 @@ class RemoteFetchQueue {
 	public const POSTS_INTERVAL = 600;
 
 	private const POSTS_FILLED = 'social.postsfill';
+
+	private const COUNTS_ASKED = 'social.countsfill';
+
+	/**
+	 * The longest a job's list of posts is, JSON-encoded: `IJobList` refuses
+	 * an argument over 4000 characters.
+	 */
+	private const ARGUMENT_LENGTH = 3500;
 
 	public function __construct(
 		private IJobList $jobList,
@@ -230,6 +239,51 @@ class RemoteFetchQueue {
 	}
 
 	/**
+	 * Queues a read of what these posts' likes, boosts and replies are now
+	 * where they live (`Cron\RefreshCounts`), each post at most once per its
+	 * own interval, at most `MAX_PER_CALL` posts a call.
+	 *
+	 * @param array<string, int> $intervals post id => seconds until it may be asked for again
+	 * @return bool whether a read was asked for
+	 */
+	public function refreshCounts(array $intervals): bool {
+		$wanted = [];
+		foreach ($intervals as $id => $interval) {
+			if (count($wanted) >= self::MAX_PER_CALL) {
+				break;
+			}
+			$id = (string)$id;
+			if ($id === '') {
+				continue;
+			}
+			$key = md5($id);
+			try {
+				if ($this->durableCache->get(self::COUNTS_ASKED, $key) !== null) {
+					continue;
+				}
+				$this->durableCache->set(self::COUNTS_ASKED, $key, 1, $interval);
+			} catch (Throwable $e) {
+				// the post's own stamp, written when it is asked, still holds
+			}
+			$wanted[] = $id;
+		}
+
+		$batch = [];
+		foreach ($wanted as $id) {
+			if ($batch !== [] && strlen((string)json_encode(['posts' => [...$batch, $id]])) > self::ARGUMENT_LENGTH) {
+				$this->queue(RefreshCounts::class, ['posts' => $batch]);
+				$batch = [];
+			}
+			$batch[] = $id;
+		}
+		if ($batch !== []) {
+			$this->queue(RefreshCounts::class, ['posts' => $batch]);
+		}
+
+		return $wanted !== [];
+	}
+
+	/**
 	 * Queues a fetch of each actor not cached here.
 	 *
 	 * @param string[] $ids actor ids; what is not an http(s) URL is ignored
@@ -254,7 +308,7 @@ class RemoteFetchQueue {
 
 	/**
 	 * @param class-string $job
-	 * @param array<string, string> $argument
+	 * @param array<string, string|list<string>> $argument
 	 */
 	private function queue(string $job, array $argument): void {
 		try {

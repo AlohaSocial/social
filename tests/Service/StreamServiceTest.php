@@ -33,6 +33,7 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\CurlService;
 use OCA\Social\Service\EmojiService;
 use OCA\Social\Service\LinkPreviewService;
@@ -995,6 +996,59 @@ class StreamServiceTest extends TestCase {
 			->willReturn([$note]);
 
 		$this->assertSame([$note], $this->service->getTimeline($options));
+	}
+
+	/** The service as the container builds it, with the counts asked for on pages. */
+	private function serviceCounting(CountService $counts): StreamService {
+		return new StreamService(
+			$this->urlGenerator,
+			$this->streamRequest,
+			$this->activityService,
+			$this->cacheActorService,
+			$this->configService,
+			$this->curlService,
+			$this->linkPreviewService,
+			$this->emojiService,
+			$this->createStub(\OCP\EventDispatcher\IEventDispatcher::class),
+			$this->logger,
+			$this->createStub(PlaceService::class),
+			$this->createStub(ReactionSummaryService::class),
+			$this->createStub(MediaTagsRequest::class),
+			$this->accountService,
+			$this->channelService,
+			null,
+			$counts,
+		);
+	}
+
+	public function testAPageAClientReadsHasItsPostsCountsAskedFor(): void {
+		$note = $this->note('https://remote.example/notes/1');
+		$this->streamRequest->method('getTimeline')->willReturn([$note]);
+		$this->streamRequest->method('getVisibleByNids')->willReturn(['5' => $note]);
+		$counts = $this->createMock(CountService::class);
+		$counts->expects($this->exactly(2))->method('seen')->with([$note]);
+		$service = $this->serviceCounting($counts);
+
+		$local = new ProbeOptions();
+		$local->setFormat(ACore::FORMAT_LOCAL);
+		$service->getTimeline($local);
+		$service->visiblePosts(['5']);
+		// a read for something other than a client — an export, a federation
+		// collection — asks nothing
+		$service->getTimeline(new ProbeOptions());
+	}
+
+	public function testAConversationHasEveryPostInItsCountsAskedFor(): void {
+		$post = $this->note('https://remote.example/notes/2', self::ACTOR_ID, 'https://remote.example/notes/1');
+		$parent = $this->note('https://remote.example/notes/1');
+		$reply = $this->note('https://remote.example/notes/3', self::ACTOR_ID, $post->getId());
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->willReturn($parent);
+		$this->streamRequest->method('getDescendants')->willReturn([$reply]);
+		$counts = $this->createMock(CountService::class);
+		$counts->expects($this->once())->method('seen')->with([$parent, $post, $reply]);
+
+		$this->serviceCounting($counts)->getContextByNid(2);
 	}
 
 	private function boostOf(string $id, string $of): Announce {

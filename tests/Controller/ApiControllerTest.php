@@ -184,6 +184,7 @@ class ApiControllerTest extends TestCase {
 	private \OCA\Social\Service\CountsService|Stub $countsService;
 	private \OCA\Social\Service\RemoteFetchQueue|MockObject $remoteFetchQueue;
 	private \OCA\Social\Service\FollowList\FollowListService|MockObject $followLists;
+	private \OCA\Social\Service\Counts\CountService|MockObject $counts;
 	/** what the AI switch stub answers for the viewer */
 	private bool $hidesAi = false;
 	private bool $hidesCounts = true;
@@ -329,6 +330,7 @@ class ApiControllerTest extends TestCase {
 		$this->aiContentService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesAi);
 		$this->remoteFetchQueue = $this->createMock(\OCA\Social\Service\RemoteFetchQueue::class);
 		$this->followLists = $this->createMock(\OCA\Social\Service\FollowList\FollowListService::class);
+		$this->counts = $this->createMock(\OCA\Social\Service\Counts\CountService::class);
 		$this->countsService = $this->createStub(\OCA\Social\Service\CountsService::class);
 		$this->countsService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesCounts);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
@@ -506,6 +508,7 @@ class ApiControllerTest extends TestCase {
 				new NullLogger(),
 			),
 			'blockedBy' => $this->blockedBy,
+			'counts' => $this->counts,
 		]);
 	}
 
@@ -1373,6 +1376,16 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($item, $response->getData());
+	}
+
+	public function testAStatusServedHasItsCountsAskedForInTheBackground(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$item = $this->createMock(Stream::class);
+		$this->streamService->method('getStreamByNid')->willReturn($item);
+		$this->streamService->method('attachCard')->willReturn($item);
+		$this->counts->expects($this->once())->method('seen')->with([$item])->willReturn(true);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->statusGet(42)->getStatus());
 	}
 
 	public function testStatusGetOfUnknownStatusIsAnError(): void {

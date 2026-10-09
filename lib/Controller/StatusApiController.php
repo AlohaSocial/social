@@ -30,6 +30,7 @@ use OCA\Social\Service\ActionService;
 use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
@@ -118,6 +119,7 @@ class StatusApiController extends MastodonApiController {
 		private Publisher $atprotoPublisher,
 		private ReplyRuleService $replyRules,
 		private InteractionService $interactions,
+		private CountService $counts,
 		private ?BlockedByService $blockedBy = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
@@ -506,6 +508,9 @@ class StatusApiController extends MastodonApiController {
 			// having read it: not an impression in a timeline, which is a post
 			// scrolled past rather than read
 			$this->viewCountService->seen($item, $this->viewer);
+			// and what its likes, boosts and replies are now where it lives,
+			// asked in the background
+			$this->counts->seen([$item]);
 
 			return new DataResponse($item, Http::STATUS_OK);
 		} catch (Throwable $e) {

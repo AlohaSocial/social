@@ -682,6 +682,21 @@ cached as it is found; one of this server's own accounts is named as
 itself. Bluesky has no way to hide the lists, so nothing is hidden. See
 **Who follows an account, and whom it follows** in Architecture.md.
 
+### 9.4e Counts
+
+A post read from Bluesky is stored once with the `likeCount`,
+`repostCount`, `replyCount` and `quoteCount` the AppView had at that moment,
+and no later feed read touches a stored post. Its counts are kept current
+like a fediverse post's: when somebody here sees it (its page, its
+conversation, a timeline page), and its counts are older than a quarter of
+an hour (a post less than a day old) or six hours (older), it is queued for
+a background `getPosts`, 25 posts a call (`BlueskyCountSource`); the cron's
+pass over the posts nobody looked at asks the same way every two hours. The
+answer replaces what the post's own network said (`remote_*`) and the quote
+count in the post's `atproto` block; a post the AppView no longer has is
+deleted as §9.5 deletes it. Nothing is notified. See **Counts where a post
+lives** in Architecture.md.
+
 ### 9.5 Deletes and edits from Bluesky
 
 A `delete` op from Jetstream, or a post gone from the author feed on the

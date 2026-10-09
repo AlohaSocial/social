@@ -21,6 +21,7 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GroupListService;
 use OCA\Social\Service\LinkPreviewService;
@@ -91,6 +92,7 @@ class ListController extends ClientApiController {
 		private PlaceService $placeService,
 		private GroupListService $groupListService,
 		private ?ContainerInterface $container = null,
+		private ?CountService $counts = null,
 	) {
 		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
 	}
@@ -405,6 +407,7 @@ class ListController extends ClientApiController {
 			// one query for the whole page, as the home timeline does it
 			$this->linkPreviewService->attachCards($posts);
 			$this->placeService->attachPlaces($posts);
+			$this->counts?->seen($posts);
 
 			return $this->paged($posts, $options->getLimit());
 		} catch (Throwable $e) {

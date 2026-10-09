@@ -33,6 +33,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Tools\Exceptions\DateTimeException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -85,6 +86,7 @@ class StreamService {
 		private AccountService $accountService,
 		private ChannelService $channelService,
 		private ?RemoteFetchQueue $remoteFetchQueue = null,
+		private ?CountService $countService = null,
 	) {
 	}
 
@@ -677,6 +679,7 @@ class StreamService {
 		// meant the one post the reader actually opened was the only one
 		// without its link preview
 		$this->attachCardsToPosts(array_merge($context['ancestors'], [$post], $context['descendants']));
+		$this->countService?->seen(array_merge($context['ancestors'], [$post], $context['descendants']));
 
 		return $context;
 	}
@@ -737,6 +740,8 @@ class StreamService {
 			$this->placeService->attachPlaces($posts);
 			$this->reactionSummaryService->attachReactions($posts, $this->viewer?->getId() ?? '');
 			$this->attachTaggedPeople($posts);
+			// what the remote posts on the page count now, asked in the background
+			$this->countService?->seen($posts);
 		}
 
 		return $posts;
@@ -759,6 +764,7 @@ class StreamService {
 		$this->placeService->attachPlaces($list);
 		$this->reactionSummaryService->attachReactions($list, $this->viewer?->getId() ?? '');
 		$this->attachTaggedPeople($list);
+		$this->countService?->seen($list);
 
 		return $posts;
 	}
