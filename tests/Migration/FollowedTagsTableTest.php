@@ -10,7 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Migration;
 
 use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Migration\Version1000Date20221118000002;
+use OCA\Social\Migration\Version1000Date20261009000710;
 use OCP\DB\Types;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 
 /** The table a followed hashtag lives in. */
@@ -18,9 +21,18 @@ class FollowedTagsTableTest extends TestCase {
 	use ReadsTheSchema;
 
 	public function testTheTableIsTheOneTheCodeReadsAndWrites(): void {
-		$this->assertColumnsAre(
-			CoreRequestBuilder::TABLE_FOLLOWED_TAGS,
-			CoreRequestBuilder::$tables[CoreRequestBuilder::TABLE_FOLLOWED_TAGS],
+		$schema = MigrationReplay::run(
+			[Version1000Date20221118000002::class],
+			[IAppConfig::class => $this->createStub(IAppConfig::class)]
+		);
+		MigrationReplay::run([Version1000Date20261009000710::class], [], $schema);
+		$columns = array_keys($schema->shape()[CoreRequestBuilder::TABLE_FOLLOWED_TAGS]['columns']);
+		$declared = CoreRequestBuilder::$tables[CoreRequestBuilder::TABLE_FOLLOWED_TAGS];
+		sort($columns);
+		sort($declared);
+
+		$this->assertSame(
+			$declared, $columns,
 			'every column of the table is declared in CoreRequestBuilder, and nothing else'
 		);
 	}

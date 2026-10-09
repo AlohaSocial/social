@@ -191,6 +191,26 @@ class RemoteFetchQueue {
 	 * @return bool whether a read was asked for
 	 */
 	public function fillPosts(string $kind, string $term, ?Person $viewer = null): bool {
+		if (!$this->claimPostsFill($kind, $term, $viewer)) {
+			return false;
+		}
+
+		$term = trim(mb_strtolower($term));
+		$viewerId = ($viewer === null || $kind !== 'search') ? '' : $viewer->getId();
+		$this->queue(FillPosts::class, ['kind' => $kind, 'term' => $term, 'viewer' => $viewerId]);
+
+		return true;
+	}
+
+	/**
+	 * Whether the posts with a hashtag, or matching a search, may be read
+	 * from beyond this server now, and if so, that they are being: the
+	 * `POSTS_INTERVAL` throttle `fillPosts()` keeps, for a caller that reads
+	 * them itself (`Service\Discovery\FollowedTagsFill`).
+	 *
+	 * @param string $kind `PostDiscoveryService::TAG` or `::SEARCH`
+	 */
+	public function claimPostsFill(string $kind, string $term, ?Person $viewer = null): bool {
 		$term = trim(mb_strtolower($term));
 		if ($term === '' || mb_strlen($term) > 200) {
 			return false;
@@ -205,8 +225,6 @@ class RemoteFetchQueue {
 		} catch (Throwable $e) {
 			// the job list's own dedupe still holds
 		}
-
-		$this->queue(FillPosts::class, ['kind' => $kind, 'term' => $term, 'viewer' => $viewerId]);
 
 		return true;
 	}

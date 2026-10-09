@@ -277,7 +277,8 @@ class CoreRequestBuilder {
 			'id',
 			'actor_id_prim',
 			'hashtag',
-			'creation'
+			'creation',
+			'filled'
 		],
 		self::TABLE_INTERESTS => [
 			'id',

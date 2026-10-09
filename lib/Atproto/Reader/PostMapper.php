@@ -148,7 +148,7 @@ class PostMapper {
 			'content' => $content,
 			'summary' => $warning,
 			'sensitive' => $adult || $warning !== '',
-			'tag' => $this->tags($record['facets'] ?? [], (string)($record['reply']['parent']['uri'] ?? '')),
+			'tag' => $this->tags($record['facets'] ?? [], (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
 			'attachment' => $attachments,
 			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
 			'_atproto' => [
@@ -371,11 +371,13 @@ class PostMapper {
 	}
 
 	/**
-	 * Mentions and hashtags as the tags a Fediverse post carries them in.
+	 * Mentions and hashtags as the tags a Fediverse post carries them in:
+	 * the hashtags in the text, and the ones the record lists beside it
+	 * (`tags`), which Bluesky's hashtag search finds the post by too.
 	 *
 	 * @return list<array{type: string, href: string, name: string}>
 	 */
-	private function tags(mixed $facets, string $parentUri = ''): array {
+	private function tags(mixed $facets, string $parentUri = '', mixed $outline = []): array {
 		$tags = [];
 		// a reply to a local post addresses its author, which is what makes
 		// the notification here; Bluesky names nobody in the reply itself
@@ -394,6 +396,14 @@ class PostMapper {
 				} elseif ($type === 'app.bsky.richtext.facet#tag' && is_string($feature['tag'] ?? null) && $feature['tag'] !== '') {
 					$tags[] = ['type' => 'Hashtag', 'href' => BlueskyIds::hashtagUrl($feature['tag']), 'name' => '#' . $feature['tag']];
 				}
+			}
+		}
+		$named = array_map(static fn (array $tag): string => mb_strtolower($tag['name']), $tags);
+		foreach (is_array($outline) ? array_slice($outline, 0, 8) : [] as $tag) {
+			$tag = is_string($tag) ? ltrim(trim($tag), '#') : '';
+			if ($tag !== '' && !in_array(mb_strtolower('#' . $tag), $named, true)) {
+				$named[] = mb_strtolower('#' . $tag);
+				$tags[] = ['type' => 'Hashtag', 'href' => BlueskyIds::hashtagUrl($tag), 'name' => '#' . $tag];
 			}
 		}
 

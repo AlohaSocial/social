@@ -56,4 +56,26 @@ class FediversePostSourceTest extends TestCase {
 		$this->assertSame(['https://a.example/notes/1', 'https://b.example/notes/3'], $fetched);
 		$this->assertSame(0, $source->matching('anything', 10, null), 'the fediverse has no public search of posts');
 	}
+
+	public function testOnlyPostsWrittenSinceTheBoundAreFetched(): void {
+		$directory = $this->createMock(FediverseDirectoryService::class);
+		$directory->method('sources')->willReturn([new DirectorySource('mastodon.example', DirectorySource::KIND_MASTODON, 'Mastodon')]);
+		$curl = $this->createMock(CurlService::class);
+		$curl->method('retrieveJson')->willReturn([
+			['uri' => 'https://a.example/notes/new', 'created_at' => '2026-10-09T12:00:00.000Z'],
+			['uri' => 'https://a.example/notes/old', 'created_at' => '2026-10-01T12:00:00.000Z'],
+			['uri' => 'https://a.example/notes/undated'],
+		]);
+		$streams = $this->createMock(StreamRequest::class);
+		$streams->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$fetched = [];
+		$queue = $this->createMock(StreamQueueService::class);
+		$queue->method('fetchNow')->willReturnCallback(static function (string $uri) use (&$fetched): void {
+			$fetched[] = $uri;
+		});
+		$source = new FediversePostSource($directory, $curl, $streams, $queue, new NullLogger());
+
+		$this->assertSame(1, $source->tagged('nextcloud', 20, null, (int)strtotime('2026-10-08T00:00:00Z')));
+		$this->assertSame(['https://a.example/notes/new'], $fetched);
+	}
 }

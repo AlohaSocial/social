@@ -47,12 +47,30 @@ class PostDiscoveryService {
 			} catch (Throwable) {
 			}
 		}
+
+		return $this->ask($kind, static fn (PostSource $source): int => $kind === self::TAG
+			? $source->tagged($term, self::LIMIT, $viewer)
+			: $source->matching($term, self::LIMIT, $viewer));
+	}
+
+	/**
+	 * The newest posts with a hashtag, from every network, as nobody in
+	 * particular: at most `$limit` from each, none written before `$since`.
+	 *
+	 * @return int how many posts were stored
+	 */
+	public function fillTag(string $tag, int $limit, int $since): int {
+		return $this->ask(self::TAG, static fn (PostSource $source): int => $source->tagged($tag, $limit, null, $since));
+	}
+
+	/**
+	 * @param callable(PostSource): int $read
+	 */
+	private function ask(string $kind, callable $read): int {
 		$stored = 0;
 		foreach ($this->sources() as $source) {
 			try {
-				$stored += $kind === self::TAG
-					? $source->tagged($term, self::LIMIT, $viewer)
-					: $source->matching($term, self::LIMIT, $viewer);
+				$stored += $read($source);
 			} catch (Throwable $e) {
 				$this->logger->info('Posts not read', ['kind' => $kind, 'source' => $source::class, 'exception' => $e]);
 			}

@@ -64,4 +64,37 @@ class BlueskyPostSourceTest extends TestCase {
 
 		$source->matching('cats', 20, $alice);
 	}
+
+	public function testOnlyPostsWrittenSinceTheBoundAreStored(): void {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$appView = $this->createMock(AppViewClient::class);
+		$appView->method('query')->willReturn(['posts' => [
+			['uri' => 'at://a/new', 'record' => ['createdAt' => '2026-10-09T12:00:00.000Z'], 'indexedAt' => '2026-10-09T12:00:01.000Z'],
+			['uri' => 'at://a/backdated', 'record' => ['createdAt' => '2020-01-01T00:00:00.000Z'], 'indexedAt' => '2026-10-09T12:00:01.000Z'],
+			['uri' => 'at://a/ahead', 'record' => ['createdAt' => '2030-01-01T00:00:00.000Z'], 'indexedAt' => '2026-10-01T00:00:00.000Z'],
+			['uri' => 'at://a/undated'],
+		]]);
+		$stored = [];
+		$store = $this->createMock(PostStore::class);
+		$store->method('storePost')->willReturnCallback(static function (array $post) use (&$stored): bool {
+			$stored[] = $post['uri'];
+
+			return true;
+		});
+		$source = new BlueskyPostSource($config, $appView, $this->createMock(IdentityService::class), $store, $this->createMock(LabelerService::class), new NullLogger());
+
+		$this->assertSame(1, $source->tagged('nextcloud', 20, null, (int)strtotime('2026-10-08T00:00:00Z')));
+		$this->assertSame(['at://a/new'], $stored, 'a record dated ahead is as old as when it was seen');
+	}
+
+	public function testNothingIsAskedWhileBlueskyIsOffForTheInstance(): void {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(false);
+		$appView = $this->createMock(AppViewClient::class);
+		$appView->expects($this->never())->method('query');
+		$source = new BlueskyPostSource($config, $appView, $this->createMock(IdentityService::class), $this->createMock(PostStore::class), $this->createMock(LabelerService::class), new NullLogger());
+
+		$this->assertSame(0, $source->tagged('nextcloud', 20, null, 1));
+	}
 }

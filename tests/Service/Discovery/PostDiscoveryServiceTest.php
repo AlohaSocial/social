@@ -38,4 +38,16 @@ class PostDiscoveryServiceTest extends TestCase {
 		$this->assertSame(7, $service->fill(PostDiscoveryService::TAG, 'nextcloud'));
 		$this->assertSame(2, $service->fill(PostDiscoveryService::SEARCH, 'open source', $alice->getId()));
 	}
+
+	public function testAFollowedTagIsAskedOfEveryNetworkAsNobodyFromWhenItWasLastRead(): void {
+		$fediverse = $this->createMock(FediversePostSource::class);
+		$fediverse->expects($this->once())->method('tagged')->with('nextcloud', 20, null, 1_700_000_000)->willReturn(2);
+		$bluesky = $this->createMock(BlueskyPostSource::class);
+		$bluesky->expects($this->once())->method('tagged')->with('nextcloud', 20, null, 1_700_000_000)->willThrowException(new \RuntimeException('down'));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->willReturnMap([[FediversePostSource::class, $fediverse], [BlueskyPostSource::class, $bluesky]]);
+		$service = new PostDiscoveryService($this->createMock(CacheActorService::class), new NullLogger(), $container);
+
+		$this->assertSame(2, $service->fillTag('nextcloud', 20, 1_700_000_000), 'one network failing leaves the other');
+	}
 }

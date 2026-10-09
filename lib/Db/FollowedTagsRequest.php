@@ -154,4 +154,44 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 
 		return $tags;
 	}
+
+	/**
+	 * The hashtags somebody here follows, each once, the one whose posts were
+	 * read from beyond this server longest ago first — never read first of
+	 * all — for `Service\Discovery\FollowedTagsFill`.
+	 *
+	 * A tag followed by several accounts is several rows, stamped together by
+	 * markFilled(); a row added since carries 0, so the latest stamp is when
+	 * the tag was read.
+	 *
+	 * @return list<array{hashtag: string, filled: int}>
+	 */
+	public function dueForFill(int $limit): array {
+		$qb = $this->getQueryBuilder();
+		$qb->select('hashtag')->selectAlias($qb->func()->max('filled'), 'last_filled')
+			->from(self::TABLE_FOLLOWED_TAGS)
+			->groupBy('hashtag')
+			->orderBy('last_filled', 'asc')
+			->addOrderBy('hashtag', 'asc')
+			->setMaxResults(max(1, $limit));
+
+		$tags = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$tags[] = ['hashtag' => (string)$data['hashtag'], 'filled' => (int)$data['last_filled']];
+		}
+		$cursor->closeCursor();
+
+		return $tags;
+	}
+
+	/** Records that the posts with a followed hashtag were read at `$time`. */
+	public function markFilled(string $hashtag, int $time): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update(self::TABLE_FOLLOWED_TAGS)
+			->set('filled', $qb->createNamedParameter($time, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('hashtag', $qb->createNamedParameter($hashtag)));
+
+		$qb->executeStatement();
+	}
 }

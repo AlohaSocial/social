@@ -43,7 +43,7 @@ class FediversePostSource implements PostSource {
 	}
 
 	#[\Override]
-	public function tagged(string $tag, int $limit, ?Person $viewer): int {
+	public function tagged(string $tag, int $limit, ?Person $viewer, int $since = 0): int {
 		$uris = [];
 		$asked = 0;
 		foreach ($this->directory->sources() as $source) {
@@ -63,6 +63,9 @@ class FediversePostSource implements PostSource {
 			}
 			foreach ($statuses as $status) {
 				$uri = is_array($status) ? (string)($status['uri'] ?? '') : '';
+				if ($since > 0 && self::writtenAt($status) < $since) {
+					continue;
+				}
 				if (preg_match('#^https?://#i', $uri) === 1) {
 					$uris[$uri] = true;
 				}
@@ -88,6 +91,15 @@ class FediversePostSource implements PostSource {
 		}
 
 		return $stored;
+	}
+
+	/**
+	 * When a Mastodon status says it was written, 0 when it does not say.
+	 */
+	private static function writtenAt(mixed $status): int {
+		$time = is_array($status) ? strtotime((string)($status['created_at'] ?? '')) : false;
+
+		return $time === false ? 0 : $time;
 	}
 
 	#[\Override]

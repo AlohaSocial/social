@@ -20,9 +20,11 @@ interface PostSource {
 	/**
 	 * Stores the newest posts with the hashtag this server does not hold.
 	 *
+	 * @param int $since a Unix time: posts written before it are left out;
+	 *                   0 for no bound
 	 * @return int how many were stored
 	 */
-	public function tagged(string $tag, int $limit, ?Person $viewer): int;
+	public function tagged(string $tag, int $limit, ?Person $viewer, int $since = 0): int;
 
 	/**
 	 * Stores the posts matching the search this server does not hold.

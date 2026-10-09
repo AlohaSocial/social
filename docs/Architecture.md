@@ -225,7 +225,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_stream_card` | The link-preview card of a status (url, title, description, image, provider), one row per stream |
 | `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice |
 | `social_gif` | The instance's shared picture library the composer offers, unique on the slug; the bytes live in appdata beside the custom emoji |
-| `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair |
+| `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair; `filled` is when the tag's posts were last read from beyond this server (`FollowedTagsFill`, Unix time, 0 for never), indexed with the tag (`Version1000Date20261009000710`) |
 | `social_interest` | For you: one row per (reader, lowercased tag), unique on the pair — the score reading earned it, when (`scored_at`, unix time, so decay is worked out on read), whether the reader added it (`manual`), the rank they pinned it to (`position`, null to float) and the score as the current week began (`score_week`, for the trend arrow) |
 | `social_interest_hide` | The posts a reader said "less like this" about, by `stream_nid`, unique on (reader, post); forgotten once older than the feed looks back |
 | `social_collection` | Collections: an album an account curates out of its own posts, with its title, description and visibility |
@@ -1646,6 +1646,34 @@ What is found is stored like any arriving post, indexed for the search as
 it is stored, so the timeline and the search simply have it the next time.
 The answers say `X-Social-Filling` while the read is new.
 
+**Followed hashtags** are read the same way without anybody looking:
+`Cron\FillFollowedTags`, every quarter of an hour, runs
+`Service\Discovery\FollowedTagsFill`, which takes the hashtags somebody here
+follows, each once, ten a run, never read first and then the one read
+longest ago (`FollowedTagsRequest::dueForFill()`, from
+`social_followed_tag.filled`), and asks every `PostSource` for each
+(`PostDiscoveryService::fillTag()`, as nobody in particular). Bounded so a
+popular tag cannot flood a timeline: at most 20 posts a tag from each
+network a run, only those written since the tag was last read (less ten
+minutes, for a post a network shows late) and never any older than two
+days, which is also all a first read goes back; a Fediverse status is dated
+by its `created_at`, a Bluesky post by the earlier of its record's
+`createdAt` and the AppView's `indexedAt`. A tag a page has just had read
+shares the ten-minute throttle (`RemoteFetchQueue::claimPostsFill()`) and
+waits for the next run. What an administrator has turned off holds: with
+Bluesky off for the instance, `BlueskyPostSource` asks nothing, and the
+servers asked are the directory's.
+
+Nothing is written for the home timeline. Its followed-tags half
+(`StreamRequest::followedTagNids()`) is a join at read time of the post's
+stored tags (`social_stream_tag`) with the reader's followed tags, limited
+to posts addressed to the public collection — and a post read from Bluesky
+is stored addressed to it, its hashtags as tags (those in the text and the
+record's `tags` beside it, which Bluesky's search finds a post by too). So a
+stored post is in the home timeline of everybody following one of its tags,
+and blocks, mutes, silenced accounts and keyword filters apply to it as to
+any post there.
+
 ### Hidden replies
 
 The author of a thread's first post may hide any reply in it, wherever it
@@ -3001,6 +3029,7 @@ $context->registerEventListener(PostPublishedEvent::class, MyListener::class);
 | Background Jobs | `Cron\AtprotoMaintenance` | `appinfo/info.xml` | 5-minute interval, only while Bluesky is on: reconciles the last day's public posts with their Bluesky records (publishes what the listener missed, replaces an edit within the grace period, removes the record of a deleted post), resends directory operations the PLC refused, prunes the firehose past its replay window, drops retired instance keys, and asks the AppView about a page of the last week's stored Bluesky posts, deleting those it no longer has (`DeletionSweep`, cursor in `atproto_delete_cursor`) |
 | Background Jobs | `Cron\AtprotoSync` | `appinfo/info.xml` | 2-minute interval, only while Bluesky is on: reads the newest page of each due watch (`social_atproto_watch`) from the public AppView and stores what is new, then asks the AppView's notifications for each due local account (`social_atproto_notify_cursor`); both within the request ceiling, both backed off after empty reads |
 | Background Jobs | `Cron\AtprotoVideo` | `appinfo/info.xml` | 1-minute interval, only while Bluesky is on and a video service is set: sends up to three queued videos to Bluesky's video service in their accounts' names, asks after the jobs being made, and publishes each post whose video has ended — with the video, or as a link (`social_atproto_video`) |
+| Background Jobs | `Cron\FillFollowedTags` | `appinfo/info.xml` | 15-minute interval: reads the new posts with ten of the hashtags people here follow from every network (`FollowedTagsFill`), the ones read longest ago first — see **Hashtags and searches beyond this server** |
 | Background Jobs | `Cron\AtprotoPublish` | queued by `AtprotoPostListener` and `AccountService` | One post or profile at a time: publish, edit, delete, profile — the work the listener queues on the post events, done off the request. Not in `appinfo/info.xml`: meaningless without its argument. The maintenance job is the backstop for a job that failed or was never queued |
 | Background Jobs | `Cron\AtprotoMove` | queued by `MoveAwayService`, `MoveInService` and `InboundMoveService` | One move of a Bluesky account, the steps left of it: away — the repository, the blobs, the preferences, the DID, the activation; here — the repository, the blobs, the preferences, the follows, then, once the person entered the e-mailed code, the DID and the posts into the timeline; moved here by the other side — the follows and the posts, once the account is active. Not in `appinfo/info.xml`: meaningless without its argument. A step that fails stops it, and the person starts it again from there |
 | Repair step | `Migration\EncryptPrivateKeys` | `appinfo/info.xml` | Seals legacy plaintext actor private keys with ICrypto, once. A row it cannot process is named and skipped rather than aborting `occ upgrade` with the instance in maintenance mode |

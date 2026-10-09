@@ -659,6 +659,17 @@ A hashtag's timeline and a search of posts here have Bluesky's posts too
 fediverse servers' hashtag timelines. See **Hashtags and searches beyond
 this server** in Architecture.md.
 
+A hashtag somebody here follows is read the same way every quarter of an
+hour (`FollowedTagsFill`): `searchPosts` with `q=#tag`, `tag=[tag]`,
+`sort=latest`, asked of the public AppView, at most 20 posts a tag, and only
+the posts whose `sortAt` — the earlier of the record's `createdAt` and the
+AppView's `indexedAt` — is after the last read and within two days. Those
+are stored like any Bluesky post, so the home timeline of everybody
+following the tag has them through the same join that puts a Fediverse
+post there. A record's `tags` (the hashtags beside the text) are hashtags
+here as the ones in its facets are: `searchPosts` finds a post by either.
+Nothing is read while Bluesky is off for the instance.
+
 ### 9.4d Who follows an account, and whom it follows
 
 The followers and following lists of an account on Bluesky have the ones
