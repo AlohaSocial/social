@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.200
+**App version:** 0.26.201
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1839,7 +1839,11 @@ first), and each record is tied to what it stands for by its local id —
 `BlueskyLists` finds it again. Records this server writes never pass
 through `WriteService`, and a record that already stands for a list is not
 imported again, so nothing goes round in a circle. A group list stays
-private: who is in a group is not its member's to show.
+private: who is in a group is not its member's to show. Withdrawing a list
+also takes the items in the repository that name it and stand for no
+member here; a public list not on Bluesky yet is published by the
+maintenance pass (`BlueskyLists::publishMissing()`, a page of lists at a
+time, the place kept with `DurableCache::setShared()`).
 
 ### Switching off Bluesky
 
@@ -1893,7 +1897,7 @@ web app draws one check, `VerifiedBadge`, for this and for Bluesky's own
 verification (`bluesky.verified`), naming who verified; `BlueskyBadge` is
 the butterfly alone. The Fediverse's `rel="me"` link verification
 (`ProfileLinkVerifier`, `VerifiedCheck`) is a different thing — a page
-proving a profile row — and stays apart.
+proving a profile row — and stays apart. A deleted account's verification goes with it (`ActorCascadeService`, not on a suspension).
 
 Bluesky is where the instance's verifications are published: the
 administrator's verifying account (`verification_account`) issues an

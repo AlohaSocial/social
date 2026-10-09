@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Firehose\EventService;
 use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
+use OCA\Social\Atproto\Publisher\BlueskyLists;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Reader\DeletionSweep;
 use OCA\Social\Atproto\Reader\DetachedQuoteSweep;
@@ -46,6 +47,7 @@ class AtprotoMaintenance extends TimedJob {
 		private AtprotoOAuthRequest $oauth,
 		private CustomHandleService $customHandles,
 		private LoggerInterface $logger,
+		private ?BlueskyLists $lists = null,
 	) {
 		parent::__construct($time);
 		$this->setInterval(self::INTERVAL);
@@ -66,6 +68,7 @@ class AtprotoMaintenance extends TimedJob {
 			'expired app sessions' => fn (): int => $this->clients->pruneSessions($this->time->getTime()),
 			'expired OAuth requests and sessions' => fn (): int => $this->oauth->prune($this->time->getTime()),
 			'custom handles that no longer resolve' => fn (): int => $this->customHandles->recheck(),
+			'public lists not on Bluesky yet' => fn (): int => $this->lists?->publishMissing() ?? 0,
 		] as $step => $run) {
 			try {
 				$run();

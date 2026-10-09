@@ -38,6 +38,7 @@ use OCA\Social\Db\StoryInteractionsRequest;
 use OCA\Social\Db\StreamActionsRequest;
 use OCA\Social\Db\StreamViewsRequest;
 use OCA\Social\Db\WatchRequest;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -97,6 +98,7 @@ class ActorCascadeService {
 		private CacheDocumentService $cacheDocumentService,
 		private AtprotoCascade $atproto,
 		private LoggerInterface $logger,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -185,6 +187,10 @@ class ActorCascadeService {
 			// a local account has no cached copy; deleting one that is not
 			// there is not a failure
 			'cachedActor' => fn () => $this->cacheActorsRequest->deleteCacheById($actorId),
+			// this instance's verification of it, and the record that says so
+			// on Bluesky; resolved here, as the verification needs services
+			// that need this one
+			'verification' => fn () => $this->container?->get(VerificationService::class)->unverify($actorId),
 		];
 
 		if (!$reversible) {
@@ -198,7 +204,7 @@ class ActorCascadeService {
 		// this account may quietly undo.
 		$steps['relations'] = fn () => $this->actorRelationRequest->deleteByActor($actorId);
 		$steps['muteExpiry'] = fn () => $this->muteExpiryRequest->deleteByActor($actorId);
-		unset($steps['notes'], $steps['reports']);
+		unset($steps['notes'], $steps['reports'], $steps['verification']);
 
 		return $steps;
 	}

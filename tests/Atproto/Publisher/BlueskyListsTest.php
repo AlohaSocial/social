@@ -26,7 +26,10 @@ use OCA\Social\Db\ListsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\DurableCache;
+use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -43,6 +46,12 @@ class BlueskyListsTest extends TestCase {
 	private array $rewritten = [];
 	/** @var StoredRecord[] the owner's threadgates */
 	private array $gates = [];
+
+	/** @var MastodonList[] */
+	private array $publicLists = [];
+	/** @var StoredRecord[] item records in the repository */
+	private array $items = [];
+	private ?DurableCache $durableCache = null;
 
 	private function lists(): BlueskyLists {
 		$publisher = $this->createMock(Publisher::class);
@@ -61,7 +70,11 @@ class BlueskyListsTest extends TestCase {
 		});
 		$repositories = $this->createMock(RepositoryService::class);
 		$repositories->method('getRecordsByLocalId')->willReturnCallback(fn (string $id): array => array_values(array_filter($this->records, static fn (StoredRecord $r): bool => $r->localId === $id)));
-		$repositories->method('listRecords')->willReturnCallback(fn (string $did, string $collection): array => $collection === RecordMapper::THREADGATE ? $this->gates : []);
+		$repositories->method('listRecords')->willReturnCallback(fn (string $did, string $collection): array => match ($collection) {
+			RecordMapper::THREADGATE => $this->gates,
+			BlueskyLists::ITEM => $this->items,
+			default => [],
+		});
 		$repositories->method('write')->willReturnCallback(function (string $did, PrivateKey $key, array $writes): CommitResult {
 			array_push($this->rewritten, ...$writes);
 
@@ -69,6 +82,7 @@ class BlueskyListsTest extends TestCase {
 		});
 		$lists = $this->createMock(ListsRequest::class);
 		$lists->method('getOwnedById')->willReturn((new MastodonList())->setId(7)->setTitle('Friends'));
+		$lists->method('getPublic')->willReturnCallback(fn (int $limit, int $after): array => array_slice(array_values(array_filter($this->publicLists, static fn (MastodonList $l): bool => $l->getId() > $after)), 0, $limit));
 		$lists->method('getMemberIds')->willReturn(['https://bsky.app/profile/did:plc:bob', 'https://social.test/@carol', 'https://remote.example/users/dave']);
 		$cacheActors = $this->createMock(CacheActorService::class);
 		$cacheActors->method('getFromId')->willReturnCallback(static fn (string $id): Person => (new Person())->setId($id)->setLocal(str_starts_with($id, 'https://social.test/')));
@@ -79,7 +93,11 @@ class BlueskyListsTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new BlueskyLists($publisher, $repositories, $lists, $cacheActors, $identities, $time, new NullLogger());
+		$factory = $this->createStub(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(false);
+		$this->durableCache ??= new DurableCache($factory, new InMemoryDurableCacheRequest(), $time);
+
+		return new BlueskyLists($publisher, $repositories, $lists, $cacheActors, $identities, $time, new NullLogger(), $this->durableCache);
 	}
 
 	public function testAListIsPublishedOnceWithTheMembersThatAreOnBluesky(): void {
@@ -101,6 +119,30 @@ class BlueskyListsTest extends TestCase {
 			[BlueskyLists::ITEM, 'list:7#' . md5('https://social.test/@carol')],
 			[BlueskyLists::LIST, 'list:7'],
 		], $this->removed);
+	}
+
+	public function testAPublicListNotOnBlueskyYetIsPublishedByTheNextPass(): void {
+		$this->publicLists = [
+			(new MastodonList())->setId(7)->setTitle('Friends')->setOwnerId('https://social.test/@alice'),
+			(new MastodonList())->setId(8)->setTitle('Work')->setOwnerId('https://social.test/@alice'),
+		];
+		$this->records[] = new StoredRecord(self::DID, BlueskyLists::LIST, '3kwork', Cid::forRaw('w'), '', 'list:8', 0);
+
+		$this->assertSame(1, $this->lists()->publishMissing(1), 'the first page: the list made public while Bluesky was off');
+		$this->assertSame([BlueskyLists::LIST, 'Friends', 'list:7'], $this->written[0]);
+		$this->assertSame(0, $this->lists()->publishMissing(1), 'the next page: the one that is there already');
+		$this->assertSame(0, $this->lists()->publishMissing(1), 'past the end: the next pass starts from the first');
+	}
+
+	public function testAnItemNoMemberHereStandsForGoesWithItsList(): void {
+		$this->records[] = new StoredRecord(self::DID, BlueskyLists::LIST, '3klist', Cid::forRaw('l'), '', 'list:7', 0);
+		$item = static fn (string $rkey, string $list): StoredRecord => new StoredRecord(self::DID, BlueskyLists::ITEM, $rkey, Cid::forRaw($rkey), DagCbor::encode(['$type' => BlueskyLists::ITEM, 'subject' => 'did:plc:gone', 'list' => $list, 'createdAt' => '2026-10-09T10:00:00.000Z']), '', 0);
+		$this->items = [$item('3kgone', 'at://' . self::DID . '/app.bsky.graph.list/3klist'), $item('3kother', 'at://' . self::DID . '/app.bsky.graph.list/3kother')];
+
+		$this->lists()->deleted(7, []);
+
+		$this->assertSame(['3kgone'], array_map(static fn (RepoWrite $write): string => $write->rkey, $this->rewritten), 'only the item of the list that went');
+		$this->assertSame([[BlueskyLists::LIST, 'list:7']], $this->removed);
 	}
 
 	public function testAMemberOfAListNotPublishedIsNotPublished(): void {
