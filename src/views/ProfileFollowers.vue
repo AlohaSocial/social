@@ -53,6 +53,9 @@ import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
 
+/** How long after the first look the accounts from where the account lives are asked for again. */
+export const REFILL_MS = 6000
+
 export default {
 	name: 'ProfileFollowers',
 	components: {
@@ -73,6 +76,7 @@ export default {
 	data() {
 		return {
 			observer: null,
+			refill: null,
 		}
 	},
 
@@ -146,6 +150,16 @@ export default {
 			}
 		},
 
+		/** @return {boolean} whether the server is reading more of this list from where the account lives */
+		filling() {
+			if (!this.profileAccount) {
+				return false
+			}
+			return this.isFollowers
+				? !!this.accountStore.accountsFollowersFilling[this.storeKey]
+				: !!this.accountStore.accountsFollowingsFilling[this.storeKey]
+		},
+
 		maxId() {
 			if (!this.profileAccount) {
 				return 0
@@ -184,6 +198,7 @@ export default {
 		if (this.observer) {
 			this.observer.disconnect()
 		}
+		clearTimeout(this.refill)
 	},
 
 	methods: {
@@ -199,15 +214,36 @@ export default {
 			}
 		},
 
-		fetchData() {
-			if (!this.profileAccount) {
+		/**
+		 * The first page of the list. Who follows an account elsewhere, or whom
+		 * it follows, is read by the server in the background; when it says so,
+		 * the first page is asked for again a little later, once.
+		 */
+		async fetchData() {
+			clearTimeout(this.refill)
+			const account = this.profileAccount
+			if (!account) {
 				return
 			}
-			if (this.isFollowers) {
-				this.accountStore.fetchAccountFollowers({ account: this.profileAccount })
-			} else {
-				this.accountStore.fetchAccountFollowing({ account: this.profileAccount })
+			const followers = this.isFollowers
+			await this.fetchFirstPage(account, followers)
+			if (this.filling && account === this.profileAccount && followers === this.isFollowers) {
+				this.refill = setTimeout(() => {
+					if (account === this.profileAccount && followers === this.isFollowers) {
+						this.fetchFirstPage(account, followers)
+					}
+				}, REFILL_MS)
 			}
+		},
+
+		/**
+		 * @param {string} account whose list
+		 * @param {boolean} followers the followers, or the followed accounts
+		 */
+		fetchFirstPage(account, followers) {
+			return followers
+				? this.accountStore.fetchAccountFollowers({ account })
+				: this.accountStore.fetchAccountFollowing({ account })
 		},
 
 		loadMoreIfNeeded() {

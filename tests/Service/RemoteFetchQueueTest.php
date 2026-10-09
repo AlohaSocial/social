@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Cron\FillFollowLists;
 use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
@@ -167,6 +168,17 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertTrue($this->queue->fillInteractions($remote, 'Like'));
 		$this->assertFalse($this->queue->fillInteractions($remote, 'Like'));
 		$this->assertTrue($this->queue->fillInteractions($remote, 'Announce'));
+	}
+
+	public function testAFollowListIsReadOncePerIntervalAndDirection(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add')->with(FillFollowLists::class, $this->anything());
+		$local = $this->remote('https://social.test/@alice')->setLocal(true);
+
+		$this->assertTrue($this->queue->fillFollowList($this->remote(), 'followers'));
+		$this->assertFalse($this->queue->fillFollowList($this->remote(), 'followers'), 'once per interval');
+		$this->assertTrue($this->queue->fillFollowList($this->remote(), 'following'));
+		$this->assertFalse($this->queue->fillFollowList($local, 'followers'), 'this server knows its own accounts');
 	}
 
 	public function testAHashtagIsReadOncePerIntervalAndASearchPerPerson(): void {

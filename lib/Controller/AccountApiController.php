@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
-use Exception;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -31,11 +30,9 @@ use OCA\Social\Service\AvatarService;
 use OCA\Social\Service\BannerService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
-use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CountsService;
-use OCA\Social\Service\CurlService;
-use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FilterService;
+use OCA\Social\Service\FollowList\FollowListService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\MultipartBodyService;
@@ -72,10 +69,6 @@ class AccountApiController extends MastodonApiController {
 	/** Accounts one `familiar_followers` call answers for; Mastodon's cap too. */
 	private const FAMILIAR_FOLLOWERS_MAX = 20;
 
-	/** Where a remote followers/following page's actor ids are kept, and for how long (seconds). */
-	private const COLLECTION_CACHE = 'social.collections';
-	private const COLLECTION_TTL = 300;
-
 	public function __construct(
 		IRequest $request,
 		IURLGenerator $urlGenerator,
@@ -89,8 +82,6 @@ class AccountApiController extends MastodonApiController {
 		private RelationshipService $relationshipService,
 		private PinService $pinService,
 		private SearchService $searchService,
-		private ConfigService $configService,
-		private CurlService $curlService,
 		private FilterService $filterService,
 		private BannerService $bannerService,
 		private AvatarService $avatarService,
@@ -105,8 +96,8 @@ class AccountApiController extends MastodonApiController {
 		private CountsService $countsService,
 		private InstanceService $instanceService,
 		private RemoteFetchQueue $remoteFetchQueue,
-		private DurableCache $durableCache,
 		private IdentityService $atprotoIdentities,
+		private FollowListService $followLists,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -642,20 +633,6 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 * The handle to judge an account's remoteness by.
-	 *
-	 * The route takes either a handle or a numeric id; only the handle carries
-	 * the host, so for an id it comes from the account that was resolved.
-	 */
-	private function handleOf(string $reference, Person $actor): string {
-		if (is_numeric($reference)) {
-			return $actor->getAccount();
-		}
-
-		return $reference;
-	}
-
-	/**
 	 * Mastodon's account search: what a composer calls to complete a `@handle`
 	 * as somebody types it.
 	 *
@@ -858,10 +835,9 @@ class AccountApiController extends MastodonApiController {
 	}
 
 	/**
-	 *
-	 * @param string $account
-	 *
-	 * @return DataResponse
+	 * The accounts an account follows. For an account on another server
+	 * this is what this server knows and, after it, whom the account's own
+	 * network lists (`FollowListService`); see accountFollowers().
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -875,47 +851,18 @@ class AccountApiController extends MastodonApiController {
 		int|string $min_id = 0,
 		int|string $since = 0,
 	): DataResponse {
-		try {
-			$this->initViewer(false);
-			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
-
-			$parts = explode('@', $this->handleOf($account, $actor));
-			$domain = end($parts);
-			$cloudHost = $this->configService->getCloudHost();
-			$socialAddress = $this->configService->getSocialAddress();
-			// the remote collection is read only for a caller with a session:
-			// it is a fetch of a URL from another server, and every actor on
-			// the page not cached here is queued to be fetched and stored. An
-			// anonymous caller gets what is known here.
-			if ($this->viewer !== null
-				&& $domain !== '' && $domain !== $cloudHost && $domain !== $socialAddress) {
-				$followingUrl = $actor->getFollowing();
-				if (!empty($followingUrl)) {
-					$result = $this->fetchRemoteCollection($followingUrl, $limit);
-					return new DataResponse($result, Http::STATUS_OK);
-				}
-			}
-
-			$options = new ProbeOptions($this->request);
-			$options->setFormat(ACore::FORMAT_LOCAL);
-			$options->setProbe(ProbeOptions::FOLLOWING)
-				->setAccountId($actor->getId())
-				->setLimit($limit)
-				->setMaxId($max_id)
-				->setMinId($min_id)
-				->setSince($since);
-
-			return $this->paged($this->cacheActorService->probeActors($options), $options->getLimit());
-		} catch (Throwable $e) {
-			return $this->error($e);
-		}
+		return $this->followList($account, ProbeOptions::FOLLOWING, $limit, $max_id, $min_id, $since);
 	}
 
 	/**
+	 * The accounts that follow an account.
 	 *
-	 * @param string $account
-	 *
-	 * @return DataResponse
+	 * The ones this server knows come first, paged by their ids as always.
+	 * For an account on another server the ones its own network lists follow
+	 * after the last of them, read in the background and kept for an hour
+	 * (`X-Social-Filling: 1` while that read was just asked for); a page that
+	 * reaches into those is continued by the `max_id` of its last account.
+	 * An account that hides its list where it lives has it hidden here too.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -929,156 +876,54 @@ class AccountApiController extends MastodonApiController {
 		int|string $min_id = 0,
 		int|string $since = 0,
 	): DataResponse {
+		return $this->followList($account, ProbeOptions::FOLLOWERS, $limit, $max_id, $min_id, $since);
+	}
+
+	private function followList(
+		string $account,
+		string $direction,
+		int $limit,
+		int|string $max_id,
+		int|string $min_id,
+		int|string $since,
+	): DataResponse {
 		try {
 			$this->initViewer(false);
-
 			$actor = $this->cacheActorService->resolve($account, $this->viewer !== null);
-
-			$parts = explode('@', $this->handleOf($account, $actor));
-			$domain = end($parts);
-			$cloudHost = $this->configService->getCloudHost();
-			$socialAddress = $this->configService->getSocialAddress();
-			// see accountFollowing(): reading a remote collection fetches it
-			// and queues a fetch per uncached entry, so it needs a session
-			if ($this->viewer !== null
-				&& $domain !== '' && $domain !== $cloudHost && $domain !== $socialAddress) {
-				$followersUrl = $actor->getFollowers();
-				if (!empty($followersUrl)) {
-					$result = $this->fetchRemoteCollection($followersUrl, $limit);
-					return new DataResponse($result, Http::STATUS_OK);
-				}
-			}
 
 			$options = new ProbeOptions($this->request);
 			$options->setFormat(ACore::FORMAT_LOCAL);
-			$options->setProbe(ProbeOptions::FOLLOWERS)
+			$options->setProbe($direction)
 				->setAccountId($actor->getId())
 				->setLimit($limit)
 				->setMaxId($max_id)
 				->setMinId($min_id)
 				->setSince($since);
 
-			return $this->paged($this->cacheActorService->probeActors($options), $options->getLimit());
+			// what the account's network lists is read for a caller with a
+			// session only: the read is a fetch from another server, and every
+			// account it names not cached here is fetched too
+			if ($this->viewer === null || $actor->isLocal()) {
+				return $this->paged($this->cacheActorService->probeActors($options), $options->getLimit());
+			}
+
+			$page = $this->followLists->page($actor, $direction, $options);
+			if ($page['next'] === null) {
+				$response = $this->paged($page['accounts'], $options->getLimit());
+			} else {
+				$response = new DataResponse($page['accounts'], Http::STATUS_OK);
+				if ($page['next'] !== '') {
+					$response->addHeader('Link', '<' . $this->pageUrl(['max_id' => $page['next']]) . '>; rel="next"');
+				}
+			}
+			if ($page['filling']) {
+				$response->addHeader('X-Social-Filling', '1');
+			}
+
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
-	}
-
-	/**
-	 * The accounts on the first page of a remote followers or following
-	 * collection that are already cached here.
-	 *
-	 * Only cached ones: resolving the rest meant a fetch per entry, one after
-	 * another at the federation timeout each, while the caller waited. They
-	 * are queued for the background instead (`RemoteFetchQueue`), so the
-	 * list fills in on the next look. The collection's ids are kept for
-	 * `COLLECTION_TTL`, so paging through a profile or reopening it does not
-	 * fetch the collection again either.
-	 *
-	 * @return Person[]
-	 */
-	private function fetchRemoteCollection(string $url, int $limit = 20): array {
-		$limit = max(1, min(ProbeOptions::MAX_LIMIT, $limit));
-		$ids = array_slice($this->remoteCollectionIds($url), 0, $limit);
-		$cached = $this->cacheActorService->getCachedFromIds($ids);
-
-		$actors = [];
-		$missing = [];
-		foreach ($ids as $id) {
-			$person = $cached[$id] ?? null;
-			if ($person === null) {
-				$missing[] = $id;
-				continue;
-			}
-
-			// every id in the API addresses exactly one account, so a page
-			// of accounts all sharing id "0" is one a client cannot act on
-			if ($person->getNid() <= 0) {
-				continue;
-			}
-
-			$person->setExportFormat(ACore::FORMAT_LOCAL);
-			$actors[] = $person;
-		}
-
-		$this->remoteFetchQueue->resolveActors($missing);
-
-		return $actors;
-	}
-
-	/**
-	 * The actor ids on the first page of a remote collection, at most
-	 * `ProbeOptions::MAX_LIMIT` of them, in the collection's order.
-	 *
-	 * A page can carry far more entries than any client asks for, so the walk
-	 * is bounded as well as the answer. A collection that could not be read is
-	 * not remembered, so the next look asks again.
-	 *
-	 * @return string[]
-	 */
-	private function remoteCollectionIds(string $url): array {
-		$key = md5($url);
-		try {
-			$known = $this->durableCache->get(self::COLLECTION_CACHE, $key);
-			if (is_array($known)) {
-				return array_values(array_filter($known, 'is_string'));
-			}
-		} catch (Throwable $e) {
-			// a cache that cannot be read is a miss
-		}
-
-		try {
-			$collectionData = $this->curlService->retrieveObject($url);
-
-			$pageData = $collectionData;
-			if (isset($collectionData['first'])) {
-				$pageUrl = is_array($collectionData['first'])
-					? ($collectionData['first']['id'] ?? '')
-					: $collectionData['first'];
-				if (!empty($pageUrl) && is_string($pageUrl)) {
-					$pageData = $this->curlService->retrieveObject($pageUrl);
-				} elseif (is_array($collectionData['first'])) {
-					$pageData = $collectionData['first'];
-				}
-			}
-		} catch (Exception $e) {
-			return [];
-		}
-
-		$items = $pageData['orderedItems'] ?? $pageData['items'] ?? [];
-		if (!is_array($items)) {
-			return [];
-		}
-
-		$ids = [];
-		foreach (array_slice($items, 0, ProbeOptions::MAX_LIMIT) as $item) {
-			// an entry is the actor's id or the actor inline; either way only
-			// the id is taken, and the actor is what is cached under it
-			$id = '';
-			if (is_array($item) && isset($item['id']) && is_string($item['id'])) {
-				$id = $item['id'];
-			} elseif (is_string($item)) {
-				$id = $item;
-			}
-
-			$anchor = strpos($id, '#');
-			if ($anchor !== false) {
-				$id = substr($id, 0, $anchor);
-			}
-
-			if ($id !== '') {
-				$ids[$id] = $id;
-			}
-		}
-		$ids = array_values($ids);
-
-		try {
-			$this->durableCache->set(self::COLLECTION_CACHE, $key, $ids, self::COLLECTION_TTL);
-		} catch (Throwable $e) {
-			// the answer stands; the next look fetches the collection again
-		}
-
-		return $ids;
 	}
 
 	/**

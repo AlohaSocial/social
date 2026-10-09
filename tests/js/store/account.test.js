@@ -46,6 +46,8 @@ function freshState() {
 		accountsFollowingsAllLoaded: {},
 		accountsFollowersFailed: {},
 		accountsFollowingsFailed: {},
+		accountsFollowersFilling: {},
+		accountsFollowingsFilling: {},
 	}
 }
 
@@ -779,6 +781,20 @@ describe('account store actions', () => {
 			axios.get.mockResolvedValue({ data: [bob] })
 			await store.fetchAccountFollowers({ account: ALICE, maxId: store.accountsFollowersMaxId[alice.url] })
 			expect(axios.get).toHaveBeenCalledWith(`${API}/accounts/${ALICE}/followers`, { params: { limit: 20, max_id: '219' } })
+		})
+
+		it('remembers whether the server is reading more of the list from elsewhere', async () => {
+			axios.get.mockResolvedValue({ data: [bob], headers: { 'x-social-filling': '1' } })
+			await store.fetchAccountFollowers({ account: ALICE })
+			expect(store.accountsFollowersFilling[alice.url]).toBe(true)
+
+			axios.get.mockResolvedValue({ data: [bob, carol], headers: {} })
+			await store.fetchAccountFollowers({ account: ALICE })
+			expect(store.accountsFollowersFilling[alice.url]).toBe(false)
+
+			axios.get.mockResolvedValue({ data: [carol], headers: { 'x-social-filling': '1' } })
+			await store.fetchAccountFollowing({ account: ALICE })
+			expect(store.accountsFollowingsFilling[alice.url]).toBe(true)
 		})
 
 		it('does not start a second request while one is running', async () => {

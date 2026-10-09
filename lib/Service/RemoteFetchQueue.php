@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Cron\FillFollowLists;
 use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
@@ -51,6 +52,11 @@ class RemoteFetchQueue {
 	public const INTERACTIONS_INTERVAL = 600;
 
 	private const INTERACTIONS_FILLED = 'social.reactfill';
+
+	/** Seconds between two reads of one account's followers, or of whom it follows. */
+	public const FOLLOW_LISTS_INTERVAL = 600;
+
+	private const FOLLOW_LISTS_FILLED = 'social.followfill';
 
 	/** Seconds between two reads of one hashtag, or of one search. */
 	public const POSTS_INTERVAL = 600;
@@ -144,6 +150,33 @@ class RemoteFetchQueue {
 		}
 
 		$this->queue(FillInteractions::class, ['post' => $post->getId(), 'type' => $type]);
+
+		return true;
+	}
+
+	/**
+	 * Queues a read of who follows an account on another server, or whom it
+	 * follows, where it lives (`Cron\FillFollowLists`), at most once per
+	 * `FOLLOW_LISTS_INTERVAL` per account and direction.
+	 *
+	 * @param string $direction `FollowListService::FOLLOWERS` or `::FOLLOWING`
+	 * @return bool whether a read was asked for
+	 */
+	public function fillFollowList(Person $account, string $direction): bool {
+		if ($account->isLocal() || $account->getId() === '') {
+			return false;
+		}
+		$key = md5($direction . "\0" . $account->getId());
+		try {
+			if ($this->durableCache->get(self::FOLLOW_LISTS_FILLED, $key) !== null) {
+				return false;
+			}
+			$this->durableCache->set(self::FOLLOW_LISTS_FILLED, $key, 1, self::FOLLOW_LISTS_INTERVAL);
+		} catch (Throwable $e) {
+			// the job list's own dedupe still holds
+		}
+
+		$this->queue(FillFollowLists::class, ['actor' => $account->getId(), 'direction' => $direction]);
 
 		return true;
 	}

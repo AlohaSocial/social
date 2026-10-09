@@ -659,6 +659,17 @@ A hashtag's timeline and a search of posts here have Bluesky's posts too
 fediverse servers' hashtag timelines. See **Hashtags and searches beyond
 this server** in Architecture.md.
 
+### 9.4d Who follows an account, and whom it follows
+
+The followers and following lists of an account on Bluesky have the ones
+the AppView lists in them too (`BlueskyFollowListSource`:
+`app.bsky.graph.getFollowers`, `getFollows`, up to three pages and 100
+accounts), after the follows this server knows, read in the background
+beside the fediverse's `followers`/`following` collections. Each account is
+cached as it is found; one of this server's own accounts is named as
+itself. Bluesky has no way to hide the lists, so nothing is hidden. See
+**Who follows an account, and whom it follows** in Architecture.md.
+
 ### 9.5 Deletes and edits from Bluesky
 
 A `delete` op from Jetstream, or a post gone from the author feed on the
