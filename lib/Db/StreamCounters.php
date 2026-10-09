@@ -55,7 +55,51 @@ trait StreamCounters {
 		Details::LIKES => [Stream::COUNTER_COLUMNS[Details::LIKES], Details::REMOTE_LIKES, Like::TYPE],
 		Details::BOOSTS => [Stream::COUNTER_COLUMNS[Details::BOOSTS], Details::REMOTE_BOOSTS, Announce::TYPE],
 		Details::DISLIKES => [Stream::COUNTER_COLUMNS[Details::DISLIKES], '', Dislike::TYPE],
+		Details::QUOTES => [Stream::COUNTER_COLUMNS[Details::QUOTES], Details::REMOTE_QUOTES, self::QUOTED],
 	];
+
+	/** what {@see self::countedHereSql()} counts for quotes: posts naming it as their quote */
+	private const QUOTED = 'quote';
+
+	/**
+	 * Counts the posts quoting a post again and stores the total on it, as
+	 * replies are counted; `remote_quotes` is what the post's own network
+	 * reported.
+	 *
+	 * @param string $quoted the id of the post that was quoted
+	 */
+	public function recountQuotes(string $quoted): void {
+		if ($quoted === '') {
+			return;
+		}
+
+		try {
+			$post = $this->getStreamById($quoted);
+		} catch (StreamNotFoundException $e) {
+			return;
+		}
+
+		$this->recount($post, Details::QUOTES);
+	}
+
+	/**
+	 * How many posts held here quote a post.
+	 */
+	public function countQuotesOf(string $id): int {
+		$qb = $this->getQueryBuilder();
+		$prim = $qb->prim($id);
+		if ($prim === '') {
+			return 0;
+		}
+		$qb->select($qb->func()->count('*', 'count'))
+			->from(self::TABLE_STREAM)
+			->where($qb->expr()->eq('quote_prim', $qb->createNamedParameter($prim)));
+		$cursor = $qb->executeQuery();
+		$data = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return (int)($data['count'] ?? 0);
+	}
 
 	/**
 	 * Counts the replies to a post again and stores the total on it.
@@ -154,9 +198,14 @@ trait StreamCounters {
 	 * aggregate inside a derived table is never merged into the outer query,
 	 * so it always is.
 	 *
-	 * @param string $type the action counted, or '' for replies
+	 * @param string $type the action counted, '' for replies, `quote` for quotes
 	 */
 	private function countedHereSql(SocialQueryBuilder $qb, string $prim, string $type): string {
+		if ($type === self::QUOTED) {
+			return '(SELECT `c` FROM (SELECT COUNT(*) AS `c` FROM ' . $qb->getTableName(self::TABLE_STREAM)
+				. ' WHERE ' . $qb->getColumnName('quote_prim') . ' = ' . (string)$qb->createNamedParameter($prim)
+				. ') `quotes`)';
+		}
 		if ($type === '') {
 			return '(SELECT `c` FROM (SELECT COUNT(*) AS `c` FROM ' . $qb->getTableName(self::TABLE_STREAM)
 				. ' WHERE ' . $qb->getColumnName('in_reply_to_prim') . ' = ' . (string)$qb->createNamedParameter($prim)

@@ -360,6 +360,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		// a reply count — a local post being deleted, which never reaches this
 		// interface — has to do exactly the same arithmetic
 		$this->streamRequest->recountReplies($stream->getInReplyTo());
+		$this->streamRequest->recountQuotes($stream->getQuote());
 	}
 
 	/**

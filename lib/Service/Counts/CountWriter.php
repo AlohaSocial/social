@@ -41,9 +41,10 @@ class CountWriter {
 	 * @param ?int $likes the origin's total, null where it stated none
 	 * @param array<string, array<string, mixed>> $merge `details` blocks whose
 	 *                                                   keys are merged into what the post holds
+	 * @param ?int $quotes the origin's total of posts quoting it, null where it stated none
 	 * @return bool whether the post is still stored here
 	 */
-	public function write(string $postId, ?int $likes, ?int $boosts, ?int $replies, array $merge = []): bool {
+	public function write(string $postId, ?int $likes, ?int $boosts, ?int $replies, array $merge = [], ?int $quotes = null): bool {
 		try {
 			// read again rather than trusted from the caller: a like that
 			// arrived while the network was being asked is not this to lose
@@ -55,6 +56,7 @@ class CountWriter {
 		$this->applyCount($post, Details::LIKES, Details::REMOTE_LIKES, $likes, $this->actions->countActions($postId, Like::TYPE));
 		$this->applyCount($post, Details::BOOSTS, Details::REMOTE_BOOSTS, $boosts, $this->actions->countActions($postId, Announce::TYPE));
 		$this->applyCount($post, Details::REPLIES, Details::REMOTE_REPLIES, $replies, $this->streams->countRepliesTo($postId));
+		$this->applyCount($post, Details::QUOTES, Details::REMOTE_QUOTES, $quotes, $this->streams->countQuotesOf($postId));
 		foreach ($merge as $key => $values) {
 			$post->setDetailArray($key, array_merge($post->getDetails($key), $values));
 		}
@@ -62,7 +64,7 @@ class CountWriter {
 		// the origin's halves are `details` keys, the totals are columns that
 		// add what is counted here to them, in the statement that writes them
 		$this->streams->updateDetails($post, $this->now());
-		$this->streams->recount($post, Details::LIKES, Details::BOOSTS, Details::REPLIES);
+		$this->streams->recount($post, Details::LIKES, Details::BOOSTS, Details::REPLIES, Details::QUOTES);
 
 		return true;
 	}

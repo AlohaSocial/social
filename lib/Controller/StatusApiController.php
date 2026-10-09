@@ -509,10 +509,14 @@ class StatusApiController extends MastodonApiController {
 			// scrolled past rather than read
 			$this->viewCountService->seen($item, $this->viewer);
 			// and what its likes, boosts and replies are now where it lives,
-			// asked in the background
-			$this->counts->seen([$item]);
+			// asked in the background; a client that knows the header asks
+			// for the post again a little later
+			$response = new DataResponse($item, Http::STATUS_OK);
+			if ($this->counts->seen([$item])) {
+				$response->addHeader('X-Social-Filling', '1');
+			}
 
-			return new DataResponse($item, Http::STATUS_OK);
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

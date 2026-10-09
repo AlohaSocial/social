@@ -57,5 +57,20 @@ class AtprotoCountsTest extends TestCase {
 			return (int)($status['favourites_count'] ?? 0) === 1 ? true : null;
 		});
 		$this->assertTrue($counted ?? false, 'the like is counted here, the status says ' . json_encode(array_intersect_key($status, array_flip(['favourites_count', 'reblogs_count', 'replies_count']))));
+
+		// and a quote of it, by somebody nobody here follows: counted all the same
+		[$code, $answer] = $this->network->asUser('POST', 'com.atproto.repo.createRecord', [
+			'repo' => $likerDid, 'collection' => 'app.bsky.feed.post',
+			'record' => ['$type' => 'app.bsky.feed.post', 'text' => 'Quoting it', 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'), 'embed' => ['$type' => 'app.bsky.embed.record', 'record' => $post]],
+		]);
+		$this->assertSame(200, $code, json_encode($answer));
+		$this->assertNotNull($this->network->await(fn (): ?bool => (int)($this->network->postView($post['uri'])['quoteCount'] ?? 0) === 1 ? true : null), 'the AppView counts the quote');
+		$quoted = $this->network->await(function () use ($counts, $postId, $nid, &$status): ?bool {
+			$counts->refreshPosts([Server::get(StreamRequest::class)->getStreamById($postId)]);
+			$status = $this->alice->status($nid) ?? [];
+
+			return (int)($status['quotes_count'] ?? 0) === 1 ? true : null;
+		});
+		$this->assertTrue($quoted ?? false, 'the quote is counted here, the status says quotes_count ' . json_encode($status['quotes_count'] ?? null));
 	}
 }

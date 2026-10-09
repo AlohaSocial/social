@@ -41,6 +41,7 @@ class CountWriterTest extends TestCase {
 		$this->actions = $this->createMock(ActionsRequest::class);
 		$this->actions->method('countActions')->willReturnCallback(static fn (string $id, string $type): int => $type === Like::TYPE ? 2 : ($type === Announce::TYPE ? 1 : 0));
 		$this->streams->method('countRepliesTo')->willReturn(1);
+		$this->streams->method('countQuotesOf')->willReturn(1);
 	}
 
 	private function writer(): CountWriter {
@@ -65,13 +66,23 @@ class CountWriterTest extends TestCase {
 				$this->assertSame(2, $post->getDetailInt(Details::REMOTE_REPLIES));
 			});
 		$this->streams->expects($this->once())->method('recount')
-			->with($this->identicalTo($post), Details::LIKES, Details::BOOSTS, Details::REPLIES)
+			->with($this->identicalTo($post), Details::LIKES, Details::BOOSTS, Details::REPLIES, Details::QUOTES)
 			->willReturnCallback(function () use (&$calls): void {
 				$calls[] = 'recount';
 			});
 
 		$this->assertTrue($this->writer()->write(self::POST, 10, 4, 3));
 		$this->assertSame(['details', 'recount'], $calls, 'the halves are stored before the recount that adds to them');
+	}
+
+	public function testTheQuotesTheOriginCountsAreStoredAsTheirHalfToo(): void {
+		$post = new Note();
+		$post->setId(self::POST);
+		$this->streams->method('getStreamById')->willReturn($post);
+
+		$this->writer()->write(self::POST, null, null, null, [], 5);
+
+		$this->assertSame(4, $post->getDetailInt(Details::REMOTE_QUOTES), 'the one quote held here is added by the recount');
 	}
 
 	public function testACountTheOriginDoesNotStateKeepsWhatWasStored(): void {

@@ -1,6 +1,7 @@
 OC.L10N.register(
     "social",
     {
+    "_Quoted %n time_::_Quoted %n times_" : ["%n-mal zitiert","%n-mal zitiert"],
     "This account has blocked you" : "Dieses Konto hat dich blockiert",
     "Relays carry this server" : "Relays tragen diesen Server",
     "Who may send you direct messages" : "Wer dir Direktnachrichten senden darf",

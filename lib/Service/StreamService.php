@@ -567,6 +567,7 @@ class StreamService {
 		// without this the parent went on claiming a reply that no page could
 		// show — and the recount has to happen after the row has gone.
 		$this->streamRequest->recountReplies($item->getInReplyTo());
+		$this->streamRequest->recountQuotes($item->getQuote());
 
 		// after the row has gone and the Delete is queued, with the post as it
 		// last was: anything that copied it somewhere else needs the id to
@@ -679,7 +680,11 @@ class StreamService {
 		// meant the one post the reader actually opened was the only one
 		// without its link preview
 		$this->attachCardsToPosts(array_merge($context['ancestors'], [$post], $context['descendants']));
-		$this->countService?->seen(array_merge($context['ancestors'], [$post], $context['descendants']));
+		// counts being asked for are more of the thread on its way, which the
+		// web app reads again a little later
+		if ($this->countService?->seen(array_merge($context['ancestors'], [$post], $context['descendants'])) === true) {
+			$context['filling'] = true;
+		}
 
 		return $context;
 	}
@@ -1184,6 +1189,7 @@ class StreamService {
 					// left the parent's count where it was — which, when the origin
 					// publishes no `replies.totalItems`, was "no replies at all"
 					$this->streamRequest->recountReplies($note->getInReplyTo());
+					$this->streamRequest->recountQuotes($note->getQuote());
 					$synced++;
 					$this->logger->debug('[syncRemoteTimeline] Saved post', ['id' => $note->getId()]);
 				} catch (Exception $e) {

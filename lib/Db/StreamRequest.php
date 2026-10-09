@@ -1120,11 +1120,13 @@ class StreamRequest extends StreamRequestBuilder {
 	 * `2026-09-12T10:00:00+02:00` would otherwise be stored as 10:00 and read
 	 * back as 10:00 UTC — the right text for the wrong instant.
 	 */
-	private function setPostFields(IQueryBuilder $qb, Stream $stream, bool $insert): void {
+	private function setPostFields(SocialQueryBuilder $qb, Stream $stream, bool $insert): void {
 		$values = [
 			'tags' => [json_encode($stream->getTags(), JSON_UNESCAPED_SLASHES), IQueryBuilder::PARAM_STR],
 			'language' => [$stream->getLanguage(), IQueryBuilder::PARAM_STR],
 			'quote' => [$stream->getQuote(), IQueryBuilder::PARAM_STR],
+			// what the quotes of a post are counted and found by
+			'quote_prim' => [$qb->prim($stream->getQuote()), IQueryBuilder::PARAM_STR],
 			'quote_authorization' => [$stream->getQuoteAuthorization(), IQueryBuilder::PARAM_STR],
 			'quote_policy' => [$stream->getQuotePolicy(), IQueryBuilder::PARAM_STR],
 			'updated' => [$this->updatedAsDate($stream->getUpdated()), IQueryBuilder::PARAM_DATE],

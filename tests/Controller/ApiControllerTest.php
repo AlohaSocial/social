@@ -1385,7 +1385,20 @@ class ApiControllerTest extends TestCase {
 		$this->streamService->method('attachCard')->willReturn($item);
 		$this->counts->expects($this->once())->method('seen')->with([$item])->willReturn(true);
 
-		$this->assertSame(Http::STATUS_OK, $this->controller()->statusGet(42)->getStatus());
+		$response = $this->controller()->statusGet(42);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('1', $response->getHeaders()['X-Social-Filling'] ?? null, 'the client reads it again a little later');
+	}
+
+	public function testAStatusWhoseCountsAreCurrentSaysNothingIsOnItsWay(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$item = $this->createMock(Stream::class);
+		$this->streamService->method('getStreamByNid')->willReturn($item);
+		$this->streamService->method('attachCard')->willReturn($item);
+		$this->counts->method('seen')->willReturn(false);
+
+		$this->assertArrayNotHasKey('X-Social-Filling', $this->controller()->statusGet(42)->getHeaders());
 	}
 
 	public function testStatusGetOfUnknownStatusIsAnError(): void {

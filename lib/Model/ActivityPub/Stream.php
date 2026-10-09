@@ -158,6 +158,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		Details::LIKES => 'count_likes',
 		Details::BOOSTS => 'count_boosts',
 		Details::DISLIKES => 'count_dislikes',
+		Details::QUOTES => 'count_quotes',
 	];
 
 	/** The interactions an author can speak about, in this app's own names. */
@@ -2227,6 +2228,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			'replies_count' => $this->getDetailInt(Details::REPLIES),
 			'reblogs_count' => $this->getDetailInt(Details::BOOSTS),
 			'favourites_count' => $this->getDetailInt(Details::LIKES),
+			// Mastodon 4.5's: the posts quoting it, here and where it lives
+			'quotes_count' => $this->getDetailInt(Details::QUOTES),
 			'favourited' => $favorited,
 			'reblogged' => $reblogged,
 			'muted' => $this->isMutedConversation(),

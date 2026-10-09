@@ -33,7 +33,7 @@ class CountsService {
 	 * post got, and a busy thread is that too. `dislikes_count` is null on
 	 * anything but a video.
 	 */
-	private const STATUS_COUNTS = ['favourites_count', 'reblogs_count', 'replies_count', 'dislikes_count'];
+	private const STATUS_COUNTS = ['favourites_count', 'reblogs_count', 'replies_count', 'dislikes_count', 'quotes_count'];
 
 	/** @var array<string, bool> user id => hides, read once per request */
 	private array $hides = [];

@@ -752,9 +752,11 @@ an hour (a post less than a day old) or six hours (older), it is queued for
 a background `getPosts`, 25 posts a call (`BlueskyCountSource`); the cron's
 pass over the posts nobody looked at asks the same way every two hours. The
 answer replaces what the post's own network said (`remote_*`) and the quote
-count in the post's `atproto` block; a post the AppView no longer has is
-deleted as §9.5 deletes it. Nothing is notified. See **Counts where a post
-lives** in Architecture.md.
+count in the post's `atproto` block, and `quoteCount` is the origin's half
+of the post's quote counter, which the status entity carries as
+`quotes_count`; a post the AppView no longer has is deleted as §9.5 deletes
+it. Nothing is notified. See **Counts where a post lives** in
+Architecture.md.
 
 ### 9.5 Deletes and edits from Bluesky
 

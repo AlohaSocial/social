@@ -1046,9 +1046,9 @@ class StreamServiceTest extends TestCase {
 		$this->streamRequest->method('getStreamById')->willReturn($parent);
 		$this->streamRequest->method('getDescendants')->willReturn([$reply]);
 		$counts = $this->createMock(CountService::class);
-		$counts->expects($this->once())->method('seen')->with([$parent, $post, $reply]);
+		$counts->expects($this->once())->method('seen')->with([$parent, $post, $reply])->willReturn(true);
 
-		$this->serviceCounting($counts)->getContextByNid(2);
+		$this->assertTrue($this->serviceCounting($counts)->getContextByNid(2)['filling'], 'counts on their way are more of the thread to read again');
 	}
 
 	private function boostOf(string $id, string $of): Announce {

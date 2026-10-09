@@ -65,6 +65,15 @@ describe('PostReactedBy', () => {
 		expect(wrapper.find('.reacted-by').exists()).toBe(false)
 	})
 
+	it('says how often the post was quoted, and not to a reader who hides the numbers', async () => {
+		const wrapper = mountReactions(post({ quotes_count: 3 }))
+		await flushPromises()
+
+		expect(wrapper.find('.reacted-by').text()).toContain('Quoted 3 times')
+		expect(mountReactions(post({ quotes_count: 3 }), { hideCounts: true }).find('.reacted-by').exists()).toBe(false)
+		expect(mountReactions(post({ quotes_count: 0 })).find('.reacted-by').exists()).toBe(false)
+	})
+
 	/** The server sends zero for every post then, so a zero cannot mean "nobody". */
 	it('asks who reacted even at zero, and names the rows without a number, for a reader who hides the numbers', async () => {
 		serve({ reblogged_by: [account('bob')], favourited_by: [account('carol')] })
