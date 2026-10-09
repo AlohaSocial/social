@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use InvalidArgumentException;
+use OCA\Social\Atproto\Reader\BlueskyDiscovery;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\StarterPacks;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -35,6 +36,7 @@ class AtprotoFeedsControllerTest extends TestCase {
 	private BlueskyFeeds&MockObject $feeds;
 	private LinkPreviewService&MockObject $cards;
 	private StarterPacks&MockObject $packs;
+	private BlueskyDiscovery&MockObject $discovery;
 	private bool $enabled = true;
 	private bool $signedIn = true;
 
@@ -49,7 +51,7 @@ class AtprotoFeedsControllerTest extends TestCase {
 		$accounts->method('getActorFromUserId')->willReturn((new Person())->setUserId('alice'));
 
 		return new AtprotoFeedsController(
-			$this->createStub(IRequest::class), $session, $config, $accounts, $this->feeds, $this->packs, $this->cards, $this->createStub(PlaceService::class), new NullLogger(),
+			$this->createStub(IRequest::class), $session, $config, $accounts, $this->feeds, $this->packs, $this->discovery, $this->cards, $this->createStub(PlaceService::class), new NullLogger(),
 		);
 	}
 
@@ -57,6 +59,15 @@ class AtprotoFeedsControllerTest extends TestCase {
 		$this->feeds = $this->createMock(BlueskyFeeds::class);
 		$this->cards = $this->createMock(LinkPreviewService::class);
 		$this->packs = $this->createMock(StarterPacks::class);
+		$this->discovery = $this->createMock(BlueskyDiscovery::class);
+	}
+
+	public function testTrendsAndSuggestionsAreBlueskysAnswer(): void {
+		$this->discovery->method('trends')->willReturn([['topic' => 'cats', 'label' => 'Cats', 'feed' => '', 'search' => 'cats']]);
+		$this->discovery->method('suggestions')->willReturn([['acct' => 'bob.test']]);
+
+		$this->assertSame(['trends' => [['topic' => 'cats', 'label' => 'Cats', 'feed' => '', 'search' => 'cats']]], $this->controller()->trends()->getData());
+		$this->assertSame(['accounts' => [['acct' => 'bob.test']]], $this->controller()->suggestions()->getData());
 	}
 
 	public function testAStarterPackIsReadAndItsMembersFollowedOnlyAsStrings(): void {

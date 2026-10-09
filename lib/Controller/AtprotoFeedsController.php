@@ -11,6 +11,7 @@ namespace OCA\Social\Controller;
 
 use InvalidArgumentException;
 use OCA\Social\AppInfo\Application;
+use OCA\Social\Atproto\Reader\BlueskyDiscovery;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\StarterPacks;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -41,6 +42,7 @@ class AtprotoFeedsController extends Controller {
 		private AccountService $accountService,
 		private BlueskyFeeds $feeds,
 		private StarterPacks $starterPacks,
+		private BlueskyDiscovery $discovery,
 		private LinkPreviewService $linkPreviewService,
 		private PlaceService $placeService,
 		private LoggerInterface $logger,
@@ -124,6 +126,24 @@ class AtprotoFeedsController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/starter-pack/follow')]
 	public function followStarterPack(string $pack, array $dids = [], bool $feeds = false): DataResponse {
 		return $this->answer(fn (Person $viewer): array => $this->starterPacks->follow($viewer, $pack, array_values(array_filter($dids, 'is_string')), $feeds));
+	}
+
+	/**
+	 * The topics trending on Bluesky, each a feed to read here or a search.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/trends')]
+	public function trends(): DataResponse {
+		return $this->answer(fn (Person $viewer): array => ['trends' => $this->discovery->trends()]);
+	}
+
+	/**
+	 * The accounts Bluesky suggests to the viewer.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/suggestions')]
+	public function suggestions(): DataResponse {
+		return $this->answer(fn (Person $viewer): array => ['accounts' => $this->discovery->suggestions($viewer)]);
 	}
 
 	/**

@@ -629,6 +629,13 @@ Bluesky's custom feeds and lists are read here as timelines
   one.
 - **Lists made in a Bluesky app** are written to the account's repository
   (§6), so they reach the AppView, and read here as their feed.
+- **Discover** shows what is trending on Bluesky beside what is trending
+  here — a topic that is a custom feed opens as one, any other as a
+  search — and the accounts Bluesky suggests to the person, read as them
+  and followed by their handle like anybody else there
+  (`Reader\BlueskyDiscovery`). Trends are the same for everybody and kept
+  ten minutes; an AppView without them answers nothing rather than an
+  error.
 - **Starter packs** open here at the path bsky.app gives them,
   `/starter-pack/<handle or DID>/<key>` — from a starter-pack card in a post
   (§9, `PostMapper::cardOf()`) or an address typed into the search
