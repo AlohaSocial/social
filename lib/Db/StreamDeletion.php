@@ -244,6 +244,10 @@ trait StreamDeletion {
 			// and its words, which would otherwise keep answering a search
 			// for a post that is gone
 			[self::TABLE_SEARCH_TERMS, 'stream_id_prim'],
+			// and the approvals of quotes it was the quoted or the quoting
+			// post of
+			[self::TABLE_QUOTE_GRANTS, 'target_id_prim'],
+			[self::TABLE_QUOTE_GRANTS, 'quoting_id_prim'],
 		] as [$table, $field]) {
 			$qb = $this->getQueryBuilder();
 			$qb->delete($table)

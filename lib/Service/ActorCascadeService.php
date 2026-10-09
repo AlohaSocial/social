@@ -189,8 +189,9 @@ class ActorCascadeService {
 			'mediaTagsMade' => fn () => $this->mediaTagsRequest->deleteByTagger($actorId),
 			// the hashtags it followed, as the ones it featured
 			'followedTags' => fn () => $this->followedTagsRequest->deleteByActor($actorId),
-			// the approvals of quotes it gave or was given
-			'quoteGrants' => fn () => $this->quoteGrantRequest->deleteRelatedId($actorId),
+			// the approvals it was given for its quotes; the ones about its
+			// posts go with the posts (`StreamDeletion::deleteRelatedTo()`)
+			'quoteGrants' => fn () => $this->quoteGrantRequest->deleteByActor($actorId),
 			// the channels it owned, and its own row as a channel; the channel
 			// accounts are deleted with it (`AccountService::deleteActor()`)
 			'channels' => fn () => $this->channelsRequest->deleteRelatedId($actorId),

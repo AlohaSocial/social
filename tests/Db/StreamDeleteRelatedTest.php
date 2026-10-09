@@ -28,6 +28,8 @@ use PHPUnit\Framework\TestCase;
 class StreamDeleteRelatedTest extends TestCase {
 	/** @var array<string, string> table => the column the delete filtered on */
 	private array $deleted = [];
+	/** @var list<string> every delete as `table.column`, in order */
+	private array $filters = [];
 
 	private function streamRequest(): StreamRequest {
 		$streamRequest = $this->getMockBuilder(StreamRequest::class)
@@ -53,6 +55,7 @@ class StreamDeleteRelatedTest extends TestCase {
 		$qb->method('where')->willReturnCallback(function (string $predicate) use ($qb, &$table): SocialQueryBuilder {
 			if ($table !== '') {
 				$this->deleted[$table] = explode(' ', $predicate)[0];
+				$this->filters[] = $table . '.' . explode(' ', $predicate)[0];
 			}
 
 			return $qb;
@@ -98,6 +101,14 @@ class StreamDeleteRelatedTest extends TestCase {
 		$this->streamRequest()->deleteRelatedTo([md5('https://cloud.example/@alice/1')]);
 
 		$this->assertSame('stream_id_prim', $this->deleted['social_search_term'] ?? null);
+	}
+
+	/** An approval of a quote is about two posts, and goes with either. */
+	public function testTheQuoteApprovalsOfThePostGoWithIt(): void {
+		$this->streamRequest()->deleteRelatedTo([md5('https://cloud.example/@alice/1')]);
+
+		$this->assertContains('social_quote_grant.target_id_prim', $this->filters, 'the post was the quoted one');
+		$this->assertContains('social_quote_grant.quoting_id_prim', $this->filters, 'the post was the quote');
 	}
 
 	/** A table added after the squash, so not in schema.json: named here. */

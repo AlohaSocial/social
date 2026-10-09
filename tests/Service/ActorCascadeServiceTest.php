@@ -105,7 +105,7 @@ class ActorCascadeServiceTest extends TestCase {
 			'media tags' => [MediaTagsRequest::class, 'deleteByActor'],
 			'the tags it put on pictures' => [MediaTagsRequest::class, 'deleteByTagger'],
 			'followed hashtags' => [FollowedTagsRequest::class, 'deleteByActor'],
-			'quote approvals' => [QuoteGrantRequest::class, 'deleteRelatedId'],
+			'quote approvals' => [QuoteGrantRequest::class, 'deleteByActor'],
 			'what it wrote as a team' => [TeamsRequest::class, 'deleteByAuthor'],
 			'its channels, and itself as one' => [ChannelsRequest::class, 'deleteRelatedId'],
 			'imported posts' => [ImportedPostsRequest::class, 'deleteByActor'],
