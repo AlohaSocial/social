@@ -9,9 +9,11 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCP\BackgroundJob\IJobList;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -37,6 +39,11 @@ class RemoteFetchQueue {
 	public const TIMELINE_SYNC_INTERVAL = 900;
 
 	private const TIMELINE_SYNCED = 'social.outboxsync';
+
+	/** Seconds between two reads of one conversation asked for by opening it. */
+	public const THREAD_FILL_INTERVAL = 600;
+
+	private const THREAD_FILLED = 'social.threadfill';
 
 	public function __construct(
 		private IJobList $jobList,
@@ -72,6 +79,33 @@ class RemoteFetchQueue {
 		}
 
 		$this->queue(SyncRemoteTimeline::class, ['actor' => $actor->getId()]);
+
+		return true;
+	}
+
+	/**
+	 * Queues a read of the rest of a conversation (`Cron\FillThread`), at
+	 * most once per `THREAD_FILL_INTERVAL` per post, for a post that may
+	 * have replies elsewhere: one from another server, or a public one of
+	 * this server's, which other networks read too.
+	 *
+	 * @return bool whether a read was asked for
+	 */
+	public function fillThread(Stream $post): bool {
+		if ($post->getId() === '' || ($post->isLocal() && $post->getVisibility() !== Stream::TYPE_PUBLIC)) {
+			return false;
+		}
+		$key = md5($post->getId());
+		try {
+			if ($this->durableCache->get(self::THREAD_FILLED, $key) !== null) {
+				return false;
+			}
+			$this->durableCache->set(self::THREAD_FILLED, $key, 1, self::THREAD_FILL_INTERVAL);
+		} catch (Throwable $e) {
+			// the job list's own dedupe still holds
+		}
+
+		$this->queue(FillThread::class, ['post' => $post->getId()]);
 
 		return true;
 	}

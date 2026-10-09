@@ -75,6 +75,7 @@ One box, and everything a post can carry.
   the instance and no reader's browser ever talks to anybody else. An administrator
   can add their own on top with `occ social:gif add`, or turn the shipped set off
   with `occ config:app:set social gif_pack --value=0`.
+- **Read the whole conversation.** Opening a post brings in its replies from everywhere they were written, not only from the people somebody here follows.
 - **Quote a post**, with the original author's permission carried on the wire (FEP-044f).
 - **Say what language it is in**, starting from your Nextcloud language.
 - **Send it later.** Pick a time at least five minutes out and Post becomes Schedule.

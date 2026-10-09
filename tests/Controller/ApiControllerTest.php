@@ -1374,6 +1374,16 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($context, $response->getData());
+		$this->assertArrayNotHasKey('X-Social-Thread-Filling', $response->getHeaders());
+	}
+
+	public function testStatusContextSaysWhenTheRestIsBeingRead(): void {
+		$this->streamService->method('getContextByNid')->willReturn(['ancestors' => [], 'descendants' => [], 'filling' => true]);
+
+		$response = $this->controller()->statusContext(7);
+
+		$this->assertSame(['ancestors' => [], 'descendants' => []], $response->getData(), 'the entity is Mastodon\'s');
+		$this->assertSame('1', $response->getHeaders()['X-Social-Thread-Filling'] ?? null);
 	}
 
 	/** @return iterable<string, array{string}> */

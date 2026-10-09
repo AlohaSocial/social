@@ -627,6 +627,16 @@ so the daemon being down costs latency and nothing else. The admin page
 shows whether the listener is connected, for how many accounts, and when
 it last heard something (`atproto_jetstream_status`).
 
+### 9.4a Whole threads
+
+Opening a post that is on Bluesky reads its thread from the AppView
+(`BlueskyThreadSource`, `getPostThread`, depth 6, 20 parents up) in the
+background, as one of the sources of `ThreadService` beside the fediverse's
+`replies` collections, so the replies of accounts nobody here follows are in
+the conversation too. A post written here and published is read the same
+way, for the replies it got on Bluesky. See **Whole conversations** in
+Architecture.md.
+
 ### 9.5 Deletes and edits from Bluesky
 
 A `delete` op from Jetstream, or a post gone from the author feed on the

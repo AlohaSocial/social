@@ -604,6 +604,20 @@ class StreamQueueServiceTest extends TestCase {
 		$this->service->manageStreamQueue($queue);
 	}
 
+	/** A fetch asked for now is held to the same breaker as a queued one. */
+	public function testAFetchNowIsHeldBackByTheBreakerAndTripsIt(): void {
+		$this->curlService->expects($this->once())->method('retrieveObject')->willThrowException(new RequestNetworkException('timeout'));
+		$this->hostBreakerRequest->expects($this->once())->method('open')->with('remote.example');
+
+		try {
+			$this->service->fetchNow('https://remote.example/notes/1');
+			$this->fail('an unreachable server is an error');
+		} catch (RequestNetworkException) {
+		}
+		$this->expectException(RequestNetworkException::class);
+		$this->service->fetchNow('https://remote.example/notes/2');
+	}
+
 	/** One timeout per dead host and drain, not one per item queued against it. */
 	public function testAnUnreachableOriginIsNotAskedAgainInTheSameDrain(): void {
 		$this->curlService->expects($this->once())->method('retrieveObject')
