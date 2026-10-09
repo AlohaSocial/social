@@ -80,4 +80,11 @@ class StreamCounterColumnsTest extends TestCase {
 		$this->assertSame(7, $note->getDetailInt(Details::REMOTE_LIKES));
 		$this->assertSame(9, $note->getDetailInt(Details::LIKES));
 	}
+
+	/** When the post's own network was last asked for its counts comes with the row. */
+	public function testWhenTheCountsWereAskedForIsReadWithTheRow(): void {
+		$this->assertSame((new \DateTime('2026-10-09 12:00:00'))->getTimestamp(), $this->read(['counts_at' => '2026-10-09 12:00:00'])->getCountsAt());
+		$this->assertNull($this->read(['counts_at' => null])->getCountsAt(), 'never asked');
+		$this->assertNull($this->read([])->getCountsAt());
+	}
 }

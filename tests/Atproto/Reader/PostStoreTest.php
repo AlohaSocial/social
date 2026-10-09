@@ -259,6 +259,24 @@ class PostStoreTest extends TestCase {
 		$this->assertSame($gone, $this->imported[0]->getObjectId());
 	}
 
+	public function testTheViewsOfThePostsTheAppViewStillHasAreHandedBack(): void {
+		$kept = 'https://bsky.app/profile/' . self::DID . '/post/3kkept';
+		$gone = 'https://bsky.app/profile/' . self::DID . '/post/3kgone';
+		$this->known = [$kept, $gone];
+		$view = ['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kkept', 'likeCount' => 4];
+		$this->appView->method('query')->willReturn(['posts' => [$view]]);
+
+		$this->assertSame(['posts' => [$kept => $view], 'deleted' => 1], $this->store->postViews([$kept, $gone]));
+		$this->assertSame($gone, $this->imported[0]->getObjectId(), 'the one it no longer has is deleted');
+	}
+
+	public function testNoViewsAreConcludedFromAnAppViewThatDidNotAnswer(): void {
+		$this->appView->method('query')->willThrowException(new AtprotoException('down'));
+
+		$this->assertNull($this->store->postViews(['https://bsky.app/profile/' . self::DID . '/post/3k']));
+		$this->assertSame(['posts' => [], 'deleted' => 0], $this->store->postViews(['https://mastodon.test/x']), 'nothing to ask about');
+	}
+
 	public function testNothingIsConcludedFromAnAppViewThatDidNotAnswer(): void {
 		$this->known = ['https://bsky.app/profile/' . self::DID . '/post/3k'];
 		$this->appView->method('query')->willThrowException(new AtprotoException('down'));

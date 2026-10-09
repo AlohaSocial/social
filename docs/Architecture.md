@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.195
+**App version:** 0.26.196
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1625,6 +1625,52 @@ follows known here alone. The answers say `X-Social-Filling` while the
 read was just asked for; the web app's list asks for its first page once
 more six seconds later. An account of this server's own is unchanged.
 
+### Counts where a post lives
+
+A post from elsewhere arrives with the likes, boosts and replies it had at
+that moment, and nothing tells this server when they change: a `Like` of a
+remote post travels to that post's server, and a Bluesky post read off a
+feed is stored once and never re-read. So the counts of the remote posts
+people look at are asked for again, one concept with a source per network
+(`Service\Counts\CountSource`):
+
+- `ActivityPubCountSource` reads the post's document at its `id` and takes
+  the `totalItems` of its `likes`, `shares` and `replies` collections
+  (`Stream::statedCount()`), twenty documents a round; an answer naming some
+  other document, or none — a post deleted at its source among them — leaves
+  what is stored;
+- `Atproto\Reader\BlueskyCountSource` asks the AppView's `getPosts`, 25
+  posts a call (`PostStore::postViews()`), for `likeCount`, `repostCount`,
+  `replyCount` and `quoteCount`; a post it no longer has is deleted as
+  `DeletionSweep` deletes it.
+
+`CountService::seen()` is called with what a page serves — a status
+(`StatusApiController::statusGet()`), a conversation
+(`StreamService::getContextByNid()`) and every timeline page a client reads
+(`StreamService::getTimeline()` in the local format, `visiblePosts()`, the
+list timeline) — and does no network I/O: a boost stands for the post it
+boosts, local posts and direct messages are skipped, and a remote post is
+due when its `counts_at` is older than a quarter of an hour while the post
+is less than a day old, six hours after that. The due ones are handed to
+`RemoteFetchQueue::refreshCounts()`, which stamps each post in the durable
+cache for its interval (so a post is queued at most once per interval
+however many pages show it), takes at most twenty a call and queues
+`Cron\RefreshCounts` jobs with the ids. The job re-reads each post, skips
+the ones no longer due and hands the rest to the network each lives on
+(`CountService::refreshPosts()`); a post no source answers for is stamped
+all the same. The cron's pass over the posts nobody looked at
+(`RemoteCountService`, every two hours, fifty a pass) goes through the same
+`refreshPosts()`, so a Bluesky post there is asked of the AppView rather
+than fetched as an ActivityPub document from bsky.app.
+
+`CountWriter` stores an answer: the origin's total less what is counted here
+into `remote_likes`, `remote_boosts` and `remote_replies`, `counts_at` set,
+then `StreamRequest::recount()` for the columns (see **The counters are
+columns** below), so every reader — the client and Mastodon APIs alike —
+sees the new numbers. No notification is made and no action is touched.
+The last-asked time is the `counts_at` column the cron's pass already kept,
+not a new table; `Stream::getCountsAt()` carries it to `seen()` with the row.
+
 ### Hashtags and searches beyond this server
 
 A hashtag's timeline and a search of posts are answered, as before, from
@@ -2692,7 +2738,7 @@ statement to run includes everything committed before it. Replies are counted
 from the table being updated, through a derived table (`SELECT c FROM (SELECT
 COUNT(*) AS c …)`), which is what MySQL needs to allow that. The origin's halves
 (`remote_likes`, `remote_boosts`, `remote_replies`) are absolute numbers written
-by `RemoteCountService` and stay in `details`. `Stream::importFromDatabase()` lays
+by `Counts\CountWriter` and stay in `details`. `Stream::importFromDatabase()` lays
 the columns over the `details` keys, so every reader — the client and Mastodon
 APIs, the ActivityPub collections, statistics, the annual report — is unchanged;
 a column at zero adds no key the blob did not have. The JSON keys are no longer

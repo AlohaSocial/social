@@ -132,6 +132,17 @@ class PostStore {
 	 * @return int how many were deleted
 	 */
 	public function deleteGone(array $postIds): int {
+		return $this->postViews($postIds)['deleted'] ?? 0;
+	}
+
+	/**
+	 * The AppView's views of these stored Bluesky posts, by id, with the
+	 * ones it no longer has deleted as `deleteGone()` deletes them.
+	 *
+	 * @param string[] $postIds stored ids, at most 25 (one `getPosts`); others are ignored
+	 * @return array{posts: array<string, array>, deleted: int}|null null when the AppView did not answer
+	 */
+	public function postViews(array $postIds): ?array {
 		$uris = [];
 		foreach (array_slice($postIds, 0, 25) as $id) {
 			$parsed = BlueskyIds::parsePostId($id);
@@ -140,7 +151,7 @@ class PostStore {
 			}
 		}
 		if ($uris === []) {
-			return 0;
+			return ['posts' => [], 'deleted' => 0];
 		}
 		try {
 			$answer = $this->appView->query('app.bsky.feed.getPosts', ['uris' => array_values($uris)], ['atproto-accept-labelers' => $this->labelers->acceptHeader()]);
@@ -148,25 +159,28 @@ class PostStore {
 			// nothing is concluded from an AppView that did not answer
 			$this->logger->notice('Bluesky posts not checked', ['exception' => $e]);
 
-			return 0;
+			return null;
 		}
 		if (!is_array($answer['posts'] ?? null)) {
-			return 0;
+			return null;
 		}
 		$present = [];
 		foreach ($answer['posts'] as $post) {
 			if (is_array($post) && is_string($post['uri'] ?? null)) {
-				$present[$post['uri']] = true;
+				$present[$post['uri']] = $post;
 			}
 		}
+		$posts = [];
 		$deleted = 0;
 		foreach ($uris as $id => $uri) {
-			if (!isset($present[$uri]) && $this->delete($id)) {
+			if (isset($present[$uri])) {
+				$posts[$id] = $present[$uri];
+			} elseif ($this->delete($id)) {
 				$deleted++;
 			}
 		}
 
-		return $deleted;
+		return ['posts' => $posts, 'deleted' => $deleted];
 	}
 
 	/**

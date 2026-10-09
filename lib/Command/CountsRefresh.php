@@ -35,7 +35,7 @@ class CountsRefresh extends SocialCommand {
 		parent::configure();
 		$this->setName('social:counts:refresh')
 			->setDescription(
-				'Ask each remote post\'s own server what its likes, boosts and replies are now'
+				'Ask where each remote post lives what its likes, boosts and replies are now'
 			)
 			->addOption(
 				'force', 'f', InputOption::VALUE_NONE,

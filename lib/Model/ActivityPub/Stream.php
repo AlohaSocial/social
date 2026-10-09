@@ -436,6 +436,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private string $conversation = '';
 	private ?Cache $cache = null;
 	private int $publishedTime = 0;
+	/** when the post's own network was last asked for its counts (`counts_at`), null for never */
+	private ?int $countsAt = null;
 	private ?StreamAction $action = null;
 	private string $timeline = '';
 	private bool $filterDuplicate = false;
@@ -1433,6 +1435,16 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		return $this;
 	}
 
+	public function getCountsAt(): ?int {
+		return $this->countsAt;
+	}
+
+	public function setCountsAt(?int $time): Stream {
+		$this->countsAt = $time;
+
+		return $this;
+	}
+
 	/**
 	 */
 	public function convertPublished() {
@@ -1807,6 +1819,13 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			$dTime = new DateTime($this->get('published_time', $data, 'yesterday'));
 			$this->setPublishedTime($dTime->getTimestamp());
 		} catch (Exception $e) {
+		}
+		$countsAt = $this->get('counts_at', $data, '');
+		if ($countsAt !== '') {
+			try {
+				$this->setCountsAt((new DateTime($countsAt))->getTimestamp());
+			} catch (Exception $e) {
+			}
 		}
 
 		$this->setActivityId($this->validate(self::AS_ID, 'activity_id', $data, ''));

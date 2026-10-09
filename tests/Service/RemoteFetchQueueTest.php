@@ -13,6 +13,7 @@ use OCA\Social\Cron\FillFollowLists;
 use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
+use OCA\Social\Cron\RefreshCounts;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -200,5 +201,37 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertFalse($this->queue->fillPosts('tag', 'nextcloud'), 'a page looking at it right after queues nothing');
 		$this->assertFalse($this->queue->claimPostsFill('tag', 'nextcloud'));
 		$this->assertFalse($this->queue->claimPostsFill('tag', '  '));
+	}
+
+	public function testAPostsCountsAreAskedForAtMostOncePerItsInterval(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$added = [];
+		$this->jobList->method('add')->willReturnCallback(function (string $job, array $argument) use (&$added): void {
+			$this->assertSame(RefreshCounts::class, $job);
+			$added[] = $argument['posts'];
+		});
+
+		$this->assertTrue($this->queue->refreshCounts(['https://r.example/1' => 900, 'https://r.example/2' => 21600]));
+		$this->assertFalse($this->queue->refreshCounts(['https://r.example/1' => 900, 'https://r.example/2' => 21600]));
+		$this->now += 901;
+		$this->assertTrue($this->queue->refreshCounts(['https://r.example/1' => 900, 'https://r.example/2' => 21600]));
+
+		$this->assertSame([['https://r.example/1', 'https://r.example/2'], ['https://r.example/1']], $added);
+	}
+
+	public function testOneCallAsksAboutABoundedNumberOfPostsInJobsTheJobListAccepts(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$asked = [];
+		$this->jobList->method('add')->willReturnCallback(function (string $job, array $argument) use (&$asked): void {
+			$this->assertLessThanOrEqual(4000, strlen((string)json_encode($argument)));
+			$asked = array_merge($asked, $argument['posts']);
+		});
+		$intervals = [];
+		for ($i = 0; $i < 3 * RemoteFetchQueue::MAX_PER_CALL; $i++) {
+			$intervals['https://a-rather-long-host-name.example/users/somebody/statuses/' . str_repeat('9', 100) . $i] = 900;
+		}
+
+		$this->assertTrue($this->queue->refreshCounts($intervals));
+		$this->assertSame(array_slice(array_keys($intervals), 0, RemoteFetchQueue::MAX_PER_CALL), $asked);
 	}
 }

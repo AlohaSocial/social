@@ -783,8 +783,8 @@ does.
 
 ### `social:counts:refresh`
 
-Ask each remote server what the counts of the posts it owns are right now, and
-store what it says.
+Ask where each remote post lives — its own server, or the AppView for a post
+read from Bluesky — what its counts are right now, and store what it says.
 
 ```
 php occ social:counts:refresh [-f|--force] [-l|--limit LIMIT]
@@ -814,8 +814,11 @@ Reply counts are the limit of this: ActivityPub documents publish
 instance holds and not a number the origin supplies.
 
 The cron (`OCA\Social\Cron\Cache`) runs the same work on its own schedule for
-at most a minute per pass, `RemoteCountService::BATCH` posts at a time, so this
-command is for the other moments. It prints `N post(s) asked, M answered with a
+at most a minute per pass, `RemoteCountService::BATCH` posts at a time, and the
+posts people look at are asked about again as they are seen (every quarter of
+an hour while a post is less than a day old, every six hours after that; see
+**Counts where a post lives** in Architecture.md), so this command is for the
+other moments. It prints `N post(s) asked, M answered with a
 count`.
 
 ### `social:media:retry`

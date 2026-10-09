@@ -22,6 +22,7 @@ use OCA\Social\Model\Relationship;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\GroupListService;
 use OCA\Social\Service\LinkPreviewService;
@@ -252,7 +253,7 @@ class ListControllerTest extends TestCase {
 	 * The bearer token is parsed in the constructor, so a test that presents
 	 * one has to say so before the controller exists.
 	 */
-	private function controller(string $authorization = ''): ListController {
+	private function controller(string $authorization = '', ?CountService $counts = null): ListController {
 		// the getHeader() callback is registered once, in setUp(): a second
 		// method() on the same mock never wins over the first
 		$this->headers = ['Authorization' => $authorization];
@@ -268,7 +269,9 @@ class ListControllerTest extends TestCase {
 			$this->linkPreviewService,
 			$this->listsRequest,
 			$this->createStub(PlaceService::class),
-			$this->groupListService
+			$this->groupListService,
+			null,
+			$counts,
 		);
 	}
 
@@ -729,6 +732,16 @@ class ListControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame(4, $this->timelineOf?->getId());
 		$this->assertSame([9, 7], array_map(static fn (Note $n): int => $n->getNid(), $response->getData()));
+	}
+
+	public function testTheTimelineHasItsPostsCountsAskedFor(): void {
+		$this->given(4, self::VIEWER);
+		$this->timeline = [9, 7];
+		$counts = $this->createMock(CountService::class);
+		$counts->expects($this->once())->method('seen')
+			->with($this->callback(static fn (array $posts): bool => array_map(static fn (Note $n): int => $n->getNid(), $posts) === [9, 7]));
+
+		$this->controller('', $counts)->timeline(4);
 	}
 
 	public function testTheTimelinePagesOnTheStatusIdAsEveryOtherTimelineDoes(): void {
