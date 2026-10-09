@@ -148,7 +148,6 @@ class VerificationServiceTest extends TestCase {
 
 	private static function local(string $id, string $username, string $name): Person {
 		$actor = (new Person())->setId($id)->setPreferredUsername($username)->setName($name);
-		$actor->setDisplayName($name);
 		$actor->setLocal(true);
 
 		return $actor;
@@ -271,7 +270,7 @@ class VerificationServiceTest extends TestCase {
 		$service->refresh($this->actors[self::ANNA]);
 		$this->assertCount(1, $this->published, 'nothing changed');
 
-		$this->actors[self::ANNA]->setDisplayName('Anna Example');
+		$this->actors[self::ANNA]->setName('Anna Example');
 		$service->refresh($this->actors[self::ANNA]);
 		$this->assertSame('publish company did:plc:anna anna.social.test Anna Example', $this->published[1]);
 		$this->assertSame('Anna Example', $this->rows[self::ANNA]['displayName']);

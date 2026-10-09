@@ -119,6 +119,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 			<step>OCA\Social\Migration\CacheFeaturedCollections</step>
 			<step>OCA\Social\Migration\BackfillStreamPostFields</step>
 			<step>OCA\Social\Migration\ClearAvatarHeaders</step>
+			<step>OCA\Social\Migration\RepublishBlueskyProfiles</step>
 		</post-migration>
 	</repair-steps>
 
