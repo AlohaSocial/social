@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use DateTime;
+use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\StreamRequest;
@@ -90,6 +91,8 @@ class PostServiceTest extends TestCase {
 	private DocumentService|MockObject $documentService;
 	/** @var Threadgates&MockObject */
 	private Threadgates $threadgates;
+	/** @var Postgates&MockObject */
+	private Postgates $postgates;
 	/** @var ContainerInterface&MockObject */
 	private ContainerInterface $container;
 
@@ -145,7 +148,8 @@ class PostServiceTest extends TestCase {
 
 		$this->threadgates = $this->createMock(Threadgates::class);
 		$this->container = $this->createMock(ContainerInterface::class);
-		$this->container->method('get')->with(Threadgates::class)->willReturn($this->threadgates);
+		$this->postgates = $this->createMock(Postgates::class);
+		$this->container->method('get')->willReturnCallback(fn (string $id): object => $id === Postgates::class ? $this->postgates : $this->threadgates);
 		$this->service = new PostService(
 			$streamService,
 			$this->accountService,
@@ -570,6 +574,23 @@ class PostServiceTest extends TestCase {
 
 		$this->expectException(InvalidActionException::class);
 		$this->expectExceptionMessage('allows no replies');
+		$this->service->createPost($post);
+	}
+
+	public function testAQuoteOfABlueskyPostItsAuthorKeepsFromQuotesIsRefusedBeforeAnythingIsSent(): void {
+		$quoted = new Note();
+		$quoted->setId('https://bsky.app/profile/did:plc:bob/post/3kpost');
+		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:bob');
+		$quoted->setTo(\OCA\Social\Model\ActivityPub\ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($quoted);
+		$this->postgates->method('refusal')->willReturn(Postgates::REFUSAL);
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('Look at this');
+		$post->setQuotedId($quoted->getId());
+
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('does not allow quotes');
 		$this->service->createPost($post);
 	}
 

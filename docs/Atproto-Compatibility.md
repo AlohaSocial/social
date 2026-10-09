@@ -466,6 +466,14 @@ when crossed.
   not let through is refused with the reason: every AppView would hide it.
   This app's own posts carry no gate: Social has no reply controls of its
   own yet.
+- **Who may quote** (`app.bsky.feed.postgate` beside the quoted post): a
+  quote of a post whose author turned quoting off (`disableRule`) is
+  refused with the reason (`Reader\Postgates`), since every AppView would
+  show it detached. The gate is read from the author's own PDS, under the
+  post's key, because the AppView tells only a signed-in viewer; a post
+  read as such a viewer and marked `embeddingDisabled` is not offered for
+  quoting (`interaction_policy`). The author quoting their own post is not
+  asked about.
 - **Language**: `langs: [<post language>]` when known.
 - **Link card**: when the post has a `StreamCard` and no pictures,
   `app.bsky.embed.external` with title, description and the preview image
