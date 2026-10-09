@@ -16,6 +16,7 @@ use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\AnnouncementsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Db\ChannelsRequest;
 use OCA\Social\Db\CollectionsRequest;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\DomainBlocksRequest;
@@ -101,6 +102,7 @@ class ActorCascadeService {
 		private TeamsRequest $teamsRequest,
 		private FileCommentsRequest $fileCommentsRequest,
 		private ImportsRequest $importsRequest,
+		private ChannelsRequest $channelsRequest,
 		private WatchRequest $watchRequest,
 		private RequestQueueRequest $requestQueueRequest,
 		private CacheDocumentsRequest $cacheDocumentsRequest,
@@ -189,6 +191,9 @@ class ActorCascadeService {
 			'followedTags' => fn () => $this->followedTagsRequest->deleteByActor($actorId),
 			// the approvals of quotes it gave or was given
 			'quoteGrants' => fn () => $this->quoteGrantRequest->deleteRelatedId($actorId),
+			// the channels it owned, and its own row as a channel; the channel
+			// accounts are deleted with it (`AccountService::deleteActor()`)
+			'channels' => fn () => $this->channelsRequest->deleteRelatedId($actorId),
 			// which of a team's posts it wrote; the posts stay the team's
 			'teamPosts' => fn () => $this->teamsRequest->deleteByAuthor($actorId),
 			// what it posted from Files and the imports it ran, kept by its
@@ -238,7 +243,7 @@ class ActorCascadeService {
 		$steps['muteExpiry'] = fn () => $this->muteExpiryRequest->deleteByActor($actorId);
 		// approvals of quotes and attributions of team posts are other
 		// accounts' records too
-		unset($steps['notes'], $steps['reports'], $steps['verification'], $steps['quoteGrants'], $steps['teamPosts']);
+		unset($steps['notes'], $steps['reports'], $steps['verification'], $steps['quoteGrants'], $steps['teamPosts'], $steps['channels']);
 
 		return $steps;
 	}

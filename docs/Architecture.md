@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.204
+**App version:** 0.26.205
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -194,7 +194,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_discover_cat` | The subjects an instance says Explore is about: a name and the hashtags it means, in the order an administrator put them in |
 | `social_trend_review` | What a moderator has decided about something that is trending: one row per rejected (or approved) tag, link or status |
 | `social_relay` | The relays this instance subscribes to: one row per subscription, with the `Follow` it sent, the inbox to deliver to and whether the relay answered |
-| `social_channel` | The `Group` actors an account publishes videos under: one row per channel, binding it to the account that owns it |
+| `social_channel` | The `Group` actors an account publishes videos under: one row per channel, binding it to the account that owns it. A channel is deleted with the account that owns it, as an account of its own (`AccountService::deleteActor()`) |
 | `social_watch` | Where a reader stopped watching a video: one row per (post, viewer), never federated |
 | `social_video_rendition` | The rungs of a local video's ladder: one row per (video, height), each naming one fragmented MP4 and the playlist that addresses it |
 | `social_file_post` | Which Nextcloud file a post was made from: one row per (file, post), written with the attachment's nid when the file is copied in and given its post when the post is published; a row still without a post after two days is cleared |
