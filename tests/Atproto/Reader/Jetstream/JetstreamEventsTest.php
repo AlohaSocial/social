@@ -114,13 +114,25 @@ class JetstreamEventsTest extends TestCase {
 
 	public function testADeleteAProfileAndAHandleAreActedOnAtOnce(): void {
 		$this->store->expects($this->once())->method('delete')->with(self::POST);
-		$this->actors->expects($this->exactly(2))->method('resolve')->with(self::BOB, true)->willReturn(new Person());
+		$this->actors->expects($this->exactly(2))->method('resolve')->with(self::BOB, true)->willReturn((new Person())->setAccount('Bob.Example'));
 		$this->watches->expects($this->once())->method('setHandle')->with(self::BOB, 'bob.example');
 
 		$this->events->handle(self::commit('delete', 'app.bsky.feed.post', '3kpost'));
 		$this->events->handle(self::commit('update', 'app.bsky.actor.profile', 'self', ['displayName' => 'Bob']));
 		$this->events->handle(['did' => self::BOB, 'time_us' => 1, 'kind' => 'identity', 'identity' => ['did' => self::BOB, 'handle' => 'Bob.Example']]);
 		$this->assertFalse($this->events->hasPending());
+	}
+
+	/** The relay passes an identity event on as the account's server sent it, unverified. */
+	public function testTheHandleKeptIsTheOneTheAppViewVerifiedNotTheEvents(): void {
+		$this->actors->method('resolve')->willReturnOnConsecutiveCalls(
+			(new Person())->setAccount('bob.example'),
+			(new Person())->setAccount('handle.invalid'),
+		);
+		$this->watches->expects($this->once())->method('setHandle')->with(self::BOB, 'bob.example');
+
+		$this->events->handle(['did' => self::BOB, 'time_us' => 1, 'kind' => 'identity', 'identity' => ['did' => self::BOB, 'handle' => 'paypal.com']]);
+		$this->events->handle(['did' => self::BOB, 'time_us' => 2, 'kind' => 'identity', 'identity' => ['did' => self::BOB, 'handle' => 'paypal.com']]);
 	}
 
 	public function testAnAccountNobodyFollowsIsIgnored(): void {
