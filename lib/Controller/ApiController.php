@@ -17,8 +17,10 @@ use OCA\Social\Model\Report;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\Discovery\PostDiscoveryService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\HashtagService;
+use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\SearchService;
 use OCA\Social\Service\StreamService;
@@ -57,6 +59,7 @@ class ApiController extends MastodonApiController {
 		private HashtagService $hashtagService,
 		private ReportService $reportService,
 		private SearchService $searchService,
+		private RemoteFetchQueue $remoteFetchQueue,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -240,6 +243,11 @@ class ApiController extends MastodonApiController {
 					$statuses = $this->searchService->searchStreamContent($q, $limit, $offset, $author, $maxId, $minId);
 				}
 				$firstPage = ($offset <= 0 && $maxId === 0 && $minId === 0);
+				// what the networks beyond this server have that matches, read
+				// in the background and found here by the next search
+				if ($firstPage && $account_id === '' && mb_strlen(trim($q)) >= 3 && !str_contains($q, '://')) {
+					$filling = $this->remoteFetchQueue->fillPosts(PostDiscoveryService::SEARCH, $q, $this->viewer);
+				}
 
 				// `resolve` is the reader saying "I have a link, go and get
 				// it". Without it a post found in a browser cannot be replied
@@ -271,10 +279,15 @@ class ApiController extends MastodonApiController {
 				}
 			}
 
-			return new DataResponse(
+			$response = new DataResponse(
 				['accounts' => $accounts, 'statuses' => $statuses, 'hashtags' => $hashtags],
 				Http::STATUS_OK
 			);
+			if ($filling ?? false) {
+				$response->addHeader('X-Social-Filling', '1');
+			}
+
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

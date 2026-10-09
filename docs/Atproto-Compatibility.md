@@ -645,6 +645,13 @@ there, or written here and published — have Bluesky's in them too
 in the background beside the fediverse's collections. See **Who liked,
 boosted or quoted** in Architecture.md.
 
+### 9.4c Hashtags and searches
+
+A hashtag's timeline and a search of posts here have Bluesky's posts too
+(`BlueskyPostSource`, `searchPosts`), read in the background beside the
+fediverse servers' hashtag timelines. See **Hashtags and searches beyond
+this server** in Architecture.md.
+
 ### 9.5 Deletes and edits from Bluesky
 
 A `delete` op from Jetstream, or a post gone from the author feed on the

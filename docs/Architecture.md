@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.182
+**App version:** 0.26.183
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1585,6 +1585,27 @@ Who reacted is kept an hour in the durable cache's table (`DurableCache::setShar
 counts on a post, and the notifications, stay what they were. Quoting
 posts are stored as posts, so the quotes list reads them like any other.
 The answers say `X-Social-Filling` while the read was just asked for.
+
+### Hashtags and searches beyond this server
+
+A hashtag's timeline and a search of posts are answered, as before, from
+what this server holds — and the first page of either also has the posts
+beyond it read in the background (`RemoteFetchQueue::fillPosts()`,
+`Cron\FillPosts`, `PostDiscoveryService`, at most every ten minutes per
+hashtag, and per search and reader). Each network is a `PostSource`:
+
+- `FediversePostSource` asks the public hashtag timelines
+  (`/api/v1/timelines/tag/{tag}`) of up to five Mastodon-speaking servers
+  this one talks to (`FediverseDirectoryService::sources()`), and fetches
+  each post from its own server (`StreamQueueService::fetchNow()`), so what
+  is stored is what its author's server says, never a peer's copy. The
+  fediverse has no public search of posts, so a search is not asked of it;
+- `Atproto\Reader\BlueskyPostSource` asks the AppView's `searchPosts`,
+  newest first, as the reader where they are on Bluesky.
+
+What is found is stored like any arriving post, indexed for the search as
+it is stored, so the timeline and the search simply have it the next time.
+The answers say `X-Social-Filling` while the read is new.
 
 ### Who may reply
 

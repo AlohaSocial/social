@@ -2927,6 +2927,16 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('https://cloud.example/tags/bobcats', $data['hashtags'][0]['url']);
 	}
 
+	public function testASearchOfPostsIsAskedBeyondThisServerAsTheReader(): void {
+		$this->loggedInAs();
+		$this->searchService->method('searchStreamContent')->willReturn([]);
+		$this->searchService->method('searchHashtags')->willReturn([]);
+		$this->remoteFetchQueue->expects($this->once())->method('fillPosts')->with('search', 'open source', $this->anything())->willReturn(true);
+
+		$this->assertSame('1', $this->controller()->searchV2('open source', 'statuses')->getHeaders()['X-Social-Filling'] ?? null);
+		$this->assertArrayNotHasKey('X-Social-Filling', $this->controller()->searchV2('https://x.example/notes/1', 'statuses')->getHeaders(), 'an address is fetched, not searched');
+	}
+
 	public function testSearchV2CanBeNarrowedByType(): void {
 		$this->loggedInAs();
 		$this->searchService->expects($this->never())->method('searchStreamContent');
@@ -3528,6 +3538,16 @@ class ApiControllerTest extends TestCase {
 		$this->assertTrue($probe->isLocal());
 		$this->assertTrue($probe->isOnlyMedia());
 		$this->assertSame(6, $probe->getLimit());
+	}
+
+	/** A hashtag's posts beyond this server are read on the first page, not for the local one. */
+	public function testTheTagTimelineAsksForTheHashtagBeyondThisServer(): void {
+		$this->loggedInAs();
+		$this->captureTimelineOptions([]);
+		$this->remoteFetchQueue->expects($this->once())->method('fillPosts')->with('tag', 'nextcloud')->willReturn(true);
+
+		$this->assertSame('1', $this->controller()->tag('nextcloud')->getHeaders()['X-Social-Filling'] ?? null);
+		$this->assertArrayNotHasKey('X-Social-Filling', $this->controller()->tag('nextcloud', 20, 0, 0, 0, true)->getHeaders(), 'the local timeline is this server alone');
 	}
 
 	// pagination Link headers

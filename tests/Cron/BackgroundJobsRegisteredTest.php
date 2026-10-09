@@ -37,6 +37,7 @@ class BackgroundJobsRegisteredTest extends TestCase {
 		'OCA\\Social\\Cron\\DomainPurge',
 		'OCA\\Social\\Cron\\ExternalPromoted',
 		'OCA\\Social\\Cron\\FillInteractions',
+		'OCA\\Social\\Cron\\FillPosts',
 		'OCA\\Social\\Cron\\FillThread',
 		'OCA\\Social\\Cron\\ResolveActor',
 		'OCA\\Social\\Cron\\RunImport',

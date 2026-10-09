@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Cron\FillInteractions;
+use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
@@ -50,6 +51,11 @@ class RemoteFetchQueue {
 	public const INTERACTIONS_INTERVAL = 600;
 
 	private const INTERACTIONS_FILLED = 'social.reactfill';
+
+	/** Seconds between two reads of one hashtag, or of one search. */
+	public const POSTS_INTERVAL = 600;
+
+	private const POSTS_FILLED = 'social.postsfill';
 
 	public function __construct(
 		private IJobList $jobList,
@@ -138,6 +144,36 @@ class RemoteFetchQueue {
 		}
 
 		$this->queue(FillInteractions::class, ['post' => $post->getId(), 'type' => $type]);
+
+		return true;
+	}
+
+	/**
+	 * Queues a read of the posts with a hashtag, or matching a search, beyond
+	 * this server (`Cron\FillPosts`), at most once per `POSTS_INTERVAL` per
+	 * kind and term — a search per person, as it is asked as them where
+	 * they are known.
+	 *
+	 * @param string $kind `PostDiscoveryService::TAG` or `::SEARCH`
+	 * @return bool whether a read was asked for
+	 */
+	public function fillPosts(string $kind, string $term, ?Person $viewer = null): bool {
+		$term = trim(mb_strtolower($term));
+		if ($term === '' || mb_strlen($term) > 200) {
+			return false;
+		}
+		$viewerId = ($viewer === null || $kind !== 'search') ? '' : $viewer->getId();
+		$key = md5($kind . "\0" . $term . "\0" . $viewerId);
+		try {
+			if ($this->durableCache->get(self::POSTS_FILLED, $key) !== null) {
+				return false;
+			}
+			$this->durableCache->set(self::POSTS_FILLED, $key, 1, self::POSTS_INTERVAL);
+		} catch (Throwable $e) {
+			// the job list's own dedupe still holds
+		}
+
+		$this->queue(FillPosts::class, ['kind' => $kind, 'term' => $term, 'viewer' => $viewerId]);
 
 		return true;
 	}

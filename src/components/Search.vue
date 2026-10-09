@@ -127,6 +127,9 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 /** how long to wait for the typing to stop before asking the server */
 const DEBOUNCE_MS = 300
 
+/** How long after a search the posts found beyond this server are asked for again. */
+export const SEARCH_REFILL_MS = 6000
+
 export default {
 	name: 'Search',
 	components: {
@@ -280,11 +283,16 @@ export default {
 			this.loading = true
 			this.error = null
 			try {
-				const { data } = await axios.get(generateUrl('apps/social/api/v2/search'), {
+				const { data, headers } = await axios.get(generateUrl('apps/social/api/v2/search'), {
 					params: { q: term, limit: 20 },
 				})
 				if (sequence !== this.requestSequence) {
 					return
+				}
+				// the posts beyond this server that match are being read: the
+				// same search once more, a little later, while it is still the one asked
+				if (headers?.['x-social-filling'] === '1') {
+					setTimeout(() => sequence === this.requestSequence && this.search(), SEARCH_REFILL_MS)
 				}
 
 				this.accounts = Array.isArray(data?.accounts) ? data.accounts : []
