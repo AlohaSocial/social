@@ -8,7 +8,7 @@ import { RouterLinkStub, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
 
-import PostReactedBy from '../../../src/components/PostReactedBy.vue'
+import PostReactedBy, { REFILL_MS } from '../../../src/components/PostReactedBy.vue'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
 vi.mock('@nextcloud/axios', () => ({
@@ -146,5 +146,29 @@ describe('PostReactedBy', () => {
 		expect(wrapper.findAll('.reacted-by__face')).toHaveLength(12)
 		// and the count, not the faces, is what says how many there are
 		expect(wrapper.text()).toContain('Favourited by 30 people')
+	})
+
+	it('fills the faces in again once, when the server is reading who reacted elsewhere', async () => {
+		vi.useFakeTimers()
+		let calls = 0
+		axios.get.mockImplementation(async (url) => {
+			if (!url.endsWith('/favourited_by')) {
+				return { data: [] }
+			}
+			calls++
+
+			return calls === 1
+				? { data: [account('bob')], headers: { 'x-social-filling': '1' } }
+				: { data: [account('bob'), account('carol@bsky.example')], headers: {} }
+		})
+		const wrapper = mountReactions(post({ favourites_count: 2 }))
+		await flushPromises()
+		expect(wrapper.findAll('.reacted-by__face')).toHaveLength(1)
+
+		await vi.advanceTimersByTimeAsync(REFILL_MS)
+		await flushPromises()
+		expect(calls).toBe(2)
+		expect(wrapper.findAll('.reacted-by__face')).toHaveLength(2)
+		vi.useRealTimers()
 	})
 })

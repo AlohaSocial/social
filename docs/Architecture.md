@@ -1563,6 +1563,29 @@ The page is never held up by another server: the answer says so with
 `X-Social-Thread-Filling`, and the web app asks once more a few seconds
 later. Nothing in what a reader sees says which network a reply came from.
 
+### Who liked, boosted or quoted
+
+The same idea as whole conversations, for the reactions to a post: the
+lists of who liked it, who boosted it and which posts quote it are the
+ones from here and the ones from wherever the post lives, merged, with
+nothing to tell them apart. `InteractionService` asks each network the post
+is on (`InteractionSource`) in the background (`Cron\FillInteractions`,
+queued by `RemoteFetchQueue::fillInteractions()` at most every ten minutes
+per post and kind):
+
+- `ActivityPubInteractionSource` reads the post's `likes` and `shares`
+  collections as its server describes them — Mastodon lists only the
+  number, other servers name the accounts — and has the accounts not
+  cached here fetched (`RemoteFetchQueue::resolveActors()`);
+- `Atproto\Reader\BlueskyInteractionSource` asks the AppView
+  (`getLikes`, `getRepostedBy`, `getQuotes`) for a post that is on Bluesky,
+  caches each account as it is found and stores each quoting post.
+
+Who reacted is kept an hour in the durable cache, not as actions: the
+counts on a post, and the notifications, stay what they were. Quoting
+posts are stored as posts, so the quotes list reads them like any other.
+The answers say `X-Social-Filling` while the read was just asked for.
+
 ### Who may reply
 
 The author of a post written here says who may reply to it: everybody (the

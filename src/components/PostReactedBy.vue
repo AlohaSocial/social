@@ -29,6 +29,9 @@ import { useSettingsStore } from '../store/settings.js'
 /** How many faces are worth showing; the count says how many there are in all. */
 const FACES = 12
 
+/** How long after the first look the faces from elsewhere are asked for again. */
+export const REFILL_MS = 6000
+
 export default {
 	name: 'PostReactedBy',
 	components: {
@@ -110,11 +113,11 @@ export default {
 		},
 
 		async loadBoosts() {
-			this.boosted = await this.fetch('reblogged_by', this.status.reblogs_count)
+			this.boosted = await this.fetch('reblogged_by', this.status.reblogs_count, () => this.loadBoosts())
 		},
 
 		async loadFavourites() {
-			this.favourited = await this.fetch('favourited_by', this.status.favourites_count)
+			this.favourited = await this.fetch('favourited_by', this.status.favourites_count, () => this.loadFavourites())
 		},
 
 		/**
@@ -125,11 +128,16 @@ export default {
 		 * something to answer with. A refusal is not worth a message: the
 		 * counts are still on the post, and this row is the elaboration.
 		 *
+		 * Who reacted where the post lives is read by the server in the
+		 * background; when it says so, the row is filled in again a little
+		 * later, once.
+		 *
 		 * @param {string} path the endpoint under the status, Mastodon's name for it
 		 * @param {number} count how many the post says there are; ignored while the numbers are hidden
+		 * @param {() => void} again what reads the row again
 		 * @return {Promise<object[]>} the accounts, newest first
 		 */
-		async fetch(path, count) {
+		async fetch(path, count, again) {
 			// with the numbers hidden the server sends 0 for every post, so
 			// the count says nothing about whether anybody is there to show
 			if (!this.hidesCounts && !(count > 0)) {
@@ -137,10 +145,14 @@ export default {
 			}
 
 			try {
-				const { data } = await axios.get(
+				const { data, headers } = await axios.get(
 					generateUrl(`apps/social/api/v1/statuses/${this.status.id}/${path}`),
 					{ params: { limit: FACES } },
 				)
+				if (headers?.['x-social-filling'] === '1') {
+					const id = this.status.id
+					setTimeout(() => this.status.id === id && again(), REFILL_MS)
+				}
 
 				return Array.isArray(data) ? data.slice(0, FACES) : []
 			} catch (error) {

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
@@ -155,5 +156,15 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertTrue($this->queue->fillThread($public), 'a public post of ours is read on other networks too');
 		$this->assertFalse($this->queue->fillThread($private), 'nobody elsewhere can reply to it');
 		$this->now += RemoteFetchQueue::THREAD_FILL_INTERVAL + 1;
+	}
+
+	public function testWhoReactedIsReadOncePerIntervalAndKind(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add')->with(FillInteractions::class, $this->anything());
+		$remote = (new Note())->setId('https://remote.example/notes/1');
+
+		$this->assertTrue($this->queue->fillInteractions($remote, 'Like'));
+		$this->assertFalse($this->queue->fillInteractions($remote, 'Like'));
+		$this->assertTrue($this->queue->fillInteractions($remote, 'Announce'));
 	}
 }
