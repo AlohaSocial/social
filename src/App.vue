@@ -116,6 +116,7 @@
 
 <script>
 import { defineAsyncComponent } from 'vue'
+import { starterPackRoute } from './utils/starterPack.js'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -424,6 +425,13 @@ export default {
 				if (this.$route.name === 'search') {
 					this.$router.push({ name: 'timeline' })
 				}
+				return
+			}
+
+			// a Bluesky starter pack someone was sent is opened, not searched for
+			const pack = starterPackRoute(query)
+			if (pack !== null) {
+				this.$router.push(pack)
 				return
 			}
 

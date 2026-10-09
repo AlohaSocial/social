@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Controller;
 
 use InvalidArgumentException;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
+use OCA\Social\Atproto\Reader\StarterPacks;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Controller\AtprotoFeedsController;
 use OCA\Social\Exceptions\AtprotoException;
@@ -33,6 +34,7 @@ use Psr\Log\NullLogger;
 class AtprotoFeedsControllerTest extends TestCase {
 	private BlueskyFeeds&MockObject $feeds;
 	private LinkPreviewService&MockObject $cards;
+	private StarterPacks&MockObject $packs;
 	private bool $enabled = true;
 	private bool $signedIn = true;
 
@@ -47,13 +49,22 @@ class AtprotoFeedsControllerTest extends TestCase {
 		$accounts->method('getActorFromUserId')->willReturn((new Person())->setUserId('alice'));
 
 		return new AtprotoFeedsController(
-			$this->createStub(IRequest::class), $session, $config, $accounts, $this->feeds, $this->cards, $this->createStub(PlaceService::class), new NullLogger(),
+			$this->createStub(IRequest::class), $session, $config, $accounts, $this->feeds, $this->packs, $this->cards, $this->createStub(PlaceService::class), new NullLogger(),
 		);
 	}
 
 	protected function setUp(): void {
 		$this->feeds = $this->createMock(BlueskyFeeds::class);
 		$this->cards = $this->createMock(LinkPreviewService::class);
+		$this->packs = $this->createMock(StarterPacks::class);
+	}
+
+	public function testAStarterPackIsReadAndItsMembersFollowedOnlyAsStrings(): void {
+		$this->packs->method('read')->with($this->anything(), 'https://bsky.app/starter-pack/bob.test/3ks')->willReturn(['name' => 'Start here']);
+		$this->packs->expects($this->once())->method('follow')->with($this->anything(), 'https://bsky.app/starter-pack/bob.test/3ks', ['did:plc:a'], true)->willReturn(['followed' => ['did:plc:a'], 'failed' => []]);
+
+		$this->assertSame(['pack' => ['name' => 'Start here']], $this->controller()->starterPack('https://bsky.app/starter-pack/bob.test/3ks')->getData());
+		$this->assertSame(['followed' => ['did:plc:a'], 'failed' => []], $this->controller()->followStarterPack('https://bsky.app/starter-pack/bob.test/3ks', ['did:plc:a', ['nested']], true)->getData());
 	}
 
 	public function testNothingIsAnsweredWhileBlueskyIsOffOrNoOneIsSignedIn(): void {

@@ -125,7 +125,7 @@ class BlueskyFeeds {
 		}
 
 		return array_values(array_filter(array_map(
-			fn ($view): ?array => is_array($view) ? $this->feedView($view) : null,
+			static fn ($view): ?array => is_array($view) ? self::describeFeed($view) : null,
 			is_array($answer['feeds'] ?? null) ? $answer['feeds'] : [],
 		)));
 	}
@@ -237,7 +237,7 @@ class BlueskyFeeds {
 				continue;
 			}
 			foreach (is_array($answer['feeds'] ?? null) ? $answer['feeds'] : [] as $view) {
-				$mapped = is_array($view) ? $this->feedView($view) : null;
+				$mapped = is_array($view) ? self::describeFeed($view) : null;
 				if ($mapped !== null) {
 					$described[$mapped['uri']] = $mapped;
 				}
@@ -268,9 +268,11 @@ class BlueskyFeeds {
 	}
 
 	/**
+	 * A feed generator's view, as this app describes a feed.
+	 *
 	 * @return array{uri: string, type: string, name: string, description: string, avatar: string, creator: string}|null
 	 */
-	private function feedView(array $view): ?array {
+	public static function describeFeed(array $view): ?array {
 		$uri = (string)($view['uri'] ?? '');
 		if (self::typeOf($uri) !== self::FEED) {
 			return null;

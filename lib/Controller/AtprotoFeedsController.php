@@ -12,6 +12,7 @@ namespace OCA\Social\Controller;
 use InvalidArgumentException;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
+use OCA\Social\Atproto\Reader\StarterPacks;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\AccountService;
@@ -30,7 +31,7 @@ use Throwable;
 /**
  * Bluesky's custom feeds and lists for the person signed in (§9.6): the
  * ones they keep, keeping or dropping one, Bluesky's suggestions, and a
- * page of one as a timeline.
+ * page of one as a timeline; and starter packs, opened and followed.
  */
 class AtprotoFeedsController extends Controller {
 	public function __construct(
@@ -39,6 +40,7 @@ class AtprotoFeedsController extends Controller {
 		private AtprotoConfig $config,
 		private AccountService $accountService,
 		private BlueskyFeeds $feeds,
+		private StarterPacks $starterPacks,
 		private LinkPreviewService $linkPreviewService,
 		private PlaceService $placeService,
 		private LoggerInterface $logger,
@@ -100,6 +102,28 @@ class AtprotoFeedsController extends Controller {
 
 			return $posts;
 		});
+	}
+
+	/**
+	 * A starter pack — who is in it, which feeds come with it — by its
+	 * bsky.app address or `at://` URI.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/starter-pack')]
+	public function starterPack(string $pack): DataResponse {
+		return $this->answer(fn (Person $viewer): array => ['pack' => $this->starterPacks->read($viewer, $pack)]);
+	}
+
+	/**
+	 * Follows members of a starter pack, a batch at a time, and keeps its
+	 * feeds when asked to.
+	 *
+	 * @param string[] $dids
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/starter-pack/follow')]
+	public function followStarterPack(string $pack, array $dids = [], bool $feeds = false): DataResponse {
+		return $this->answer(fn (Person $viewer): array => $this->starterPacks->follow($viewer, $pack, array_values(array_filter($dids, 'is_string')), $feeds));
 	}
 
 	/**

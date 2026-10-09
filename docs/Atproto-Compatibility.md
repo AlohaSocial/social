@@ -629,6 +629,14 @@ Bluesky's custom feeds and lists are read here as timelines
   one.
 - **Lists made in a Bluesky app** are written to the account's repository
   (§6), so they reach the AppView, and read here as their feed.
+- **Starter packs** open here at the path bsky.app gives them,
+  `/starter-pack/<handle or DID>/<key>` — from a starter-pack card in a post
+  (§9, `PostMapper::cardOf()`) or an address typed into the search
+  (`Reader\StarterPacks`). The page lists the members (up to 150, read as
+  the person, so whom they follow already is marked) and the feeds; it
+  follows everybody not followed yet or one at a time, 25 to a request, as
+  any Bluesky account is followed, and keeps the feeds when asked, as the
+  Bluesky app does.
 
 ## 10. Being followed, liked and answered from Bluesky
 
