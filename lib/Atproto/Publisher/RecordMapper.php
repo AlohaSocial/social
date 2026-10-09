@@ -230,6 +230,15 @@ class RecordMapper {
 		if ($bio !== '') {
 			$record['description'] = self::clip($bio, 256, 2560);
 		}
+		// the profile rows Bluesky has a place for (`Person`)
+		$pronouns = $actor->getPronouns();
+		if ($pronouns !== '') {
+			$record['pronouns'] = self::clip($pronouns, 20, 200);
+		}
+		$website = $actor->getWebsite();
+		if ($website !== '') {
+			$record['website'] = $website;
+		}
 		$avatar = $this->pictures->avatarBlob($identity, $actor, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES);
 		if ($avatar !== null) {
 			$record['avatar'] = $avatar['blob']->toRecordValue();

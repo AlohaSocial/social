@@ -112,7 +112,7 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   other way too: follow `alice.bsky.social` by its bare handle and read it in your home feed, badged,
   its videos playing here; your likes and boosts reach Bluesky, and their follows, likes, replies and
   mentions reach your Activities. Bluesky's custom feeds and lists read as timelines of their own,
-  the same ones a Bluesky app keeps for you, and a starter pack opens here to follow everybody in it. Discover shows
+  the same ones a Bluesky app keeps for you, and a starter pack opens here to follow everybody in it. Your pronouns and website rows are your Bluesky profile's, and a Bluesky account's show here as rows. Discover shows
   what is trending on Bluesky and whom Bluesky suggests to you. Bluesky apps sign in here, their direct messages included, with Bluesky sign-in, or with an app
   password made in your settings, and post videos as they would on Bluesky. A Bluesky account of your
   own moves here with its followers and its posts — from Bluesky, from Bridgy Fed's bridge of your Fediverse account,

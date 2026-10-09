@@ -237,7 +237,7 @@ Collection → written when:
 
 | Collection | Written | Content |
 |---|---|---|
-| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName`, `description` (plain text, bio), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
+| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName`, `description` (plain text, bio), `pronouns` (the profile row named for them, at most 20 graphemes) and `website` (the row named for one, else the first row that is an address), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
 | `app.bsky.feed.post` | public post created (D8) | §8 |
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
@@ -535,8 +535,10 @@ then DNS/HTTPS directly as a fallback), the DID document from
 result is a **cached actor** (`social_cache_actor`) with id `at://<did>`,
 account `alice.bsky.social` (the handle, no `@…@` form), type `Person`,
 `host` the handle's host, the profile fields mapped (`displayName` →
-name, `description` → summary as plain text, avatar and banner as cached
-documents, `followersCount`/`followsCount`/`postsCount` into the counts,
+name, `description` → summary as plain text, `pronouns` and `website`
+→ profile rows named Pronouns and Website, which is where the rest of the
+network keeps them, avatar and banner as cached documents,
+`followersCount`/`followsCount`/`postsCount` into the counts,
 the profile's `pinnedPost` a pin as a Fediverse account's pins are, its
 `verification` — verified, by whom, a trusted verifier itself — onto the
 Account entity's `bluesky` block, where the app draws Bluesky's check),
@@ -1286,7 +1288,11 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   the app uploaded becomes the account's — the avatar is the Nextcloud
   account's own picture, refused where its backend owns it — and one left
   out is taken away. An app sends the whole profile every time, so a
-  picture it did not change is left alone. `getServiceAuth` came with 3d.
+  picture it did not change is left alone. The pronouns and the website
+  it sets are the account's profile rows named for them, rewritten, added
+  while there is room among the four, or taken away
+  (`Person::withProfileRows()`); unchanged, they are left alone.
+  `getServiceAuth` came with 3d.
 - A mention of a Bluesky account in a post published from here — the
   composer's `@alice.bsky.social` — is now a mention facet with the DID,
   where it was a link.

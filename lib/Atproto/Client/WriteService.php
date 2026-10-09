@@ -167,6 +167,7 @@ class WriteService {
 			}
 			$this->profilePicture($session, 'avatar', $record, $was);
 			$this->profilePicture($session, 'banner', $record, $was);
+			$this->profileRows($session, $record, $was);
 		});
 		// the actor as the changes left it: a new avatar is a new icon
 		try {
@@ -181,6 +182,31 @@ class WriteService {
 		}
 
 		return $this->created($session, $stored);
+	}
+
+	/**
+	 * The pronouns and the website of a profile an app saves, where they
+	 * changed: written into the account's profile rows (`Person`), the ones
+	 * every other network reads them from. An app sends the whole profile,
+	 * so one left out that was there is taken away.
+	 */
+	private function profileRows(ClientSession $session, array $record, array $was): void {
+		$changed = static function (string $key) use ($record, $was): ?string {
+			$now = is_string($record[$key] ?? null) ? trim($record[$key]) : '';
+			$before = is_string($was[$key] ?? null) ? trim($was[$key]) : '';
+
+			return $now === $before ? null : $now;
+		};
+		$pronouns = $changed('pronouns');
+		$website = $changed('website');
+		if ($website !== null && $website !== '' && filter_var($website, FILTER_VALIDATE_URL) === false) {
+			$website = null;
+		}
+		if ($pronouns === null && $website === null) {
+			return;
+		}
+		$actor = $this->accounts->getActorFromUserId($session->userId);
+		$this->accounts->setFields($session->userId, Person::withProfileRows($actor->getFields(), $pronouns, $website));
 	}
 
 	/**

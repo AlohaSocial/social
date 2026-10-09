@@ -70,6 +70,17 @@ class ActorMapperTest extends TestCase {
 		$this->assertSame(['handle' => 'alice.bsky.social', 'did' => self::DID, 'url' => 'https://bsky.app/profile/alice.bsky.social', 'native' => true, 'verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => false], $person->getDetails(Details::BLUESKY));
 	}
 
+	public function testThePronounsAndTheWebsiteAreProfileRows(): void {
+		$person = (new ActorMapper())->person($this->profile() + ['pronouns' => 'she/her', 'website' => 'https://alice.example']);
+
+		$this->assertSame('she/her', $person->getPronouns());
+		$this->assertSame('https://alice.example', $person->getWebsite());
+		$this->assertSame(['Pronouns', 'Website'], array_column($person->getFields(), 'name'));
+
+		$odd = (new ActorMapper())->person($this->profile() + ['website' => 'javascript:alert(1)']);
+		$this->assertSame([], $odd->getFields(), 'only an address is a website');
+	}
+
 	public function testAHiddenAccountIsLimitedAndABareProfileStillMaps(): void {
 		$hidden = (new ActorMapper())->person(['did' => self::DID, 'handle' => 'alice.bsky.social', 'labels' => [['src' => 'did:plc:ar7c4by46qjdydhdevvrndac', 'uri' => 'at://' . self::DID, 'val' => '!hide']]]);
 		$this->assertTrue($hidden->getDetails(ActorMapper::DETAIL)['limited']);

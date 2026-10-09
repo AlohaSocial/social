@@ -1173,6 +1173,32 @@ class PersonTest extends TestCase {
 		}
 	}
 
+	public function testTheWebsiteIsTheRowNamedForItElseTheFirstAddress(): void {
+		$person = new Person();
+		$person->setFields([['name' => 'Code', 'value' => 'https://git.example/alice'], ['name' => 'Homepage:', 'value' => 'https://alice.example']]);
+		$this->assertSame('https://alice.example', $person->getWebsite());
+
+		$person->setFields([['name' => 'Pronouns', 'value' => 'she/her'], ['name' => 'Code', 'value' => 'https://git.example/alice']]);
+		$this->assertSame('https://git.example/alice', $person->getWebsite(), 'the first address when no row is named for it');
+
+		$person->setFields([['name' => 'Website', 'value' => 'somewhere nice'], ['name' => 'Mood', 'value' => 'javascript:alert(1)']]);
+		$this->assertSame('', $person->getWebsite(), 'only an address is a website');
+	}
+
+	public function testABlueskyAppSetsThePronounAndWebsiteRowsAndLeavesTheRest(): void {
+		$fields = [['name' => 'Pronouns', 'value' => 'she/her'], ['name' => 'Mastodon', 'value' => 'https://mastodon.example/@alice']];
+
+		$this->assertSame(
+			[['name' => 'Pronouns', 'value' => 'they/them'], ['name' => 'Mastodon', 'value' => 'https://mastodon.example/@alice'], ['name' => 'Website', 'value' => 'https://alice.example']],
+			Person::withProfileRows($fields, 'they/them', 'https://alice.example'),
+		);
+		$this->assertSame([['name' => 'Mastodon', 'value' => 'https://mastodon.example/@alice']], Person::withProfileRows($fields, '', null), 'cleared is taken away');
+		$this->assertSame($fields, Person::withProfileRows($fields, null, null), 'not said is left alone');
+
+		$full = [['name' => 'A', 'value' => '1'], ['name' => 'B', 'value' => '2'], ['name' => 'C', 'value' => '3'], ['name' => 'D', 'value' => '4']];
+		$this->assertSame($full, Person::withProfileRows($full, 'she/her', null), 'four rows are all a profile has');
+	}
+
 	public function testARowThatIsNotAboutPronounsIsNotReadAsOne(): void {
 		$person = new Person();
 		$person->setFields([['name' => 'Website', 'value' => 'https://alice.example']]);

@@ -464,6 +464,18 @@ class RecordMapperTest extends TestCase {
 		$this->assertSame(64, Lexicon::graphemes($record['displayName']));
 		$this->assertSame('I run Nextcloud (https://nextcloud.com)', $record['description']);
 		$this->assertArrayNotHasKey('avatar', $record);
+		$this->assertArrayNotHasKey('pronouns', $record);
+		$this->assertArrayNotHasKey('website', $record);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testAProfileCarriesThePronounsAndTheWebsiteFromItsRows(): void {
+		$this->author->setFields([['name' => 'Pronouns', 'value' => 'she/her'], ['name' => 'Website', 'value' => 'https://alice.example']]);
+
+		$record = $this->mapper->profile($this->author, $this->identity);
+
+		$this->assertSame('she/her', $record['pronouns']);
+		$this->assertSame('https://alice.example', $record['website']);
 		$this->lexicon->validateRecord($record);
 	}
 
