@@ -109,6 +109,11 @@ class AppViewClient {
 		}
 		$decoded = json_decode($answer, true);
 		if ($status >= 200 && $status < 300) {
+			// a procedure without output (`muteActor`, `muteActorList`,
+			// `createBookmark`) answers an empty body
+			if ($input !== null && trim($answer) === '') {
+				return [];
+			}
 			if (!is_array($decoded)) {
 				throw new AtprotoException('AppView did not answer JSON for ' . $method);
 			}

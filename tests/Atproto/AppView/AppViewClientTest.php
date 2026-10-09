@@ -14,6 +14,7 @@ use OCA\Social\Atproto\AppView\ServiceAuth;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Service\AtprotoConfig;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Service\CurlService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -40,5 +41,23 @@ class AppViewClientTest extends TestCase {
 
 		$this->assertSame(['subject' => 'did:plc:bob'], $answer);
 		$this->assertSame(['post', 'https://api.bsky.app/xrpc/app.bsky.notification.putActivitySubscription', 'Bearer signed', 'application/json', ['subject' => 'did:plc:bob']], $sent);
+	}
+
+	public function testAProcedureWithoutOutputAnswersNothingAndAQueryMustAnswerJson(): void {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('appView')->willReturn('https://public.api.bsky.app');
+		$config->method('appViewAuth')->willReturn('https://api.bsky.app');
+		$config->method('appViewDid')->willReturn('did:web:api.bsky.app');
+		$curl = $this->createMock(CurlService::class);
+		$curl->method('doRequest')->willReturnCallback(static function (string $verb, string $url, array $options, &$contentType, &$status): string {
+			$status = 200;
+
+			return '';
+		});
+		$client = new AppViewClient($config, $this->createMock(ServiceAuth::class), $curl, new NullLogger());
+
+		$this->assertSame([], $client->procedureAs('did:plc:alice', PrivateKey::generate(Curve::K256), 'app.bsky.graph.muteActorList', ['list' => 'at://did:plc:bob/app.bsky.graph.list/3k']));
+		$this->expectException(AtprotoException::class);
+		$client->query('app.bsky.actor.getProfile', ['actor' => 'did:plc:bob']);
 	}
 }
