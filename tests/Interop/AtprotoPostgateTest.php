@@ -37,9 +37,9 @@ class AtprotoPostgateTest extends TestCase {
 		$this->alice = LocalAccount::create('pg');
 	}
 
-	/** The post's status id here, once stored. */
+	/** The post's status id here, once the AppView has it and it is stored. */
 	private function stored(string $uri): string {
-		$this->assertTrue(Server::get(PostStore::class)->storeByUri($uri));
+		$this->assertNotNull($this->network->await(fn (): ?bool => Server::get(PostStore::class)->storeByUri($uri) ? true : null), 'the AppView has ' . $uri);
 
 		return (string)Server::get(StreamRequest::class)->getStreamById(BlueskyIds::postIdOfUri($uri))->getNid();
 	}
@@ -56,14 +56,16 @@ class AtprotoPostgateTest extends TestCase {
 		]);
 		$this->assertSame(200, $status, json_encode($answer));
 
+		$closedHere = $this->stored($closed['uri']);
+		$openHere = $this->stored($open['uri']);
 		try {
-			$this->alice->postStatus('Quoting anyway', null, ['quote_id' => $this->stored($closed['uri'])]);
+			$this->alice->postStatus('Quoting anyway', null, ['quote_id' => $closedHere]);
 			$this->fail('the quote went out');
 		} catch (RuntimeException $e) {
 			$this->assertStringContainsString('does not allow quotes', $e->getMessage());
 		}
 
-		$quote = $this->alice->postStatus('Quoting this one', null, ['quote_id' => $this->stored($open['uri'])]);
+		$quote = $this->alice->postStatus('Quoting this one', null, ['quote_id' => $openHere]);
 		$this->assertNotEmpty($quote['quote'] ?? null, 'a post without a gate is quoted');
 	}
 }
