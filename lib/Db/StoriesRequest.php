@@ -262,12 +262,14 @@ class StoriesRequest extends CoreRequestBuilder {
 		$qb->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter(md5($actorId))));
 		$qb->executeStatement();
 
-		// and what this account said about anybody else's story, which the
-		// stories it owns do not cover
-		$qb = $this->getQueryBuilder();
-		$qb->delete(self::TABLE_STORY_REACTS)
-			->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter(md5($actorId))));
-		$qb->executeStatement();
+		// and what this account said about anybody else's story, and which of
+		// them it watched, which the stories it owns do not cover
+		foreach ([self::TABLE_STORY_REACTS, self::TABLE_STORY_VIEWS] as $table) {
+			$qb = $this->getQueryBuilder();
+			$qb->delete($table)
+				->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter(md5($actorId))));
+			$qb->executeStatement();
+		}
 	}
 
 	/**

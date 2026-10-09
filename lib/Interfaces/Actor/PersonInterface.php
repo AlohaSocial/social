@@ -130,7 +130,7 @@ class PersonInterface extends AbstractActivityPubInterface implements IActivityP
 			return;
 		}
 
-		$this->actorCascadeService->purge($item->getId());
+		$this->actorCascadeService->purge($item->getId(), false, $item->getUserId());
 		$this->deleteStreamFromActor($item);
 	}
 
