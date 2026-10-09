@@ -76,6 +76,7 @@ class SessionService {
 		if ($identity->state === Identity::STATE_TOMBSTONED || $identity->state === Identity::STATE_MOVED_AWAY) {
 			throw new XrpcException(400, 'AccountTakedown', 'This account is no longer hosted here');
 		}
+		self::assertActive($identity);
 
 		return $this->open($identity, $userId, $appPasswordId);
 	}
@@ -94,6 +95,7 @@ class SessionService {
 		}
 		$this->request->removeSession($session['jti']);
 		$identity = $this->identityByDid($session['did']);
+		self::assertActive($identity);
 
 		return $this->open($identity, $session['user_id'], $session['app_password_id']);
 	}
@@ -124,9 +126,7 @@ class SessionService {
 			throw new XrpcException(401, 'ExpiredToken', 'Token has been revoked');
 		}
 		$identity = $this->identityByDid($session['did']);
-		if (!$identity->isActive()) {
-			throw new XrpcException(400, 'AccountDeactivated', 'This account is deactivated');
-		}
+		self::assertActive($identity);
 
 		$scopes = ['atproto', ClientSession::GENERIC, ClientSession::EMAIL];
 		if ($this->request->isPrivileged($session['app_password_id'])) {
@@ -179,6 +179,20 @@ class SessionService {
 			'didDoc' => $this->identities->document($identity),
 			'active' => $identity->isActive(),
 		] + $this->email($userId);
+	}
+
+	/**
+	 * Refuses an account its owner switched off for Bluesky (§4.6): no app
+	 * signs in to it, and none signed in goes on, until it is on again here.
+	 *
+	 * @throws XrpcException
+	 */
+	private static function assertActive(Identity $identity): void {
+		if (!$identity->isActive()) {
+			throw new XrpcException(400, 'AccountDeactivated', $identity->state === Identity::STATE_DEACTIVATED
+				? 'This account is switched off for Bluesky; its owner can switch it on again in their settings on this server'
+				: 'This account is deactivated');
+		}
 	}
 
 	/**

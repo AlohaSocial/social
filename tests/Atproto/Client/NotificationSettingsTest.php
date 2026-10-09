@@ -46,7 +46,7 @@ class NotificationSettingsTest extends TestCase {
 			return ['preferences' => $input];
 		});
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn($identity);
+		$identities->method('activeForActor')->willReturn($identity);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$policies = $this->createMock(NotificationPolicyService::class);
 		$policies->method('of')->willReturnCallback(fn (): NotificationPolicy => (new NotificationPolicy())->set(NotificationPolicy::NOT_FOLLOWING, $this->notFollowing));

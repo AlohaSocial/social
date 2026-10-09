@@ -51,7 +51,7 @@ class BlueskyBookmarksTest extends TestCase {
 		});
 		$appView->method('queryAs')->willReturn(['posts' => [['uri' => self::URI, 'cid' => 'bafy', 'record' => ['text' => 'hi']]]]);
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn($this->identity);
+		$identities->method('activeForActor')->willReturn($this->identity);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$refs = $this->createMock(PostRefs::class);
 		$refs->method('strongRef')->willReturnCallback(static fn (string $id): ?array => match ($id) {

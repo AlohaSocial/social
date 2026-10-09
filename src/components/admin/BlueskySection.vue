@@ -199,6 +199,11 @@
 				<dt>{{ t('social', 'Identities') }}</dt>
 				<dd>{{ current.status.identities }}</dd>
 			</div>
+			<!-- of those, the people who switched their presence there off -->
+			<div class="bluesky__number-cell">
+				<dt>{{ t('social', 'Switched off by their owners') }}</dt>
+				<dd>{{ current.status.identities_off ?? 0 }}</dd>
+			</div>
 			<div class="bluesky__number-cell">
 				<dt>{{ t('social', 'Repositories') }}</dt>
 				<dd>{{ current.status.repositories }}</dd>
@@ -275,7 +280,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
  * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, chat: string, sync_ceiling: number, trusted_clients: string[]}} settings - what is set, in the app values' names
- * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, listener?: {running: boolean, connected: boolean, started: number, seen: number, last_event: number, cursor: number, accounts: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
+ * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, identities_off?: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, listener?: {running: boolean, connected: boolean, started: number, seen: number, last_event: number, cursor: number, accounts: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
  */
 

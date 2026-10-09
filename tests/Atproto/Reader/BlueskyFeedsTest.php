@@ -75,6 +75,7 @@ class BlueskyFeedsTest extends TestCase {
 		$appView->method('queryAs')->willReturnCallback(fn (string $did, PrivateKey $key, string $method, array $params = []): array => $answer($method, $params, true));
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('forActor')->willReturnCallback(fn (): ?Identity => $this->identity);
+		$identities->method('activeForActor')->willReturnCallback(fn (): ?Identity => $this->identity?->isActive() ? $this->identity : null);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$config = $this->createMock(IConfig::class);
 		$config->method('getUserValue')->willReturnCallback(fn (string $user, string $app, string $key, $default = ''): string => $this->stored[$key] ?? $default);
@@ -212,5 +213,20 @@ class BlueskyFeedsTest extends TestCase {
 
 		$this->identity = null;
 		$this->feeds()->page($this->alice, self::FEED, '', 20);
+	}
+
+	/**
+	 * Switched off for Bluesky, the person still reads feeds and gets
+	 * suggestions, as anyone does: nothing is asked in their name.
+	 */
+	public function testAPersonSwitchedOffForBlueskyReadsAsAnyone(): void {
+		$this->identity = new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_DEACTIVATED, '', 0);
+		$this->answers['app.bsky.feed.getFeed'] = ['feed' => []];
+		$this->answers['app.bsky.feed.getSuggestedFeeds'] = ['feeds' => []];
+
+		$this->feeds()->page($this->alice, self::FEED, '', 20);
+		$this->feeds()->suggested($this->alice);
+
+		$this->assertSame([['app.bsky.feed.getFeed', false], ['app.bsky.feed.getSuggestedFeeds', false]], array_map(static fn (array $asked): array => [$asked[0], $asked[2]], $this->asked));
 	}
 }

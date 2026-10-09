@@ -18,6 +18,9 @@ use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Identity\PlcOperation;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Protocol\Commit;
+use OCA\Social\Atproto\Protocol\Mst;
+use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoBlobRequest;
@@ -57,6 +60,8 @@ class IdentityServiceTest extends TestCase {
 	private array $stored = [];
 	/** @var array<int, array{did: string, cid: string, operation: array}> */
 	private array $logged = [];
+	/** @var array<string, Identity> the rows found by actor id */
+	private array $byActor = [];
 
 	protected function setUp(): void {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -73,7 +78,7 @@ class IdentityServiceTest extends TestCase {
 			return count($this->stored);
 		});
 		$this->identityRequest->method('getByDid')->willReturnCallback(fn (string $did): Identity => $this->stored[$did] ?? throw new AtprotoIdentityNotFoundException());
-		$this->identityRequest->method('getByActorId')->willThrowException(new AtprotoIdentityNotFoundException());
+		$this->identityRequest->method('getByActorId')->willReturnCallback(fn (string $id): Identity => $this->byActor[$id] ?? throw new AtprotoIdentityNotFoundException());
 
 		$this->plcLog = $this->createMock(AtprotoPlcLogRequest::class);
 		$this->plcLog->method('record')->willReturnCallback(function (string $did, string $cid, array $operation): int {
@@ -272,6 +277,8 @@ class IdentityServiceTest extends TestCase {
 		$this->assertNotNull($identity);
 		$this->plc->expects($this->never())->method('submit');
 		$this->repositories->expects($this->never())->method('delete');
+		$head = Commit::sign($identity->did, (new Mst([]))->build()->root, Tid::next(), PrivateKey::generate(Curve::K256));
+		$this->repositories->method('headCommit')->willReturn($head);
 		$states = [];
 		$this->identityRequest->method('setState')->willReturnCallback(static function (string $did, string $state) use (&$states): void {
 			$states[] = $state;
@@ -282,6 +289,17 @@ class IdentityServiceTest extends TestCase {
 
 			return 1;
 		});
+		$this->events->method('identity')->willReturnCallback(static function (string $did, string $handle) use (&$announced): int {
+			$announced[] = ['identity', $handle];
+
+			return 1;
+		});
+		$this->events->method('sync')->willReturnCallback(static function (string $did, Commit $commit) use (&$announced): int {
+			$announced[] = ['sync', $commit->rev];
+
+			return 1;
+		});
+		$announced = [];
 
 		$this->service->deactivate($identity);
 		$this->service->deactivate($identity);
@@ -291,8 +309,42 @@ class IdentityServiceTest extends TestCase {
 		$this->service->activate($identity);
 
 		$this->assertSame([Identity::STATE_DEACTIVATED, Identity::STATE_DEACTIVATED, Identity::STATE_ACTIVE], $states, 'the DID keeps its state row; only a change is written');
-		$this->assertSame([[false, 'deactivated'], [false, 'deactivated'], [true, '']], $announced);
+		$this->assertSame([[false, 'deactivated'], [false, 'deactivated'], [true, ''], ['identity', 'erin.social.test'], ['sync', $head->rev]], $announced, 'on again, the handle is resolved again and the repository taken as it is');
 		$this->assertSame(['did' => $off->did, 'handle' => $off->handle, 'signing_key' => $off->signingPublic, 'state' => 'deactivated', 'active' => false, 'created_at' => gmdate('Y-m-d\TH:i:s\Z', $off->creation)], $off->toArray());
+	}
+
+	public function testAMovedAwayOrTombstonedIdentityIsNeitherSwitchedOffNorOn(): void {
+		$this->identityRequest->expects($this->never())->method('setState');
+		$this->events->expects($this->never())->method('account');
+		foreach ([Identity::STATE_MOVED_AWAY, Identity::STATE_TOMBSTONED] as $state) {
+			$identity = new Identity(1, 'https://social.test/@gone', 'did:plc:gone', 'gone.social.test', '', '', '', $state, '', 0);
+			$this->service->deactivate($identity);
+			$this->service->activate($identity);
+		}
+	}
+
+	/**
+	 * Acting as the person on Bluesky takes an identity that is on there;
+	 * one switched off is kept, never made again, and not acted as.
+	 */
+	public function testOnlyAnIdentityThatIsOnIsActedAsAndASwitchedOffOneIsNotMadeAgain(): void {
+		$actor = self::actor('fay');
+		$this->assertNull($this->service->activeForActor($actor), 'none is made');
+		$this->identityRequest->expects($this->never())->method('create');
+		$this->plc->expects($this->never())->method('submit');
+
+		$this->byActor[$actor->getId()] = new Identity(7, $actor->getId(), 'did:plc:fay', 'fay.social.test', '', '', '', Identity::STATE_DEACTIVATED, '', 0);
+		$this->assertNull($this->service->activeForActor($actor));
+		$this->assertSame(Identity::STATE_DEACTIVATED, $this->service->forActor($actor)?->state, 'not made again, nor switched on');
+
+		$this->byActor[$actor->getId()] = new Identity(7, $actor->getId(), 'did:plc:fay', 'fay.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0);
+		$this->assertSame('did:plc:fay', $this->service->activeForActor($actor)?->did);
+	}
+
+	public function testTheSwitchedOffAreCounted(): void {
+		$this->identityRequest->method('countInState')->willReturnCallback(static fn (string $state): int => $state === Identity::STATE_DEACTIVATED ? 3 : 0);
+
+		$this->assertSame(3, $this->service->countDeactivated());
 	}
 
 	public function testATombstoneEndsEverything(): void {

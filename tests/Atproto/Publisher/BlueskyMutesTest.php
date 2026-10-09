@@ -35,7 +35,7 @@ class BlueskyMutesTest extends TestCase {
 		$carol = (new Person())->setId('https://remote.example/users/carol');
 		$identity = new Identity(1, $alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn($identity);
+		$identities->method('activeForActor')->willReturn($identity);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$told = [];
 		$appView = $this->createMock(AppViewClient::class);

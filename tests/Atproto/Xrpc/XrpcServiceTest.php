@@ -121,6 +121,36 @@ class XrpcServiceTest extends TestCase {
 		$this->assertSame(['did' => self::DID, 'active' => true, 'rev' => '3kznmn7xqxl22'], $this->xrpc->query('com.atproto.sync.getRepoStatus', ['did' => self::DID]));
 	}
 
+	/**
+	 * Switched off by its owner, the repository is kept and served to
+	 * nobody; its status says why, and the handle does not resolve.
+	 */
+	public function testARepoSwitchedOffIsNotServedAndSaysSo(): void {
+		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', 'did:key:z', '', Identity::STATE_DEACTIVATED, '', 0);
+		$this->repositories->method('getHead')->willReturn(new RepoHead(self::DID, 'bafy', '3kznmn7xqxl22', 3, 0, 0));
+		$this->repositories->expects($this->never())->method('exportCar');
+		$this->repositories->expects($this->never())->method('getRecord');
+
+		$refused = [];
+		foreach ([
+			['com.atproto.sync.getRepo', ['did' => self::DID]],
+			['com.atproto.sync.getLatestCommit', ['did' => self::DID]],
+			['com.atproto.repo.getRecord', ['repo' => 'alice.social.test', 'collection' => 'app.bsky.actor.profile', 'rkey' => 'self']],
+			['com.atproto.repo.describeRepo', ['repo' => self::DID]],
+			['com.atproto.identity.resolveHandle', ['handle' => 'alice.social.test']],
+		] as [$method, $params]) {
+			try {
+				$this->xrpc->query($method, $params);
+				$refused[] = '';
+			} catch (XrpcException $e) {
+				$refused[] = $e->error;
+			}
+		}
+
+		$this->assertSame(['RepoDeactivated', 'RepoDeactivated', 'RepoDeactivated', 'RepoDeactivated', 'InvalidRequest'], $refused);
+		$this->assertSame(['did' => self::DID, 'active' => false, 'status' => 'deactivated', 'rev' => '3kznmn7xqxl22'], $this->xrpc->query('com.atproto.sync.getRepoStatus', ['did' => self::DID]));
+	}
+
 	public function testGetRecordAnswersTheValueAsJson(): void {
 		$value = ['$type' => 'app.bsky.feed.post', 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z', 'embed' => ['ref' => Cid::forRaw('x')]];
 		$bytes = DagCbor::encode($value);

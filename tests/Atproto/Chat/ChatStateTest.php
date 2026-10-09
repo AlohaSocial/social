@@ -56,6 +56,9 @@ class ChatStateTest extends TestCase {
 		$identities->method('forActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity
 			? new Identity(1, self::VIEWER, self::ALICE, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0)
 			: null);
+		$identities->method('activeForActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity
+			? new Identity(1, self::VIEWER, self::ALICE, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0)
+			: null);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = [], ?array $input = null): array {

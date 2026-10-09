@@ -519,7 +519,8 @@ php occ social:atproto:identities [--user USER] [--list]
 An identity is a `did:plc` registered with the PLC directory, a handle
 `alice.<host>` and a signing key, and the profile record is written with it. An
 account that already has one is left alone, so the command is safe to run
-again; a registration the directory refused is logged and resent by the
+again — one its owner switched off stays off, marked `(deactivated)`, and
+`--list` shows every identity's state; a registration the directory refused is logged and resent by the
 maintenance job and by `social:atproto:plc --repair`.
 
 ### `social:atproto:plc`

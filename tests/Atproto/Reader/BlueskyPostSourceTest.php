@@ -55,7 +55,7 @@ class BlueskyPostSourceTest extends TestCase {
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('queryAs')->willReturn($answer);
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn(new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0));
+		$identities->method('activeForActor')->willReturn(new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0));
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$alice = (new Person())->setId('https://social.test/@alice');
 		$blockedBy = $this->createMock(BlueskyBlockedBy::class);

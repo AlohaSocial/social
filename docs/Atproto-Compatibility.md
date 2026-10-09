@@ -78,7 +78,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 |---|---|---|
 | D1 | **Native identity**: Aloha Social is the PDS. No Bluesky account is needed or used. (The linked-account approach of PR #2482 is a separate track.) | 09-25, confirmed 10-06 |
 | D2 | **Both directions**: Social → Bluesky and Bluesky → Social. | 09-25 |
-| D3 | **Every account, automatically**: each Social account is reachable from Bluesky; the administrator can disable Bluesky instance-wide. No per-user opt-in. | 10-06 (supersedes 09-25's opt-in) |
+| D3 | **Every account, automatically**: each Social account is reachable from Bluesky; the administrator can disable Bluesky instance-wide. No per-user opt-in; a person may switch their own presence off (D23). | 10-06 (supersedes 09-25's opt-in) |
 | D4 | Handles are **`alice.<instance host>`** via wildcard DNS and a wildcard certificate; bring-your-own-domain handles are a later phase. | 09-25, fixed 10-06 |
 | D5 | **`did:plc` only**, registered at `plc.directory`. | 09-25 |
 | D6 | The firehose is served by a daemon, **`occ social:atproto:serve`**, run under systemd. | 09-25 |
@@ -98,6 +98,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D20 | **Phase 1 makes a Social account visible on Bluesky** (identity, repository, firehose); reading Bluesky from here is phase 2. Four phases, one PR each. | 09-25, order fixed 10-06 |
 | D21 | CI and devel use a self-hosted PLC, `@atproto/dev-env` and an `indigo` relay; the real network is exercised by hand only. | 09-25 |
 | D22 | **A person's lists are one set with their Bluesky lists** (§9.7). A list here is private, as a Mastodon list is, and is never published silently: the person makes it public, and a public list is a Bluesky curate list with its members, kept in step both ways; a curate list made in a Bluesky app signed in here, or brought by a move here, is a public list here. A list a reply rule names is published while the rule needs it, public or not (§8.3). | 10-09 |
+| D23 | **A person may switch their own presence on Bluesky off** (was open question 1): "Be on Bluesky" in their settings, on by default. Off is Bluesky's own deactivation — the profile and posts are no longer shown there, nothing new is published, Bluesky apps are signed out, Bluesky direct messages and notifications are no longer read — while the DID, the handle and the repository stay theirs. Reading Bluesky accounts they follow goes on; their likes, replies and messages to Bluesky then stay here. On again, the repository is served as it was; **what was written while off is never published afterwards**. §4.6. | 10-09 |
 
 ## 3. The protocol, as far as this app needs it
 
@@ -213,7 +214,8 @@ sentence that says the Bluesky account exists because this server offers
 one. The recovery key is shown there **once**, on first view, as a
 twelve-word phrase to write down (BIP-39 encoding of the 32-byte private
 key), with a "Show again" that requires password confirmation and
-regenerates (and re-registers, §4.5) rather than reveals.
+regenerates (and re-registers, §4.5) rather than reveals. The switch **Be
+on Bluesky** is there too (§4.6).
 
 ### 4.5 PLC operations this app sends
 
@@ -231,6 +233,57 @@ Every operation goes through one `PlcClient` with retries and is recorded
 in `social_atproto_plc_log` before it is sent (so a crash between the two
 leaves a row to reconcile from), and `occ social:atproto:plc` lists the log
 and the directory's view side by side.
+
+### 4.6 Switching off (D23)
+
+**Settings → Apps and account → Bluesky** has the switch **Be on Bluesky**,
+on by default, with a plain explanation beside it. It is the one setting
+that names Bluesky, since it is about presence there and nothing else. The
+route is `POST /api/v1/social/bluesky/state` (`active`), the work
+`PresenceService` (`lib/Atproto/Identity/PresenceService.php`).
+
+**Off** is Bluesky's own deactivation (`com.atproto.server.deactivateAccount`
+on a Bluesky PDS):
+
+- the identity's state becomes `deactivated` (`IdentityService::deactivate()`)
+  and the firehose says `#account` with `active: false, status: deactivated`;
+  the relay and the AppView then stop showing the profile and the posts
+  (the AppView answers `AccountDeactivated`). `getRepoStatus` and
+  `listRepos` say `deactivated`; `getRepo`, `getRecord`, `getBlob` and the
+  other reads of the repository answer `RepoDeactivated`, and neither the
+  handle's well-known file nor `resolveHandle` resolves the handle;
+- nothing is written to the repository: no post (`Publisher::publishPost()`),
+  no edit or gate, no like, repost, follow, block or list record
+  (`writeRecord()`), no profile. A **delete** still goes, so a post taken
+  back while off does not come back with the account;
+- every Bluesky app is signed out — the app-password sessions and the OAuth
+  sessions end — and none signs in again: `createSession`,
+  `refreshSession` and an access token answer `AccountDeactivated`, the
+  OAuth endpoints `access_denied` or `invalid_token`. The app passwords
+  stay, for when the account is on again;
+- the notification and chat pollers drop the account's cursors, so
+  Bluesky notifications and direct messages are no longer read, and a
+  direct message written here to somebody on Bluesky is not sent there;
+- nothing is asked of the AppView in the person's name (`activeForActor()`):
+  following and reading Bluesky accounts goes on with anonymous reads —
+  feeds, threads, search, suggestions — so the person keeps the Bluesky
+  accounts they follow. A like, reply or bookmark of a Bluesky post stays
+  here, and a mute or bell is not told to the AppView;
+- `IdentityService::forActor()` returns the row as it is, whatever its
+  state: neither first need nor `occ social:atproto:identities` makes a new
+  identity or switches it back on. An account that moved away or was
+  deleted cannot be switched either way.
+
+**On again** (`IdentityService::activate()`): the state is `active`, and the
+firehose says `#account` with `active: true`, `#identity` (the AppView
+resolves the handle again) and `#sync` with the head commit, so a relay that
+dropped the commits made while the account was off — the deletes — takes the
+repository as it is now. The profile is written as it is now. Nothing is
+published retroactively: like Bluesky's own reactivation, the repository is
+served as it was left. The time of switching on is kept (user value
+`atproto_on_since`), and a post published before it is never published by
+the reconcile pass that otherwise picks up a missed post of the last day.
+The UI says so: posts written while off stay off Bluesky.
 
 ## 5. The repository
 
@@ -380,7 +433,8 @@ the web server proxies at `/xrpc/com.atproto.sync.subscribeRepos`
 every commit (§5.3) is a `#commit` frame — `seq`, `did`, `rev`, `commit`
 CID, `ops` (`create`/`update`/`delete` with path and CID), `blocks` (the CAR
 of the commit, the changed MST nodes and the records), `time` — plus
-`#identity` (handle change), `#account` (deactivated/deleted) and `#info`
+`#identity` (handle change), `#account` (deactivated/deleted), `#sync`
+(the head commit, when an account is switched back on, §4.6) and `#info`
 frames, each with a `seq` from one monotonic counter per instance. A client
 that connects with `?cursor=N` is replayed from `N+1` out of
 `social_atproto_event` (§15), which keeps 72 hours of frames (the relay's
@@ -1182,15 +1236,17 @@ A **Bluesky** section: the instance switch (D3), the handle host (read
 from `social_url`, with the wildcard checks beside it), the relay(s), the
 Jetstream endpoint and whether the listener is running, the service DID,
 the instance rotation key's age and a *Rotate* button (§16.3), the sync
-ceiling and the current lag, counts (identities, records, blobs, watches,
-events in the window), the PDS/DID blocklist (§12.4), and the state of
+ceiling and the current lag, counts (identities, and of those the ones
+their owners switched off, §4.6; records, blobs, watches, events in the
+window), the PDS/DID blocklist (§12.4), and the state of
 each daemon (last frame served, last event seen, pid, uptime). The same
 numbers on the Statistics page's agency view, labelled.
 
 ### 14.3 Commands
 
 `social:atproto:serve` (§7.1), `social:atproto:listen` (§9.4),
-`social:atproto:identities` (create missing identities; `--user`),
+`social:atproto:identities` (create missing identities; `--user`; an
+identity switched off is listed with its state and left off; `--list`),
 `social:atproto:plc` (log and directory view, `--repair`),
 `social:atproto:resolve <handle|did>`, `social:atproto:repo <user>`
 (head, record counts, `--verify` recomputes the MST and compares),
@@ -1448,10 +1504,11 @@ Everything in the phase 2 row, in `lib/Atproto/Reader/` (`BlueskyActorService`,
   or read, the adult labels make the pictures sensitive with a warning
   naming the label, and other service labels become a warning; labelers'
   own definitions are not read yet.
-- **Per-user opt-out** (§19.1, taken as recommended): Settings → Your
-  account has a switch; off, the account is announced inactive on the
-  firehose and by `getRepoStatus`, nothing more is published for it and its
-  notifications are not read; the DID and repository stay.
+- **Per-user opt-out** (then open question 1, since decided as D23 and
+  completed 10-09, §4.6): Settings → Your account has a switch; off, the
+  account is announced inactive on the firehose and by `getRepoStatus`,
+  nothing more is published for it and its notifications are not read; the
+  DID and repository stay.
 - Likes and reposts are written by the queued publish job, like posts, so
   the request that made them never waits for a repository commit; a like
   of a Fediverse-only post writes nothing.
@@ -1916,21 +1973,16 @@ direction `inbound` in `social_atproto_move`:
 
 For the owner, not blocking phase 1:
 
-1. **Per-user opt-out.** D3 says every account, automatically. Should a
-   person be able to switch *their* Bluesky identity off (deactivate the
-   repository; the DID stays theirs) — a Nextcloud user who wants no
-   presence on Bluesky at all? Recommended: yes, in phase 2, as
-   `deactivateAccount` on their own identity with a plain explanation.
-2. **Bluesky-only replies.** A Bluesky user replies to alice's post; alice
+1. **Bluesky-only replies.** A Bluesky user replies to alice's post; alice
    answers from here; her answer goes to Bluesky (§8.3) — and to the
    Fediverse, where the parent does not exist. Publish it as an ordinary
    public post there (the parent linked), or keep a reply-to-Bluesky off
    the Fediverse? Recommended: publish, parent linked — one post, two
    addresses, as D8 says.
-3. **Who pays for pictures.** A re-encoded picture is a second stored file
+2. **Who pays for pictures.** A re-encoded picture is a second stored file
    per picture per post. Count it against the user's quota (it is their
    post) or the app's? Recommended: the user's, like the original.
-4. **Relay choice.** `bsky.network` only, or also announce to independent
+3. **Relay choice.** `bsky.network` only, or also announce to independent
    relays by default? Recommended: `bsky.network` default, list editable.
 
 ## 20. Facts, and when they were checked

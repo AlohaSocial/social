@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Atproto\Publisher;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PresenceService;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
@@ -68,14 +69,16 @@ class PublisherTest extends TestCase {
 	private array $importedPosts = [];
 	/** @var ImportedPostsRequest&MockObject */
 	private ImportedPostsRequest $imported;
+	/** when the author last switched back on for Bluesky; 0 for never */
+	private int $onSince = 0;
 
 	protected function setUp(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(true);
 		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0);
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn($this->identity);
-		$identities->method('getByDid')->willReturn($this->identity);
+		$identities->method('forActor')->willReturnCallback(fn (): Identity => $this->identity);
+		$identities->method('getByDid')->willReturnCallback(fn (): Identity => $this->identity);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$this->repositories = $this->createMock(RepositoryService::class);
 		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(fn (string $id): array => array_values(array_filter($this->records, static fn (StoredRecord $r): bool => $r->localId === $id)));
@@ -94,7 +97,9 @@ class PublisherTest extends TestCase {
 		$this->videos->method('forPost')->willReturnCallback(fn (): array => $this->video);
 		$this->imported = $this->createMock(ImportedPostsRequest::class);
 		$this->imported->method('isImported')->willReturnCallback(fn (string $actor, string $post): bool => in_array($post, $this->importedPosts, true));
-		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->videos, $this->streamRequest, $actors, $this->time, new NullLogger(), $this->imported);
+		$presence = $this->createMock(PresenceService::class);
+		$presence->method('writtenWhileOff')->willReturnCallback(fn (Person $author, Stream $post): bool => $post->getPublishedTime() < $this->onSince);
+		$this->publisher = new Publisher($config, $identities, $this->repositories, $this->mapper, $this->videos, $this->streamRequest, $actors, $this->time, new NullLogger(), $this->imported, $presence);
 	}
 
 	public function testAPublicPostIsWrittenOnce(): void {
@@ -384,6 +389,43 @@ class PublisherTest extends TestCase {
 
 	private function mappedBytes(): string {
 		return DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z']);
+	}
+
+	/**
+	 * Switched off for Bluesky, nothing is written for the person: no post,
+	 * no edit, no gate, no like. A delete still goes, so a post taken back
+	 * while off does not come back with the account.
+	 */
+	public function testNothingIsWrittenWhileThePersonIsOffBlueskyButADeleteGoes(): void {
+		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', 'did:key:z', '', Identity::STATE_DEACTIVATED, '', 0);
+		$actor = new Person();
+		$actor->setId('https://social.test/@alice');
+		$actor->setLocal(true);
+		$this->mapper->method('threadgate')->willReturn(['$type' => RecordMapper::THREADGATE]);
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->action === RepoWrite::DELETE))->willReturnCallback(fn (): CommitResult => $this->written());
+
+		$this->assertNull($this->publisher->publishPost($this->post()));
+		$this->assertFalse($this->publisher->writeRecord($actor, 'app.bsky.feed.like', ['$type' => 'app.bsky.feed.like'], 'https://social.test/like/1'));
+		$this->assertFalse($this->publisher->publishProfile($actor));
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::POST, '3kznmn7xqxl22', Cid::forRaw('r'), DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'before']), self::POST, 0);
+		$this->assertSame('kept', $this->publisher->editPost($this->post(1760000000 - 60)), 'an edit within the grace is not published');
+		$this->publisher->updateGates($this->post());
+		$this->assertTrue($this->publisher->deletePost(self::POST));
+	}
+
+	/**
+	 * On again, the pass that publishes what is missing leaves alone what
+	 * was written while the person was off, and publishes what came after.
+	 */
+	public function testReconcileLeavesWhatWasWrittenWhileOffAlone(): void {
+		$this->onSince = 1760000000 - 30;
+		$whileOff = $this->post(1760000000 - 60);
+		$after = $this->post(1760000000 - 10);
+		$after->setId('https://social.test/@alice/2');
+		$this->streamRequest->method('getLocalPublicSince')->willReturn([$whileOff, $after]);
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->localId === 'https://social.test/@alice/2'))->willReturnCallback(fn (): CommitResult => $this->written());
+
+		$this->assertSame(1, $this->publisher->reconcile());
 	}
 
 	private function post(int $published = 1760000000 - 10): Note {

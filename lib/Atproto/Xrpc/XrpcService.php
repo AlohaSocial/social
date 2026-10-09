@@ -292,17 +292,24 @@ class XrpcService {
 	 * @throws XrpcException
 	 */
 	private function repoIdentity(string $identifier): Identity {
+		$identity = null;
 		try {
 			if (Syntax::isDid($identifier)) {
-				return $this->identities->getByDid($identifier);
-			}
-			if (Syntax::isHandle($identifier)) {
-				return $this->identities->getByHandle(Syntax::normalizeHandle($identifier));
+				$identity = $this->identities->getByDid($identifier);
+			} elseif (Syntax::isHandle($identifier)) {
+				$identity = $this->identities->getByHandle(Syntax::normalizeHandle($identifier));
 			}
 		} catch (AtprotoIdentityNotFoundException) {
 		}
+		if ($identity === null) {
+			throw new XrpcException(404, 'RepoNotFound', 'Could not find repo: ' . $identifier);
+		}
+		// switched off by its owner (§4.6): kept, and served to nobody until it is on again
+		if ($identity->state === Identity::STATE_DEACTIVATED) {
+			throw new XrpcException(400, 'RepoDeactivated', 'Repo has been deactivated: ' . $identifier);
+		}
 
-		throw new XrpcException(404, 'RepoNotFound', 'Could not find repo: ' . $identifier);
+		return $identity;
 	}
 
 	/**

@@ -65,7 +65,7 @@ class BlueskyBookmarks {
 		}
 		try {
 			$ref = $this->refs->strongRef($postId);
-			$identity = $ref === null ? null : $this->identities->forActor($viewer, false);
+			$identity = $ref === null ? null : $this->identities->activeForActor($viewer);
 			if ($ref === null || $identity === null) {
 				return;
 			}
@@ -124,7 +124,7 @@ class BlueskyBookmarks {
 		$views = [];
 		if ($refs !== []) {
 			try {
-				$identity = $this->identities->forActor($viewer, false);
+				$identity = $this->identities->activeForActor($viewer);
 				$params = ['uris' => array_column($refs, 'uri')];
 				$answer = $identity !== null
 					? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), 'app.bsky.feed.getPosts', $params)

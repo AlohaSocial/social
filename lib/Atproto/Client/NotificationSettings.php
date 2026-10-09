@@ -82,7 +82,7 @@ class NotificationSettings {
 	public function policyChanged(string $userId): void {
 		try {
 			$viewer = $this->accounts->getActorFromUserId($userId);
-			$identity = $this->identities->forActor($viewer, false);
+			$identity = $this->identities->activeForActor($viewer);
 			if ($identity === null) {
 				return;
 			}
@@ -104,7 +104,7 @@ class NotificationSettings {
 	 * @return array<string, mixed>
 	 */
 	private function current(Person $viewer): array {
-		$identity = $this->identities->forActor($viewer, false);
+		$identity = $this->identities->activeForActor($viewer);
 		if ($identity === null) {
 			return [];
 		}

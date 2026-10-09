@@ -73,6 +73,17 @@ class IdentityService {
 	}
 
 	/**
+	 * The identity of a local actor when it is on Bluesky now, for acting as
+	 * the person there; never made. Null as forActor() without $create, and
+	 * while the person has switched their presence on Bluesky off.
+	 */
+	public function activeForActor(Person $actor): ?Identity {
+		$identity = $this->forActor($actor, false);
+
+		return $identity !== null && $identity->isActive() ? $identity : null;
+	}
+
+	/**
 	 * @throws AtprotoIdentityNotFoundException
 	 */
 	public function getByDid(string $did): Identity {
@@ -102,6 +113,11 @@ class IdentityService {
 
 	public function count(): int {
 		return $this->identityRequest->count();
+	}
+
+	/** How many people switched their presence on Bluesky off. */
+	public function countDeactivated(): int {
+		return $this->identityRequest->countInState(Identity::STATE_DEACTIVATED);
 	}
 
 	/**
@@ -337,16 +353,10 @@ class IdentityService {
 	}
 
 	/**
-	 * Ends the identity for good: the DID is tombstoned at the directory,
-	 * the repository and its blobs are dropped, and the firehose says so.
-	 * The row stays, so neither the DID nor the handle is issued again.
-	 *
-	 * @throws AtprotoException
-	 */
-	/**
-	 * Switches a person's Bluesky presence off (§19): the repository stays
-	 * and the DID stays theirs, but the account is announced inactive, the
-	 * sync endpoints say so, and nothing more is published for it.
+	 * Switches a person's presence on Bluesky off (D22, §4.6): the
+	 * repository stays and the DID and the handle stay theirs, but the
+	 * account is announced inactive, the sync endpoints and the handle say
+	 * so, and nothing more is published for it.
 	 */
 	public function deactivate(Identity $identity): void {
 		if ($identity->state !== Identity::STATE_ACTIVE) {
@@ -357,7 +367,10 @@ class IdentityService {
 	}
 
 	/**
-	 * Switches it back on; the repository is as it was left.
+	 * Switches it back on, the repository as it was left: announced active,
+	 * the handle to be resolved again, and the head commit as a `#sync`, so
+	 * a relay that dropped what was removed while it was off fetches the
+	 * repository again.
 	 */
 	public function activate(Identity $identity): void {
 		if ($identity->state !== Identity::STATE_DEACTIVATED) {
@@ -365,8 +378,20 @@ class IdentityService {
 		}
 		$this->identityRequest->setState($identity->did, Identity::STATE_ACTIVE);
 		$this->events->account($identity->did, true);
+		$this->events->identity($identity->did, $identity->handle);
+		$head = $this->repositories->headCommit($identity->did);
+		if ($head !== null) {
+			$this->events->sync($identity->did, $head);
+		}
 	}
 
+	/**
+	 * Ends the identity for good: the DID is tombstoned at the directory,
+	 * the repository and its blobs are dropped, and the firehose says so.
+	 * The row stays, so neither the DID nor the handle is issued again.
+	 *
+	 * @throws AtprotoException
+	 */
 	public function tombstone(Identity $identity): void {
 		if ($identity->state !== Identity::STATE_TOMBSTONED) {
 			$operation = PlcOperation::sign(PlcOperation::tombstone($this->prev($identity)), $this->instanceKeys->rotationKey());

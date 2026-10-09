@@ -142,6 +142,16 @@ class AtprotoClientRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * Signs every Bluesky app out of the person's account; their app
+	 * passwords stay.
+	 */
+	public function removeSessionsOfUser(string $userId): void {
+		$qb = $this->getQueryBuilder();
+		$qb->delete(self::TABLE_ATPROTO_SESSION)->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+		$qb->executeStatement();
+	}
+
+	/**
 	 * @return int how many expired sessions were removed
 	 */
 	public function pruneSessions(int $now): int {

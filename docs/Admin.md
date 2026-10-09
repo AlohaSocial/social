@@ -498,7 +498,14 @@ way, people here follow Bluesky accounts by their bare handle
 followed authors' feeds from Bluesky's public AppView, and asks the AppView,
 as each local account, what Bluesky did to it — follows, likes, reposts,
 replies, mentions — which arrive in Activities like anything else. Each
-person can pause their own Bluesky presence in Settings → Apps and account → Bluesky.
+person can switch their own presence on Bluesky off in Settings → Apps and
+account → Bluesky ("Be on Bluesky"): their account is then deactivated there,
+as Bluesky deactivates one — not shown, nothing published, Bluesky apps signed
+out — and comes back as it was when they switch it on again; what they wrote
+in between stays off Bluesky. Nothing an administrator runs switches it back
+on or makes the identity again: `occ social:atproto:identities` leaves it as
+it is and shows `(deactivated)` beside it, and `--list` shows each identity's
+state.
 
 **What the card shows.** The handle host, the PDS endpoint and the instance's
 `did:web`; the relays (`https://bsky.network` by default; "Tell the relays now"
@@ -506,7 +513,8 @@ sends the crawl request again); the PLC directory and the AppView the instance
 talks to (the defaults are Bluesky's; the interop job points them at its own —
 `atproto_appview` for public reads, `atproto_appview_auth` and
 `atproto_appview_did` for the reads made as a user, which the public AppView
-refuses); how many identities and repositories there are, how many events the
+refuses); how many identities and repositories there are — and how many of
+those identities their owners switched off — how many events the
 replay window holds and the head sequence number; the daemon's last report;
 the age of the instance rotation key; and the reading side — how many Bluesky
 authors are followed, how many accounts' notifications are asked for, and how

@@ -282,6 +282,32 @@ class AuthorizationServerTest extends TestCase {
 		$this->assertSame([], $this->server->sessionsOf('alice'));
 	}
 
+	/**
+	 * Switched off for Bluesky, an app's token does nothing, its refresh is
+	 * refused, and no app is let in anew.
+	 */
+	public function testAnAccountSwitchedOffForBlueskyLetsNoAppIn(): void {
+		$tokens = $this->signedIn();
+		[$requestUri] = $this->pushed();
+		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', '', '', Identity::STATE_DEACTIVATED, '', 0);
+
+		$url = self::ISSUER . '/xrpc/app.bsky.feed.getTimeline';
+		$refused = [];
+		foreach ([
+			fn () => $this->server->authenticate('DPoP ' . $tokens['access_token'], $this->proof($url, 'GET', $tokens['access_token']), 'GET', $url),
+			fn () => $this->server->token(['grant_type' => 'refresh_token', 'client_id' => self::CLIENT, 'refresh_token' => $tokens['refresh_token']], $this->proof(self::ISSUER . '/oauth/token')),
+			fn () => $this->server->approve(self::CLIENT, $requestUri, 'alice'),
+		] as $call) {
+			try {
+				$call();
+				$refused[] = '';
+			} catch (OAuthException $e) {
+				$refused[] = $e->error;
+			}
+		}
+		$this->assertSame(['invalid_token', 'access_denied', 'access_denied'], $refused);
+	}
+
 	public function testAnExpiredRequestCannotBeApproved(): void {
 		[$requestUri] = $this->pushed();
 		$this->now += 600;

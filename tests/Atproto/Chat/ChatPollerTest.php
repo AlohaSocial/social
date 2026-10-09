@@ -51,6 +51,9 @@ class ChatPollerTest extends TestCase {
 	private array $synced = [];
 	/** @var list<array> */
 	private array $failed = [];
+	private string $state = Identity::STATE_ACTIVE;
+	/** @var list<string> the DIDs whose cursor was dropped */
+	private array $removed = [];
 
 	private function poller(): ChatPoller {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -58,7 +61,7 @@ class ChatPollerTest extends TestCase {
 		$config->method('chat')->willReturnCallback(fn (): string => $this->chat);
 		$config->method('syncCeiling')->willReturn(200);
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('getByDid')->willReturn(new Identity(1, 'https://social.test/users/alice', self::ALICE, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0));
+		$identities->method('getByDid')->willReturnCallback(fn (): Identity => new Identity(1, 'https://social.test/users/alice', self::ALICE, 'alice.social.test', 'sealed', '', '', $this->state, '', 0));
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = []): array {
@@ -69,6 +72,9 @@ class ChatPollerTest extends TestCase {
 		$cursors = $this->createMock(AtprotoWatchRequest::class);
 		$cursors->method('synced')->willReturnCallback(function (string $did, string $cursor, int $now, int $next, string $table): void {
 			$this->synced[] = [$did, $cursor, $next - $now, $table];
+		});
+		$cursors->method('remove')->willReturnCallback(function (string $did): void {
+			$this->removed[] = $did;
 		});
 		$cursors->method('failed')->willReturnCallback(function (string $did, string $error, int $next, string $table): void {
 			$this->failed[] = [$did, $next - self::NOW, $table];
@@ -204,5 +210,16 @@ class ChatPollerTest extends TestCase {
 
 		$this->assertSame(['accounts' => 0, 'handled' => 0], $this->poller()->poll());
 		$this->assertFalse($this->poller()->isOn());
+	}
+
+	/** Switched off for Bluesky, the messages there are not read, and the cursor goes. */
+	public function testAnAccountSwitchedOffForBlueskyIsNotReadAndLosesItsCursor(): void {
+		$this->state = Identity::STATE_DEACTIVATED;
+		$this->answers['chat.bsky.convo.getLog'] = ['logs' => []];
+
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('3k005')));
+
+		$this->assertSame([], $this->asked);
+		$this->assertSame([self::ALICE], $this->removed);
 	}
 }

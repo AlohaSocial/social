@@ -70,6 +70,10 @@ class InMemoryClientRequest extends AtprotoClientRequest {
 		unset($this->sessions[$jti]);
 	}
 
+	public function removeSessionsOfUser(string $userId): void {
+		$this->sessions = array_filter($this->sessions, static fn (array $s): bool => $s['user_id'] !== $userId);
+	}
+
 	public function pruneSessions(int $now): int {
 		$before = count($this->sessions);
 		$this->sessions = array_filter($this->sessions, static fn (array $s): bool => $s['expires'] >= $now);

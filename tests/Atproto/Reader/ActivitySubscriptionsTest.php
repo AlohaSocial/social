@@ -41,7 +41,7 @@ class ActivitySubscriptionsTest extends TestCase {
 			return [];
 		});
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity ? new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0) : null);
+		$identities->method('activeForActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity ? new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0) : null);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 
 		return new ActivitySubscriptions($config, $appView, $identities, new NullLogger());

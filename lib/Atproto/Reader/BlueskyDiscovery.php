@@ -82,7 +82,7 @@ class BlueskyDiscovery {
 	 */
 	public function suggestions(Person $viewer): array {
 		try {
-			$identity = $this->identities->forActor($viewer, false);
+			$identity = $this->identities->activeForActor($viewer);
 			$params = ['limit' => self::SUGGESTIONS_LIMIT];
 			$answer = $identity !== null
 				? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), 'app.bsky.actor.getSuggestions', $params)

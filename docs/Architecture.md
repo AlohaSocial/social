@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.197
+**App version:** 0.26.198
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -233,13 +233,13 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_place` | Places: one row per distinct place this instance has seen, deduplicated on (name, country). No geocoder — see the migration |
 | `social_import_post` | What an account has brought over from another server: one row per (account, original id), unique on the pair, naming the local post it became |
 | `social_import` | The imports an account asked for — a kept upload or a server to pull from — with where the run got to and what it came to; `Cron\RunImport` works a row off and the Migration page polls it |
-| `social_atproto_identity` | One row per local account that is also a Bluesky account: its `did:plc`, its handle (`alice.<host>`, stored, never recomputed), a custom handle on the person's own domain when they set one (`custom_handle`, with when it was last checked and how many checks in a row failed), its signing key sealed with the instance secret, the public halves, and its state (`active`, `deactivated`, `moved_away`, `tombstoned`) |
+| `social_atproto_identity` | One row per local account that is also a Bluesky account: its `did:plc`, its handle (`alice.<host>`, stored, never recomputed), a custom handle on the person's own domain when they set one (`custom_handle`, with when it was last checked and how many checks in a row failed), its signing key sealed with the instance secret, the public halves, and its state (`active`, `deactivated` — switched off by its owner, `moved_away`, `tombstoned`) |
 | `social_atproto_instance_key` | The instance's own keys: the rotation key listed first on every account's DID and the service key its `did:web` names, sealed; a rotated rotation key stays, retired, for the PLC's 72-hour window |
 | `social_atproto_repo` | Each repository's signed head: the commit CID and revision, the record count and the blob bytes — written last in a commit, so a failure half-way leaves the previous commit as the repository |
 | `social_atproto_record` | The live records of every repository with their DAG-CBOR bytes, the collection and rkey (unique by the hash of the path), and the Social object each came from (`local_id`), so a post maps to its record and back in one lookup |
 | `social_atproto_block` | The Merkle search tree nodes and the commits, by CID: what `getRepo` and the firehose serve. Records are not duplicated here; they are read from their own table |
 | `social_atproto_blob` | The pictures a repository refers to: a CID naming one of the app's stored documents, its type and size |
-| `social_atproto_event` | The firehose, one frame per commit, identity or account change, numbered by the database (`seq`) and kept for the 72-hour replay window; `occ social:atproto:serve` reads it |
+| `social_atproto_event` | The firehose, one frame per commit, identity or account change or `#sync`, numbered by the database (`seq`) and kept for the 72-hour replay window; `occ social:atproto:serve` reads it |
 | `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
 | `social_atproto_watch` | One row per Bluesky author somebody here follows: the author-feed cursor the poller continues from, when it last read and when it is due again (`next_sync`, backed off after empty pages), failures and the last error |
 | `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
@@ -1839,6 +1839,28 @@ first), and each record is tied to what it stands for by its local id —
 through `WriteService`, and a record that already stands for a list is not
 imported again, so nothing goes round in a circle. A group list stays
 private: who is in a group is not its member's to show.
+
+### Switching off Bluesky
+
+A person may switch their own presence on Bluesky off (D23 of the Bluesky
+specification, §4.6; **Settings → Apps and account → Bluesky**, `POST
+/api/v1/social/bluesky/state`). `Atproto\Identity\PresenceService` does it
+with what a move away already uses: `IdentityService::deactivate()` sets the
+identity `deactivated` and puts `#account active: false` on the firehose, so
+the relay and the AppView stop showing the account, and the sync and repository
+reads answer `RepoDeactivated`. Everything that writes for the person checks
+`Identity::isActive()` — the `Publisher` (posts, edits, gates, records,
+profile), `ChatSender` — and so do the sign-ins of Bluesky apps
+(`SessionService`, `AuthorizationServer`), whose sessions are ended at once,
+and the notification and chat pollers, which drop the account's cursor. What
+asks the AppView in the person's name takes `IdentityService::activeForActor()`
+and reads anonymously without it, so reading Bluesky goes on. A delete still
+goes to the repository. `IdentityService::forActor()` returns the row as it
+is, so nothing makes the identity again. Switching back on
+(`IdentityService::activate()`) puts `#account active: true`, `#identity` and a
+`#sync` of the head commit on the firehose, and keeps the time in the user value
+`atproto_on_since`; `PresenceService::writtenWhileOff()` keeps the publisher's
+reconcile pass from publishing what was written before it.
 
 ### Shared lists to mute or block
 

@@ -50,7 +50,7 @@ class BlueskyDiscoveryTest extends TestCase {
 		$appView->method('query')->willReturnCallback(fn (string $method, array $params = []): array => $answer($method, $params, false));
 		$appView->method('queryAs')->willReturnCallback(fn (string $did, PrivateKey $key, string $method, array $params = []): array => $answer($method, $params, true));
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity ? new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0) : null);
+		$identities->method('activeForActor')->willReturnCallback(fn (): ?Identity => $this->hasIdentity ? new Identity(1, 'https://social.test/@alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0) : null);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$cache = $this->createMock(ICache::class);
 		$cache->method('get')->willReturnCallback(fn (string $key): mixed => $this->cached[$key] ?? null);

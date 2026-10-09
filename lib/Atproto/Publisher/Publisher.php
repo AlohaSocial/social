@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Publisher;
 
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PresenceService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\DagCbor;
@@ -57,13 +58,15 @@ class Publisher {
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 		private ImportedPostsRequest $imported,
+		private ?PresenceService $presence = null,
 		private ?ContainerInterface $container = null,
 	) {
 	}
 
 	/**
-	 * Publishes a post, unless it is not one that goes to Bluesky or is
-	 * there already.
+	 * Publishes a post, unless it is not one that goes to Bluesky, is there
+	 * already, or its author is not on Bluesky now or was not when they
+	 * wrote it.
 	 *
 	 * @return CommitResult|null the commit, or null when nothing was written
 	 * @throws AtprotoException
@@ -77,7 +80,7 @@ class Publisher {
 		}
 		$author = $this->cacheActorService->getFromId($post->getAttributedTo());
 		$identity = $this->identities->forActor($author);
-		if ($identity === null || !$identity->isActive()) {
+		if ($identity === null || !$identity->isActive() || $this->presence?->writtenWhileOff($author, $post) === true) {
 			return null;
 		}
 		$this->ensureProfile($author, $identity);
@@ -363,6 +366,9 @@ class Publisher {
 	 */
 	private function replaceRecord(Stream $post, StoredRecord $record): bool {
 		$identity = $this->identities->getByDid($record->did);
+		if (!$identity->isActive()) {
+			return false;
+		}
 		$author = $this->cacheActorService->getFromId($post->getAttributedTo());
 		$video = $this->videos->forPost($post, $identity, $author);
 		if ($video['state'] === 'waiting') {
@@ -457,13 +463,17 @@ class Publisher {
 	/**
 	 * Writes a published post's gates again, as its reply rule and quote
 	 * policy now say: each one made, rewritten or taken away in one commit;
-	 * nothing for a post not on Bluesky.
+	 * nothing for a post not on Bluesky, or while its author is not.
 	 *
 	 * @throws AtprotoException
 	 */
 	public function updateGates(Stream $post): void {
 		$record = $this->recordOf($post->getId());
 		if ($record === null || !$this->config->isEnabled()) {
+			return;
+		}
+		$identity = $this->identities->getByDid($record->did);
+		if (!$identity->isActive()) {
 			return;
 		}
 		$gates = $this->gatesOf($post, $record->did, $record->rkey);
@@ -481,7 +491,6 @@ class Publisher {
 			$writes[] = RepoWrite::create($collection, $gate, $post->getId(), $record->rkey);
 		}
 		if ($writes !== []) {
-			$identity = $this->identities->getByDid($record->did);
 			$this->repositories->write($identity->did, $this->identities->signingKey($identity), $writes);
 		}
 	}
