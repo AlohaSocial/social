@@ -528,7 +528,9 @@ account `alice.bsky.social` (the handle, no `@…@` form), type `Person`,
 `host` the handle's host, the profile fields mapped (`displayName` →
 name, `description` → summary as plain text, avatar and banner as cached
 documents, `followersCount`/`followsCount`/`postsCount` into the counts,
-the profile's `pinnedPost` a pin as a Fediverse account's pins are),
+the profile's `pinnedPost` a pin as a Fediverse account's pins are, its
+`verification` — verified, by whom, a trusted verifier itself — onto the
+Account entity's `bluesky` block, where the app draws Bluesky's check),
 and a `details.atproto` block with the DID, the PDS endpoint and the
 labels. The cache refresh cron (`manageCacheRemoteActors`) refreshes it
 through `getProfile` the way it refreshes an ActivityPub actor through its

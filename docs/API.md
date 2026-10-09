@@ -149,6 +149,17 @@ them. `pronouns` is `''` when the value is longer than 40 characters (a
 sentence in the wrong row), and `support_link` is `''` unless the value is an
 `https://` URL, because it is drawn as a button.
 
+**An Account entity says where it is on Bluesky.** `bluesky` is `null` for
+an account that is not on Bluesky; for a Bluesky account read here it is
+`{handle, did, url, native: true, verified, verified_by, verified_by_bluesky,
+trusted_verifier}` — whether Bluesky shows the account as verified (a
+trusted verifier vouched for it and the AppView judges that valid), the DIDs
+of the verifiers, whether Bluesky's own account is one of them, and whether
+the account is a trusted verifier itself. A local account's carries its own
+handle and DID where the controllers that know them attach them. The app
+draws a check beside the Bluesky butterfly of a verified account, labelled
+with who verified it.
+
 **An Account entity says whether its pictures are placeholders.**
 `avatar_default` and `header_default` are `true` when `avatar` or `header` is
 a placeholder rather than a picture the account set: Nextcloud's own avatar

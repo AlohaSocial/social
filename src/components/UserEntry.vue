@@ -18,7 +18,7 @@
 				<router-link v-else-if="!serverData.public" :to="{ name: 'profile', params: { account: item.acct }}">
 					<span class="post-author">
 						<DisplayName :text="item.display_name" :emojis="item.emojis" />
-						<BlueskyBadge v-if="isBluesky" />
+						<BlueskyBadge v-if="isBluesky" :account="item" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
@@ -33,7 +33,7 @@
 					:rel="isLocal ? undefined : 'noreferrer'">
 					<span class="post-author">
 						{{ item.display_name }}
-						<BlueskyBadge v-if="isBluesky" />
+						<BlueskyBadge v-if="isBluesky" :account="item" />
 					</span>
 					<span class="user-description">
 						{{ item.acct }}
