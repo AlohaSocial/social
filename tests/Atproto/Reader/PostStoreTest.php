@@ -187,6 +187,19 @@ class PostStoreTest extends TestCase {
 		$this->assertSame([], $this->imported);
 	}
 
+	public function testADirectMessageGoesThroughTheSameDoorOnce(): void {
+		$id = 'https://bsky.app/profile/' . self::DID . '/convo/c1/m1';
+		$create = ['id' => $id . '/activity', 'type' => 'Create', 'actor' => 'https://bsky.app/profile/' . self::DID, 'to' => ['https://social.test/users/alice'], 'cc' => [], 'object' => [
+			'id' => $id, 'type' => 'Note', 'attributedTo' => 'https://bsky.app/profile/' . self::DID, 'to' => ['https://social.test/users/alice'], 'cc' => [], 'content' => '<p>hi</p>',
+		]];
+
+		$this->assertTrue($this->store->storeMessage($create));
+		$this->assertFalse($this->store->storeMessage($create), 'a message is stored once');
+		$this->assertCount(1, $this->imported);
+		$this->assertSame('bsky.app', $this->imported[0]->getOrigin());
+		$this->assertSame(['https://social.test/users/alice'], $this->imported[0]->getObject()->getToArray());
+	}
+
 	public function testAnUnseenAuthorIsMadeACachedActorFirst(): void {
 		$this->actors->method('cached')->willReturn(null);
 		$this->actors->expects($this->once())->method('store')->with($this->callback(static fn (Person $p): bool => $p->getId() === 'https://bsky.app/profile/' . self::DID && $p->getAccount() === 'alice.bsky.social'));

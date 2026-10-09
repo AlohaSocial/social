@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.189
+**App version:** 0.26.190
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -243,6 +243,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_plc_log` | Every PLC directory operation this instance made, logged before it is sent and marked when the directory took it, so `occ social:atproto:plc --repair` can resend what never got through |
 | `social_atproto_watch` | One row per Bluesky author somebody here follows: the author-feed cursor the poller continues from, when it last read and when it is due again (`next_sync`, backed off after empty pages), failures and the last error |
 | `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
+| `social_atproto_chat_cursor` | The same bookkeeping per local account with a Bluesky identity, for its direct messages on Bluesky's chat service (`ChatPoller`): the chat log's `rev` read up to |
 | `social_atproto_blocklist` | The administrator's Bluesky block list: a PDS host or a DID, with the reason. A blocked account is not resolved, read or heard from; a blocked host blocks every account whose PDS it is |
 | `social_atproto_labeler` | The Bluesky labelers each person subscribes to, by DID, with their choice per label value (`ignore`, `warn`, `hide`) as JSON; Bluesky's own moderation service is always applied and needs no row |
 | `social_atproto_app_password` | The app passwords a person made for Bluesky apps, by name, stored as password hashes only — the password is shown once — and whether each is `privileged`, which lets an app signed in with it reach the Bluesky direct messages. Good for this app's Bluesky surface and nothing else of Nextcloud |
@@ -1650,6 +1651,26 @@ forward-only, like the quote policy: replies already made stay. It
 re-snapshots the stored source, as the quote policy does, and rewrites the
 threadgate in one commit (`Publisher::updateGates()`), which a quote-policy
 change now uses for the postgate too.
+
+### Direct messages with Bluesky
+
+A conversation with somebody on Bluesky is a conversation in Messages like
+any other. Bluesky keeps direct messages on its chat service, not in
+repositories, so `Atproto\Chat\ChatPoller` (a step of `Cron\AtprotoSync`)
+reads each account's chat log as the account (`AppViewClient::chatAs()`,
+cursor in `social_atproto_chat_cursor`), and `ChatStore` stores each message
+somebody else sent as a direct `Note` from them to the account, naming it,
+through `PostStore::storeMessage()` — the import path every post takes, so
+the dest rows, the notification, push and the unread count follow as for
+a Fediverse message. Each message answers the newest one of its Bluesky
+conversation, received or sent from here (kept with
+`DurableCache::setShared()`), so `ConversationService`, which groups direct
+messages by the thread they are in, shows one conversation. A direct
+message written here is queued by `AtprotoPostListener` as an
+`AtprotoPublish` `message`, and `ChatSender` sends it to its recipients on
+Bluesky in their conversation (`getConvoForMembers`, `sendMessage`), while
+the Fediverse recipients get it over ActivityPub as before. Opening
+Messages wakes the account's next read (`ConversationService::getPage()`).
 
 ### Shared lists to mute or block
 

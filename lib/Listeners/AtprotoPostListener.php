@@ -14,6 +14,7 @@ use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Events\PostDeletedEvent;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -38,7 +39,9 @@ class AtprotoPostListener implements IEventListener {
 			return;
 		}
 		if ($event instanceof PostPublishedEvent) {
-			$this->queue('publish', $event->getPost()->getId());
+			// a direct message goes to the people it names on Bluesky as one
+			$post = $event->getPost();
+			$this->queue($post->getVisibility() === Stream::TYPE_DIRECT ? 'message' : 'publish', $post->getId());
 		} elseif ($event instanceof PostEditedEvent) {
 			$this->queue('edit', $event->getPost()->getId());
 		} elseif ($event instanceof PostDeletedEvent) {

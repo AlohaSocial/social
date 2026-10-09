@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Chat\ChatPoller;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -17,6 +18,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Conversation;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Tools\Nid;
+use Psr\Container\ContainerInterface;
 use Throwable;
 
 /**
@@ -87,6 +89,7 @@ class ConversationService {
 		private StreamService $streamService,
 		private CacheActorService $cacheActorService,
 		private ConversationsRequest $conversationsRequest,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -108,6 +111,13 @@ class ConversationService {
 	 */
 	public function getPage(Person $viewer, int $limit, int|string $maxId = '0', int|string $minId = 0, int|string $sinceId = '0'): array {
 		$limit = max(1, min(self::MAX_LIMIT, $limit));
+		// somebody reading their messages: the ones on Bluesky are read next
+		// run, not when the backoff says; resolved here, as the Bluesky side
+		// needs services that need this one
+		try {
+			$this->container?->get(ChatPoller::class)->wakeActor($viewer);
+		} catch (Throwable) {
+		}
 		$messages = $this->directMessages($viewer, $maxId, $minId, $sinceId);
 		if ($messages === []) {
 			return ['conversations' => [], 'next' => 0, 'prev' => 0];

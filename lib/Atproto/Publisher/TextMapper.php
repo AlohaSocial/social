@@ -286,7 +286,7 @@ class TextMapper {
 	/**
 	 * The last word boundary before $graphemes, and under $bytes.
 	 */
-	private static function cut(string $text, int $graphemes, int $bytes): string {
+	public static function cut(string $text, int $graphemes, int $bytes): string {
 		preg_match_all('/\X/u', $text, $matches);
 		$clusters = array_slice($matches[0], 0, $graphemes);
 		$cut = implode('', $clusters);

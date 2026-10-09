@@ -158,6 +158,8 @@ jobs:
           ./occ config:app:set social atproto_plc_directory --value http://127.0.0.1:2582
           ./occ config:app:set social atproto_appview --value http://127.0.0.1:2584
           ./occ config:app:set social atproto_relays --value '["http://127.0.0.1:2470"]'
+          # the development network has no chat service: never Bluesky's own
+          ./occ config:app:set social atproto_chat --value ''
           ./occ config:app:set social atproto_enabled --value 1
           ./occ config:system:set auth.bruteforce.protection.enabled --value false --type boolean
           ./occ config:system:set ratelimit.protection.enabled --value false --type boolean

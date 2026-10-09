@@ -113,7 +113,7 @@
 				class="bluesky__field"
 				:label="t('social', 'Direct messages')"
 				placeholder="https://api.bsky.chat"
-				:helperText="t('social', 'Bluesky\'s chat service, which the direct messages of a Bluesky app signed in here go through, for app passwords that allow them. Empty turns direct messages off.')" />
+				:helperText="t('social', 'Bluesky\'s chat service, where direct messages with people on Bluesky are kept: they arrive in Messages here, and a Bluesky app signed in here with an app password that allows them reaches them too. Empty turns direct messages with Bluesky off.')" />
 			<NcTextField
 				v-model="form.syncCeiling"
 				class="bluesky__number"
