@@ -19,9 +19,11 @@ use OCA\Social\Interfaces\Object\ImageInterface;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Service\ActorService;
+use OCA\Social\Service\CacheActorService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 #[AllowMockObjectsWithoutExpectations]
 class ActorServiceTest extends TestCase {
@@ -61,6 +63,18 @@ class ActorServiceTest extends TestCase {
 		}
 
 		return $alice;
+	}
+
+	public function testCachingALocalActorMakesTheNextReadInTheRequestTheNewCopy(): void {
+		$alice = $this->alice();
+		$this->cacheActorsRequest->method('getFromId')->willThrowException(new CacheActorDoesNotExistException());
+		$memo = $this->createMock(CacheActorService::class);
+		$memo->expects($this->once())->method('forget')->with(self::ALICE);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(CacheActorService::class)->willReturn($memo);
+		$service = new ActorService($this->cacheActorsRequest, $this->cacheDocumentsRequest, $container);
+
+		$service->cacheLocalActor($alice);
 	}
 
 	public function testCacheLocalActorUpdatesAnAlreadyCachedActor(): void {

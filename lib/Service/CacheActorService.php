@@ -245,6 +245,14 @@ class CacheActorService {
 	}
 
 	/**
+	 * Forgets one memoised actor, once its cached copy was written: the next
+	 * read in the same request is the copy as it is now.
+	 */
+	public function forget(string $id): void {
+		unset($this->memo[$id]);
+	}
+
+	/**
 	 * What is already known about a set of actors, in one query and without
 	 * touching the network.
 	 *

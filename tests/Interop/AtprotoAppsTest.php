@@ -12,6 +12,10 @@ namespace OCA\Social\Tests\Interop;
 use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Publisher\RecordMapper;
+use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\Server;
@@ -128,6 +132,8 @@ class AtprotoAppsTest extends TestCase {
 		]);
 		$this->assertSame(200, $status, json_encode($saved));
 		$this->assertNotSame($before, (string)($this->alice->get('/api/v1/accounts/verify_credentials')['avatar'] ?? ''), 'the picture is the account\'s avatar');
+		$profile = Server::get(RepositoryService::class)->getRecord($identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
+		$this->assertArrayHasKey('avatar', $profile === null ? [] : (array)DagCbor::decode($profile->bytes), 'the profile record names the avatar; the account\'s icon is ' . Server::get(CacheActorService::class)->getFromId($this->alice->actor->getId(), false)->getIconId());
 		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($identity->did)['avatar'] ?? '') !== '' ? true : null), 'and the AppView shows it');
 
 		// deleting the post's record deletes the post here

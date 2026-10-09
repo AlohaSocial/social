@@ -144,6 +144,24 @@ class CacheActorServiceTest extends TestCase {
 		$this->service->getFromId(self::BOB);
 	}
 
+	public function testForgettingOneActorReadsOnlyThatOneAgain(): void {
+		$asked = [];
+		$this->cacheActorsRequest->method('getFromId')
+			->willReturnCallback(function (string $id) use (&$asked): Person {
+				$asked[] = $id;
+
+				return $this->person($id);
+			});
+		$this->service->getFromId(self::BOB);
+		$this->service->getFromId('https://remote.example/users/carol');
+
+		$this->service->forget(self::BOB);
+		$this->service->getFromId(self::BOB);
+		$this->service->getFromId('https://remote.example/users/carol');
+
+		$this->assertSame([self::BOB, 'https://remote.example/users/carol', self::BOB], $asked);
+	}
+
 	/** a route answered to anybody is not a reason to go and fetch an actor */
 	public function testResolveDoesNotFetchAnUnknownUrlByDefault(): void {
 		$this->cacheActorsRequest->method('getFromIds')->willReturn([]);
