@@ -13,6 +13,7 @@ use OCA\Social\AP;
 use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\ActorMapper;
+use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\BlueskySearch;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Exceptions\AtprotoException;
@@ -110,5 +111,36 @@ class BlueskySearchTest extends TestCase {
 		]]);
 		$people = (new BlueskySearch($config, $this->appView, new ActorMapper(), $blocklist, new NullLogger()))->typeahead('alice.');
 		$this->assertSame(['alice.bsky.social'], array_map(static fn ($p): string => $p->getAccount(), $people));
+	}
+
+	/**
+	 * An account with no stored row has no id: a client could neither open
+	 * it nor follow it, and `/api/v1/accounts/0/follow` is all it would have.
+	 */
+	public function testAnAccountFoundIsTheCachedOneOrIsStoredFirst(): void {
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$this->appView->method('query')->willReturn(['actors' => [
+			['did' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'handle' => 'alice.bsky.social'],
+			['did' => 'did:plc:z72i7hdynmk6r22z27h6tvur', 'handle' => 'bsky.app'],
+		]]);
+		$known = new Person();
+		$known->setId('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz')->setNid(41);
+		$stored = [];
+		$actors = $this->createMock(BlueskyActorService::class);
+		$actors->method('cached')->willReturnCallback(static function (string $did) use ($known, &$stored): ?Person {
+			if ($did === 'did:plc:ewvi7nxzyoun6zhxrhs64oiz') {
+				return $known;
+			}
+
+			return isset($stored[$did]) ? (clone $stored[$did])->setNid(42) : null;
+		});
+		$actors->expects($this->once())->method('store')->willReturnCallback(static function (Person $person) use (&$stored): void {
+			$stored['did:plc:z72i7hdynmk6r22z27h6tvur'] = $person;
+		});
+
+		$people = (new BlueskySearch($config, $this->appView, new ActorMapper(), $this->createMock(Blocklist::class), new NullLogger(), $actors))->typeahead('alice.');
+
+		$this->assertSame([41, 42], array_map(static fn (Person $p): int => (int)$p->getNid(), $people));
 	}
 }

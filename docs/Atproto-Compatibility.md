@@ -1151,8 +1151,10 @@ Everything in the phase 2 row, in `lib/Atproto/Reader/` (`BlueskyActorService`,
   feed of anybody who follows the quoting account.
 - **Search** (§9.1) asks the typeahead only for text that is the start of a
   handle — a dot in it, no `@` — so a plain username never leaves the
-  instance; what it finds is not stored until somebody follows or
-  mentions it.
+  instance; each account it finds is the cached one, or is stored as it
+  is found — at most eight per search — since an account without a
+  stored row has no id a client can open or follow it by (it used to be
+  answered with id `0`).
 - **The admin's federation block list applies to a handle's domain** (the
   part after the first dot) in the directory; the per-DID/PDS-host block
   list of §12.4 is phase 3, as are labelers (§12.2) and reporting (§12.3).
