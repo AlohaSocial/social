@@ -840,6 +840,19 @@ export const useTimelineStore = defineStore('timeline', {
 				this.statuses[statusId] = { ...known, tagged_people: taggedPeople }
 			}
 		},
+		/**
+		 * Who may reply to a post, after its author changed it.
+		 *
+		 * @param {object} root0 the post and its new policy
+		 * @param {string} root0.statusId the post
+		 * @param {string} root0.replyPolicy who may reply now
+		 */
+		updateStatusReplyPolicy({ statusId, replyPolicy }) {
+			const known = this.statuses[statusId]
+			if (known !== undefined) {
+				this.statuses[statusId] = { ...known, reply_policy: replyPolicy }
+			}
+		},
 		updateStatusPoll({ statusId, poll }) {
 			const known = this.statuses[statusId]
 			if (known !== undefined) {

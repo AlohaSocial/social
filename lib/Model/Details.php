@@ -93,6 +93,8 @@ final class Details {
 	 * the second one is about somebody else's document entirely.
 	 */
 	public const REPLY_POLICY = 'reply_policy';
+	/** who may reply to one of this instance's own posts (`Stream::REPLY_RULES`) */
+	public const REPLY_RULE = 'reply_rule';
 	public const REPLY_STATE = 'reply_state';
 
 	/**

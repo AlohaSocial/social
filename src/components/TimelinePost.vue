@@ -319,6 +319,7 @@
 						@edit="editPost"
 						@archive="toggleArchive"
 						@manageQuotes="managingQuotes = true"
+						@manageReplies="managingReplies = true"
 						@tagPeople="taggingPeople = true"
 						@delete="askToDelete(false)"
 						@redraft="askToDelete(true)"
@@ -447,6 +448,12 @@
 			:nid="item.nid"
 			:approval="item.quote_approval"
 			@close="managingQuotes = false" />
+		<ReplyControlDialog
+			v-if="managingReplies"
+			:nid="item.nid"
+			:replyPolicy="item.reply_policy ?? 'everyone'"
+			@changed="onReplyPolicy"
+			@close="managingReplies = false" />
 		<NcDialog
 			v-model:open="showBlockDialog"
 			:name="t('social', 'Block {account}?', { account: item.account.acct })"
@@ -565,6 +572,7 @@ const TagPeopleDialog = defineAsyncComponent(() => import(/* webpackChunkName: "
 // same chunk, and for the same reason: a dialog nobody opens until they ask for
 // it, which brings framework form controls with it
 const QuoteControlDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./QuoteControlDialog.vue'))
+const ReplyControlDialog = defineAsyncComponent(() => import(/* webpackChunkName: "account-dialogs" */'./ReplyControlDialog.vue'))
 
 /** How long the heart is held before it offers the reactions. */
 const HOLD_MS = 450
@@ -580,6 +588,7 @@ export default {
 		Pin,
 		CreationOutline,
 		QuoteControlDialog,
+		ReplyControlDialog,
 		TagPeopleDialog,
 		IconEyeOutline,
 		CollectionPickerDialog,
@@ -672,6 +681,7 @@ export default {
 			untagging: false,
 			taggingPeople: false,
 			managingQuotes: false,
+			managingReplies: false,
 			/** whether the delete on screen is the first half of a re-draft */
 			deleteToRedraft: false,
 			/** the Translation entity once it has arrived, null before */
@@ -1189,6 +1199,13 @@ export default {
 		 */
 		isLocalAccount(account) {
 			return Boolean(account?.acct && isLocalAccount(account) && account.username)
+		},
+
+		/**
+		 * @param {string} policy who may reply now
+		 */
+		onReplyPolicy(policy) {
+			this.timelineStore.updateStatusReplyPolicy({ statusId: this.item.id, replyPolicy: policy })
 		},
 
 		/**

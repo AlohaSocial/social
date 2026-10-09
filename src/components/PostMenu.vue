@@ -41,6 +41,15 @@
 			</template>
 			{{ t('social', 'Quotes of this post') }}
 		</NcActionButton>
+		<NcActionButton
+			v-if="isMine && isLocal"
+			closeAfterClick
+			@click="$emit('manageReplies')">
+			<template #icon>
+				<IconCommentAccountOutline :size="20" />
+			</template>
+			{{ t('social', 'Who can reply') }}
+		</NcActionButton>
 		<!-- who is in the picture, which only the author may say: anybody able
 		     to write a name onto anybody's photograph could put a post in front
 		     of an audience that did not ask for it -->
@@ -182,6 +191,7 @@ import FolderMultiplePlusOutline from 'vue-material-design-icons/FolderMultipleP
 import FormatQuoteClose from 'vue-material-design-icons/FormatQuoteClose.vue'
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
 import IconArchiveOutline from 'vue-material-design-icons/ArchiveOutline.vue'
+import IconCommentAccountOutline from 'vue-material-design-icons/CommentAccountOutline.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import PencilBoxOutline from 'vue-material-design-icons/PencilBoxOutline.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
@@ -221,6 +231,7 @@ export default {
 		FormatQuoteClose,
 		IconAccountBoxMultiple,
 		IconArchiveOutline,
+		IconCommentAccountOutline,
 		NcActionButton,
 		NcActionLink,
 		NcActions,
@@ -290,6 +301,7 @@ export default {
 		'edit',
 		'archive',
 		'manageQuotes',
+		'manageReplies',
 		'tagPeople',
 		'delete',
 		'redraft',

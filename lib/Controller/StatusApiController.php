@@ -43,6 +43,7 @@ use OCA\Social\Service\PostService;
 use OCA\Social\Service\QuoteService;
 use OCA\Social\Service\ReactionService;
 use OCA\Social\Service\ReactionSummaryService;
+use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\ScheduledStatusService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TeamService;
@@ -113,6 +114,7 @@ class StatusApiController extends MastodonApiController {
 		private IFactory $l10nFactory,
 		private DurableCache $durableCache,
 		private Publisher $atprotoPublisher,
+		private ReplyRuleService $replyRules,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -235,6 +237,7 @@ class StatusApiController extends MastodonApiController {
 
 			$post->setQuotedId($status->getQuotedId());
 			$post->setQuotePolicy($status->getQuotePolicy());
+			$post->setReplyRule($status->getReplyRule());
 			$post->setVideoMeta($status->getVideoMeta());
 
 			// Before anything is written: a post a rule holds is stored as a
@@ -968,11 +971,24 @@ class StatusApiController extends MastodonApiController {
 		try {
 			$this->initViewer(true);
 
+			$input = $this->convertInput((string)file_get_contents('php://input'));
 			$status = new Status();
-			$status->import($this->convertInput((string)file_get_contents('php://input')));
+			$status->import($input);
 
 			$actor = $this->accountService->getActorFromUserId($this->currentSession());
-			$item = $this->quoteService->setPolicy($nid, $actor, $status->getQuotePolicy());
+			// each policy only when it was sent: this app's `reply_policy`
+			// alone leaves who may quote as it was
+			if (array_key_exists('reply_policy', $input)) {
+				$item = $this->replyRules->setRule($nid, $actor, $status->getReplyRule() !== '' ? $status->getReplyRule() : Stream::REPLY_RULE_EVERYONE);
+			}
+			if (!array_key_exists('reply_policy', $input) || array_key_exists('quote_approval_policy', $input)) {
+				$item = $this->quoteService->setPolicy($nid, $actor, $status->getQuotePolicy());
+				try {
+					$this->atprotoPublisher->updateGates($item);
+				} catch (Throwable $e) {
+					$this->logger->warning('Quote policy not written to Bluesky', ['post' => $item->getId(), 'exception' => $e]);
+				}
+			}
 			$item->setExportFormat(ACore::FORMAT_LOCAL);
 
 			return new DataResponse($item, Http::STATUS_OK);

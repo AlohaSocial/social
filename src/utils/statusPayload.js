@@ -19,6 +19,7 @@
  * @param {string} [post.quoteId] the post this quotes
  * @param {string} post.visibility who it is for
  * @param {string} post.postAs the team it is written as, '' for oneself
+ * @param {string} [post.replyPolicy] who may reply, `everyone` when not narrowed
  * @param {string} post.language what it is written in
  * @param {{title: string, category: string, licence: string}|null} post.video what the poster said about the video, null when it is not a video post
  * @param {{id?: string, name?: string, country?: string}|null} post.place where it was taken
@@ -39,6 +40,7 @@ export function statusPayload(post) {
 		quote_id: post.quoteId,
 		visibility: post.visibility,
 		...(post.postAs === '' ? {} : { post_as: post.postAs }),
+		...(!post.replyPolicy || post.replyPolicy === 'everyone' ? {} : { reply_policy: post.replyPolicy }),
 		// always, so the post is never without one: the server would fill in
 		// the same default, but what the poster saw is what goes
 		language: post.language,

@@ -34,6 +34,7 @@ use OCA\Social\Service\ForwardService;
 use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\PushService;
+use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamQueueService;
@@ -66,6 +67,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 	private Person $alice;
 	private StatusRevisionService|MockObject $revisionService;
 	private FileCommentsService|MockObject $fileCommentsService;
+	private ReplyRuleService|MockObject $replyRules;
 	private Person $bob;
 	private Person $carol;
 
@@ -82,6 +84,7 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->forwardService = $this->createMock(ForwardService::class);
 		$this->revisionService = $this->createMock(StatusRevisionService::class);
 		$this->fileCommentsService = $this->createMock(FileCommentsService::class);
+		$this->replyRules = $this->createMock(ReplyRuleService::class);
 		$this->handler = new NoteInterface(
 			$this->streamRequest,
 			$this->cacheActorsRequest,
@@ -92,7 +95,8 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 			$this->forwardService,
 			$this->createStub(\OCA\Social\Service\NotificationService::class),
 			$this->revisionService,
-			$this->fileCommentsService
+			$this->fileCommentsService,
+			$this->replyRules,
 		);
 
 		$this->alice = $this->person(self::LOCAL_URL . '/users/alice', true);
@@ -356,6 +360,19 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$note->setInReplyTo(self::PARENT);
 
 		$this->streamRequest->expects($this->once())->method('save')->with($this->identicalTo($note));
+
+		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
+	}
+
+	public function testAReplyTheParentsAuthorDoesNotLetThroughIsNotKept(): void {
+		$parent = $this->note(self::PARENT, $this->alice->getId(), true);
+		$this->streamRequest->method('getStreamById')->willReturnCallback(static fn (string $id): Stream => $id === self::PARENT ? $parent : throw new StreamNotFoundException());
+		$note = $this->incomingNote();
+		$note->setInReplyTo(self::PARENT);
+		$this->replyRules->expects($this->once())->method('refusal')->with($parent, $this->bob->getId())->willReturn(ReplyRuleService::describe(Stream::REPLY_RULE_NOBODY));
+
+		$this->streamRequest->expects($this->never())->method('save');
+		$this->streamRequest->expects($this->never())->method('recountReplies');
 
 		$this->handler->activity($this->wrap(Create::TYPE, $note), $note);
 	}

@@ -37,6 +37,7 @@ use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\PushService;
+use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tools\Traits\TArrayTools;
@@ -55,6 +56,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		private NotificationService $notificationService,
 		private StatusRevisionService $revisionService,
 		private FileCommentsService $fileCommentsService,
+		private ?ReplyRuleService $replyRules = null,
 	) {
 	}
 
@@ -192,6 +194,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 		try {
 			$this->streamRequest->getStreamById($note->getId());
 		} catch (StreamNotFoundException $e) {
+			if ($this->refusedReply($note)) {
+				return;
+			}
 			if ($note->getVisibility() === '') {
 				$note->setVisibility($this->estimateVisibility($note));
 			}
@@ -215,6 +220,24 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 				);
 			}
 		}
+	}
+
+	/**
+	 * Whether the note is a reply the author of one of this instance's own
+	 * posts does not let through (`ReplyRuleService`): not kept, from
+	 * another server or from Bluesky alike, as a reply from here is refused.
+	 */
+	private function refusedReply(Note $note): bool {
+		if ($this->replyRules === null || $note->getInReplyTo() === '') {
+			return false;
+		}
+		try {
+			$parent = $this->streamRequest->getStreamById($note->getInReplyTo());
+		} catch (StreamNotFoundException) {
+			return false;
+		}
+
+		return $this->replyRules->refusal($parent, $note->getAttributedTo()) !== '';
 	}
 
 	/**

@@ -1,4 +1,12 @@
 { "translations": {
+    "Who can reply" : "Wer antworten darf",
+    "Anybody" : "Alle",
+    "People who follow me" : "Leute, die mir folgen",
+    "People I follow" : "Leute, denen ich folge",
+    "Only people I mention" : "Nur Leute, die ich erwähne",
+    "Nobody" : "Niemand",
+    "This decides what happens from now on. Replies already posted stay. You can always reply yourself." : "Das gilt ab jetzt. Antworten, die schon da sind, bleiben. Sie selbst können immer antworten.",
+    "Could not change who can reply" : "Konnte nicht ändern, wer antworten darf",
     "You can now choose who reaches your notifications — new accounts and people you don't follow can wait for your review." : "Sie können jetzt wählen, wer Ihre Benachrichtigungen erreicht – neue Konten und Personen, denen Sie nicht folgen, können warten, bis Sie sie prüfen.",
     "Choose in Settings" : "In den Einstellungen wählen",
     "_{count} person is waiting — Review_::_{count} people are waiting — Review_" : ["{count} Person wartet – Ansehen", "{count} Personen warten – Ansehen"],

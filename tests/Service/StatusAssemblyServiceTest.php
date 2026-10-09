@@ -182,6 +182,14 @@ class StatusAssemblyServiceTest extends TestCase {
 		$this->assertSame(['options' => ['yes', 'no']], $post->getPoll());
 	}
 
+	public function testWhoMayReplyWaitsWithTheScheduledPost(): void {
+		$this->assertArrayNotHasKey('reply_policy', $this->service->paramsOf(new Status(), Stream::TYPE_PUBLIC));
+		$params = $this->service->paramsOf((new Status())->setReplyRule(Stream::REPLY_RULE_MENTIONED), Stream::TYPE_PUBLIC);
+		$this->assertSame(Stream::REPLY_RULE_MENTIONED, $params['reply_policy']);
+
+		$this->assertSame(Stream::REPLY_RULE_MENTIONED, $this->service->fromParams($this->actor(), $this->params($params))->getReplyRule());
+	}
+
 	public function testTheReplyFindsThePostItAnswers(): void {
 		$parent = new Stream();
 		$parent->setId('https://cloud.example/apps/social/@bob/42');

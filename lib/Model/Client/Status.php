@@ -30,6 +30,8 @@ class Status implements \JsonSerializable {
 	private string $quotedId = '';
 	/** who may quote the post being written: '', 'public', 'followers' or 'nobody' */
 	private string $quotePolicy = '';
+	/** who may reply to the post being written, one of `Stream::REPLY_RULES`, or '' when not said */
+	private string $replyRule = '';
 
 	/**
 	 * What the composer said about the video: its title, category and licence.
@@ -140,6 +142,16 @@ class Status implements \JsonSerializable {
 		return $this->quotePolicy;
 	}
 
+	public function setReplyRule(string $replyRule): self {
+		$this->replyRule = in_array($replyRule, Stream::REPLY_RULES, true) ? $replyRule : '';
+
+		return $this;
+	}
+
+	public function getReplyRule(): string {
+		return $this->replyRule;
+	}
+
 	/**
 	 * @return array<string, string>
 	 */
@@ -216,6 +228,11 @@ class Status implements \JsonSerializable {
 		// it on every post and its three values are the whole vocabulary
 		$policy = $data['quote_approval_policy'] ?? '';
 		$this->setQuotePolicy(is_scalar($policy) ? (string)$policy : '');
+
+		// who may reply: this app's own field, `everyone`, `followers`,
+		// `following`, `mentioned` or `nobody`
+		$rule = $data['reply_policy'] ?? '';
+		$this->setReplyRule(is_scalar($rule) ? (string)$rule : '');
 
 		// what a video is called, and what it is. A `Note` has none of this and
 		// the composer never asked, so a video posted from here was published

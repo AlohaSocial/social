@@ -185,6 +185,21 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/** Replies to this post are held until somebody approves them. */
 	public const REPLY_POLICY_APPROVAL = 'approval';
 
+	/**
+	 * Who may reply to one of this instance's own posts: everybody (the
+	 * default), the author's followers, the accounts the author follows, the
+	 * accounts the post mentions, or nobody. The author always may.
+	 */
+	public const REPLY_RULE_EVERYONE = 'everyone';
+	public const REPLY_RULE_FOLLOWERS = 'followers';
+	public const REPLY_RULE_FOLLOWING = 'following';
+	public const REPLY_RULE_MENTIONED = 'mentioned';
+	public const REPLY_RULE_NOBODY = 'nobody';
+	public const REPLY_RULES = [
+		self::REPLY_RULE_EVERYONE, self::REPLY_RULE_FOLLOWERS, self::REPLY_RULE_FOLLOWING,
+		self::REPLY_RULE_MENTIONED, self::REPLY_RULE_NOBODY,
+	];
+
 	/** This reply is waiting to be approved, has been, or was refused. */
 	public const REPLY_PENDING = 'pending';
 	public const REPLY_APPROVED = 'approved';
@@ -981,6 +996,22 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	public function setReplyPolicy(string $policy): self {
 		$this->setDetail(Details::REPLY_POLICY, $policy);
+
+		return $this;
+	}
+
+	/**
+	 * Who may reply to this post, one of `REPLY_RULES`; everybody unless the
+	 * author of one of this instance's own posts said otherwise.
+	 */
+	public function getReplyRule(): string {
+		$rule = $this->getDetailsAll()[Details::REPLY_RULE] ?? '';
+
+		return is_string($rule) && in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE;
+	}
+
+	public function setReplyRule(string $rule): self {
+		$this->setDetail(Details::REPLY_RULE, in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE);
 
 		return $this;
 	}
@@ -2013,6 +2044,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			// server decides who may quote theirs, and what it decided rides
 			// on their document as `interactionPolicy` rather than here
 			'quote_approval' => $this->isLocal() ? $this->exportQuoteApproval() : null,
+			// who may reply to one of our own posts — an extension, as no
+			// Mastodon entity says it; null on anybody else's
+			'reply_policy' => $this->isLocal() ? $this->getReplyRule() : null,
 			// where a reply of ours stands with the server it was sent to, and
 			// whether replies here have to be approved at all. Null for the
 			// ordinary post, which is almost every post: a client that has to
@@ -2245,7 +2279,47 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			default => $author,
 		};
 
-		return ['interactionPolicy' => ['canQuote' => ['automaticApproval' => $allowed]]];
+		$policy = ['canQuote' => ['automaticApproval' => $allowed]];
+		$canReply = $this->replyApproval();
+		if ($canReply !== null) {
+			$policy['canReply'] = ['automaticApproval' => $canReply];
+		}
+
+		return ['interactionPolicy' => $policy];
+	}
+
+	/**
+	 * Who the author lets reply, as `interactionPolicy.canReply` says it —
+	 * GoToSocial's field, which it holds peers to: the author always, beside
+	 * the collection or the accounts the rule names. Null for everybody,
+	 * which is what a post saying nothing means.
+	 *
+	 * @return string[]|null
+	 */
+	private function replyApproval(): ?array {
+		$author = $this->getAttributedTo();
+		$named = match ($this->getReplyRule()) {
+			self::REPLY_RULE_FOLLOWERS => [$this->followersOfAuthor()],
+			self::REPLY_RULE_FOLLOWING => [$author === '' ? '' : $author . '/following'],
+			self::REPLY_RULE_MENTIONED => $this->addressed(),
+			self::REPLY_RULE_NOBODY => [],
+			default => null,
+		};
+
+		return $named === null ? null : array_values(array_unique(array_filter(array_merge($named, [$author]))));
+	}
+
+	/**
+	 * The accounts a post is addressed to by name — whom it mentions — as
+	 * against the collections it goes to.
+	 *
+	 * @return string[]
+	 */
+	public function addressed(): array {
+		return array_values(array_filter(
+			array_merge($this->getToArray(), $this->getCcArray()),
+			fn (string $id): bool => $id !== self::CONTEXT_PUBLIC && $id !== $this->followersOfAuthor() && !str_ends_with($id, '/followers'),
+		));
 	}
 
 	/**

@@ -43,6 +43,7 @@ use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PlaceService;
 use OCA\Social\Service\PostService;
 use OCA\Social\Service\ReactionSummaryService;
+use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -93,6 +94,8 @@ class PostServiceTest extends TestCase {
 	private Threadgates $threadgates;
 	/** @var Postgates&MockObject */
 	private Postgates $postgates;
+	/** @var ReplyRuleService&MockObject */
+	private ReplyRuleService $replyRules;
 	/** @var ContainerInterface&MockObject */
 	private ContainerInterface $container;
 
@@ -149,7 +152,12 @@ class PostServiceTest extends TestCase {
 		$this->threadgates = $this->createMock(Threadgates::class);
 		$this->container = $this->createMock(ContainerInterface::class);
 		$this->postgates = $this->createMock(Postgates::class);
-		$this->container->method('get')->willReturnCallback(fn (string $id): object => $id === Postgates::class ? $this->postgates : $this->threadgates);
+		$this->replyRules = $this->createMock(ReplyRuleService::class);
+		$this->container->method('get')->willReturnCallback(fn (string $id): object => match ($id) {
+			Postgates::class => $this->postgates,
+			ReplyRuleService::class => $this->replyRules,
+			default => $this->threadgates,
+		});
 		$this->service = new PostService(
 			$streamService,
 			$this->accountService,
@@ -574,6 +582,25 @@ class PostServiceTest extends TestCase {
 
 		$this->expectException(InvalidActionException::class);
 		$this->expectExceptionMessage('allows no replies');
+		$this->service->createPost($post);
+	}
+
+	public function testAReplyTheAuthorsRuleDoesNotLetThroughIsRefusedBeforeAnythingIsSent(): void {
+		$parent = new Note();
+		$parent->setId('https://social.test/@bob/1');
+		$parent->setAttributedTo(self::BOB_ID);
+		$parent->setLocal(true);
+		$parent->setReplyRule(Stream::REPLY_RULE_FOLLOWERS);
+		$parent->setTo(\OCA\Social\Model\ActivityPub\ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($parent);
+		$this->replyRules->expects($this->once())->method('refusal')->with($parent, $this->anything())->willReturn(ReplyRuleService::describe(Stream::REPLY_RULE_FOLLOWERS));
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('I agree');
+		$post->setReplyTo($parent->getId());
+
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('only from their followers');
 		$this->service->createPost($post);
 	}
 
