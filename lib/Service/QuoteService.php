@@ -10,6 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\Atproto\Publisher\Publisher;
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -18,6 +21,7 @@ use OCA\Social\Model\ActivityPub\Activity\Reject;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\InstancePath;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -42,6 +46,7 @@ class QuoteService {
 		private CacheActorService $cacheActorService,
 		private ActivityService $activityService,
 		private LoggerInterface $logger,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -98,6 +103,11 @@ class QuoteService {
 	 * A **local** quoting post is revoked here directly: there is nobody to
 	 * tell, and the stamp on it is one this instance issued to itself.
 	 *
+	 * A **Bluesky** quote has no request to refuse: Bluesky asks nobody's
+	 * permission. It is detached the way Bluesky detaches one, by the post's
+	 * postgate listing it (`detachedEmbeddingUris`), which every AppView
+	 * honours; here it is withdrawn at once.
+	 *
 	 * @return bool whether there was a quote to take back
 	 * @throws InvalidResourceException the quoted post is not this account's own
 	 */
@@ -120,6 +130,8 @@ class QuoteService {
 
 		if ($quoting->isLocal()) {
 			$this->withdrawLocally($quoting);
+		} elseif (BlueskyIds::isPostId($quoting->getId())) {
+			$this->detachOnBluesky($post, $quoting);
 		} elseif ($grant !== null) {
 			$this->tell($post, $quoting, $grant->getRequestId(), $grant->getActorId());
 		} else {
@@ -148,6 +160,26 @@ class QuoteService {
 
 		$this->streamRequest->update($quoting);
 		$this->streamRequest->updateDetails($quoting);
+	}
+
+	/**
+	 * A Bluesky quote, detached: listed in the quoted post's postgate, and
+	 * withdrawn here. The postgate is written only for a post that is on
+	 * Bluesky; one that is not cannot be quoted there with an embed anyway.
+	 */
+	private function detachOnBluesky(Stream $post, Stream $quoting): void {
+		$this->withdrawLocally($quoting);
+		$uri = (string)($quoting->getDetails(PostMapper::DETAIL)['uri'] ?? '');
+		if ($uri === '') {
+			return;
+		}
+		$post->addDetachedQuote($uri);
+		$this->streamRequest->updateDetails($post);
+		try {
+			$this->container?->get(Publisher::class)->updateGates($post);
+		} catch (Throwable $e) {
+			$this->logger->warning('Detached quote not written to Bluesky', ['post' => $post->getId(), 'quoting' => $quoting->getId(), 'exception' => $e]);
+		}
 	}
 
 	/**

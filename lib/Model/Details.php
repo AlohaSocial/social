@@ -95,6 +95,8 @@ final class Details {
 	public const REPLY_POLICY = 'reply_policy';
 	/** who may reply to one of this instance's own posts (`Stream::REPLY_RULES`) */
 	public const REPLY_RULE = 'reply_rule';
+	/** the `at://` URIs of the Bluesky quotes the author of one of this instance's own posts detached */
+	public const DETACHED_QUOTES = 'detached_quotes';
 	public const REPLY_STATE = 'reply_state';
 
 	/**

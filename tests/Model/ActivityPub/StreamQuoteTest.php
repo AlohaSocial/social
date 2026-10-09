@@ -369,6 +369,34 @@ class StreamQuoteTest extends TestCase {
 	 * Without an `interactionPolicy.canQuote`, Mastodon 4.5 treats a post as
 	 * unquotable and offers no quote button at all.
 	 */
+	/** Bluesky asks nobody's permission: a quote of a post there stands unstamped. */
+	public function testALocalQuoteOfABlueskyPostIsAcceptedWithoutAStamp(): void {
+		$note = new Note();
+		$note->setId('https://cloud.example.org/apps/social/@alice/2');
+		$note->setLocal(true);
+		$note->setQuote('https://bsky.app/profile/did:plc:bob/post/3kq');
+		$note->setQuoteState(Stream::QUOTE_ACCEPTED);
+		$this->holdingNothing();
+
+		$this->assertSame(Stream::QUOTE_ACCEPTED, $note->exportAsLocal()['quote']['state']);
+
+		$note->setQuoteState(Stream::QUOTE_REVOKED);
+		$this->assertSame(Stream::QUOTE_REVOKED, $note->exportAsLocal()['quote']['state'], 'detached is still detached');
+	}
+
+	public function testOnlyTheNewestFiftyDetachedQuotesAreKept(): void {
+		$note = new Note();
+		for ($i = 1; $i <= 52; $i++) {
+			$note->addDetachedQuote('at://did:plc:bob/app.bsky.feed.post/' . $i);
+		}
+		$note->addDetachedQuote('at://did:plc:bob/app.bsky.feed.post/10');
+
+		$kept = $note->getDetachedQuotes();
+		$this->assertCount(Stream::DETACHED_QUOTES_KEPT, $kept);
+		$this->assertSame('at://did:plc:bob/app.bsky.feed.post/10', end($kept), 'detached again, it is the newest');
+		$this->assertNotContains('at://did:plc:bob/app.bsky.feed.post/1', $kept);
+	}
+
 	public function testALocalPublicPostSaysAnybodyMayQuoteIt(): void {
 		$note = new Note();
 		$note->setId('https://cloud.example.org/apps/social/@alice/1');

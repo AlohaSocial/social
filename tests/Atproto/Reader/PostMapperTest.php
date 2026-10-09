@@ -122,6 +122,15 @@ class PostMapperTest extends TestCase {
 		]]));
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kquoted', $withMedia['quote']);
 		$this->assertSame('image/png', $withMedia['attachment'][0]['mediaType']);
+		$this->assertArrayNotHasKey('quote_detached', $quote['_atproto']);
+
+		$detached = $mapper->note($this->postView(['embed' => [
+			'$type' => 'app.bsky.embed.recordWithMedia#view',
+			'record' => ['record' => ['$type' => 'app.bsky.embed.record#viewDetached', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'detached' => true]],
+			'media' => ['$type' => 'app.bsky.embed.images#view', 'images' => [['fullsize' => 'https://cdn.bsky.app/x@png', 'alt' => '']]],
+		]]));
+		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kquoted', $detached['quote'], 'a detached quote is still a quote');
+		$this->assertTrue($detached['_atproto']['quote_detached']);
 
 		$card = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.external#view', 'external' => ['uri' => 'https://nextcloud.com/blog', 'title' => 'A <post>']]]));
 		$this->assertStringEndsWith('<p><a href="https://nextcloud.com/blog" rel="nofollow noopener noreferrer" target="_blank">A &lt;post&gt;</a></p>', $card['content']);

@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Publisher\Publisher;
+use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -25,6 +27,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -188,6 +191,30 @@ class QuoteServiceTest extends TestCase {
 		$this->assertTrue($this->service->revoke(7, $this->alice(), 9));
 
 		$this->assertSame('', $quoting->getQuoteAuthorization());
+		$this->assertSame(Stream::QUOTE_REVOKED, $quoting->getQuoteState());
+	}
+
+	/**
+	 * Bluesky asks nobody's permission, so there is no request to refuse: the
+	 * quote is listed in the post's postgate, which every AppView honours.
+	 */
+	public function testRevokingABlueskyQuoteDetachesItInThePostgate(): void {
+		$post = $this->post();
+		$quoting = new Note();
+		$quoting->setId('https://bsky.app/profile/did:plc:bob/post/3kq')->setNid(9)->setAttributedTo('https://bsky.app/profile/did:plc:bob');
+		$quoting->setQuote(self::POST);
+		$quoting->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://did:plc:bob/app.bsky.feed.post/3kq']);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnCallback(static fn (int $nid): Stream => ($nid === 7) ? $post : $quoting);
+		$this->activityService->expects($this->never())->method('request');
+		$publisher = $this->createMock(Publisher::class);
+		$publisher->expects($this->once())->method('updateGates')->with($this->callback(static fn (Stream $gated): bool => $gated->getDetachedQuotes() === ['at://did:plc:bob/app.bsky.feed.post/3kq']));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(Publisher::class)->willReturn($publisher);
+		$service = new QuoteService($this->streamRequest, $this->quoteGrantRequest, $this->cacheActorService, $this->activityService, new NullLogger(), $container);
+
+		$this->assertTrue($service->revoke(7, $this->alice(), 9));
+
 		$this->assertSame(Stream::QUOTE_REVOKED, $quoting->getQuoteState());
 	}
 

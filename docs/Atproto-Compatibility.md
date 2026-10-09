@@ -1168,7 +1168,15 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 - **Quotes** of a post that is on Bluesky are `app.bsky.embed.record`
   (`recordWithMedia` with pictures); of anything else, the link as before.
   A quote of a Bluesky post stands at once: Bluesky asks nobody's
-  permission, so no FEP-044f `QuoteRequest` waits for an answer.
+  permission, so no FEP-044f `QuoteRequest` waits for an answer, and it
+  reads as accepted, as does a Bluesky post quoting anything.
+- **Detached quotes**: the author of a post here detaches a Bluesky
+  quote of it from the quote list as they would a Fediverse one; the
+  quoting post's URI goes into the post's postgate
+  (`detachedEmbeddingUris`, the newest 50, `Stream::addDetachedQuote()`),
+  so every AppView shows the quote detached, and it reads as revoked here.
+  A Bluesky quote whose quoted author detached it arrives as revoked
+  (`viewDetached`).
 - **Link cards**: the post's link preview as `app.bsky.embed.external`
   when it has a title and the post has no pictures and quotes nothing —
   **without a thumbnail**: the preview's picture is a remote URL, and a

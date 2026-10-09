@@ -41,6 +41,7 @@ class PostMapper {
 	private const RECORD = 'app.bsky.embed.record#view';
 	private const RECORD_WITH_MEDIA = 'app.bsky.embed.recordWithMedia#view';
 	private const VIEW_RECORD = 'app.bsky.embed.record#viewRecord';
+	private const VIEW_DETACHED = 'app.bsky.embed.record#viewDetached';
 	/** the records a post can embed that are shown as a card */
 	private const GENERATOR_VIEW = 'app.bsky.feed.defs#generatorView';
 	private const LIST_VIEW = 'app.bsky.graph.defs#listView';
@@ -164,7 +165,11 @@ class PostMapper {
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
-			] + ($card === null ? [] : [
+			] + (self::quoteDetached($embed) ? [
+				// the quoted author detached this quote, so it is withdrawn
+				// here too (PostStore)
+				'quote_detached' => true,
+			] : []) + ($card === null ? [] : [
 				// the card of a feed, a list or a starter pack the post embeds
 				'card' => $card,
 			]),
@@ -241,7 +246,9 @@ class PostMapper {
 				return [$attachments, '', ''];
 			case self::RECORD:
 				$record = $embed['record'] ?? [];
-				if (is_array($record) && ($record['$type'] ?? '') === self::VIEW_RECORD) {
+				// a quote the quoted author detached is still a quote, shown
+				// as withdrawn (`quoteDetached()`)
+				if (is_array($record) && in_array($record['$type'] ?? '', [self::VIEW_RECORD, self::VIEW_DETACHED], true)) {
 					return [[], $this->local->postId((string)($record['uri'] ?? '')), ''];
 				}
 
@@ -265,6 +272,20 @@ class PostMapper {
 		}
 
 		return [[], '', ''];
+	}
+
+	/**
+	 * Whether the post quotes one whose author detached the quote: the
+	 * AppView shows the quoted post as `viewDetached`, alone or beside
+	 * pictures.
+	 */
+	private static function quoteDetached(array $embed): bool {
+		$record = $embed['record'] ?? null;
+		if (is_array($record) && is_array($record['record'] ?? null)) {
+			$record = $record['record'];
+		}
+
+		return is_array($record) && ($record['$type'] ?? '') === self::VIEW_DETACHED;
 	}
 
 	/**

@@ -195,6 +195,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const REPLY_RULE_FOLLOWING = 'following';
 	public const REPLY_RULE_MENTIONED = 'mentioned';
 	public const REPLY_RULE_NOBODY = 'nobody';
+	/** as many detached quotes as a postgate's `detachedEmbeddingUris` holds */
+	public const DETACHED_QUOTES_KEPT = 50;
 	public const REPLY_RULES = [
 		self::REPLY_RULE_EVERYONE, self::REPLY_RULE_FOLLOWERS, self::REPLY_RULE_FOLLOWING,
 		self::REPLY_RULE_MENTIONED, self::REPLY_RULE_NOBODY,
@@ -1008,6 +1010,27 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$rule = $this->getDetailsAll()[Details::REPLY_RULE] ?? '';
 
 		return is_string($rule) && in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE;
+	}
+
+	/**
+	 * The Bluesky posts quoting this one that its author detached, as their
+	 * `at://` URIs: what the post's postgate lists, so every AppView shows
+	 * those quotes without it. The newest fifty, as many as a postgate holds.
+	 *
+	 * @return list<string>
+	 */
+	public function getDetachedQuotes(): array {
+		$uris = $this->getDetailsAll()[Details::DETACHED_QUOTES] ?? [];
+
+		return is_array($uris) ? array_values(array_filter($uris, 'is_string')) : [];
+	}
+
+	public function addDetachedQuote(string $uri): self {
+		$uris = array_values(array_diff($this->getDetachedQuotes(), [$uri]));
+		$uris[] = $uri;
+		$this->setDetailArray(Details::DETACHED_QUOTES, array_slice($uris, -self::DETACHED_QUOTES_KEPT));
+
+		return $this;
 	}
 
 	public function setReplyRule(string $rule): self {
@@ -2640,7 +2663,9 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		// question — whether we *could* show it — and reading the state off
 		// that reported every quote as accepted the moment it was written,
 		// including ones the author went on to refuse.
-		if ($this->getQuoteAuthorization() === '') {
+		// Bluesky asks nobody's permission to quote, so a quote made there or
+		// of a post there carries no stamp: it stands until it is detached
+		if ($this->getQuoteAuthorization() === '' && !self::isBlueskyPost($this->getId()) && !self::isBlueskyPost($this->getQuote())) {
 			return ['state' => self::QUOTE_PENDING, 'quoted_status' => null];
 		}
 
@@ -2709,6 +2734,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		}
 
 		return ['uri' => $uri, 'url' => $this->pageUrl(), 'labels' => $labels];
+	}
+
+	private static function isBlueskyPost(string $id): bool {
+		return str_starts_with($id, 'https://bsky.app/profile/') && str_contains($id, '/post/');
 	}
 
 	private function exportAiGenerated(): bool {

@@ -127,6 +127,30 @@ class PostStoreTest extends TestCase {
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', $note->getDetails(PostMapper::DETAIL)['uri']);
 	}
 
+	public function testAQuoteItsQuotedAuthorDetachedArrivesWithdrawn(): void {
+		$this->actors->method('cached')->willReturn($this->person(self::DID));
+		$view = $this->postView();
+		$view['embed'] = ['$type' => 'app.bsky.embed.record#view', 'record' => ['$type' => 'app.bsky.embed.record#viewDetached', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'detached' => true]];
+		$this->store->storeFeedItem(['post' => $view]);
+		$note = $this->imported[0]->getObject();
+
+		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kquoted', $note->getQuote());
+		$this->assertSame(Stream::QUOTE_REVOKED, $note->getQuoteState());
+		$this->assertSame('revoked', $note->exportAsLocal()['quote']['state']);
+	}
+
+	public function testAQuoteOnBlueskyStandsWithoutAStamp(): void {
+		$this->actors->method('cached')->willReturn($this->person(self::DID));
+		$view = $this->postView();
+		$view['embed'] = ['$type' => 'app.bsky.embed.record#view', 'record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'cid' => 'bafyq']];
+		$this->store->storeFeedItem(['post' => $view]);
+		$held = $this->createStub(StreamRequest::class);
+		$held->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		\OC::$server->register(StreamRequest::class, $held);
+
+		$this->assertSame('accepted', $this->imported[0]->getObject()->exportAsLocal()['quote']['state']);
+	}
+
 	public function testAFeedThePostEmbedsIsItsCard(): void {
 		$this->actors->method('cached')->willReturn($this->person(self::DID));
 		$view = $this->postView();
