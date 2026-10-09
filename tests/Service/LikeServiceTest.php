@@ -142,6 +142,21 @@ class LikeServiceTest extends TestCase {
 		return $like;
 	}
 
+	// recordWithoutSending()
+
+	public function testALikeBroughtOverIsWrittenDatedAndSentNowhere(): void {
+		$this->streamService->method('getStreamById')->with(self::POST_ID, true)->willReturn($this->note());
+		$this->likeInterface->expects($this->once())->method('save');
+		$this->streamActionService->expects($this->once())->method('setActionBool')->with(self::ALICE_ID, self::POST_ID, StreamAction::LIKED, true);
+		$this->signatureService->expects($this->never())->method('signObject');
+		$this->activityService->expects($this->never())->method('request');
+
+		$like = $this->service->recordWithoutSending($this->alice(), self::POST_ID, '2025-06-07T08:09:10Z');
+
+		$this->assertSame(self::POST_ID, $like->getObjectId());
+		$this->assertSame('2025-06-07T08:09:10Z', $like->getPublished());
+	}
+
 	// create()
 
 	public function testCreateBuildsLikeSavesFlagsAndFederatesIt(): void {

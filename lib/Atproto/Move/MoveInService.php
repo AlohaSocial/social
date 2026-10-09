@@ -308,12 +308,15 @@ class MoveInService {
 	}
 
 	/**
-	 * The account's posts become posts in its timeline here. The account has
-	 * moved by then, so a failure here does not fail the move.
+	 * The account's posts become posts in its timeline here, and its latest
+	 * likes and reposts likes and boosts. The account has moved by then, so
+	 * a failure here does not fail the move.
 	 */
 	public function importPosts(Move $move): void {
 		try {
-			$move->progress = ['posts' => $this->history->import($this->actors->getFromUserId($move->userId), $move->did)] + $move->progress;
+			$actor = $this->actors->getFromUserId($move->userId);
+			$move->progress = ['posts' => $this->history->import($actor, $move->did)] + $move->progress;
+			$move->progress = $this->history->importActions($actor, $move->did) + $move->progress;
 		} catch (Throwable $e) {
 			$this->logger->warning('Posts of a Bluesky account that moved here not imported', ['did' => $move->did, 'exception' => $e]);
 		}
