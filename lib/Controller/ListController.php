@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use Exception;
+use OCA\Social\Atproto\Publisher\BlueskyLists;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Exceptions\ItemNotFoundException;
@@ -33,6 +34,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
 use OCP\IUserSession;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -88,6 +90,7 @@ class ListController extends ClientApiController {
 		private ListsRequest $listsRequest,
 		private PlaceService $placeService,
 		private GroupListService $groupListService,
+		private ?ContainerInterface $container = null,
 	) {
 		parent::__construct($request, $userSession, $logger, $accountService, $clientService);
 	}
@@ -200,7 +203,10 @@ class ListController extends ClientApiController {
 	public function delete(int $id): DataResponse {
 		try {
 			$this->initViewer(['write:lists']);
-			$this->listsRequest->delete($this->notAGroupList($this->ownedList($id)));
+			$list = $this->notAGroupList($this->ownedList($id));
+			$members = $this->listsRequest->getMemberIds($list);
+			$this->listsRequest->delete($list);
+			$this->blueskyLists()?->deleted($list->getId(), $members);
 
 			return new DataResponse([], Http::STATUS_OK);
 		} catch (Throwable $e) {
@@ -292,6 +298,7 @@ class ListController extends ClientApiController {
 
 			foreach ($members as $member) {
 				$this->listsRequest->addMember($list, $member->getId());
+				$this->blueskyLists()?->memberAdded($this->viewer, $list->getId(), $member->getId());
 			}
 
 			return new DataResponse([], Http::STATUS_OK);
@@ -315,7 +322,9 @@ class ListController extends ClientApiController {
 			foreach ($this->accountIds($account_ids) as $accountId) {
 				// resolved, not trusted: the row is keyed by the actor id, and
 				// what a client sends is a numeric id or a handle
-				$this->listsRequest->removeMember($list, $this->cacheActorService->resolve($accountId, true)->getId());
+				$memberId = $this->cacheActorService->resolve($accountId, true)->getId();
+				$this->listsRequest->removeMember($list, $memberId);
+				$this->blueskyLists()?->memberRemoved($list->getId(), $memberId);
 			}
 
 			return new DataResponse([], Http::STATUS_OK);
@@ -401,6 +410,17 @@ class ListController extends ClientApiController {
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/**
+	 * Where a list is a Bluesky list too (a reply rule names it), its members
+	 * are kept in step there; resolved lazily, as the Bluesky side needs
+	 * services that need this one.
+	 */
+	private function blueskyLists(): ?BlueskyLists {
+		$lists = $this->container?->get(BlueskyLists::class);
+
+		return $lists instanceof BlueskyLists ? $lists : null;
 	}
 
 	/**

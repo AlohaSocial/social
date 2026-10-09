@@ -12,15 +12,33 @@
 			{{ t('social', 'This decides what happens from now on. Replies already posted stay. You can always reply yourself.') }}
 		</p>
 		<NcCheckboxRadioSwitch
-			v-for="choice in choices"
-			:key="choice.value"
-			:modelValue="policy"
-			:value="choice.value"
+			:modelValue="mode"
+			value="everyone"
 			:disabled="saving"
 			name="reply-policy"
 			type="radio"
-			@update:modelValue="setPolicy">
-			{{ choice.label }}
+			@update:modelValue="setPolicy('everyone')">
+			{{ t('social', 'Anybody') }}
+		</NcCheckboxRadioSwitch>
+		<NcCheckboxRadioSwitch
+			:modelValue="mode"
+			value="nobody"
+			:disabled="saving"
+			name="reply-policy"
+			type="radio"
+			@update:modelValue="setPolicy('nobody')">
+			{{ t('social', 'Nobody') }}
+		</NcCheckboxRadioSwitch>
+		<h4 class="replies__heading">
+			{{ t('social', 'Or only') }}
+		</h4>
+		<NcCheckboxRadioSwitch
+			v-for="part in parts"
+			:key="part.value"
+			:modelValue="chosen.includes(part.value)"
+			:disabled="saving"
+			@update:modelValue="(on) => setPolicy(withPart(policy, part.value, on))">
+			{{ part.label }}
 		</NcCheckboxRadioSwitch>
 	</NcDialog>
 </template>
@@ -33,11 +51,13 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import logger from '../services/logger.js'
 import { showError, showSuccess } from '../services/toast.js'
-import { replyPolicies } from '../utils/replyPolicy.js'
+import { ownLists, partLabel, RULE_PARTS, ruleParts, withPart } from '../utils/replyPolicy.js'
 
 /**
  * An author's control over who may reply to one of their posts, here and on
- * Bluesky alike, from now on.
+ * Bluesky alike, from now on: anybody, nobody, or any of their followers,
+ * the people they follow, the people the post mentions and the people on
+ * one of their lists.
  */
 export default {
 	name: 'ReplyControlDialog',
@@ -67,21 +87,44 @@ export default {
 		return {
 			policy: this.replyPolicy || 'everyone',
 			saving: false,
+			lists: [],
 		}
 	},
 
 	computed: {
-		/** @return {Array<{value: string, label: string}>} */
-		choices() {
-			return replyPolicies()
+		/** @return {string} `everyone`, `nobody` or `some` */
+		mode() {
+			return ['everyone', 'nobody'].includes(this.policy) ? this.policy : 'some'
 		},
+
+		/** @return {string[]} the parts the rule has */
+		chosen() {
+			return ruleParts(this.policy)
+		},
+
+		/** @return {Array<{value: string, label: string}>} every part that can be chosen */
+		parts() {
+			return [
+				...RULE_PARTS.map((value) => ({ value, label: partLabel(value) })),
+				...this.lists.map((list) => ({ value: `list:${list.id}`, label: partLabel(`list:${list.id}`, this.lists) })),
+			]
+		},
+	},
+
+	async mounted() {
+		try {
+			this.lists = await ownLists()
+		} catch (error) {
+			logger.debug('Could not read the lists', { error })
+		}
 	},
 
 	methods: {
 		t,
+		withPart,
 
 		/**
-		 * @param {string} policy one of the choices
+		 * @param {string} policy the new rule
 		 * @return {Promise<void>}
 		 */
 		async setPolicy(policy) {
@@ -109,5 +152,9 @@ export default {
 .replies__hint {
 	color: var(--color-text-maxcontrast);
 	margin-block-end: 8px;
+}
+
+.replies__heading {
+	margin-block: 12px 4px;
 }
 </style>

@@ -93,12 +93,14 @@ final class Details {
 	 * the second one is about somebody else's document entirely.
 	 */
 	public const REPLY_POLICY = 'reply_policy';
-	/** who may reply to one of this instance's own posts (`Stream::REPLY_RULES`) */
+	/** who may reply to one of this instance's own posts (`Stream::normalizeReplyRule()`) */
 	public const REPLY_RULE = 'reply_rule';
 	/** the `at://` URIs of the Bluesky quotes the author of one of this instance's own posts detached */
 	public const DETACHED_QUOTES = 'detached_quotes';
 	/** the replies the author of a thread's first post hid, by their ids, kept on that post */
 	public const HIDDEN_REPLIES = 'hidden_replies';
+	/** the members of the lists a post's reply rule names, when it was set */
+	public const REPLY_LIST_MEMBERS = 'reply_list_members';
 	public const REPLY_STATE = 'reply_state';
 
 	/**

@@ -107,5 +107,7 @@ class StatusTest extends TestCase {
 		$this->assertSame('followers', (new Status())->import(['status' => 'x', 'reply_policy' => 'followers'])->getReplyRule());
 		$this->assertSame('', (new Status())->import(['status' => 'x', 'reply_policy' => 'friends'])->getReplyRule());
 		$this->assertSame('', (new Status())->import(['status' => 'x', 'reply_policy' => ['nobody']])->getReplyRule());
+		$this->assertSame('followers,mentioned', (new Status())->import(['status' => 'x', 'reply_policy' => 'mentioned, followers'])->getReplyRule(), 'a combination, in order');
+		$this->assertSame('following,list:7', (new Status())->import(['status' => 'x', 'reply_policy' => 'list:7,following'])->getReplyRule());
 	}
 }

@@ -136,7 +136,7 @@ class Post implements JsonSerializable {
 		return $this->quotePolicy;
 	}
 
-	/** who may reply to the post, one of `Stream::REPLY_RULES`; '' for everybody */
+	/** who may reply to the post (`Stream::normalizeReplyRule()`); '' for everybody */
 	public function getReplyRule(): string {
 		return $this->replyRule;
 	}

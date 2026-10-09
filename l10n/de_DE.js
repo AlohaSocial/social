@@ -1,6 +1,10 @@
 OC.L10N.register(
     "social",
     {
+    "Or only" : "Oder nur",
+    "People I mention" : "Leute, die ich erwähne",
+    "People on {list}" : "Leute auf {list}",
+    "People on one of my lists" : "Leute auf einer meiner Listen",
     "Hidden by the author of the conversation" : "Vom Autor der Unterhaltung ausgeblendet",
     "The reply is hidden from the conversation" : "Die Antwort ist in der Unterhaltung ausgeblendet",
     "The reply is shown again" : "Die Antwort wird wieder angezeigt",

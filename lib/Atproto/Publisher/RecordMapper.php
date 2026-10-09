@@ -185,13 +185,7 @@ class RecordMapper {
 	 * nothing hidden.
 	 */
 	public function threadgate(Stream $post, string $postUri): ?array {
-		$allow = match ($post->getReplyRule()) {
-			Stream::REPLY_RULE_FOLLOWERS => [['$type' => self::THREADGATE . '#followerRule']],
-			Stream::REPLY_RULE_FOLLOWING => [['$type' => self::THREADGATE . '#followingRule']],
-			Stream::REPLY_RULE_MENTIONED => [['$type' => self::THREADGATE . '#mentionRule']],
-			Stream::REPLY_RULE_NOBODY => [],
-			default => null,
-		};
+		$allow = $this->allowOf($post);
 		$hidden = [];
 		foreach ($post->getHiddenReplies() as $replyId) {
 			$uri = $this->refs->strongRef($replyId)['uri'] ?? '';
@@ -209,6 +203,49 @@ class RecordMapper {
 		] + ($allow === null ? [] : ['allow' => $allow])
 			+ ['createdAt' => Syntax::datetime(self::publishedAt($post))]
 			+ ($hidden === [] ? [] : ['hiddenReplies' => $hidden]);
+	}
+
+	/**
+	 * The threadgate's `allow` for a post's reply rule: one rule per part, a
+	 * list as the Bluesky list it was published as (`BlueskyLists`); `[]`
+	 * for nobody, null for everybody.
+	 */
+	private function allowOf(Stream $post): ?array {
+		$parts = $post->getReplyRuleParts();
+		if ($parts === []) {
+			return null;
+		}
+		$allow = [];
+		foreach ($parts as $part) {
+			if (str_starts_with($part, Stream::REPLY_RULE_LIST)) {
+				$uri = $this->listUri((int)substr($part, strlen(Stream::REPLY_RULE_LIST)));
+				if ($uri !== '') {
+					$allow[] = ['$type' => self::THREADGATE . '#listRule', 'list' => $uri];
+				}
+				continue;
+			}
+			$rule = match ($part) {
+				Stream::REPLY_RULE_FOLLOWERS => 'followerRule',
+				Stream::REPLY_RULE_FOLLOWING => 'followingRule',
+				Stream::REPLY_RULE_MENTIONED => 'mentionRule',
+				default => '',
+			};
+			if ($rule !== '') {
+				$allow[] = ['$type' => self::THREADGATE . '#' . $rule];
+			}
+		}
+
+		return $allow;
+	}
+
+	private function listUri(int $listId): string {
+		foreach ($this->repositories->getRecordsByLocalId(BlueskyLists::localId($listId)) as $record) {
+			if ($record->collection === BlueskyLists::LIST) {
+				return $record->uri();
+			}
+		}
+
+		return '';
 	}
 
 	public function postgate(Stream $post, string $postUri): ?array {

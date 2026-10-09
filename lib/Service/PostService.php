@@ -175,7 +175,9 @@ class PostService {
 		// the same insert as everything else on the post
 		$note->setQuotePolicy($post->getQuotePolicy());
 		if ($post->getReplyRule() !== '') {
-			$note->setReplyRule($post->getReplyRule());
+			$rules = $this->replyRules();
+			$note->setReplyRule($rules?->sanitize($post->getActor()->getId(), $post->getReplyRule()) ?? $post->getReplyRule());
+			$rules?->snapshotListMembers($note);
 		}
 		if ($post->getVideoMeta() !== []) {
 			$note->setVideoMeta($post->getVideoMeta());

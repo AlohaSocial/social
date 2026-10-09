@@ -30,7 +30,7 @@ class Status implements \JsonSerializable {
 	private string $quotedId = '';
 	/** who may quote the post being written: '', 'public', 'followers' or 'nobody' */
 	private string $quotePolicy = '';
-	/** who may reply to the post being written, one of `Stream::REPLY_RULES`, or '' when not said */
+	/** who may reply to the post being written (`Stream::normalizeReplyRule()`), or '' when not said */
 	private string $replyRule = '';
 
 	/**
@@ -143,7 +143,9 @@ class Status implements \JsonSerializable {
 	}
 
 	public function setReplyRule(string $replyRule): self {
-		$this->replyRule = in_array($replyRule, Stream::REPLY_RULES, true) ? $replyRule : '';
+		$rule = Stream::normalizeReplyRule($replyRule);
+		// nothing it knows of is not said, rather than said to be everybody
+		$this->replyRule = ($rule === Stream::REPLY_RULE_EVERYONE && strtolower(trim($replyRule)) !== Stream::REPLY_RULE_EVERYONE) ? '' : $rule;
 
 		return $this;
 	}
