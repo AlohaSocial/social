@@ -53,6 +53,7 @@ class CountsServiceTest extends TestCase {
 			'favourites_count' => 12,
 			'reblogs_count' => 3,
 			'replies_count' => 4,
+			'quotes_count' => 2,
 			'dislikes_count' => null,
 			'account' => ['acct' => 'bob@remote.example', 'followers_count' => 900, 'following_count' => 80, 'statuses_count' => 50],
 		]);
@@ -62,6 +63,7 @@ class CountsServiceTest extends TestCase {
 		$this->assertSame(0, $out->favourites_count);
 		$this->assertSame(0, $out->reblogs_count);
 		$this->assertSame(0, $out->replies_count, 'a busy thread is attention too, and the reader asked not to be shown it');
+		$this->assertSame(0, $out->quotes_count);
 		$this->assertNull($out->dislikes_count, 'null is what says "not a video"');
 		$this->assertSame(0, $out->account->followers_count);
 		$this->assertSame(80, $out->account->following_count);

@@ -40,9 +40,12 @@ final class Details {
 	public const BOOSTS = 'boosts';
 	public const LIKES = 'likes';
 	public const DISLIKES = 'dislikes';
+	/** the posts quoting it, as `REPLIES` counts its replies */
+	public const QUOTES = 'quotes';
 	public const REMOTE_REPLIES = 'remote_replies';
 	public const REMOTE_BOOSTS = 'remote_boosts';
 	public const REMOTE_LIKES = 'remote_likes';
+	public const REMOTE_QUOTES = 'remote_quotes';
 
 	/** Handles mentioned in a post, as an array of strings. */
 	public const MENTIONS = 'mentions';

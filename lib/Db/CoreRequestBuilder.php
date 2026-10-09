@@ -788,6 +788,8 @@ class CoreRequestBuilder {
 			'count_likes',
 			'count_boosts',
 			'count_dislikes',
+			'count_quotes',
+			'quote_prim',
 			'local',
 			'filter_duplicate',
 			'tags',

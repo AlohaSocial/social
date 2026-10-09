@@ -730,6 +730,23 @@ describe('timeline store actions', () => {
 			expect(tl().statuses['42']).toBeDefined()
 		})
 
+		it('reads the post once more when its counts are on their way', async () => {
+			vi.useFakeTimers()
+			try {
+				axios.get.mockResolvedValueOnce({ data: { ...makeStatus('42'), favourites_count: 1 }, headers: { 'x-social-filling': '1' } })
+				axios.get.mockResolvedValueOnce({ data: { ...makeStatus('42'), favourites_count: 7 }, headers: {} })
+
+				await store.fetchStatus('42')
+				expect(tl().statuses['42'].favourites_count).toBe(1)
+				await vi.advanceTimersByTimeAsync(6000)
+
+				expect(axios.get).toHaveBeenCalledTimes(2)
+				expect(tl().statuses['42'].favourites_count).toBe(7)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
 		it('answers null for a post this server does not have', async () => {
 			// a deleted post and one that never arrived look the same from here
 			axios.get.mockRejectedValue(new Error('gone'))

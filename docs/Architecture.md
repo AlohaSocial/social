@@ -1672,6 +1672,21 @@ sees the new numbers. No notification is made and no action is touched.
 The last-asked time is the `counts_at` column the cron's pass already kept,
 not a new table; `Stream::getCountsAt()` carries it to `seen()` with the row.
 
+Quotes are a fifth counter beside the four: `count_quotes`, recounted
+(`StreamRequest::recountQuotes()`) where a reply's parent is — a quoting post
+saved, synced or deleted — from the posts held here that quote it, found by
+`quote_prim`, the indexed hash of what a post quotes (`quote` is TEXT, which
+no index covers); `remote_quotes` is the origin's half, which Bluesky's
+`quoteCount` fills. The status entity carries it as Mastodon 4.5's
+`quotes_count`, hidden with the other numbers for a reader who hides them.
+
+A page that queued a refresh says so: `GET /api/v1/statuses/{nid}` with
+`X-Social-Filling`, a conversation with the `X-Social-Thread-Filling` its
+background read already uses. The web app reads the post, or the
+conversation, once more six seconds later (`fetchStatus()`,
+`refetchThreadLater()`), so the new numbers appear without a reload; a
+timeline page is not read again, and shows them when it is next loaded.
+
 ### Hashtags and searches beyond this server
 
 A hashtag's timeline and a search of posts are answered, as before, from

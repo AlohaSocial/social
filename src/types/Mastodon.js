@@ -128,6 +128,7 @@
  * @property {string} url - Ex: "https://mastodon.social/@Gargron/103270115826048975"
  * @property {number} replies_count - Ex: 5
  * @property {number} reblogs_count - Ex: 6
+ * @property {number} [quotes_count] - how many posts quote it, here and where it lives
  * @property {number} favourites_count - Ex: 11
  * @property {boolean} [favourited] - Ex: false
  * @property {boolean} [reblogged] - Ex: false

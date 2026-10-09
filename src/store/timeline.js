@@ -1272,8 +1272,20 @@ export const useTimelineStore = defineStore('timeline', {
 		 */
 		async fetchStatus(id) {
 			try {
-				const response = await axios.get(generateUrl(`apps/social/api/v1/statuses/${id}`))
+				const url = generateUrl(`apps/social/api/v1/statuses/${id}`)
+				const response = await axios.get(url)
 				this.addToStatuses(response.data)
+				// its counts are being asked for where it lives: read once more
+				// a little later, so the page shows them without a reload
+				if (response.headers?.['x-social-filling'] === '1') {
+					setTimeout(async () => {
+						try {
+							this.addToStatuses((await axios.get(url)).data)
+						} catch (error) {
+							logger.debug('The counts of a status were not read again', { error, id })
+						}
+					}, THREAD_REFETCH_MS)
+				}
 
 				return response.data
 			} catch (error) {

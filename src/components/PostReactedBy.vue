@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div v-if="groups.length > 0" class="reacted-by">
+	<div v-if="groups.length > 0 || quotedLabel !== ''" class="reacted-by">
 		<div v-for="group in groups" :key="group.key" class="reacted-by__group">
 			<component :is="group.icon" :size="16" class="reacted-by__icon" />
 			<span class="reacted-by__label">{{ group.label }}</span>
@@ -13,6 +13,10 @@
 				</li>
 			</ul>
 		</div>
+		<div v-if="quotedLabel !== ''" class="reacted-by__group">
+			<FormatQuoteClose :size="16" class="reacted-by__icon" />
+			<span class="reacted-by__label">{{ quotedLabel }}</span>
+		</div>
 	</div>
 </template>
 
@@ -20,6 +24,7 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
+import FormatQuoteClose from 'vue-material-design-icons/FormatQuoteClose.vue'
 import Heart from 'vue-material-design-icons/Heart.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import ActorAvatar from './ActorAvatar.vue'
@@ -36,6 +41,7 @@ export default {
 	name: 'PostReactedBy',
 	components: {
 		ActorAvatar,
+		FormatQuoteClose,
 		Heart,
 		Repeat,
 	},
@@ -86,6 +92,22 @@ export default {
 						: n('social', 'Favourited by %n person', 'Favourited by %n people', this.status.favourites_count ?? 0),
 				},
 			].filter((group) => group.accounts.length > 0)
+		},
+
+		/**
+		 * How often the post was quoted, wherever: a number alone, as the
+		 * quoting posts are read in their own place. Nothing for a reader who
+		 * hides the numbers, or a post nobody quoted.
+		 *
+		 * @return {string}
+		 */
+		quotedLabel() {
+			const quotes = this.status.quotes_count ?? 0
+			if (this.hidesCounts || quotes <= 0) {
+				return ''
+			}
+
+			return n('social', 'Quoted %n time', 'Quoted %n times', quotes)
 		},
 	},
 

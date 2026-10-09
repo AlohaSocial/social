@@ -57,13 +57,14 @@ class BlueskyCountSource implements CountSource {
 				$likes = self::count($view, 'likeCount');
 				$reposts = self::count($view, 'repostCount');
 				$replies = self::count($view, 'replyCount');
+				$quotes = self::count($view, 'quoteCount');
 				$block = array_filter([
 					'likes' => $likes,
 					'reposts' => $reposts,
 					'replies' => $replies,
-					'quotes' => self::count($view, 'quoteCount'),
+					'quotes' => $quotes,
 				], static fn (?int $count): bool => $count !== null);
-				if ($this->writer->write($id, $likes, $reposts, $replies, [PostMapper::DETAIL => $block])) {
+				if ($this->writer->write($id, $likes, $reposts, $replies, [PostMapper::DETAIL => $block], $quotes)) {
 					$answered++;
 				}
 			}
