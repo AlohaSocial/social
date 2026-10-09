@@ -54,7 +54,7 @@ class JetstreamListenerTest extends TestCase {
 
 	public function testTheAddressAsksForTheCollectionsAndForNothingUntilTheAccountsAreNamed(): void {
 		$this->assertSame(
-			'wss://jetstream.test/subscribe?wantedCollections=app.bsky.feed.post&wantedCollections=app.bsky.feed.repost&wantedCollections=app.bsky.actor.profile&requireHello=true&cursor=42',
+			'wss://jetstream.test/subscribe?wantedCollections=app.bsky.feed.post&wantedCollections=app.bsky.feed.repost&wantedCollections=app.bsky.actor.profile&wantedCollections=app.bsky.graph.block&requireHello=true&cursor=42',
 			JetstreamListener::url('wss://jetstream.test/', 42),
 		);
 		$this->assertStringStartsWith('ws://127.0.0.1:6008/subscribe?wanted', JetstreamListener::url('ws://127.0.0.1:6008/subscribe'));

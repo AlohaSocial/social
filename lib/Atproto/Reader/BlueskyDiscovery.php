@@ -38,6 +38,7 @@ class BlueskyDiscovery {
 		private IdentityService $identities,
 		private ICacheFactory $cacheFactory,
 		private LoggerInterface $logger,
+		private ?BlueskyBlockedBy $blockedBy = null,
 	) {
 	}
 
@@ -90,6 +91,9 @@ class BlueskyDiscovery {
 			$this->logger->info('Bluesky suggestions not read', ['exception' => $e]);
 
 			return [];
+		}
+		if ($identity !== null) {
+			$this->blockedBy?->learn($viewer, $answer);
 		}
 		$accounts = [];
 		foreach (is_array($answer['actors'] ?? null) ? $answer['actors'] : [] as $actor) {

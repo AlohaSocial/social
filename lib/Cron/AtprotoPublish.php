@@ -12,6 +12,7 @@ namespace OCA\Social\Cron;
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\StreamService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -28,7 +29,10 @@ use Throwable;
  * repost (`like`, `unlike`, `repost`,
  * `unrepost`) the id is the Like's or Announce's, with the `post` and the
  * `actor` when one is made. A failure is logged and, for a post, left to
- * the reconcile pass.
+ * the reconcile pass. Before a like, a repost or a new post's mentions
+ * reach accounts on Bluesky, whether they have blocked the local account
+ * is asked and recorded (`BlockedByService`); what is written does not
+ * change with the answer.
  */
 class AtprotoPublish extends QueuedJob {
 	public function __construct(
@@ -39,6 +43,7 @@ class AtprotoPublish extends QueuedJob {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ChatSender $chat,
+		private ?BlockedByService $blockedBy = null,
 	) {
 		parent::__construct($time);
 	}
@@ -76,6 +81,7 @@ class AtprotoPublish extends QueuedJob {
 			if ($action === 'edit') {
 				$this->publisher->editPost($post);
 			} else {
+				$this->askBlocks($post->getAttributedTo(), array_column($post->getTags('Mention'), 'href'));
 				$this->publisher->publishPost($post);
 			}
 		} catch (Throwable $e) {
@@ -96,10 +102,22 @@ class AtprotoPublish extends QueuedJob {
 		}
 		$actor = $this->cacheActorService->getFromId($actorId);
 		$post = $this->streamService->getStreamById($postId);
+		$this->askBlocks($actor->getId(), [$post->getAttributedTo()]);
 		if ($action === 'like') {
 			$this->interactions->like($actor, $post, $id);
 		} else {
 			$this->interactions->repost($actor, $post, $id);
+		}
+	}
+
+	/**
+	 * @param array<mixed> $actorIds the accounts the local one reaches
+	 */
+	private function askBlocks(string $localId, array $actorIds): void {
+		try {
+			$this->blockedBy?->ask($localId, array_values(array_filter($actorIds, 'is_string')));
+		} catch (Throwable $e) {
+			$this->logger->info('Not asked who blocked an account', ['actor' => $localId, 'exception' => $e]);
 		}
 	}
 }

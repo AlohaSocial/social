@@ -694,8 +694,8 @@ class StreamService {
 	 * @return Stream
 	 * @throws StreamNotFoundException
 	 */
-	public function getStreamByNid(int|string $nid): Stream {
-		return $this->streamRequest->getStreamByNid($nid);
+	public function getStreamByNid(int|string $nid, bool $asViewer = true): Stream {
+		return $this->streamRequest->getStreamByNid($nid, $asViewer);
 	}
 
 	public function updateStream(Stream $stream, bool $generateDest = false): void {

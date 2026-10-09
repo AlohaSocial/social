@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Reader\BlueskyBlockedBy;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\PostStore;
@@ -49,6 +50,7 @@ class BlueskyFeedsTest extends TestCase {
 	private array $answers = [];
 	/** @var string[] posts hidden from the viewer */
 	private array $hidden = [];
+	private ?BlueskyBlockedBy $blockedBy = null;
 
 	protected function setUp(): void {
 		$this->alice = new Person();
@@ -100,7 +102,7 @@ class BlueskyFeedsTest extends TestCase {
 		$cacheFactory = $this->createMock(ICacheFactory::class);
 		$cacheFactory->method('createDistributed')->willReturn($cache);
 
-		return new BlueskyFeeds($appView, $identities, new Preferences($config, $this->createMock(\OCA\Social\Atproto\Client\MutedWords::class), $this->createMock(\OCA\Social\Service\AccountService::class)), $this->createMock(PostStore::class), $streams, $cacheFactory, new NullLogger());
+		return new BlueskyFeeds($appView, $identities, new Preferences($config, $this->createMock(\OCA\Social\Atproto\Client\MutedWords::class), $this->createMock(\OCA\Social\Service\AccountService::class)), $this->createMock(PostStore::class), $streams, $cacheFactory, new NullLogger(), $this->blockedBy);
 	}
 
 	/** @return list<array> the saved-feeds items as stored */
@@ -197,5 +199,18 @@ class BlueskyFeedsTest extends TestCase {
 		$this->assertSame(['app.bsky.feed.getListFeed', ['list' => self::LIST, 'limit' => 100], false], $this->asked[0]);
 		$this->expectException(InvalidArgumentException::class);
 		$this->feeds()->page($this->alice, 'at://' . self::BOB . '/app.bsky.feed.post/3kpost', '', 20);
+	}
+
+	public function testWhoHasBlockedThePersonIsTakenFromAFeedReadAsThem(): void {
+		$answer = ['feed' => [['post' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3ka', 'author' => ['did' => self::BOB, 'viewer' => ['blockedBy' => true]]]]]];
+		$this->answers['app.bsky.feed.getFeed'] = $answer;
+		$blockedBy = $this->createMock(BlueskyBlockedBy::class);
+		$blockedBy->expects($this->once())->method('learn')->with($this->alice, $answer);
+		$this->blockedBy = $blockedBy;
+
+		$this->feeds()->page($this->alice, self::FEED, '', 20);
+
+		$this->identity = null;
+		$this->feeds()->page($this->alice, self::FEED, '', 20);
 	}
 }

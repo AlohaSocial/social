@@ -539,6 +539,15 @@ describe('account store actions', () => {
 			expect(store.getRelationshipWith(bob.id)).toBeUndefined()
 		})
 
+		it('says why when the account has blocked the person', async () => {
+			axios.put.mockRejectedValue({ response: { status: 403, data: { status: -1, error: 'This account has blocked you', blocked_by: true } } })
+
+			await expect(store.followAccount({ accountToFollow: bob.acct })).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith('This account has blocked you')
+			expect(store.getRelationshipWith(bob.id)).toBeUndefined()
+		})
+
 		it('asks about an account it has never loaded once the info comes back', async () => {
 			store.$patch(freshState())
 			axios.put.mockResolvedValue({ data: { status: 1, result: [] } })

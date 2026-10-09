@@ -894,6 +894,14 @@ describe('timeline store actions', () => {
 			expect(showError).toHaveBeenCalledWith('Could not send the post')
 			expect(logger.error).toHaveBeenCalledWith('Failed to create a status', { error: expect.any(Error) })
 		})
+
+		it('says why a reply or quote to an account that has blocked the author was refused', async () => {
+			axios.post.mockRejectedValue({ response: { status: 403, data: { error: 'This account has blocked you' } } })
+
+			await expect(store.post({ status: 'x', in_reply_to_id: '7' })).resolves.toBeUndefined()
+
+			expect(showError).toHaveBeenCalledWith('This account has blocked you')
+		})
 	})
 
 	describe('updateStatusPoll', () => {

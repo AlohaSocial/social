@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Reader\BlueskyBlockedBy;
 use OCA\Social\Atproto\Reader\BlueskyDiscovery;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -29,6 +30,7 @@ class BlueskyDiscoveryTest extends TestCase {
 	private array $asked = [];
 	private ?array $topics = null;
 	private bool $hasIdentity = true;
+	private ?BlueskyBlockedBy $blockedBy = null;
 
 	private function discovery(): BlueskyDiscovery {
 		$appView = $this->createMock(AppViewClient::class);
@@ -60,7 +62,7 @@ class BlueskyDiscoveryTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
 
-		return new BlueskyDiscovery($appView, $identities, $factory, new NullLogger());
+		return new BlueskyDiscovery($appView, $identities, $factory, new NullLogger(), $this->blockedBy);
 	}
 
 	public function testATrendIsAFeedToReadHereOrASearch(): void {
@@ -96,5 +98,16 @@ class BlueskyDiscoveryTest extends TestCase {
 		$this->asked = [];
 		$this->discovery()->suggestions(new Person());
 		$this->assertSame([['app.bsky.actor.getSuggestions', false]], $this->asked);
+	}
+
+	public function testWhoHasBlockedThePersonIsTakenFromTheSuggestionsMadeForThem(): void {
+		$alice = new Person();
+		$blockedBy = $this->createMock(BlueskyBlockedBy::class);
+		$blockedBy->expects($this->once())->method('learn')->with($alice, $this->callback(static fn (array $answer): bool => count($answer['actors']) === 3));
+		$this->blockedBy = $blockedBy;
+
+		$this->discovery()->suggestions($alice);
+		$this->hasIdentity = false;
+		$this->discovery()->suggestions($alice);
 	}
 }

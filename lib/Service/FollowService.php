@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\BlueskyGraphService;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FollowLimitException;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -37,6 +38,7 @@ use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Relationship;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -80,6 +82,7 @@ class FollowService {
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
 		private ?BlueskyGraphService $blueskyGraph = null,
+		private ?BlockedByService $blockedBy = null,
 	) {
 	}
 
@@ -119,6 +122,26 @@ class FollowService {
 		throw new FollowLimitException(
 			'this account has sent as many follows in the last hour as this server allows'
 		);
+	}
+
+	/**
+	 * Refuses a new follow of an account that has blocked this one, wherever
+	 * the account is: it would reach nobody. A follow that is there already
+	 * is left to be changed.
+	 *
+	 * @throws BlockedByException
+	 */
+	private function assertNotBlockedBy(Person $actor, Person $target): void {
+		if ($this->blockedBy === null) {
+			return;
+		}
+		try {
+			$this->followsRequest->getByPersons($actor->getId(), $target->getId());
+
+			return;
+		} catch (FollowNotFoundException) {
+		}
+		$this->blockedBy->assertNotBlocked($actor, [$target->getId()]);
 	}
 
 	/**
@@ -266,6 +289,7 @@ class FollowService {
 			$this->logger->warning('FollowService::followAccount - same account');
 			throw new FollowSameAccountException("Don't follow yourself, be your own lead");
 		}
+		$this->assertNotBlockedBy($actor, $remoteActor);
 
 		if (BlueskyActorService::isBluesky($remoteActor)) {
 			return $this->followBluesky($actor, $remoteActor);
@@ -675,6 +699,12 @@ class FollowService {
 		}
 
 		unset($actorNids[$this->viewer->getNid()]); // ignore current session
+
+		if (count($actorNids) === 1) {
+			// one account is a profile being looked at: whether it has blocked
+			// the viewer is asked where its network can be asked
+			$this->blockedBy?->ask($this->viewer->getId(), array_values($actorNids));
+		}
 
 		return $this->generateRelationships($this->viewer->getId(), $actorNids);
 	}

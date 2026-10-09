@@ -27,6 +27,7 @@ use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActionService;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\DeliveryService;
@@ -117,6 +118,7 @@ class StatusApiController extends MastodonApiController {
 		private Publisher $atprotoPublisher,
 		private ReplyRuleService $replyRules,
 		private InteractionService $interactions,
+		private ?BlockedByService $blockedBy = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -213,6 +215,7 @@ class StatusApiController extends MastodonApiController {
 					$post->setReplyTo($replyTo->getId());
 					$post->setType(PostService::visibilityOfReply($post->getType(), $replyTo));
 				} catch (StreamNotFoundException $e) {
+					$this->refuseHiddenByBlock($author, $status->getInReplyToId());
 					$this->logger->debug('reply to post not found');
 				}
 			}
@@ -1107,4 +1110,20 @@ class StatusApiController extends MastodonApiController {
 			return $this->error($e);
 		}
 	}
+
+	/**
+	 * A reply to a post the writer cannot see because its author has blocked
+	 * them is refused with the reason, rather than posted as a new thread.
+	 *
+	 * @throws \OCA\Social\Exceptions\BlockedByException
+	 */
+	private function refuseHiddenByBlock(Person $author, int|string $nid): void {
+		try {
+			$parent = $this->streamService->getStreamByNid($nid, false);
+		} catch (StreamNotFoundException) {
+			return;
+		}
+		$this->blockedBy?->assertNotBlocked($author, [$parent->getAttributedTo()]);
+	}
+
 }

@@ -18,8 +18,8 @@ use Throwable;
 
 /**
  * `occ social:atproto:listen` (§9.4): one WebSocket to the configured
- * Jetstream, asking for the posts, reposts and profiles of the Bluesky
- * accounts somebody here follows, and for nothing until it has said whose —
+ * Jetstream, asking for the posts, reposts, profiles and blocks of the
+ * Bluesky accounts somebody here follows, and for nothing until it has said whose —
  * an empty list would be the whole network. What arrives is handed to
  * `JetstreamEvents`; the poller keeps running beside it, so the listener
  * being down costs latency and nothing else. Where it got to is kept every

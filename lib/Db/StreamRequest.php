@@ -430,13 +430,15 @@ class StreamRequest extends StreamRequestBuilder {
 		}
 	}
 
-	public function getStreamByNid(int|string $nid): Stream {
+	public function getStreamByNid(int|string $nid, bool $asViewer = true): Stream {
 		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
 		$qb->limitToNid($nid);
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 
-		$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
-		$qb->leftJoinStreamAction('sa');
+		if ($asViewer) {
+			$qb->limitToViewer('sd', 'f', true, true, SocialCoreQueryBuilder::HIDDEN_DIRECT);
+			$qb->leftJoinStreamAction('sa');
+		}
 
 		return $this->getStreamFromRequest($qb);
 	}

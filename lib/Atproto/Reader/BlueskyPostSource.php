@@ -31,6 +31,7 @@ class BlueskyPostSource implements PostSource {
 		private PostStore $store,
 		private LabelerService $labelers,
 		private LoggerInterface $logger,
+		private ?BlueskyBlockedBy $blockedBy = null,
 	) {
 	}
 
@@ -58,6 +59,9 @@ class BlueskyPostSource implements PostSource {
 			$this->logger->info('Bluesky posts not searched', ['exception' => $e]);
 
 			return 0;
+		}
+		if ($identity !== null && $viewer !== null) {
+			$this->blockedBy?->learn($viewer, $answer);
 		}
 		$stored = 0;
 		foreach (is_array($answer['posts'] ?? null) ? $answer['posts'] : [] as $post) {
