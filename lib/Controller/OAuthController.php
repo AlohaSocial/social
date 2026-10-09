@@ -14,6 +14,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\DpopNonce;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\OAuth\PermissionDescriber;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Exceptions\ClientException;
 use OCA\Social\Exceptions\ClientNotFoundException;
@@ -45,6 +46,7 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use OCP\L10N\IFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -63,6 +65,8 @@ class OAuthController extends Controller {
 		private AuthorizationServer $atprotoOAuth,
 		private AtprotoConfig $atprotoConfig,
 		private DpopNonce $dpopNonce,
+		private ?PermissionDescriber $permissionDescriber = null,
+		private ?IFactory $l10nFactory = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -896,11 +900,21 @@ class OAuthController extends Controller {
 		$actor = $this->accountService->getActorFromUserId($user->getUID());
 		$redirectUri = (string)$request->params['redirect_uri'];
 
-		// an app's own name and site are what it says of itself; the address
-		// its metadata is at is the one thing about it that is checked
-		$this->initialState->provideInitialState('appName', parse_url($clientId, PHP_URL_HOST) ?: $clientId);
+		// an app's own name and logo are what it says of itself, shown only
+		// for an app the administrator vouches for; otherwise the address its
+		// metadata is at, the one thing about it that is checked
+		$metadata = $pending['metadata'];
+		$trusted = $this->atprotoConfig->isTrustedClient($clientId);
+		$name = $trusted && is_string($metadata['client_name'] ?? null) ? trim($metadata['client_name']) : '';
+		$logo = $trusted && is_string($metadata['logo_uri'] ?? null) && str_starts_with($metadata['logo_uri'], 'https://') ? $metadata['logo_uri'] : '';
+		$this->initialState->provideInitialState('appName', $name !== '' ? mb_substr($name, 0, 100) : (parse_url($clientId, PHP_URL_HOST) ?: $clientId));
 		$this->initialState->provideInitialState('appWebsite', $clientId);
+		$this->initialState->provideInitialState('appLogo', $logo);
+		$this->initialState->provideInitialState('trusted', $trusted);
 		$this->initialState->provideInitialState('protocol', 'atproto');
+		$this->initialState->provideInitialState('permissions', $this->permissionDescriber?->describe(
+			$pending['scopes'], $this->l10nFactory?->getUserLanguage($user) ?? 'en'
+		) ?? []);
 		$this->initialState->provideInitialState('account', [
 			'uid' => $user->getUID(),
 			'displayName' => $this->accountDisplayName($actor, $user),
@@ -910,7 +924,11 @@ class OAuthController extends Controller {
 		$this->initialState->provideInitialState('redirectUri', $redirectUri);
 		$this->initialState->provideInitialState('denyUrl', $this->atprotoOAuth->refusal($request));
 		$response = new TemplateResponse(Application::APP_ID, 'oauth2', [], TemplateResponse::RENDER_AS_GUEST);
-		$response->setContentSecurityPolicy($this->consentPolicy($redirectUri));
+		$policy = $this->consentPolicy($redirectUri);
+		if ($logo !== '') {
+			$policy->addAllowedImageDomain((string)parse_url($logo, PHP_URL_SCHEME) . '://' . (string)parse_url($logo, PHP_URL_HOST));
+		}
+		$response->setContentSecurityPolicy($policy);
 
 		return $response;
 	}

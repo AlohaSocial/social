@@ -117,6 +117,13 @@
 				:label="t('social', 'Sync ceiling')"
 				:helperText="t('social', 'How many AppView requests one polling pass may make. Every followed Bluesky account is asked for new posts in turn; the ceiling bounds what a pass costs.')" />
 
+			<NcTextArea
+				v-model="form.trustedClients"
+				class="bluesky__field"
+				:label="t('social', 'Trusted Bluesky apps')"
+				placeholder="https://example.app/oauth-client-metadata.json"
+				:helperText="t('social', 'Optional. One client ID per line. When one of these apps asks to sign in, the consent page shows its own name and logo; for any other app it shows only the address it is known by, because an app can call itself anything.')" />
+
 			<div class="bluesky__actions">
 				<NcButton variant="primary" :disabled="saving || !changed" @click="save">
 					<template v-if="saving" #icon>
@@ -255,7 +262,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
- * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, sync_ceiling: number}} settings - what is set, in the app values' names
+ * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, sync_ceiling: number, trusted_clients: string[]}} settings - what is set, in the app values' names
  * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
  */
@@ -280,6 +287,7 @@ function formOf(settings) {
 		appview: settings.appview ?? '',
 		jetstream: settings.jetstream ?? '',
 		syncCeiling: String(settings.sync_ceiling ?? 200),
+		trustedClients: (settings.trusted_clients ?? []).join('\n'),
 	}
 }
 
@@ -367,6 +375,10 @@ export default {
 			const ceiling = parseInt(this.form.syncCeiling, 10)
 			if (!Number.isNaN(ceiling) && ceiling !== stored.sync_ceiling) {
 				changes.sync_ceiling = ceiling
+			}
+			const trusted = relaysOf(this.form.trustedClients)
+			if (trusted.join('\n') !== (stored.trusted_clients ?? []).join('\n')) {
+				changes.trusted_clients = trusted
 			}
 
 			return changes

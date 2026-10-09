@@ -128,6 +128,30 @@ class AtprotoConfig {
 		$this->configService->setAppValue(ConfigService::ATPROTO_RELAYS, (string)json_encode(array_values($relays)));
 	}
 
+	/**
+	 * The Bluesky apps an administrator vouches for, by client ID: the
+	 * consent page shows their own name and logo, which it never takes from
+	 * an app on its word.
+	 *
+	 * @return string[]
+	 */
+	public function trustedClients(): array {
+		$clients = json_decode($this->configService->getAppValue(ConfigService::ATPROTO_OAUTH_TRUSTED), true);
+
+		return is_array($clients) ? array_values(array_filter($clients, 'is_string')) : [];
+	}
+
+	/**
+	 * @param string[] $clients
+	 */
+	public function setTrustedClients(array $clients): void {
+		$this->configService->setAppValue(ConfigService::ATPROTO_OAUTH_TRUSTED, (string)json_encode(array_values(array_unique($clients)), JSON_UNESCAPED_SLASHES));
+	}
+
+	public function isTrustedClient(string $clientId): bool {
+		return in_array($clientId, $this->trustedClients(), true);
+	}
+
 	public function syncCeiling(): int {
 		return max(1, $this->configService->getAppValueInt(ConfigService::ATPROTO_SYNC_CEILING));
 	}
@@ -143,6 +167,7 @@ class AtprotoConfig {
 			'appview' => $this->appView(),
 			'jetstream' => $this->jetstream(),
 			'sync_ceiling' => $this->syncCeiling(),
+			'trusted_clients' => $this->trustedClients(),
 		];
 	}
 }

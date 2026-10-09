@@ -20,6 +20,7 @@ use OCA\Social\Atproto\OAuth\ClientMetadataService;
 use OCA\Social\Atproto\OAuth\DpopNonce;
 use OCA\Social\Atproto\OAuth\DpopVerifier;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\OAuth\PermissionSets;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -38,6 +39,8 @@ class AuthorizationServerTest extends TestCase {
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 
 	private int $now = 1760000000;
+	/** the scopes the app's client document declares */
+	private string $declared = 'atproto transition:generic';
 	private PrivateKey $dpopKey;
 	private DpopNonce $nonce;
 	private InMemoryOAuthRequest $store;
@@ -57,11 +60,11 @@ class AuthorizationServerTest extends TestCase {
 		$config->method('pdsEndpoint')->willReturn(self::ISSUER);
 		$config->method('serviceDid')->willReturn('did:web:social.test');
 		$curl = $this->createMock(CurlService::class);
-		$curl->method('retrieveJson')->willReturnCallback(static function (string $method, string $url, array $options, ?int &$status = null, ?string &$type = null): array {
+		$curl->method('retrieveJson')->willReturnCallback(function (string $method, string $url, array $options, ?int &$status = null, ?string &$type = null): array {
 			$status = 200;
 			$type = 'application/json';
 
-			return OAuthKit::clientDocument();
+			return OAuthKit::clientDocument(['scope' => $this->declared]);
 		});
 		$cache = $this->createMock(ICacheFactory::class);
 		$identities = $this->createMock(IdentityService::class);
@@ -72,10 +75,14 @@ class AuthorizationServerTest extends TestCase {
 		$keys->method('serviceKey')->willReturn($serviceKey);
 		$actors = $this->createMock(ActorsRequest::class);
 		$actors->method('getFromUserId')->willReturn(new Person());
+		$sets = $this->createMock(PermissionSets::class);
+		$sets->method('expand')->willReturnCallback(static fn (string $nsid, string $aud): ?array => $nsid === 'com.example.authBasic'
+			? [['resource' => 'rpc', 'lxm' => ['com.example.getThing'], 'aud' => $aud]]
+			: null);
 		$this->server = new AuthorizationServer(
 			$config, $this->store, new ClientMetadataService($curl, $cache),
 			new ClientAuthenticator($this->store, $curl, $time), new DpopVerifier($this->nonce, $this->store, $time),
-			$identities, $keys, $actors, $time,
+			$identities, $keys, $actors, $time, $sets,
 		);
 	}
 
@@ -284,6 +291,42 @@ class AuthorizationServerTest extends TestCase {
 	}
 
 	public function testOnlyOfferedScopesAreGranted(): void {
-		$this->assertSame(['atproto', 'transition:generic'], AuthorizationServer::granted('atproto transition:generic transition:chat.bsky repo:app.bsky.feed.post'));
+		$this->assertSame(['atproto', 'transition:generic', 'repo:app.bsky.feed.post'], AuthorizationServer::granted('atproto transition:generic transition:chat.bsky repo:app.bsky.feed.post repo:not!a!nsid'));
+	}
+
+	public function testGranularScopesAreGrantedAndAnIncludedSetExpanded(): void {
+		$scope = 'atproto repo:app.bsky.feed.post?action=create blob:image/* include:com.example.authBasic?aud=did:web:api.bsky.app%23bsky_appview';
+		$this->declared = $scope;
+		[$requestUri, $verifier] = $this->pushed(['scope' => $scope]);
+		parse_str((string)parse_url($this->server->approve(self::CLIENT, $requestUri, 'alice'), PHP_URL_QUERY), $callback);
+		$tokens = $this->server->token([
+			'grant_type' => 'authorization_code', 'client_id' => self::CLIENT, 'code' => $callback['code'],
+			'code_verifier' => $verifier, 'redirect_uri' => self::REDIRECT,
+		], $this->proof(self::ISSUER . '/oauth/token'));
+		$this->assertSame($scope, $tokens['scope']);
+
+		$url = self::ISSUER . '/xrpc/app.bsky.feed.getTimeline';
+		$permissions = $this->server->authenticate('DPoP ' . $tokens['access_token'], $this->proof($url, 'GET', $tokens['access_token']), 'GET', $url)->permissions();
+
+		$this->assertTrue($permissions->mayWrite('app.bsky.feed.post', 'create'));
+		$this->assertFalse($permissions->mayWrite('app.bsky.feed.post', 'delete'));
+		$this->assertFalse($permissions->mayWrite('app.bsky.feed.like', 'create'));
+		$this->assertTrue($permissions->mayUpload('image/png'));
+		$this->assertFalse($permissions->mayUpload('video/mp4'));
+		$this->assertTrue($permissions->mayCall('com.example.getThing', 'did:web:api.bsky.app#bsky_appview'), 'from the set, at the service the include named');
+		$this->assertFalse($permissions->mayCall('app.bsky.feed.getTimeline', 'did:web:api.bsky.app#bsky_appview'));
+		$this->assertFalse($permissions->mayReadEmail());
+	}
+
+	public function testAScopeThatIsNoneOrASetThatCannotBeHadIsRefusedAtOnce(): void {
+		foreach (['repo:not!a!nsid', 'rpc:*?aud=*', 'include:com.example.unknown'] as $scope) {
+			$this->declared = 'atproto ' . $scope;
+			try {
+				$this->pushed(['scope' => 'atproto ' . $scope]);
+				$this->fail('taken: ' . $scope);
+			} catch (OAuthException $e) {
+				$this->assertSame('invalid_scope', $e->error, $scope);
+			}
+		}
 	}
 }
