@@ -473,6 +473,9 @@ when crossed.
   under its key (`followerRule`, `followingRule`, `mentionRule`, or no
   rule at all), which every AppView holds Bluesky replies to; a change of
   mind later rewrites or removes the gate (`Publisher::updateGates()`).
+  The replies the author hid are in the same threadgate (`hiddenReplies`),
+  and a Bluesky author's hidden replies are hidden here (see **Hidden
+  replies** in Architecture.md).
   The rule is held here as well (`ReplyRuleService`): a reply from here
   it does not let through is refused with the reason, and one from
   another server or from Bluesky is not kept. The author always may.

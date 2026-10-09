@@ -85,6 +85,20 @@ final class DevNetwork {
 		return $this->did;
 	}
 
+	/**
+	 * Signs in again as a user `createUser()` made earlier, by the name it
+	 * was made with.
+	 */
+	public function switchTo(string $name): void {
+		$answer = $this->signInAs($name . '.test', 'dev-pass-' . $name);
+		$this->accessJwt = (string)($answer['accessJwt'] ?? '');
+		$this->did = (string)($answer['did'] ?? '');
+		$this->handle = strtolower($name . '.test');
+		if ($this->accessJwt === '') {
+			throw new RuntimeException('could not sign in as ' . $name . ': ' . json_encode($answer));
+		}
+	}
+
 	public function userDid(): string {
 		return $this->did;
 	}

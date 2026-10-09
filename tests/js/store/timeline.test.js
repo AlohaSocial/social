@@ -1612,3 +1612,28 @@ describe('a conversation read from where it lives', () => {
 		vi.useRealTimers()
 	})
 })
+
+describe('replies hidden by the author of a conversation', () => {
+	let store
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		setActivePinia(createPinia())
+		store = useTimelineStore()
+	})
+
+	it('says how many there are, and shows them when asked', async () => {
+		await store.changeTimelineType({ type: 'single-post', params: { id: '7' } })
+		axios.get
+			.mockResolvedValueOnce({ data: { ancestors: [], descendants: [makeStatus('8')] }, headers: { 'x-social-hidden-replies': '2' } })
+			.mockResolvedValueOnce({ data: { ancestors: [], descendants: [makeStatus('8'), makeStatus('9', { hidden_by_author: true })] }, headers: {} })
+
+		await store.fetchTimeline()
+		expect(store.hiddenByAuthor).toBe(2)
+
+		await store.showHiddenReplies()
+		expect(axios.get).toHaveBeenLastCalledWith(expect.stringContaining('/statuses/7/context'), { params: { with_hidden: true } })
+		expect(store.timeline).toEqual(['8', '9'])
+		expect(store.hiddenByAuthor).toBe(0)
+	})
+})

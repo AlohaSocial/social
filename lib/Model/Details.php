@@ -97,6 +97,8 @@ final class Details {
 	public const REPLY_RULE = 'reply_rule';
 	/** the `at://` URIs of the Bluesky quotes the author of one of this instance's own posts detached */
 	public const DETACHED_QUOTES = 'detached_quotes';
+	/** the replies the author of a thread's first post hid, by their ids, kept on that post */
+	public const HIDDEN_REPLIES = 'hidden_replies';
 	public const REPLY_STATE = 'reply_state';
 
 	/**

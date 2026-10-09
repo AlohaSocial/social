@@ -73,6 +73,8 @@ class BlueskyThreadSource implements ThreadSource {
 				$stored++;
 			}
 		}
+		// the replies its author hid on Bluesky are hidden here too
+		$this->store->rememberHiddenReplies(is_array($answer['threadgate'] ?? null) ? $answer['threadgate'] : null);
 
 		return $stored;
 	}

@@ -160,6 +160,8 @@
  * @property {?Place} [place] - where it was taken, null when nobody said
  * @property {?object} [quote_approval] - who may quote it; only on this server's own posts
  * @property {?('everyone'|'followers'|'following'|'mentioned'|'nobody')} [reply_policy] - who may reply to it, this app's own; only on this server's own posts
+ * @property {?boolean} [hidden_by_author] - in a conversation: whether its author hid this reply; null elsewhere
+ * @property {?boolean} [can_hide] - in a conversation: whether the reader is its author and may hide this reply; null elsewhere
  * @property {?object} [video] - PeerTube's metadata for a video post, null for anything else
  * @property {string} [type] - set when a timeline entry is a notification about the post rather than the post itself
  * @property {string} [delivery] - `held` while a video is being converted before the post goes to other servers; only ever on the author's own copy

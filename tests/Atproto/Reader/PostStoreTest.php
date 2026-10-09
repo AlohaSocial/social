@@ -151,6 +151,20 @@ class PostStoreTest extends TestCase {
 		$this->assertSame('accepted', $this->imported[0]->getObject()->exportAsLocal()['quote']['state']);
 	}
 
+	public function testTheRepliesABlueskyAuthorHidAreHiddenHere(): void {
+		$root = (new Note())->setId('https://bsky.app/profile/' . self::DID . '/post/3kroot');
+		$streams = $this->createMock(StreamRequest::class);
+		$streams->method('getStreamById')->willReturn($root);
+		$streams->expects($this->once())->method('updateDetails')->with($root);
+		$store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $this->import, $streams, $this->createMock(ITimeFactory::class), new NullLogger(), $this->cards);
+		$gate = ['uri' => 'at://x', 'record' => ['post' => 'at://' . self::DID . '/app.bsky.feed.post/3kroot', 'hiddenReplies' => ['at://' . self::OTHER . '/app.bsky.feed.post/3kr', 'not a uri']]];
+
+		$store->rememberHiddenReplies($gate);
+		$store->rememberHiddenReplies($gate);
+
+		$this->assertSame(['https://bsky.app/profile/' . self::OTHER . '/post/3kr'], $root->getHiddenReplies(), 'and written once');
+	}
+
 	public function testAFeedThePostEmbedsIsItsCard(): void {
 		$this->actors->method('cached')->willReturn($this->person(self::DID));
 		$view = $this->postView();

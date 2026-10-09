@@ -50,6 +50,18 @@
 			</template>
 			{{ t('social', 'Who can reply') }}
 		</NcActionButton>
+		<!-- a reply in a thread of the reader's own: they may hide it from
+		     the conversation, wherever it was written -->
+		<NcActionButton
+			v-if="item.can_hide === true && item.in_reply_to_id"
+			closeAfterClick
+			@click="$emit('hideReply', !item.hidden_by_author)">
+			<template #icon>
+				<IconEyeOutline v-if="item.hidden_by_author" :size="20" />
+				<IconEyeOffOutline v-else :size="20" />
+			</template>
+			{{ item.hidden_by_author ? t('social', 'Show reply') : t('social', 'Hide reply') }}
+		</NcActionButton>
 		<!-- who is in the picture, which only the author may say: anybody able
 		     to write a name onto anybody's photograph could put a post in front
 		     of an audience that did not ask for it -->
@@ -192,6 +204,8 @@ import FormatQuoteClose from 'vue-material-design-icons/FormatQuoteClose.vue'
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
 import IconArchiveOutline from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconCommentAccountOutline from 'vue-material-design-icons/CommentAccountOutline.vue'
+import IconEyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
+import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import PencilBoxOutline from 'vue-material-design-icons/PencilBoxOutline.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
@@ -232,6 +246,8 @@ export default {
 		IconAccountBoxMultiple,
 		IconArchiveOutline,
 		IconCommentAccountOutline,
+		IconEyeOffOutline,
+		IconEyeOutline,
 		NcActionButton,
 		NcActionLink,
 		NcActions,
@@ -302,6 +318,7 @@ export default {
 		'archive',
 		'manageQuotes',
 		'manageReplies',
+		'hideReply',
 		'tagPeople',
 		'delete',
 		'redraft',

@@ -36,6 +36,9 @@ class ActionService {
 	/** PeerTube's other counter; only a video can carry one. */
 	private const DISLIKE = 'dislike';
 	private const UNDISLIKE = 'undislike';
+	/** the author of a thread hiding a reply in it, or showing it again */
+	private const HIDE_REPLY = 'hide_reply';
+	private const SHOW_REPLY = 'unhide_reply';
 
 	private static array $availableStatusAction = [
 		self::FAVOURITE,
@@ -44,6 +47,8 @@ class ActionService {
 		self::UNREBLOG,
 		self::BOOKMARK,
 		self::UNBOOKMARK,
+		self::HIDE_REPLY,
+		self::SHOW_REPLY,
 		self::MUTE,
 		self::UNMUTE,
 		self::PIN,
@@ -196,6 +201,14 @@ class ActionService {
 
 			case self::DISLIKE:
 				$this->dislikeService->create($actor, $post->getId());
+				break;
+
+			case self::HIDE_REPLY:
+			case self::SHOW_REPLY:
+				$hidden = $this->container?->get(HiddenReplyService::class);
+				if ($hidden instanceof HiddenReplyService) {
+					$hidden->setHidden($actor, $post, $action === self::HIDE_REPLY);
+				}
 				break;
 
 			case self::UNDISLIKE:

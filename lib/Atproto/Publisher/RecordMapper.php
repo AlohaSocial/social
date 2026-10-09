@@ -179,8 +179,10 @@ class RecordMapper {
 	 * @param string $postUri the post's `at://` URI
 	 */
 	/**
-	 * Who may reply on Bluesky, as the author's reply rule says: a gate of
-	 * the one rule, an empty one for nobody, and none for everybody.
+	 * Who may reply on Bluesky, as the author's reply rule says — a gate of
+	 * the one rule, an empty one for nobody — and the replies the author hid
+	 * (`hiddenReplies`, those that are on Bluesky); none for everybody and
+	 * nothing hidden.
 	 */
 	public function threadgate(Stream $post, string $postUri): ?array {
 		$allow = match ($post->getReplyRule()) {
@@ -190,16 +192,23 @@ class RecordMapper {
 			Stream::REPLY_RULE_NOBODY => [],
 			default => null,
 		};
-		if ($allow === null) {
+		$hidden = [];
+		foreach ($post->getHiddenReplies() as $replyId) {
+			$uri = $this->refs->strongRef($replyId)['uri'] ?? '';
+			if ($uri !== '') {
+				$hidden[] = $uri;
+			}
+		}
+		if ($allow === null && $hidden === []) {
 			return null;
 		}
 
 		return [
 			'$type' => self::THREADGATE,
 			'post' => $postUri,
-			'allow' => $allow,
-			'createdAt' => Syntax::datetime(self::publishedAt($post)),
-		];
+		] + ($allow === null ? [] : ['allow' => $allow])
+			+ ['createdAt' => Syntax::datetime(self::publishedAt($post))]
+			+ ($hidden === [] ? [] : ['hiddenReplies' => $hidden]);
 	}
 
 	public function postgate(Stream $post, string $postUri): ?array {

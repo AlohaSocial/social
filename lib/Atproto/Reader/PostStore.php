@@ -190,6 +190,29 @@ class PostStore {
 		return $deleted;
 	}
 
+	/**
+	 * The replies a Bluesky thread's author hid, as its threadgate lists them
+	 * (`threadgateView`), kept on the thread's first post here — so they are
+	 * hidden in the conversation here as they are on Bluesky.
+	 */
+	public function rememberHiddenReplies(?array $threadgate): void {
+		$root = BlueskyIds::postIdOfUri((string)($threadgate['record']['post'] ?? ''));
+		$uris = $threadgate['record']['hiddenReplies'] ?? [];
+		if ($root === '' || !is_array($uris)) {
+			return;
+		}
+		try {
+			$post = $this->streams->getStreamById($root);
+		} catch (StreamNotFoundException) {
+			return;
+		}
+		$ids = array_values(array_filter(array_map(static fn (mixed $uri): string => is_string($uri) ? BlueskyIds::postIdOfUri($uri) : '', $uris)));
+		if ($ids !== $post->getHiddenReplies()) {
+			$post->setHiddenReplies($ids);
+			$this->streams->updateDetails($post);
+		}
+	}
+
 	public function isKnown(string $id): bool {
 		try {
 			$this->streams->getStreamById($id);
