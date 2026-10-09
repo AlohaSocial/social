@@ -35,7 +35,7 @@ class ListsRequestBuilder extends StreamRequestBuilder {
 
 	protected function getListsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
-		$qb->select('l.id', 'l.actor_id', 'l.actor_id_prim', 'l.title', 'l.replies_policy', 'l.exclusive', 'l.group_id', 'l.creation')
+		$qb->select('l.id', 'l.actor_id', 'l.actor_id_prim', 'l.title', 'l.replies_policy', 'l.exclusive', 'l.group_id', 'l.visibility', 'l.creation')
 			->from(self::TABLE_LISTS, 'l');
 
 		$this->defaultSelectAlias = 'l';

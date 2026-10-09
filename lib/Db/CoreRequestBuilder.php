@@ -326,6 +326,7 @@ class CoreRequestBuilder {
 			'replies_policy',
 			'exclusive',
 			'group_id',
+			'visibility',
 			'creation'
 		],
 		self::TABLE_LIST_MEMBERS => [

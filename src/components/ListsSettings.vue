@@ -64,6 +64,9 @@
 						<span v-if="list.nextcloud_group" class="lists-settings__badge">
 							{{ t('social', 'Nextcloud group') }}
 						</span>
+						<span v-else-if="list.public" class="lists-settings__badge">
+							{{ t('social', 'Public') }}
+						</span>
 					</template>
 
 					<div class="lists-settings__row-actions">
@@ -97,6 +100,20 @@
 				</div>
 
 				<div v-if="expanded === list.id" class="lists-settings__members">
+					<!-- a group's members are the group's to show, so a group
+					     list stays private -->
+					<div v-if="!list.nextcloud_group" class="lists-settings__visibility">
+						<NcCheckboxRadioSwitch
+							type="switch"
+							:modelValue="Boolean(list.public)"
+							:disabled="busy"
+							@update:modelValue="setPublic(list, $event)">
+							{{ t('social', 'Public list — anyone can see it and who is on it') }}
+						</NcCheckboxRadioSwitch>
+						<p class="lists-settings__hint">
+							{{ t('social', 'A list you pick under “Who can reply” on a post can be seen from that post, even while it is not public.') }}
+						</p>
+					</div>
 					<p v-if="members[list.id] === undefined" class="lists-settings__hint">
 						{{ t('social', 'Loading …') }}
 					</p>
@@ -187,6 +204,7 @@
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
@@ -223,7 +241,8 @@ const MEMBERS_PER_REQUEST = 500
 
 /**
  * The reader's lists, and everything that can be done to them: made, renamed,
- * deleted, and filled or emptied one person at a time. A section of Settings.
+ * made public or private, deleted, and filled or emptied one person at a
+ * time. A section of Settings.
  *
  * The sidebar only names the lists; it fetches them itself once per page, so
  * every change made here is announced on the event bus and the sidebar asks
@@ -247,6 +266,7 @@ export default {
 		NcActionButton,
 		NcActions,
 		NcButton,
+		NcCheckboxRadioSwitch,
 		NcDialog,
 		NcLoadingIcon,
 		NcTextField,
@@ -390,6 +410,31 @@ export default {
 			} catch (error) {
 				logger.error('Failed to rename the list', { error })
 				showError(error?.response?.data?.error || t('social', 'Could not rename the list'))
+			} finally {
+				this.busy = false
+			}
+		},
+
+		/**
+		 * @param {object} list the list to make public or private
+		 * @param {boolean} isPublic whether anyone may see it and who is on it
+		 */
+		async setPublic(list, isPublic) {
+			if (this.busy || Boolean(list.public) === isPublic) {
+				return
+			}
+			this.busy = true
+			try {
+				// the route requires the title on every update
+				const { data } = await axios.put(generateUrl(`apps/social/api/v1/lists/${list.id}`), {
+					title: list.title,
+					replies_policy: list.replies_policy,
+					public: isPublic,
+				})
+				this.lists = this.lists.map((entry) => (entry.id === list.id ? { ...entry, ...data } : entry))
+			} catch (error) {
+				logger.error('Failed to change who can see the list', { error })
+				showError(error?.response?.data?.error || t('social', 'Could not change who can see the list'))
 			} finally {
 				this.busy = false
 			}
@@ -659,6 +704,10 @@ export default {
 
 	&__members {
 		padding: 4px 0 8px 28px;
+	}
+
+	&__visibility {
+		margin-bottom: 8px;
 	}
 
 	&__member-list {

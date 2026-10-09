@@ -43,12 +43,13 @@ use Throwable;
  * Mastodon's lists: a user-made group of accounts they follow, with a timeline
  * of its own.
  *
- * A list is private to the account that made it, and that is the whole of its
- * access model — there is no sharing, no visibility flag and nobody else who
- * may read one. Every route here therefore resolves its list through
- * `ListsRequest::getOwnedById()`, which carries the owner in the statement, so
- * a list belonging to somebody else is a 404 and not a row that was read and
- * then rejected.
+ * A list is the account's own to read and change, and nobody else may reach
+ * it through these routes. Its owner may make it public (`public`, this
+ * app's own key): anyone may then see it and who is on it, as a Bluesky list
+ * (`BlueskyLists`); a private one is theirs alone. Every route here resolves
+ * its list through `ListsRequest::getOwnedById()`, which carries the owner in
+ * the statement, so a list belonging to somebody else is a 404 and not a row
+ * that was read and then rejected.
  *
  * `#[PublicPage]` with `#[NoCSRFRequired]`, like `ApiController` and
  * `TagController`, and for the same reason: a Mastodon client authenticates
@@ -132,6 +133,7 @@ class ListController extends ClientApiController {
 		string $title = '',
 		string $replies_policy = MastodonList::DEFAULT_REPLIES_POLICY,
 		bool $exclusive = false,
+		bool $public = false,
 	): DataResponse {
 		try {
 			$this->initViewer(['write:lists']);
@@ -140,9 +142,15 @@ class ListController extends ClientApiController {
 			$list->setOwnerId($this->viewer->getId())
 				->setTitle($this->title($title))
 				->setRepliesPolicy($this->repliesPolicy($replies_policy))
-				->setExclusive($exclusive);
+				->setExclusive($exclusive)
+				->setPublic($public);
 
-			return new DataResponse($this->listsRequest->create($list), Http::STATUS_OK);
+			$list = $this->listsRequest->create($list);
+			if ($public) {
+				$this->blueskyLists()?->sync($this->viewer, $list);
+			}
+
+			return new DataResponse($list, Http::STATUS_OK);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
@@ -164,7 +172,9 @@ class ListController extends ClientApiController {
 	/**
 	 * Mastodon requires `title` on an update as it does on a create, so an
 	 * absent one is a 422 and not "keep what is there": a client that meant to
-	 * change only `exclusive` still sends the title back.
+	 * change only `exclusive` still sends the title back. `public` left out
+	 * keeps what is there; a group list cannot be made public, as who is in a
+	 * group is not the owner's to show.
 	 */
 	#[NoCSRFRequired]
 	#[PublicPage]
@@ -174,10 +184,14 @@ class ListController extends ClientApiController {
 		string $title = '',
 		string $replies_policy = '',
 		?bool $exclusive = null,
+		?bool $public = null,
 	): DataResponse {
 		try {
 			$this->initViewer(['write:lists']);
 			$list = $this->ownedList($id);
+			if ($public === true) {
+				$this->notAGroupList($list);
+			}
 
 			if (!GroupListService::isGroupList($list)) {
 				// a group list is called what the group is called
@@ -189,8 +203,12 @@ class ListController extends ClientApiController {
 			if ($exclusive !== null) {
 				$list->setExclusive($exclusive);
 			}
+			if ($public !== null) {
+				$list->setPublic($public);
+			}
 
 			$this->listsRequest->update($list);
+			$this->blueskyLists()?->sync($this->viewer, $list);
 
 			return new DataResponse($list, Http::STATUS_OK);
 		} catch (Throwable $e) {
@@ -416,9 +434,9 @@ class ListController extends ClientApiController {
 	}
 
 	/**
-	 * Where a list is a Bluesky list too (a reply rule names it), its members
-	 * are kept in step there; resolved lazily, as the Bluesky side needs
-	 * services that need this one.
+	 * Where a list is a Bluesky list too (it is public, or a reply rule
+	 * names it), its name and members are kept in step there; resolved
+	 * lazily, as the Bluesky side needs services that need this one.
 	 */
 	private function blueskyLists(): ?BlueskyLists {
 		$lists = $this->container?->get(BlueskyLists::class);

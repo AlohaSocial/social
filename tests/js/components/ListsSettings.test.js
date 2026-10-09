@@ -10,6 +10,7 @@ import axios from '@nextcloud/axios'
 
 import ListsSettings from '../../../src/components/ListsSettings.vue'
 import eventBus, { LISTS_CHANGED } from '../../../src/services/eventBus.js'
+import { showError } from '../../../src/services/toast.js'
 
 vi.mock('@nextcloud/axios', () => ({
 	default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -417,6 +418,63 @@ describe('ListsSettings', () => {
 
 		expect(wrapper.find('.lists-settings__add').exists()).toBe(true)
 		expect(wrapper.text()).not.toContain('group in Nextcloud')
+	})
+
+	describe('public lists', () => {
+		const publicSwitch = (wrapper) => wrapper.findComponent({ name: 'NcCheckboxRadioSwitch' })
+		const openMembers = async (wrapper, title) => {
+			await rowFor(wrapper, title).findAll('button').find((b) => b.text() === 'Members').trigger('click')
+			await flushPromises()
+		}
+
+		it('makes a list public with the switch, and says so on its row', async () => {
+			const wrapper = await mountLists([list('1', 'Book club')])
+			await openMembers(wrapper, 'Book club')
+
+			expect(publicSwitch(wrapper).text()).toBe('Public list — anyone can see it and who is on it')
+			expect(publicSwitch(wrapper).props('modelValue')).toBe(false)
+			expect(wrapper.text()).toContain('under “Who can reply” on a post can be seen from that post, even while it is not public')
+
+			axios.put.mockResolvedValue({ data: list('1', 'Book club', { public: true }) })
+			publicSwitch(wrapper).vm.$emit('update:modelValue', true)
+			await flushPromises()
+
+			expect(axios.put).toHaveBeenCalledWith(`${API}/lists/1`, { title: 'Book club', replies_policy: 'list', public: true })
+			expect(publicSwitch(wrapper).props('modelValue')).toBe(true)
+			expect(rowFor(wrapper, 'Book club').find('.lists-settings__badge').text()).toBe('Public')
+		})
+
+		it('makes a public list private again', async () => {
+			const wrapper = await mountLists([list('1', 'Book club', { public: true })])
+			await openMembers(wrapper, 'Book club')
+			axios.put.mockResolvedValue({ data: list('1', 'Book club', { public: false }) })
+
+			publicSwitch(wrapper).vm.$emit('update:modelValue', false)
+			await flushPromises()
+
+			expect(axios.put).toHaveBeenCalledWith(`${API}/lists/1`, { title: 'Book club', replies_policy: 'list', public: false })
+			expect(rowFor(wrapper, 'Book club').find('.lists-settings__badge').exists()).toBe(false)
+		})
+
+		it('keeps the list as it was and says so when the server refuses', async () => {
+			const wrapper = await mountLists([list('1', 'Book club')])
+			await openMembers(wrapper, 'Book club')
+			axios.put.mockRejectedValue(new Error('nope'))
+
+			publicSwitch(wrapper).vm.$emit('update:modelValue', true)
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Could not change who can see the list')
+			expect(publicSwitch(wrapper).props('modelValue')).toBe(false)
+		})
+
+		it('offers no switch on a list a Nextcloud group makes', async () => {
+			const wrapper = await mountLists([list('2', 'Design', { nextcloud_group: 'design' })])
+			axios.get.mockResolvedValue({ data: [bob] })
+			await openMembers(wrapper, 'Design')
+
+			expect(publicSwitch(wrapper).exists()).toBe(false)
+		})
 	})
 
 	it('tells the sidebar whenever the lists have changed', async () => {

@@ -17,12 +17,14 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Publisher\BlueskyBlocks;
+use OCA\Social\Atproto\Publisher\BlueskyLists;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
@@ -64,19 +66,20 @@ use Throwable;
  * follow, a profile record the profile — and the record the publisher then
  * writes for it is the answer. The app shows what it gets back; the text may
  * differ where Social's mapping does (a long post cut with a link, say).
- * Lists, starter packs, feed generators and gates, which Social has no
- * counterpart for, are kept as written (`KEPT_AS_WRITTEN`). Who may send
- * the person direct messages (`chat.bsky.actor.declaration`) is the setting
- * here, which writes the record (`ChatDeclaration`). Anything else —
+ * Lists, starter packs, feed generators and gates are kept as written
+ * (`KEPT_AS_WRITTEN`); a curate list and its members are the person's list
+ * here as well (`BlueskyListImport`). Who may send the person direct
+ * messages (`chat.bsky.actor.declaration`) is the setting here, which
+ * writes the record (`ChatDeclaration`). Anything else —
  * blocks and list blocks (D16) among it — is refused, and a post can only be
  * public: that is what goes to Bluesky (D8).
  */
 class WriteService {
 	/**
-	 * Records an app writes that mean nothing to Social and everything on
-	 * Bluesky — lists and their members, starter packs, feed generators,
-	 * reply and quote gates: kept as the app wrote them, checked against
-	 * their lexicon. A list block is a block, and refused (D16).
+	 * Records an app writes that are kept as the app wrote them, checked
+	 * against their lexicon — lists and their members, starter packs, feed
+	 * generators, reply and quote gates. A list block is a block, and
+	 * refused (D16).
 	 */
 	public const KEPT_AS_WRITTEN = [
 		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
@@ -113,6 +116,7 @@ class WriteService {
 		private RelationshipService $relationships,
 		private BlueskyBlocks $blocks,
 		private ChatDeclaration $declaration,
+		private BlueskyListImport $listImport,
 	) {
 	}
 
@@ -287,6 +291,7 @@ class WriteService {
 		}
 		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
 			$this->writeRaw($session, RepoWrite::delete($collection, $rkey));
+			$this->listChanged($session, $record, true);
 
 			return ['commit' => $this->commit($session)];
 		}
@@ -776,12 +781,38 @@ class WriteService {
 			throw XrpcException::invalidRequest('The record is not of its collection');
 		}
 		$record['$type'] = $collection;
-		$this->writeRaw($session, $this->repositories->getRecord($did, $collection, $rkey) === null
+		$was = $this->repositories->getRecord($did, $collection, $rkey);
+		// a record replaced stands for what it stood for before
+		$this->writeRaw($session, $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
-			: RepoWrite::update($collection, $rkey, $record));
+			: RepoWrite::update($collection, $rkey, $record, $was->localId));
 
-		return $this->repositories->getRecord($did, $collection, $rkey)
+		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
+		$this->listChanged($session, $kept, false);
+
+		return $kept;
+	}
+
+	/**
+	 * A list or a list item the app wrote or deleted, followed in the
+	 * person's lists here. The record is the app's either way, so a failure
+	 * here is logged and not the app's.
+	 */
+	private function listChanged(ClientSession $session, StoredRecord $record, bool $deleted): void {
+		if (!in_array($record->collection, [BlueskyLists::LIST, BlueskyLists::ITEM], true)) {
+			return;
+		}
+		try {
+			$owner = $this->actor($session);
+			match (true) {
+				$deleted => $this->listImport->deleted($owner, $record),
+				$record->collection === BlueskyLists::LIST => $this->listImport->listWritten($owner, $record),
+				default => $this->listImport->itemWritten($owner, $record),
+			};
+		} catch (Throwable $e) {
+			$this->logger->warning('A list from a Bluesky app not followed here', ['record' => $record->uri(), 'exception' => $e]);
+		}
 	}
 
 	/**

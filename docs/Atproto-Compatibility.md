@@ -97,6 +97,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D19 | **Moving an existing Bluesky account here** is its own phase. | 10-06 |
 | D20 | **Phase 1 makes a Social account visible on Bluesky** (identity, repository, firehose); reading Bluesky from here is phase 2. Four phases, one PR each. | 09-25, order fixed 10-06 |
 | D21 | CI and devel use a self-hosted PLC, `@atproto/dev-env` and an `indigo` relay; the real network is exercised by hand only. | 09-25 |
+| D22 | **A person's lists are one set with their Bluesky lists** (§9.7). A list here is private, as a Mastodon list is, and is never published silently: the person makes it public, and a public list is a Bluesky curate list with its members, kept in step both ways; a curate list made in a Bluesky app signed in here, or brought by a move here, is a public list here. A list a reply rule names is published while the rule needs it, public or not (§8.3). | 10-09 |
 
 ## 3. The protocol, as far as this app needs it
 
@@ -245,7 +246,8 @@ Collection → written when:
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
 | `app.bsky.graph.follow` | a local actor follows a Bluesky account (§9.2) | `subject` DID |
 | `app.bsky.feed.threadgate`, `app.bsky.feed.postgate` | a post written here whose author narrowed who may reply or quote (§8), written with the post under its key and rewritten when the author changes it; or a Bluesky app signed in here writes one for one of the account's own posts (§6), kept under that post's key | `post`, `allow` (threadgate) or `embeddingRules` (postgate), `createdAt`; as the app wrote it |
-| `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6) | as the app wrote it |
+| `app.bsky.graph.list` (curate list), `listitem` | a local actor makes one of their lists public, or a reply rule names it (§8.3, §9.7, `Publisher\BlueskyLists`); renamed with it, withdrawn when it is made private and no threadgate names it, or deleted | `purpose` curatelist, `name` (the title, at most 64 characters), `createdAt`; an item's `subject` DID and `list` URI |
+| `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6); a curate list and its items are then the person's list here too (§9.7) | as the app wrote it |
 | `app.bsky.graph.block` | a local actor blocks a Bluesky account, **only when the person publishes their blocks** (D16, `Publisher\BlueskyBlocks`) | `subject` DID |
 | `app.bsky.graph.listblock` | a local actor subscribes to a block list **and** publishes their blocks (D16, §12.5, `Reader\BlueskyModerationLists`) | `subject` list `at://` URI |
 | `chat.bsky.actor.declaration` (rkey `self`) | who may send the person direct messages changed here or in a Bluesky app signed in here, or the account's first read of its direct messages finds none while the setting here is `none` (§10.1, `Chat\ChatDeclaration`) | `allowIncoming`: `all`, `following` or `none` |
@@ -475,7 +477,8 @@ when crossed.
   together — or nobody reply is published with a threadgate under its key
   (a `followerRule`, `followingRule`, `mentionRule` or `listRule` each, or
   no rule at all; a list is published as a Bluesky curate list with its
-  members that have a Bluesky identity, `BlueskyLists`), which every AppView holds Bluesky replies to; a change of
+  members that have a Bluesky identity, `BlueskyLists`, and stays published
+  while a threadgate names it, even when the list is private, §9.7), which every AppView holds Bluesky replies to; a change of
   mind later rewrites or removes the gate (`Publisher::updateGates()`).
   The replies the author hid are in the same threadgate (`hiddenReplies`),
   and a Bluesky author's hidden replies are hidden here (see **Hidden
@@ -731,7 +734,8 @@ Bluesky's custom feeds and lists are read here as timelines
   URI's own slashes stay out of the path, as web servers refuse an encoded
   one.
 - **Lists made in a Bluesky app** are written to the account's repository
-  (§6), so they reach the AppView, and read here as their feed.
+  (§6), so they reach the AppView, and read here as their feed; a curate
+  list is the person's list here as well (§9.7).
 - **Discover** shows what is trending on Bluesky beside what is trending
   here — a topic that is a custom feed opens as one, any other as a
   search — and the accounts Bluesky suggests to the person, read as them
@@ -747,6 +751,50 @@ Bluesky's custom feeds and lists are read here as timelines
   follows everybody not followed yet or one at a time, 25 to a request, as
   any Bluesky account is followed, and keeps the feeds when asked, as the
   Bluesky app does.
+
+### 9.7 A person's lists, one set (D22)
+
+A person's lists here and their Bluesky lists are one set
+(`Publisher\BlueskyLists` outward, `Reader\BlueskyListImport` inward). A
+list here is a Mastodon list, private to its owner; a Bluesky list
+(`app.bsky.graph.list`, purpose `curatelist`, members
+`app.bsky.graph.listitem`) is a public record. So a list carries a
+visibility (`social_list.visibility`, `private` by default, `public`;
+`public` in the List entity, API.md):
+
+- **Made public**, a list is written to the owner's repository as a curate
+  list with an item for each member that has a Bluesky identity (a
+  Bluesky account, or a local account's DID); a member on the Fediverse
+  alone has none and is not listed there. Renamed here, the record is
+  renamed, the rest of it (a description an app gave it) kept; a member
+  added or taken out here is listed or withdrawn; deleted here, the list
+  and its items go. While Bluesky is off on this server nothing is
+  published; making the list private and public again publishes it once
+  it is on.
+- **Made private again**, the records are withdrawn — unless one of the
+  owner's threadgates names the list (§8.3): a reply rule that lets the
+  members of a list reply needs the list on Bluesky, so it stays published
+  while a gate names it. The list's settings say so.
+- **A curate list a Bluesky app signed in here writes** (§6,
+  `WriteService`) becomes a public list here, named as on Bluesky, and its
+  items its members: a local DID as the local account, any other as the
+  Bluesky account, read into the cache (an account the AppView does not
+  know, or one blocked here, is left out). The record is tied to the list
+  by its local id (`list:<id>`, an item `list:<id>#<md5 of the member>`),
+  so the list is one from then on: a rename in the app renames it here,
+  an item deleted takes the member out, the list deleted deletes it here.
+  A list's visibility is not changed by the app; a moderation list is not
+  a list here (§12.5).
+- **No round trip**: what this server writes for a list goes into the
+  repository directly and is never read back as an app's write, and a
+  record that already stands for a list is not imported again.
+- **An account that moved here** (§13.1) brings its curate lists: the last
+  step of the move makes each a public list here with its members, the
+  same way, and a second run makes none twice.
+
+On Bluesky a list may hold anybody; a list here is a view of whom its
+owner follows, so a member they do not follow shows nothing in the list's
+timeline here until they do.
 
 ## 10. Being followed, liked and answered from Bluesky
 
@@ -1091,8 +1139,8 @@ beside the Fediverse move-in.
    custom handle (later phase).
 6. The imported posts become local stream rows (§9.3's mapping, attributed
    to the local actor), the follows become watches and `social_follows`
-   rows, the likes and reposts become actions — through the import path,
-   nothing re-published.
+   rows, the likes and reposts become actions, the curate lists public
+   lists (§9.7) — through the import path, nothing re-published.
 
 ### 13.2 Moving away
 
@@ -1241,13 +1289,14 @@ buffer, as the reference relay does to a slow PDS.
 
 ### 16.5 What is published
 
-Only what D8 and D16 allow: public posts, their pictures, profile fields
-that are already public on the Fediverse, follows of Bluesky accounts,
-likes and reposts of Bluesky-visible posts, and who may send the person
-direct messages (§10.1). Nothing else is ever written
-to a repository, and `RecordMapper` is the one place that could — but for
-that setting, which `ChatDeclaration` writes from its three answers alone —
-so one test class (§17) is the whole of that guarantee.
+Only what D8, D16 and D22 allow: public posts, their pictures, profile
+fields that are already public on the Fediverse, follows of Bluesky
+accounts, likes and reposts of Bluesky-visible posts, the lists a person
+made public or a reply rule names (§9.7), and who may send the person
+direct messages (§10.1). Nothing else is ever written to a repository, and
+`RecordMapper` is the one place that could — but for those lists and that
+setting, which `BlueskyLists` and `ChatDeclaration` write — so one test
+class (§17) is the whole of that guarantee.
 
 ## 17. Testing
 

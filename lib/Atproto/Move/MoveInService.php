@@ -28,6 +28,7 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcException;
@@ -60,7 +61,8 @@ use Throwable;
  * Then the old PDS e-mails the person a code; with it, it signs the
  * operation that points the DID here, and the account takes the DID: the
  * one this server had made for it is retired. Last, the account is switched
- * off on the old PDS, and its posts become posts in its timeline here.
+ * off on the old PDS, its posts become posts in its timeline here and its
+ * lists its lists here.
  */
 class MoveInService {
 	private const PAGE = 500;
@@ -85,6 +87,7 @@ class MoveInService {
 		private ICrypto $crypto,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
+		private BlueskyListImport $lists,
 	) {
 	}
 
@@ -308,9 +311,10 @@ class MoveInService {
 	}
 
 	/**
-	 * The account's posts become posts in its timeline here, and its latest
-	 * likes and reposts likes and boosts. The account has moved by then, so
-	 * a failure here does not fail the move.
+	 * The account's posts become posts in its timeline here, its latest
+	 * likes and reposts likes and boosts, and its curate lists public lists
+	 * here (`BlueskyListImport`). The account has moved by then, so a
+	 * failure here does not fail the move.
 	 */
 	public function importPosts(Move $move): void {
 		try {
@@ -319,6 +323,11 @@ class MoveInService {
 			$move->progress = $this->history->importActions($actor, $move->did) + $move->progress;
 		} catch (Throwable $e) {
 			$this->logger->warning('Posts of a Bluesky account that moved here not imported', ['did' => $move->did, 'exception' => $e]);
+		}
+		try {
+			$move->progress = ['lists' => $this->lists->adopt($this->actors->getFromUserId($move->userId), $move->did)] + $move->progress;
+		} catch (Throwable $e) {
+			$this->logger->warning('Lists of a Bluesky account that moved here not taken over', ['did' => $move->did, 'exception' => $e]);
 		}
 	}
 

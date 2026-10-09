@@ -78,6 +78,7 @@ class ListsRequestTest extends TestCase {
 
 		$this->assertGreaterThan(0, $list->getId());
 		$this->assertSame('Friends', $this->lists->getOwnedById(self::OWNER, $list->getId())->getTitle());
+		$this->assertFalse($this->lists->getOwnedById(self::OWNER, $list->getId())->isPublic(), 'private unless made public');
 		$this->assertCount(1, $this->lists->getByActor(self::OWNER));
 		$this->assertSame([], $this->lists->getByActor(self::STRANGER));
 
@@ -92,10 +93,11 @@ class ListsRequestTest extends TestCase {
 		$this->lists->delete((clone $list)->setOwnerId(self::STRANGER));
 		$this->assertSame('Friends', $this->lists->getOwnedById(self::OWNER, $list->getId())->getTitle());
 
-		$this->lists->update($list->setTitle('Close friends')->setExclusive(true));
+		$this->lists->update($list->setTitle('Close friends')->setExclusive(true)->setPublic(true));
 		$renamed = $this->lists->getOwnedById(self::OWNER, $list->getId());
 		$this->assertSame('Close friends', $renamed->getTitle());
 		$this->assertTrue($renamed->isExclusive());
+		$this->assertTrue($renamed->isPublic());
 
 		$this->lists->delete($list);
 		$this->assertSame([], $this->lists->getByActor(self::OWNER));
