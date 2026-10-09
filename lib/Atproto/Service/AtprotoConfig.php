@@ -157,6 +157,23 @@ class AtprotoConfig {
 	}
 
 	/**
+	 * Bluesky's chat service, which a Bluesky app signed in here reaches its
+	 * direct messages through; '' when the administrator turned them off.
+	 */
+	public function chat(): string {
+		return rtrim($this->configService->getAppValue(ConfigService::ATPROTO_CHAT), '/');
+	}
+
+	/**
+	 * The chat service's DID, `did:web:` its host, as `atproto-proxy` names it.
+	 */
+	public function chatDid(): string {
+		$host = (string)parse_url($this->chat(), PHP_URL_HOST);
+
+		return $host === '' ? '' : 'did:web:' . strtolower($host);
+	}
+
+	/**
 	 * The settings as the admin page shows and saves them.
 	 */
 	public function export(): array {
@@ -166,6 +183,7 @@ class AtprotoConfig {
 			'plc_directory' => $this->plcDirectory(),
 			'appview' => $this->appView(),
 			'jetstream' => $this->jetstream(),
+			'chat' => $this->chat(),
 			'sync_ceiling' => $this->syncCeiling(),
 			'trusted_clients' => $this->trustedClients(),
 		];

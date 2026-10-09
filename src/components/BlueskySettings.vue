@@ -272,6 +272,9 @@
 								{{ appPassword.last_used > 0
 									? t('social', 'Last used {when}', { when: lastUsed(appPassword.last_used) })
 									: t('social', 'Never used') }}
+								<template v-if="appPassword.privileged">
+									· {{ t('social', 'Can read and send direct messages') }}
+								</template>
 							</span>
 							<div v-if="confirmingRevoke === appPassword.id" class="bluesky-settings__app-password-actions">
 								<p class="bluesky-settings__hint">
@@ -306,6 +309,11 @@
 							:showTrailingButton="false"
 							@update:modelValue="appPasswordNameError = ''"
 							@keydown.enter.prevent="createAppPassword" />
+						<!-- Bluesky's own privileged app passwords: only an app
+						     signed in with one reaches the direct messages -->
+						<NcCheckboxRadioSwitch v-model="appPasswordPrivileged" class="bluesky-settings__app-password-privileged">
+							{{ t('social', 'Allow direct messages') }}
+						</NcCheckboxRadioSwitch>
 						<NcButton
 							:disabled="appPasswordName.trim() === '' || makingAppPassword"
 							@click="createAppPassword">
@@ -461,13 +469,15 @@ export default {
 			/**
 			 * The app passwords for Bluesky apps; null until they come
 			 *
-			 * @type {Array<{id: number, name: string, creation: number, last_used: number}>|null}
+			 * @type {Array<{id: number, name: string, creation: number, last_used: number, privileged?: boolean}>|null}
 			 */
 			appPasswords: null,
 			/** the server has no such route: Bluesky is off there */
 			appPasswordsHidden: false,
 			appPasswordsError: '',
 			appPasswordName: '',
+			/** whether the new app password reaches the direct messages */
+			appPasswordPrivileged: false,
 			/** what the server said about the name, under the field */
 			appPasswordNameError: '',
 			makingAppPassword: false,
@@ -748,10 +758,11 @@ export default {
 			this.makingAppPassword = true
 			this.appPasswordNameError = ''
 			try {
-				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/app-passwords'), { name })
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/app-passwords'), { name, privileged: this.appPasswordPrivileged })
 				this.appPasswords = data.app_passwords
 				this.newAppPassword = { name: data.name, password: data.password }
 				this.appPasswordName = ''
+				this.appPasswordPrivileged = false
 			} catch (error) {
 				const status = error?.response?.status
 				if (status === 422) {

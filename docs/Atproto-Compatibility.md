@@ -88,7 +88,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D12 | **Inbound** reads by **polling** the public AppView per followed author, with a cap and backoff; **Jetstream** is an optional daemon an administrator may run for instant delivery on a large instance. | 09-25 polling, 10-06 the optional daemon |
 | D13 | Bluesky posts appear **in the same timelines**, their authors addressed as bare `@alice.bsky.social` with a **badge**. | 09-25, confirmed 10-06 |
 | D14 | **All Bluesky interactions** (like, repost, follow, reply, mention, quote) show in Activities like their ActivityPub counterparts, under the same **notification policy** and requests inbox. | 10-06 |
-| D15 | **Direct messages** are out of scope (Bluesky chat is a separate service). | 10-06 |
+| D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. They are not bridged into this app's own direct messages. | 10-06, revised 10-09 |
 | D16 | **Blocks and mutes are never published**; in scope: honour Bluesky's moderation labels, let users subscribe to labelers, file reports with Bluesky's moderation service, instance-level blocks of PDS hosts and DIDs. | 09-25, extended 10-06 |
 | D17 | The client API is a PDS: Bluesky apps may log in here, with `app.bsky.*` proxied to the AppView; no AppView of our own. | 09-25 |
 | D18 | Bridgy Fed twins of local accounts are folded into the native identity (§13.3). | 09-25 |
@@ -330,8 +330,9 @@ of local records only); `_health`.
 
 **Proxied to the AppView** with a service-auth token for the calling user
 (`Authorization: Bearer <JWT signed by the user's signing key, aud
-did:web:api.bsky.app>`): everything under `app.bsky.*`, and
-`chat.bsky.*` is refused (D15). The proxy is `AppViewClient`, the same
+did:web:api.bsky.app>`): everything under `app.bsky.*`; `chat.bsky.*`
+goes to Bluesky's chat service (`did:web:api.bsky.chat`) the same way
+(D15). The proxy is `AppViewClient`, the same
 guarded HTTP client as every outbound request (`CurlService`), with the
 response passed through unchanged.
 
@@ -1227,7 +1228,12 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 - **The AppView proxy** (`app.bsky.*`) goes to the configured AppView only —
   `atproto-proxy` cannot point the account's signature elsewhere — with a
   token the account's own key signs for the one method; the answer passes
-  through with its status. `chat.bsky.*` is refused (D15).
+  through with its status. `chat.bsky.*` goes the same way to the chat
+  service the administrator configured (`atproto_chat`, by default
+  `https://api.bsky.chat`; empty turns direct messages off, 501), for a
+  session that may reach it: an app password made **privileged** (Settings →
+  Bluesky, "Allow direct messages", off by default, as Bluesky's), or an
+  OAuth app given `transition:chat.bsky` (D15).
   `app.bsky.actor.getPreferences`/`putPreferences` are kept here, per person,
   within the `app.bsky` namespace and 256 KB.
 - **Writes are Social actions** (§16.5): `createRecord` of a post is a
@@ -1310,8 +1316,8 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   every PDS request, client IDs that are the address of the app's metadata
   (and the profile's `http://localhost` development exception), public and
   confidential (`private_key_jwt`) clients, the `atproto` scope with
-  `transition:generic` and `transition:email`. `transition:chat.bsky` is
-  listed and never granted (D15).
+  `transition:generic`, `transition:email` and `transition:chat.bsky` (the
+  direct messages, D15).
 - **One issuer with the Mastodon OAuth server.** AT Protocol requires the
   issuer to be the bare origin, and an origin has one
   `/.well-known/oauth-authorization-server`. With Bluesky on (and the root

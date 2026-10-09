@@ -19,12 +19,13 @@ class AtprotoClientRequest extends CoreRequestBuilder {
 	/**
 	 * @return int the new password's id
 	 */
-	public function addAppPassword(string $userId, string $name, string $hash): int {
+	public function addAppPassword(string $userId, string $name, string $hash, bool $privileged = false): int {
 		$qb = $this->getQueryBuilder();
 		$qb->insert(self::TABLE_ATPROTO_APP_PASSWORD)
 			->setValue('user_id', $qb->createNamedParameter($userId))
 			->setValue('name', $qb->createNamedParameter($name))
 			->setValue('hash', $qb->createNamedParameter($hash))
+			->setValue('privileged', $qb->createNamedParameter($privileged ? 1 : 0, IQueryBuilder::PARAM_INT))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 		$qb->executeStatement();
 
@@ -32,11 +33,11 @@ class AtprotoClientRequest extends CoreRequestBuilder {
 	}
 
 	/**
-	 * @return list<array{id: int, name: string, hash: string, creation: int, last_used: int}>
+	 * @return list<array{id: int, name: string, hash: string, creation: int, last_used: int, privileged: bool}>
 	 */
 	public function getAppPasswords(string $userId): array {
 		$qb = $this->getQueryBuilder();
-		$qb->select('id', 'name', 'hash', 'creation', 'last_used')->from(self::TABLE_ATPROTO_APP_PASSWORD)
+		$qb->select('id', 'name', 'hash', 'creation', 'last_used', 'privileged')->from(self::TABLE_ATPROTO_APP_PASSWORD)
 			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
 			->orderBy('creation', 'asc');
 		$rows = [];
@@ -48,11 +49,26 @@ class AtprotoClientRequest extends CoreRequestBuilder {
 				'hash' => (string)$row['hash'],
 				'creation' => AtprotoIdentityRequest::time($row['creation']),
 				'last_used' => AtprotoIdentityRequest::time($row['last_used']),
+				'privileged' => (int)($row['privileged'] ?? 0) === 1,
 			];
 		}
 		$result->closeCursor();
 
 		return $rows;
+	}
+
+	/**
+	 * Whether the app password reaches the direct messages.
+	 */
+	public function isPrivileged(int $id): bool {
+		$qb = $this->getQueryBuilder();
+		$qb->select('privileged')->from(self::TABLE_ATPROTO_APP_PASSWORD)
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		$result = $qb->executeQuery();
+		$privileged = $result->fetchOne();
+		$result->closeCursor();
+
+		return (int)$privileged === 1;
 	}
 
 	public function appPasswordUsed(int $id): void {

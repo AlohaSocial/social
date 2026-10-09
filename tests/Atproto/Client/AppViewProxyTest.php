@@ -37,11 +37,15 @@ class AppViewProxyTest extends TestCase {
 	private AppViewProxy $proxy;
 	private ClientSession $session;
 	private PrivateKey $userKey;
+	/** the chat service as configured, '' for none */
+	private string $chat = 'https://api.bsky.chat';
 
 	protected function setUp(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('appViewDid')->willReturn('did:web:api.bsky.app');
 		$config->method('appViewAuth')->willReturn('https://api.bsky.app');
+		$config->method('chat')->willReturnCallback(fn (): string => $this->chat);
+		$config->method('chatDid')->willReturnCallback(fn (): string => $this->chat === '' ? '' : 'did:web:api.bsky.chat');
 		$this->userKey = PrivateKey::generate(Curve::K256);
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('signingKey')->willReturn($this->userKey);
@@ -89,11 +93,27 @@ class AppViewProxyTest extends TestCase {
 		$this->assertStringContainsString('Profile not found', $answer->bytes);
 	}
 
-	public function testOnlyTheConfiguredAppViewIsATargetAndChatIsNotOffered(): void {
+	public function testDirectMessagesGoToTheChatServiceSignedForIt(): void {
+		$this->curl->expects($this->once())->method('doRequest')->with('post', 'https://api.bsky.chat/xrpc/chat.bsky.convo.sendMessage', $this->callback(function (array $options): bool {
+			$claims = json_decode(Encoding::base64UrlDecode(explode('.', substr($options['headers']['Authorization'], 7))[1]), true);
+			$this->assertSame(['did:web:api.bsky.chat', 'chat.bsky.convo.sendMessage'], [$claims['aud'], $claims['lxm']]);
+			$this->assertSame('{"convoId":"c1"}', $options['body']);
+
+			return true;
+		}))->willReturnCallback(static function (string $m, string $u, array $o, &$contentType, &$status): string {
+			$status = 200;
+
+			return '{}';
+		});
+
+		$this->proxy->forward($this->session, 'chat.bsky.convo.sendMessage', 'post', '', '{"convoId":"c1"}', ['atproto-proxy' => 'did:web:api.bsky.chat#bsky_chat', 'content-type' => 'application/json']);
+	}
+
+	public function testOnlyTheConfiguredServicesAreATarget(): void {
 		$this->curl->expects($this->never())->method('doRequest');
 		foreach ([
 			['app.bsky.feed.getTimeline', ['atproto-proxy' => 'did:web:evil.example#bsky_appview'], 'InvalidRequest'],
-			['chat.bsky.convo.listConvos', [], 'MethodNotImplemented'],
+			['chat.bsky.convo.listConvos', ['atproto-proxy' => 'did:web:evil.example#bsky_chat'], 'InvalidRequest'],
 		] as [$method, $headers, $error]) {
 			try {
 				$this->proxy->forward($this->session, $method, 'get', '', '', $headers);
@@ -101,6 +121,13 @@ class AppViewProxyTest extends TestCase {
 			} catch (XrpcException $e) {
 				$this->assertSame($error, $e->error);
 			}
+		}
+		$this->chat = '';
+		try {
+			$this->proxy->forward($this->session, 'chat.bsky.convo.listConvos', 'get', '', '', []);
+			$this->fail('direct messages turned off');
+		} catch (XrpcException $e) {
+			$this->assertSame('MethodNotImplemented', $e->error);
 		}
 		$this->assertTrue(AppViewProxy::isProxied('app.bsky.feed.getTimeline'));
 		$this->assertFalse(AppViewProxy::isProxied('app.bsky.actor.getPreferences'), 'kept here');

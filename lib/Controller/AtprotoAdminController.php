@@ -63,6 +63,7 @@ class AtprotoAdminController extends Controller {
 		?string $plc_directory = null,
 		?string $appview = null,
 		?string $jetstream = null,
+		?string $chat = null,
 		?int $sync_ceiling = null,
 		?array $trusted_clients = null,
 	): DataResponse {
@@ -97,6 +98,13 @@ class AtprotoAdminController extends Controller {
 					throw new \InvalidArgumentException('A Jetstream endpoint is a WebSocket URL');
 				}
 				$this->configService->setAppValue(ConfigService::ATPROTO_JETSTREAM, $jetstream);
+			}
+			if ($chat !== null) {
+				$chat = rtrim(trim($chat), '/');
+				if ($chat !== '' && preg_match('#^https://[^/\s]+$#', $chat) !== 1) {
+					throw new \InvalidArgumentException('The chat service is an https origin, like https://api.bsky.chat');
+				}
+				$this->configService->setAppValue(ConfigService::ATPROTO_CHAT, $chat);
 			}
 			if ($trusted_clients !== null) {
 				$clients = array_values(array_filter(array_map(

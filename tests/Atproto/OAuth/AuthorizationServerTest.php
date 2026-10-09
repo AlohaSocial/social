@@ -291,7 +291,7 @@ class AuthorizationServerTest extends TestCase {
 	}
 
 	public function testOnlyOfferedScopesAreGranted(): void {
-		$this->assertSame(['atproto', 'transition:generic', 'repo:app.bsky.feed.post'], AuthorizationServer::granted('atproto transition:generic transition:chat.bsky repo:app.bsky.feed.post repo:not!a!nsid'));
+		$this->assertSame(['atproto', 'transition:generic', 'transition:chat.bsky', 'repo:app.bsky.feed.post'], AuthorizationServer::granted('atproto transition:generic transition:chat.bsky repo:app.bsky.feed.post repo:not!a!nsid transition:other'));
 	}
 
 	public function testGranularScopesAreGrantedAndAnIncludedSetExpanded(): void {

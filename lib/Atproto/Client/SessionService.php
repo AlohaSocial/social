@@ -128,7 +128,13 @@ class SessionService {
 			throw new XrpcException(400, 'AccountDeactivated', 'This account is deactivated');
 		}
 
-		return new ClientSession($session['user_id'], $identity, $session['jti']);
+		$scopes = ['atproto', ClientSession::GENERIC, ClientSession::EMAIL];
+		if ($this->request->isPrivileged($session['app_password_id'])) {
+			// a privileged app password reaches the direct messages, as Bluesky's do
+			$scopes[] = ClientSession::CHAT;
+		}
+
+		return new ClientSession($session['user_id'], $identity, $session['jti'], $scopes);
 	}
 
 	/**

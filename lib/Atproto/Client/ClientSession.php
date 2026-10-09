@@ -21,6 +21,8 @@ use OCA\Social\Atproto\OAuth\Permissions;
 final class ClientSession {
 	public const GENERIC = 'transition:generic';
 	public const EMAIL = 'transition:email';
+	/** direct messages, for an app password made privileged or an OAuth app given it */
+	public const CHAT = 'transition:chat.bsky';
 
 	/**
 	 * @param string[] $scopes

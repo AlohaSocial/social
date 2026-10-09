@@ -137,7 +137,7 @@ class CoreRequestBuilder {
 		self::TABLE_ATPROTO_NOTIFY_CURSOR => ['id', 'did', 'handle', 'cursor', 'last_sync', 'next_sync', 'failures', 'last_error', 'creation'],
 		self::TABLE_ATPROTO_BLOCKLIST => ['id', 'kind', 'value', 'reason', 'creation'],
 		self::TABLE_ATPROTO_LABELER => ['id', 'user_id', 'did', 'settings', 'creation'],
-		self::TABLE_ATPROTO_APP_PASSWORD => ['id', 'user_id', 'name', 'hash', 'creation', 'last_used'],
+		self::TABLE_ATPROTO_APP_PASSWORD => ['id', 'user_id', 'name', 'hash', 'creation', 'last_used', 'privileged'],
 		self::TABLE_ATPROTO_SESSION => ['id', 'jti', 'user_id', 'did', 'app_password_id', 'expires', 'creation'],
 		self::TABLE_ATPROTO_VIDEO => ['id', 'post_id', 'post_id_prim', 'did', 'document_id', 'state', 'job_id', 'blob_cid', 'attempts', 'error', 'creation', 'updated'],
 		self::TABLE_ATPROTO_OAUTH_REQUEST => ['id', 'request_id', 'client_id', 'client_auth', 'params', 'dpop_jkt', 'code_challenge', 'user_id', 'did', 'code_hash', 'session_id', 'expires', 'creation'],

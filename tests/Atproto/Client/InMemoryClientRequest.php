@@ -15,12 +15,12 @@ use OCA\Social\Db\AtprotoClientRequest;
  * App passwords and sessions in memory, as the tables keep them.
  */
 class InMemoryClientRequest extends AtprotoClientRequest {
-	/** @var array<int, array{id: int, user_id: string, name: string, hash: string, creation: int, last_used: int}> */
+	/** @var array<int, array{id: int, user_id: string, name: string, hash: string, creation: int, last_used: int, privileged: bool}> */
 	public array $passwords = [];
 	/** @var array<string, array{jti: string, user_id: string, did: string, app_password_id: int, expires: int}> */
 	public array $sessions = [];
 
-	public function addAppPassword(string $userId, string $name, string $hash): int {
+	public function addAppPassword(string $userId, string $name, string $hash, bool $privileged = false): int {
 		foreach ($this->passwords as $row) {
 			if ($row['user_id'] === $userId && $row['name'] === $name) {
 				throw new class('taken') extends \OCP\DB\Exception {
@@ -31,13 +31,17 @@ class InMemoryClientRequest extends AtprotoClientRequest {
 			}
 		}
 		$id = count($this->passwords) + 1;
-		$this->passwords[$id] = ['id' => $id, 'user_id' => $userId, 'name' => $name, 'hash' => $hash, 'creation' => 1, 'last_used' => 0];
+		$this->passwords[$id] = ['id' => $id, 'user_id' => $userId, 'name' => $name, 'hash' => $hash, 'creation' => 1, 'last_used' => 0, 'privileged' => $privileged];
 
 		return $id;
 	}
 
 	public function getAppPasswords(string $userId): array {
 		return array_values(array_map(static fn (array $row): array => array_diff_key($row, ['user_id' => 1]), array_filter($this->passwords, static fn (array $row): bool => $row['user_id'] === $userId)));
+	}
+
+	public function isPrivileged(int $id): bool {
+		return $this->passwords[$id]['privileged'] ?? false;
 	}
 
 	public function appPasswordUsed(int $id): void {

@@ -40,6 +40,14 @@ class PermissionsTest extends TestCase {
 		$this->assertTrue(Permissions::of(['atproto', 'transition:email'])->mayReadEmail());
 	}
 
+	public function testTheChatScopeReachesTheDirectMessagesAndNothingElse(): void {
+		$chat = Permissions::of(['atproto', 'transition:chat.bsky']);
+
+		$this->assertTrue($chat->mayCall('chat.bsky.convo.listConvos', 'did:web:api.bsky.chat#bsky_chat'));
+		$this->assertFalse($chat->mayCall('app.bsky.feed.getTimeline', 'did:web:api.bsky.app#bsky_appview'));
+		$this->assertTrue(Permissions::of(['atproto', 'transition:generic', 'transition:chat.bsky'])->mayCall('chat.bsky.convo.sendMessage', 'did:web:api.bsky.chat#bsky_chat'));
+	}
+
 	public function testGranularScopesAllowWhatTheyNameOnly(): void {
 		$permissions = Permissions::of([
 			'atproto', 'repo:app.bsky.feed.like?action=create&action=delete', 'rpc:app.bsky.feed.getTimeline?aud=did:web:api.bsky.app%23bsky_appview',
