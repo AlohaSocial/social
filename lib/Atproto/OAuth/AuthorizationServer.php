@@ -38,10 +38,9 @@ use Throwable;
  */
 class AuthorizationServer {
 	public const REQUEST_URI_PREFIX = 'urn:ietf:params:oauth:request_uri:req-';
-	/** what a Bluesky app may be granted; DMs (chat.bsky) are not offered here (D15) */
-	public const SCOPES = ['atproto', 'transition:generic', 'transition:email'];
-	/** listed, so an app that asks for it is not refused outright; never granted */
-	public const SCOPES_LISTED = ['atproto', 'transition:generic', 'transition:chat.bsky', 'transition:email'];
+	/** what a Bluesky app may be granted; the direct messages go through Bluesky's chat service (D15) */
+	public const SCOPES = ['atproto', 'transition:generic', 'transition:chat.bsky', 'transition:email'];
+	public const SCOPES_LISTED = self::SCOPES;
 	public const ACCESS_LIFETIME = 900;
 	/** what the scopes of a session may come to, as stored */
 	private const MAX_SCOPE = 1024;

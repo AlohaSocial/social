@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.171
+**App version:** 0.26.172
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -245,7 +245,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_notify_cursor` | The same bookkeeping per local account with a Bluesky identity, for the AppView's notifications of follows, likes, reposts, replies, mentions and quotes of its records |
 | `social_atproto_blocklist` | The administrator's Bluesky block list: a PDS host or a DID, with the reason. A blocked account is not resolved, read or heard from; a blocked host blocks every account whose PDS it is |
 | `social_atproto_labeler` | The Bluesky labelers each person subscribes to, by DID, with their choice per label value (`ignore`, `warn`, `hide`) as JSON; Bluesky's own moderation service is always applied and needs no row |
-| `social_atproto_app_password` | The app passwords a person made for Bluesky apps, by name, stored as password hashes only — the password is shown once. Good for this app's Bluesky surface and nothing else of Nextcloud |
+| `social_atproto_app_password` | The app passwords a person made for Bluesky apps, by name, stored as password hashes only — the password is shown once — and whether each is `privileged`, which lets an app signed in with it reach the Bluesky direct messages. Good for this app's Bluesky surface and nothing else of Nextcloud |
 | `social_atproto_session` | The sessions Bluesky apps opened with those passwords, by the id of their refresh token, with the password that opened them: ending a session, or revoking its password, ends its tokens |
 | `social_atproto_video` | A local post's video on its way through Bluesky's video service: the post and its video document, the state (`queued`, `processing`, `done`, `failed`), the service's job, the blob it stored here, the tries and the reason it failed. The post goes to Bluesky once the row has ended — naming the blob, or as a link — and ended rows are pruned after a week |
 | `social_atproto_oauth_request` | Bluesky sign-in (OAuth) requests a Bluesky app pushed: the app's `client_id`, how it authenticated, what it asked for, the DPoP key it asked with and its PKCE challenge; once the person agreed, who agreed and the hash of the code handed out, and once that code was exchanged, the session it started — so a second exchange ends that session. Kept a day past expiry, so a PKCE challenge is not taken twice |

@@ -20,12 +20,13 @@ use Throwable;
 
 /**
  * What a Bluesky app asks of the AppView through this PDS (D17): its
- * timelines, threads, profiles, notifications, search. Passed on as the
+ * timelines, threads, profiles, notifications, search — and of Bluesky's
+ * chat service, its direct messages (`chat.bsky.*`, D15). Passed on as the
  * signed-in account, with a token its own key signs for the one method,
- * and answered as the AppView answered (§16.2). The app's own token never
- * leaves here. Only the AppView this instance is configured with can be
- * the target: `atproto-proxy` cannot point the account's signature
- * anywhere else. A report an app files is no proxied call: it becomes a
+ * and answered as the service answered (§16.2). The app's own token never
+ * leaves here. Only the AppView and the chat service this instance is
+ * configured with can be the target: `atproto-proxy` cannot point the
+ * account's signature anywhere else. A report an app files is no proxied call: it becomes a
  * report here (`WriteService`), passed on in this server's name.
  */
 class AppViewProxy {
@@ -57,9 +58,6 @@ class AppViewProxy {
 	 * @throws XrpcException
 	 */
 	public function forward(ClientSession $session, string $method, string $verb, string $query, string $body, array $headers): XrpcBytes {
-		if (str_starts_with($method, 'chat.bsky.')) {
-			throw new XrpcException(501, 'MethodNotImplemented', 'Direct messages are not offered by this server');
-		}
 		[$audience, $endpoint] = $this->target($method, (string)($headers['atproto-proxy'] ?? ''));
 		if (strlen($body) > self::MAX_BODY) {
 			throw new XrpcException(413, 'PayloadTooLarge', 'Request body too large');
@@ -99,6 +97,17 @@ class AppViewProxy {
 	 * @throws XrpcException
 	 */
 	private function target(string $method, string $proxy): array {
+		if (str_starts_with($method, 'chat.bsky.')) {
+			$chat = $this->config->chatDid();
+			if ($chat === '') {
+				throw new XrpcException(501, 'MethodNotImplemented', 'Direct messages are not offered by this server');
+			}
+			if ($proxy !== '' && explode('#', $proxy, 2)[0] !== $chat) {
+				throw new XrpcException(400, 'InvalidRequest', 'This server proxies direct messages to its configured chat service only');
+			}
+
+			return [$chat, $this->config->chat()];
+		}
 		$appView = $this->config->appViewDid();
 		if ($proxy === '') {
 			return [$appView, $this->config->appViewAuth()];

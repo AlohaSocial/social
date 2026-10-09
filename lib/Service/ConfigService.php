@@ -477,6 +477,8 @@ class ConfigService {
 	public const ATPROTO_APPVIEW_AUTH = 'atproto_appview_auth';
 	public const ATPROTO_APPVIEW_DID = 'atproto_appview_did';
 	public const ATPROTO_JETSTREAM = 'atproto_jetstream';
+	/** Bluesky's chat service, which direct messages in a Bluesky app go through; empty for none */
+	public const ATPROTO_CHAT = 'atproto_chat';
 	public const ATPROTO_SYNC_CEILING = 'atproto_sync_ceiling';
 	/** the firehose daemon's last report (JSON), written by `occ social:atproto:serve` */
 	public const ATPROTO_FIREHOSE_STATUS = 'atproto_firehose_status';
@@ -495,6 +497,7 @@ class ConfigService {
 		self::ATPROTO_APPVIEW_AUTH => 'https://api.bsky.app',
 		self::ATPROTO_APPVIEW_DID => 'did:web:api.bsky.app',
 		self::ATPROTO_JETSTREAM => '',
+		self::ATPROTO_CHAT => 'https://api.bsky.chat',
 		self::ATPROTO_SYNC_CEILING => '200',
 		self::ATPROTO_FIREHOSE_STATUS => '',
 		self::ATPROTO_DELETE_CURSOR => '0',

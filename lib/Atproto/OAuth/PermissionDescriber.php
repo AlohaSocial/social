@@ -51,6 +51,8 @@ class PermissionDescriber {
 				return $plain($this->l10n->t('Post, like, follow, upload and read as you, everywhere on Bluesky'), true);
 			case Permissions::EMAIL:
 				return $plain($this->l10n->t('See your e-mail address'));
+			case Permissions::CHAT:
+				return $plain($this->l10n->t('Read and send your direct messages on Bluesky'), true);
 		}
 		$rule = Permissions::parse($scope);
 		if ($rule === null) {

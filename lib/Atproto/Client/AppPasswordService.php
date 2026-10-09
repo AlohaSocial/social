@@ -32,10 +32,11 @@ class AppPasswordService {
 	}
 
 	/**
-	 * @return array{id: int, name: string, password: string} the password, the one time it is seen
+	 * @param bool $privileged whether an app signed in with it reaches the direct messages
+	 * @return array{id: int, name: string, password: string, privileged: bool} the password, the one time it is seen
 	 * @throws InvalidArgumentException for an empty or taken name, or too many passwords
 	 */
-	public function create(string $userId, string $name): array {
+	public function create(string $userId, string $name, bool $privileged = false): array {
 		$name = trim($name);
 		if ($name === '' || mb_strlen($name) > 64) {
 			throw new InvalidArgumentException('A name of 1 to 64 characters is needed');
@@ -45,7 +46,7 @@ class AppPasswordService {
 		}
 		$password = implode('-', array_map(fn (int $group): string => $this->random->generate(4, self::ALPHABET), range(1, 4)));
 		try {
-			$id = $this->request->addAppPassword($userId, $name, password_hash($password, PASSWORD_DEFAULT));
+			$id = $this->request->addAppPassword($userId, $name, password_hash($password, PASSWORD_DEFAULT), $privileged);
 		} catch (DBException $e) {
 			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
 				throw new InvalidArgumentException('There is an app password with that name');
@@ -53,15 +54,15 @@ class AppPasswordService {
 			throw $e;
 		}
 
-		return ['id' => $id, 'name' => $name, 'password' => $password];
+		return ['id' => $id, 'name' => $name, 'password' => $password, 'privileged' => $privileged];
 	}
 
 	/**
-	 * @return list<array{id: int, name: string, creation: int, last_used: int}>
+	 * @return list<array{id: int, name: string, creation: int, last_used: int, privileged: bool}>
 	 */
 	public function list(string $userId): array {
 		return array_map(static fn (array $row): array => [
-			'id' => $row['id'], 'name' => $row['name'], 'creation' => $row['creation'], 'last_used' => $row['last_used'],
+			'id' => $row['id'], 'name' => $row['name'], 'creation' => $row['creation'], 'last_used' => $row['last_used'], 'privileged' => $row['privileged'],
 		], $this->request->getAppPasswords($userId));
 	}
 

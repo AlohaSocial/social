@@ -23,6 +23,8 @@ final class Permissions {
 	public const ATPROTO = 'atproto';
 	public const GENERIC = 'transition:generic';
 	public const EMAIL = 'transition:email';
+	/** the direct messages (`chat.bsky.*`), which `transition:generic` does not reach */
+	public const CHAT = 'transition:chat.bsky';
 	public const REPO_ACTIONS = ['create', 'update', 'delete'];
 	/** the resources a scope string may name */
 	private const RESOURCES = ['repo', 'rpc', 'blob', 'account', 'identity', 'include'];
@@ -154,7 +156,7 @@ final class Permissions {
 	 * DID, which any of its services matches.
 	 */
 	public function mayCall(string $lxm, string $aud): bool {
-		if ($this->isGeneric() && !str_starts_with($lxm, 'chat.bsky.')) {
+		if (str_starts_with($lxm, 'chat.bsky.') ? in_array(self::CHAT, $this->scopes, true) : $this->isGeneric()) {
 			return true;
 		}
 		foreach ($this->rules as $rule) {

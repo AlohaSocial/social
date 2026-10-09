@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Atproto\Client;
 
 use InvalidArgumentException;
 use OCA\Social\Atproto\Client\AppPasswordService;
+use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
@@ -79,13 +80,24 @@ class SessionServiceTest extends TestCase {
 		$this->sessions = new SessionService($config, $identities, $keys, $this->appPasswords, $this->request, $actors, $users, $this->throttler, $time);
 	}
 
+	public function testOnlyAPrivilegedAppPasswordReachesTheDirectMessages(): void {
+		$plain = $this->appPasswords->create('alice', 'reader')['password'];
+		$privileged = $this->appPasswords->create('alice', 'chatter', true);
+		$this->assertTrue($privileged['privileged']);
+
+		$signedIn = fn (string $password): ClientSession => $this->sessions->authenticate('Bearer ' . $this->sessions->create('alice.social.test', $password, '203.0.113.5')['accessJwt']);
+		$this->assertFalse($signedIn($plain)->permissions()->mayCall('chat.bsky.convo.listConvos', 'did:web:api.bsky.chat#bsky_chat'));
+		$this->assertTrue($signedIn($privileged['password'])->permissions()->mayCall('chat.bsky.convo.listConvos', 'did:web:api.bsky.chat#bsky_chat'));
+		$this->assertTrue($signedIn($plain)->permissions()->mayCall('app.bsky.feed.getTimeline', 'did:web:api.bsky.app#bsky_appview'), 'the rest as before');
+	}
+
 	public function testAnAppPasswordIsShownOnceAndStoredAsAHash(): void {
 		$created = $this->appPasswords->create('alice', 'Bluesky on my phone');
 		$this->assertMatchesRegularExpression('/^[a-z2-7]{4}(-[a-z2-7]{4}){3}$/', $created['password']);
 		$stored = $this->request->passwords[$created['id']];
 		$this->assertNotSame($created['password'], $stored['hash']);
 		$this->assertTrue(password_verify($created['password'], $stored['hash']));
-		$this->assertSame([['id' => $created['id'], 'name' => 'Bluesky on my phone', 'creation' => 1, 'last_used' => 0]], $this->appPasswords->list('alice'), 'never the hash, never the password');
+		$this->assertSame([['id' => $created['id'], 'name' => 'Bluesky on my phone', 'creation' => 1, 'last_used' => 0, 'privileged' => false]], $this->appPasswords->list('alice'), 'never the hash, never the password');
 		$this->expectException(InvalidArgumentException::class);
 		$this->appPasswords->create('alice', 'Bluesky on my phone');
 	}

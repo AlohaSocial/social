@@ -372,7 +372,7 @@ describe('BlueskySettings', () => {
 			await flushPromises()
 
 			expect(confirmPassword).toHaveBeenCalled()
-			expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky' })
+			expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky', privileged: false })
 			const box = section(wrapper).find('.bluesky-settings__new-password')
 			expect(box.text()).toContain('New app password for Bluesky')
 			expect(box.find('code').text()).toBe(PASSWORD)
@@ -389,6 +389,22 @@ describe('BlueskySettings', () => {
 			expect(section(wrapper).text()).not.toContain(PASSWORD)
 		})
 
+		it('makes a privileged one for the direct messages, and says which ones are', async () => {
+			serverHasPasswords()
+			axios.post.mockResolvedValue({ data: { id: 3, name: 'Chat', password: PASSWORD, privileged: true, app_passwords: [PHONE, TABLET, { id: 3, name: 'Chat', creation: NOW, last_used: 0, privileged: true }] } })
+			const wrapper = mountSettings()
+			await flushPromises()
+
+			await nameField(wrapper).setValue('Chat')
+			wrapper.findComponent({ name: 'BlueskySettings' }).vm.appPasswordPrivileged = true
+			await buttonByText(wrapper, 'Make an app password').trigger('click')
+			await flushPromises()
+
+			expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Chat', privileged: true })
+			expect(rows(wrapper)[2].text()).toContain('Can read and send direct messages')
+			expect(rows(wrapper)[0].text()).not.toContain('direct messages')
+		})
+
 		it('makes one on Enter', async () => {
 			serverHasPasswords()
 			axios.post.mockResolvedValue({ data: { id: 3, name: 'Bluesky', password: PASSWORD, app_passwords: [PHONE, TABLET] } })
@@ -399,7 +415,7 @@ describe('BlueskySettings', () => {
 			await nameField(wrapper).trigger('keydown', { key: 'Enter' })
 			await flushPromises()
 
-			expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky' })
+			expect(axios.post).toHaveBeenCalledWith(APP_PASSWORDS, { name: 'Bluesky', privileged: false })
 		})
 
 		it('makes nothing when the password dialog is dismissed', async () => {

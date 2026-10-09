@@ -195,12 +195,12 @@ class AtprotoAccountController extends Controller {
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/app-passwords')]
-	public function createAppPassword(string $name): DataResponse {
+	public function createAppPassword(string $name, bool $privileged = false): DataResponse {
 		if (!$this->config->isEnabled()) {
 			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
 		}
 		try {
-			$created = $this->appPasswords->create($this->userId(), $name);
+			$created = $this->appPasswords->create($this->userId(), $name, $privileged);
 		} catch (\InvalidArgumentException $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

@@ -109,6 +109,12 @@
 				placeholder="wss://jetstream2.us-east.bsky.network"
 				:helperText="t('social', 'Optional. A Jetstream endpoint brings posts from followed Bluesky accounts within seconds instead of on the next poll.')" />
 			<NcTextField
+				v-model="form.chat"
+				class="bluesky__field"
+				:label="t('social', 'Direct messages')"
+				placeholder="https://api.bsky.chat"
+				:helperText="t('social', 'Bluesky\'s chat service, which the direct messages of a Bluesky app signed in here go through, for app passwords that allow them. Empty turns direct messages off.')" />
+			<NcTextField
 				v-model="form.syncCeiling"
 				class="bluesky__number"
 				type="number"
@@ -262,7 +268,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
- * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, sync_ceiling: number, trusted_clients: string[]}} settings - what is set, in the app values' names
+ * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, chat: string, sync_ceiling: number, trusted_clients: string[]}} settings - what is set, in the app values' names
  * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
  */
@@ -286,6 +292,7 @@ function formOf(settings) {
 		plcDirectory: settings.plc_directory ?? '',
 		appview: settings.appview ?? '',
 		jetstream: settings.jetstream ?? '',
+		chat: settings.chat ?? '',
 		syncCeiling: String(settings.sync_ceiling ?? 200),
 		trustedClients: (settings.trusted_clients ?? []).join('\n'),
 	}
@@ -367,7 +374,7 @@ export default {
 			if (relays.join('\n') !== (stored.relays ?? []).join('\n')) {
 				changes.relays = relays
 			}
-			for (const [field, key] of [['plcDirectory', 'plc_directory'], ['appview', 'appview'], ['jetstream', 'jetstream']]) {
+			for (const [field, key] of [['plcDirectory', 'plc_directory'], ['appview', 'appview'], ['jetstream', 'jetstream'], ['chat', 'chat']]) {
 				if (this.form[field].trim() !== (stored[key] ?? '')) {
 					changes[key] = this.form[field].trim()
 				}
