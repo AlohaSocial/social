@@ -213,7 +213,7 @@
 /**
  * @typedef Notification - https://docs.joinmastodon.org/entities/Notification
  * @property {string} id - Ex: "34975861"
- * @property {"mention"|"status"|"reblog"|"follow"|"follow_request"|"favourite"|"poll"|"update"|"admin.sign_up"|"admin.report"} type - Ex: "mention"
+ * @property {"mention"|"status"|"reblog"|"follow"|"follow_request"|"favourite"|"poll"|"update"|"admin.sign_up"|"admin.report"|"bluesky:repost_liked"|"bluesky:repost_reposted"|"bluesky:verified"|"bluesky:unverified"|"bluesky:starterpack_joined"} type - Ex: "mention"; the `bluesky:` ones are what only Bluesky tells
  * @property {string} created_at - Ex: "2016-03-16T14:34:26.392Z"
  * @property {Account} account -
  * @property {Status} [status] -

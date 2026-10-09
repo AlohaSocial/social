@@ -987,6 +987,34 @@ class NotificationServiceTest extends TestCase {
 		$this->assertSame(self::BOB, $this->stored[0]->getAttributedTo());
 	}
 
+	/** A bell rung on Bluesky tells as the bell rung here does, and once if both are. */
+	public function testAPostOfABellRungOnBlueskyIsTheBellsOwnNotification(): void {
+		$this->installActivityPub();
+		$this->captureStoredRows();
+
+		$this->service->onSubscribedPost(self::POST, self::ALICE);
+		$this->service->onSubscribedPost(self::POST, 'https://remote.example/users/dave');
+
+		$this->assertCount(1, $this->stored, 'local subscribers only');
+		$this->assertSame(Stream::SUBTYPE_STATUS, $this->stored[0]->getSubType());
+		$this->assertSame(self::POST . '/notification+status/' . md5(self::ALICE), $this->stored[0]->getId(), 'the id the bell rung here gives it');
+		$this->assertSame(self::BOB, $this->stored[0]->getAttributedTo());
+	}
+
+	public function testWhatOnlyBlueskyTellsIsTheAccountsAndAboutThePostWhereThereIsOne(): void {
+		$this->installActivityPub();
+		$this->captureStoredRows();
+
+		$this->service->onBlueskyEvent(Stream::SUBTYPE_BLUESKY_REPOST_LIKED, self::ALICE, self::BOB, self::POST, '{account} liked your boost', 'at://like/1');
+		$this->service->onBlueskyEvent(Stream::SUBTYPE_BLUESKY_VERIFIED, self::ALICE, self::BOB, '', '{account} verified your account on Bluesky', 'at://v/1');
+		$this->service->onBlueskyEvent(Stream::SUBTYPE_BLUESKY_VERIFIED, 'https://remote.example/users/dave', self::BOB, '', 'x', 'at://v/2');
+
+		$this->assertCount(2, $this->stored);
+		$this->assertSame([Stream::SUBTYPE_BLUESKY_REPOST_LIKED, self::POST, self::ALICE, self::BOB], [$this->stored[0]->getSubType(), $this->stored[0]->getObjectId(), $this->stored[0]->getTo(), $this->stored[0]->getAttributedTo()]);
+		$this->assertSame('', $this->stored[1]->getObjectId(), 'about the account, not a post');
+		$this->assertNotSame($this->stored[0]->getId(), $this->stored[1]->getId());
+	}
+
 	public function testTheAuthorIsNotToldAboutTheirOwnEdit(): void {
 		$this->installActivityPub();
 		$this->captureStoredRows();

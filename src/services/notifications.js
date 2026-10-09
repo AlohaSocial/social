@@ -22,6 +22,11 @@ export const NOTIFICATION_TYPES = [
 	'update',
 	'moderation_warning',
 	'severed_relationships',
+	'bluesky:repost_liked',
+	'bluesky:repost_reposted',
+	'bluesky:verified',
+	'bluesky:unverified',
+	'bluesky:starterpack_joined',
 ]
 
 /**
@@ -278,6 +283,16 @@ export function notificationSummary(notification) {
 			return translate('social', '{account} signed up', { account: notification.account.acct })
 		case 'admin.report':
 			return translate('social', '{account} filed a report', { account: notification.account.acct })
+		case 'bluesky:repost_liked':
+			return translate('social', '{account} liked your boost', { account: notification.account.acct })
+		case 'bluesky:repost_reposted':
+			return translate('social', '{account} boosted your boost', { account: notification.account.acct })
+		case 'bluesky:verified':
+			return translate('social', '{account} verified your account on Bluesky', { account: notification.account.acct })
+		case 'bluesky:unverified':
+			return translate('social', '{account} no longer verifies your account on Bluesky', { account: notification.account.acct })
+		case 'bluesky:starterpack_joined':
+			return translate('social', '{account} joined Bluesky with your starter pack', { account: notification.account.acct })
 		default:
 			return ''
 	}

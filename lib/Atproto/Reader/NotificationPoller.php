@@ -21,7 +21,9 @@ use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AppViewNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ImportService;
+use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\SignatureService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
@@ -57,6 +59,7 @@ class NotificationPoller {
 		private BlueskyActorService $actors,
 		private Blocklist $blocklist,
 		private ImportService $import,
+		private NotificationService $notifications,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 	) {
@@ -177,6 +180,59 @@ class NotificationPoller {
 			case 'mention':
 			case 'quote':
 				return $this->store->storeByUri($uri);
+			case 'subscribed-post':
+				// a bell rung on Bluesky: the post, and the bell's notification
+				if (!$this->ensureActor($author)) {
+					return false;
+				}
+				$this->store->storeByUri($uri);
+				$this->notifications->onSubscribedPost(BlueskyIds::postIdOfUri($uri), $identity->actorId);
+
+				return true;
+			case 'like-via-repost':
+			case 'repost-via-repost':
+				// the like or repost names the post, and the repost it came through
+				$post = (string)($notification['record']['subject']['uri'] ?? '');
+				$postId = $this->local->postId($post);
+				if ($postId === '' || !$this->ensureActor($author)) {
+					return false;
+				}
+				if (BlueskyIds::isPostId($postId)) {
+					$this->store->storeByUri($post);
+				}
+				$liked = $reason === 'like-via-repost';
+				$this->notifications->onBlueskyEvent(
+					$liked ? Stream::SUBTYPE_BLUESKY_REPOST_LIKED : Stream::SUBTYPE_BLUESKY_REPOST_REPOSTED,
+					$identity->actorId, $actorId, $postId,
+					$liked ? '{account} liked your boost' : '{account} boosted your boost',
+					$uri,
+				);
+
+				return true;
+			case 'verified':
+			case 'unverified':
+				if (!$this->ensureActor($author)) {
+					return false;
+				}
+				$verified = $reason === 'verified';
+				$this->notifications->onBlueskyEvent(
+					$verified ? Stream::SUBTYPE_BLUESKY_VERIFIED : Stream::SUBTYPE_BLUESKY_UNVERIFIED,
+					$identity->actorId, $actorId, '',
+					$verified ? '{account} verified your account on Bluesky' : '{account} no longer verifies your account on Bluesky',
+					$uri,
+				);
+
+				return true;
+			case 'starterpack-joined':
+				if (!$this->ensureActor($author)) {
+					return false;
+				}
+				$this->notifications->onBlueskyEvent(
+					Stream::SUBTYPE_BLUESKY_STARTER_PACK, $identity->actorId, $actorId, '',
+					'{account} joined Bluesky with your starter pack', $uri,
+				);
+
+				return true;
 		}
 
 		return false;

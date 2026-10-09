@@ -36,7 +36,9 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Like;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ImportService;
+use OCA\Social\Service\NotificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -61,6 +63,8 @@ class NotificationPollerTest extends TestCase {
 	/** @var IdentityService&MockObject */
 	private IdentityService $identities;
 	private NotificationPoller $poller;
+	/** @var NotificationService&MockObject */
+	private NotificationService $notifications;
 	private Identity $alice;
 	/** @var ACore[] */
 	private array $imported = [];
@@ -108,7 +112,8 @@ class NotificationPollerTest extends TestCase {
 		});
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
-		$this->poller = new NotificationPoller($config, $this->identities, $this->cursors, $this->appView, $this->store, new LocalRecordResolver($identityRequest, $records), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $import, $time, new NullLogger());
+		$this->notifications = $this->createMock(NotificationService::class);
+		$this->poller = new NotificationPoller($config, $this->identities, $this->cursors, $this->appView, $this->store, new LocalRecordResolver($identityRequest, $records), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $import, $this->notifications, $time, new NullLogger());
 	}
 
 	protected function tearDown(): void {
@@ -135,9 +140,47 @@ class NotificationPollerTest extends TestCase {
 	public function testALikeOfSomethingNotOursAndOtherReasonsAreIgnored(): void {
 		$this->assertFalse($this->poller->handle($this->alice, $this->notification('like', 'app.bsky.feed.like', '3k', 'at://' . self::BOB . '/' . RecordMapper::POST . '/3kother')));
 		$this->assertFalse($this->poller->handle($this->alice, $this->notification('like', 'app.bsky.feed.like', '3k', 'at://' . self::LOCAL . '/' . RecordMapper::POST . '/3knever')), 'a record we did not write');
-		$this->assertFalse($this->poller->handle($this->alice, $this->notification('starterpack-joined', 'app.bsky.graph.starterpack', '3k')));
-		$this->assertFalse($this->poller->handle($this->alice, $this->notification('verified', 'app.bsky.graph.verification', '3k')));
+		$this->assertFalse($this->poller->handle($this->alice, $this->notification('something-new', 'app.bsky.graph.whatever', '3k')));
 		$this->assertSame([], $this->imported);
+	}
+
+	public function testAPostOfABellRungOnBlueskyIsStoredAndTheBellsNotification(): void {
+		$this->store->expects($this->once())->method('storeByUri')->with('at://' . self::BOB . '/app.bsky.feed.post/3kbell');
+		$this->notifications->expects($this->once())->method('onSubscribedPost')->with('https://bsky.app/profile/' . self::BOB . '/post/3kbell', $this->alice->actorId);
+
+		$this->assertTrue($this->poller->handle($this->alice, $this->notification('subscribed-post', RecordMapper::POST, '3kbell')));
+	}
+
+	public function testALikeOrRepostOfARepostTellsOfThePostThatWasReposted(): void {
+		$events = [];
+		$this->notifications->method('onBlueskyEvent')->willReturnCallback(function (string $subType, string $to, string $by, string $object) use (&$events): void {
+			$events[] = [$subType, $to, $by, $object];
+		});
+		$like = $this->notification('like-via-repost', 'app.bsky.feed.like', '3kl');
+		$like['record'] = ['subject' => ['uri' => 'at://' . self::LOCAL . '/' . RecordMapper::POST . '/3kmine', 'cid' => 'x'], 'via' => ['uri' => 'at://' . self::LOCAL . '/app.bsky.feed.repost/3kr', 'cid' => 'y']];
+		$repost = $this->notification('repost-via-repost', 'app.bsky.feed.repost', '3kp');
+		$repost['record'] = ['subject' => ['uri' => 'at://did:plc:carol/' . RecordMapper::POST . '/3kc', 'cid' => 'x']];
+		$this->store->expects($this->once())->method('storeByUri')->with('at://did:plc:carol/' . RecordMapper::POST . '/3kc');
+
+		$this->assertTrue($this->poller->handle($this->alice, $like));
+		$this->assertTrue($this->poller->handle($this->alice, $repost));
+		$bob = 'https://bsky.app/profile/' . self::BOB;
+		$this->assertSame([
+			[Stream::SUBTYPE_BLUESKY_REPOST_LIKED, $this->alice->actorId, $bob, 'https://social.test/@alice/1'],
+			[Stream::SUBTYPE_BLUESKY_REPOST_REPOSTED, $this->alice->actorId, $bob, 'https://bsky.app/profile/did:plc:carol/post/3kc'],
+		], $events);
+	}
+
+	public function testVerificationAndAStarterPackJoinedAreTold(): void {
+		$events = [];
+		$this->notifications->method('onBlueskyEvent')->willReturnCallback(function (string $subType) use (&$events): void {
+			$events[] = $subType;
+		});
+
+		$this->assertTrue($this->poller->handle($this->alice, $this->notification('verified', 'app.bsky.graph.verification', '3kv')));
+		$this->assertTrue($this->poller->handle($this->alice, $this->notification('unverified', 'app.bsky.graph.verification', '3ku')));
+		$this->assertTrue($this->poller->handle($this->alice, $this->notification('starterpack-joined', 'app.bsky.graph.starterpack', '3ks')));
+		$this->assertSame([Stream::SUBTYPE_BLUESKY_VERIFIED, Stream::SUBTYPE_BLUESKY_UNVERIFIED, Stream::SUBTYPE_BLUESKY_STARTER_PACK], $events);
 	}
 
 	public function testRepliesMentionsAndQuotesStoreTheirPost(): void {
@@ -171,7 +214,7 @@ class NotificationPollerTest extends TestCase {
 		$gone = new Identity(1, 'https://social.test/@alice', self::LOCAL, 'alice.social.test', 'sealed', '', '', Identity::STATE_DEACTIVATED, '', 0);
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('getByDid')->willReturn($gone);
-		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(ImportService::class), $this->createMock(ITimeFactory::class), new NullLogger());
+		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(ImportService::class), $this->createMock(NotificationService::class), $this->createMock(ITimeFactory::class), new NullLogger());
 		$this->cursors->expects($this->once())->method('remove')->with(self::LOCAL, self::TABLE);
 		$this->appView->expects($this->never())->method('queryAs');
 
@@ -181,7 +224,7 @@ class NotificationPollerTest extends TestCase {
 	public function testABlockedAccountsInteractionsAreDroppedOnArrival(): void {
 		$blocklist = $this->createMock(Blocklist::class);
 		$blocklist->method('isBlockedDid')->willReturn(true);
-		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $this->identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $blocklist, $this->createMock(ImportService::class), $this->createMock(ITimeFactory::class), new NullLogger());
+		$poller = new NotificationPoller($this->createMock(AtprotoConfig::class), $this->identities, $this->cursors, $this->appView, $this->store, $this->createMock(LocalRecordResolver::class), new ActorMapper(), $this->actors, $blocklist, $this->createMock(ImportService::class), $this->createMock(NotificationService::class), $this->createMock(ITimeFactory::class), new NullLogger());
 		$this->store->expects($this->never())->method('storeByUri');
 
 		$this->assertFalse($poller->handle($this->alice, $this->notification('follow', 'app.bsky.graph.follow', '3kf')));

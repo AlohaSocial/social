@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Reader\ActivitySubscriptions;
 use OCA\Social\Db\AccountNotesRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
@@ -18,6 +19,7 @@ use OCA\Social\Exceptions\InvalidResourceException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Relationship;
+use Psr\Container\ContainerInterface;
 
 /**
  * The three things one account keeps about another beside a follow, a block or
@@ -88,6 +90,7 @@ class AccountRelationService {
 		private MuteExpiryRequest $muteExpiryRequest,
 		private DomainBlockService $domainBlockService,
 		private RelationshipService $relationshipService,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -182,11 +185,12 @@ class AccountRelationService {
 
 		if ($notify) {
 			$this->actorRelationRequest->save($viewer->getId(), $target->getId(), self::TYPE_NOTIFY);
-
-			return;
+		} else {
+			$this->actorRelationRequest->delete($viewer->getId(), $target->getId(), self::TYPE_NOTIFY);
 		}
-
-		$this->actorRelationRequest->delete($viewer->getId(), $target->getId(), self::TYPE_NOTIFY);
+		// a Bluesky account's bell is kept on Bluesky too; resolved here, as
+		// the Bluesky side needs services that need this one
+		$this->container?->get(ActivitySubscriptions::class)->set($viewer, $target, $notify);
 	}
 
 	/**

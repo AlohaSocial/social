@@ -676,7 +676,14 @@ path, so **D14** holds without a second notification system:
 | `reply` | the reply post is fetched (`getPostThread`), stored with `in_reply_to`, a mention/reply notification follows |
 | `mention` | the post is fetched and stored; a mention notification |
 | `quote` | the quoting post is fetched; a quote notification (Social has quote notifications already) |
-| `starterpack-joined`, `verified`, `unverified` | ignored |
+| `subscribed-post` | a post of an account whose bell the person rang in a Bluesky app: the post stored, and the bell's own notification (`status`), under the id a bell rung here gives it, so one rung both ways tells once. Ringing the bell here on a Bluesky account rings it on Bluesky too (`app.bsky.notification.putActivitySubscription`, `Reader\ActivitySubscriptions`), so a Bluesky app shows it |
+| `like-via-repost`, `repost-via-repost` | `bluesky:repost_liked`, `bluesky:repost_reposted`: somebody liked or reposted the person's repost, about the post that was reposted |
+| `verified`, `unverified` | `bluesky:verified`, `bluesky:unverified`: a trusted verifier verified the account on Bluesky, or no longer does |
+| `starterpack-joined` | `bluesky:starterpack_joined`: somebody joined Bluesky with the person's starter pack |
+
+The `bluesky:` kinds are this app's own, as Pixelfed's `story:` ones are:
+the web app words them; a Mastodon client leaves out a kind it does not
+know, as Mastodon's API asks; they raise no Nextcloud notification.
 
 The **notification policy** (`NotificationPolicyService`) sees a Bluesky
 sender like any other: `for_not_following` holds a like from a Bluesky

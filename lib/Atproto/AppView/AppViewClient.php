@@ -65,12 +65,29 @@ class AppViewClient {
 	}
 
 	/**
-	 * @param array<string, string|int|string[]> $params
-	 * @param array<string, string> $headers
+	 * A procedure as a local user, its input as JSON: what the AppView keeps
+	 * for the user rather than in their repository, such as whose posts they
+	 * want to be told about.
+	 *
 	 * @throws AppViewNotFoundException
 	 * @throws AtprotoException
 	 */
-	private function get(string $base, string $method, array $params, array $headers): array {
+	public function procedureAs(string $did, PrivateKey $key, string $method, array $input): array {
+		$token = $this->serviceAuth->token($key, $did, $this->config->appViewDid(), $method);
+
+		return $this->get($this->config->appViewAuth(), $method, [], ['Authorization' => 'Bearer ' . $token], $input);
+	}
+
+	/**
+	 * A query, or with an input a procedure.
+	 *
+	 * @param array<string, string|int|string[]> $params
+	 * @param array<string, string> $headers
+	 * @param array|null $input a procedure's input, sent as JSON
+	 * @throws AppViewNotFoundException
+	 * @throws AtprotoException
+	 */
+	private function get(string $base, string $method, array $params, array $headers, ?array $input = null): array {
 		$url = $base . '/xrpc/' . $method;
 		$query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
 		if ($query !== '') {
@@ -79,14 +96,14 @@ class AppViewClient {
 		$status = 0;
 		$contentType = '';
 		try {
-			$answer = $this->curlService->doRequest('get', $url, [
-				'headers' => $headers + ['Accept' => 'application/json'],
+			$answer = $this->curlService->doRequest($input === null ? 'get' : 'post', $url, [
+				'headers' => $headers + ['Accept' => 'application/json'] + ($input === null ? [] : ['Content-Type' => 'application/json']),
 				'timeout' => self::TIMEOUT,
 				'json_headers' => false,
 				'accept_errors' => true,
 				// the interop job runs its own AppView on this machine
 				'allow_local_address' => !str_starts_with($base, 'https://'),
-			], $contentType, $status);
+			] + ($input === null ? [] : ['body' => (string)json_encode($input === [] ? new \stdClass() : $input, JSON_UNESCAPED_SLASHES)]), $contentType, $status);
 		} catch (Throwable $e) {
 			throw new AtprotoException('AppView could not be reached for ' . $method . ': ' . $e->getMessage(), 0, $e);
 		}

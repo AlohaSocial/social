@@ -41,6 +41,10 @@
 				<MessageOutline v-if="notification.type === 'status'" :size="16" />
 				<MessagePlusOutline v-if="notification.type === 'update'" :size="16" />
 				<Poll v-if="notification.type === 'poll'" :size="16" />
+				<Heart v-if="notification.type === 'bluesky:repost_liked'" :size="16" />
+				<Repeat v-if="notification.type === 'bluesky:repost_reposted'" :size="16" />
+				<CheckDecagram v-if="notification.type === 'bluesky:verified'" :size="16" />
+				<AccountPlusOutline v-if="notification.type === 'bluesky:starterpack_joined'" :size="16" />
 				{{ actionSummary }}
 			</span>
 			<span class="notification__details">
@@ -154,6 +158,7 @@ import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue
 import AccountQuestion from 'vue-material-design-icons/AccountQuestion.vue'
 import At from 'vue-material-design-icons/At.vue'
 import Poll from 'vue-material-design-icons/Poll.vue'
+import CheckDecagram from 'vue-material-design-icons/CheckDecagram.vue'
 import MessageOutline from 'vue-material-design-icons/MessageOutline.vue'
 import MessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline.vue'
 import Pound from 'vue-material-design-icons/Pound.vue'
@@ -213,6 +218,7 @@ export default {
 		AccountQuestion,
 		At,
 		Poll,
+		CheckDecagram,
 		MessageOutline,
 		MessagePlusOutline,
 		Pound,
@@ -432,7 +438,7 @@ export default {
 
 		/** @return {boolean} */
 		notificationIsAboutAnAccount() {
-			return ['follow', 'follow_request', 'admin.sign_up', 'admin.report'].includes(this.notification.type)
+			return ['follow', 'follow_request', 'admin.sign_up', 'admin.report', 'bluesky:verified', 'bluesky:unverified', 'bluesky:starterpack_joined'].includes(this.notification.type)
 		},
 
 		/**
