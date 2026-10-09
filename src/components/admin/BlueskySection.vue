@@ -491,6 +491,8 @@ export default {
 					return t('social', 'Firehose daemon')
 				case 'firehose':
 					return t('social', 'Firehose proxied')
+				case 'relay_host':
+					return t('social', 'Relays carry this server')
 				default:
 					return id
 			}

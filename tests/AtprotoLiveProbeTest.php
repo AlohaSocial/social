@@ -34,4 +34,14 @@ class AtprotoLiveProbeTest extends TestCase {
 
 		$this->assertStringContainsString('contrib/atproto-live-probe.sh <host> alice.<host>', $guide);
 	}
+
+	public function testTheProbeAsksTheRelayHowItSeesTheHostAndTheChatService(): void {
+		$script = (string)file_get_contents(self::SCRIPT);
+
+		$this->assertStringContainsString('com.atproto.sync.getHostStatus?hostname=$HOST', $script);
+		foreach (['throttled', 'banned', 'offline', 'HostNotFound'] as $state) {
+			$this->assertStringContainsString($state . ')', $script, 'the relay state ' . $state . ' says what to do');
+		}
+		$this->assertStringContainsString('$CHAT/xrpc/_health', $script);
+	}
 }

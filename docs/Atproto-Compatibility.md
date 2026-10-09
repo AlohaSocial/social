@@ -1847,6 +1847,17 @@ before.
   `atproto-proxy: <did>#atproto_labeler`. *verify* label value names.
 - PDS rate limits (3,000 points/hour/DID for writes; per-IP on
   `createSession`): *verify*.
+- Relays limit hosts, not only accounts (checked 2026-10-09 against
+  `bsky.network`): `com.atproto.sync.getHostStatus?hostname=` answers
+  `status` (`active`, `idle`, `offline`, `throttled`, `banned`) and
+  `accountCount`, or `HostNotFound` for a host it never crawled. A new host
+  is limited in accounts and events and throttled past that; the limit is
+  raised by the relay's operator. The admin card's `relay_host` check and
+  the live probe read it. The size of the default limit: *verify*.
+- Push to a Bluesky app signed in here (`app.bsky.notification.registerPush`)
+  and age assurance (`app.bsky.ageassurance.*`) are AppView calls passed on
+  by the proxy (§16.2), untested against the real AppView: *verify* with
+  §3.9 of docs/Atproto-Live-Test.md.
 - Packagist: `spomky-labs/cbor-php` 3.4.2, `paragonie/ecc` 2.6.0 (gmp),
   `ratchet/rfc6455` 0.4.1, `react/socket` 1.17.0 — usable on PHP 8.3.
   `aazsamir/libphpsky` and `karanshukla/php-atproto-identity` need PHP ≥ 8.4
