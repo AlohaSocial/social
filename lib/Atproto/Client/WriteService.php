@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
@@ -64,7 +65,9 @@ use Throwable;
  * writes for it is the answer. The app shows what it gets back; the text may
  * differ where Social's mapping does (a long post cut with a link, say).
  * Lists, starter packs, feed generators and gates, which Social has no
- * counterpart for, are kept as written (`KEPT_AS_WRITTEN`). Anything else —
+ * counterpart for, are kept as written (`KEPT_AS_WRITTEN`). Who may send
+ * the person direct messages (`chat.bsky.actor.declaration`) is the setting
+ * here, which writes the record (`ChatDeclaration`). Anything else —
  * blocks and list blocks (D16) among it — is refused, and a post can only be
  * public: that is what goes to Bluesky (D8).
  */
@@ -109,6 +112,7 @@ class WriteService {
 		private IdentityService $identities,
 		private RelationshipService $relationships,
 		private BlueskyBlocks $blocks,
+		private ChatDeclaration $declaration,
 	) {
 	}
 
@@ -121,6 +125,9 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		if ($collection === ChatDeclaration::COLLECTION) {
+			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), $record));
+		}
 		$actor = $this->actor($session);
 		$written = match ($collection) {
 			RecordMapper::POST => $this->post($session, $actor, $record),
@@ -137,8 +144,8 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.putRecord`: the profile, which is the one record an
-	 * app replaces.
+	 * `com.atproto.repo.putRecord`: the profile and who may send direct
+	 * messages, which are the records an app replaces.
 	 *
 	 * @throws XrpcException
 	 */
@@ -149,6 +156,9 @@ class WriteService {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
 			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record));
+		}
+		if ($collection === ChatDeclaration::COLLECTION) {
+			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), is_array($body['record'] ?? null) ? $body['record'] : []));
 		}
 		if ($collection !== RecordMapper::PROFILE || ($body['rkey'] ?? '') !== RecordMapper::PROFILE_RKEY) {
 			throw $this->unsupported($collection);
@@ -771,6 +781,19 @@ class WriteService {
 			: RepoWrite::update($collection, $rkey, $record));
 
 		return $this->repositories->getRecord($did, $collection, $rkey)
+			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
+	}
+
+	/**
+	 * Who may send direct messages, as an app chose it: the setting here,
+	 * and the record it wrote.
+	 *
+	 * @throws XrpcException
+	 */
+	private function declared(ClientSession $session, string $rkey, array $record): StoredRecord {
+		$this->declaration->fromApp($session, $rkey, $record);
+
+		return $this->repositories->getRecord($session->identity->did, ChatDeclaration::COLLECTION, RecordMapper::PROFILE_RKEY)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
 	}
 

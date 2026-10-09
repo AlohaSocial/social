@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Chat\ChatDeclaration;
+use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Client\NotificationSettings;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ModerationRequest;
@@ -49,6 +51,14 @@ use Psr\Container\ContainerInterface;
  * stored, so what is held raises no Nextcloud notification — no bell, push or
  * mail (`isHeldFor()`, called from `NotificationService::emit()`).
  *
+ * Who may send the account direct messages (`directMessagesFrom()`) is the
+ * policy's `for_private_mentions` seen from the other side: everybody when
+ * it accepts them, the people the account follows when it holds the rest,
+ * and nobody when it holds every direct message, whoever sent it — the one
+ * answer the five questions have no room for, stored beside the policy
+ * (`DIRECT_NOBODY_KEY`). Bluesky has the same setting
+ * (`chat.bsky.actor.declaration`), written whenever the answer changes.
+ *
  * Reading is where the list is filtered, not writing, and that has a cost
  * worth naming: `/api/v1/notifications` reads a page and then removes what is held,
  * so a page can come back short. It is the same trade `FilterService` makes,
@@ -67,6 +77,15 @@ class NotificationPolicyService {
 
 	/** Set to `1` once the reader has put away the one-time pointer to the policy. */
 	public const NOTICE_KEY = 'notification_policy_notice_dismissed';
+
+	/** Set to `1` while the account takes direct messages from nobody. */
+	public const DIRECT_NOBODY_KEY = 'direct_messages_nobody';
+
+	/** Who may send the account direct messages. */
+	public const DIRECT_ALL = 'all';
+	public const DIRECT_FOLLOWING = 'following';
+	public const DIRECT_NONE = 'none';
+	public const DIRECT_FROM = [self::DIRECT_ALL, self::DIRECT_FOLLOWING, self::DIRECT_NONE];
 
 	/** The two answers an administrator may give for new accounts. */
 	public const DEFAULT_DECISIONS = [NotificationPolicy::ACCEPT, NotificationPolicy::FILTER];
@@ -210,9 +229,14 @@ class NotificationPolicyService {
 		}
 
 		$before = $this->of($userId)->get(NotificationPolicy::NOT_FOLLOWING);
+		$messagesBefore = $this->directMessagesFrom($userId);
 		$this->configService->setValueForUser(
 			$userId, self::CONFIG_KEY, (string)json_encode($policy->getDecisions())
 		);
+		// direct messages from strangers taken in again: from everybody
+		if ($policy->get(NotificationPolicy::PRIVATE_MENTIONS) === NotificationPolicy::ACCEPT) {
+			$this->fromNobody($userId, false);
+		}
 		// who may notify is also a Bluesky app's setting (`NotificationSettings`)
 		if ($policy->get(NotificationPolicy::NOT_FOLLOWING) !== $before) {
 			$settings = $this->container?->get(NotificationSettings::class);
@@ -220,8 +244,72 @@ class NotificationPolicyService {
 				$settings->policyChanged($userId);
 			}
 		}
+		$this->directMessagesChanged($userId, $messagesBefore);
 
 		return $policy;
+	}
+
+	/**
+	 * Who may send the account direct messages: `all`, `following` or
+	 * `none`, as the policy says it.
+	 */
+	public function directMessagesFrom(string $userId): string {
+		if ($this->configService->getUserValue(self::DIRECT_NOBODY_KEY, $userId) === '1') {
+			return self::DIRECT_NONE;
+		}
+
+		return $this->of($userId)->get(NotificationPolicy::PRIVATE_MENTIONS) === NotificationPolicy::ACCEPT
+			? self::DIRECT_ALL : self::DIRECT_FOLLOWING;
+	}
+
+	/**
+	 * Changes who may send the account direct messages, and answers with it:
+	 * `for_private_mentions` accepts them for `all` and holds them otherwise
+	 * (a `drop` stays a `drop`), and `none` holds the ones from people the
+	 * account follows as well.
+	 *
+	 * @throws InvalidResourceException anything but the three answers; nothing is written
+	 */
+	public function saveDirectMessagesFrom(string $userId, string $from): string {
+		if (!in_array($from, self::DIRECT_FROM, true)) {
+			throw new InvalidResourceException('from must be all, following or none');
+		}
+
+		$before = $this->directMessagesFrom($userId);
+		$this->fromNobody($userId, $from === self::DIRECT_NONE);
+		$policy = $this->of($userId);
+		$private = $policy->get(NotificationPolicy::PRIVATE_MENTIONS);
+		$wanted = ($from === self::DIRECT_ALL)
+			? NotificationPolicy::ACCEPT
+			: ($private === NotificationPolicy::ACCEPT ? NotificationPolicy::FILTER : $private);
+		if ($wanted !== $private) {
+			$policy->set(NotificationPolicy::PRIVATE_MENTIONS, $wanted);
+			$this->configService->setValueForUser(
+				$userId, self::CONFIG_KEY, (string)json_encode($policy->getDecisions())
+			);
+		}
+		$this->directMessagesChanged($userId, $before);
+
+		return $this->directMessagesFrom($userId);
+	}
+
+	private function fromNobody(string $userId, bool $nobody): void {
+		$stored = $this->configService->getUserValue(self::DIRECT_NOBODY_KEY, $userId) === '1';
+		if ($stored !== $nobody) {
+			$this->configService->setValueForUser($userId, self::DIRECT_NOBODY_KEY, $nobody ? '1' : '');
+		}
+	}
+
+	/** Who may send direct messages is Bluesky's setting too (`ChatDeclaration`). */
+	private function directMessagesChanged(string $userId, string $before): void {
+		$now = $this->directMessagesFrom($userId);
+		if ($now === $before) {
+			return;
+		}
+		$declaration = $this->container?->get(ChatDeclaration::class);
+		if ($declaration instanceof ChatDeclaration) {
+			$declaration->changed($userId, $now);
+		}
 	}
 
 	/**
@@ -251,6 +339,7 @@ class NotificationPolicyService {
 		}
 
 		$facts = $this->factsAbout($viewer, $senders);
+		$nobody = $this->directMessagesFrom($viewer->getUserId()) === self::DIRECT_NONE;
 
 		$shown = [];
 		$held = [];
@@ -259,7 +348,7 @@ class NotificationPolicyService {
 			$senderId = $sender?->getId() ?? '';
 			if ($senderId === ''
 				|| !$this->isHeld(
-					$policy, $senderId, $sender?->getCreation() ?? 0, $this->isPrivateMention($notification), $facts
+					$policy, $senderId, $sender?->getCreation() ?? 0, $this->isPrivateMention($notification), $facts, $nobody
 				)) {
 				$shown[] = $notification;
 
@@ -291,7 +380,8 @@ class NotificationPolicyService {
 		}
 
 		return $this->isHeld(
-			$policy, $senderId, $senderCreation, $directMention, $this->factsAbout($viewer, [$senderId])
+			$policy, $senderId, $senderCreation, $directMention, $this->factsAbout($viewer, [$senderId]),
+			$this->directMessagesFrom($viewer->getUserId()) === self::DIRECT_NONE
 		);
 	}
 
@@ -367,6 +457,8 @@ class NotificationPolicyService {
 	public function accept(Person $viewer, Person $sender): void {
 		$this->accountRelationService->acceptNotifications($viewer, $sender);
 		$this->timelineRevisionService->bump($viewer->getUserId());
+		// their message request on Bluesky is accepted with them
+		$this->chatState()?->acceptedSender($viewer, $sender);
 	}
 
 	/**
@@ -380,6 +472,18 @@ class NotificationPolicyService {
 	public function dismiss(Person $viewer, Person $sender): void {
 		$this->accountRelationService->dismissNotifications($viewer, $sender);
 		$this->timelineRevisionService->bump($viewer->getUserId());
+		// and their message request on Bluesky turned down, not accepted
+		$this->chatState()?->dismissedSender($viewer, $sender);
+	}
+
+	private function chatState(): ?ChatState {
+		try {
+			$state = $this->container?->get(ChatState::class);
+		} catch (\Throwable) {
+			return null;
+		}
+
+		return $state instanceof ChatState ? $state : null;
 	}
 
 	/**
@@ -471,6 +575,7 @@ class NotificationPolicyService {
 		int $senderCreation,
 		bool $privateMention,
 		array $facts,
+		bool $directFromNobody = false,
 	): bool {
 		// a decision the reader has already taken outranks the policy, in
 		// both directions: the policy is about accounts nobody has decided
@@ -488,7 +593,7 @@ class NotificationPolicyService {
 			NotificationPolicy::NOT_FOLLOWING => !$following,
 			NotificationPolicy::NOT_FOLLOWERS => !isset($facts['followers'][$senderId]),
 			NotificationPolicy::NEW_ACCOUNTS => $this->isNewAccount($senderCreation),
-			NotificationPolicy::PRIVATE_MENTIONS => !$following && $privateMention,
+			NotificationPolicy::PRIVATE_MENTIONS => $privateMention && (!$following || $directFromNobody),
 			NotificationPolicy::LIMITED_ACCOUNTS => isset($facts['silenced'][$senderId]),
 		] as $key => $applies) {
 			if ($applies && $policy->get($key) !== NotificationPolicy::ACCEPT) {

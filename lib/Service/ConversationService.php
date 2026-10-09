@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Atproto\Chat\ChatPoller;
+use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -198,6 +199,7 @@ class ConversationService {
 		}
 
 		$marked = 0;
+		$ids = [];
 		foreach ($this->entities($viewer, $this->group($messages)) as $conversation) {
 			if (!$conversation->isUnread()) {
 				continue;
@@ -207,7 +209,10 @@ class ConversationService {
 				$viewer->getId(), $conversation->getRootId(), $conversation->getLastStatusNid()
 			);
 			$marked++;
+			$ids[] = $conversation->getRootId();
+			$ids[] = $conversation->getLastStatus()?->getId() ?? '';
 		}
+		$this->chatState()?->read($viewer, $ids, true);
 
 		return $marked;
 	}
@@ -227,8 +232,28 @@ class ConversationService {
 		$this->conversationsRequest->markRead(
 			$viewer->getId(), $root['id'], Nid::fromStorage($newest)
 		);
+		$this->chatState()?->read($viewer, [$root['id'], $this->newestIdOf($thread)]);
 
 		return $this->single($viewer, $root, $newest, false);
+	}
+
+	/**
+	 * Marks the conversation a message is in read up to that message, as the
+	 * account read it somewhere else; never back to an older one.
+	 *
+	 * @return bool whether the message is in one of the viewer's conversations
+	 */
+	public function markReadUpTo(Person $viewer, string $messageId): bool {
+		$this->readAs($viewer);
+		try {
+			$message = $this->streamService->getStreamById($messageId);
+			[$root] = $this->threadOf($viewer, $message->getNid());
+		} catch (Throwable) {
+			return false;
+		}
+		$this->conversationsRequest->markRead($viewer->getId(), $root['id'], Nid::fromStorage($message->getNid()));
+
+		return true;
 	}
 
 	/**
@@ -248,6 +273,22 @@ class ConversationService {
 		$this->conversationsRequest->markHidden(
 			$viewer->getId(), $root['id'], Nid::fromStorage($this->newestOf($thread))
 		);
+		// a request on Bluesky is turned down there, not accepted
+		$this->chatState()?->dismissed($viewer, [$root['id'], $this->newestIdOf($thread)]);
+	}
+
+	/**
+	 * Where a conversation's state goes to Bluesky; resolved when needed, as
+	 * the Bluesky side needs services that need this one.
+	 */
+	private function chatState(): ?ChatState {
+		try {
+			$state = $this->container?->get(ChatState::class);
+		} catch (Throwable) {
+			return null;
+		}
+
+		return $state instanceof ChatState ? $state : null;
 	}
 
 	/**
@@ -553,6 +594,22 @@ class ConversationService {
 		}
 
 		return $newest;
+	}
+
+	/**
+	 * The newest message of a thread, as its id.
+	 *
+	 * @param array<string, array{id: string, idPrim: string, nid: int|string, inReplyTo: string}> $thread
+	 */
+	private function newestIdOf(array $thread): string {
+		$newest = ['id' => '', 'nid' => '0'];
+		foreach ($thread as $link) {
+			if (Nid::compare($link['nid'], $newest['nid']) > 0) {
+				$newest = $link;
+			}
+		}
+
+		return $newest['id'];
 	}
 
 	/**

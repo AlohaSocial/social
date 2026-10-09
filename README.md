@@ -117,7 +117,7 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   other way too: follow `alice.bsky.social` by its bare handle and read it in your home feed, badged,
   its videos playing here; your likes and boosts reach Bluesky, and their follows, likes, replies and
   mentions reach your Activities. Bluesky's custom feeds and lists read as timelines of their own,
-  the same ones a Bluesky app keeps for you, and a starter pack opens here to follow everybody in it. Your pronouns and website rows are your Bluesky profile's, and a Bluesky account's show here as rows. Mutes, muted words, bookmarks and who may notify you are the same here and in a Bluesky app signed in here. Direct messages with somebody on Bluesky are conversations in your Messages like any other, both ways. With a Jetstream endpoint and `occ social:atproto:listen`, followed Bluesky accounts' posts arrive within seconds. Discover shows
+  the same ones a Bluesky app keeps for you, and a starter pack opens here to follow everybody in it. Your pronouns and website rows are your Bluesky profile's, and a Bluesky account's show here as rows. Mutes, muted words, bookmarks and who may notify you are the same here and in a Bluesky app signed in here. Direct messages with somebody on Bluesky are conversations in your Messages like any other, both ways: what you write in a Bluesky app shows here too, a conversation read in one place is read in the other, a message request is what a direct message from anybody you do not follow is here, and who may send you direct messages is the same setting in both. With a Jetstream endpoint and `occ social:atproto:listen`, followed Bluesky accounts' posts arrive within seconds. Discover shows
   what is trending on Bluesky and whom Bluesky suggests to you. Bluesky apps sign in here, their direct messages included, with Bluesky sign-in, or with an app
   password made in your settings, and post videos as they would on Bluesky. A Bluesky account of your
   own moves here with its followers and its posts — from Bluesky, from Bridgy Fed's bridge of your Fediverse account,
@@ -496,7 +496,9 @@ Activities, and raises no bell, push or mail. You decide about the person once �
 accept, and they are always allowed until you stop allowing them; dismiss, and what
 they sent is gone. New accounts start calm (strangers, new accounts, unsolicited
 private mentions and limited accounts held); existing accounts keep accepting
-everybody until they choose. Clients read it as Mastodon 4.3's notification policy,
+everybody until they choose. **Who may send you direct messages** — everybody, the
+people you follow, or nobody — is the private-mention question seen from the other side,
+in Settings → Profile and privacy. Clients read it as Mastodon 4.3's notification policy,
 where *drop* stays available, and read the same notifications grouped — "eight people
 favourited your post" rather than eight rows.
 

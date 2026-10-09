@@ -63,6 +63,7 @@ Negative interactions on social media go with more depressive symptoms. Being re
 
 - A notification is held when **any** policy key that is `filter` applies to its sender (or the notification, for `for_private_mentions`), and the sender is not on the viewer's accepted list. `drop` (API only) holds it for good, as today; neither ever rings.
 - Held applies to **every notification type** from that sender.
+- **Who may send you direct messages** (Settings → Profile and privacy, `/api/v1/social/direct_messages`) is `for_private_mentions` seen from the other side: *Everybody* is `accept`, *People you follow* is `filter`, and *Nobody* is `filter` plus the user value `direct_messages_nobody`, which holds a direct message from somebody followed as well. An accepted sender still reaches the person. Setting `for_private_mentions` to `accept` here is *Everybody* again.
 - **A held notification is stored, never raised:** `emit()` checks the policy (the same rules as `partition()`, shared code, not a copy) before the digest/quiet-hours check; a held notification raises nothing — no bell, no push, no mail, and it is not counted in a digest's notification total.
 - The Activities list and `/api/v1/notifications` keep excluding held notifications (as today); `/api/v1/notifications/requests` lists the waiting senders.
 - **Accept** releases the sender's held notifications into Activities **without ringing the bell for them now** (they are old news; the count in the sidebar reflects them as unread) and records the sender as always allowed. **Dismiss** discards them.

@@ -1738,6 +1738,37 @@ Bluesky in their conversation (`getConvoForMembers`, `sendMessage`), while
 the Fediverse recipients get it over ActivityPub as before. Opening
 Messages wakes the account's next read (`ConversationService::getPage()`).
 
+What the account writes in a Bluesky app arrives in the same log and is
+stored as its own direct message to the conversation's other members, saved
+with `StreamRequest::save()` alone — the stream row and its recipient rows,
+no `PostService`, no `PostPublishedEvent`, not `local` — so nothing
+delivers it again. `ChatSender` remembers the Bluesky id `sendMessage`
+answered with (`ChatStore::sent()`), so the log's copy of a message sent
+from here is recognised, and which Bluesky conversation a message here is
+in (`ChatStore::convoOf()`: in the id of one from Bluesky, remembered for
+one sent from here). With that, `ConversationService::markRead()`,
+`markAllRead()` and `remove()` tell `Chat\ChatState` (resolved from the
+container), which queues an `AtprotoPublish` `chat` job: `updateRead`,
+`updateAllRead`, or `leaveConvo` for a conversation that is still a
+request. The other way, a `logReadConvo` in the log marks the conversation
+read here up to that message (`ConversationService::markReadUpTo()`). A
+conversation that is a request on Bluesky is accepted when it is answered
+from here (`ChatSender`) or its sender is accepted from the requests, and
+left when the sender is dismissed there (`NotificationPolicyService`
+`accept()`, `dismiss()`).
+
+Who may send the person direct messages is one setting for both networks,
+kept by `NotificationPolicyService` (`directMessagesFrom()`): it is the
+policy's `for_private_mentions` read the other way round (accepted:
+everybody; held: people followed), plus the user value
+`direct_messages_nobody` for nobody, which holds direct messages from people
+followed as well. A change, from the settings page
+(`DirectMessagesSettings.vue`, `PATCH /api/v1/social/direct_messages`) or
+from the policy, is written to the person's repository as
+`chat.bsky.actor.declaration` (`Chat\ChatDeclaration`,
+`Publisher::writeSelfRecord()`), which Bluesky's chat service goes by; one
+a Bluesky app writes through `WriteService` becomes the setting here.
+
 ### Shared lists to mute or block
 
 A person subscribes to somebody else's list of accounts, to mute or block

@@ -27,6 +27,8 @@ const NcModalStub = { name: 'NcModal', template: '<div class="modal-stub"><slot 
 // passed. They have tests of their own; here they are stubs.
 const asyncStubs = {
 	AccountSettings: { name: 'AccountSettings', template: '<section class="account-settings-stub" />' },
+	// reads who may send direct messages on mount
+	DirectMessagesSettings: { name: 'DirectMessagesSettings', template: '<section class="direct-messages-settings-stub" />' },
 	// reads the featured tags and the suggestions on mount, same story
 	FeaturedTagsSettings: { name: 'FeaturedTagsSettings', template: '<section class="featured-tags-settings-stub" />' },
 	ListsSettings: { name: 'ListsSettings', template: '<section class="lists-settings-stub" />' },
@@ -96,7 +98,7 @@ describe('Settings', () => {
 		expect(wrapper.find('.settings__heading').text()).toBe('Settings')
 		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Notifications', 'Your posts', 'Apps and account', 'Help'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Featured hashtags', 'Portfolio'])
+		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Who may send you direct messages', 'Featured hashtags', 'Portfolio'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -110,6 +112,7 @@ describe('Settings', () => {
 
 		expect(seen).toEqual([
 			'Who can find and follow you',
+			'Who may send you direct messages',
 			'Featured hashtags',
 			'Portfolio',
 			'Lists',
@@ -223,7 +226,7 @@ describe('Settings', () => {
 		it('marks the last section whose heading has passed the top', async () => {
 			const wrapper = await mountSettings()
 
-			const tops = { account: -800, 'featured-tags': 40, portfolio: 320 }
+			const tops = { account: -800, 'direct-messages': -400, 'featured-tags': 40, portfolio: 320 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)
@@ -244,7 +247,7 @@ describe('Settings', () => {
 			const wrapper = await mountSettings()
 			wrapper.vm.current = 'portfolio'
 
-			const tops = { account: 150, 'featured-tags': 900, portfolio: 1400 }
+			const tops = { account: 150, 'direct-messages': 600, 'featured-tags': 900, portfolio: 1400 }
 			const real = document.getElementById.bind(document)
 			vi.spyOn(document, 'getElementById').mockImplementation((id) => (
 				id in tops ? { getBoundingClientRect: () => ({ top: tops[id] }) } : real(id)

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Cron;
 
 use OCA\Social\Atproto\Chat\ChatSender;
+use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Cron\AtprotoPublish;
@@ -66,7 +67,7 @@ class AtprotoPublishTest extends TestCase {
 		$actors->method('getFromId')->willReturnCallback(static fn (string $id): Person => (new Person())->setId($id));
 		$this->job = new AtprotoPublish(
 			$this->createMock(ITimeFactory::class), $this->publisher, $this->interactions, $streams, $actors,
-			new NullLogger(), $this->createMock(ChatSender::class), $this->blockedBy,
+			new NullLogger(), $this->createMock(ChatSender::class), $this->createMock(ChatState::class), $this->blockedBy,
 		);
 	}
 

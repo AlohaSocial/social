@@ -299,14 +299,51 @@ class Publisher {
 	}
 
 	private function writeProfile(Person $actor, Identity $identity): bool {
-		$record = $this->mapper->profile($actor, $identity);
-		$existing = $this->repositories->getRecord($identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
+		return $this->writeSelf($identity, RecordMapper::PROFILE, $this->mapper->profile($actor, $identity), $actor->getId());
+	}
+
+	/**
+	 * Writes a record a repository holds one of, under `self` — a setting of
+	 * the account's, such as who may send it direct messages — or rewrites
+	 * it when it changed.
+	 *
+	 * @return bool whether anything was written
+	 * @throws AtprotoException
+	 */
+	public function writeSelfRecord(Person $actor, string $collection, array $record): bool {
+		if (!$this->config->isEnabled() || !$actor->isLocal()) {
+			return false;
+		}
+		$identity = $this->identities->forActor($actor);
+		if ($identity === null || !$identity->isActive()) {
+			return false;
+		}
+
+		// a setting, which no object here stands for
+		return $this->writeSelf($identity, $collection, $record, '');
+	}
+
+	/**
+	 * Whether the account's repository holds its record of a collection
+	 * under `self`; false for an account without an identity.
+	 */
+	public function hasSelfRecord(Person $actor, string $collection): bool {
+		$identity = $this->identities->forActor($actor, false);
+
+		return $identity !== null && $this->repositories->getRecord($identity->did, $collection, RecordMapper::PROFILE_RKEY) !== null;
+	}
+
+	/**
+	 * @throws AtprotoException
+	 */
+	private function writeSelf(Identity $identity, string $collection, array $record, string $localId): bool {
+		$existing = $this->repositories->getRecord($identity->did, $collection, RecordMapper::PROFILE_RKEY);
 		if ($existing !== null && $existing->bytes === DagCbor::encode($record)) {
 			return false;
 		}
 		$write = $existing === null
-			? RepoWrite::create(RecordMapper::PROFILE, $record, $actor->getId(), RecordMapper::PROFILE_RKEY)
-			: RepoWrite::update(RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY, $record, $actor->getId());
+			? RepoWrite::create($collection, $record, $localId, RecordMapper::PROFILE_RKEY)
+			: RepoWrite::update($collection, RecordMapper::PROFILE_RKEY, $record, $localId);
 		$this->repositories->write($identity->did, $this->identities->signingKey($identity), [$write]);
 
 		return true;
