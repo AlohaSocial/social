@@ -56,6 +56,7 @@ class ListsRequest extends ListsRequestBuilder {
 			->setValue('replies_policy', $qb->createNamedParameter($list->getRepliesPolicy()))
 			->setValue('exclusive', $qb->createNamedParameter($list->isExclusive() ? 1 : 0))
 			->setValue('group_id', $qb->createNamedParameter($list->getGroupId()))
+			->setValue('visibility', $qb->createNamedParameter($list->getVisibility()))
 			->setValue('creation', $qb->createNamedParameter(new DateTime('now'), IQueryBuilder::PARAM_DATE));
 
 		$qb->executeStatement();
@@ -236,7 +237,8 @@ class ListsRequest extends ListsRequestBuilder {
 		$qb = $this->getListsUpdateSql();
 		$qb->set('title', $qb->createNamedParameter($list->getTitle()))
 			->set('replies_policy', $qb->createNamedParameter($list->getRepliesPolicy()))
-			->set('exclusive', $qb->createNamedParameter($list->isExclusive() ? 1 : 0));
+			->set('exclusive', $qb->createNamedParameter($list->isExclusive() ? 1 : 0))
+			->set('visibility', $qb->createNamedParameter($list->getVisibility()));
 		$qb->where(
 			$qb->expr()->eq('id', $qb->createNamedParameter($list->getId(), IQueryBuilder::PARAM_INT)),
 			$qb->expr()->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($list->getOwnerId())))

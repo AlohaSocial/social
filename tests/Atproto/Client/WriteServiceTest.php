@@ -27,6 +27,7 @@ use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
+use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\CommitResult;
@@ -105,6 +106,8 @@ class WriteServiceTest extends TestCase {
 	private bool $publishesBlocks = false;
 	/** @var ChatDeclaration&MockObject */
 	private ChatDeclaration $declaration;
+	/** @var BlueskyListImport&MockObject */
+	private BlueskyListImport $listImport;
 	private ClientSession $session;
 	private Person $alice;
 	/** @var StoredRecord[] */
@@ -147,12 +150,13 @@ class WriteServiceTest extends TestCase {
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$this->declaration = $this->createMock(ChatDeclaration::class);
+		$this->listImport = $this->createMock(BlueskyListImport::class);
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
-			$this->relationships, $this->blocks, $this->declaration,
+			$this->relationships, $this->blocks, $this->declaration, $this->listImport,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -239,7 +243,7 @@ class WriteServiceTest extends TestCase {
 				$this->records = array_values(array_filter($this->records, static fn (StoredRecord $r): bool => !($r->collection === $write->collection && $r->rkey === $write->rkey)));
 				if ($write->action !== RepoWrite::DELETE) {
 					$bytes = DagCbor::encode($write->record);
-					$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+					$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
 				}
 			}
 
@@ -260,6 +264,51 @@ class WriteServiceTest extends TestCase {
 
 		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey]);
 		$this->assertSame([], $this->records);
+	}
+
+	public function testAListAndItsMembersAnAppWritesAreTheListHereToo(): void {
+		$this->keepWrites();
+		$now = '2026-10-09T10:00:00.000Z';
+		$this->listImport->expects($this->exactly(2))->method('listWritten')->willReturnCallback(function (Person $owner, StoredRecord $record): int {
+			$this->assertSame($this->alice, $owner);
+			$this->assertSame('app.bsky.graph.list', $record->collection);
+
+			return 7;
+		});
+		$this->listImport->expects($this->once())->method('itemWritten')->with($this->alice, $this->callback(static fn (StoredRecord $r): bool => $r->value()['subject'] === self::BOB))->willReturn(true);
+		$deleted = [];
+		$this->listImport->expects($this->exactly(2))->method('deleted')->willReturnCallback(function (Person $owner, StoredRecord $record) use (&$deleted): void {
+			$deleted[] = [$record->collection, count($this->records)];
+		});
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => $now]]);
+		$rkey = substr($made['uri'], (int)strrpos($made['uri'], '/') + 1);
+		$item = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.listitem', 'record' => ['$type' => 'app.bsky.graph.listitem', 'list' => $made['uri'], 'subject' => self::BOB, 'createdAt' => $now]]);
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey, 'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Close friends', 'createdAt' => $now]]);
+
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.listitem', 'rkey' => substr($item['uri'], (int)strrpos($item['uri'], '/') + 1)]);
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey]);
+		$this->assertSame([['app.bsky.graph.listitem', 1], ['app.bsky.graph.list', 0]], $deleted, 'followed here once the record is gone');
+	}
+
+	public function testARecordAnAppReplacesStandsForWhatItStoodForBefore(): void {
+		$this->keepWrites();
+		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
+		$bytes = DagCbor::encode($list);
+		$this->records[] = new StoredRecord(self::DID, 'app.bsky.graph.list', '3klist', Cid::forDagCbor($bytes), $bytes, 'list:7', 0);
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => '3klist', 'record' => ['name' => 'Close friends'] + $list]);
+
+		$this->assertSame('list:7', $this->records[0]->localId);
+	}
+
+	public function testAListTheImportCannotFollowIsStillTheApps(): void {
+		$this->keepWrites();
+		$this->listImport->method('listWritten')->willThrowException(new \RuntimeException('no database'));
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z']]);
+
+		$this->assertStringStartsWith('at://' . self::DID . '/app.bsky.graph.list/', $made['uri']);
 	}
 
 	public function testAGateIsKeptOnlyUnderTheKeyOfTheAccountsOwnPost(): void {

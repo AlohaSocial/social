@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.196
+**App version:** 0.26.197
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -256,7 +256,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
-| `social_list` | Mastodon lists: one row per (owner, list), with its title, `replies_policy` and `exclusive` flag — and `group_id`, the Nextcloud group a list follows, `''` for one made by hand |
+| `social_list` | Mastodon lists: one row per (owner, list), with its title, `replies_policy` and `exclusive` flag — `group_id`, the Nextcloud group a list follows, `''` for one made by hand, and `visibility`, `private` (the default) or `public`, a list its owner made public and that is a Bluesky list too (see **Lists, here and on Bluesky**) |
 | `social_list_member` | Who is in a list: one row per (list, account), unique on the pair |
 | `social_filter` | Keyword filters: one row per (account, filter) with its contexts, action and expiry |
 | `social_filter_kw` | The keywords of a filter: one row per keyword, with its `whole_word` flag |
@@ -1757,7 +1757,8 @@ post's key (`RecordMapper::threadgate()`, a rule for each part). A list a rule
 names is published as a Bluesky curate list (`Atproto\Publisher\BlueskyLists`,
 `app.bsky.graph.list` and a `listitem` for each member with a Bluesky identity),
 kept in step as members are added or removed and withdrawn with the list, so
-the threadgate's `listRule` can name it. A change later
+the threadgate's `listRule` can name it; it stays published while a
+threadgate names it, even when the list is private. A change later
 (`PUT /api/v1/statuses/{nid}/interaction_policy` with `reply_policy`) is
 forward-only, like the quote policy: replies already made stay. It
 re-snapshots the stored source, as the quote policy does, and rewrites the
@@ -1814,6 +1815,30 @@ from the policy, is written to the person's repository as
 `chat.bsky.actor.declaration` (`Chat\ChatDeclaration`,
 `Publisher::writeSelfRecord()`), which Bluesky's chat service goes by; one
 a Bluesky app writes through `WriteService` becomes the setting here.
+
+### Lists, here and on Bluesky
+
+A person's lists are one set with their Bluesky lists. A list is private
+unless its owner makes it public (`social_list.visibility`; `public` on
+`PUT /api/v1/lists/{id}`, a switch in **Settings → Lists**). Outward,
+`ListController` hands every change to `Atproto\Publisher\BlueskyLists`:
+`sync()` publishes a public list as a curate list with its members that
+have a Bluesky identity, renames the record when the list is renamed, and
+withdraws it when the list is made private — unless one of the owner's
+threadgates names it (see **Who may reply**); members added or taken out
+are listed or withdrawn as before. Inward, `Atproto\Reader\BlueskyListImport`
+reads the curate lists in the person's own repository: what a Bluesky app
+signed in here writes (`WriteService` hands it each `list` and `listitem`
+it creates, replaces or deletes, after the record is written) and, at the
+last step of a move here, what the account brought (`MoveInService::
+importPosts()`). A list record becomes a public list, an item a member
+(a local DID the local account, any other the Bluesky account, cached
+first), and each record is tied to what it stands for by its local id —
+`list:<id>`, an item `list:<id>#<md5 of the member>` — which is how
+`BlueskyLists` finds it again. Records this server writes never pass
+through `WriteService`, and a record that already stands for a list is not
+imported again, so nothing goes round in a circle. A group list stays
+private: who is in a group is not its member's to show.
 
 ### Shared lists to mute or block
 

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
+use OCA\Social\Atproto\Publisher\BlueskyLists;
 use OCA\Social\Controller\ListController;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Exceptions\ClientNotFoundException;
@@ -36,6 +37,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -253,7 +255,7 @@ class ListControllerTest extends TestCase {
 	 * The bearer token is parsed in the constructor, so a test that presents
 	 * one has to say so before the controller exists.
 	 */
-	private function controller(string $authorization = '', ?CountService $counts = null): ListController {
+	private function controller(string $authorization = '', ?BlueskyLists $blueskyLists = null, ?CountService $counts = null): ListController {
 		// the getHeader() callback is registered once, in setUp(): a second
 		// method() on the same mock never wins over the first
 		$this->headers = ['Authorization' => $authorization];
@@ -270,9 +272,30 @@ class ListControllerTest extends TestCase {
 			$this->listsRequest,
 			$this->createStub(PlaceService::class),
 			$this->groupListService,
-			null,
+			$blueskyLists === null ? null : $this->containerWith($blueskyLists),
 			$counts,
 		);
+	}
+
+	private function containerWith(BlueskyLists $blueskyLists): ContainerInterface {
+		$container = $this->createStub(ContainerInterface::class);
+		$container->method('get')->willReturn($blueskyLists);
+
+		return $container;
+	}
+
+	/**
+	 * The lists `BlueskyLists::sync()` was handed, as [id, public].
+	 *
+	 * @param list<array{int, bool}> $synced
+	 */
+	private function blueskyLists(array &$synced): BlueskyLists {
+		$lists = $this->createMock(BlueskyLists::class);
+		$lists->method('sync')->willReturnCallback(static function (Person $owner, MastodonList $list) use (&$synced): void {
+			$synced[] = [$list->getId(), $list->isPublic()];
+		});
+
+		return $lists;
 	}
 
 	/** A list that follows a Nextcloud group, owned by whoever is named. */
@@ -304,7 +327,7 @@ class ListControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame(
-			['id' => '1', 'title' => 'Friends', 'replies_policy' => 'list', 'exclusive' => false, 'nextcloud_group' => null],
+			['id' => '1', 'title' => 'Friends', 'replies_policy' => 'list', 'exclusive' => false, 'nextcloud_group' => null, 'public' => false],
 			$response->getData()->jsonSerialize()
 		);
 		$this->assertSame([['create', 1, 'Friends']], $this->writes);
@@ -315,6 +338,40 @@ class ListControllerTest extends TestCase {
 
 		$this->assertSame('followed', $response->getData()->getRepliesPolicy());
 		$this->assertTrue($response->getData()->isExclusive());
+	}
+
+	public function testAListMadePublicIsPublishedAndAPrivateOneIsNot(): void {
+		$synced = [];
+		$controller = $this->controller('', $this->blueskyLists($synced));
+
+		$private = $controller->create('Close friends');
+		$public = $controller->create('People I read', 'list', false, true);
+
+		$this->assertFalse($private->getData()->jsonSerialize()['public']);
+		$this->assertTrue($public->getData()->jsonSerialize()['public']);
+		$this->assertSame([[2, true]], $synced);
+	}
+
+	public function testMakingAListPublicOrPrivateKeepsItInStepAndLeavingItOutKeepsWhatItWas(): void {
+		$this->given(4, self::VIEWER, 'Friends');
+		$synced = [];
+		$controller = $this->controller('', $this->blueskyLists($synced));
+
+		$this->assertTrue($controller->update(4, 'Friends', '', null, true)->getData()->isPublic());
+		$this->assertTrue($controller->update(4, 'Close friends')->getData()->isPublic(), 'left out, it stays public');
+		$this->assertFalse($controller->update(4, 'Close friends', '', null, false)->getData()->isPublic());
+
+		$this->assertSame([[4, true], [4, true], [4, false]], $synced, 'a rename is kept in step too');
+	}
+
+	public function testAGroupListCannotBeMadePublic(): void {
+		$this->givenGroupList(4, self::VIEWER);
+
+		$response = $this->controller()->update(4, 'Design', '', null, true);
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $response->getStatus());
+		$this->assertSame([], $this->writes);
+		$this->assertFalse($this->lists[4]->isPublic());
 	}
 
 	public function testAListWithNoTitleIsRefused(): void {
@@ -741,7 +798,7 @@ class ListControllerTest extends TestCase {
 		$counts->expects($this->once())->method('seen')
 			->with($this->callback(static fn (array $posts): bool => array_map(static fn (Note $n): int => $n->getNid(), $posts) === [9, 7]));
 
-		$this->controller('', $counts)->timeline(4);
+		$this->controller('', null, $counts)->timeline(4);
 	}
 
 	public function testTheTimelinePagesOnTheStatusIdAsEveryOtherTimelineDoes(): void {

@@ -234,7 +234,10 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   description when pressed.
 - **Lists**, made and filled in Settings or from anybody's profile — and **the
   Nextcloud groups your administrator chose** are lists of their own, built and
-  maintained by nobody.
+  maintained by nobody. A list is yours alone unless you make it **public**: then
+  anyone can see it and who is on it, and it is one list wherever you use it — a
+  list you make in another app signed in here, or bring along when you move here,
+  is your list here too.
 - **Follow a hashtag** and it reads exactly like following a person: its new posts reach your home timeline wherever they were written, not only the ones that happened to arrive here.
 - **Filter out words you would rather not read** — **Blocking → Filtered words**. A
   filter is a handful of words, the timelines it applies in, and whether a matching

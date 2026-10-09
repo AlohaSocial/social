@@ -36,6 +36,8 @@ class MastodonListTest extends TestCase {
 				'exclusive' => true,
 				// null for a list made by hand; a Mastodon client ignores it
 				'nextcloud_group' => null,
+				// this app's own too: whether anyone may see the list
+				'public' => false,
 			],
 			$list->jsonSerialize()
 		);
@@ -48,6 +50,15 @@ class MastodonListTest extends TestCase {
 		$this->assertSame('design', (new MastodonList())->importFromDatabase(['id' => 3, 'group_id' => 'design', 'creation' => ''])->getGroupId());
 		// rows from before the column existed
 		$this->assertSame('', (new MastodonList())->importFromDatabase(['id' => 3, 'creation' => ''])->getGroupId());
+	}
+
+	public function testAListIsPrivateUnlessMadePublic(): void {
+		$this->assertFalse((new MastodonList())->isPublic());
+		$this->assertTrue((new MastodonList())->setPublic(true)->jsonSerialize()['public']);
+		$this->assertSame('private', (new MastodonList())->setVisibility('everybody')->getVisibility(), 'anything but public is private');
+		$this->assertTrue((new MastodonList())->importFromDatabase(['id' => 3, 'visibility' => 'public', 'creation' => ''])->isPublic());
+		// rows from before the column existed
+		$this->assertFalse((new MastodonList())->importFromDatabase(['id' => 3, 'creation' => ''])->isPublic());
 	}
 
 	public function testTheIdIsAStringAsEveryIdAClientIsHandedIs(): void {

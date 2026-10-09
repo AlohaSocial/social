@@ -31,6 +31,7 @@ use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Mst;
 use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Cron\AtprotoMove;
@@ -77,6 +78,8 @@ class MoveInServiceTest extends TestCase {
 	private FollowService $follows;
 	/** @var PostHistory&MockObject */
 	private PostHistory $history;
+	/** @var BlueskyListImport&MockObject */
+	private BlueskyListImport $lists;
 	/** @var AtprotoBlobRequest&MockObject */
 	private AtprotoBlobRequest $blobs;
 	private MoveInService $moves;
@@ -141,6 +144,7 @@ class MoveInServiceTest extends TestCase {
 		$actors->method('resolve')->with(self::FOLLOWED)->willReturn($followed);
 		$this->follows = $this->createMock(FollowService::class);
 		$this->history = $this->createMock(PostHistory::class);
+		$this->lists = $this->createMock(BlueskyListImport::class);
 		$local = new Person();
 		$local->setId('https://social.test/@alice');
 		$actorsRequest = $this->createMock(ActorsRequest::class);
@@ -167,7 +171,7 @@ class MoveInServiceTest extends TestCase {
 		$this->moves = new MoveInService(
 			$pds, $config, $appView, $plc, $this->identities, $keys, $this->repositories, $this->createMock(AtprotoRepoRequest::class),
 			$this->blobs, $documents, $this->createMock(Preferences::class), $actors, $this->follows, $this->history, $actorsRequest, $request,
-			$crypto, $jobs, new NullLogger(),
+			$crypto, $jobs, new NullLogger(), $this->lists,
 		);
 		$this->answers['com.atproto.server.createSession'] = [['status' => 200, 'body' => ['did' => self::DID, 'handle' => 'alice.bsky.social', 'accessJwt' => 'access', 'refreshJwt' => 'refresh']]];
 	}
@@ -245,6 +249,7 @@ class MoveInServiceTest extends TestCase {
 			'services' => ['atproto_pds' => ['type' => 'AtprotoPersonalDataServer', 'endpoint' => self::HERE]],
 		]]]];
 		$this->history->expects($this->once())->method('import')->with($this->isInstanceOf(Person::class), self::DID)->willReturn(3);
+		$this->lists->expects($this->once())->method('adopt')->with($this->isInstanceOf(Person::class), self::DID)->willReturn(2);
 		$this->moves->run($this->rows[1]);
 
 		$sign = array_values(array_filter($this->calls, static fn (array $c): bool => $c['method'] === 'com.atproto.identity.signPlcOperation'))[0]['json'];
@@ -256,11 +261,13 @@ class MoveInServiceTest extends TestCase {
 		$this->assertSame(Move::DONE, $this->rows[1]->state);
 		$this->assertSame('', $this->rows[1]->session);
 		$this->assertSame(3, $this->rows[1]->progress['posts'], 'and its posts are posts here');
+		$this->assertSame(2, $this->rows[1]->progress['lists'], 'and its lists lists here');
 	}
 
 	public function testAMoveIsDoneEvenWhenItsPostsCannotBeImported(): void {
 		$this->rows[1] = new Move(1, self::DID, 'alice', Move::IN, self::OLD, '', 'alice.bsky.social', Move::STEP_POSTS, Move::RUNNING);
 		$this->history->method('import')->willThrowException(new \RuntimeException('no room'));
+		$this->lists->expects($this->once())->method('adopt')->willThrowException(new \RuntimeException('no room'));
 
 		$this->moves->run($this->rows[1]);
 
