@@ -344,11 +344,12 @@ class AtprotoAccountController extends Controller {
 
 	/**
 	 * The Bluesky account Bridgy Fed made for the viewer's Fediverse account,
-	 * or null.
+	 * or null. Asked to search, Bluesky's search is given the viewer's
+	 * Fediverse address, for a twin they gave a domain of their own.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/social/bluesky/bridgy-twin')]
-	public function bridgyTwin(): DataResponse {
+	public function bridgyTwin(bool $search = false): DataResponse {
 		if (!$this->config->isEnabled()) {
 			return new DataResponse(['error' => 'Bluesky is not enabled on this server'], Http::STATUS_NOT_FOUND);
 		}
@@ -359,7 +360,7 @@ class AtprotoAccountController extends Controller {
 			return new DataResponse(['twin' => null]);
 		}
 
-		return new DataResponse(['twin' => $this->bridgy->find($actor)]);
+		return new DataResponse(['twin' => $this->bridgy->find($actor, $search)]);
 	}
 
 	/**

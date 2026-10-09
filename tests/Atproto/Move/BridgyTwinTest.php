@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Atproto\Move;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Identity\DnsLookup;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Move\BridgyTwin;
 use OCA\Social\Exceptions\AtprotoException;
@@ -26,6 +27,10 @@ class BridgyTwinTest extends TestCase {
 	private const TWIN = 'did:plc:3guzzweuqraryl3rdkimjamk';
 
 	private array $endpoints = [self::TWIN => 'https://atproto.brid.gy'];
+	private array $aka = [];
+	private array $txt = [];
+	private array $searchedFor = [];
+	private array $found = [];
 
 	private function actor(string $account): Person {
 		$actor = new Person();
@@ -36,7 +41,13 @@ class BridgyTwinTest extends TestCase {
 
 	private function twins(?PostService $posts = null): BridgyTwin {
 		$appView = $this->createMock(AppViewClient::class);
-		$appView->method('query')->willReturnCallback(static function (string $method, array $params): array {
+		$appView->method('query')->willReturnCallback(function (string $method, array $params): array {
+			if ($method === 'app.bsky.actor.searchActors') {
+				$this->searchedFor[] = $params['q'];
+
+				return ['actors' => array_map(static fn (string $did): array => ['did' => $did], $this->found)];
+			}
+
 			return match ($params['handle']) {
 				'alice.social.example.com.ap.brid.gy' => ['did' => self::TWIN],
 				'bob.social.example.com.ap.brid.gy' => ['did' => 'did:plc:notbridgyatall000000000'],
@@ -44,9 +55,14 @@ class BridgyTwinTest extends TestCase {
 			};
 		});
 		$plc = $this->createMock(PlcClient::class);
-		$plc->method('data')->willReturnCallback(fn (string $did): array => ['services' => ['atproto_pds' => ['endpoint' => $this->endpoints[$did] ?? 'https://bsky.social']]]);
+		$plc->method('data')->willReturnCallback(fn (string $did): array => [
+			'alsoKnownAs' => $this->aka[$did] ?? [],
+			'services' => ['atproto_pds' => ['endpoint' => $this->endpoints[$did] ?? 'https://bsky.social']],
+		]);
+		$dns = $this->createMock(DnsLookup::class);
+		$dns->method('txt')->willReturnCallback(fn (string $name): array => $this->txt[$name] ?? []);
 
-		return new BridgyTwin($appView, $plc, $posts ?? $this->createMock(PostService::class), new NullLogger());
+		return new BridgyTwin($appView, $plc, $posts ?? $this->createMock(PostService::class), $dns, new NullLogger());
 	}
 
 	public function testTheTwinsHandleIsTheFediverseAddressFlattened(): void {
@@ -60,6 +76,32 @@ class BridgyTwinTest extends TestCase {
 		$this->assertNull($this->twins()->find($this->actor('carol@social.example.com')), 'not bridged');
 		$this->assertTrue(BridgyTwin::hosts('https://atproto.brid.gy/'));
 		$this->assertFalse(BridgyTwin::hosts('https://atproto.brid.gy.example.org'));
+	}
+
+	public function testARenamedTwinIsFoundByTheRecordBridgyKeepsForItsHandle(): void {
+		$renamed = 'did:plc:renamedtwin0000000000000';
+		$this->endpoints[$renamed] = 'https://atproto.brid.gy';
+		$this->aka[$renamed] = ['at://carol.example.org', 'https://social.example.com/users/carol'];
+		$this->txt['_atproto.carol.social.example.com.ap.brid.gy'] = ['did=' . $renamed];
+
+		$this->assertSame(['handle' => 'carol.example.org', 'did' => $renamed], $this->twins()->find($this->actor('carol@social.example.com')), 'under the handle it has now');
+		$this->assertSame([], $this->searchedFor, 'nothing was searched for');
+	}
+
+	public function testBlueskysSearchIsAskedOnlyWhenAskedAndTakenOnlyWhenTheTwinNamesTheAccount(): void {
+		$carol = $this->actor('carol@social.example.com');
+		$carol->setId('https://social.example.com/users/carol');
+		$impostor = 'did:plc:impostor00000000000000000';
+		$renamed = 'did:plc:renamedtwin0000000000000';
+		$this->endpoints += [$impostor => 'https://atproto.brid.gy', $renamed => 'https://atproto.brid.gy'];
+		$this->aka[$impostor] = ['at://carol.example.net', 'https://elsewhere.example/users/carol'];
+		$this->aka[$renamed] = ['at://carol.example.org', 'https://social.example.com/users/carol'];
+		$this->found = [$impostor, $renamed];
+
+		$this->assertNull($this->twins()->find($carol));
+		$this->assertSame([], $this->searchedFor);
+		$this->assertSame(['handle' => 'carol.example.org', 'did' => $renamed], $this->twins()->find($carol, true));
+		$this->assertSame(['carol@social.example.com'], $this->searchedFor);
 	}
 
 	public function testBridgyIsAskedWithItsOwnCommandInADirectMessage(): void {

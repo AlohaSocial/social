@@ -42,16 +42,16 @@ function moveOf(state, step = 'invited', extra = {}) {
 }
 
 /** The server: an identity (or none), a twin (or none), and the moves the GET answers one after the other. */
-function server({ identity = true, twin = TWIN, moves = [null] } = {}) {
+function server({ identity = true, twin = TWIN, searchedTwin = null, moves = [null] } = {}) {
 	let polls = 0
-	axios.get.mockImplementation((url) => {
+	axios.get.mockImplementation((url, opts) => {
 		if (url === `${API}/identity`) {
 			return identity
 				? Promise.resolve({ data: { handle: 'alice.social.test', did: 'did:plc:alice', state: 'active' } })
 				: notFound()
 		}
 		if (url === `${API}/bridgy-twin`) {
-			return Promise.resolve({ data: { twin } })
+			return Promise.resolve({ data: { twin: opts?.params?.search ? searchedTwin : twin } })
 		}
 		if (url === `${API}/move`) {
 			const move = moves[Math.min(polls, moves.length - 1)]
@@ -130,6 +130,27 @@ describe('BlueskyMoveInbound', () => {
 		expect(wrapper.text()).toContain('Waiting for the migration tool to start')
 		expect(wrapper.find('dl').text()).toContain('abcdef-ghijkl-mnopqr-stuvwx')
 		expect(wrapper.find('dl').text()).toContain('alice@social.test')
+	})
+
+	it('asks Bluesky\'s search for a renamed twin only when asked', async () => {
+		server({ twin: null, searchedTwin: { handle: 'carol.example.org', did: 'did:plc:twin' } })
+		const wrapper = await mountCard()
+		expect(axios.get).not.toHaveBeenCalledWith(`${API}/bridgy-twin`, { params: { search: 1 } })
+
+		await buttonNamed(wrapper, 'Look for my bridged account on Bluesky').trigger('click')
+		await flushPromises()
+
+		expect(axios.get).toHaveBeenCalledWith(`${API}/bridgy-twin`, { params: { search: 1 } })
+		expect(wrapper.text()).toContain('Bridgy Fed bridges your account to Bluesky as carol.example.org.')
+	})
+
+	it('says when the search found nothing', async () => {
+		server({ twin: null })
+		const wrapper = await mountCard()
+		await buttonNamed(wrapper, 'Look for my bridged account on Bluesky').trigger('click')
+		await flushPromises()
+
+		expect(wrapper.text()).toContain('No account bridged by Bridgy Fed names your Fediverse account.')
 	})
 
 	it('says why an invitation was refused', async () => {
