@@ -242,7 +242,7 @@ Collection → written when:
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
 | `app.bsky.graph.follow` | a local actor follows a Bluesky account (§9.2) | `subject` DID |
-| `app.bsky.feed.threadgate`, `app.bsky.feed.postgate` | a Bluesky app signed in here writes one for one of the account's own posts (§6), kept under that post's key | as the app wrote it |
+| `app.bsky.feed.threadgate`, `app.bsky.feed.postgate` | a post written here whose author narrowed who may reply or quote (§8), written with the post under its key and rewritten when the author changes it; or a Bluesky app signed in here writes one for one of the account's own posts (§6), kept under that post's key | `post`, `allow` (threadgate) or `embeddingRules` (postgate), `createdAt`; as the app wrote it |
 | `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6) | as the app wrote it |
 | `app.bsky.graph.block` | a local actor blocks a Bluesky account, **only when the person publishes their blocks** (D16, `Publisher\BlueskyBlocks`) | `subject` DID |
 | `app.bsky.graph.listblock` | **never** (D16) | — |
@@ -466,8 +466,15 @@ when crossed.
   accounts the author follows, a list's members — is checked when somebody
   replies (`Reader\Threadgates`, through the AppView), and a reply it does
   not let through is refused with the reason: every AppView would hide it.
-  This app's own posts carry no gate: Social has no reply controls of its
-  own yet.
+  This app's own posts carry the author's choice the same way: a post
+  whose author lets only their followers, the accounts they follow, the
+  accounts it mentions, or nobody reply is published with a threadgate
+  under its key (`followerRule`, `followingRule`, `mentionRule`, or no
+  rule at all), which every AppView holds Bluesky replies to; a change of
+  mind later rewrites or removes the gate (`Publisher::updateGates()`).
+  The rule is held here as well (`ReplyRuleService`): a reply from here
+  it does not let through is refused with the reason, and one from
+  another server or from Bluesky is not kept. The author always may.
 - **Who may quote** (`app.bsky.feed.postgate` beside the quoted post): a
   quote of a post whose author turned quoting off (`disableRule`) is
   refused with the reason (`Reader\Postgates`), since every AppView would
@@ -1168,9 +1175,14 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
 - **Quote rules**: a post whose quote policy is followers-only or nobody
   gets an `app.bsky.feed.postgate` under its rkey with `disableRule`.
   Bluesky cannot say "followers only", so the stricter rule is published
-  rather than an open one. Reply approval has no Bluesky equivalent and
-  writes no threadgate: Bluesky replies arrive and are held here like any.
-- **Deletes**: a local post's delete removes its postgate with it and the
+  rather than an open one. A later change of the quote policy rewrites
+  the postgate, or removes it.
+- **Reply rules**: a post whose author narrowed who may reply gets an
+  `app.bsky.feed.threadgate` under its rkey: followers →
+  `followerRule`, the accounts followed → `followingRule`, the accounts
+  mentioned → `mentionRule`, nobody → an empty `allow`. Everybody writes
+  no gate. A change later is one commit that updates, makes or deletes it.
+- **Deletes**: a local post's delete removes its gates with it and the
   like and repost records local accounts made of it (§8.5); a post deleted
   on Bluesky is noticed by the maintenance job, which asks the AppView
   about a page of 25 stored Bluesky posts of the last week per run and

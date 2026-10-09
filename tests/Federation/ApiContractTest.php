@@ -84,6 +84,9 @@ class ApiContractTest extends TestCase {
 		// 'quote_approval' is Mastodon 4.5's "who may quote this", and null on
 		// everybody else's post: their server decides who may quote theirs,
 		// and what it decided rides on their document as `interactionPolicy`.
+		// 'reply_policy' is who may reply to one of our own posts — this
+		// app's own key, `everyone` unless the author said otherwise, and null
+		// on everybody else's post.
 		// 'interaction_policy' is what somebody else's server said may be done
 		// with their post — GoToSocial's `interactionPolicy`, which Mastodon
 		// 4.5 reads. Null unless they published one, which most do not, and
@@ -105,7 +108,7 @@ class ApiContractTest extends TestCase {
 			'archived', 'bookmarked', 'card', 'content', 'created_at', 'edited_at', 'emojis', 'favourited',
 			'favourites_count', 'id', 'in_reply_to_account_id', 'in_reply_to_id', 'language',
 			'local', 'media_attachments', 'mentions', 'muted', 'nid', 'noindex', 'pinned', 'place', 'poll', 'quote',
-			'quote_approval', 'reply_approval', 'interaction_policy', 'video',
+			'quote_approval', 'reply_approval', 'reply_policy', 'interaction_policy', 'video',
 			'dislikes_count', 'disliked',
 			'reactions', 'reblog', 'reblogged', 'reblogs_count', 'replies_count', 'sensitive', 'spoiler_text',
 			'tagged_people', 'tags', 'uri', 'url', 'view_count', 'visibility', 'interest', 'ai_generated', 'bluesky',

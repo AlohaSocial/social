@@ -134,6 +134,7 @@ describe('the post menu', () => {
 				'Edit',
 				'Archive',
 				'Quotes of this post',
+				'Who can reply',
 				'Tag people',
 				'Delete',
 				'Delete & re-draft',
@@ -177,6 +178,7 @@ describe('the post menu', () => {
 
 			expect(offered).not.toContain('Delivery status')
 			expect(offered).not.toContain('Quotes of this post')
+			expect(offered).not.toContain('Who can reply')
 			expect(offered).not.toContain('Pin to profile')
 		})
 
@@ -291,6 +293,7 @@ describe('the post menu', () => {
 			['Edit', 'edit'],
 			['Archive', 'archive'],
 			['Quotes of this post', 'manageQuotes'],
+			['Who can reply', 'manageReplies'],
 			['Tag people', 'tagPeople'],
 			['Delete', 'delete'],
 			['Delete & re-draft', 'redraft'],

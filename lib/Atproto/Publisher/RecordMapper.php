@@ -47,6 +47,7 @@ class RecordMapper {
 	public const LIKE = 'app.bsky.feed.like';
 	public const REPOST = 'app.bsky.feed.repost';
 	public const POSTGATE = 'app.bsky.feed.postgate';
+	public const THREADGATE = 'app.bsky.feed.threadgate';
 
 	public function __construct(
 		private TextMapper $text,
@@ -177,6 +178,30 @@ class RecordMapper {
 	 *
 	 * @param string $postUri the post's `at://` URI
 	 */
+	/**
+	 * Who may reply on Bluesky, as the author's reply rule says: a gate of
+	 * the one rule, an empty one for nobody, and none for everybody.
+	 */
+	public function threadgate(Stream $post, string $postUri): ?array {
+		$allow = match ($post->getReplyRule()) {
+			Stream::REPLY_RULE_FOLLOWERS => [['$type' => self::THREADGATE . '#followerRule']],
+			Stream::REPLY_RULE_FOLLOWING => [['$type' => self::THREADGATE . '#followingRule']],
+			Stream::REPLY_RULE_MENTIONED => [['$type' => self::THREADGATE . '#mentionRule']],
+			Stream::REPLY_RULE_NOBODY => [],
+			default => null,
+		};
+		if ($allow === null) {
+			return null;
+		}
+
+		return [
+			'$type' => self::THREADGATE,
+			'post' => $postUri,
+			'allow' => $allow,
+			'createdAt' => Syntax::datetime(self::publishedAt($post)),
+		];
+	}
+
 	public function postgate(Stream $post, string $postUri): ?array {
 		if (!in_array($post->getQuotePolicy(), [Stream::QUOTE_POLICY_FOLLOWERS, Stream::QUOTE_POLICY_NOBODY], true)) {
 			return null;

@@ -492,6 +492,7 @@ class ApiControllerTest extends TestCase {
 
 				return $publisher;
 			})(),
+			'replyRules' => $this->createMock(\OCA\Social\Service\ReplyRuleService::class),
 		]);
 	}
 

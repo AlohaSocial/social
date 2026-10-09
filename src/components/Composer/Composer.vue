@@ -478,6 +478,10 @@
 				</select>
 				<LanguageSelect :language="language" @update:language="language = $event" />
 				<VisibilitySelect :visibility="visibility" @update:visibility="chooseVisibility" />
+				<ReplyPolicySelect
+					v-if="visibility !== 'direct'"
+					:policy="replyPolicy"
+					@update:policy="replyPolicy = $event" />
 				<div class="emptySpace" />
 				<span
 					v-if="statusText.length > 0"
@@ -554,6 +558,7 @@ import PreviewGrid from './PreviewGrid.vue'
 import ComposerPreview from './ComposerPreview.vue'
 import LanguageSelect from './LanguageSelect.vue'
 import VisibilitySelect from '../Visibility/VisibilitySelect.vue'
+import ReplyPolicySelect from './ReplyPolicySelect.vue'
 import { isKnownVisibility } from '../Visibility/VisibilitiesInfos.js'
 import SubmitStatusButton from './SubmitStatusButton.vue'
 import MessageContent from '../MessageContent.js'
@@ -679,6 +684,7 @@ export default {
 		FileGifBox,
 		LanguageSelect,
 		VisibilitySelect,
+		ReplyPolicySelect,
 		SubmitStatusButton,
 		MessageContent,
 	},
@@ -849,6 +855,8 @@ export default {
 			 */
 			teams: [],
 			postAs: '',
+			/** who may reply to it, as `reply_policy` says it */
+			replyPolicy: 'everyone',
 			/** when the post is to go out, or null for now */
 			scheduledAt: null,
 			/** whether the clock is pressed: the picker is shown, Post reads Schedule */
@@ -1325,6 +1333,7 @@ export default {
 			this.placing = false
 			this.place = null
 			this.asCard = false
+			this.replyPolicy = 'everyone'
 			clearDraft(this.draftContext)
 			this.updateStatusContent()
 		},
@@ -1710,6 +1719,7 @@ export default {
 				quoteId: this.quoteOf?.id,
 				visibility: this.visibility,
 				postAs: this.postAs,
+				replyPolicy: this.visibility === 'direct' ? 'everyone' : this.replyPolicy,
 				language: this.language,
 				video: this.isVideoPost
 					? { title: this.videoTitle, category: this.videoCategory, licence: this.videoLicence }

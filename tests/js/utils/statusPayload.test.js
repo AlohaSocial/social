@@ -85,4 +85,10 @@ describe('statusPayload', () => {
 			.not.toHaveProperty('poll')
 		expect(statusPayload(post())).not.toHaveProperty('poll')
 	})
+
+	it('says who may reply only when it is less than everybody', () => {
+		expect(statusPayload(post())).not.toHaveProperty('reply_policy')
+		expect(statusPayload(post({ replyPolicy: 'everyone' }))).not.toHaveProperty('reply_policy')
+		expect(statusPayload(post({ replyPolicy: 'followers' })).reply_policy).toBe('followers')
+	})
 })

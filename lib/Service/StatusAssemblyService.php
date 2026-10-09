@@ -73,7 +73,7 @@ class StatusAssemblyService {
 			'spoiler_text' => $status->getSpoilerText(),
 			'visibility' => $visibility,
 			'language' => $status->getLanguage(),
-		];
+		] + ($status->getReplyRule() !== '' ? ['reply_policy' => $status->getReplyRule()] : []);
 	}
 
 	/**
@@ -89,6 +89,7 @@ class StatusAssemblyService {
 		$post->setType($params->paramString('visibility'));
 		$post->setLanguage($params->paramString('language'));
 		$post->setQuotedId($params->paramString('quoted_status_id'));
+		$post->setReplyRule($params->paramString('reply_policy'));
 
 		$mediaIds = $params->paramMediaIds();
 		if ($mediaIds !== []) {

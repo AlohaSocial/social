@@ -397,6 +397,21 @@ class RecordMapperTest extends TestCase {
 		}
 	}
 
+	public function testWhoMayReplyIsAThreadgate(): void {
+		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
+		$post = $this->post('<p>mine</p>');
+		$this->assertNull($this->mapper->threadgate($post, $uri));
+		$post->setReplyRule('everyone');
+		$this->assertNull($this->mapper->threadgate($post, $uri));
+		foreach (['followers' => ['followerRule'], 'following' => ['followingRule'], 'mentioned' => ['mentionRule'], 'nobody' => []] as $rule => $allow) {
+			$post->setReplyRule($rule);
+			$gate = $this->mapper->threadgate($post, $uri);
+			$this->assertSame(array_map(static fn (string $r): array => ['$type' => 'app.bsky.feed.threadgate#' . $r], $allow), $gate['allow'], $rule);
+			$this->assertSame($uri, $gate['post']);
+			$this->lexicon->validateRecord($gate);
+		}
+	}
+
 	public function testAReferenceWithABrokenCidIsNotOnBluesky(): void {
 		$quoted = new Note();
 		$quoted->setId('https://bsky.app/profile/' . self::OTHER . '/post/3kbad');

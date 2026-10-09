@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.173
+**App version:** 0.26.174
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1537,6 +1537,27 @@ than `rejected`.
 **On the wire.** `quote` is FEP-044f's name and what Mastodon 4.5 reads first;
 `quoteUrl` and `_misskey_quote` are emitted beside it for the servers that
 predate the FEP. `quoteAuthorization` carries the approval once there is one.
+
+### Who may reply
+
+The author of a post written here says who may reply to it: everybody (the
+default), their followers, the accounts they follow, the accounts the post
+mentions, or nobody (`Stream::REPLY_RULES`, kept in the post's details as
+`reply_rule`, so no column is needed). `ReplyRuleService::refusal()` is the
+one rule, applied wherever a reply comes from: `PostService` refuses one
+written here with the reason before anything is sent, and `NoteInterface`
+does not keep one that arrives from another server or from Bluesky. The
+author always may. A follow counts once it is accepted.
+
+The rule goes out with the post: to peers as
+`interactionPolicy.canReply.automaticApproval` (GoToSocial's field, which it
+holds its own users to), to Bluesky as an `app.bsky.feed.threadgate` under the
+post's key (`RecordMapper::threadgate()`). A change later
+(`PUT /api/v1/statuses/{nid}/interaction_policy` with `reply_policy`) is
+forward-only, like the quote policy: replies already made stay. It
+re-snapshots the stored source, as the quote policy does, and rewrites the
+threadgate in one commit (`Publisher::updateGates()`), which a quote-policy
+change now uses for the postgate too.
 
 ### Discovery
 

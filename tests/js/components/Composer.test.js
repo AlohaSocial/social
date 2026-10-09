@@ -2956,6 +2956,33 @@ describe('Composer', () => {
 		})
 	})
 
+	describe('who can reply', () => {
+		it('sends a narrowed rule with the post, and starts over at everybody', async () => {
+			const { wrapper, store } = mountComposer()
+			await flushPromises()
+			wrapper.findComponent({ name: 'ReplyPolicySelect' }).vm.$emit('update:policy', 'mentioned')
+			await setContent(wrapper, 'hello')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(store.post).toHaveBeenCalledWith(expect.objectContaining({ reply_policy: 'mentioned' }))
+			expect(wrapper.vm.replyPolicy).toBe('everyone')
+		})
+
+		it('says nothing about it on a direct message', async () => {
+			const { wrapper, store } = mountComposer()
+			await flushPromises()
+			wrapper.findComponent({ name: 'ReplyPolicySelect' }).vm.$emit('update:policy', 'nobody')
+			wrapper.vm.chooseVisibility('direct')
+			await setContent(wrapper, 'hello @bob')
+			await submitButton(wrapper).trigger('click')
+			await flushPromises()
+
+			expect(wrapper.findComponent({ name: 'ReplyPolicySelect' }).exists()).toBe(false)
+			expect(store.post).toHaveBeenCalledWith(expect.not.objectContaining({ reply_policy: expect.anything() }))
+		})
+	})
+
 	describe('the composer as a toy', () => {
 		/** the roll plays at the speed a reader who asked for less motion gets */
 		const quickRoll = () => vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({

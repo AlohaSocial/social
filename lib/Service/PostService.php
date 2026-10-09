@@ -117,8 +117,12 @@ class PostService {
 		$parent = $this->replyParent($post);
 		if ($parent !== null) {
 			$post->setType(self::visibilityOfReply($post->getType(), $parent));
-			// who a Bluesky thread lets reply, before anything is written
+			// who a Bluesky thread lets reply, and who the author of one of
+			// this instance's own posts does, before anything is written
 			$refusal = $this->threadgates()?->refusal($post->getActor(), $parent) ?? '';
+			if ($refusal === '') {
+				$refusal = $this->replyRules()?->refusal($parent, $post->getActor()->getId()) ?? '';
+			}
 			if ($refusal !== '') {
 				throw new InvalidActionException($refusal);
 			}
@@ -170,6 +174,9 @@ class PostService {
 		// who may quote this one, before it is stored: the column is written by
 		// the same insert as everything else on the post
 		$note->setQuotePolicy($post->getQuotePolicy());
+		if ($post->getReplyRule() !== '') {
+			$note->setReplyRule($post->getReplyRule());
+		}
 		if ($post->getVideoMeta() !== []) {
 			$note->setVideoMeta($post->getVideoMeta());
 		}
@@ -263,6 +270,12 @@ class PostService {
 		$service = $this->container?->get(Threadgates::class);
 
 		return $service instanceof Threadgates ? $service : null;
+	}
+
+	private function replyRules(): ?ReplyRuleService {
+		$service = $this->container?->get(ReplyRuleService::class);
+
+		return $service instanceof ReplyRuleService ? $service : null;
 	}
 
 	private function postgates(): ?Postgates {

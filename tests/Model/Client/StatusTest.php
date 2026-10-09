@@ -101,4 +101,11 @@ class StatusTest extends TestCase {
 	public function testANullLanguageIsNoLanguage(): void {
 		$this->assertSame('', (new Status())->import(['language' => null])->getLanguage());
 	}
+
+	public function testWhoMayReplyIsReadAndAnUnknownRuleIsNotKept(): void {
+		$this->assertSame('', (new Status())->import(['status' => 'x'])->getReplyRule());
+		$this->assertSame('followers', (new Status())->import(['status' => 'x', 'reply_policy' => 'followers'])->getReplyRule());
+		$this->assertSame('', (new Status())->import(['status' => 'x', 'reply_policy' => 'friends'])->getReplyRule());
+		$this->assertSame('', (new Status())->import(['status' => 'x', 'reply_policy' => ['nobody']])->getReplyRule());
+	}
 }

@@ -350,6 +350,14 @@ class LocalAccount {
 	}
 
 	/**
+	 * @param array<string, mixed> $body
+	 * @return array<mixed>
+	 */
+	public function put(string $path, array $body = []): array {
+		return $this->request('PUT', $path, $body);
+	}
+
+	/**
 	 * @param array<string, mixed>|null $body
 	 * @return array<mixed>
 	 */

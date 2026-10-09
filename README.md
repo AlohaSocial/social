@@ -370,6 +370,11 @@ own unified search. No external search engine to run.
   followers, nobody), who already has, and a button that detaches one and tells
   their server. Mastodon 4.5's `quote_approval_policy`, its quote list and its
   revoke, over FEP-044f.
+- **Who can reply** — anybody, your followers, the people you follow, only the
+  people you mention, or nobody, chosen in the composer and changed later
+  from the post's menu. Held here, said to other servers as
+  `interactionPolicy.canReply`, and published to Bluesky as the post's
+  threadgate.
 - **Relays** — subscribe to one and a new server's federated timeline stops
   being empty: a relay rebroadcasts the public posts of every server on it, and
   carries this server's public posts out to all of them. Public posts only, and

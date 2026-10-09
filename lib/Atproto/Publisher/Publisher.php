@@ -364,15 +364,63 @@ class Publisher {
 	}
 
 	/**
-	 * The postgate a post needs beside it, under the post's own rkey, as the
-	 * lexicon requires.
+	 * The gates a post needs beside it, under the post's own rkey, as the
+	 * lexicons require: a postgate for its quote policy, a threadgate for
+	 * who may reply.
 	 *
+	 * @return array<string, array> collection => record
+	 */
+	private function gatesOf(Stream $post, string $did, string $rkey): array {
+		$uri = 'at://' . $did . '/' . RecordMapper::POST . '/' . $rkey;
+
+		return array_filter([
+			RecordMapper::POSTGATE => $this->mapper->postgate($post, $uri),
+			RecordMapper::THREADGATE => $this->mapper->threadgate($post, $uri),
+		], static fn (?array $gate): bool => $gate !== null);
+	}
+
+	/**
 	 * @return RepoWrite[]
 	 */
 	private function gateWrites(Stream $post, string $did, string $rkey): array {
-		$gate = $this->mapper->postgate($post, 'at://' . $did . '/' . RecordMapper::POST . '/' . $rkey);
+		$writes = [];
+		foreach ($this->gatesOf($post, $did, $rkey) as $collection => $gate) {
+			$writes[] = RepoWrite::create($collection, $gate, $post->getId(), $rkey);
+		}
 
-		return $gate === null ? [] : [RepoWrite::create(RecordMapper::POSTGATE, $gate, $post->getId(), $rkey)];
+		return $writes;
+	}
+
+	/**
+	 * Writes a published post's gates again, as its reply rule and quote
+	 * policy now say: each one made, rewritten or taken away in one commit;
+	 * nothing for a post not on Bluesky.
+	 *
+	 * @throws AtprotoException
+	 */
+	public function updateGates(Stream $post): void {
+		$record = $this->recordOf($post->getId());
+		if ($record === null || !$this->config->isEnabled()) {
+			return;
+		}
+		$gates = $this->gatesOf($post, $record->did, $record->rkey);
+		$writes = [];
+		foreach ($this->repositories->getRecordsByLocalId($post->getId()) as $stored) {
+			if ($stored->collection !== RecordMapper::POSTGATE && $stored->collection !== RecordMapper::THREADGATE) {
+				continue;
+			}
+			$writes[] = isset($gates[$stored->collection])
+				? RepoWrite::update($stored->collection, $stored->rkey, $gates[$stored->collection], $post->getId())
+				: RepoWrite::delete($stored->collection, $stored->rkey);
+			unset($gates[$stored->collection]);
+		}
+		foreach ($gates as $collection => $gate) {
+			$writes[] = RepoWrite::create($collection, $gate, $post->getId(), $record->rkey);
+		}
+		if ($writes !== []) {
+			$identity = $this->identities->getByDid($record->did);
+			$this->repositories->write($identity->did, $this->identities->signingKey($identity), $writes);
+		}
 	}
 
 	/**
@@ -381,7 +429,7 @@ class Publisher {
 	private function gateDeletes(string $postId): array {
 		$deletes = [];
 		foreach ($this->repositories->getRecordsByLocalId($postId) as $record) {
-			if ($record->collection === RecordMapper::POSTGATE) {
+			if ($record->collection === RecordMapper::POSTGATE || $record->collection === RecordMapper::THREADGATE) {
 				$deletes[] = RepoWrite::delete($record->collection, $record->rkey);
 			}
 		}

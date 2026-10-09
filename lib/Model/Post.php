@@ -35,6 +35,7 @@ class Post implements JsonSerializable {
 	private string $quotedId = '';
 	/** who may quote this post: '', 'public', 'followers' or 'nobody' */
 	private string $quotePolicy = '';
+	private string $replyRule = '';
 	/** what the composer said about the video: its title, category and licence */
 	private array $videoMeta = [];
 	private string $content = '';
@@ -133,6 +134,17 @@ class Post implements JsonSerializable {
 
 	public function getQuotePolicy(): string {
 		return $this->quotePolicy;
+	}
+
+	/** who may reply to the post, one of `Stream::REPLY_RULES`; '' for everybody */
+	public function getReplyRule(): string {
+		return $this->replyRule;
+	}
+
+	public function setReplyRule(string $replyRule): Post {
+		$this->replyRule = $replyRule;
+
+		return $this;
 	}
 
 	public function setQuotePolicy(string $quotePolicy): Post {
