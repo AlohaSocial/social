@@ -1013,7 +1013,11 @@ feed; a picture round-trips; a label from the dev Ozone hides a post; an
 account migrates from the dev PDS to here and its follower still follows.
 The real network (`plc.directory`, `bsky.network`) is touched by hand on a
 public https host only — devel is http and cannot be a PDS; the admin page
-says so when it detects http.
+says so when it detects http. That run is
+[Atproto-Live-Test.md](Atproto-Live-Test.md): `contrib/atproto-live-probe.sh`
+checks the host from outside (PDS, service identity, handle, DID document,
+firehose, relay, AppView, OAuth metadata), then a checklist goes through
+every feature with the Bluesky app on the other side.
 
 ## 18. Phases
 
