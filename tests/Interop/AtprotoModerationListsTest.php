@@ -54,6 +54,9 @@ class AtprotoModerationListsTest extends TestCase {
 		$this->assertNotNull($this->network->await(fn (): ?bool => in_array($spammer, $this->network->listItems($list['uri']), true) ? true : null), 'the AppView has the list');
 		$this->assertNotNull($this->network->await(fn (): ?bool => $this->network->resolveHandle('spam' . $suffix . '.test') === $spammer ? true : null), 'the AppView verified the handle');
 
+		// signed in first: that makes alice's Bluesky identity, as opening
+		// Social does, and a list is muted at the AppView as that identity
+		$app = $this->app();
 		$lists = Server::get(ModerationListService::class);
 		$subscription = $lists->subscribe($this->alice->actor, $list['uri'], 'mute');
 		$this->assertSame('Spammers', $subscription['name']);
@@ -62,7 +65,6 @@ class AtprotoModerationListsTest extends TestCase {
 		$spammerHere = $this->alice->resolve('spam' . $suffix . '.test');
 		$this->assertTrue($this->alice->relationship($spammerHere)['muting'] ?? false, 'muted here');
 
-		$app = $this->app();
 		$listMutes = function () use ($app): array {
 			[$status, $answer] = $app->query('app.bsky.graph.getListMutes', ['limit' => 50]);
 
