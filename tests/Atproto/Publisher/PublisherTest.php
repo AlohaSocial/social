@@ -32,10 +32,12 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\VerificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -288,6 +290,35 @@ class PublisherTest extends TestCase {
 		$this->publisher->deletePost(self::POST);
 
 		$this->assertSame([RecordMapper::POST . ' ' . RepoWrite::DELETE, RecordMapper::PROFILE . ' ' . RepoWrite::UPDATE], $writes, 'the profile no longer names it');
+	}
+
+	/** A changed name is a changed profile: the instance's verification of the account follows it. */
+	public function testPublishingTheProfileWritesTheVerificationOfTheAccountAgain(): void {
+		$this->mapper->method('profile')->willReturn(['$type' => RecordMapper::PROFILE, 'displayName' => 'Alice A.']);
+		$this->repositories->method('write')->willReturn($this->written());
+		$alice = (new Person())->setId('https://social.test/@alice');
+		$alice->setLocal(true);
+		$verifications = $this->createMock(VerificationService::class);
+		$verifications->expects($this->once())->method('refresh')->with($this->identicalTo($alice));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(VerificationService::class)->willReturn($verifications);
+		(new \ReflectionProperty(Publisher::class, 'container'))->setValue($this->publisher, $container);
+
+		$this->assertTrue($this->publisher->publishProfile($alice));
+	}
+
+	public function testAFailingVerificationDoesNotFailTheProfile(): void {
+		$this->mapper->method('profile')->willReturn(['$type' => RecordMapper::PROFILE, 'displayName' => 'Alice A.']);
+		$this->repositories->method('write')->willReturn($this->written());
+		$alice = (new Person())->setId('https://social.test/@alice');
+		$alice->setLocal(true);
+		$verifications = $this->createMock(VerificationService::class);
+		$verifications->method('refresh')->willThrowException(new \RuntimeException('the AppView is down'));
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->willReturn($verifications);
+		(new \ReflectionProperty(Publisher::class, 'container'))->setValue($this->publisher, $container);
+
+		$this->assertTrue($this->publisher->publishProfile($alice));
 	}
 
 	public function testReconcileLeavesAnImportedPostAsItCame(): void {

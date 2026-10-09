@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Service\VerificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -49,7 +50,7 @@ class AtprotoPublishChatTest extends TestCase {
 		$job = new AtprotoPublish(
 			$this->createMock(ITimeFactory::class), $publisher, $this->createMock(InteractionPublisher::class),
 			$this->createMock(StreamService::class), $this->createMock(CacheActorService::class), new NullLogger(),
-			$this->createMock(ChatSender::class), $state,
+			$this->createMock(ChatSender::class), $state, $this->createMock(VerificationService::class),
 		);
 		(new ReflectionMethod($job, 'run'))->invoke($job, $argument);
 	}

@@ -16,7 +16,8 @@
 				<span class="quoted-post__author">
 					<DisplayName :text="quotedAccount.display_name" :emojis="quotedAccount.emojis" />
 				</span>
-				<BlueskyBadge v-if="isBlueskyAccount(quotedAccount)" :account="quotedAccount" />
+				<BlueskyBadge v-if="isBlueskyAccount(quotedAccount)" />
+				<VerifiedBadge :account="quotedAccount" />
 				<span class="quoted-post__handle">@{{ quotedAccount.acct }}</span>
 			</router-link>
 			<div class="quoted-post__message">
@@ -43,6 +44,7 @@ import ActorAvatar from './ActorAvatar.vue'
 import BlueskyBadge from './BlueskyBadge.vue'
 import DisplayName from './DisplayName.js'
 import MessageContent from './MessageContent.js'
+import VerifiedBadge from './VerifiedBadge.vue'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
 
 export default {
@@ -52,6 +54,7 @@ export default {
 		BlueskyBadge,
 		DisplayName,
 		MessageContent,
+		VerifiedBadge,
 	},
 
 	props: {

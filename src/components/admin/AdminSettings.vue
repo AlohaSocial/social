@@ -157,6 +157,7 @@ import IconServer from 'vue-material-design-icons/ServerOutline.vue'
 import IconServerSettings from 'vue-material-design-icons/CogOutline.vue'
 import IconStorage from 'vue-material-design-icons/Harddisk.vue'
 import IconTrends from 'vue-material-design-icons/TrendingUp.vue'
+import IconVerified from 'vue-material-design-icons/CheckDecagramOutline.vue'
 import { currentSection, scrollToSection, watchSections } from '../../services/sectionRail.js'
 import { matchesQuery } from '../../services/settingsSearch.js'
 import AccessSection from './AccessSection.vue'
@@ -184,6 +185,7 @@ import SectionsSection from './SectionsSection.vue'
 import ServerSection from './ServerSection.vue'
 import StorageSection from './StorageSection.vue'
 import TrendsSection from './TrendsSection.vue'
+import VerificationSection from './VerificationSection.vue'
 
 /** What `AdminSettings::getForm()` provides when it provides nothing. */
 const NOTHING = {
@@ -304,6 +306,7 @@ export default {
 		IconServerSettings,
 		IconStorage,
 		IconTrends,
+		IconVerified,
 		InterestsSection,
 		MediaBlocksSection,
 		NcTextField,
@@ -316,6 +319,7 @@ export default {
 		ServerSection,
 		StorageSection,
 		TrendsSection,
+		VerificationSection,
 	},
 
 	data() {
@@ -452,6 +456,16 @@ export default {
 					title: t('social', 'Accounts'),
 					lede: t('social', 'Every account this server knows. Find one by username, handle or server, then silence or suspend it.'),
 					keywords: t('social', 'user silence suspend ban'),
+				},
+				{
+					id: 'verification',
+					group: 'moderation',
+					icon: 'IconVerified',
+					component: 'VerificationSection',
+					props: { administrator },
+					title: t('social', 'Verified accounts'),
+					lede: t('social', 'Accounts this server vouches for, with a check beside their name.'),
+					keywords: t('social', 'verify verification check badge trusted'),
 				},
 				{
 					id: 'media',

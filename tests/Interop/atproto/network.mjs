@@ -26,7 +26,9 @@
  *   (`POST /did`), behind the job's proxy as `https://me.handles.test`;
  *   and, on `/plc-token?did=`, the code the dev PDS would have e-mailed an
  *   account for a PLC operation, which a move here needs; and `/card`, a
- *   page with a preview picture (`/card.png`), for a link card;
+ *   page with a preview picture (`/card.png`), for a link card; and
+ *   `POST /trusted-verifier` with a DID, which makes the AppView trust that
+ *   account as a verifier, as Bluesky does for the verifiers it chose;
  * - a feed generator, the one dev-env ships: every feed it is asked for
  *   answers the posts the test last gave the handle server (`POST /feed`,
  *   their `at://` URIs one per line), so a feed record a test publishes
@@ -213,6 +215,21 @@ const handleServer = createServer(async (req, res) => {
 		}
 		feedPosts = Buffer.concat(chunks).toString().split('\n').map((line) => line.trim()).filter((line) => line !== '')
 		res.writeHead(204)
+		return res.end()
+	}
+	// Bluesky's decision to trust an account as a verifier, which the
+	// AppView keeps on the account's row and no XRPC method sets
+	if (req.method === 'POST' && req.url === '/trusted-verifier') {
+		const chunks = []
+		for await (const chunk of req) {
+			chunks.push(chunk)
+		}
+		const result = await network.bsky.db.db
+			.updateTable('actor')
+			.set({ trustedVerifier: true })
+			.where('did', '=', Buffer.concat(chunks).toString().trim())
+			.executeTakeFirst()
+		res.writeHead(Number(result.numUpdatedRows ?? 0) > 0 ? 204 : 404)
 		return res.end()
 	}
 	if (req.url === '/.well-known/atproto-did' && handleDid !== '') {

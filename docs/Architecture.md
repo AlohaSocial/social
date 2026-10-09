@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.198
+**App version:** 0.26.199
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -253,6 +253,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_atproto_oauth_session` | The Bluesky apps signed in through OAuth: account, app, granted scopes, the DPoP key every token is bound to, the hash of the one refresh token that is good and of the one it replaced (presenting that one ends the session), and when it ends — two weeks for a public app, never for a confidential one |
 | `social_atproto_oauth_replay` | One-time values that may not be used twice — DPoP proof ids, client assertion ids — by hash, until they could no longer be fresh |
 | `social_atproto_move` | Moves of a Bluesky account between this server and another PDS, either way (`direction` `away` or `in`): the other PDS, the handle there, the step reached (`repo`, `blobs`, `prefs`, `follows`, `code`, `identity`, `activate`, `done`), how it ended or that it waits for the person's e-mailed code, and why it stopped; while it runs, the session on the other PDS — and, moving here, the signing key made for the account and the code — sealed with the instance secret, all dropped once the move is done |
+| `social_verification` | The accounts this instance verified (`VerificationService`), one row per account, unique on the hash of its id: the moderator who verified it and when, and the DID, handle and display name its published verification record names — the DID `''` for an account that has none, verified here only |
 | `social_post_hold` | The posts waiting for a moderator: the client's request, the rule that held it, and the digest the queue is unique on |
 | `social_story` | Stories — the web client's 24-hour shorts: one picture, video or text card that expires after a day, with its caption, hold time, `expires_at`, the ActivityPub id it travels under (`source_id`/`source_id_prim`) and whether this instance wrote it (`local`) |
 | `social_story_view` | Who has seen a story: one row per (story, viewer), unique on the pair |
@@ -1878,6 +1879,33 @@ every six hours. Where the list lives is told too, as D16 of the Bluesky
 specification allows: a mute list is muted at the AppView, and a block
 list is published as a `listblock` record only for somebody who publishes
 their blocks.
+
+### Accounts this instance verified
+
+Moderators verify accounts in the instance's name (`VerificationService`,
+`VerificationController`; **Administration → Moderation → Verified
+accounts** and the profile menu, which `serverData.canVerify` turns on).
+Any account can be verified; each is a row in `social_verification`. The
+account entity's `verification` (`Person::exportAsLocal()`) is read from
+that table once per request (`exportOf()`, a whole-table index), never
+stored on the cached actor, which is rewritten whole on every refresh. The
+web app draws one check, `VerifiedBadge`, for this and for Bluesky's own
+verification (`bluesky.verified`), naming who verified; `BlueskyBadge` is
+the butterfly alone. The Fediverse's `rel="me"` link verification
+(`ProfileLinkVerifier`, `VerifiedCheck`) is a different thing — a page
+proving a profile row — and stays apart.
+
+Bluesky is where the instance's verifications are published: the
+administrator's verifying account (`verification_account`) issues an
+`app.bsky.graph.verification` record per verified DID from its repository
+(`Atproto\Publisher\BlueskyVerifications`, local id
+`verification:<did>`). The record names the account's handle and display
+name, so it is withdrawn and written again when either changes —
+`Publisher::publishProfile()` for a local account, `BlueskyActorService::store()`
+for a Bluesky one, both resolving the service lazily — and moved by
+`AtprotoPublish` (`verifications`) when the administrator chooses another
+verifying account. Bluesky apps show it once Bluesky trusts the verifying
+account as a verifier; see the Bluesky specification, §12.6.
 
 ### Discovery
 

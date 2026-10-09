@@ -45,7 +45,8 @@
 				:size="128" />
 			<h2>
 				{{ displayName }}
-				<BlueskyBadge v-if="isBluesky" :account="accountInfo" />
+				<BlueskyBadge v-if="isBluesky" />
+				<VerifiedBadge :account="accountInfo" />
 				<!-- beside the name, which is where a pronoun belongs and where
 				     every other network puts it; it is still a profile field and
 				     still federates as one -->
@@ -230,6 +231,21 @@
 							<IconFormatListBulleted :size="20" />
 						</template>
 						{{ t('social', 'Add to list') }}
+					</NcActionButton>
+					<!-- a moderator vouches for the account in the instance's
+					     name; everybody sees the check beside its name -->
+					<NcActionButton
+						v-if="serverData.canVerify"
+						:disabled="verifying"
+						closeAfterClick
+						@click="toggleVerification">
+						<template #icon>
+							<CheckDecagramOutline v-if="accountInfo.verification" :size="20" />
+							<CheckDecagram v-else :size="20" />
+						</template>
+						{{ accountInfo.verification
+							? t('social', 'Remove verification')
+							: t('social', 'Verify account') }}
 					</NcActionButton>
 				</NcActions>
 			</div>
@@ -511,6 +527,8 @@ import BellOutline from 'vue-material-design-icons/BellOutline.vue'
 import BellRing from 'vue-material-design-icons/BellRing.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
 import Check from 'vue-material-design-icons/Check.vue'
+import CheckDecagram from 'vue-material-design-icons/CheckDecagram.vue'
+import CheckDecagramOutline from 'vue-material-design-icons/CheckDecagramOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
@@ -534,12 +552,14 @@ import FollowButton from './FollowButton.vue'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
 import FeaturedTags from './FeaturedTags.vue'
 import ProfileHighlights from './ProfileHighlights.vue'
+import VerifiedBadge from './VerifiedBadge.vue'
 import VerifiedCheck from './VerifiedCheck.vue'
 import { asAccent, dominantColour } from '../utils/dominantColour.js'
 import { formatCount } from '../utils/number.js'
 import { fieldLink, profileFields } from '../utils/profileFields.js'
 import { sanitizeHtml } from '../utils/sanitizeHtml.js'
 import logger from '../services/logger.js'
+import { moderationUrl } from '../services/adminApi.js'
 import { showError, showSuccess } from '../services/toast.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
@@ -583,6 +603,8 @@ export default {
 		RepeatOff,
 		Cancel,
 		Check,
+		CheckDecagram,
+		CheckDecagramOutline,
 		Close,
 		ContentCopy,
 		BlueskyBadge,
@@ -599,6 +621,7 @@ export default {
 		ProfileHighlights,
 		ImagePlus,
 		TableEdit,
+		VerifiedBadge,
 		VerifiedCheck,
 		VolumeHigh,
 		VolumeOff,
@@ -629,6 +652,8 @@ export default {
 			/** the banner's own colour, tinting this profile only */
 			accent: '',
 			relationshipLoading: false,
+			/** a verification being made or taken back */
+			verifying: false,
 			showProfileModal: false,
 			/** the editor reads the profile before it opens; this is that read */
 			openingProfile: false,
@@ -984,6 +1009,33 @@ export default {
 			}
 
 			this.accent = asAccent(await dominantColour(url))
+		},
+
+		/**
+		 * Verifies the account in the instance's name, or takes the
+		 * verification back; the entity is told, so the check beside the
+		 * name follows at once.
+		 */
+		async toggleVerification() {
+			this.verifying = true
+			const verified = Boolean(this.accountInfo.verification)
+			try {
+				const url = moderationUrl('/verifications')
+				const { data } = verified
+					? await axios.delete(url, { data: { account: this.accountInfo.url } })
+					: await axios.post(url, { account: this.accountInfo.url })
+				this.accountStore.addAccount({ actorId: this.accountInfo.url, data: { verification: data.verification ?? null } })
+				await this.showSuccess(verified
+					? t('social', 'The verification was removed')
+					: t('social', 'The account is verified'))
+			} catch (error) {
+				logger.error('Failed to change the verification of this account', { error })
+				await this.showError(verified
+					? t('social', 'Could not remove the verification')
+					: t('social', 'Could not verify the account'))
+			} finally {
+				this.verifying = false
+			}
 		},
 
 		async toggleBlock() {

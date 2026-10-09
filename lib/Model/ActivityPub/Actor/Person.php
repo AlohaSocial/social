@@ -21,10 +21,12 @@ use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\Details;
+use OCA\Social\Service\VerificationService;
 use OCA\Social\Tools\IQueryRow;
 use OCA\Social\Traits\TDetails;
 use OCP\IURLGenerator;
 use OCP\Server;
+use Throwable;
 
 /**
  * Class Actor
@@ -1635,6 +1637,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				// a local account's Bluesky handle and DID, attached by the
 				// controllers that know them (see LocalController::attachBluesky)
 				'bluesky' => (isset($details[Details::BLUESKY]) && is_array($details[Details::BLUESKY])) ? $details[Details::BLUESKY] : null,
+				// this app's own: this instance's verification of the account,
+				// with who it is in the name of (VerificationService), or null
+				'verification' => self::verificationOf($this->getId()),
 			];
 
 		if ($this->getMovedTo() !== '') {
@@ -1642,6 +1647,21 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		}
 
 		return array_merge(parent::exportAsLocal(), $result);
+	}
+
+	/**
+	 * Read from the service rather than stored on the actor: a cached actor
+	 * is rewritten whole whenever it is fetched again. Null where there is
+	 * no service to ask, as in a unit test.
+	 *
+	 * @return array{by: string, issuer: string, created_at: string}|null
+	 */
+	private static function verificationOf(string $actorId): ?array {
+		try {
+			return Server::get(VerificationService::class)->exportOf($actorId);
+		} catch (Throwable) {
+			return null;
+		}
 	}
 
 	/**

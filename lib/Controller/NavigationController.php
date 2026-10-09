@@ -27,6 +27,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\ExternalMediaQuota;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\SectionsService;
 use OCA\Social\Service\SensitiveMediaService;
 use OCA\Social\Service\StreamService;
@@ -83,6 +84,7 @@ class NavigationController extends Controller {
 		private FilterService $filterService,
 		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
+		private ?ModeratorService $moderatorService = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -166,6 +168,9 @@ class NavigationController extends Controller {
 			'needsAccount' => false,
 			'setup' => false,
 			'isAdmin' => Server::get(IGroupManager::class)->isAdmin($this->userId),
+			// whether the reader may verify accounts in the instance's name,
+			// which is the moderators' (VerificationController)
+			'canVerify' => $this->moderatorService?->isModerator($this->userId) ?? false,
 			'cliUrl' => $this->getCliUrl(),
 			// what to do with a post somebody marked sensitive: this reader's
 			// own choice, or what the instance does for somebody who has not

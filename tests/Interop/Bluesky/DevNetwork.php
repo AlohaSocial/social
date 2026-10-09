@@ -328,6 +328,17 @@ final class DevNetwork {
 	}
 
 	/**
+	 * Makes the AppView trust an account as a verifier, as Bluesky does for
+	 * the verifiers it chose: their verifications are the ones a profile
+	 * shows. The AppView has to know the account first.
+	 */
+	public function trustVerifier(string $did): bool {
+		[$status] = $this->request('POST', $this->handleServer . '/trusted-verifier', $did, ['Content-Type: text/plain']);
+
+		return $status === 204;
+	}
+
+	/**
 	 * What every feed of the network's feed generator answers from now on.
 	 *
 	 * @param string[] $uris the posts, in the feed's order

@@ -146,7 +146,7 @@ describe('the administration page', () => {
 
 		expect(seen).toEqual({
 			Overview: ['Needs attention', 'Activity here'],
-			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Refused pictures', 'Server rules'],
+			Moderation: ['Reports', 'Posts waiting for review', 'Accounts', 'Verified accounts', 'Refused pictures', 'Server rules'],
 			'Explore and features': ['About this server', 'What may trend', 'Custom emoji', 'Announcements', 'Features'],
 			Federation: ['Allowed and blocked servers', 'Block lists', 'Relays', 'Deliveries'],
 			Server: ['Server settings', 'Retention', 'Storage', 'Background jobs'],
@@ -183,7 +183,7 @@ describe('the administration page', () => {
 		// nor what the app offers everybody, which is a decision about the
 		// instance rather than about a report
 		expect(all).not.toContain('Features')
-		expect(all).toHaveLength(16)
+		expect(all).toHaveLength(17)
 	})
 
 	/**

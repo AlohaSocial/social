@@ -21,6 +21,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\ActorService;
+use OCA\Social\Service\VerificationService;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -160,5 +161,23 @@ class BlueskyActorService {
 			$this->actorService->save($person);
 		}
 		$this->cacheActorsRequest->setCounts($person->getId(), $person->getDetails(Details::COUNT));
+		$this->reissueVerification($person);
+	}
+
+	/**
+	 * The instance's verification of the account written again when the
+	 * AppView now gives another handle or display name
+	 * (`VerificationService::refresh()`); resolved lazily, as that needs
+	 * services that need this one.
+	 */
+	private function reissueVerification(Person $person): void {
+		try {
+			$verifications = $this->container?->get(VerificationService::class);
+			if ($verifications instanceof VerificationService) {
+				$verifications->refresh($person);
+			}
+		} catch (Throwable $e) {
+			$this->logger->warning('Verification not issued again', ['actor' => $person->getId(), 'exception' => $e]);
+		}
 	}
 }

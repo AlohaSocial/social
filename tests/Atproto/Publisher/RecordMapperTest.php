@@ -504,6 +504,14 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($record);
 	}
 
+	/** A verification of the account names the name the profile carries, or it does not hold. */
+	public function testTheProfilesDisplayNameIsTheOneAVerificationNames(): void {
+		$this->author->setDisplayName('  Alice ' . str_repeat('x', 100));
+
+		$this->assertSame($this->mapper->profile($this->author, $this->identity)['displayName'], RecordMapper::displayNameOf($this->author));
+		$this->assertSame('', RecordMapper::displayNameOf((new Person())->setPreferredUsername('')));
+	}
+
 	public function testAProfileCarriesThePronounsAndTheWebsiteFromItsRows(): void {
 		$this->author->setFields([['name' => 'Pronouns', 'value' => 'she/her'], ['name' => 'Website', 'value' => 'https://alice.example']]);
 

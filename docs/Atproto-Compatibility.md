@@ -99,6 +99,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D21 | CI and devel use a self-hosted PLC, `@atproto/dev-env` and an `indigo` relay; the real network is exercised by hand only. | 09-25 |
 | D22 | **A person's lists are one set with their Bluesky lists** (§9.7). A list here is private, as a Mastodon list is, and is never published silently: the person makes it public, and a public list is a Bluesky curate list with its members, kept in step both ways; a curate list made in a Bluesky app signed in here, or brought by a move here, is a public list here. A list a reply rule names is published while the rule needs it, public or not (§8.3). | 10-09 |
 | D23 | **A person may switch their own presence on Bluesky off** (was open question 1): "Be on Bluesky" in their settings, on by default. Off is Bluesky's own deactivation — the profile and posts are no longer shown there, nothing new is published, Bluesky apps are signed out, Bluesky direct messages and notifications are no longer read — while the DID, the handle and the repository stay theirs. Reading Bluesky accounts they follow goes on; their likes, replies and messages to Bluesky then stay here. On again, the repository is served as it was; **what was written while off is never published afterwards**. §4.6. | 10-09 |
+| D24 | **The instance as a verifier**: moderators verify accounts here (a company verifying its own people), local and remote alike; the check is shown on the account everywhere, as one "verified" concept with Bluesky's trusted verifications, naming who verified. With Bluesky on, a verification of an account with a DID is published as an `app.bsky.graph.verification` record from a local **verifying account** the administrator chooses; Bluesky apps show it only once Bluesky trusts that account as a verifier. A Fediverse account without a DID is verified here only (§12.6). | 10-09 |
 
 ## 3. The protocol, as far as this app needs it
 
@@ -304,6 +305,7 @@ Collection → written when:
 | `app.bsky.graph.block` | a local actor blocks a Bluesky account, **only when the person publishes their blocks** (D16, `Publisher\BlueskyBlocks`) | `subject` DID |
 | `app.bsky.graph.listblock` | a local actor subscribes to a block list **and** publishes their blocks (D16, §12.5, `Reader\BlueskyModerationLists`) | `subject` list `at://` URI |
 | `chat.bsky.actor.declaration` (rkey `self`) | who may send the person direct messages changed here or in a Bluesky app signed in here, or the account's first read of its direct messages finds none while the setting here is `none` (§10.1, `Chat\ChatDeclaration`) | `allowIncoming`: `all`, `following` or `none` |
+| `app.bsky.graph.verification` | a moderator verifies an account that has a DID, in the repository of the instance's verifying account (D24, §12.6, `Publisher\BlueskyVerifications`); written again when the account's handle or display name changes, withdrawn when the verification is taken back | `subject` DID, `handle`, `displayName` (as they are when written), `createdAt` |
 | any other `chat.*` | never | — |
 
 Records are built by `RecordMapper` from the Social model (§8) and
@@ -998,9 +1000,10 @@ reaching the chat service another way goes by it.
   router tells it apart), the follow button, the counts, the posts from
   the author feed (fetched live and paged by the AppView cursor when the
   account is not watched), and a **Bluesky badge** next to the name — the
-  butterfly glyph with `title="On Bluesky"`, the same place the verified
-  tick sits. The badge appears on every card the author appears in: post
-  header, notification, follower list, search result.
+  butterfly glyph with `title="On Bluesky"`; beside it, the one verified
+  check (`VerifiedBadge`) for Bluesky's trusted verifications and this
+  instance's own (§12.6). The badge appears on every card the author
+  appears in: post header, notification, follower list, search result.
 - **Addressing**: `@alice.bsky.social` in a post mentions the Bluesky
   account; the composer's mention picker completes Bluesky handles from the
   AppView typeahead when the typed text has a dot and no second `@`.
@@ -1160,6 +1163,60 @@ person's own block does (§12.4): on Bluesky a list block hides both ways
 without touching the follow records, and here the block relation does
 the same on read. At most 20 subscriptions per person.
 
+### 12.6 Verification by this instance (D24)
+
+An instance can vouch for accounts: a company running the server verifies
+its own people, a community the accounts it knows. **Administration →
+Moderation → Verified accounts** lists them and verifies one by its handle;
+a moderator (an administrator or a delegate of the Social settings) also
+verifies or takes back from the account's profile menu
+(`VerificationController`, `VerificationService`). Any account can be
+verified — local, Fediverse, Bluesky. `social_verification` keeps one row
+per account: who verified it, when, and the DID, handle and display name
+its published record names.
+
+The check is shown wherever the account appears: the account entity
+carries `verification` (`{by, issuer, created_at}`, null when the instance
+did not verify it), read once per request from the table rather than
+stored on the cached actor, which is rewritten whole on every refresh.
+The web app draws one check (`VerifiedBadge`) for both this and Bluesky's
+own verification (`bluesky.verified`, §9.1), its label naming who:
+"Verified by Example Inc", "… and by Bluesky", "Verified by 2 trusted
+verifiers". `by` is the verifying account's name, or the instance's
+(Theming) when none is chosen.
+
+**Publishing.** The administrator chooses a local **verifying account**
+(`verification_account`, admin only; it is given a Bluesky identity when it
+has none, and its profile is published so the network knows its name).
+With Bluesky on, a verification of an account that has a DID — a local
+account's own identity, or a Bluesky account's — is an
+`app.bsky.graph.verification` record in that account's repository, local
+id `verification:<subject DID>`. The AppView judges a record invalid once
+the subject's handle or display name differs from what it names, and keeps
+one verification per issuer and subject, so a change means withdrawing the
+record and writing a new one, in that order:
+
+- a local account: when its profile is published (`Publisher::publishProfile()`,
+  after a name change, and after a new custom handle, which queues it);
+- a Bluesky account: when its cached profile is stored with another handle
+  or display name (`BlueskyActorService::store()`).
+
+The record's display name for a local account is the one its profile
+record carries (`RecordMapper::displayNameOf()`); Bluesky treats a
+verification of an account without a display name as invalid. Another
+verifying account moves every record to its repository, off the request
+(`AtprotoPublish` action `verifications`); none withdraws them all. A
+Fediverse account without a DID is verified here only, its row says so
+(`did` empty), and the administration page shows it as "Shown here only".
+
+**What Bluesky shows.** Bluesky apps show a verification only from a
+*trusted verifier* — an account Bluesky chose (`trustedVerifierStatus`),
+which this instance cannot make itself; until Bluesky trusts the verifying
+account the records exist and show nowhere but here. The interop job makes
+the dev AppView trust the verifying account (`DevNetwork::trustVerifier()`)
+and reads the verification back from `getProfile`
+(`AtprotoVerificationTest`).
+
 ## 13. Moving a Bluesky account here
 
 Its own phase (D19). The AT Protocol account-migration flow, driven from
@@ -1296,6 +1353,7 @@ regenerated schema check that `SchemaConventionsTest` expects:
 | `social_atproto_labeler` | per user: labeler DID, the per-label settings (JSON), `added` |
 | `social_atproto_blocklist` | admin blocks: `kind` (`host`/`did`), `value`, `reason`, `created` |
 | `social_atproto_session` | app-password sessions for Bluesky apps (§6.3): `did`, `jti`, refresh token hash, `expires`, `created`; OAuth later adds its own |
+| `social_verification` | the accounts this instance verified (§12.6): `actor_id(_prim)`, `did` ('' for none), `handle` and `display_name` as the published record names them, `verified_by` (the moderator), `creation`. Unique on the actor |
 
 Existing tables gain nothing except: `social_stream.id` may be an `at://`
 URI (no schema change; `id_prim` handles it), `social_cache_actor.id`
@@ -1345,14 +1403,16 @@ buffer, as the reference relay does to a slow PDS.
 
 ### 16.5 What is published
 
-Only what D8, D16 and D22 allow: public posts, their pictures, profile
-fields that are already public on the Fediverse, follows of Bluesky
-accounts, likes and reposts of Bluesky-visible posts, the lists a person
-made public or a reply rule names (§9.7), and who may send the person
-direct messages (§10.1). Nothing else is ever written to a repository, and
-`RecordMapper` is the one place that could — but for those lists and that
-setting, which `BlueskyLists` and `ChatDeclaration` write — so one test
-class (§17) is the whole of that guarantee.
+Only what D8, D16, D22 and D24 allow: public posts, their pictures,
+profile fields that are already public on the Fediverse, follows of
+Bluesky accounts, likes and reposts of Bluesky-visible posts, the lists a
+person made public or a reply rule names (§9.7), who may send the person
+direct messages (§10.1), and the verifications this instance issues
+(§12.6). Nothing else is ever written to a repository, and `RecordMapper`
+is the one place that could — but for those lists, that setting and those
+verifications, which `BlueskyLists`, `ChatDeclaration` and
+`BlueskyVerifications` write — so one test class (§17) is the whole of
+that guarantee.
 
 ## 17. Testing
 
