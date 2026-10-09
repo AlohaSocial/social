@@ -49,10 +49,12 @@ class AtprotoBellTest extends TestCase {
 			return array_map(static fn (array $profile): string => (string)($profile['did'] ?? ''), $answer['subscriptions'] ?? []);
 		};
 
+		// the AppView keeps subscriptions in bsync and lists them once it has
+		// read the write back, so the list is asked until it says so
 		Server::get(AccountRelationService::class)->setNotify($this->alice->actor, $target, true);
-		$this->assertContains($bob, $subscribed(), 'listed for the account on Bluesky');
+		$this->assertNotNull($this->network->await(fn (): ?bool => in_array($bob, $subscribed(), true) ? true : null), 'listed for the account on Bluesky');
 
 		Server::get(AccountRelationService::class)->setNotify($this->alice->actor, $target, false);
-		$this->assertNotContains($bob, $subscribed(), 'and gone when silenced');
+		$this->assertNotNull($this->network->await(fn (): ?bool => !in_array($bob, $subscribed(), true) ? true : null), 'and gone when silenced');
 	}
 }
