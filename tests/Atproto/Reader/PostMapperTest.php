@@ -35,6 +35,15 @@ class PostMapperTest extends TestCase {
 		$this->assertArrayNotHasKey('interactionPolicy', (new PostMapper($this->resolver()))->note($view), 'a narrower gate is checked on replying');
 	}
 
+	public function testAPostItsAuthorKeepsTheViewerFromQuotingIsMarkedSo(): void {
+		$view = $this->postView();
+		$this->assertArrayNotHasKey('interactionPolicy', (new PostMapper($this->resolver()))->note($view));
+
+		$view['viewer'] = ['embeddingDisabled' => true];
+		$view['threadgate'] = ['record' => ['allow' => []]];
+		$this->assertSame(['canReply' => ['automaticApproval' => []], 'canQuote' => ['automaticApproval' => []]], (new PostMapper($this->resolver()))->note($view)['interactionPolicy'] ?? null);
+	}
+
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
 		$create = (new PostMapper($this->resolver()))->create($this->postView());
 		$this->assertNotNull($create);

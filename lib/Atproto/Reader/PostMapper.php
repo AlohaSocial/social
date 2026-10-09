@@ -179,6 +179,10 @@ class PostMapper {
 		if (($post['threadgate']['record']['allow'] ?? null) === []) {
 			$note['interactionPolicy'] = ['canReply' => ['automaticApproval' => []]];
 		}
+		// a post read as a viewer its author's postgate keeps from quoting it
+		if (($post['viewer']['embeddingDisabled'] ?? false) === true) {
+			$note['interactionPolicy'] = ($note['interactionPolicy'] ?? []) + ['canQuote' => ['automaticApproval' => []]];
+		}
 		$langs = $record['langs'] ?? [];
 		if (is_array($langs) && is_string($langs[0] ?? null) && $langs[0] !== '') {
 			$note['contentMap'] = [$langs[0] => $content];

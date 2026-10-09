@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
@@ -172,7 +173,7 @@ class PostService {
 		if ($post->getVideoMeta() !== []) {
 			$note->setVideoMeta($post->getVideoMeta());
 		}
-		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId());
+		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId(), $post->getActor());
 		$this->streamService->addRecipients($note, $post->getType(), $post->getTo());
 		$this->streamService->addChannelFollowers($note);
 		$this->streamService->addHashtags($note, $post->getHashtags());
@@ -262,6 +263,12 @@ class PostService {
 		$service = $this->container?->get(Threadgates::class);
 
 		return $service instanceof Threadgates ? $service : null;
+	}
+
+	private function postgates(): ?Postgates {
+		$service = $this->container?->get(Postgates::class);
+
+		return $service instanceof Postgates ? $service : null;
 	}
 
 	private function replyParent(Post $post): ?Stream {
@@ -460,7 +467,7 @@ class PostService {
 	 *                                client can act on, and the one PinService::pin() raises for the
 	 *                                same refusal
 	 */
-	private function applyQuote(Note $note, string $quotedId): ?Person {
+	private function applyQuote(Note $note, string $quotedId, Person $quoter): ?Person {
 		if ($quotedId === '') {
 			return null;
 		}
@@ -473,6 +480,18 @@ class PostService {
 			throw new InvalidActionException('the post to quote is unknown here');
 		}
 
+		if (BlueskyIds::isPostId($quoted->getId())) {
+			// Bluesky asks nobody's permission to quote: the author's postgate
+			// decides, and the AppView applies it — a quote it shows detached
+			// is refused here instead
+			$refusal = $quoted->getQuotePolicy() === Stream::QUOTE_POLICY_NOBODY
+				? Postgates::REFUSAL
+				: ($this->postgates()?->refusal($quoter, $quoted) ?? '');
+			if ($refusal !== '') {
+				throw new InvalidActionException($refusal);
+			}
+		}
+
 		if (!$quoted->isQuotable()) {
 			throw new InvalidActionException('you can only quote a public or unlisted post');
 		}
@@ -480,8 +499,6 @@ class PostService {
 		$note->setQuote($quoted->getId());
 
 		if (BlueskyIds::isPostId($quoted->getId())) {
-			// Bluesky asks nobody's permission to quote: the author's postgate
-			// decides, and the AppView applies it
 			$note->setQuoteState(Stream::QUOTE_ACCEPTED);
 
 			return null;
