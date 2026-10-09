@@ -93,18 +93,23 @@ class PictureService {
 	 * @return array{blob: BlobRef, width: int, height: int}|null
 	 */
 	public function avatarBlob(Identity $identity, Person $owner, int $maxBytes = self::MAX_BYTES): ?array {
-		if (!$owner->isLocal() || $owner->getUserId() === ''
-			|| $this->container?->get(AccountService::class)->mayPublish($owner, IAccountManager::PROPERTY_AVATAR) === false) {
+		if (!$owner->isLocal()) {
 			return null;
 		}
+		$accounts = $this->container?->get(AccountService::class);
 		try {
-			$avatar = $this->avatars->getAvatar($owner->getUserId());
+			// an actor read from the actors cache carries no user id
+			$userId = $owner->getUserId() !== '' ? $owner->getUserId() : (string)$accounts?->getFromId($owner->getId())->getUserId();
+			if ($userId === '' || $accounts?->mayPublish((clone $owner)->setUserId($userId), IAccountManager::PROPERTY_AVATAR) === false) {
+				return null;
+			}
+			$avatar = $this->avatars->getAvatar($userId);
 			if (!$avatar->isCustomAvatar()) {
 				return null;
 			}
 			$bytes = $avatar->getFile(-1)->getContent();
 		} catch (Throwable $e) {
-			$this->logger->notice('Avatar not readable for Bluesky', ['user' => $owner->getUserId(), 'exception' => $e]);
+			$this->logger->notice('Avatar not readable for Bluesky', ['actor' => $owner->getId(), 'exception' => $e]);
 
 			return null;
 		}

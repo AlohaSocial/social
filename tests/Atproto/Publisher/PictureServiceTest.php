@@ -87,6 +87,7 @@ class PictureServiceTest extends TestCase {
 		$avatars = $this->createMock(IAvatarManager::class);
 		$avatars->method('getAvatar')->with('alice')->willReturn($avatar);
 		$accounts = $this->createMock(AccountService::class);
+		$accounts->method('getFromId')->with('https://social.test/@alice')->willReturn((new Person())->setUserId('alice'));
 		$accounts->method('mayPublish')->with($this->anything(), IAccountManager::PROPERTY_AVATAR)->willReturnCallback(fn (): bool => $this->avatarPublished);
 		$container = $this->createMock(ContainerInterface::class);
 		$container->method('get')->with(AccountService::class)->willReturn($accounts);
@@ -142,6 +143,15 @@ class PictureServiceTest extends TestCase {
 		$this->assertTrue(Cid::forRaw(self::png())->equals($blob['blob']->cid));
 		$this->assertSame([self::png()], $this->stored, 'stored once, the second time known by its bytes');
 		$this->assertTrue($again['blob']->cid->equals($blob['blob']->cid));
+	}
+
+	public function testAnActorReadFromTheCacheIsFoundItsAccount(): void {
+		$cached = new Person();
+		$cached->setId('https://social.test/@alice');
+		$cached->setLocal(true);
+
+		$this->assertNotNull($this->pictures(self::png())->avatarBlob($this->identity(), $cached));
+		$this->assertSame('', $cached->getUserId(), 'the actor handed in is left as it was');
 	}
 
 	public function testAGeneratedAvatarOrOneKeptFromOtherServersIsNotPublished(): void {

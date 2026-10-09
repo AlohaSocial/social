@@ -11,12 +11,18 @@ namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Service\AccountService;
+use OCA\Social\Service\CacheActorService;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
+use OCP\Accounts\IAccountManager;
+use OCP\IAvatarManager;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -132,7 +138,7 @@ class AtprotoAppsTest extends TestCase {
 		$this->assertSame(200, $status, json_encode($saved));
 		$this->assertNotSame($before, (string)($this->alice->get('/api/v1/accounts/verify_credentials')['avatar'] ?? ''), 'the picture is the account\'s avatar');
 		$profile = Server::get(RepositoryService::class)->getRecord($identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
-		$this->assertArrayHasKey('avatar', $profile === null ? [] : (array)DagCbor::decode($profile->bytes), 'the profile record names the avatar');
+		$this->assertArrayHasKey('avatar', $profile === null ? [] : (array)DagCbor::decode($profile->bytes), 'the profile record names the avatar: ' . $this->whyNoAvatar($identity));
 		$this->assertNotNull($this->network->await(fn () => ($this->network->profile($identity->did)['avatar'] ?? '') !== '' ? true : null), 'and the AppView shows it');
 
 		// deleting the post's record deletes the post here
@@ -155,5 +161,25 @@ class AtprotoAppsTest extends TestCase {
 		imagepng($image);
 
 		return (string)ob_get_clean();
+	}
+
+	/** What the avatar's way to the profile record looks like from here, for a failure message. */
+	private function whyNoAvatar(Identity $identity): string {
+		$actor = Server::get(CacheActorService::class)->getFromId($this->alice->actor->getId(), false);
+		$avatar = Server::get(IAvatarManager::class)->getAvatar($this->alice->userId);
+		try {
+			$blob = Server::get(PictureService::class)->avatarBlob($identity, $actor, PictureService::MAX_BYTES);
+			$blob = $blob === null ? 'null' : $blob['blob']->cid->toString();
+		} catch (\Throwable $e) {
+			$blob = get_class($e) . ': ' . $e->getMessage();
+		}
+
+		return json_encode([
+			'local' => $actor->isLocal(),
+			'userId' => $actor->getUserId(),
+			'mayPublish' => Server::get(AccountService::class)->mayPublish($actor, IAccountManager::PROPERTY_AVATAR),
+			'custom' => $avatar->isCustomAvatar(),
+			'blob' => $blob,
+		]);
 	}
 }
