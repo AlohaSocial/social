@@ -102,6 +102,19 @@ class QuoteGrantRequest extends CoreRequestBuilder {
 	}
 
 	/** Everything a deleted post leaves behind here, either way round. */
+	/**
+	 * The approvals one account was given for its quotes. `actor_id` holds
+	 * the account; the other two columns hold posts. Not indexed: only an
+	 * account's deletion asks.
+	 */
+	public function deleteByActor(string $actorId): void {
+		$qb = $this->getQueryBuilder();
+		$qb->delete(self::TABLE_QUOTE_GRANTS)
+			->where($qb->expr()->eq('actor_id', $qb->createNamedParameter($actorId)));
+
+		$qb->executeStatement();
+	}
+
 	public function deleteRelatedId(string $id): void {
 		$qb = $this->getQueryBuilder();
 		$qb->delete(self::TABLE_QUOTE_GRANTS)
