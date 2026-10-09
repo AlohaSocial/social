@@ -413,6 +413,22 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($gate);
 	}
 
+	public function testTheRepliesTheAuthorHidAreInTheThreadgate(): void {
+		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
+		$post = $this->post('<p>mine</p>');
+		$post->setHiddenReplies(['https://bsky.app/profile/did:plc:bob/post/3kr', 'https://remote.example/notes/not-on-bluesky']);
+		$reply = (new Note())->setId('https://bsky.app/profile/did:plc:bob/post/3kr');
+		$reply->setDetailArray(PostMapper::DETAIL, ['uri' => 'at://did:plc:bob/app.bsky.feed.post/3kr', 'cid' => Cid::forRaw('r')->toString()]);
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturnCallback(static fn (string $id): Note => $id === $reply->getId() ? $reply : throw new StreamNotFoundException());
+
+		$gate = $this->mapper()->threadgate($post, $uri);
+
+		$this->assertSame(['at://did:plc:bob/app.bsky.feed.post/3kr'], $gate['hiddenReplies']);
+		$this->assertArrayNotHasKey('allow', $gate, 'anybody may still reply');
+		$this->lexicon->validateRecord($gate);
+	}
+
 	public function testWhoMayReplyIsAThreadgate(): void {
 		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
 		$post = $this->post('<p>mine</p>');

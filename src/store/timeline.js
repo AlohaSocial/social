@@ -365,6 +365,8 @@ export const useTimelineStore = defineStore('timeline', {
 		parentsTimeline: [],
 		/** which list a removed status came from, so a rollback restores it there */
 		removedFrom: {},
+		/** how many replies of the open conversation its author hid, and that are not shown */
+		hiddenByAuthor: 0,
 		type: 'home',
 
 		/**
@@ -737,6 +739,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timeline = []
 			this.parentsTimeline = []
 			this.removedFrom = {}
+			this.hiddenByAuthor = 0
 			// the id lists used to be the only thing cleared, so `statuses` grew
 			// for the whole session: every page of every timeline ever opened.
 			// Pruned rather than emptied, because the remembered lists read it
@@ -1496,6 +1499,9 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			this.addToTimeline(response.data)
+			if (this.type === 'single-post') {
+				this.hiddenByAuthor = Number(response.headers?.['x-social-hidden-replies'] ?? 0) || 0
+			}
 			// more of it is being read from elsewhere: the rest of a
 			// conversation, or a hashtag's posts beyond this server
 			if (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1') {
@@ -1503,6 +1509,33 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			return response.data
+		},
+
+		/**
+		 * The replies of the open conversation its author hid, shown after all,
+		 * marked as hidden, below the others.
+		 */
+		async showHiddenReplies() {
+			const identity = this.getTimelineIdentity
+			const { data } = await axios.get(timelineRequest(this, {}), { params: { with_hidden: true } })
+			if (this.getTimelineIdentity === identity) {
+				this.addToTimeline(data)
+				this.hiddenByAuthor = 0
+			}
+		},
+
+		/**
+		 * A reply hidden or shown by the author of its thread.
+		 *
+		 * @param {object} root0 the reply and whether it is hidden now
+		 * @param {string} root0.statusId the reply
+		 * @param {boolean} root0.hidden whether it is hidden
+		 */
+		updateStatusHiddenByAuthor({ statusId, hidden }) {
+			const known = this.statuses[statusId]
+			if (known !== undefined) {
+				this.statuses[statusId] = { ...known, hidden_by_author: hidden }
+			}
 		},
 
 		/**

@@ -620,7 +620,7 @@ class StreamService {
 	 *
 	 * @return array
 	 */
-	public function getContextByNid(int|string $nid): array {
+	public function getContextByNid(int|string $nid, bool $withHidden = false): array {
 		// Router path parameters arrive as decimal strings. Normalize the id at
 		// the service boundary before it reaches the query builder, whose
 		// integer predicate cannot accept even an in-range numeric string.
@@ -651,10 +651,26 @@ class StreamService {
 			$filling = ($this->remoteFetchQueue?->fillThread($post) ?? false) || $filling;
 		}
 
+		// the replies the thread's author hid: left out, or marked when the
+		// reader asks to see them; the author may hide or show any of them
+		$hidden = array_flip($root->getHiddenReplies());
+		$readerIsAuthor = $this->viewer !== null && $this->viewer->getId() === $root->getAttributedTo();
+		$descendants = [];
+		$hiddenCount = 0;
+		foreach ($this->streamRequest->getDescendants($post->getId()) as $reply) {
+			$isHidden = isset($hidden[$reply->getId()]);
+			$hiddenCount += $isHidden ? 1 : 0;
+			if ($isHidden && !$withHidden) {
+				continue;
+			}
+			$descendants[] = $reply->setThreadVisibility($isHidden, $readerIsAuthor);
+		}
+
 		$context = [
 			'ancestors' => array_reverse($ancestors),
-			'descendants' => $this->streamRequest->getDescendants($post->getId()),
+			'descendants' => $descendants,
 			'filling' => $filling,
+			'hidden' => $hiddenCount,
 		];
 		// the post itself as well: it is drawn with the thread — the open
 		// direct message is rendered from it — and leaving it out of the batch

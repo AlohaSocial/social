@@ -545,10 +545,10 @@ class StatusApiController extends MastodonApiController {
 	#[NoCSRFRequired]
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/statuses/{nid}/context')]
-	public function statusContext(int|string $nid): DataResponse {
+	public function statusContext(int|string $nid, bool $with_hidden = false): DataResponse {
 		try {
 			$this->initViewer(false);
-			$context = $this->streamService->getContextByNid($nid);
+			$context = $this->streamService->getContextByNid($nid, $with_hidden);
 
 			$response = new DataResponse(
 				[
@@ -565,6 +565,11 @@ class StatusApiController extends MastodonApiController {
 			// a client that knows the header asks again a little later
 			if ($context['filling'] ?? false) {
 				$response->addHeader('X-Social-Thread-Filling', '1');
+			}
+			// how many replies the thread's author hid: left out unless asked
+			// for with `with_hidden`, and then marked `hidden_by_author`
+			if (($context['hidden'] ?? 0) > 0) {
+				$response->addHeader('X-Social-Hidden-Replies', (string)$context['hidden']);
 			}
 
 			return $response;

@@ -195,6 +195,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const REPLY_RULE_FOLLOWING = 'following';
 	public const REPLY_RULE_MENTIONED = 'mentioned';
 	public const REPLY_RULE_NOBODY = 'nobody';
+	/** as many hidden replies as a threadgate's `hiddenReplies` holds */
+	public const HIDDEN_REPLIES_KEPT = 300;
 	/** as many detached quotes as a postgate's `detachedEmbeddingUris` holds */
 	public const DETACHED_QUOTES_KEPT = 50;
 	public const REPLY_RULES = [
@@ -373,6 +375,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	private string $quote = '';
 	/** FEP-044f: the quoted author's stamp of approval, once one has been granted */
 	private string $quoteAuthorization = '';
+	private ?bool $hiddenByAuthor = null;
+	private ?bool $readerMayHide = null;
 	/** who the author said may quote this post; '' means the visibility rule decides */
 	private string $quotePolicy = '';
 	private array $attachments = [];
@@ -1010,6 +1014,41 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		$rule = $this->getDetailsAll()[Details::REPLY_RULE] ?? '';
 
 		return is_string($rule) && in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE;
+	}
+
+	/**
+	 * The replies in this post's thread that its author hid, by their ids,
+	 * the newest 300 — as many as a Bluesky threadgate lists. Kept on the
+	 * thread's first post.
+	 *
+	 * @return list<string>
+	 */
+	public function getHiddenReplies(): array {
+		$ids = $this->getDetailsAll()[Details::HIDDEN_REPLIES] ?? [];
+
+		return is_array($ids) ? array_values(array_filter($ids, 'is_string')) : [];
+	}
+
+	/**
+	 * @param string[] $ids
+	 */
+	public function setHiddenReplies(array $ids): self {
+		$this->setDetailArray(Details::HIDDEN_REPLIES, array_slice(array_values(array_unique($ids)), -self::HIDDEN_REPLIES_KEPT));
+
+		return $this;
+	}
+
+	/**
+	 * Whether this reply is one its thread's author hid, and whether the
+	 * reader is that author and may hide or show it — said of the replies of
+	 * a conversation as it is read (`StreamService::getContextByNid()`),
+	 * `null` everywhere else.
+	 */
+	public function setThreadVisibility(bool $hiddenByAuthor, bool $readerMayHide): self {
+		$this->hiddenByAuthor = $hiddenByAuthor;
+		$this->readerMayHide = $readerMayHide;
+
+		return $this;
 	}
 
 	/**
@@ -2070,6 +2109,10 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			// who may reply to one of our own posts — an extension, as no
 			// Mastodon entity says it; null on anybody else's
 			'reply_policy' => $this->isLocal() ? $this->getReplyRule() : null,
+			// in a conversation: whether its author hid this reply, and
+			// whether the reader is that author — this app's own, null elsewhere
+			'hidden_by_author' => $this->hiddenByAuthor,
+			'can_hide' => $this->readerMayHide,
 			// where a reply of ours stands with the server it was sent to, and
 			// whether replies here have to be approved at all. Null for the
 			// ordinary post, which is almost every post: a client that has to

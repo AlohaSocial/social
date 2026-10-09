@@ -10,6 +10,9 @@
 		:data-social-status="item.id"
 		:aria-label="postLabel"
 		@click="onPostClick">
+		<p v-if="item.hidden_by_author === true" class="post-hidden-by-author">
+			{{ t('social', 'Hidden by the author of the conversation') }}
+		</p>
 		<div class="post-header">
 			<div v-if="!hideAuthor" class="post-author-wrapper" :title="item.account.acct">
 				<component
@@ -320,6 +323,7 @@
 						@archive="toggleArchive"
 						@manageQuotes="managingQuotes = true"
 						@manageReplies="managingReplies = true"
+						@hideReply="hideReply"
 						@tagPeople="taggingPeople = true"
 						@delete="askToDelete(false)"
 						@redraft="askToDelete(true)"
@@ -1202,6 +1206,23 @@ export default {
 		},
 
 		/**
+		 * Hides a reply from a conversation of the reader's own, or shows it
+		 * again.
+		 *
+		 * @param {boolean} hidden whether it is to be hidden
+		 */
+		async hideReply(hidden) {
+			try {
+				await axios.post(generateUrl(`apps/social/api/v1/statuses/${this.item.id}/${hidden ? 'hide_reply' : 'unhide_reply'}`))
+				this.timelineStore.updateStatusHiddenByAuthor({ statusId: this.item.id, hidden })
+				showSuccess(hidden ? t('social', 'The reply is hidden from the conversation') : t('social', 'The reply is shown again'))
+			} catch (error) {
+				logger.error('Could not hide or show a reply', { error })
+				showError(t('social', 'Could not change whether the reply is shown'))
+			}
+		},
+
+		/**
 		 * @param {string} policy who may reply now
 		 */
 		onReplyPolicy(policy) {
@@ -1773,6 +1794,12 @@ export default {
 	&:focus-within,
 	&:has(.post-actions-reveal--held) {
 		z-index: 4;
+	}
+
+	.post-hidden-by-author {
+		margin: 0 0 4px;
+		color: var(--color-text-maxcontrast);
+		font-size: 13px;
 	}
 
 	.post-header {

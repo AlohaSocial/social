@@ -1153,6 +1153,27 @@ class StreamServiceTest extends TestCase {
 		$this->assertTrue($context['filling']);
 	}
 
+	/** The replies the thread's author hid are left out, or marked when asked for. */
+	public function testHiddenRepliesAreLeftOutUnlessAskedForAndTheAuthorMayHideAny(): void {
+		$post = $this->note('https://social.example/@alice/1', self::ACTOR_ID);
+		$post->setHiddenReplies(['https://remote.example/notes/hidden']);
+		$shown = $this->note('https://remote.example/notes/shown', 'https://remote.example/users/bob', $post->getId());
+		$hidden = $this->note('https://remote.example/notes/hidden', 'https://remote.example/users/carol', $post->getId());
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getDescendants')->willReturn([$shown, $hidden]);
+		$this->service->setViewer((new Person())->setId(self::ACTOR_ID));
+
+		$context = $this->service->getContextByNid(1);
+		$this->assertSame([$shown], $context['descendants']);
+		$this->assertSame(1, $context['hidden']);
+
+		$context = $this->service->getContextByNid(1, true);
+		$this->assertSame([$shown, $hidden], $context['descendants']);
+		$this->assertTrue($hidden->exportAsLocal()['hidden_by_author']);
+		$this->assertFalse($shown->exportAsLocal()['hidden_by_author']);
+		$this->assertTrue($shown->exportAsLocal()['can_hide'], 'the reader is the thread\'s author');
+	}
+
 	public function testGetContextByNidNormalizesTheStringFromAClientRoute(): void {
 		$post = $this->note('https://social.example/@alice/1789250751711653456', self::ACTOR_ID);
 		$this->streamRequest->expects($this->once())->method('getStreamByNid')
@@ -1170,7 +1191,7 @@ class StreamServiceTest extends TestCase {
 
 		$context = $this->service->getContextByNid(3);
 
-		$this->assertSame(['ancestors' => [], 'descendants' => [], 'filling' => false], $context);
+		$this->assertSame(['ancestors' => [], 'descendants' => [], 'filling' => false, 'hidden' => 0], $context);
 	}
 
 	/** Ancestors are walked up as long as they are known, capped where Mastodon caps them. */

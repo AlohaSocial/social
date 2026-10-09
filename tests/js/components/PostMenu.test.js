@@ -308,6 +308,18 @@ describe('the post menu', () => {
 			expect(wrapper.emitted(event)).toHaveLength(1)
 		})
 
+		it('lets the author of a conversation hide a reply in it, and show it again', () => {
+			const visible = mountMenu({ in_reply_to_id: '9', can_hide: true, hidden_by_author: false })
+			itemFor(visible, 'Hide reply').trigger('click')
+			expect(visible.emitted('hideReply')).toEqual([[true]])
+
+			const hidden = mountMenu({ in_reply_to_id: '9', can_hide: true, hidden_by_author: true })
+			itemFor(hidden, 'Show reply').trigger('click')
+			expect(hidden.emitted('hideReply')).toEqual([[false]])
+
+			expect(items(mountMenu({ in_reply_to_id: '9', can_hide: false }))).not.toContain('Hide reply')
+		})
+
 		it('asks for a translation', () => {
 			const wrapper = mountMenu({}, { canTranslate: true })
 

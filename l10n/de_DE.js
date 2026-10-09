@@ -1,6 +1,12 @@
 OC.L10N.register(
     "social",
     {
+    "Hidden by the author of the conversation" : "Vom Autor der Unterhaltung ausgeblendet",
+    "The reply is hidden from the conversation" : "Die Antwort ist in der Unterhaltung ausgeblendet",
+    "The reply is shown again" : "Die Antwort wird wieder angezeigt",
+    "Could not change whether the reply is shown" : "Konnte nicht ändern, ob die Antwort angezeigt wird",
+    "Show reply" : "Antwort anzeigen",
+    "Hide reply" : "Antwort ausblenden",
     "Who can reply" : "Wer antworten darf",
     "Anybody" : "Alle",
     "People who follow me" : "Leute, die mir folgen",

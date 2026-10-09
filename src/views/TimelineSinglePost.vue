@@ -59,6 +59,14 @@
 			<p v-if="hiddenReplies > 0" class="thread__hidden">
 				{{ hiddenRepliesText }}
 			</p>
+			<!-- the replies the conversation's author hid: there, behind a button -->
+			<NcButton
+				v-if="hiddenByAuthor > 0"
+				class="thread__hidden-by-author"
+				variant="tertiary"
+				@click="showHiddenReplies">
+				{{ n('social', 'Show %n reply hidden by the author', 'Show %n replies hidden by the author', hiddenByAuthor) }}
+			</NcButton>
 		</div>
 	</div>
 </template>
@@ -221,7 +229,13 @@ export default {
 			const known = this.singlePost.replies_count ?? 0
 			const shown = this.timeline.filter((status) => status.in_reply_to_id === this.singlePost.id).length
 
-			return Math.max(0, known - shown)
+			// the ones the author hid are said by the button below
+			return Math.max(0, known - shown - this.hiddenByAuthor)
+		},
+
+		/** @return {number} how many replies the conversation's author hid, not shown */
+		hiddenByAuthor() {
+			return this.timelineStore.hiddenByAuthor
 		},
 
 		/** @return {string} */
@@ -271,6 +285,16 @@ export default {
 
 	methods: {
 		t: translate,
+		n: translatePlural,
+
+		/** The replies the conversation's author hid, shown after all. */
+		async showHiddenReplies() {
+			try {
+				await this.timelineStore.showHiddenReplies()
+			} catch (error) {
+				logger.error('Could not show the hidden replies', { error })
+			}
+		},
 
 		/**
 		 * Back to wherever the reader came from, and to the home timeline when

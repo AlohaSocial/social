@@ -1385,6 +1385,15 @@ class ApiControllerTest extends TestCase {
 		$this->assertArrayNotHasKey('X-Social-Thread-Filling', $response->getHeaders());
 	}
 
+	public function testStatusContextSaysHowManyRepliesTheAuthorHidAndShowsThemWhenAsked(): void {
+		$this->streamService->expects($this->exactly(2))->method('getContextByNid')->willReturnCallback(
+			static fn (int|string $nid, bool $withHidden): array => ['ancestors' => [], 'descendants' => [], 'filling' => false, 'hidden' => $withHidden ? 2 : 2]
+		);
+
+		$this->assertSame('2', $this->controller()->statusContext(7)->getHeaders()['X-Social-Hidden-Replies'] ?? null);
+		$this->assertSame(Http::STATUS_OK, $this->controller()->statusContext(7, true)->getStatus());
+	}
+
 	public function testStatusContextSaysWhenTheRestIsBeingRead(): void {
 		$this->streamService->method('getContextByNid')->willReturn(['ancestors' => [], 'descendants' => [], 'filling' => true]);
 

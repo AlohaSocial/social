@@ -1607,6 +1607,21 @@ What is found is stored like any arriving post, indexed for the search as
 it is stored, so the timeline and the search simply have it the next time.
 The answers say `X-Social-Filling` while the read is new.
 
+### Hidden replies
+
+The author of a thread's first post may hide any reply in it, wherever it
+was written (`HiddenReplyService`, the `hide_reply` status action). The ids
+are kept on that first post (`Stream::getHiddenReplies()`, the newest 300,
+as many as a Bluesky threadgate holds); a conversation read here leaves
+them out and counts them (`X-Social-Hidden-Replies`), or marks them
+`hidden_by_author` when the reader asks for them, and the web app shows
+them behind a button. A thread that is on Bluesky lists them in its
+threadgate (`hiddenReplies`, rewritten by `Publisher::updateGates()`), so
+every AppView hides them too; a Bluesky author's `hiddenReplies` are kept
+the same way when their thread is read (`PostStore::rememberHiddenReplies()`).
+The fediverse has no such list, so a fediverse server shows the replies
+it holds.
+
 ### Who may reply
 
 The author of a post written here says who may reply to it: everybody (the
