@@ -117,6 +117,29 @@ class ListsRequest extends ListsRequestBuilder {
 	}
 
 	/**
+	 * Public lists, oldest first, for the pass that publishes the ones not on
+	 * Bluesky yet (`BlueskyLists::publishMissing()`).
+	 *
+	 * @return MastodonList[]
+	 */
+	public function getPublic(int $limit, int $afterId = 0): array {
+		$qb = $this->getListsSelectSql();
+		$qb->andWhere($qb->expr()->eq('l.visibility', $qb->createNamedParameter(MastodonList::VISIBILITY_PUBLIC)));
+		$qb->andWhere($qb->expr()->gt('l.id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)));
+		$qb->orderBy('l.id', 'asc');
+		$qb->setMaxResults($limit);
+
+		$lists = [];
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			$lists[] = $this->parseListsSelectSql($data);
+		}
+		$cursor->closeCursor();
+
+		return $lists;
+	}
+
+	/**
 	 * The lists of one owner that a given account is in — what
 	 * `GET /api/v1/accounts/{id}/lists` answers.
 	 *

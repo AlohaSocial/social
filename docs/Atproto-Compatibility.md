@@ -824,9 +824,12 @@ visibility (`social_list.visibility`, `private` by default, `public`;
   alone has none and is not listed there. Renamed here, the record is
   renamed, the rest of it (a description an app gave it) kept; a member
   added or taken out here is listed or withdrawn; deleted here, the list
-  and its items go. While Bluesky is off on this server nothing is
-  published; making the list private and public again publishes it once
-  it is on.
+  and its items go — an item an app wrote for an account that could not
+  be found among them, matched by the list it names. A public list not on
+  Bluesky yet (made public while Bluesky was off on this server, or whose
+  first write failed) is published by the maintenance pass
+  (`BlueskyLists::publishMissing()`, 200 lists a pass, going on where the
+  last one stopped).
 - **Made private again**, the records are withdrawn — unless one of the
   owner's threadgates names the list (§8.3): a reply rule that lets the
   members of a list reply needs the list on Bluesky, so it stays published
@@ -1208,6 +1211,9 @@ verifying account moves every record to its repository, off the request
 (`AtprotoPublish` action `verifications`); none withdraws them all. A
 Fediverse account without a DID is verified here only, its row says so
 (`did` empty), and the administration page shows it as "Shown here only".
+An account deleted here takes its verification with it, the record
+included (`ActorCascadeService`); a suspended one keeps it, as a
+suspension can be lifted.
 
 **What Bluesky shows.** Bluesky apps show a verification only from a
 *trusted verifier* — an account Bluesky chose (`trustedVerifierStatus`),

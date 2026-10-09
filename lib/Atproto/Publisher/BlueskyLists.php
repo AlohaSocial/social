@@ -19,6 +19,7 @@ use OCA\Social\Db\ListsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -35,6 +36,10 @@ use Throwable;
  * have no Bluesky identity to list, and are held to a reply rule here.
  */
 class BlueskyLists {
+	/** how many public lists one pass looks at */
+	public const MISSING_PAGE = 200;
+	private const MISSING_CACHE = 'social.lists.publish';
+	private const ITEM_PAGE = 100;
 	public const LIST = 'app.bsky.graph.list';
 	public const ITEM = 'app.bsky.graph.listitem';
 	public const CURATELIST = 'app.bsky.graph.defs#curatelist';
@@ -50,7 +55,36 @@ class BlueskyLists {
 		private IdentityService $identities,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ?DurableCache $durableCache = null,
 	) {
+	}
+
+	/**
+	 * Publishes the public lists that are not on Bluesky yet — made public
+	 * while Bluesky was off for the instance, or whose first write failed —
+	 * a page of lists a pass, going on where the last pass stopped.
+	 *
+	 * @return int how many were published
+	 */
+	public function publishMissing(int $limit = self::MISSING_PAGE): int {
+		$after = (int)($this->durableCache?->getShared(self::MISSING_CACHE, 'after') ?? 0);
+		$lists = $this->lists->getPublic($limit, $after);
+		$published = 0;
+		foreach ($lists as $list) {
+			$after = $list->getId();
+			if ($this->recordOf($list->getId()) !== null) {
+				continue;
+			}
+			try {
+				$published += $this->ensure($this->cacheActors->getFromId($list->getOwnerId()), $list->getId()) !== null ? 1 : 0;
+			} catch (Throwable $e) {
+				$this->logger->info('Public list not published to Bluesky', ['list' => $list->getId(), 'exception' => $e]);
+			}
+		}
+		// a short page is the end: the next pass starts from the first list
+		$this->durableCache?->setShared(self::MISSING_CACHE, 'after', count($lists) < $limit ? 0 : $after, 86400);
+
+		return $published;
 	}
 
 	/**
@@ -150,8 +184,12 @@ class BlueskyLists {
 	 * @param string[] $memberIds
 	 */
 	public function deleted(int $listId, array $memberIds): void {
+		$record = $this->recordOf($listId);
 		foreach ($memberIds as $memberId) {
 			$this->memberRemoved($listId, $memberId);
+		}
+		if ($record !== null) {
+			$this->withdrawItemsOf($record);
 		}
 		try {
 			$this->publisher->removeRecord(self::LIST, self::localId($listId));
@@ -195,6 +233,33 @@ class BlueskyLists {
 	 * The list record named as the list is now; the rest of it — what an
 	 * app wrote, a description, a picture — stays as it is.
 	 */
+	/**
+	 * The list's item records that no member here stands for — one an app
+	 * wrote for an account that could not be found — go with it, as nothing
+	 * else could take them back.
+	 */
+	private function withdrawItemsOf(StoredRecord $list): void {
+		try {
+			$identity = $this->identities->getByDid($list->did);
+			$deletes = [];
+			$cursor = '';
+			do {
+				$page = $this->repositories->listRecords($list->did, self::ITEM, self::ITEM_PAGE, $cursor);
+				foreach ($page as $item) {
+					if (($item->value()['list'] ?? '') === $list->uri()) {
+						$deletes[] = RepoWrite::delete(self::ITEM, $item->rkey);
+					}
+					$cursor = $item->rkey;
+				}
+			} while (count($page) === self::ITEM_PAGE);
+			if ($deletes !== []) {
+				$this->repositories->write($identity->did, $this->identities->signingKey($identity), $deletes);
+			}
+		} catch (Throwable $e) {
+			$this->logger->warning('Items of a list not withdrawn from Bluesky', ['list' => $list->localId, 'exception' => $e]);
+		}
+	}
+
 	private function rename(StoredRecord $record, string $title): void {
 		$value = $record->value();
 		$name = self::nameOf($title);

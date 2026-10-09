@@ -39,10 +39,12 @@ use OCA\Social\Db\WatchRequest;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\ActorCascadeService;
 use OCA\Social\Service\CacheDocumentService;
+use OCA\Social\Service\VerificationService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -152,7 +154,27 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->cacheDocumentService,
 			$this->createMock(\OCA\Social\Atproto\Service\AtprotoCascade::class),
 			$logger ?? new NullLogger(),
+			$this->container(),
 		);
+	}
+
+	/** @var VerificationService&MockObject|null */
+	private ?VerificationService $verifications = null;
+
+	private function container(): ContainerInterface {
+		$this->verifications ??= $this->createMock(VerificationService::class);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->willReturn($this->verifications);
+
+		return $container;
+	}
+
+	public function testADeletedAccountsVerificationGoesAndASuspendedOnesStays(): void {
+		$this->container();
+		$this->verifications->expects($this->once())->method('unverify')->with(self::BOB);
+
+		$this->service()->purge(self::BOB);
+		$this->service()->purge(self::BOB, true);
 	}
 
 	public function testADeletedAccountLeavesNothingBehindInAnyOfThem(): void {
