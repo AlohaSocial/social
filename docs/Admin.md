@@ -461,6 +461,13 @@ checks, and the card refuses to switch Bluesky on while one fails:
   `ExecStart=/usr/bin/php occ social:atproto:listen`. It reports to the card's
   "Reading Bluesky" part every fifteen seconds; without it, the poller does all
   the reading, as before.
+- **The relays.** The card's "Relays carry this server" check asks each
+  configured relay how it sees this server: crawled or not, how many of its
+  accounts it carries, and whether it throttles or bans it. A relay limits
+  how many accounts and events a new server may have; when it throttles,
+  the posts of the accounts over the limit do not reach Bluesky, and only
+  the relay's operator can raise the limit. It is a warning, never a reason
+  the switch refuses.
 - **Cron.** The maintenance job (every five minutes) brings Bluesky up to
   date with the last day's public posts — a post the listener missed is
   published, an edit within the grace period is replaced, a deleted post's

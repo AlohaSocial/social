@@ -47,6 +47,8 @@ Run it from a machine outside the host's network. It only reads: GET requests an
 | the firehose is not 101 | the daemon is not running, or the proxy rule for `subscribeRepos` is missing |
 | the relay does not know the DID | `occ social:atproto:crawl`, then wait a minute |
 | the AppView shows `handle.invalid` | the AppView could not fetch `https://<handle>/.well-known/atproto-did`; check from outside with curl |
+| the relay throttles the host | the relay limits how many accounts and events a new data server may have; ask its operator to raise the limit for the host. The admin card's "Relays carry this server" check says the same |
+| the chat service does not answer | direct messages with Bluesky cannot work; the card's chat service setting, or Bluesky's service is down |
 
 Run the probe again after the first public post (§3.2). Its last checks need one.
 
@@ -122,7 +124,14 @@ The development network has no chat service, so these lines are the only test of
 - [ ] The probe still passes, with the relay at the same rev as the PDS, or one behind just after a post.
 - [ ] The daemon is restarted. Posts made while it was down reach Bluesky afterwards.
 
-### 3.9 Moving, last and with throwaway accounts only
+### 3.9 What only the real network can answer
+
+- [ ] **Push.** Alice signs in to the Bluesky phone app here (§3.6) and allows notifications. The tester likes one of her posts: the phone shows a push notification. (The app registers through this server, `app.bsky.notification.registerPush`, passed on to the AppView.)
+- [ ] **Age assurance.** In a region where Bluesky asks for it, the Bluesky app signed in here shows Bluesky's age check and not an error. (`app.bsky.ageassurance.*` is passed on to the AppView like any `app.bsky.*` call; note what the app shows.)
+- [ ] **Limits.** Alice writes 30 short public posts within a few minutes. All 30 are on her Bluesky profile within ten minutes, and the probe's relay line still says `active`. Note the relay's `accountCount` beside the number of identities (`occ social:atproto:identities --list | wc -l`): a relay counts only accounts it has seen events from.
+- [ ] After a day, the admin card's "Relays carry this server" check is green.
+
+### 3.10 Moving, last and with throwaway accounts only
 
 - [ ] A throwaway Bluesky account moves here: Migration → "Bring your Bluesky account here", signed in as a fresh Nextcloud account. Its followers on Bluesky still follow it, and its posts are in its timeline.
 - [ ] It moves away again, to bsky.social, from the Migration page.

@@ -115,6 +115,7 @@ class AtprotoStatusService {
 			'detail' => ($daemon['running'] ?? false) ? '' : 'occ social:atproto:serve is not running',
 		];
 		$checks[] = $this->firehoseCheck();
+		$checks[] = $this->relayCheck();
 
 		$failed = count(array_filter($checks, static fn (array $check): bool => $check['state'] === 'error')) > 0;
 		$cache->set('checks', $checks, $failed ? self::CACHE_FAILED : self::CACHE_OK);
@@ -198,6 +199,57 @@ class AtprotoStatusService {
 			'state' => $ok ? 'ok' : 'error',
 			'detail' => $ok ? '' : $endpoint . '/xrpc/com.atproto.sync.subscribeRepos is not served (' . (int)$status . '): the web server must proxy the WebSocket to the daemon',
 		];
+	}
+
+	/**
+	 * What each relay says of this server (`com.atproto.sync.getHostStatus`):
+	 * whether it crawls it, how many of its accounts it carries, and whether
+	 * it throttles or bans it. A relay limits how many accounts and events a
+	 * new data server may have; past that it throttles, and the posts of
+	 * the accounts over the limit do not reach Bluesky. Never an error: a
+	 * relay's view does not decide whether this server can be one.
+	 */
+	private function relayCheck(): array {
+		$host = (string)parse_url($this->safe(fn (): string => $this->config->pdsEndpoint()), PHP_URL_HOST);
+		$relays = $this->config->relays();
+		if ($host === '' || $relays === []) {
+			return ['id' => 'relay_host', 'state' => 'warning', 'detail' => 'No relay is configured, so nothing on Bluesky reads this server'];
+		}
+		$state = 'ok';
+		$details = [];
+		foreach ($relays as $relay) {
+			$name = (string)parse_url($relay, PHP_URL_HOST);
+			$answer = $this->fetchAnswer($relay . '/xrpc/com.atproto.sync.getHostStatus?hostname=' . rawurlencode($host));
+			$status = (string)($answer['status'] ?? '');
+			$accounts = (int)($answer['accountCount'] ?? 0);
+			[$ok, $detail] = match (true) {
+				($answer['error'] ?? '') === 'HostNotFound' => [false, $name . ' has not crawled this server yet: run occ social:atproto:crawl'],
+				$status === 'active', $status === 'idle' => [true, $name . ': ' . $status . ', ' . $accounts . ' accounts'],
+				$status === 'throttled' => [false, $name . ' throttles this server at ' . $accounts . ' accounts: ask its operator to raise the limit for this host'],
+				$status === 'banned' => [false, $name . ' has banned this server: nothing it publishes reaches Bluesky through this relay'],
+				$status === 'offline' => [false, $name . ' finds this server offline: is the firehose reachable from outside?'],
+				default => [false, $name . ' did not say how it sees this server'],
+			};
+			$state = $ok ? $state : 'warning';
+			$details[] = $detail;
+		}
+
+		return ['id' => 'relay_host', 'state' => $state, 'detail' => implode('; ', $details)];
+	}
+
+	/**
+	 * A JSON answer whatever its status: an XRPC error is an object too.
+	 */
+	private function fetchAnswer(string $url): array {
+		$status = 0;
+		try {
+			$body = $this->curlService->doRequest('get', $url, ['timeout' => 5, 'json_headers' => false, 'accept_errors' => true, 'headers' => ['Accept' => 'application/json'], 'allow_local_address' => !str_starts_with($url, 'https://')], $contentType, $status);
+		} catch (Throwable) {
+			return [];
+		}
+		$decoded = json_decode($body, true);
+
+		return is_array($decoded) ? $decoded : [];
 	}
 
 	private function fetch(string $url): ?array {

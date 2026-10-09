@@ -20,6 +20,7 @@ HANDLE=${2:-}
 PLC=${PLC:-https://plc.directory}
 RELAY=${RELAY:-https://bsky.network}
 APPVIEW=${APPVIEW:-https://public.api.bsky.app}
+CHAT=${CHAT:-https://api.bsky.chat}
 
 if [ -z "$HOST" ] || [ -z "$HANDLE" ]; then
 	echo "usage: $0 <instance host> <handle>" >&2
@@ -134,6 +135,18 @@ else
 	fi
 fi
 
+# a relay limits how many accounts and events a new host may have, and
+# throttles it past that: the posts of the accounts over the limit stop there
+hoststatus=$(curl -sS --max-time 15 -H 'Accept: application/json' "$RELAY/xrpc/com.atproto.sync.getHostStatus?hostname=$HOST" 2>/dev/null)
+case "$(jq -r '.status // .error // ""' <<<"$hoststatus" 2>/dev/null)" in
+	active | idle) pass "$RELAY carries $HOST: $(jq -r '.status' <<<"$hoststatus"), $(jq -r '.accountCount' <<<"$hoststatus") accounts" ;;
+	throttled) fail "$RELAY throttles $HOST at $(jq -r '.accountCount' <<<"$hoststatus") accounts: ask the relay's operator to raise this host's limit" ;;
+	banned) fail "$RELAY has banned $HOST" ;;
+	offline) fail "$RELAY finds $HOST offline: the firehose is not reachable from outside" ;;
+	HostNotFound) fail "$RELAY has not crawled $HOST: run occ social:atproto:crawl" ;;
+	*) warn "$RELAY did not say how it sees $HOST" ;;
+esac
+
 profile=$(xrpc "$APPVIEW" "app.bsky.actor.getProfile?actor=$did")
 shown=$(jq -r '.handle // ""' <<<"$profile" 2>/dev/null)
 case "$shown" in
@@ -152,6 +165,9 @@ else
 fi
 
 # --- Bluesky apps -----------------------------------------------------------
+
+chat=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$CHAT/xrpc/_health" 2>/dev/null)
+[ "$chat" = "200" ] && pass "the chat service answers" || warn "the chat service ($CHAT) answers $chat: direct messages with Bluesky will not work"
 
 meta=$(get "https://$HOST/.well-known/oauth-authorization-server")
 if [ -z "$meta" ]; then
