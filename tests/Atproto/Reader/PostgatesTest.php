@@ -97,4 +97,14 @@ class PostgatesTest extends TestCase {
 		$this->assertSame('', $this->gates()->refusal(new Person(), $this->quoted('https://social.test/@bob/1')), 'not a Bluesky post');
 		$this->assertSame([], $this->asked);
 	}
+
+	public function testAQuoteItsAuthorDetachedIsListedInTheirGate(): void {
+		$mine = 'at://did:plc:alice/app.bsky.feed.post/3kmine';
+		$this->assertFalse($this->gates()->detached($this->quoted(), $mine), 'no gate');
+
+		$this->gate = ['$type' => Postgates::GATE, 'post' => self::POST, 'detachedEmbeddingUris' => [$mine], 'createdAt' => '2026-10-09T10:00:00.000Z'];
+		$this->assertTrue($this->gates()->detached($this->quoted(), $mine));
+		$this->assertFalse($this->gates()->detached($this->quoted(), 'at://did:plc:carol/app.bsky.feed.post/3k'), 'somebody else\'s quote');
+		$this->assertFalse($this->gates()->detached($this->quoted('https://social.test/@bob/1'), $mine), 'not a Bluesky post');
+	}
 }

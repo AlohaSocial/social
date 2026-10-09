@@ -1231,7 +1231,12 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   (`detachedEmbeddingUris`, the newest 50, `Stream::addDetachedQuote()`),
   so every AppView shows the quote detached, and it reads as revoked here.
   A Bluesky quote whose quoted author detached it arrives as revoked
-  (`viewDetached`).
+  (`viewDetached`). A quote written here of a Bluesky post, which its
+  author detached, is noticed by the maintenance job: Bluesky says it
+  only in the author's postgate, so the local posts quoting a Bluesky post
+  in the last month are checked ten per run (`DetachedQuoteSweep`,
+  `Postgates::detached()`), and a detached one reads as revoked here — as
+  a quote taken back on the fediverse with a `Reject` does.
 - **Link cards**: the post's link preview as `app.bsky.embed.external`
   when it has a title and the post has no pictures and quotes nothing —
   **without a thumbnail**: the preview's picture is a remote URL, and a

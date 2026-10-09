@@ -839,6 +839,25 @@ class StreamRequest extends StreamRequestBuilder {
 	}
 
 	/**
+	 * The posts local accounts made since a point in time that quote a
+	 * Bluesky post, after a stream number, in order: what the check for
+	 * quotes detached on Bluesky walks through a page at a time.
+	 *
+	 * @return Stream[]
+	 */
+	public function getLocalQuotesOfBluesky(int $since, int $afterNid, int $limit): array {
+		$qb = $this->getStreamSelectSql();
+		$qb->limitToLocal(true);
+		$qb->andWhere($qb->expr()->like('s.quote', $qb->createNamedParameter('https://bsky.app/profile/%')))
+			->andWhere($qb->expr()->gt('s.nid', $qb->createNamedParameter($afterNid, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->gte('s.published_time', $qb->createNamedParameter(new \DateTime('@' . $since), IQueryBuilder::PARAM_DATE)))
+			->orderBy('s.nid', 'asc')
+			->setMaxResults(max(1, $limit));
+
+		return $this->getStreamsFromRequest($qb);
+	}
+
+	/**
 	 * The public posts local accounts made since a point in time, newest
 	 * first: what the Bluesky reconcile pass checks for a missing record.
 	 *
