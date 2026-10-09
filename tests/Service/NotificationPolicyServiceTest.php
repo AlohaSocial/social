@@ -513,4 +513,16 @@ class NotificationPolicyServiceTest extends TestCase {
 			$this->timelineRevisionService
 		);
 	}
+
+	/** Who may notify is a Bluesky app's setting too: told when it changes, not otherwise. */
+	public function testAChangeOfWhoMayNotifyIsToldToBluesky(): void {
+		$settings = $this->createMock(\OCA\Social\Atproto\Client\NotificationSettings::class);
+		$settings->expects($this->once())->method('policyChanged')->with('alice');
+		$container = $this->createMock(\Psr\Container\ContainerInterface::class);
+		$container->method('get')->willReturn($settings);
+		$service = new NotificationPolicyService($this->configService, $this->followsRequest, $this->moderationRequest, $this->accountRelationService, $this->timelineRevisionService, $container);
+
+		$service->save('alice', [NotificationPolicy::NOT_FOLLOWING => NotificationPolicy::FILTER]);
+		$service->save('alice', [NotificationPolicy::NEW_ACCOUNTS => NotificationPolicy::DROP]);
+	}
 }

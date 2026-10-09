@@ -57,6 +57,7 @@ class ClientXrpc {
 		private InboundMoveService $inbound,
 		private BlueskyMutes $mutes,
 		private BlueskyBookmarks $bookmarks,
+		private NotificationSettings $notificationSettings,
 	) {
 	}
 
@@ -96,6 +97,7 @@ class ClientXrpc {
 			),
 			$method === 'app.bsky.actor.getPreferences' => $this->preferences->get($session),
 			$method === BlueskyBookmarks::LIST => $this->bookmarks->list($session, (int)self::param($params, 'limit'), self::param($params, 'cursor')),
+			$method === NotificationSettings::GET => $this->notificationSettings->get($session),
 			default => $this->proxy->forward($session, $method, 'get', $rawQuery, '', $headers),
 		};
 	}
@@ -155,6 +157,7 @@ class ClientXrpc {
 			'com.atproto.moderation.createReport' => $this->writes->report($session, self::json($rawBody)),
 			BlueskyMutes::MUTE, BlueskyMutes::UNMUTE => $this->mute($session, $method, $rawBody, $headers),
 			BlueskyBookmarks::CREATE, BlueskyBookmarks::DELETE => $this->bookmark($session, $method, $rawBody, $headers),
+			NotificationSettings::PUT => $this->notificationSettings->put($session, self::json($rawBody)),
 			default => $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers),
 		};
 	}

@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Atproto\Client;
 use OCA\Social\Atproto\Client\AppViewProxy;
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Client\NotificationSettings;
 use OCA\Social\Atproto\Client\Preferences;
 use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
@@ -52,6 +53,8 @@ class ClientXrpcTest extends TestCase {
 	private BlueskyMutes $mutes;
 	/** @var BlueskyBookmarks&MockObject */
 	private BlueskyBookmarks $bookmarks;
+	/** @var NotificationSettings&MockObject */
+	private NotificationSettings $notificationSettings;
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -70,7 +73,7 @@ class ClientXrpcTest extends TestCase {
 		$this->oauth->method('issuer')->willReturn('https://social.test');
 		$this->inbound = $this->createMock(InboundMoveService::class);
 		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class));
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class), $this->notificationSettings = $this->createMock(NotificationSettings::class));
 	}
 
 	protected function tearDown(): void {
@@ -135,6 +138,16 @@ class ClientXrpcTest extends TestCase {
 
 		$this->assertSame(['bookmarks' => []], $this->client->query(BlueskyBookmarks::LIST, 'limit=30&cursor=c1', $headers));
 		$this->client->procedure(BlueskyBookmarks::CREATE, '{"uri":"at://did:plc:bob/app.bsky.feed.post/3k","cid":"bafy"}', $headers, '1.2.3.4');
+	}
+
+	public function testTheAppsNotificationSettingsAreAnsweredHere(): void {
+		$headers = ['authorization' => 'Bearer t'];
+		$this->notificationSettings->expects($this->once())->method('get')->with($this->session)->willReturn(['preferences' => []]);
+		$this->notificationSettings->expects($this->once())->method('put')->with($this->session, ['like' => ['include' => 'follows']])->willReturn(['preferences' => []]);
+		$this->proxy->expects($this->never())->method('forward');
+
+		$this->assertSame(['preferences' => []], $this->client->query(NotificationSettings::GET, '', $headers));
+		$this->assertSame(['preferences' => []], $this->client->procedure(NotificationSettings::PUT, '{"like":{"include":"follows"}}', $headers, '1.2.3.4'));
 	}
 
 	public function testAnAccountMovingHereIsAnsweredByTheMoveAlone(): void {

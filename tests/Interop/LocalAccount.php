@@ -353,6 +353,14 @@ class LocalAccount {
 	 * @param array<string, mixed> $body
 	 * @return array<mixed>
 	 */
+	public function patch(string $path, array $body = []): array {
+		return $this->request('PATCH', $path, $body);
+	}
+
+	/**
+	 * @param array<string, mixed> $body
+	 * @return array<mixed>
+	 */
 	public function put(string $path, array $body = []): array {
 		return $this->request('PUT', $path, $body);
 	}
