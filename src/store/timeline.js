@@ -355,6 +355,9 @@ function timelineRequest(list, params) {
  * The list currently on screen: which one it is, what it holds, and everything
  * the reader does to a post in it.
  */
+/** How long after a conversation is opened its replies from elsewhere are asked for again. */
+const THREAD_REFETCH_MS = 6000
+
 export const useTimelineStore = defineStore('timeline', {
 	state: () => ({
 		statuses: {},
@@ -1493,8 +1496,36 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			this.addToTimeline(response.data)
+			if (response.headers?.['x-social-thread-filling'] === '1') {
+				this.refetchThreadLater(url, params, identity)
+			}
 
 			return response.data
+		},
+
+		/**
+		 * The rest of a conversation is being read from the servers it lives
+		 * on: asked for once more a little later, and the replies that came
+		 * in meanwhile added below the ones already shown.
+		 *
+		 * @param {string} url the context the page was read from
+		 * @param {object} params its query
+		 * @param {string} identity the timeline it belongs to
+		 */
+		refetchThreadLater(url, params, identity) {
+			setTimeout(async () => {
+				if (this.getTimelineIdentity !== identity) {
+					return
+				}
+				try {
+					const { data } = await axios.get(url, { params })
+					if (this.getTimelineIdentity === identity) {
+						this.addToTimeline(data)
+					}
+				} catch (error) {
+					logger.debug('The rest of the conversation was not read again', { error })
+				}
+			}, THREAD_REFETCH_MS)
 		},
 	},
 })

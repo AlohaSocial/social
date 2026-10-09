@@ -124,6 +124,27 @@ class StreamQueueService {
 	}
 
 	/**
+	 * Fetches a post from the server that holds it, now, for a job that is
+	 * itself in the background (`ActivityPubThreadSource`): what its own
+	 * server answers, taken in as `fetchFromOrigin()` takes it.
+	 *
+	 * @throws Throwable the server could not be reached, is held back, or did not answer with a post
+	 */
+	public function fetchNow(string $url): void {
+		$openUntil = $this->breaker->openUntil(self::hostOf($url));
+		if ($openUntil > 0) {
+			throw new RequestNetworkException('held back until ' . $openUntil . ': ' . $url);
+		}
+		try {
+			$this->fetchFromOrigin($url);
+		} catch (RequestNetworkException|RequestResultNotJsonException|RequestServerException $e) {
+			$this->holdHost($url, $e);
+
+			throw $e;
+		}
+	}
+
+	/**
 	 * The items that are due. The backoff and the give-up threshold are the
 	 * query's (`StreamQueueRequest::getStandby()`).
 	 *

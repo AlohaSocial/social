@@ -1571,3 +1571,44 @@ describe('fetching a scope ahead', () => {
 		expect(store.timeline).toEqual(['1'])
 	})
 })
+
+describe('a conversation read from where it lives', () => {
+	let store
+
+	beforeEach(() => {
+		vi.clearAllMocks()
+		vi.useFakeTimers()
+		setActivePinia(createPinia())
+		store = useTimelineStore()
+	})
+
+	it('asks once more a little later while the server reads the rest of it', async () => {
+		await store.changeTimelineType({ type: 'single-post', params: { id: '7' } })
+		axios.get
+			.mockResolvedValueOnce({ data: { ancestors: [], descendants: [makeStatus('8')] }, headers: { 'x-social-thread-filling': '1' } })
+			.mockResolvedValueOnce({ data: { ancestors: [], descendants: [makeStatus('8'), makeStatus('9')] }, headers: {} })
+
+		await store.fetchTimeline()
+		expect(store.timeline).toEqual(['8'])
+
+		await vi.runAllTimersAsync()
+		expect(axios.get).toHaveBeenCalledTimes(2)
+		expect(store.timeline).toEqual(['8', '9'])
+		vi.useRealTimers()
+	})
+
+	it('does not ask again when the reader has moved on, or when nothing is being read', async () => {
+		await store.changeTimelineType({ type: 'single-post', params: { id: '7' } })
+		axios.get.mockResolvedValue({ data: { ancestors: [], descendants: [] }, headers: { 'x-social-thread-filling': '1' } })
+		await store.fetchTimeline()
+		await store.changeTimelineType({ type: 'home', params: {} })
+		await vi.runAllTimersAsync()
+		expect(axios.get).toHaveBeenCalledTimes(1)
+
+		axios.get.mockResolvedValue({ data: [], headers: {} })
+		await store.fetchTimeline()
+		await vi.runAllTimersAsync()
+		expect(axios.get).toHaveBeenCalledTimes(2)
+		vi.useRealTimers()
+	})
+})

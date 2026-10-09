@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.180
+**App version:** 0.26.181
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1537,6 +1537,31 @@ than `rejected`.
 **On the wire.** `quote` is FEP-044f's name and what Mastodon 4.5 reads first;
 `quoteUrl` and `_misskey_quote` are emitted beside it for the servers that
 predate the FEP. `quoteAuthorization` carries the approval once there is one.
+
+### Whole conversations
+
+A reader opening a post sees its whole conversation, wherever the replies
+were written: not only the ones this server received because somebody here
+follows their author. `StreamService::getContextByNid()` asks
+`RemoteFetchQueue::fillThread()` for the conversation's first post and for
+the one opened, at most every ten minutes per post, for a post from another
+server or a public one of this server's (which other networks read too), and
+`Cron\FillThread` hands it to `ThreadService`. That asks every network the
+post is on (`ThreadSource`), with one budget of 150 replies between them:
+
+- `ActivityPubThreadSource` reads the post's `replies` collection as its
+  server described it, a few pages, fetches each reply this server does not
+  hold from its own server (`StreamQueueService::fetchNow()`, held to the
+  same host breaker as the queue), and the replies of those in turn, three
+  levels deep;
+- `Atproto\Reader\BlueskyThreadSource` asks the AppView for the thread
+  (`getPostThread`) of a post that is on Bluesky — read from there, or
+  written here and published — and stores each post as any Bluesky post is
+  stored, parents first.
+
+The page is never held up by another server: the answer says so with
+`X-Social-Thread-Filling`, and the web app asks once more a few seconds
+later. Nothing in what a reader sees says which network a reply came from.
 
 ### Who may reply
 

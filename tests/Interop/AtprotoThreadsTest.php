@@ -11,10 +11,14 @@ namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Publisher\Publisher;
+use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\DeletionSweep;
 use OCA\Social\Atproto\Reader\FeedPoller;
+use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoWatchRequest;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\Thread\ThreadService;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -109,5 +113,27 @@ class AtprotoThreadsTest extends TestCase {
 			return $this->alice->status((string)$status['id']) === null ? true : null;
 		});
 		$this->assertTrue($gone, 'the post deleted on Bluesky is gone here');
+	}
+
+	/**
+	 * A reply by a Bluesky account nobody here follows is not read by any
+	 * poller; opening the conversation reads it from the AppView, so the
+	 * thread here is the thread there.
+	 */
+	public function testOpeningAConversationBringsInTheRepliesOfStrangers(): void {
+		$this->network->createUser('root' . bin2hex(random_bytes(3)));
+		$root = $this->network->postText('Who wants to answer ' . bin2hex(random_bytes(4)));
+		$this->assertNotNull($this->network->await(fn (): ?bool => Server::get(PostStore::class)->storeByUri($root['uri']) ? true : null), 'the post is stored here');
+		$this->network->createUser('stranger' . bin2hex(random_bytes(3)));
+		$words = 'A stranger answers ' . bin2hex(random_bytes(4));
+		$reply = $this->network->postText($words, ['parent' => $root]);
+		$this->assertNotNull($this->network->await(fn (): ?bool => in_array($reply['uri'], array_column($this->network->replies($root['uri']), 'uri'), true) ? true : null), 'the AppView has the reply');
+		$nid = (string)Server::get(StreamRequest::class)->getStreamById(BlueskyIds::postIdOfUri($root['uri']))->getNid();
+
+		$this->alice->get('/api/v1/statuses/' . $nid . '/context');
+		Server::get(ThreadService::class)->fill(BlueskyIds::postIdOfUri($root['uri']));
+
+		$descendants = $this->alice->get('/api/v1/statuses/' . $nid . '/context')['descendants'] ?? [];
+		$this->assertNotEmpty(array_filter($descendants, static fn (array $s): bool => str_contains((string)($s['content'] ?? ''), $words)), 'the stranger\'s reply is not in the conversation here');
 	}
 }

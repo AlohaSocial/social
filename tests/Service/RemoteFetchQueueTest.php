@@ -9,9 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
@@ -136,5 +139,21 @@ class RemoteFetchQueueTest extends TestCase {
 
 		$this->queue->resolveActors(['https://remote.example/users/bob']);
 		$this->addToAssertionCount(1);
+	}
+
+	public function testAConversationIsReadAtMostOncePerIntervalAndOnlyWhereItMayHaveRepliesElsewhere(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add')->with(FillThread::class, $this->anything());
+		$remote = (new Note())->setId('https://remote.example/notes/1');
+		$public = (new Note())->setId('https://social.test/@alice/2')->setLocal(true);
+		$public->setVisibility(Stream::TYPE_PUBLIC);
+		$private = (new Note())->setId('https://social.test/@alice/3')->setLocal(true);
+		$private->setVisibility(Stream::TYPE_FOLLOWERS);
+
+		$this->assertTrue($this->queue->fillThread($remote));
+		$this->assertFalse($this->queue->fillThread($remote), 'once per interval');
+		$this->assertTrue($this->queue->fillThread($public), 'a public post of ours is read on other networks too');
+		$this->assertFalse($this->queue->fillThread($private), 'nobody elsewhere can reply to it');
+		$this->now += RemoteFetchQueue::THREAD_FILL_INTERVAL + 1;
 	}
 }

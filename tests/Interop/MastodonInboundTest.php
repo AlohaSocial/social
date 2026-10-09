@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\Thread\ThreadService;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -71,6 +72,28 @@ class MastodonInboundTest extends TestCase {
 		$this->assertStringContainsString($words, (string)$status['content']);
 		$this->assertSame('public', $status['visibility'] ?? '');
 		$this->assertSame(strtolower($this->mastodon->handle()), strtolower((string)($status['account']['acct'] ?? '')));
+	}
+
+	/**
+	 * A reply by somebody nobody here follows is not delivered here; opening
+	 * the conversation reads it from the replied post's server, so the
+	 * thread here is the thread there.
+	 */
+	public function testOpeningAConversationBringsInTheRepliesOfStrangers(): void {
+		$stranger = Mastodon::fromEnvironment('MASTODON_TOKEN_STRANGER', 'stranger');
+		if ($stranger === null) {
+			$this->markTestSkipped('no token for Mastodon\'s stranger: set MASTODON_TOKEN_STRANGER');
+		}
+		$sent = $this->mastodon->publish($this->unique(), ['visibility' => 'public']);
+		$status = $this->here->awaitOnTimeline('home', (string)$sent['uri']);
+		$this->assertNotNull($status, 'the post never reached the home timeline of a follower here');
+		$reply = $stranger->publish($this->unique('reply'), ['visibility' => 'public', 'in_reply_to_id' => (string)$sent['id']]);
+
+		$this->here->get('/api/v1/statuses/' . $status['id'] . '/context');
+		Server::get(ThreadService::class)->fill((string)$sent['uri']);
+
+		$descendants = $this->here->get('/api/v1/statuses/' . $status['id'] . '/context')['descendants'] ?? [];
+		$this->assertContains((string)$reply['uri'], array_column($descendants, 'uri'), 'the stranger\'s reply is not in the conversation here');
 	}
 
 	/** A content warning travels as `summary`, the field most easily dropped. */

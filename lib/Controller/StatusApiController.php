@@ -548,7 +548,7 @@ class StatusApiController extends MastodonApiController {
 			$this->initViewer(false);
 			$context = $this->streamService->getContextByNid($nid);
 
-			return new DataResponse(
+			$response = new DataResponse(
 				[
 					'ancestors' => $this->filterService->apply(
 						$context['ancestors'] ?? [], Filter::CONTEXT_THREAD, $this->viewer
@@ -559,6 +559,13 @@ class StatusApiController extends MastodonApiController {
 				],
 				Http::STATUS_OK
 			);
+			// the rest of the conversation is being read in the background:
+			// a client that knows the header asks again a little later
+			if ($context['filling'] ?? false) {
+				$response->addHeader('X-Social-Thread-Filling', '1');
+			}
+
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

@@ -1129,6 +1129,30 @@ class StreamServiceTest extends TestCase {
 		$this->assertSame(ACore::FORMAT_LOCAL, $parent->getExportFormat());
 	}
 
+	/**
+	 * The rest of a conversation is read from wherever it lives: from its
+	 * first post, and from the one opened, in the background.
+	 */
+	public function testOpeningAConversationAsksForTheRestOfIt(): void {
+		$post = $this->note('https://remote.example/notes/2', self::ACTOR_ID, 'https://remote.example/notes/1');
+		$root = $this->note('https://remote.example/notes/1');
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->willReturn($root);
+		$this->streamRequest->method('getDescendants')->willReturn([]);
+		$queue = $this->createMock(RemoteFetchQueue::class);
+		$asked = [];
+		$queue->method('fillThread')->willReturnCallback(static function (Stream $stream) use (&$asked): bool {
+			$asked[] = $stream->getId();
+
+			return $stream->getId() === 'https://remote.example/notes/1';
+		});
+
+		$context = $this->serviceWithTags($this->createStub(MediaTagsRequest::class), $queue)->getContextByNid(2);
+
+		$this->assertSame(['https://remote.example/notes/1', 'https://remote.example/notes/2'], $asked);
+		$this->assertTrue($context['filling']);
+	}
+
 	public function testGetContextByNidNormalizesTheStringFromAClientRoute(): void {
 		$post = $this->note('https://social.example/@alice/1789250751711653456', self::ACTOR_ID);
 		$this->streamRequest->expects($this->once())->method('getStreamByNid')
@@ -1146,7 +1170,7 @@ class StreamServiceTest extends TestCase {
 
 		$context = $this->service->getContextByNid(3);
 
-		$this->assertSame(['ancestors' => [], 'descendants' => []], $context);
+		$this->assertSame(['ancestors' => [], 'descendants' => [], 'filling' => false], $context);
 	}
 
 	/** Ancestors are walked up as long as they are known, capped where Mastodon caps them. */

@@ -642,9 +642,19 @@ class StreamService {
 			}
 		}
 
+		// the rest of the conversation, from wherever it lives, read in the
+		// background: from its first post, and from this one when that is
+		// deeper than one read goes
+		$root = ($ancestors === []) ? $post : end($ancestors);
+		$filling = $this->remoteFetchQueue?->fillThread($root) ?? false;
+		if ($root !== $post) {
+			$filling = ($this->remoteFetchQueue?->fillThread($post) ?? false) || $filling;
+		}
+
 		$context = [
 			'ancestors' => array_reverse($ancestors),
-			'descendants' => $this->streamRequest->getDescendants($post->getId())
+			'descendants' => $this->streamRequest->getDescendants($post->getId()),
+			'filling' => $filling,
 		];
 		// the post itself as well: it is drawn with the thread — the open
 		// direct message is rendered from it — and leaving it out of the batch
