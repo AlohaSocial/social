@@ -170,6 +170,20 @@ class ActionServiceTest extends TestCase {
 		$this->assertNull($this->service->action($this->actor, 42, $action));
 	}
 
+	public function testABookmarkIsToldToBlueskyWhereThePostIsThere(): void {
+		$this->streamService->method('getStreamByNid')->willReturn($this->post);
+		$bookmarks = $this->createMock(\OCA\Social\Atproto\Publisher\BlueskyBookmarks::class);
+		$bookmarks->expects($this->exactly(2))->method('bookmarked')->willReturnCallback(function (Person $actor, string $postId, bool $on): void {
+			$this->assertSame(self::POST_ID, $postId);
+		});
+		$container = $this->createMock(\Psr\Container\ContainerInterface::class);
+		$container->method('get')->willReturn($bookmarks);
+		$service = new ActionService($this->streamService, $this->boostService, $this->likeService, $this->streamActionService, $this->pinService, $this->actionsRequest, $this->conversationsRequest, $this->dislikeService, $this->interestService, $container);
+
+		$service->action($this->actor, 42, 'bookmark');
+		$service->action($this->actor, 42, 'unbookmark');
+	}
+
 	/**
 	 * Mastodon's conversation mute is about being *told*: the thread's posts
 	 * stay on the timelines and only the notifications stop.

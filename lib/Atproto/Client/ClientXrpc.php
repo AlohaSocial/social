@@ -12,6 +12,7 @@ namespace OCA\Social\Atproto\Client;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
@@ -55,6 +56,7 @@ class ClientXrpc {
 		private ModerationService $moderation,
 		private InboundMoveService $inbound,
 		private BlueskyMutes $mutes,
+		private BlueskyBookmarks $bookmarks,
 	) {
 	}
 
@@ -93,6 +95,7 @@ class ClientXrpc {
 				$session, self::param($params, 'aud'), self::param($params, 'lxm'), (int)self::param($params, 'exp')
 			),
 			$method === 'app.bsky.actor.getPreferences' => $this->preferences->get($session),
+			$method === BlueskyBookmarks::LIST => $this->bookmarks->list($session, (int)self::param($params, 'limit'), self::param($params, 'cursor')),
 			default => $this->proxy->forward($session, $method, 'get', $rawQuery, '', $headers),
 		};
 	}
@@ -151,8 +154,25 @@ class ClientXrpc {
 			'com.atproto.repo.applyWrites' => $this->writes->apply($session, self::json($rawBody)),
 			'com.atproto.moderation.createReport' => $this->writes->report($session, self::json($rawBody)),
 			BlueskyMutes::MUTE, BlueskyMutes::UNMUTE => $this->mute($session, $method, $rawBody, $headers),
+			BlueskyBookmarks::CREATE, BlueskyBookmarks::DELETE => $this->bookmark($session, $method, $rawBody, $headers),
 			default => $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers),
 		};
+	}
+
+	/**
+	 * A bookmark an app sets or takes away: the AppView keeps it, and once it
+	 * took it, it is the same here (`BlueskyBookmarks`).
+	 *
+	 * @param array<string, string> $headers
+	 * @throws XrpcException
+	 */
+	private function bookmark(ClientSession $session, string $method, string $rawBody, array $headers): XrpcBytes {
+		$answer = $this->proxy->forward($session, $method, 'post', '', $rawBody, $headers);
+		if ($answer->status === 200) {
+			$this->bookmarks->fromApp($session, $method, self::json($rawBody));
+		}
+
+		return $answer;
 	}
 
 	/**
