@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Client\NotificationSettings;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Exceptions\InvalidResourceException;
@@ -18,6 +19,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\NotificationPolicy;
 use OCA\Social\Model\Client\NotificationRequest;
 use OCA\Social\Model\Moderation;
+use Psr\Container\ContainerInterface;
 
 /**
  * Mastodon 4.3's notification policy and the requests inbox it fills.
@@ -92,6 +94,7 @@ class NotificationPolicyService {
 		private ModerationRequest $moderationRequest,
 		private AccountRelationService $accountRelationService,
 		private TimelineRevisionService $timelineRevisionService,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -206,9 +209,17 @@ class NotificationPolicyService {
 			}
 		}
 
+		$before = $this->of($userId)->get(NotificationPolicy::NOT_FOLLOWING);
 		$this->configService->setValueForUser(
 			$userId, self::CONFIG_KEY, (string)json_encode($policy->getDecisions())
 		);
+		// who may notify is also a Bluesky app's setting (`NotificationSettings`)
+		if ($policy->get(NotificationPolicy::NOT_FOLLOWING) !== $before) {
+			$settings = $this->container?->get(NotificationSettings::class);
+			if ($settings instanceof NotificationSettings) {
+				$settings->policyChanged($userId);
+			}
+		}
 
 		return $policy;
 	}
