@@ -133,8 +133,8 @@
 					<NcAppNavigationItem
 						v-for="entry in group.entries"
 						:key="keyFor(entry)"
-						:class="entry.kind === 'list' ? 'navigation__list' : 'navigation__trend'"
-						:name="entry.kind === 'list' ? entry.list.title : `#${entry.tag.name}`"
+						:class="entry.kind === 'list' || entry.kind === 'feed' ? 'navigation__list' : 'navigation__trend'"
+						:name="nameFor(entry)"
 						:title="titleFor(entry)"
 						:href="hrefFor(routeFor(entry))"
 						:active="isExploreActive(entry)"
@@ -142,6 +142,7 @@
 						<template #icon>
 							<IconAccountGroup v-if="entry.kind === 'list' && entry.list.nextcloud_group" :size="20" />
 							<IconFormatListBulleted v-else-if="entry.kind === 'list'" :size="20" />
+							<IconBluesky v-else-if="entry.kind === 'feed'" :size="20" />
 							<IconTrendingUp v-else-if="entry.kind === 'trend'" :size="20" />
 							<IconPound v-else :size="20" />
 						</template>
@@ -164,6 +165,12 @@
 							<IconCog :size="20" />
 						</template>
 						{{ t('social', 'Manage lists') }}
+					</NcActionButton>
+					<NcActionButton v-if="blueskyEnabled" closeAfterClick @click="navigate({ name: 'settings', hash: '#bluesky-feeds' })">
+						<template #icon>
+							<IconBluesky :size="20" />
+						</template>
+						{{ t('social', 'Manage Bluesky feeds') }}
 					</NcActionButton>
 				</template>
 			</NcAppNavigationItem>
@@ -320,6 +327,7 @@ import IconPound from 'vue-material-design-icons/Pound.vue'
 import IconTrendingUp from 'vue-material-design-icons/TrendingUp.vue'
 import IconAccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import IconFormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
+import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconChartBox from 'vue-material-design-icons/ChartBox.vue'
 import { translate, translatePlural } from '@nextcloud/l10n'
 import { capacityFrom, chooseEntries, entriesThatFit } from '../utils/explore.js'
@@ -341,7 +349,8 @@ import { pageIdentity } from '../services/pageOrder.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { afterFirstTimeline } from '../services/boot.js'
-import eventBus, { LISTS_CHANGED } from '../services/eventBus.js'
+import eventBus, { BLUESKY_FEEDS_CHANGED, LISTS_CHANGED } from '../services/eventBus.js'
+import { fetchSavedFeeds, routeFor as feedRoute, uriOf } from '../services/blueskyFeeds.js'
 import { ownAvatarUrl } from '../services/avatar.js'
 
 // the composer pulls the emoji picker and the attachment stack with it:
@@ -389,6 +398,7 @@ export default {
 		IconTrendingUp,
 		IconAccountGroup,
 		IconFormatListBulleted,
+		IconBluesky,
 		IconCompass,
 		IconCancel,
 		IconSwapHorizontal,
@@ -411,6 +421,8 @@ export default {
 			lists: [],
 			/** the hashtags the reader follows, as the server orders them */
 			followedTags: [],
+			/** the Bluesky feeds and lists the reader keeps, pinned first */
+			blueskyFeeds: [],
 			/** whether the Explore entry is open; remembered per reader */
 			exploreOpen: true,
 			/** the window's height, the fallback until the rail can be measured */
@@ -454,7 +466,12 @@ export default {
 		 * @return {number} how many hashtags and lists there are in all
 		 */
 		exploreTotal() {
-			return this.followedTags.length + this.lists.length + this.trendingToShow.length
+			return this.followedTags.length + this.lists.length + this.blueskyFeeds.length + this.trendingToShow.length
+		},
+
+		/** @return {boolean} whether this server gives accounts a Bluesky identity */
+		blueskyEnabled() {
+			return this.settingsStore.getServerData?.bluesky?.enabled === true
 		},
 
 		/**
@@ -473,7 +490,7 @@ export default {
 		 * @return {Array<object>}
 		 */
 		exploreEntries() {
-			return chooseEntries(this.followedTags, this.lists, this.trendingToShow, this.exploreCap)
+			return chooseEntries(this.followedTags, this.lists, this.trendingToShow, this.exploreCap, this.blueskyFeeds)
 		},
 
 		/**
@@ -808,6 +825,7 @@ export default {
 		afterFirstTimeline(() => {
 			this.fetchTrending()
 			this.fetchLists()
+			this.fetchBlueskyFeeds()
 			this.fetchFollowedTags()
 			this.notificationsStore.fetchUnreadNotifications()
 			this.notificationsStore.fetchUnreadDirectMessages()
@@ -819,6 +837,7 @@ export default {
 		// the settings page changes them; this sidebar holds its own copy
 		this.onListsChanged = () => this.fetchLists()
 		eventBus.on(LISTS_CHANGED, this.onListsChanged)
+		eventBus.on(BLUESKY_FEEDS_CHANGED, this.fetchBlueskyFeeds)
 
 		// how many entries Explore shows depends on how much room the rail has
 		this.measureViewport()
@@ -853,6 +872,7 @@ export default {
 
 	beforeUnmount() {
 		eventBus.off(LISTS_CHANGED, this.onListsChanged)
+		eventBus.off(BLUESKY_FEEDS_CHANGED, this.fetchBlueskyFeeds)
 		window.removeEventListener('resize', this.measureViewport)
 		this.railObserver?.disconnect()
 		if (typeof this.stopListening === 'function') {
@@ -878,6 +898,7 @@ export default {
 				tag: t('social', 'Tags you follow'),
 				trend: t('social', 'Trending now'),
 				list: t('social', 'Your lists'),
+				feed: t('social', 'Bluesky feeds'),
 			}
 
 			return captions[kind] ?? t('social', 'Explore')
@@ -1047,10 +1068,27 @@ export default {
 		 * @return {string} something stable to key it by
 		 */
 		keyFor(entry) {
+			if (entry.kind === 'feed') {
+				return `feed-${entry.feed.uri}`
+			}
 			return entry.kind === 'list' ? `list-${entry.list.id}` : `${entry.kind}-${entry.tag.name}`
 		},
 
+		/**
+		 * @param {object} entry one of the Explore children
+		 * @return {string} what its row says
+		 */
+		nameFor(entry) {
+			if (entry.kind === 'feed') {
+				return entry.feed.name
+			}
+			return entry.kind === 'list' ? entry.list.title : `#${entry.tag.name}`
+		},
+
 		routeFor(entry) {
+			if (entry.kind === 'feed') {
+				return feedRoute(entry.feed.uri)
+			}
 			return entry.kind === 'list'
 				? { name: 'list', params: { id: entry.list.id } }
 				: { name: 'tags', params: { tag: entry.tag.name } }
@@ -1077,6 +1115,10 @@ export default {
 				return translate('social', 'Being posted about on this server right now')
 			}
 
+			if (entry.kind === 'feed' && entry.feed.creator) {
+				return translate('social', 'A Bluesky feed by {creator}', { creator: entry.feed.creator })
+			}
+
 			return undefined
 		},
 
@@ -1085,6 +1127,9 @@ export default {
 		 * @return {boolean} whether its timeline is the one being shown
 		 */
 		isExploreActive(entry) {
+			if (entry.kind === 'feed') {
+				return this.$route.name === 'bluesky-feed' && uriOf(this.$route.params) === entry.feed.uri
+			}
 			return entry.kind === 'list' ? this.isListActive(entry.list) : this.isTagActive(entry.tag)
 		},
 
@@ -1196,6 +1241,17 @@ export default {
 				]
 			} catch {
 				this.lists = []
+			}
+		},
+
+		async fetchBlueskyFeeds() {
+			if (!this.blueskyEnabled) {
+				return
+			}
+			try {
+				this.blueskyFeeds = await fetchSavedFeeds()
+			} catch {
+				this.blueskyFeeds = []
 			}
 		},
 

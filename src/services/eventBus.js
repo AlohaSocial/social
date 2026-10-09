@@ -15,6 +15,9 @@ export default mitt()
  */
 export const LISTS_CHANGED = 'social:lists-changed'
 
+/** The Bluesky feeds and lists the reader keeps have changed, for the same reason. */
+export const BLUESKY_FEEDS_CHANGED = 'social:bluesky-feeds-changed'
+
 /**
  * Somebody pressed "add a reaction" on a post.
  *

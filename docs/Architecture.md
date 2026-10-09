@@ -2003,7 +2003,9 @@ of the animation.
 **The Settings page, and what is on it.** `src/views/Settings.vue` describes
 every section once (`{ id, group, icon, component, title, lede }`) and sorts them
 into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
-`#portfolio`), **Reading** (`#interests`, `#lists`, `#sensitive`, `#counts`,
+`#portfolio`), **Reading** (`#interests`, `#lists`, `#bluesky-feeds` where
+Bluesky is on — `BlueskyFeedsSettings.vue`, the Bluesky custom feeds and lists
+kept, read as timelines at `/timeline/bluesky/<DID>/<feed|list>/<key>` —, `#sensitive`, `#counts`,
 `#recap`, `#senses`), **Notifications** (`#notifications` for when,
 `#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
 `#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`

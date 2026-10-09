@@ -111,7 +111,8 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   video service, a content warning as a self-label), and a relay crawls the instance's firehose. The
   other way too: follow `alice.bsky.social` by its bare handle and read it in your home feed, badged,
   its videos playing here; your likes and boosts reach Bluesky, and their follows, likes, replies and
-  mentions reach your Activities. Bluesky apps sign in here with Bluesky sign-in, or with an app
+  mentions reach your Activities. Bluesky's custom feeds and lists read as timelines of their own,
+  the same ones a Bluesky app keeps for you. Bluesky apps sign in here with Bluesky sign-in, or with an app
   password made in your settings, and post videos as they would on Bluesky. A Bluesky account of your
   own moves here with its followers and its posts — from Bluesky, from Bridgy Fed's bridge of your Fediverse account,
   or with any migration tool — and can move away again. Switched on by the administrator once the requirements

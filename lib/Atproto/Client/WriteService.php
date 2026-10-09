@@ -9,10 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
+use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
@@ -22,8 +24,10 @@ use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
+use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
@@ -51,16 +55,31 @@ use Throwable;
 /**
  * What a Bluesky app writes, as the Social action it stands for (§16.5).
  *
- * Nothing reaches a repository except through `RecordMapper`, so an app's
- * `createRecord` is not stored as it came: a post becomes a Social post, a
- * like a like, a repost a boost, a follow a follow, a profile record the
- * profile — and the record the publisher then writes for it is the answer.
- * The app shows what it gets back; the text may differ where Social's
- * mapping does (a long post cut with a link, say). Anything else — blocks
- * (D16), lists, feeds, gates — is refused, and a post can only be public:
- * that is what goes to Bluesky (D8).
+ * What Social has a counterpart for reaches a repository only through
+ * `RecordMapper`, so an app's `createRecord` is not stored as it came: a
+ * post becomes a Social post, a like a like, a repost a boost, a follow a
+ * follow, a profile record the profile — and the record the publisher then
+ * writes for it is the answer. The app shows what it gets back; the text may
+ * differ where Social's mapping does (a long post cut with a link, say).
+ * Lists, starter packs, feed generators and gates, which Social has no
+ * counterpart for, are kept as written (`KEPT_AS_WRITTEN`). Anything else —
+ * blocks and list blocks (D16) among it — is refused, and a post can only be
+ * public: that is what goes to Bluesky (D8).
  */
 class WriteService {
+	/**
+	 * Records an app writes that mean nothing to Social and everything on
+	 * Bluesky — lists and their members, starter packs, feed generators,
+	 * reply and quote gates: kept as the app wrote them, checked against
+	 * their lexicon. A list block is a block, and refused (D16).
+	 */
+	public const KEPT_AS_WRITTEN = [
+		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
+		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
+	];
+	/** the records whose key is the key of the post they gate */
+	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
+
 	public function __construct(
 		private AccountService $accounts,
 		private PostService $posts,
@@ -85,6 +104,7 @@ class WriteService {
 		private LoggerInterface $logger,
 		private AvatarService $avatars,
 		private BannerService $banners,
+		private IdentityService $identities,
 	) {
 	}
 
@@ -103,7 +123,9 @@ class WriteService {
 			RecordMapper::LIKE => $this->like($actor, $record),
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
-			default => throw $this->unsupported($collection),
+			default => in_array($collection, self::KEPT_AS_WRITTEN, true)
+				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record)
+				: throw $this->unsupported($collection),
 		};
 
 		return $this->created($session, $written);
@@ -118,6 +140,11 @@ class WriteService {
 	public function put(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
+		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+
+			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record));
+		}
 		if ($collection !== RecordMapper::PROFILE || ($body['rkey'] ?? '') !== RecordMapper::PROFILE_RKEY) {
 			throw $this->unsupported($collection);
 		}
@@ -215,6 +242,11 @@ class WriteService {
 		$record = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
 		if ($record === null) {
 			// already gone: what the app asked for is the case
+			return ['commit' => $this->commit($session)];
+		}
+		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+			$this->writeRaw($session, RepoWrite::delete($collection, $rkey));
+
 			return ['commit' => $this->commit($session)];
 		}
 		$actor = $this->actor($session);
@@ -634,6 +666,44 @@ class WriteService {
 		}
 
 		throw new XrpcException(400, 'InvalidRequest', 'That is not something that goes to Bluesky');
+	}
+
+	/**
+	 * A record kept as the app wrote it: made, or replaced under its key.
+	 *
+	 * @throws XrpcException
+	 */
+	private function keep(ClientSession $session, string $collection, string $rkey, array $record): StoredRecord {
+		$did = $session->identity->did;
+		if (in_array($collection, self::GATES, true)) {
+			$gated = Syntax::parseAtUri((string)($record['post'] ?? ''));
+			if ($gated === null || $gated['authority'] !== $did || $gated['collection'] !== RecordMapper::POST || ($rkey !== '' && $rkey !== $gated['rkey'])) {
+				throw XrpcException::invalidRequest('A gate is kept under the key of one of the account\'s own posts');
+			}
+			$rkey = $gated['rkey'];
+		}
+		$rkey = $rkey !== '' ? $rkey : Tid::next();
+		if (($record['$type'] ?? $collection) !== $collection) {
+			throw XrpcException::invalidRequest('The record is not of its collection');
+		}
+		$record['$type'] = $collection;
+		$this->writeRaw($session, $this->repositories->getRecord($did, $collection, $rkey) === null
+			? RepoWrite::create($collection, $record, '', $rkey)
+			: RepoWrite::update($collection, $rkey, $record));
+
+		return $this->repositories->getRecord($did, $collection, $rkey)
+			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
+	}
+
+	/**
+	 * @throws XrpcException
+	 */
+	private function writeRaw(ClientSession $session, RepoWrite $write): void {
+		try {
+			$this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), [$write]);
+		} catch (AtprotoException $e) {
+			throw XrpcException::invalidRequest($e->getMessage());
+		}
 	}
 
 	private function created(ClientSession $session, StoredRecord $record): array {

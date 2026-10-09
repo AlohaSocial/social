@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented.**
+**Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented, as are custom feeds and lists (§9.6).**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
 and are not to be re-derived; the technical facts were checked against the
@@ -242,9 +242,10 @@ Collection → written when:
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
 | `app.bsky.graph.follow` | a local actor follows a Bluesky account (§9.2) | `subject` DID |
-| `app.bsky.feed.threadgate` | *optional, later*: a post's reply policy maps to one | who may reply |
-| `app.bsky.graph.block` | **never** (D16) | — |
-| `app.bsky.graph.list*`, `app.bsky.feed.generator`, `chat.*` | never | — |
+| `app.bsky.feed.threadgate`, `app.bsky.feed.postgate` | a Bluesky app signed in here writes one for one of the account's own posts (§6), kept under that post's key | as the app wrote it |
+| `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6) | as the app wrote it |
+| `app.bsky.graph.block`, `app.bsky.graph.listblock` | **never** (D16) | — |
+| `chat.*` | never | — |
 
 Records are built by `RecordMapper` from the Social model (§8) and
 validated against the lexicon shapes this app ships as JSON (the lexicon
@@ -588,6 +589,35 @@ A `delete` op from Jetstream, or a post gone from the author feed on the
 next poll (the AppView answers 404 for `getPosts` of it — checked for the
 last page's ids once a day, bounded), becomes a `Delete` through the same
 import path, as a remote `Delete` would. Bluesky has no edits.
+
+### 9.6 Feeds and lists
+
+Bluesky's custom feeds and lists are read here as timelines
+(`Reader\BlueskyFeeds`, `AtprotoFeedsController`):
+
+- **Which ones a person keeps is their Bluesky preference**
+  (`app.bsky.actor.defs#savedFeedsPrefV2`, the one `getPreferences` keeps,
+  §6), so a feed saved in a Bluesky app signed in here shows in Social and
+  the other way round. Settings → Reading → Bluesky feeds adds one by its
+  `at://` URI or bsky.app address (`/profile/<handle or DID>/feed/<key>`,
+  `/lists/<key>`), from Bluesky's suggestions (`getSuggestedFeeds`), and
+  removes one; the sidebar lists them under Explore, sharing the room of
+  the person's lists.
+- **A feed is read from the AppView as the person** (`getFeed`,
+  `getListFeed`, with a service-auth token for their DID), so a feed that
+  ranks for its reader ranks for them. The posts are stored as any Bluesky
+  post is and answered in the feed's order, without a hidden one (a label,
+  a block, a muted account). The AppView's cursor is opaque: it is kept a
+  hour for the last post of each page, so the next page is asked with the
+  id of the post the client last saw.
+- **Routes**: `GET`/`POST`/`DELETE /api/v1/social/bluesky/feeds`,
+  `GET /api/v1/social/bluesky/feeds/suggested`, and
+  `GET /api/v1/timelines/bluesky?feed=<at:// URI>` (API.md). In the web
+  client the address is `/timeline/bluesky/<DID>/<feed|list>/<key>`: the
+  URI's own slashes stay out of the path, as web servers refuse an encoded
+  one.
+- **Lists made in a Bluesky app** are written to the account's repository
+  (§6), so they reach the AppView, and read here as their feed.
 
 ## 10. Being followed, liked and answered from Bluesky
 
@@ -1172,8 +1202,11 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   so the app sees what Social published, which may differ (a long post cut
   with a link). `putRecord` of the profile sets the display name and bio.
   `deleteRecord` undoes the action. `applyWrites` does the same one by one,
-  not in one commit. Blocks are refused (D16), as are lists, feeds and
-  gates. `uploadBlob` stores a picture as any upload is, named by its CID,
+  not in one commit. Lists and their members, starter packs, feed
+  generators, thread gates and post gates have no Social counterpart and
+  are kept as the app wrote them, validated against their lexicon; a gate
+  only for one of the account's own posts, under that post's key. Blocks
+  and list blocks are refused (D16). `uploadBlob` stores a picture as any upload is, named by its CID,
   for the post that uses it. A report an app files is a report here, passed
   on in this server's name (3b).
 - The app's profile editor sets the avatar and the banner too: a picture

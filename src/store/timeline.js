@@ -178,13 +178,15 @@ function pruneIndex(state) {
 
 /**
  * Whether the list is a ranking rather than a timeline: For you, whole or as
- * the For you scope of Photos and Videos.
+ * the For you scope of Photos and Videos, and a Bluesky feed or list, whose
+ * order is the feed's own.
  *
  * @param {{type: string, params?: {scope?: string}}} state the store state, or anything with its type and params
  * @return {boolean}
  */
 export function isRanked(state) {
 	return state.type === 'interests'
+		|| state.type === 'bluesky'
 		|| (['photos', 'videos'].includes(state.type) && state.params?.scope === 'interests')
 }
 
@@ -274,6 +276,11 @@ function timelineRequest(list, params) {
 			if (list.params.media === 'photos' || list.params.media === 'videos') {
 				params.media = list.params.media
 			}
+			break
+		case 'bluesky':
+			// the feed's `at://` URI rides in the query, as a link does
+			url = generateUrl('apps/social/api/v1/timelines/bluesky')
+			params.feed = list.params.feed
 			break
 		case 'photos':
 		case 'videos':

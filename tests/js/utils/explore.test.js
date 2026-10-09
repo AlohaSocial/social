@@ -187,4 +187,11 @@ describe('chooseEntries', () => {
 		expect(chooseEntries(undefined, undefined, undefined, 12)).toEqual([])
 		expect(chooseEntries([], [], [], 12)).toEqual([])
 	})
+
+	it('gives the Bluesky feeds the reader keeps a share of the lists\' room, after the lists', () => {
+		const feeds = [{ uri: 'at://did:plc:bob/app.bsky.feed.generator/cats', name: 'Cats' }]
+
+		expect(chooseEntries(tags(1), lists(1), trends(1), 12, feeds).map((e) => e.kind)).toEqual(['tag', 'list', 'feed', 'trend'])
+		expect(chooseEntries(tags(1), lists(1), trends(1), 2, feeds).map((e) => e.kind)).toEqual(['tag', 'list'])
+	})
 })

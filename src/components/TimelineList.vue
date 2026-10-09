@@ -437,6 +437,12 @@ export default {
 					},
 				},
 
+				bluesky: {
+					illustration: 'nobody-yet',
+					title: t('social', 'Nothing in this feed right now'),
+					description: t('social', 'Bluesky had no posts in this feed for you. Some feeds only fill up once you follow people or like posts there.'),
+				},
+
 				interests: {
 					illustration: 'quiet-timeline',
 					title: t('social', 'Nothing here for you yet'),

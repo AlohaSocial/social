@@ -434,11 +434,10 @@ export default {
 		},
 
 		fromPushApp(data) {
-			let timeline = 'home'
-			if (this.$route.name === 'tags') {
-				timeline = 'tags'
-			} else if (this.$route.params.type) {
-				timeline = String(this.$route.params.type)
+			// a tag, a list or a Bluesky feed is a route of its own, not home
+			let timeline = String(this.$route.name ?? '')
+			if (timeline === 'timeline') {
+				timeline = String(this.$route.params.type || 'home')
 			}
 
 			if (data.source === 'timeline.home' && timeline === 'home') {

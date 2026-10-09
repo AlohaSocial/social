@@ -227,6 +227,12 @@ const router = createRouter({
 					path: 'list/:id',
 					name: 'list',
 				}),
+				// a Bluesky feed or list, its `at://` URI spelled as segments
+				// (services/blueskyFeeds.js says why)
+				/** @type {import('vue-router').RouteRecordRaw} */ ({
+					path: 'bluesky/:did/:kind(feed|list)/:rkey',
+					name: 'bluesky-feed',
+				}),
 			],
 		},
 		{
