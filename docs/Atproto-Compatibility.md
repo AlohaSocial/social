@@ -964,7 +964,11 @@ each for a reason:
   the key is derived from them.
 - **Pictures** are the stored original when it fits Bluesky's 2,000,000
   bytes and is a type Bluesky shows, re-encoded as JPEG otherwise and stored
-  as a document of their own. A post with a link and no pictures carries
+  as a document of their own. The profile's avatar is the picture the
+  person chose for their Nextcloud account — none for a generated one, or
+  where they keep their avatar from other servers — read from Nextcloud and
+  stored as a document of its own. A picture whose bytes are a blob already
+  is that blob, so a copy is stored once. A post with a link and no pictures carries
   its link card (§8.3) — title and description, and the page's
   picture: fetched once as a cached remote document, through the guards
   any remote file passes, and re-encoded when it is over a card's
@@ -1162,8 +1166,11 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   gates. `uploadBlob` stores a picture as any upload is, named by its CID,
   for the post that uses it. A report an app files is a report here, passed
   on in this server's name (3b).
-- Not yet: the account's avatar and banner from the app's profile editor.
-  `getServiceAuth` came with 3d.
+- The app's profile editor sets the avatar and the banner too: a picture
+  the app uploaded becomes the account's — the avatar is the Nextcloud
+  account's own picture, refused where its backend owns it — and one left
+  out is taken away. An app sends the whole profile every time, so a
+  picture it did not change is left alone. `getServiceAuth` came with 3d.
 - A mention of a Bluesky account in a post published from here — the
   composer's `@alice.bsky.social` — is now a mention facet with the DID,
   where it was a link.

@@ -1094,7 +1094,7 @@ class AccountService {
 	 * behaves as it did before this existed, which is the safe direction for a
 	 * profile that is already public.
 	 */
-	private function mayPublish(Person $actor, string $property): bool {
+	public function mayPublish(Person $actor, string $property): bool {
 		$user = $this->userManager->get($actor->getUserId());
 		if ($user === null) {
 			return true;

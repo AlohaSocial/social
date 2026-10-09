@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Client;
 
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
@@ -30,6 +31,8 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\Report;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AvatarService;
+use OCA\Social\Service\BannerService;
 use OCA\Social\Service\BoostService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\DocumentService;
@@ -80,6 +83,8 @@ class WriteService {
 		private AtprotoBlobRequest $blobs,
 		private IURLGenerator $urlGenerator,
 		private LoggerInterface $logger,
+		private AvatarService $avatars,
+		private BannerService $banners,
 	) {
 	}
 
@@ -118,14 +123,25 @@ class WriteService {
 		}
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 		$actor = $this->actor($session);
-		$this->accounts->changingProfile($session->userId, function () use ($session, $record): void {
+		$current = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
+		$was = $current === null ? [] : DagCbor::decode($current->bytes);
+		$was = is_array($was) ? $was : [];
+		$this->accounts->changingProfile($session->userId, function () use ($session, $record, $was): void {
 			if (is_string($record['displayName'] ?? null)) {
 				$this->accounts->setDisplayName($session->userId, mb_substr(trim($record['displayName']), 0, 64));
 			}
 			if (is_string($record['description'] ?? null)) {
 				$this->accounts->setSummary($session->userId, mb_substr($record['description'], 0, 2560));
 			}
+			$this->profilePicture($session, 'avatar', $record, $was);
+			$this->profilePicture($session, 'banner', $record, $was);
 		});
+		// the actor as the changes left it: a new avatar is a new icon
+		try {
+			$actor = $this->cacheActors->getFromId($actor->getId());
+		} catch (Throwable $e) {
+			$this->logger->info('Changed actor not read back; the profile goes out as it was', ['exception' => $e]);
+		}
 		$this->publisher->publishProfile($actor);
 		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
 		if ($stored === null) {
@@ -133,6 +149,57 @@ class WriteService {
 		}
 
 		return $this->created($session, $stored);
+	}
+
+	/**
+	 * The avatar or the banner of a profile an app saves, when it is not the
+	 * one the profile had: the picture the app uploaded becomes the
+	 * account's, one left out is taken away. An app sends the whole profile
+	 * every time, so an unchanged picture is left alone.
+	 *
+	 * @param 'avatar'|'banner' $field
+	 * @throws XrpcException
+	 */
+	private function profilePicture(ClientSession $session, string $field, array $record, array $was): void {
+		$cid = self::blobCid($record[$field] ?? null);
+		if ($cid === self::blobCid($was[$field] ?? null)) {
+			return;
+		}
+		try {
+			if ($cid === '') {
+				$field === 'avatar' ? $this->avatars->remove($session->userId) : $this->banners->remove($session->userId);
+
+				return;
+			}
+			$blob = $this->blobs->get($session->identity->did, $cid);
+			if ($blob === null) {
+				throw XrpcException::invalidRequest('Upload the ' . $field . ' first');
+			}
+			$path = (string)tempnam(sys_get_temp_dir(), 'social-atproto-profile-');
+			try {
+				file_put_contents($path, $this->pictures->read($blob));
+				$field === 'avatar' ? $this->avatars->setFromFile($session->userId, $path) : $this->banners->setFromTempFile($session->userId, $path);
+			} finally {
+				@unlink($path);
+			}
+		} catch (XrpcException $e) {
+			throw $e;
+		} catch (Throwable $e) {
+			throw XrpcException::invalidRequest('The ' . $field . ' was not taken: ' . $e->getMessage());
+		}
+	}
+
+	/**
+	 * The CID a blob value names, as an app sends it (`{$link}`) or as the
+	 * repository holds it; '' for none.
+	 */
+	private static function blobCid(mixed $blob): string {
+		$ref = is_array($blob) && ($blob['$type'] ?? 'blob') === 'blob' ? ($blob['ref'] ?? null) : null;
+		if ($ref instanceof Cid) {
+			return $ref->toString();
+		}
+
+		return is_array($ref) && is_string($ref['$link'] ?? null) && Cid::isValid($ref['$link']) ? $ref['$link'] : '';
 	}
 
 	/**

@@ -199,9 +199,9 @@ class RecordMapper {
 		if ($bio !== '') {
 			$record['description'] = self::clip($bio, 256, 2560);
 		}
-		$avatar = $this->actorPicture($identity, $actor, $actor->getIconId());
+		$avatar = $this->pictures->avatarBlob($identity, $actor);
 		if ($avatar !== null) {
-			$record['avatar'] = $avatar;
+			$record['avatar'] = $avatar['blob']->toRecordValue();
 		}
 		if ($actor->getCreation() > 0) {
 			$record['createdAt'] = Syntax::datetime($actor->getCreation());
@@ -340,20 +340,6 @@ class RecordMapper {
 		}
 
 		return $ordered;
-	}
-
-	private function actorPicture(Identity $identity, Person $actor, string $documentId): ?array {
-		if ($documentId === '') {
-			return null;
-		}
-		try {
-			$document = $this->documents->getDocumentById($documentId);
-		} catch (Throwable) {
-			return null;
-		}
-		$picture = $this->pictures->blobFor($identity, $actor, $document);
-
-		return $picture === null ? null : $picture['blob']->toRecordValue();
 	}
 
 	private static function publishedAt(Stream $post): int {

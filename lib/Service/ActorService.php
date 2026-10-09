@@ -20,6 +20,7 @@ use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 use OCA\Social\Tools\Traits\TArrayTools;
+use Psr\Container\ContainerInterface;
 
 /**
  * Class ActorService
@@ -32,6 +33,7 @@ class ActorService {
 	public function __construct(
 		private CacheActorsRequest $cacheActorsRequest,
 		private CacheDocumentsRequest $cacheDocumentsRequest,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -51,6 +53,8 @@ class ActorService {
 		} catch (CacheActorDoesNotExistException $e) {
 			$this->save($actor);
 		}
+		// resolved here: CacheActorService depends on services that need this one
+		$this->container?->get(CacheActorService::class)->forget($actor->getId());
 	}
 
 	/**

@@ -426,6 +426,16 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($record);
 	}
 
+	public function testAProfileCarriesTheAccountsOwnAvatar(): void {
+		$avatar = new BlobRef(self::DID, Cid::forRaw('avatar'), 'https://social.test/doc/avatar', 'image/png', 6);
+		$this->pictures->method('avatarBlob')->with($this->identity, $this->author)->willReturn(['blob' => $avatar, 'width' => 4, 'height' => 4]);
+
+		$record = $this->mapper->profile($this->author, $this->identity);
+
+		$this->assertSame($avatar->toRecordValue(), $record['avatar']);
+		$this->lexicon->validateRecord($record);
+	}
+
 	private function mapper(): RecordMapper {
 		$refs = new PostRefs($this->repositories, $this->streams, $this->appView, new NullLogger());
 

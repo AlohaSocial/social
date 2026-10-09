@@ -34,6 +34,8 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
+use OCA\Social\Service\AvatarService;
+use OCA\Social\Service\BannerService;
 use OCA\Social\Service\BoostService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\DocumentService;
@@ -79,6 +81,14 @@ class WriteServiceTest extends TestCase {
 	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
 	private LocalRecordResolver $local;
+	/** @var AccountService&MockObject */
+	private AccountService $accounts;
+	/** @var CacheActorService&MockObject */
+	private CacheActorService $cacheActors;
+	/** @var AvatarService&MockObject */
+	private AvatarService $avatars;
+	/** @var BannerService&MockObject */
+	private BannerService $banners;
 	private WriteService $writes;
 	private ClientSession $session;
 	private Person $alice;
@@ -91,6 +101,11 @@ class WriteServiceTest extends TestCase {
 		$this->alice->setLocal(true);
 		$accounts = $this->createMock(AccountService::class);
 		$accounts->method('getActorFromUserId')->willReturn($this->alice);
+		$accounts->method('changingProfile')->willReturnCallback(static fn (string $userId, callable $changes): mixed => $changes());
+		$this->accounts = $accounts;
+		$this->avatars = $this->createMock(AvatarService::class);
+		$this->cacheActors = $this->createMock(CacheActorService::class);
+		$this->banners = $this->createMock(BannerService::class);
 		$this->posts = $this->createMock(PostService::class);
 		$this->streams = $this->createMock(StreamService::class);
 		$this->review = $this->createMock(PostReviewService::class);
@@ -113,11 +128,61 @@ class WriteServiceTest extends TestCase {
 		});
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
-			$this->createMock(CacheActorService::class), $this->createMock(ReportService::class), $this->documents,
+			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
-			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(),
+			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
+	}
+
+	/** The profile record this server published, naming an avatar and a banner. */
+	private function publishedProfile(Cid $avatar, Cid $banner): void {
+		$blob = static fn (Cid $cid): array => ['$type' => 'blob', 'ref' => $cid, 'mimeType' => 'image/jpeg', 'size' => 9];
+		$bytes = DagCbor::encode(['$type' => RecordMapper::PROFILE, 'displayName' => 'Alice', 'avatar' => $blob($avatar), 'banner' => $blob($banner)]);
+		$this->records[] = new StoredRecord(self::DID, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY, Cid::forDagCbor($bytes), $bytes, '', 0);
+	}
+
+	public function testAProfileAnAppSavesTakesItsNewAvatarAndLeavesTheBannerAlone(): void {
+		$avatar = Cid::forRaw('the old face');
+		$banner = Cid::forRaw('the sea');
+		$this->publishedProfile($avatar, $banner);
+		$new = Cid::forRaw('a new face');
+		$this->blobs->method('get')->with(self::DID, $new->toString())->willReturn(new BlobRef(self::DID, $new, 'https://social.test/documents/9', 'image/png', 10));
+		$this->pictures->method('read')->willReturn('a new face');
+		$this->avatars->expects($this->once())->method('setFromFile')->with('alice', $this->callback(static fn (string $path): bool => file_get_contents($path) === 'a new face'));
+		$this->banners->expects($this->never())->method('setFromTempFile');
+		$this->banners->expects($this->never())->method('remove');
+		$this->accounts->expects($this->once())->method('setDisplayName')->with('alice', 'Alice A.');
+		$changed = new Person();
+		$changed->setId('https://social.test/@alice');
+		$this->cacheActors->method('getFromId')->willReturn($changed);
+		$this->publisher->expects($this->once())->method('publishProfile')->with($this->identicalTo($changed));
+		$ref = static fn (Cid $cid): array => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 9];
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
+			'$type' => RecordMapper::PROFILE, 'displayName' => 'Alice A.', 'avatar' => $ref($new), 'banner' => $ref($banner),
+		]]);
+	}
+
+	public function testAPictureLeftOutOfTheProfileIsTakenAway(): void {
+		$this->publishedProfile(Cid::forRaw('a face'), Cid::forRaw('the sea'));
+		$this->avatars->expects($this->never())->method('setFromFile');
+		$this->avatars->expects($this->never())->method('remove');
+		$this->banners->expects($this->once())->method('remove')->with('alice');
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
+			'$type' => RecordMapper::PROFILE, 'avatar' => ['$type' => 'blob', 'ref' => ['$link' => Cid::forRaw('a face')->toString()], 'mimeType' => 'image/jpeg', 'size' => 6],
+		]]);
+	}
+
+	public function testAnAvatarNotUploadedHereIsRefused(): void {
+		$this->publishedProfile(Cid::forRaw('a face'), Cid::forRaw('the sea'));
+		$this->blobs->method('get')->willReturn(null);
+
+		$this->expectException(XrpcException::class);
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
+			'$type' => RecordMapper::PROFILE, 'avatar' => ['$type' => 'blob', 'ref' => ['$link' => Cid::forRaw('elsewhere')->toString()], 'mimeType' => 'image/jpeg', 'size' => 9],
+		]]);
 	}
 
 	public function testAPostFromAnAppIsASocialPostAndTheAnswerIsItsRecord(): void {
