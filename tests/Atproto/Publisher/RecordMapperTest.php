@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Publisher\CardThumbnail;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Publisher\RecordMapper;
@@ -64,6 +65,8 @@ class RecordMapperTest extends TestCase {
 	private AppViewClient $appView;
 	/** @var StreamCardsRequest&MockObject */
 	private StreamCardsRequest $cards;
+	/** @var CardThumbnail&MockObject */
+	private CardThumbnail $thumbnails;
 	private RecordMapper $mapper;
 	private Identity $identity;
 	private Person $author;
@@ -81,6 +84,7 @@ class RecordMapperTest extends TestCase {
 		$this->appView = $this->createMock(AppViewClient::class);
 		$this->cards = $this->createMock(StreamCardsRequest::class);
 		$this->cards->method('getByStreamId')->willThrowException(new CardNotFoundException());
+		$this->thumbnails = $this->createMock(CardThumbnail::class);
 		$this->mapper = $this->mapper();
 		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', 'did:key:z', '', Identity::STATE_ACTIVE, '', 1700000000);
 		$this->author = new Person();
@@ -345,12 +349,28 @@ class RecordMapperTest extends TestCase {
 		$this->assertSame('https://nextcloud.com/blog/', $record['embed']['external']['uri']);
 		$this->assertSame('Nextcloud Hub', $record['embed']['external']['title']);
 		$this->assertLessThanOrEqual(300, mb_strlen($record['embed']['external']['description']));
+		$this->assertArrayNotHasKey('thumb', $record['embed']['external'], 'no picture to be had, none named');
 		$this->lexicon->validateRecord($record);
 
 		$untitled = new StreamCard(self::POST_ID, 'https://nextcloud.com/');
 		$this->cards = $this->createMock(StreamCardsRequest::class);
 		$this->cards->method('getByStreamId')->willReturn($untitled);
 		$this->assertArrayNotHasKey('embed', $this->mapper()->post($this->post('<p>x</p>'), $this->identity, $this->author)['record'], 'a card with no title is no card');
+	}
+
+	public function testALinkCardCarriesThePagesPicture(): void {
+		$card = new StreamCard(self::POST_ID, 'https://nextcloud.com/blog/');
+		$card->setTitle('Nextcloud Hub');
+		$card->setImage('https://nextcloud.com/hub.jpg');
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->willReturn($card);
+		$thumb = new BlobRef(self::DID, Cid::forRaw('hub'), 'https://social.test/documents/7', 'image/jpeg', 3);
+		$this->thumbnails->expects($this->once())->method('blobFor')->with($this->identity, $this->author, $card)->willReturn($thumb);
+
+		$record = $this->mapper()->post($this->post('<p>read <a href="https://nextcloud.com/blog/">this</a></p>'), $this->identity, $this->author)['record'];
+
+		$this->assertSame($thumb->toRecordValue(), $record['embed']['external']['thumb']);
+		$this->lexicon->validateRecord($record);
 	}
 
 	public function testARestrictedQuotePolicyIsAPostgate(): void {
@@ -409,7 +429,7 @@ class RecordMapperTest extends TestCase {
 	private function mapper(): RecordMapper {
 		$refs = new PostRefs($this->repositories, $this->streams, $this->appView, new NullLogger());
 
-		return new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories, $refs, $this->cards);
+		return new RecordMapper(new TextMapper(), $this->pictures, $this->documents, $this->identities, $this->repositories, $refs, $this->cards, $this->thumbnails);
 	}
 
 	private function blueskyPost(string $rkey, ?array $replyRoot = null): Note {

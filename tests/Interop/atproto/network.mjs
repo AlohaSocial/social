@@ -25,7 +25,8 @@
  *   answers `/.well-known/atproto-did` with the DID the test gives it
  *   (`POST /did`), behind the job's proxy as `https://me.handles.test`;
  *   and, on `/plc-token?did=`, the code the dev PDS would have e-mailed an
- *   account for a PLC operation, which a move here needs;
+ *   account for a PLC operation, which a move here needs; and `/card`, a
+ *   page with a preview picture (`/card.png`), for a link card;
  * - a stand-in for Bluesky's video service, which does what that service
  *   does for the app: takes a video with the token the account signed,
  *   stores it in the account's repository on its own PDS with that token
@@ -52,6 +53,8 @@ const INTROSPECT_PORT = 2581
 const VIDEO_PORT = 2590
 const HANDLE_PORT = 2591
 const CUSTOM_HANDLE = 'me.handles.test'
+/** a four-by-three PNG, the picture of the link card page */
+const CARD_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFElEQVQI12PUqDjBAANMDEgAhQMANAQBbhkyEmoAAAAASUVORK5CYII='
 const VIDEO_HOST = 'https://video.interop.test'
 
 async function resolveSocialHandle(handle) {
@@ -209,6 +212,18 @@ const handleServer = createServer(async (req, res) => {
 			.executeTakeFirst()
 		res.writeHead(row ? 200 : 404, { 'content-type': 'text/plain' })
 		return res.end(row?.token ?? '')
+	}
+	if (url.pathname === '/card') {
+		res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+		return res.end('<!doctype html><html><head><title>A page</title>'
+			+ '<meta property="og:title" content="A page with a picture">'
+			+ '<meta property="og:description" content="What a link card shows.">'
+			+ `<meta property="og:image" content="https://${CUSTOM_HANDLE}/card.png">`
+			+ '</head><body>A page</body></html>')
+	}
+	if (url.pathname === '/card.png') {
+		res.writeHead(200, { 'content-type': 'image/png' })
+		return res.end(Buffer.from(CARD_PNG, 'base64'))
 	}
 	res.writeHead(404)
 	res.end()
