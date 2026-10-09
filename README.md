@@ -375,8 +375,9 @@ own unified search. No external search engine to run.
   their server. Mastodon 4.5's `quote_approval_policy`, its quote list and its
   revoke, over FEP-044f. A quote from Bluesky is detached the way Bluesky does it,
   through the post's postgate.
-- **Who can reply** — anybody, your followers, the people you follow, only the
-  people you mention, or nobody, chosen in the composer and changed later
+- **Who can reply** — anybody, nobody, or any mix of your followers, the people
+  you follow, the people you mention and the people on one of your lists, chosen
+  in the composer and changed later
   from the post's menu. Held here, said to other servers as
   `interactionPolicy.canReply`, and published to Bluesky as the post's
   threadgate.

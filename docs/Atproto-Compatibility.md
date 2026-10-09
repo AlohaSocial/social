@@ -469,9 +469,11 @@ when crossed.
   not let through is refused with the reason: every AppView would hide it.
   This app's own posts carry the author's choice the same way: a post
   whose author lets only their followers, the accounts they follow, the
-  accounts it mentions, or nobody reply is published with a threadgate
-  under its key (`followerRule`, `followingRule`, `mentionRule`, or no
-  rule at all), which every AppView holds Bluesky replies to; a change of
+  accounts it mentions, the people on one of their lists — any of these
+  together — or nobody reply is published with a threadgate under its key
+  (a `followerRule`, `followingRule`, `mentionRule` or `listRule` each, or
+  no rule at all; a list is published as a Bluesky curate list with its
+  members that have a Bluesky identity, `BlueskyLists`), which every AppView holds Bluesky replies to; a change of
   mind later rewrites or removes the gate (`Publisher::updateGates()`).
   The replies the author hid are in the same threadgate (`hiddenReplies`),
   and a Bluesky author's hidden replies are hidden here (see **Hidden

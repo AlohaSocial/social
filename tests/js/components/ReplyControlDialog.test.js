@@ -7,8 +7,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReplyControlDialog from '../../../src/components/ReplyControlDialog.vue'
 
-const { put } = vi.hoisted(() => ({ put: vi.fn() }))
-vi.mock('@nextcloud/axios', () => ({ default: { put } }))
+const { get, put } = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
+vi.mock('@nextcloud/axios', () => ({ default: { get, put } }))
 const { showError } = vi.hoisted(() => ({ showError: vi.fn() }))
 vi.mock('../../../src/services/toast.js', () => ({ showError, showSuccess: vi.fn() }))
 vi.mock('../../../src/services/logger.js', () => ({
@@ -30,26 +30,30 @@ function mountDialog(replyPolicy = 'everyone') {
 
 describe('who can reply', () => {
 	beforeEach(() => {
+		get.mockReset().mockResolvedValue({ data: [{ id: '12', title: 'Close friends' }] })
 		put.mockReset().mockResolvedValue({ data: {} })
 		showError.mockReset()
 	})
 
-	it('starts on the rule the post carries, and offers every one', () => {
-		const wrapper = mountDialog('mentioned')
+	it('offers anybody, nobody, each kind of people and each of the reader\'s lists', async () => {
+		const wrapper = mountDialog('followers,list:12')
+		await flushPromises()
 
-		expect(wrapper.vm.policy).toBe('mentioned')
-		for (const label of ['Anybody', 'People who follow me', 'People I follow', 'Only people I mention', 'Nobody']) {
+		for (const label of ['Anybody', 'Nobody', 'People who follow me', 'People I follow', 'People I mention', 'People on Close friends']) {
 			expect(wrapper.text()).toContain(label)
 		}
+		expect(wrapper.vm.mode).toBe('some')
+		expect(wrapper.vm.chosen).toEqual(['followers', 'list:12'])
 	})
 
-	it('writes the rule alone through the interaction_policy route', async () => {
-		const wrapper = mountDialog()
+	it('adds a part to the rule and writes it', async () => {
+		const wrapper = mountDialog('followers')
+		await flushPromises()
 
-		await wrapper.vm.setPolicy('followers')
+		await wrapper.vm.setPolicy(wrapper.vm.withPart('followers', 'mentioned', true))
 
-		expect(put).toHaveBeenCalledWith(expect.stringContaining('/api/v1/statuses/7/interaction_policy'), { reply_policy: 'followers' })
-		expect(wrapper.emitted('changed')).toEqual([['followers']])
+		expect(put).toHaveBeenCalledWith(expect.stringContaining('/api/v1/statuses/7/interaction_policy'), { reply_policy: 'followers,mentioned' })
+		expect(wrapper.emitted('changed')).toEqual([['followers,mentioned']])
 	})
 
 	it('puts the choice back when the server refuses', async () => {

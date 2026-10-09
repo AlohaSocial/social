@@ -378,6 +378,17 @@ final class DevNetwork {
 		return is_array($answer['posts'][0] ?? null) ? $answer['posts'][0] : null;
 	}
 
+	/**
+	 * The DIDs on a Bluesky list, as the AppView has it.
+	 *
+	 * @return string[]
+	 */
+	public function listItems(string $listUri): array {
+		$answer = $this->get($this->appView, 'app.bsky.graph.getList', ['list' => $listUri, 'limit' => '100']);
+
+		return array_values(array_map(static fn (array $item): string => (string)($item['subject']['did'] ?? ''), array_filter(is_array($answer['items'] ?? null) ? $answer['items'] : [], 'is_array')));
+	}
+
 	/** The signed-in user deletes one of their posts. */
 	public function deletePost(string $uri): void {
 		$this->post($this->pds, 'com.atproto.repo.deleteRecord', [

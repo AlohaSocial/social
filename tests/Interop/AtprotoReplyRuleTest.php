@@ -78,4 +78,48 @@ class AtprotoReplyRuleTest extends TestCase {
 		}
 		$this->assertNotEmpty($this->alice->postStatus('I still may', (string)$status['id'])['id'] ?? null, 'the author always may');
 	}
+
+	/**
+	 * A combination with one of the author's lists: a rule for each part in
+	 * the threadgate, and the list a Bluesky list with its member on it.
+	 */
+	public function testACombinationWithAListIsOneRuleEachAndTheListIsOnBluesky(): void {
+		$identity = Server::get(IdentityService::class)->forActor($this->alice->actor);
+		$this->assertNotNull($identity);
+		$bobDid = $this->network->createUser('listed' . bin2hex(random_bytes(3)));
+		$this->assertNotNull($this->network->await(fn (): ?bool => $this->network->resolveHandle($this->network->userHandle()) === $bobDid ? true : null), 'the AppView knows bob');
+		$bobHere = $this->alice->resolve($this->network->userHandle());
+		$this->alice->follow($bobHere);
+		$list = $this->alice->post('/api/v1/lists', ['title' => 'Close friends']);
+		$this->alice->post('/api/v1/lists/' . $list['id'] . '/accounts', ['account_ids' => [$bobHere]]);
+
+		$words = 'Friends only ' . bin2hex(random_bytes(4));
+		$status = $this->alice->postStatus($words);
+		Server::get(Publisher::class)->reconcile();
+		$uri = $this->network->await(function () use ($identity, $words): ?string {
+			foreach ($this->network->authorFeed($identity->did) as $item) {
+				if (str_contains((string)($item['post']['record']['text'] ?? ''), $words)) {
+					return (string)$item['post']['uri'];
+				}
+			}
+
+			return null;
+		});
+		$this->assertNotNull($uri, 'the AppView indexed the post');
+
+		$this->alice->put('/api/v1/statuses/' . $status['id'] . '/interaction_policy', ['reply_policy' => 'followers,list:' . $list['id']]);
+
+		$allow = $this->network->await(function () use ($uri): ?array {
+			$allow = $this->network->postView($uri)['threadgate']['record']['allow'] ?? [];
+
+			return count($allow) === 2 ? $allow : null;
+		});
+		$this->assertSame(['app.bsky.feed.threadgate#followerRule', 'app.bsky.feed.threadgate#listRule'], array_column($allow ?? [], '$type'));
+		$listUri = (string)($allow[1]['list'] ?? '');
+		$this->assertNotNull($this->network->await(function () use ($listUri, $bobDid): ?bool {
+			$items = $this->network->listItems($listUri);
+
+			return in_array($bobDid, $items, true) ? true : null;
+		}), 'bob is on the Bluesky list');
+	}
 }

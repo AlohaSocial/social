@@ -199,6 +199,8 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	public const HIDDEN_REPLIES_KEPT = 300;
 	/** as many detached quotes as a postgate's `detachedEmbeddingUris` holds */
 	public const DETACHED_QUOTES_KEPT = 50;
+	/** the prefix of a reply rule's part that names one of the author's lists */
+	public const REPLY_RULE_LIST = 'list:';
 	public const REPLY_RULES = [
 		self::REPLY_RULE_EVERYONE, self::REPLY_RULE_FOLLOWERS, self::REPLY_RULE_FOLLOWING,
 		self::REPLY_RULE_MENTIONED, self::REPLY_RULE_NOBODY,
@@ -1007,13 +1009,69 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
-	 * Who may reply to this post, one of `REPLY_RULES`; everybody unless the
-	 * author of one of this instance's own posts said otherwise.
+	 * Who may reply to this post (`normalizeReplyRule()`); everybody unless
+	 * the author of one of this instance's own posts said otherwise.
 	 */
 	public function getReplyRule(): string {
 		$rule = $this->getDetailsAll()[Details::REPLY_RULE] ?? '';
 
-		return is_string($rule) && in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE;
+		return self::normalizeReplyRule(is_string($rule) ? $rule : '');
+	}
+
+	/**
+	 * The parts of who may reply: none for everybody, `nobody` alone, or any
+	 * of the followers, the accounts followed, the accounts mentioned and the
+	 * members of one of the author's lists (`list:<id>`).
+	 *
+	 * @return list<string>
+	 */
+	public function getReplyRuleParts(): array {
+		$rule = $this->getReplyRule();
+
+		return $rule === self::REPLY_RULE_EVERYONE ? [] : explode(',', $rule);
+	}
+
+	/**
+	 * A reply rule as it is kept: `everyone`, `nobody`, or a combination of
+	 * `followers`, `following`, `mentioned` and up to five `list:<id>`,
+	 * comma-separated, in that order — Bluesky's threadgate takes five rules
+	 * at most. Anything else is everybody.
+	 */
+	public static function normalizeReplyRule(string $rule): string {
+		$parts = array_values(array_unique(array_filter(array_map('trim', explode(',', strtolower($rule))))));
+		if ($parts === [self::REPLY_RULE_NOBODY]) {
+			return self::REPLY_RULE_NOBODY;
+		}
+		$kept = array_values(array_intersect([self::REPLY_RULE_FOLLOWERS, self::REPLY_RULE_FOLLOWING, self::REPLY_RULE_MENTIONED], $parts));
+		foreach ($parts as $part) {
+			if (preg_match('/^' . self::REPLY_RULE_LIST . '\\d{1,18}$/', $part) === 1) {
+				$kept[] = $part;
+			}
+		}
+		$kept = array_slice($kept, 0, 5);
+
+		return $kept === [] ? self::REPLY_RULE_EVERYONE : implode(',', $kept);
+	}
+
+	/**
+	 * The members of the lists a reply rule names, as they were when the rule
+	 * was set: what `interactionPolicy.canReply` names for them.
+	 *
+	 * @param string[] $actorIds
+	 */
+	public function setReplyListMembers(array $actorIds): self {
+		$this->setDetailArray(Details::REPLY_LIST_MEMBERS, array_slice(array_values(array_unique($actorIds)), 0, 200));
+
+		return $this;
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	public function getReplyListMembers(): array {
+		$ids = $this->getDetailsAll()[Details::REPLY_LIST_MEMBERS] ?? [];
+
+		return is_array($ids) ? array_values(array_filter($ids, 'is_string')) : [];
 	}
 
 	/**
@@ -1073,7 +1131,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	public function setReplyRule(string $rule): self {
-		$this->setDetail(Details::REPLY_RULE, in_array($rule, self::REPLY_RULES, true) ? $rule : self::REPLY_RULE_EVERYONE);
+		$this->setDetail(Details::REPLY_RULE, self::normalizeReplyRule($rule));
 
 		return $this;
 	}
@@ -2364,15 +2422,22 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 */
 	private function replyApproval(): ?array {
 		$author = $this->getAttributedTo();
-		$named = match ($this->getReplyRule()) {
-			self::REPLY_RULE_FOLLOWERS => [$this->followersOfAuthor()],
-			self::REPLY_RULE_FOLLOWING => [$author === '' ? '' : $author . '/following'],
-			self::REPLY_RULE_MENTIONED => $this->addressed(),
-			self::REPLY_RULE_NOBODY => [],
-			default => null,
-		};
+		$parts = $this->getReplyRuleParts();
+		if ($parts === []) {
+			return null;
+		}
+		$named = [];
+		foreach ($parts as $part) {
+			$named = array_merge($named, match (true) {
+				$part === self::REPLY_RULE_FOLLOWERS => [$this->followersOfAuthor()],
+				$part === self::REPLY_RULE_FOLLOWING => [$author === '' ? '' : $author . '/following'],
+				$part === self::REPLY_RULE_MENTIONED => $this->addressed(),
+				str_starts_with($part, self::REPLY_RULE_LIST) => $this->getReplyListMembers(),
+				default => [],
+			});
+		}
 
-		return $named === null ? null : array_values(array_unique(array_filter(array_merge($named, [$author]))));
+		return array_values(array_unique(array_filter(array_merge($named, [$author]))));
 	}
 
 	/**

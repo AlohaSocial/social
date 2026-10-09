@@ -429,6 +429,25 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($gate);
 	}
 
+	public function testACombinationIsARuleEachAndAListIsTheBlueskyListItWasPublishedAs(): void {
+		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
+		$this->repositories = $this->createMock(RepositoryService::class);
+		$this->repositories->method('getRecordsByLocalId')->willReturnCallback(static fn (string $id): array => $id === 'list:7'
+			? [new StoredRecord(self::DID, 'app.bsky.graph.list', '3klist', Cid::forRaw('l'), '', 'list:7', 0)]
+			: []);
+		$post = $this->post('<p>mine</p>');
+		$post->setReplyRule('followers,mentioned,list:7,list:8');
+
+		$gate = $this->mapper()->threadgate($post, $uri);
+
+		$this->assertSame([
+			['$type' => 'app.bsky.feed.threadgate#followerRule'],
+			['$type' => 'app.bsky.feed.threadgate#mentionRule'],
+			['$type' => 'app.bsky.feed.threadgate#listRule', 'list' => 'at://' . self::DID . '/app.bsky.graph.list/3klist'],
+		], $gate['allow'], 'a list never published is left out, which is stricter');
+		$this->lexicon->validateRecord($gate);
+	}
+
 	public function testWhoMayReplyIsAThreadgate(): void {
 		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
 		$post = $this->post('<p>mine</p>');

@@ -26,6 +26,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
 use OCP\AppFramework\Utility\ITimeFactory;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -56,6 +57,7 @@ class Publisher {
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 		private ImportedPostsRequest $imported,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -372,11 +374,35 @@ class Publisher {
 	 */
 	private function gatesOf(Stream $post, string $did, string $rkey): array {
 		$uri = 'at://' . $did . '/' . RecordMapper::POST . '/' . $rkey;
+		$this->publishRuleLists($post);
 
 		return array_filter([
 			RecordMapper::POSTGATE => $this->mapper->postgate($post, $uri),
 			RecordMapper::THREADGATE => $this->mapper->threadgate($post, $uri),
 		], static fn (?array $gate): bool => $gate !== null);
+	}
+
+	/**
+	 * The lists a reply rule names, published as Bluesky lists before the
+	 * threadgate names them (`BlueskyLists`); resolved lazily, as that needs
+	 * this service.
+	 */
+	private function publishRuleLists(Stream $post): void {
+		$lists = null;
+		foreach ($post->getReplyRuleParts() as $part) {
+			if (!str_starts_with($part, Stream::REPLY_RULE_LIST)) {
+				continue;
+			}
+			$lists ??= $this->container?->get(BlueskyLists::class);
+			if (!$lists instanceof BlueskyLists) {
+				return;
+			}
+			try {
+				$lists->ensure($this->cacheActorService->getFromId($post->getAttributedTo()), (int)substr($part, strlen(Stream::REPLY_RULE_LIST)));
+			} catch (Throwable $e) {
+				$this->logger->warning('A reply rule\'s list not published to Bluesky', ['post' => $post->getId(), 'exception' => $e]);
+			}
+		}
 	}
 
 	/**

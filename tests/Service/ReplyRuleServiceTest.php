@@ -11,14 +11,17 @@ namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\FollowsRequest;
+use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\FollowNotFoundException;
 use OCA\Social\Exceptions\InvalidResourceException;
+use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Follow;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\MastodonList;
 use OCA\Social\Service\ReplyRuleService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -31,6 +34,7 @@ class ReplyRuleServiceTest extends TestCase {
 	private const ALICE = 'https://social.test/@alice';
 	private const BOB = 'https://remote.example/users/bob';
 	private const CAROL = 'https://remote.example/users/carol';
+	private const DAN = 'https://bsky.app/profile/did:plc:dan';
 
 	/** @var array<string, bool> follows, `from>to` => accepted */
 	private array $follows = [];
@@ -66,7 +70,12 @@ class ReplyRuleServiceTest extends TestCase {
 		$container = $this->createMock(ContainerInterface::class);
 		$container->method('get')->with(Publisher::class)->willReturn($publisher);
 
-		return new ReplyRuleService($streams, $follows, new NullLogger(), $container);
+		$lists = $this->createMock(ListsRequest::class);
+		$lists->method('getOwnedById')->willReturnCallback(static fn (string $owner, int $id): MastodonList => $owner === self::ALICE && $id === 7 ? (new MastodonList())->setId(7) : throw new ItemNotFoundException());
+		$lists->method('isMember')->willReturnCallback(static fn (MastodonList $list, string $member): bool => $member === self::DAN);
+		$lists->method('getMemberIds')->willReturn([self::DAN]);
+
+		return new ReplyRuleService($streams, $follows, $lists, new NullLogger(), $container);
 	}
 
 	public static function rules_(): iterable {
@@ -105,5 +114,28 @@ class ReplyRuleServiceTest extends TestCase {
 		$this->assertSame([Stream::REPLY_RULE_FOLLOWERS], $this->gatesUpdated);
 		$this->expectException(InvalidResourceException::class);
 		$this->rules()->setRule($this->post->getId(), (new Person())->setId(self::BOB), Stream::REPLY_RULE_NOBODY);
+	}
+
+	public function testACombinationLetsThroughWhomAnyPartNames(): void {
+		$this->post->setReplyRule('followers,list:7');
+		$this->follows = [self::BOB . '>' . self::ALICE => true];
+
+		$this->assertSame('', $this->rules()->refusal($this->post, self::BOB), 'a follower');
+		$this->assertSame('', $this->rules()->refusal($this->post, self::DAN), 'on the list');
+		$this->assertSame('The author of this post allows replies only from their followers and the members of one of their lists', $this->rules()->refusal($this->post, self::CAROL));
+	}
+
+	public function testOnlyTheAuthorsOwnListsAreKeptAndNothingLeftIsNobody(): void {
+		$this->assertSame('mentioned,list:7', $this->rules()->sanitize(self::ALICE, 'list:7,list:8,mentioned'));
+		$this->assertSame(Stream::REPLY_RULE_NOBODY, $this->rules()->sanitize(self::ALICE, 'list:8'), 'a list not theirs is nobody, not everybody');
+		$this->assertSame(Stream::REPLY_RULE_EVERYONE, $this->rules()->sanitize(self::ALICE, 'everyone'));
+	}
+
+	public function testTheListMembersAreWhomTheOtherServersAreTold(): void {
+		$this->post->setReplyRule('list:7');
+		$this->rules()->snapshotListMembers($this->post);
+
+		$this->assertSame([self::DAN], $this->post->getReplyListMembers());
+		$this->assertSame(['automaticApproval' => [self::DAN, self::ALICE]], $this->post->exportAsActivityPub()['interactionPolicy']['canReply']);
 	}
 }
