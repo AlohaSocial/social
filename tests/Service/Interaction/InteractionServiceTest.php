@@ -21,6 +21,7 @@ use OCA\Social\Service\Interaction\InteractionService;
 use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\ICache;
 use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -41,8 +42,11 @@ class InteractionServiceTest extends TestCase {
 		$actions->method('reactedBy')->willReturn([self::person('https://social.test/@bob')]);
 		$cacheActors = $this->createMock(CacheActorService::class);
 		$cacheActors->method('getCachedFromIds')->willReturnCallback(static fn (array $ids): array => array_combine($ids, array_map(static fn (string $id): Person => self::person($id), $ids)));
+		// a memcache only the background job's process sees, as APCu is: what
+		// it listed must still reach the web request
 		$factory = $this->createStub(ICacheFactory::class);
-		$factory->method('isAvailable')->willReturn(false);
+		$factory->method('isAvailable')->willReturn(true);
+		$factory->method('createDistributed')->willReturn($this->createStub(ICache::class));
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 		$durableCache = new DurableCache($factory, new InMemoryDurableCacheRequest(), $time);

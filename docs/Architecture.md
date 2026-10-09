@@ -1581,7 +1581,7 @@ per post and kind):
   (`getLikes`, `getRepostedBy`, `getQuotes`) for a post that is on Bluesky,
   caches each account as it is found and stores each quoting post.
 
-Who reacted is kept an hour in the durable cache, not as actions: the
+Who reacted is kept an hour in the durable cache's table (`DurableCache::setShared()`, which the cron and the web server share even where APCu is the only memcache), not as actions: the
 counts on a post, and the notifications, stay what they were. Quoting
 posts are stored as posts, so the quotes list reads them like any other.
 The answers say `X-Social-Filling` while the read was just asked for.

@@ -28,7 +28,8 @@ use Throwable;
  * this server received, and the ones the networks the post is on list
  * (`InteractionSource`), merged into one list with nothing to tell them
  * apart. What the networks list is read in the background (`Cron\FillInteractions`)
- * and kept for an hour; the counts on the post are not touched by it.
+ * and kept for an hour in the table, where the web request reads it; the
+ * counts on the post are not touched by it.
  */
 class InteractionService {
 	public const QUOTES = 'Quote';
@@ -57,7 +58,7 @@ class InteractionService {
 	public function reactedBy(Stream $post, string $type, int $limit): array {
 		$accounts = $this->actions->reactedBy($post, $type, $limit);
 		$seen = array_map(static fn (Person $p): string => $p->getId(), $accounts);
-		$listed = $this->durableCache->get(self::CACHE, self::key($post, $type));
+		$listed = $this->durableCache->getShared(self::CACHE, self::key($post, $type));
 		$wanted = array_values(array_diff(is_array($listed) ? array_filter($listed, 'is_string') : [], $seen));
 		if ($wanted !== [] && count($accounts) < $limit) {
 			$cached = $this->cacheActors->getCachedFromIds($wanted);
@@ -110,7 +111,7 @@ class InteractionService {
 			}
 		}
 		if ($type !== self::QUOTES) {
-			$this->durableCache->set(self::CACHE, self::key($post, $type), array_values(array_unique($ids)), self::KEPT);
+			$this->durableCache->setShared(self::CACHE, self::key($post, $type), array_values(array_unique($ids)), self::KEPT);
 		}
 	}
 

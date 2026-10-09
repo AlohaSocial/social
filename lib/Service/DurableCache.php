@@ -46,7 +46,8 @@ use OCP\IMemcache;
  *
  * A memcache configured as `memcache.local` only (APCu) is used as well, and
  * APCu is not shared between the web server and `occ` or cron. State that a
- * background job writes for a web request to read does not belong here.
+ * background job writes for a web request to read goes through `getShared()`
+ * and `setShared()`, which always use the table.
  */
 class DurableCache {
 	/** @var array<string, ICache> one distributed cache per namespace */
@@ -71,9 +72,7 @@ class DurableCache {
 			return $this->cache($namespace)->get($key);
 		}
 
-		$stored = $this->durableCacheRequest->read($this->rowKey($namespace, $key), $this->now());
-
-		return ($stored === null) ? null : json_decode($stored, true);
+		return $this->getShared($namespace, $key);
 	}
 
 	public function set(string $namespace, string $key, mixed $value, int $ttl): void {
@@ -84,8 +83,26 @@ class DurableCache {
 			return;
 		}
 
+		$this->setShared($namespace, $key, $value, $ttl);
+	}
+
+	/**
+	 * `get()` from the table whatever memcache there is: what a background
+	 * job wrote for a web request.
+	 */
+	public function getShared(string $namespace, string $key): mixed {
+		$stored = $this->durableCacheRequest->read($this->rowKey($namespace, $key), $this->now());
+
+		return ($stored === null) ? null : json_decode($stored, true);
+	}
+
+	/**
+	 * `set()` into the table whatever memcache there is, for a web request
+	 * to read with `getShared()`.
+	 */
+	public function setShared(string $namespace, string $key, mixed $value, int $ttl): void {
 		$this->durableCacheRequest->write(
-			$this->rowKey($namespace, $key), $this->encode($value), $this->now() + $ttl
+			$this->rowKey($namespace, $key), $this->encode($value), $this->now() + $this->ttl($ttl)
 		);
 	}
 
