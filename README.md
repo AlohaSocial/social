@@ -369,7 +369,8 @@ own unified search. No external search engine to run.
 - **Quote controls** — who may quote each of your posts (anybody, your
   followers, nobody), who already has, and a button that detaches one and tells
   their server. Mastodon 4.5's `quote_approval_policy`, its quote list and its
-  revoke, over FEP-044f.
+  revoke, over FEP-044f. A quote from Bluesky is detached the way Bluesky does it,
+  through the post's postgate.
 - **Who can reply** — anybody, your followers, the people you follow, only the
   people you mention, or nobody, chosen in the composer and changed later
   from the post's menu. Held here, said to other servers as

@@ -245,6 +245,9 @@ class PostStore {
 					$object->setDetailInt(Details::REMOTE_BOOSTS, $details['reposts']);
 					$object->setDetailInt(Details::REPLIES, $details['replies']);
 					$object->setDetailInt(Details::REMOTE_REPLIES, $details['replies']);
+					if (($details['quote_detached'] ?? false) === true) {
+						$object->setQuoteState(Stream::QUOTE_REVOKED);
+					}
 				}
 			}
 			$this->import->parseIncomingRequest($activity);

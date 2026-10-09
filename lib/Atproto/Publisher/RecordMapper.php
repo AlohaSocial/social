@@ -203,16 +203,18 @@ class RecordMapper {
 	}
 
 	public function postgate(Stream $post, string $postUri): ?array {
-		if (!in_array($post->getQuotePolicy(), [Stream::QUOTE_POLICY_FOLLOWERS, Stream::QUOTE_POLICY_NOBODY], true)) {
+		$closed = in_array($post->getQuotePolicy(), [Stream::QUOTE_POLICY_FOLLOWERS, Stream::QUOTE_POLICY_NOBODY], true);
+		$detached = $post->getDetachedQuotes();
+		if (!$closed && $detached === []) {
 			return null;
 		}
 
 		return [
 			'$type' => self::POSTGATE,
 			'post' => $postUri,
-			'embeddingRules' => [['$type' => self::POSTGATE . '#disableRule']],
-			'createdAt' => Syntax::datetime(self::publishedAt($post)),
-		];
+		] + ($closed ? ['embeddingRules' => [['$type' => self::POSTGATE . '#disableRule']]] : [])
+			+ ($detached === [] ? [] : ['detachedEmbeddingUris' => $detached])
+			+ ['createdAt' => Syntax::datetime(self::publishedAt($post))];
 	}
 
 	/**

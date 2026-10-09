@@ -397,6 +397,22 @@ class RecordMapperTest extends TestCase {
 		}
 	}
 
+	public function testADetachedQuoteIsListedInThePostgate(): void {
+		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
+		$post = $this->post('<p>mine</p>');
+		$post->addDetachedQuote('at://did:plc:bob/app.bsky.feed.post/3kq');
+		$gate = $this->mapper->postgate($post, $uri);
+		$this->assertSame(['at://did:plc:bob/app.bsky.feed.post/3kq'], $gate['detachedEmbeddingUris']);
+		$this->assertArrayNotHasKey('embeddingRules', $gate, 'anybody may still quote it');
+		$this->lexicon->validateRecord($gate);
+
+		$post->setQuotePolicy('nobody');
+		$gate = $this->mapper->postgate($post, $uri);
+		$this->assertSame([['$type' => 'app.bsky.feed.postgate#disableRule']], $gate['embeddingRules']);
+		$this->assertSame(['at://did:plc:bob/app.bsky.feed.post/3kq'], $gate['detachedEmbeddingUris']);
+		$this->lexicon->validateRecord($gate);
+	}
+
 	public function testWhoMayReplyIsAThreadgate(): void {
 		$uri = 'at://' . self::DID . '/app.bsky.feed.post/3k';
 		$post = $this->post('<p>mine</p>');
