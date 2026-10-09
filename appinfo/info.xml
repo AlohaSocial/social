@@ -156,6 +156,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<command>OCA\Social\Command\DomainPurge</command>
 		<command>OCA\Social\Command\ExternalUsers</command>
 		<command>OCA\Social\Command\AtprotoServe</command>
+		<command>OCA\Social\Command\AtprotoListen</command>
 		<command>OCA\Social\Command\AtprotoIdentities</command>
 		<command>OCA\Social\Command\AtprotoPlc</command>
 		<command>OCA\Social\Command\AtprotoResolve</command>

@@ -139,6 +139,17 @@ describe('the Bluesky card', () => {
 		expect(mountCard().text()).not.toContain('Reading Bluesky')
 	})
 
+	it('says whether the Jetstream listener is connected, where one is set', () => {
+		const reading = { watches: 7, lag: 0, accounts: 3, lag_notifications: 0 }
+		const now = Math.floor(Date.now() / 1000)
+
+		expect(mountCard(admin({ status: { reading } })).text()).not.toContain('Jetstream listener')
+		expect(mountCard(admin({ settings: { jetstream: 'wss://jetstream.example' }, status: { reading, listener: null } })).text())
+			.toContain('Not running: start occ social:atproto:listen')
+		expect(mountCard(admin({ settings: { jetstream: 'wss://jetstream.example' }, status: { reading, listener: { running: true, connected: true, started: now - 600, seen: now, last_event: now - 120, cursor: 1, accounts: 7 } } })).text())
+			.toContain('Connected for 7 accounts, last heard 2 minutes ago')
+	})
+
 	it('says plainly when the daemon is not running', () => {
 		const wrapper = mountCard(admin({ status: { daemon: null } }))
 

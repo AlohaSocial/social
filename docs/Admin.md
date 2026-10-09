@@ -453,6 +453,14 @@ checks, and the card refuses to switch Bluesky on while one fails:
   In a container, the same command under the container's supervisor. The daemon
   reports to the card every fifteen seconds; a report older than a minute shows
   as "not running".
+- **The Jetstream listener (optional).** With a Jetstream endpoint set on the
+  card (`wss://jetstream2.us-east.bsky.network`, Bluesky's own, or one you run),
+  `occ social:atproto:listen` brings the posts of the Bluesky accounts people
+  here follow within seconds rather than on the poller's next pass. It is a
+  second unit like the one above, with
+  `ExecStart=/usr/bin/php occ social:atproto:listen`. It reports to the card's
+  "Reading Bluesky" part every fifteen seconds; without it, the poller does all
+  the reading, as before.
 - **Cron.** The maintenance job (every five minutes) brings Bluesky up to
   date with the last day's public posts — a post the listener missed is
   published, an edit within the grace period is replaced, a deleted post's

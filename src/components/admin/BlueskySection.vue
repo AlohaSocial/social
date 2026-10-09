@@ -107,7 +107,7 @@
 				class="bluesky__field"
 				:label="t('social', 'Jetstream')"
 				placeholder="wss://jetstream2.us-east.bsky.network"
-				:helperText="t('social', 'Optional. A Jetstream endpoint brings posts from followed Bluesky accounts within seconds instead of on the next poll.')" />
+				:helperText="t('social', 'Optional. With occ social:atproto:listen running, a Jetstream endpoint brings posts from followed Bluesky accounts within seconds instead of on the next poll.')" />
 			<NcTextField
 				v-model="form.chat"
 				class="bluesky__field"
@@ -246,6 +246,12 @@
 					<dt>{{ t('social', 'Their notifications') }}</dt>
 					<dd>{{ lagLabel(reading.lag_notifications) }}</dd>
 				</div>
+				<div v-if="current.settings.jetstream" class="bluesky__number-cell bluesky__number-cell--wide">
+					<dt>{{ t('social', 'Jetstream listener') }}</dt>
+					<dd :class="{ 'bluesky__daemon--down': !listener?.connected }">
+						{{ listenerLabel }}
+					</dd>
+				</div>
 			</dl>
 		</template>
 	</div>
@@ -269,7 +275,7 @@ import { showError, showSuccess } from '../../services/toast.js'
 /**
  * @typedef {object} BlueskyAdmin what `AtprotoStatusService::current()` answers
  * @property {{enabled: boolean, relays: string[], plc_directory: string, appview: string, jetstream: string, chat: string, sync_ceiling: number, trusted_clients: string[]}} settings - what is set, in the app values' names
- * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
+ * @property {{handle_host: string, pds_endpoint: string, service_did: string, identities: number, repositories: number, events_in_window: number, head_seq: number, rotation_key_age: number, daemon: {running: boolean, pid: number, started: number, seen: number, head: number, subscribers: number}|null, listener?: {running: boolean, connected: boolean, started: number, seen: number, last_event: number, cursor: number, accounts: number}|null, reading?: {watches: number, lag: number, accounts: number, lag_notifications: number}, blocks?: BlueskyBlock[]}} status - the facts and the numbers; the key age in days, the daemon's times in seconds since the epoch, the reading lags in seconds
  * @property {Array<{id: string, state: 'ok'|'warning'|'error', detail: string}>} checks - the requirements of §14.1, empty while nothing has been checked
  */
 
@@ -414,6 +420,31 @@ export default {
 		/** @return {boolean} */
 		daemonRunning() {
 			return this.current.status.daemon?.running === true
+		},
+
+		/** @return {{running: boolean, connected: boolean, started: number, seen: number, last_event: number, cursor: number, accounts: number}|null} */
+		listener() {
+			return this.current.status.listener ?? null
+		},
+
+		/** @return {string} the listener's state in one line */
+		listenerLabel() {
+			const listener = this.listener
+			if (!listener?.running) {
+				return t('social', 'Not running: start occ social:atproto:listen')
+			}
+			if (!listener.connected) {
+				return t('social', 'Running, not connected to Jetstream')
+			}
+			const accounts = n('social', '%n account', '%n accounts', listener.accounts)
+			if (listener.last_event === 0) {
+				return t('social', 'Connected for {accounts}, nothing heard yet', { accounts })
+			}
+
+			return t('social', 'Connected for {accounts}, last heard {ago} ago', {
+				accounts,
+				ago: this.duration(Math.max(0, Math.floor(Date.now() / 1000) - listener.last_event)),
+			})
 		},
 
 		/** @return {string} the daemon's state in one line */
