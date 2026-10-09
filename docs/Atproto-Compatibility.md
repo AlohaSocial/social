@@ -637,6 +637,14 @@ the conversation too. A post written here and published is read the same
 way, for the replies it got on Bluesky. See **Whole conversations** in
 Architecture.md.
 
+### 9.4b Who liked, reposted and quoted
+
+The likes, boosts and quotes lists of a post that is on Bluesky — read from
+there, or written here and published — have Bluesky's in them too
+(`BlueskyInteractionSource`: `getLikes`, `getRepostedBy`, `getQuotes`), read
+in the background beside the fediverse's collections. See **Who liked,
+boosted or quoted** in Architecture.md.
+
 ### 9.5 Deletes and edits from Bluesky
 
 A `delete` op from Jetstream, or a post gone from the author feed on the

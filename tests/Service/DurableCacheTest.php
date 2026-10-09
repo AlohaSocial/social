@@ -218,4 +218,17 @@ class DurableCacheTest extends TestCase {
 		$this->assertSame(64, strlen((string)array_key_first($this->table->rows)));
 		$this->assertSame('value', $cache->get('social.test', str_repeat('k', 1000)));
 	}
+
+	#[DataProvider('backends')]
+	public function testSharedStateIsTheTablesWhateverMemcacheThereIs(bool $memcache): void {
+		$cache = $this->cache($memcache);
+		$cache->setShared('social.test', 'listed', ['a', 'b'], 60);
+
+		$this->assertSame(['a', 'b'], $cache->getShared('social.test', 'listed'));
+		$this->assertCount(1, $this->table->rows);
+		$this->assertSame([], $this->memcache);
+
+		$this->now += 61;
+		$this->assertNull($cache->getShared('social.test', 'listed'));
+	}
 }

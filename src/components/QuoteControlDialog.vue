@@ -137,8 +137,12 @@ export default {
 			this.loading = true
 			try {
 				const url = generateUrl('apps/social/api/v1/statuses/{nid}/quotes', { nid: this.nid })
-				const { data } = await axios.get(url)
+				const { data, headers } = await axios.get(url)
 				this.quotes = Array.isArray(data) ? data : []
+				// the quotes made elsewhere are being read: once more, a little later
+				if (headers?.['x-social-filling'] === '1') {
+					setTimeout(() => this.load(), 6000)
+				}
 			} catch (error) {
 				logger.error('could not load the quotes of a post', { error })
 				this.quotes = []

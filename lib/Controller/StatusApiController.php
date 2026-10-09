@@ -34,6 +34,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
+use OCA\Social\Service\Interaction\InteractionService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\PlaceService;
@@ -115,6 +116,7 @@ class StatusApiController extends MastodonApiController {
 		private DurableCache $durableCache,
 		private Publisher $atprotoPublisher,
 		private ReplyRuleService $replyRules,
+		private InteractionService $interactions,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -898,6 +900,8 @@ class StatusApiController extends MastodonApiController {
 	 * not a dead end. The status is resolved through the visibility filter
 	 * first, so one the caller may not read is a **404** and no reaction of it
 	 * is looked at — the list of who liked a post is as private as the post.
+	 * Whoever liked it where it lives is in the list too (`InteractionService`);
+	 * `X-Social-Filling: 1` says that is being read just now.
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -914,15 +918,26 @@ class StatusApiController extends MastodonApiController {
 		return $this->reactedBy($nid, Announce::TYPE, $limit);
 	}
 
+	/**
+	 * Says, on an answer, that more of it is being read from elsewhere just
+	 * now: a client that knows the header asks again a little later.
+	 */
+	private function filling(DataResponse $response, bool $filling): DataResponse {
+		if ($filling) {
+			$response->addHeader('X-Social-Filling', '1');
+		}
+
+		return $response;
+	}
+
 	private function reactedBy(int|string $nid, string $type, int $limit): DataResponse {
 		try {
 			$this->initViewer(false);
 			$limit = min(max($limit, 1), 80);
 			$post = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
+			$reacted = $this->interactions->reactedBy($post, $type, $limit);
 
-			return new DataResponse(
-				$this->actionService->reactedBy($post, $type, $limit), Http::STATUS_OK
-			);
+			return $this->filling(new DataResponse($reacted['accounts'], Http::STATUS_OK), $reacted['filling']);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
@@ -937,7 +952,9 @@ class StatusApiController extends MastodonApiController {
 	 * was approved and is real and is not in this list, because there is no
 	 * status entity to put in it — Mastodon's own answer has the same edge.
 	 * Read as the viewer, so a quote inside somebody's followers-only post is
-	 * not handed to a reader by a list about their own post.
+	 * not handed to a reader by a list about their own post. The quotes the
+	 * networks the post is on list are read in the background and stored,
+	 * so they are in the list the next time (`X-Social-Filling: 1`).
 	 */
 	#[PublicPage]
 	#[NoCSRFRequired]
@@ -947,12 +964,13 @@ class StatusApiController extends MastodonApiController {
 			$this->initViewer(false);
 			$post = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 
+			$filling = $this->interactions->askForQuotes($post);
 			$quotes = $this->quoteService->quotesOf($post, $limit, $max_id);
 			foreach ($quotes as $quote) {
 				$quote->setExportFormat(ACore::FORMAT_LOCAL);
 			}
 
-			return new DataResponse($quotes, Http::STATUS_OK);
+			return $this->filling(new DataResponse($quotes, Http::STATUS_OK), $filling);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Cron\FillInteractions;
 use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
@@ -44,6 +45,11 @@ class RemoteFetchQueue {
 	public const THREAD_FILL_INTERVAL = 600;
 
 	private const THREAD_FILLED = 'social.threadfill';
+
+	/** Seconds between two reads of who reacted to one post. */
+	public const INTERACTIONS_INTERVAL = 600;
+
+	private const INTERACTIONS_FILLED = 'social.reactfill';
 
 	public function __construct(
 		private IJobList $jobList,
@@ -106,6 +112,32 @@ class RemoteFetchQueue {
 		}
 
 		$this->queue(FillThread::class, ['post' => $post->getId()]);
+
+		return true;
+	}
+
+	/**
+	 * Queues a read of who liked, boosted or quoted a post where it lives
+	 * (`Cron\FillInteractions`), at most once per `INTERACTIONS_INTERVAL` per
+	 * post and kind, for a post that may have them elsewhere.
+	 *
+	 * @return bool whether a read was asked for
+	 */
+	public function fillInteractions(Stream $post, string $type): bool {
+		if ($post->getId() === '' || ($post->isLocal() && $post->getVisibility() !== Stream::TYPE_PUBLIC)) {
+			return false;
+		}
+		$key = md5($type . "\0" . $post->getId());
+		try {
+			if ($this->durableCache->get(self::INTERACTIONS_FILLED, $key) !== null) {
+				return false;
+			}
+			$this->durableCache->set(self::INTERACTIONS_FILLED, $key, 1, self::INTERACTIONS_INTERVAL);
+		} catch (Throwable $e) {
+			// the job list's own dedupe still holds
+		}
+
+		$this->queue(FillInteractions::class, ['post' => $post->getId(), 'type' => $type]);
 
 		return true;
 	}

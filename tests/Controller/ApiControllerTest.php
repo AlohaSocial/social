@@ -493,6 +493,14 @@ class ApiControllerTest extends TestCase {
 				return $publisher;
 			})(),
 			'replyRules' => $this->createMock(\OCA\Social\Service\ReplyRuleService::class),
+			'interactions' => new \OCA\Social\Service\Interaction\InteractionService(
+				$this->actionService,
+				$this->cacheActorService,
+				$this->createStub(\OCA\Social\Db\StreamRequest::class),
+				$this->durableCache(),
+				$this->remoteFetchQueue,
+				new NullLogger(),
+			),
 		]);
 	}
 
@@ -2521,6 +2529,15 @@ class ApiControllerTest extends TestCase {
 			->willReturn([]);
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->statusRebloggedBy(9)->getStatus());
+	}
+
+	public function testWhoReactedWhereThePostLivesIsBeingReadSaysSo(): void {
+		$this->loggedInAs();
+		$this->streamService->method('getStreamByNid')->willReturn($this->createStub(Stream::class));
+		$this->actionService->method('reactedBy')->willReturn([]);
+		$this->remoteFetchQueue->expects($this->once())->method('fillInteractions')->with($this->anything(), 'Like')->willReturn(true);
+
+		$this->assertSame('1', $this->controller()->statusFavouritedBy(9)->getHeaders()['X-Social-Filling'] ?? null);
 	}
 
 	/** Who liked a post is as private as the post: a 404 is a 404 all the way down. */
