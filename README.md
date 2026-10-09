@@ -605,7 +605,8 @@ are synthesised in the browser, so there is nothing to download.
   the bell.
 - **Unified search**, so Aloha Social posts turn up where every other search result does.
 - **Deleting a Nextcloud user takes their Fediverse account with it** — tombstoned,
-  dropped, and a `Delete` federated so other servers drop their copies too.
+  dropped, and a `Delete` federated so other servers drop their copies too. The
+  channels the account ran go with it the same way.
 
 ## 🛡️ Safety, and privacy that is the default
 

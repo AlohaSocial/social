@@ -15,6 +15,7 @@ use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\AnnouncementsRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CacheDocumentsRequest;
+use OCA\Social\Db\ChannelsRequest;
 use OCA\Social\Db\CollectionsRequest;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\DomainBlocksRequest;
@@ -106,6 +107,7 @@ class ActorCascadeServiceTest extends TestCase {
 			'followed hashtags' => [FollowedTagsRequest::class, 'deleteByActor'],
 			'quote approvals' => [QuoteGrantRequest::class, 'deleteRelatedId'],
 			'what it wrote as a team' => [TeamsRequest::class, 'deleteByAuthor'],
+			'its channels, and itself as one' => [ChannelsRequest::class, 'deleteRelatedId'],
 			'imported posts' => [ImportedPostsRequest::class, 'deleteByActor'],
 			'posts held for a moderator' => [PostHoldsRequest::class, 'deleteByActor'],
 			'queued deliveries' => [RequestQueueRequest::class, 'deleteByAuthor'],
@@ -165,6 +167,7 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->request(TeamsRequest::class),
 			$this->files,
 			$this->imports,
+			$this->request(ChannelsRequest::class),
 			$this->request(WatchRequest::class),
 			$this->request(RequestQueueRequest::class),
 			$this->request(CacheDocumentsRequest::class),
@@ -236,7 +239,7 @@ class ActorCascadeServiceTest extends TestCase {
 
 	/** Everything else a suspension does take is what a deletion takes. */
 	public function testASuspensionClearsEveryOtherTableADeletionDoes(): void {
-		$spared = [ReportsRequest::class, AccountNotesRequest::class, QuoteGrantRequest::class, TeamsRequest::class];
+		$spared = [ReportsRequest::class, AccountNotesRequest::class, QuoteGrantRequest::class, TeamsRequest::class, ChannelsRequest::class];
 		$rewritten = [ActorRelationRequest::class, MuteExpiryRequest::class];
 
 		foreach (self::tables() as [$class, $method]) {

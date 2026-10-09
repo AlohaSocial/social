@@ -354,6 +354,21 @@ class AccountService {
 			return;
 		}
 
+		// the channels it owns are accounts of their own with nobody left to
+		// run them: each goes with it, the way an account goes
+		foreach ($this->channelsRequest->getByOwner($actor->getId()) as $channel) {
+			if ($channel->getHandle() === $actor->getPreferredUsername()) {
+				continue;
+			}
+			try {
+				$this->deleteActor($channel->getHandle());
+			} catch (Exception $e) {
+				$this->logger->error('could not delete a channel of a deleted account', [
+					'owner' => $actor->getId(), 'channel' => $channel->getHandle(), 'exception' => $e,
+				]);
+			}
+		}
+
 		// set as deleted locally
 		$this->actorsRequest->setAsDeleted($actor->getPreferredUsername());
 

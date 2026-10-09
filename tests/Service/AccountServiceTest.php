@@ -31,6 +31,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Channel;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Service\AccessBlockService;
@@ -468,6 +469,30 @@ class AccountServiceTest extends TestCase {
 			->willReturn('token');
 
 		$this->service->deleteActor('alice');
+	}
+
+	/** A channel is an account of its own, and nobody would be left to run it. */
+	public function testTheChannelsAnAccountOwnedAreDeletedWithIt(): void {
+		$alice = $this->alice();
+		$news = (new Person())->setId('https://social.test/users/news')->setPreferredUsername('news')->setUserId('channel/news')->setInbox('https://social.test/users/news/inbox')->setLocal(true);
+		$this->channelsRequest->method('getByOwner')->willReturnCallback(static fn (string $owner): array => $owner === self::ALICE ? [
+			(new Channel())->setHandle('alice')->setOwnerId(self::ALICE),
+			(new Channel())->setHandle('news')->setOwnerId(self::ALICE),
+		] : []);
+		$this->actorsRequest->method('getFromUsername')->willReturnCallback(static fn (string $handle): Person => $handle === 'news' ? $news : $alice);
+		$deleted = [];
+		$this->actorsRequest->method('setAsDeleted')->willReturnCallback(function (string $handle) use (&$deleted): void {
+			$deleted[] = $handle;
+		});
+		$personInterface = $this->createMock(PersonInterface::class);
+		$ap = $this->createMock(AP::class);
+		$ap->method('getInterfaceFromType')->willReturn($personInterface);
+		AP::set($ap);
+		$this->activityService->method('request')->willReturn('token');
+
+		$this->service->deleteActor('alice');
+
+		$this->assertSame(['news', 'alice'], $deleted, 'the channel first, the account it belonged to itself never twice');
 	}
 
 	// --- deleting your own account --------------------------------------
