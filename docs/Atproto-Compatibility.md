@@ -1399,8 +1399,15 @@ the repository with a fresh key and a PLC update.
 
 ### 16.4 Input
 
-Records from Bluesky are untrusted input: the lexicon validator rejects
-what does not fit, facets are clamped to the text's byte length, every URL
+Records from Bluesky are untrusted input. What the AppView, a relay or
+Jetstream sends is read field by field — each value taken only when it is
+the type expected, ids and DIDs checked by their syntax (`Syntax`), an
+identity event's handle not taken at all (the one kept is the handle the
+AppView verified) — and not validated against the lexicons: a newer
+lexicon than the one vendored here must not make a valid post unreadable.
+The lexicon validator checks the records this server writes and the ones
+a Bluesky app writes through it (`RepositoryService::write()`). Facets are
+clamped to the text's byte length, every URL
 goes through the same guarded fetch as ActivityPub documents (no local
 addresses, the federation blocklist, size ceilings), blobs are fetched
 only from the AppView CDN or the author's PDS endpoint and only as the MIME

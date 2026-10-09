@@ -84,7 +84,7 @@ class JetstreamEvents {
 		try {
 			match ((string)($event['kind'] ?? '')) {
 				'commit' => $this->commit($did, is_array($event['commit'] ?? null) ? $event['commit'] : []),
-				'identity' => $this->identity($did, (string)($event['identity']['handle'] ?? '')),
+				'identity' => $this->identity($did),
 				default => null,
 			};
 		} catch (Throwable $e) {
@@ -197,10 +197,15 @@ class JetstreamEvents {
 		}
 	}
 
-	private function identity(string $did, string $handle): void {
-		$this->actors->resolve($did, true);
-		if ($handle !== '') {
-			$this->watches->setHandle($did, strtolower($handle));
+	/**
+	 * An account's identity changed: read again from the AppView, whose
+	 * handle is the one it verified. The handle the event names is only what
+	 * the relay passed on, and is not taken.
+	 */
+	private function identity(string $did): void {
+		$handle = strtolower($this->actors->resolve($did, true)->getAccount());
+		if ($handle !== '' && $handle !== 'handle.invalid') {
+			$this->watches->setHandle($did, $handle);
 		}
 	}
 
