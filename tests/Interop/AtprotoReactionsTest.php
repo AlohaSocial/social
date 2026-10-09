@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Interop;
 
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\BlueskyInteractionSource;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Service\Interaction\InteractionService;
@@ -55,6 +56,11 @@ class AtprotoReactionsTest extends TestCase {
 		]);
 		$this->assertSame(200, $code, json_encode($answer));
 		$this->assertNotNull($this->network->await(fn (): ?bool => in_array($likerDid, $this->network->likers($post['uri']), true) ? true : null), 'the AppView has the like');
+
+		$stored = Server::get(StreamRequest::class)->getStreamById($postId);
+		$source = Server::get(BlueskyInteractionSource::class);
+		$this->assertTrue($source->supports($stored), 'the post is one Bluesky is asked about');
+		$this->assertNotNull($this->network->await(fn (): ?bool => in_array('https://bsky.app/profile/' . $likerDid, $source->actors($stored, 'Like', 80), true) ? true : null), 'Bluesky names the liker');
 
 		$interactions = Server::get(InteractionService::class);
 		$listed = [];
