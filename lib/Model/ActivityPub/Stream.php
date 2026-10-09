@@ -310,6 +310,18 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/** Somebody named you in a photograph. */
 	public const SUBTYPE_PHOTO_TAG = 'PhotoTag';
 
+	/**
+	 * What only Bluesky tells: a like or a repost of your repost, Bluesky
+	 * verifying your account or no longer doing so, somebody joining Bluesky
+	 * with your starter pack. Typed `bluesky:…` for a client; one that does
+	 * not know a type leaves it out, as Mastodon's API asks.
+	 */
+	public const SUBTYPE_BLUESKY_REPOST_LIKED = 'BlueskyRepostLiked';
+	public const SUBTYPE_BLUESKY_REPOST_REPOSTED = 'BlueskyRepostReposted';
+	public const SUBTYPE_BLUESKY_VERIFIED = 'BlueskyVerified';
+	public const SUBTYPE_BLUESKY_UNVERIFIED = 'BlueskyUnverified';
+	public const SUBTYPE_BLUESKY_STARTER_PACK = 'BlueskyStarterPackJoined';
+
 	private const NOTIFICATION_TYPES = [
 		Like::TYPE => 'favourite',
 		Announce::TYPE => 'reblog',
@@ -324,6 +336,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 		self::SUBTYPE_STORY_REACT => 'story:react',
 		self::SUBTYPE_STORY_REPLY => 'story:comment',
 		self::SUBTYPE_PHOTO_TAG => 'tagged',
+		self::SUBTYPE_BLUESKY_REPOST_LIKED => 'bluesky:repost_liked',
+		self::SUBTYPE_BLUESKY_REPOST_REPOSTED => 'bluesky:repost_reposted',
+		self::SUBTYPE_BLUESKY_VERIFIED => 'bluesky:verified',
+		self::SUBTYPE_BLUESKY_UNVERIFIED => 'bluesky:unverified',
+		self::SUBTYPE_BLUESKY_STARTER_PACK => 'bluesky:starterpack_joined',
 	];
 
 	private string $activityId = '';

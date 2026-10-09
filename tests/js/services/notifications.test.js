@@ -286,3 +286,19 @@ describe('newestIdOf', () => {
 		expect(newestIdOf({ id: 'not-a-number' })).toBe('0')
 	})
 })
+
+describe('what only Bluesky tells', () => {
+	it('says each in words', () => {
+		const said = (type) => notificationSummary({ type, account: { acct: 'bob.test' } })
+
+		expect(said('bluesky:repost_liked')).toBe('bob.test liked your boost')
+		expect(said('bluesky:repost_reposted')).toBe('bob.test boosted your boost')
+		expect(said('bluesky:verified')).toBe('bob.test verified your account on Bluesky')
+		expect(said('bluesky:unverified')).toBe('bob.test no longer verifies your account on Bluesky')
+		expect(said('bluesky:starterpack_joined')).toBe('bob.test joined Bluesky with your starter pack')
+	})
+
+	it('leaves them out of a filter that keeps something else', () => {
+		expect(excludeTypesFor('mentions')).toEqual(expect.arrayContaining(['bluesky:repost_liked', 'bluesky:verified']))
+	})
+})

@@ -228,23 +228,31 @@ class NotificationService {
 			}
 
 			try {
-				/** @var SocialAppNotification $item */
-				$item = AP::instance()->getItemFromType(SocialAppNotification::TYPE);
-				$item->setDetailItem(Details::POST, $stored);
-				$item->addDetail(Details::ACCOUNT, $author);
-				$item->setAttributedTo($post->getAttributedTo())
-					->setSubType(Stream::SUBTYPE_STATUS)
-					->setId($post->getId() . '/notification+status/' . md5($subscriber))
-					->setSummary('{account} posted')
-					->setObjectId($post->getId())
-					->setTo($subscriber)
-					->setLocal(true);
-
-				$interface->save($item);
+				$interface->save($this->statusNotification($stored, $author, $subscriber));
 			} catch (Exception $e) {
 				$this->logger->warning('could not store a status notification', ['exception' => $e]);
 			}
 		}
+	}
+
+	/**
+	 * The bell's notification of a post, for one subscriber: one per post
+	 * and subscriber, whichever way it came.
+	 */
+	private function statusNotification(Stream $stored, string $author, string $subscriber): SocialAppNotification {
+		/** @var SocialAppNotification $item */
+		$item = AP::instance()->getItemFromType(SocialAppNotification::TYPE);
+		$item->setDetailItem(Details::POST, $stored);
+		$item->addDetail(Details::ACCOUNT, $author);
+		$item->setAttributedTo($stored->getAttributedTo())
+			->setSubType(Stream::SUBTYPE_STATUS)
+			->setId($stored->getId() . '/notification+status/' . md5($subscriber))
+			->setSummary('{account} posted')
+			->setObjectId($stored->getId())
+			->setTo($subscriber)
+			->setLocal(true);
+
+		return $item;
 	}
 
 	/**
@@ -395,6 +403,62 @@ class NotificationService {
 			$interface->save($item);
 		} catch (Exception $e) {
 			$this->logger->warning('could not store a photo-tag notification', ['exception' => $e]);
+		}
+	}
+
+	/**
+	 * Tells a local account what only Bluesky tells (`Stream::SUBTYPE_BLUESKY_*`):
+	 * `$actorId` did it, to `$objectId` where it was done to a post — the post
+	 * the account reposted, for a like or repost of the repost. One of each
+	 * per `$what`, so Bluesky saying it twice is told once.
+	 */
+	public function onBlueskyEvent(string $subType, string $recipientId, string $actorId, string $objectId, string $summary, string $what): void {
+		if (!$this->isLocal($recipientId)) {
+			return;
+		}
+
+		try {
+			$interface = AP::instance()->getInterfaceFromType(SocialAppNotification::TYPE);
+
+			/** @var SocialAppNotification $item */
+			$item = AP::instance()->getItemFromType(SocialAppNotification::TYPE);
+			if ($objectId !== '') {
+				$item->setDetailItem(Details::POST, $this->streamRequest->getStreamById($objectId, false, ACore::FORMAT_LOCAL));
+				$item->setObjectId($objectId);
+			}
+			$item->addDetail(Details::ACCOUNT, $this->accountOf($actorId));
+			$item->setAttributedTo($actorId)
+				->setSubType($subType)
+				->setId($actorId . '/notification+' . $subType . '/' . md5($recipientId . '|' . $what))
+				->setSummary($summary)
+				->setTo($recipientId)
+				->setLocal(true);
+
+			$interface->save($item);
+		} catch (Exception $e) {
+			$this->logger->warning('could not store a Bluesky notification', ['subtype' => $subType, 'exception' => $e]);
+		}
+	}
+
+	/**
+	 * Tells one local account that an account it rang the bell of on Bluesky
+	 * has posted: the bell's own notification, under the same id, so a bell
+	 * rung here as well tells once.
+	 */
+	public function onSubscribedPost(string $postId, string $subscriberId): void {
+		if (!$this->isLocal($subscriberId)) {
+			return;
+		}
+
+		try {
+			$stored = $this->streamRequest->getStreamById($postId, false, ACore::FORMAT_LOCAL);
+			if ($stored->getInReplyTo() !== '') {
+				return;
+			}
+			AP::instance()->getInterfaceFromType(SocialAppNotification::TYPE)
+				->save($this->statusNotification($stored, $this->accountOf($stored->getAttributedTo()), $subscriberId));
+		} catch (Exception $e) {
+			$this->logger->warning('could not store a status notification', ['exception' => $e]);
 		}
 	}
 

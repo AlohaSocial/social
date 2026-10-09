@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Reader\ActivitySubscriptions;
 use OCA\Social\Db\AccountNotesRequest;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
@@ -26,6 +27,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 /**
  * The note one account keeps about another, the accounts it features, and when
@@ -150,6 +152,9 @@ class AccountRelationServiceTest extends TestCase {
 		$this->domainBlockService = $this->createStub(DomainBlockService::class);
 		$this->relationshipService = $this->createMock(RelationshipService::class);
 	}
+
+	/** @var list<array{string, bool}> */
+	private array $rung = [];
 
 	private function service(): AccountRelationService {
 		return new AccountRelationService(
@@ -542,6 +547,22 @@ class AccountRelationServiceTest extends TestCase {
 		$service->setNotify($alice, $bob, false);
 
 		$this->assertFalse($service->isNotified(self::ALICE, self::BOB));
+	}
+
+	public function testTheBellOnABlueskyAccountIsKeptOnBlueskyToo(): void {
+		$subscriptions = $this->createMock(ActivitySubscriptions::class);
+		$subscriptions->expects($this->exactly(2))->method('set')->willReturnCallback(function (Person $subscriber, Person $target, bool $on): void {
+			$this->rung[] = [$target->getId(), $on];
+		});
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(ActivitySubscriptions::class)->willReturn($subscriptions);
+		$service = new AccountRelationService($this->accountNotesRequest, $this->actorRelationRequest, $this->followsRequest, $this->muteExpiryRequest, $this->domainBlockService, $this->relationshipService, $container);
+		$bob = $this->person('https://bsky.app/profile/did:plc:bob');
+
+		$service->setNotify($this->person(self::ALICE), $bob, true);
+		$service->setNotify($this->person(self::ALICE), $bob, false);
+
+		$this->assertSame([['https://bsky.app/profile/did:plc:bob', true], ['https://bsky.app/profile/did:plc:bob', false]], $this->rung);
 	}
 
 	/** Being told about your own posts is a notification nobody wants. */
