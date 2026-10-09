@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\Threadgates;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
@@ -39,6 +40,7 @@ use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -80,6 +82,7 @@ class PostService {
 		private InterestService $interestService,
 		private VideoDeliveryHold $videoDeliveryHold,
 		private DocumentService $documentService,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -113,6 +116,11 @@ class PostService {
 		$parent = $this->replyParent($post);
 		if ($parent !== null) {
 			$post->setType(self::visibilityOfReply($post->getType(), $parent));
+			// who a Bluesky thread lets reply, before anything is written
+			$refusal = $this->threadgates()?->refusal($post->getActor(), $parent) ?? '';
+			if ($refusal !== '') {
+				throw new InvalidActionException($refusal);
+			}
 		}
 
 		$note = new Note();
@@ -246,6 +254,16 @@ class PostService {
 	 *
 	 * @throws StreamNotFoundException
 	 */
+	/**
+	 * Resolved when first needed rather than injected: the Bluesky side needs
+	 * services that need this one. Null without a container, as in a unit test.
+	 */
+	private function threadgates(): ?Threadgates {
+		$service = $this->container?->get(Threadgates::class);
+
+		return $service instanceof Threadgates ? $service : null;
+	}
+
 	private function replyParent(Post $post): ?Stream {
 		if ($post->getReplyTo() === '') {
 			return null;

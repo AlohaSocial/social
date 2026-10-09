@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use DateTime;
+use OCA\Social\Atproto\Reader\Threadgates;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostEditedEvent;
@@ -52,6 +53,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 /**
@@ -86,6 +88,10 @@ class PostServiceTest extends TestCase {
 	private \OCA\Social\Service\InterestService|MockObject $interestService;
 	private \OCA\Social\Service\VideoDeliveryHold|MockObject $videoDeliveryHold;
 	private DocumentService|MockObject $documentService;
+	/** @var Threadgates&MockObject */
+	private Threadgates $threadgates;
+	/** @var ContainerInterface&MockObject */
+	private ContainerInterface $container;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
@@ -137,6 +143,9 @@ class PostServiceTest extends TestCase {
 			}
 		);
 
+		$this->threadgates = $this->createMock(Threadgates::class);
+		$this->container = $this->createMock(ContainerInterface::class);
+		$this->container->method('get')->with(Threadgates::class)->willReturn($this->threadgates);
 		$this->service = new PostService(
 			$streamService,
 			$this->accountService,
@@ -154,6 +163,7 @@ class PostServiceTest extends TestCase {
 			$this->interestService,
 			$this->videoDeliveryHold,
 			$this->documentService,
+			$this->container,
 		);
 	}
 
@@ -543,6 +553,23 @@ class PostServiceTest extends TestCase {
 		$post->setReplyTo('https://remote.example/notes/missing');
 
 		$this->expectException(StreamNotFoundException::class);
+		$this->service->createPost($post);
+	}
+
+	public function testAReplyABlueskyThreadGateDoesNotLetThroughIsRefusedBeforeAnythingIsSent(): void {
+		$parent = new Note();
+		$parent->setId('https://bsky.app/profile/did:plc:bob/post/3kroot');
+		$parent->setAttributedTo('https://bsky.app/profile/did:plc:bob');
+		$parent->setTo(\OCA\Social\Model\ActivityPub\ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($parent);
+		$this->threadgates->method('refusal')->willReturn('The author of this thread on Bluesky allows no replies');
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('I agree');
+		$post->setReplyTo($parent->getId());
+
+		$this->expectException(InvalidActionException::class);
+		$this->expectExceptionMessage('allows no replies');
 		$this->service->createPost($post);
 	}
 

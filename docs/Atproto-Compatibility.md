@@ -456,6 +456,15 @@ when crossed.
   to a post that is not on Bluesky is published as a top-level post with
   the parent's URL as a `#link` — the thread cannot be joined, and saying
   nothing would hide the post.
+- **Who may reply** (`app.bsky.feed.threadgate` on the thread's root): a
+  thread its author closed to everybody is marked when it is read, so the
+  reply is not offered here (`interaction_policy.reply` false); a narrower
+  gate — the accounts the root mentions, its author's followers, the
+  accounts the author follows, a list's members — is checked when somebody
+  replies (`Reader\Threadgates`, through the AppView), and a reply it does
+  not let through is refused with the reason: every AppView would hide it.
+  This app's own posts carry no gate: Social has no reply controls of its
+  own yet.
 - **Language**: `langs: [<post language>]` when known.
 - **Link card**: when the post has a `StreamCard` and no pictures,
   `app.bsky.embed.external` with title, description and the preview image
