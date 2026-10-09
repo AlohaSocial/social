@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Client;
 
+use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Crypto\Curve;
@@ -102,6 +103,8 @@ class WriteServiceTest extends TestCase {
 	/** @var BlueskyBlocks&MockObject */
 	private BlueskyBlocks $blocks;
 	private bool $publishesBlocks = false;
+	/** @var ChatDeclaration&MockObject */
+	private ChatDeclaration $declaration;
 	private ClientSession $session;
 	private Person $alice;
 	/** @var StoredRecord[] */
@@ -143,12 +146,13 @@ class WriteServiceTest extends TestCase {
 		$this->blocks->method('isPublished')->willReturnCallback(fn (): bool => $this->publishesBlocks);
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
+		$this->declaration = $this->createMock(ChatDeclaration::class);
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
-			$this->relationships, $this->blocks,
+			$this->relationships, $this->blocks, $this->declaration,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -287,6 +291,22 @@ class WriteServiceTest extends TestCase {
 		});
 		$this->repositories->expects($this->never())->method('write');
 		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => BlueskyBlocks::COLLECTION, 'rkey' => '3kblock']);
+	}
+
+	/** Who may send direct messages, as an app sets it: the setting here, which writes the record the app gets back. */
+	public function testAnAppsChatDeclarationIsTheSettingHere(): void {
+		$record = ['$type' => ChatDeclaration::COLLECTION, 'allowIncoming' => 'none'];
+		$this->declaration->expects($this->exactly(2))->method('fromApp')->with($this->session, 'self', $record)->willReturnCallback(function () use ($record): void {
+			$bytes = DagCbor::encode($record);
+			$this->records = [new StoredRecord(self::DID, ChatDeclaration::COLLECTION, 'self', Cid::forDagCbor($bytes), $bytes, '', 0)];
+		});
+		$this->repositories->expects($this->never())->method('write');
+
+		$put = $this->writes->put($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
+		$created = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
+
+		$this->assertSame('at://' . self::DID . '/' . ChatDeclaration::COLLECTION . '/self', $put['uri']);
+		$this->assertSame($put['uri'], $created['uri']);
 	}
 
 	public function testAListBlockIsABlockAndRefused(): void {

@@ -111,6 +111,12 @@ The development network has no chat service, so these lines are the only test of
 - [ ] The tester answers in the Bluesky app. Within two minutes the answer is in alice's Messages, in the same conversation, with a notification.
 - [ ] The tester deletes a message in the Bluesky app. It is gone here after the next read.
 - [ ] The tester follows bob. Bob, here, writes one message to the tester and to a Mastodon account. The tester gets it on Bluesky, the Mastodon account over ActivityPub.
+- [ ] Alice, signed in to a Bluesky app here, writes the tester from that app. Within two minutes the message is in alice's Messages here, as hers, in the same conversation, and the tester gets it once.
+- [ ] The tester writes alice; alice opens the conversation here. In alice's Bluesky app it shows read. The tester writes again; alice reads it in the Bluesky app; it is read here after the next read.
+- [ ] With "Who may send you direct messages" at Everybody, a Bluesky account alice does not follow writes her. It is among the requests in her Bluesky app, and in her Messages here. Alice answers it here: the conversation is accepted in her Bluesky app.
+- [ ] Alice sets the setting to People you follow. That stranger writes again in the old conversation: here the message is in Messages but does not notify, and the stranger waits among her requests.
+- [ ] Another stranger writes alice; she dismisses them from the requests here. The request is gone from her Bluesky app.
+- [ ] Alice sets "Who may send you direct messages" to Nobody here. Her Bluesky app's chat settings show "No one"; a stranger on Bluesky cannot write her. She sets "Everyone" in the Bluesky app; the setting here says Everybody.
 
 ### 3.7 Blocks
 

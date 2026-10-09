@@ -33,8 +33,9 @@ class ChatSenderTest extends TestCase {
 
 	/** @var list<array{string, array, ?array}> */
 	private array $calls = [];
-	/** @var list<array{string, string, string}> */
+	/** @var list<array{string, string, string, string}> */
 	private array $remembered = [];
+	private string $status = 'accepted';
 	/** @var list<string> */
 	private array $woken = [];
 	private bool $on = true;
@@ -44,7 +45,11 @@ class ChatSenderTest extends TestCase {
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = [], ?array $input = null): array {
 			$this->calls[] = [$method, $params, $input];
 
-			return $method === 'chat.bsky.convo.getConvoForMembers' ? ['convo' => ['id' => 'convo1']] : ['id' => 'msg1'];
+			return match ($method) {
+				'chat.bsky.convo.getConvoForMembers' => ['convo' => ['id' => 'convo1', 'status' => $this->status]],
+				'chat.bsky.convo.acceptConvo' => ['rev' => '3k1'],
+				default => ['id' => 'msg1'],
+			};
 		});
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('forActor')->willReturn(new Identity(1, 'https://social.test/users/alice', self::ALICE, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0));
@@ -52,8 +57,8 @@ class ChatSenderTest extends TestCase {
 		$cacheActors = $this->createMock(CacheActorService::class);
 		$cacheActors->method('getFromId')->willReturn(new Person());
 		$store = $this->createMock(ChatStore::class);
-		$store->method('remember')->willReturnCallback(function (string $did, string $convo, string $id): void {
-			$this->remembered[] = [$did, $convo, $id];
+		$store->method('sent')->willReturnCallback(function (string $did, string $convo, string $messageId, string $id): void {
+			$this->remembered[] = [$did, $convo, $messageId, $id];
 		});
 		$poller = $this->createMock(ChatPoller::class);
 		$poller->method('isOn')->willReturnCallback(fn (): bool => $this->on);
@@ -86,8 +91,18 @@ class ChatSenderTest extends TestCase {
 		$this->assertSame('convo1', $input['convoId']);
 		$this->assertSame('Hello, see https://example.com', $input['message']['text']);
 		$this->assertSame('app.bsky.richtext.facet#link', $input['message']['facets'][0]['features'][0]['$type']);
-		$this->assertSame([[self::ALICE, 'convo1', 'https://social.test/users/alice/statuses/7']], $this->remembered, 'the answer will answer it');
+		$this->assertSame([[self::ALICE, 'convo1', 'msg1', 'https://social.test/users/alice/statuses/7']], $this->remembered, 'the answer will answer it, and its copy in the log is known');
 		$this->assertSame([self::ALICE], $this->woken);
+		$this->assertCount(2, $this->calls, 'an accepted conversation is not accepted again');
+	}
+
+	public function testAnsweringARequestAcceptsItFirst(): void {
+		$this->status = 'request';
+
+		$this->assertTrue($this->sender()->send(self::message('<p>Hello</p>')));
+
+		$this->assertSame(['chat.bsky.convo.acceptConvo', [], ['convoId' => 'convo1']], $this->calls[1]);
+		$this->assertSame('chat.bsky.convo.sendMessage', $this->calls[2][0]);
 	}
 
 	public function testOnlyADirectMessageWithSomethingToSayAndOnlyWhileMessagesAreOn(): void {

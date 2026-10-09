@@ -14,7 +14,13 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Tests\Helper\InMemoryDurableCacheRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -33,6 +39,10 @@ class ChatStoreTest extends TestCase {
 	/** @var list<string> */
 	private array $deleted = [];
 	private bool $blocked = false;
+	/** @var array<string, Stream> what the stream holds by id */
+	private array $streams = [];
+	/** @var list<string> the messages a conversation here was read up to */
+	private array $readUpTo = [];
 
 	private function store(): ChatStore {
 		$posts = $this->createMock(PostStore::class);
@@ -46,6 +56,24 @@ class ChatStoreTest extends TestCase {
 
 			return true;
 		});
+		$posts->method('isKnown')->willReturnCallback(fn (string $id): bool => isset($this->streams[$id]));
+		$streams = $this->createMock(StreamRequest::class);
+		$streams->method('save')->willReturnCallback(function (Stream $stream): void {
+			$this->streams[$stream->getId()] = $stream;
+		});
+		$streams->method('getStreamById')->willReturnCallback(fn (string $id): Stream => $this->streams[$id] ?? throw new StreamNotFoundException());
+		$streams->method('deleteById')->willReturnCallback(function (string $id): void {
+			$this->deleted[] = $id;
+			unset($this->streams[$id]);
+		});
+		$cacheActors = $this->createMock(CacheActorService::class);
+		$cacheActors->method('getFromId')->willReturnCallback(static fn (string $id): Person => (new Person())->setId($id));
+		$conversations = $this->createMock(ConversationService::class);
+		$conversations->method('markReadUpTo')->willReturnCallback(function (Person $viewer, string $id): bool {
+			$this->readUpTo[] = $viewer->getId() . ' ' . $id;
+
+			return true;
+		});
 		$actors = $this->createMock(BlueskyActorService::class);
 		$actors->method('resolve')->willReturnCallback(static fn (string $did): Person => (new Person())->setId('https://bsky.app/profile/' . $did));
 		$blocklist = $this->createMock(Blocklist::class);
@@ -55,7 +83,7 @@ class ChatStoreTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger());
+		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations);
 	}
 
 	private function alice(): Identity {
@@ -93,13 +121,70 @@ class ChatStoreTest extends TestCase {
 		$this->assertSame('', $store->last(self::ALICE, 'convo2'), 'another conversation is its own');
 	}
 
-	public function testTheAccountsOwnAndBlockedSendersAreNotStored(): void {
+	public function testABlockedSenderIsNotStored(): void {
 		$store = $this->store();
 
-		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m1', 'mine', self::ALICE)));
 		$this->blocked = true;
 		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m2', 'blocked')));
 		$this->assertSame([], $this->stored);
+	}
+
+	public function testWhatTheAccountWroteInABlueskyAppIsItsOwnDirectMessageAndIsNeverDelivered(): void {
+		$store = $this->store();
+		$store->received($this->alice(), 'convo1', self::message('m1', 'Hi Alice'));
+
+		$this->assertTrue($store->received($this->alice(), 'convo1', self::message('m2', 'Hi Bob', self::ALICE), [self::ALICE, self::BOB]));
+
+		$id = 'https://bsky.app/profile/' . self::ALICE . '/convo/convo1/m2';
+		$note = $this->streams[$id];
+		$this->assertInstanceOf(Note::class, $note);
+		$this->assertSame('https://social.test/users/alice', $note->getAttributedTo(), 'the account wrote it');
+		$this->assertSame(['https://bsky.app/profile/' . self::BOB], $note->getToArray(), 'to the others in the conversation');
+		$this->assertSame(Stream::TYPE_DIRECT, $note->getVisibility());
+		$this->assertFalse($note->isLocal(), 'nothing delivers a message that is not local');
+		$this->assertSame('https://bsky.app/profile/' . self::BOB . '/convo/convo1/m1', $note->getInReplyTo(), 'in the conversation it is in');
+		$this->assertCount(1, $this->stored, 'saved as it is, not through the import path');
+		$this->assertSame($id, $store->last(self::ALICE, 'convo1'));
+		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m2', 'Hi Bob', self::ALICE), [self::ALICE, self::BOB]), 'once');
+	}
+
+	public function testWhatWasSentFromHereIsNotStoredAgainWhenTheLogShowsIt(): void {
+		$store = $this->store();
+		$store->sent(self::ALICE, 'convo1', 'm9', 'https://social.test/users/alice/statuses/7');
+
+		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m9', 'Hello', self::ALICE), [self::ALICE, self::BOB]));
+		$this->assertSame([], $this->streams);
+		$this->assertSame('https://social.test/users/alice/statuses/7', $store->sentHere(self::ALICE, 'm9'));
+		$this->assertSame('https://social.test/users/alice/statuses/7', $store->last(self::ALICE, 'convo1'));
+	}
+
+	public function testAnOwnMessageWithNobodyToAddressIsNotStored(): void {
+		$this->assertFalse($this->store()->received($this->alice(), 'convo1', self::message('m2', 'Hi', self::ALICE), [self::ALICE]));
+		$this->assertSame([], $this->streams);
+	}
+
+	public function testTheConversationOfAMessageIsInItsIdOrRememberedWhenSentFromHere(): void {
+		$store = $this->store();
+		$store->sent(self::ALICE, 'convo/2', 'm9', 'https://social.test/users/alice/statuses/7');
+
+		$this->assertSame('convo1', $store->convoOf(ChatStore::messageId(self::BOB, 'convo1', 'm1')));
+		$this->assertSame('convo/2', $store->convoOf('https://social.test/users/alice/statuses/7'));
+		$this->assertSame('', $store->convoOf('https://mastodon.test/users/carol/statuses/1'));
+		$this->assertSame('', $store->convoOf('https://bsky.app/profile/' . self::BOB . '/post/3kpost'), 'a post is in no conversation');
+	}
+
+	public function testAConversationReadOnBlueskyIsReadHereUpToTheSameMessage(): void {
+		$store = $this->store();
+		$store->sent(self::ALICE, 'convo1', 'm9', 'https://social.test/users/alice/statuses/7');
+
+		$this->assertTrue($store->read($this->alice(), 'convo1', ['id' => 'm1', 'sender' => ['did' => self::BOB]]));
+		$this->assertTrue($store->read($this->alice(), 'convo1', ['id' => 'm9', 'sender' => ['did' => self::ALICE]]));
+		$this->assertFalse($store->read($this->alice(), 'convo1', ['id' => 'm1']), 'a system message names nobody');
+
+		$this->assertSame([
+			'https://social.test/users/alice https://bsky.app/profile/' . self::BOB . '/convo/convo1/m1',
+			'https://social.test/users/alice https://social.test/users/alice/statuses/7',
+		], $this->readUpTo);
 	}
 
 	public function testASharedPostIsALinkToIt(): void {
@@ -111,7 +196,16 @@ class ChatStoreTest extends TestCase {
 	}
 
 	public function testADeletedMessageGoes(): void {
-		$this->assertTrue($this->store()->deleted('convo1', ['id' => 'm1', 'sender' => ['did' => self::BOB]]));
+		$this->assertTrue($this->store()->deleted($this->alice(), 'convo1', ['id' => 'm1', 'sender' => ['did' => self::BOB]]));
 		$this->assertSame(['https://bsky.app/profile/' . self::BOB . '/convo/convo1/m1'], $this->deleted);
+	}
+
+	public function testAnOwnMessageDeletedInABlueskyAppGoesButOneSentFromHereStays(): void {
+		$store = $this->store();
+		$store->received($this->alice(), 'convo1', self::message('m2', 'Hi', self::ALICE), [self::ALICE, self::BOB]);
+
+		$this->assertTrue($store->deleted($this->alice(), 'convo1', ['id' => 'm2', 'sender' => ['did' => self::ALICE]]));
+		$this->assertFalse($store->deleted($this->alice(), 'convo1', ['id' => 'm9', 'sender' => ['did' => self::ALICE]]));
+		$this->assertSame(['https://bsky.app/profile/' . self::ALICE . '/convo/convo1/m2'], $this->deleted);
 	}
 }

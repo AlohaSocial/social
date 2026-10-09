@@ -90,7 +90,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D12 | **Inbound** reads by **polling** the public AppView per followed author, with a cap and backoff; **Jetstream** is an optional daemon an administrator may run for instant delivery on a large instance. | 09-25 polling, 10-06 the optional daemon |
 | D13 | Bluesky posts appear **in the same timelines**, their authors addressed as bare `@alice.bsky.social` with a **badge**. | 09-25, confirmed 10-06 |
 | D14 | **All Bluesky interactions** (like, repost, follow, reply, mention, quote) show in Activities like their ActivityPub counterparts, under the same **notification policy** and requests inbox. | 10-06 |
-| D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. Revised again 10-09: they are also this app's own direct messages (§10.1): a message from Bluesky arrives in the person's messages, and a direct message written here to somebody on Bluesky is sent there as a Bluesky direct message. | 10-06, revised 10-09 twice |
+| D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. Revised again 10-09: they are also this app's own direct messages (§10.1): a message from Bluesky arrives in the person's messages, and a direct message written here to somebody on Bluesky is sent there as a Bluesky direct message; what the person writes in a Bluesky app shows here too, read state goes both ways, a message request is what a direct message from a stranger is here (held by the notification policy), and who may send them direct messages is one setting for both networks (`chat.bsky.actor.declaration`). | 10-06, revised 10-09 twice |
 | D16 | **Mutes are never published, and blocks only as the person chooses** (revised 10-09: "Publish my blocks of Bluesky accounts", off by default, since a Bluesky block is public; revised again 10-09: people subscribe to Bluesky's moderation lists, §12.5, and a block list is published as a `listblock` record under the same choice); in scope: honour Bluesky's moderation labels, let users subscribe to labelers, file reports with Bluesky's moderation service, instance-level blocks of PDS hosts and DIDs. | 09-25, extended 10-06 |
 | D17 | The client API is a PDS: Bluesky apps may log in here, with `app.bsky.*` proxied to the AppView; no AppView of our own. | 09-25 |
 | D18 | Bridgy Fed twins of local accounts are folded into the native identity (§13.3). | 09-25 |
@@ -248,7 +248,8 @@ Collection → written when:
 | `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6) | as the app wrote it |
 | `app.bsky.graph.block` | a local actor blocks a Bluesky account, **only when the person publishes their blocks** (D16, `Publisher\BlueskyBlocks`) | `subject` DID |
 | `app.bsky.graph.listblock` | a local actor subscribes to a block list **and** publishes their blocks (D16, §12.5, `Reader\BlueskyModerationLists`) | `subject` list `at://` URI |
-| `chat.*` | never | — |
+| `chat.bsky.actor.declaration` (rkey `self`) | who may send the person direct messages changed here or in a Bluesky app signed in here, or the account's first read of its direct messages finds none while the setting here is `none` (§10.1, `Chat\ChatDeclaration`) | `allowIncoming`: `all`, `following` or `none` |
+| any other `chat.*` | never | — |
 
 Records are built by `RecordMapper` from the Social model (§8) and
 validated against the lexicon shapes this app ships as JSON (the lexicon
@@ -806,13 +807,72 @@ like any other; nothing in it says which network it runs on.
   it, at most 1,000 graphemes, its links and hashtags as facets — is sent
   (`sendMessage`). Recipients on the Fediverse get it over ActivityPub as
   before. Pictures are not sent: a Bluesky direct message carries none.
-- **What Bluesky decides.** Whether a message reaches somebody is the chat
-  service's rule: by default only people they follow may write to them. A
-  message the chat service refuses is logged, and stays here.
-- **Not mirrored.** Messages the account sends from a Bluesky app stay in
-  that app; read state is kept separately here and on Bluesky.
+- **Written in a Bluesky app.** A message the account itself writes in a
+  Bluesky app (signed in here or anywhere) is in the log too, and is
+  stored as the account's own direct message to the conversation's other
+  members (`getConvo`, asked once a run), answering the one before it.
+  It is saved as it is (`StreamRequest::save()`, with its recipient rows),
+  never through `PostService`: no `PostPublishedEvent`, so neither
+  `ChatSender` nor ActivityPub delivers it again; the copy is not `local`.
+  A message sent from here is remembered by the id `sendMessage` answered
+  with (`ChatStore::sent()`, `DurableCache::setShared()`, 90 days), so its
+  copy in the log is not stored a second time. A message the account
+  deletes in a Bluesky app is deleted here when it was written there; one
+  sent from here stays, as it may have gone to the Fediverse too.
+- **Read state, both ways.** A conversation marked read here
+  (`ConversationService::markRead()`) is marked read on Bluesky
+  (`chat.bsky.convo.updateRead`) for each Bluesky conversation its first
+  and newest messages are in — the conversation is in the id of a
+  message from Bluesky, and remembered for one sent from here
+  (`ChatStore::convoOf()`); reading every conversation here
+  (`markAllRead()`) is `updateAllRead`. Both are queued (`AtprotoPublish`
+  `chat`, `Chat\ChatState`), never in the request. A conversation read on
+  Bluesky (`chat.bsky.convo.defs#logReadConvo`, or the older
+  `#logReadMessage`) is marked read here up to the message it names
+  (`ConversationService::markReadUpTo()`), never back.
+- **Requests.** Bluesky files a conversation somebody the person does not
+  follow started as a request (`status: request`). Here it is what a
+  direct message from a stranger is everywhere: it shows in Messages, and
+  the notification policy's `for_private_mentions` holds its notification
+  among the requests (§10) while the person takes direct messages only from
+  the people they follow (or from nobody) — then Bluesky lets no stranger
+  start one, and only a request from before the change still brings
+  messages. While the person takes them from everybody, a stranger's
+  message notifies here like any other, as they chose, and Bluesky keeps
+  the conversation among its requests until it is answered or accepted.
+  Answering it from here accepts it on Bluesky
+  (`acceptConvo` before `sendMessage`, which does not accept by itself);
+  accepting the sender from the requests accepts it too, and dismissing
+  the sender there, or putting the conversation away here
+  (`DELETE /api/v1/conversations/{id}`), leaves it on Bluesky
+  (`leaveConvo`) while it is still a request — never an accepted one. A
+  conversation named by its sender is found with `getConvoAvailability`,
+  which never starts one.
+- **Who may send direct messages.** One setting, everybody / people you
+  follow / nobody (`NotificationPolicyService::directMessagesFrom()`,
+  `GET`/`PATCH /api/v1/social/direct_messages`). Here it is the policy's
+  `for_private_mentions` seen from the other side: `all` accepts direct
+  messages from strangers, `following` holds them, `none` holds every
+  direct message whoever sent it (a sender accepted from the requests
+  still reaches the person) — held, not refused, as the policy holds
+  everything. On Bluesky it is the `chat.bsky.actor.declaration` record
+  (`allowIncoming`), written by `Publisher::writeSelfRecord()` whenever
+  the answer changes, from the settings page or from the policy; there the
+  chat service refuses what the record does not allow. Unasked, on the
+  account's first read of its messages, it is written only to narrow
+  Bluesky's default (`none`): a wider setting is not published until the
+  person sets it, so nobody is opened to strangers on Bluesky without
+  choosing it. A declaration a
+  Bluesky app writes through this server (`putRecord`, `createRecord`)
+  becomes the setting here. The default is this app's: an account created
+  here starts calm (§10), which is `following` — Bluesky's own default —
+  and an older account that never chose a policy takes direct messages
+  from everybody here, while Bluesky keeps its own default until the
+  person sets the answer.
 
-Everything stops when the chat service setting is empty (§14.2).
+Everything stops when the chat service setting is empty (§14.2), but for
+the declaration, which a change of the setting still writes: a Bluesky app
+reaching the chat service another way goes by it.
 
 ## 11. What the person sees
 
@@ -1168,9 +1228,11 @@ buffer, as the reference relay does to a slow PDS.
 
 Only what D8 and D16 allow: public posts, their pictures, profile fields
 that are already public on the Fediverse, follows of Bluesky accounts,
-likes and reposts of Bluesky-visible posts. Nothing else is ever written
-to a repository, and `RecordMapper` is the one place that could, so one
-test class (§17) is the whole of that guarantee.
+likes and reposts of Bluesky-visible posts, and who may send the person
+direct messages (§10.1). Nothing else is ever written
+to a repository, and `RecordMapper` is the one place that could — but for
+that setting, which `ChatDeclaration` writes from its three answers alone —
+so one test class (§17) is the whole of that guarantee.
 
 ## 17. Testing
 
@@ -1488,7 +1550,9 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   shortened is its whole address again), a like a like, a repost a boost,
   a follow a follow — the record the publisher writes for it is the answer,
   so the app sees what Social published, which may differ (a long post cut
-  with a link). `putRecord` of the profile sets the display name and bio.
+  with a link). `putRecord` of the profile sets the display name and bio;
+  of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
+  send direct messages here, which writes the record (§10.1).
   `deleteRecord` undoes the action. `applyWrites` does the same one by one,
   not in one commit. Lists and their members, starter packs, feed
   generators, thread gates and post gates have no Social counterpart and

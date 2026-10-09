@@ -525,4 +525,106 @@ class NotificationPolicyServiceTest extends TestCase {
 		$service->save('alice', [NotificationPolicy::NOT_FOLLOWING => NotificationPolicy::FILTER]);
 		$service->save('alice', [NotificationPolicy::NEW_ACCOUNTS => NotificationPolicy::DROP]);
 	}
+	// who may send direct messages: the private-mentions answer, seen from the other side
+
+	public function testWhoMaySendDirectMessagesFollowsThePolicy(): void {
+		$this->assertSame(NotificationPolicyService::DIRECT_ALL, $this->service->directMessagesFrom('alice'), 'an untouched policy takes them from everybody');
+
+		$this->service->startCalm('alice');
+		$this->assertSame(NotificationPolicyService::DIRECT_FOLLOWING, $this->service->directMessagesFrom('alice'), 'a new account, from the people it follows');
+
+		$this->service->save('alice', [NotificationPolicy::PRIVATE_MENTIONS => NotificationPolicy::ACCEPT]);
+		$this->assertSame(NotificationPolicyService::DIRECT_ALL, $this->service->directMessagesFrom('alice'));
+	}
+
+	public function testChoosingWhoMaySendDirectMessagesSetsThePrivateMentionsAnswer(): void {
+		$this->assertSame('following', $this->service->saveDirectMessagesFrom('alice', 'following'));
+		$policy = $this->service->of('alice');
+		$this->assertSame(NotificationPolicy::FILTER, $policy->get(NotificationPolicy::PRIVATE_MENTIONS));
+		$this->assertSame(NotificationPolicy::ACCEPT, $policy->get(NotificationPolicy::NOT_FOLLOWING), 'the other answers are left alone');
+
+		$this->assertSame('none', $this->service->saveDirectMessagesFrom('alice', 'none'));
+		$this->assertSame(NotificationPolicy::FILTER, $this->service->of('alice')->get(NotificationPolicy::PRIVATE_MENTIONS));
+
+		$this->assertSame('all', $this->service->saveDirectMessagesFrom('alice', 'all'));
+		$this->assertSame(NotificationPolicy::ACCEPT, $this->service->of('alice')->get(NotificationPolicy::PRIVATE_MENTIONS));
+		$this->assertSame('', $this->stored[NotificationPolicyService::DIRECT_NOBODY_KEY]);
+	}
+
+	public function testADroppedAnswerStaysDroppedForThePeopleFollowed(): void {
+		$this->service->save('alice', [NotificationPolicy::PRIVATE_MENTIONS => NotificationPolicy::DROP]);
+
+		$this->service->saveDirectMessagesFrom('alice', 'following');
+
+		$this->assertSame(NotificationPolicy::DROP, $this->service->of('alice')->get(NotificationPolicy::PRIVATE_MENTIONS));
+	}
+
+	public function testOnlyTheThreeAnswersAreTaken(): void {
+		try {
+			$this->service->saveDirectMessagesFrom('alice', 'friends');
+			$this->fail('an unknown answer was taken');
+		} catch (InvalidResourceException) {
+		}
+		$this->assertSame([], $this->stored, 'nothing is written');
+	}
+
+	public function testTakingPrivateMentionsFromEverybodyEndsNobody(): void {
+		$this->service->saveDirectMessagesFrom('alice', 'none');
+
+		$this->service->save('alice', [NotificationPolicy::PRIVATE_MENTIONS => NotificationPolicy::ACCEPT]);
+
+		$this->assertSame(NotificationPolicyService::DIRECT_ALL, $this->service->directMessagesFrom('alice'));
+	}
+
+	public function testNobodyHoldsADirectMessageFromSomebodyFollowedButNotTheirPosts(): void {
+		$this->withFollows([self::STRANGER], []);
+		$this->service->saveDirectMessagesFrom('alice', 'following');
+		$this->assertFalse($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'somebody followed may write');
+
+		$this->service->saveDirectMessagesFrom('alice', 'none');
+
+		$this->assertTrue($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true));
+		$this->assertFalse($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, false), 'a public mention is no direct message');
+		$notification = $this->from(self::STRANGER, Mention::TYPE);
+		$post = new Note();
+		$post->setVisibility(Stream::TYPE_DIRECT);
+		$notification->setObject($post);
+		$this->assertCount(1, $this->service->partition($this->viewer(), [$notification])['held'], 'the page agrees');
+
+		$this->decisions['accepted'][self::STRANGER] = true;
+		$this->assertFalse($this->service->isHeldFor($this->viewer(), self::STRANGER, 0, true), 'except from somebody allowed from the requests');
+	}
+
+	/** Bluesky has the same setting: told when the answer changes, from either place, and not otherwise. */
+	public function testAChangeOfWhoMaySendDirectMessagesIsToldToBluesky(): void {
+		$declaration = $this->createMock(\OCA\Social\Atproto\Chat\ChatDeclaration::class);
+		$told = [];
+		$declaration->method('changed')->willReturnCallback(function (string $userId, string $from) use (&$told): void {
+			$told[] = $from;
+		});
+		$container = $this->createMock(\Psr\Container\ContainerInterface::class);
+		$container->method('get')->willReturnCallback(static fn (string $id): ?object => $id === \OCA\Social\Atproto\Chat\ChatDeclaration::class ? $declaration : null);
+		$service = new NotificationPolicyService($this->configService, $this->followsRequest, $this->moderationRequest, $this->accountRelationService, $this->timelineRevisionService, $container);
+
+		$service->saveDirectMessagesFrom('alice', 'following');
+		$service->saveDirectMessagesFrom('alice', 'following');
+		$service->save('alice', [NotificationPolicy::NEW_ACCOUNTS => NotificationPolicy::FILTER]);
+		$service->saveDirectMessagesFrom('alice', 'none');
+		$service->save('alice', [NotificationPolicy::PRIVATE_MENTIONS => NotificationPolicy::ACCEPT]);
+
+		$this->assertSame(['following', 'none', 'all'], $told);
+	}
+
+	/** Deciding about somebody here decides about their message request on Bluesky too. */
+	public function testDecidingAboutASenderIsToldToTheirConversation(): void {
+		$state = $this->createMock(\OCA\Social\Atproto\Chat\ChatState::class);
+		$state->expects($this->once())->method('acceptedSender');
+		$state->expects($this->once())->method('dismissedSender');
+		$container = $this->createMock(\Psr\Container\ContainerInterface::class);
+		$container->method('get')->willReturn($state);
+		$service = new NotificationPolicyService($this->configService, $this->followsRequest, $this->moderationRequest, $this->accountRelationService, $this->timelineRevisionService, $container);
+
+		$service->accept($this->viewer(), new Person());
+		$service->dismiss($this->viewer(), new Person());
+	}
 }

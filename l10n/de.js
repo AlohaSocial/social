@@ -3,6 +3,13 @@ OC.L10N.register(
     {
     "This account has blocked you" : "Dieses Konto hat dich blockiert",
     "Relays carry this server" : "Relays tragen diesen Server",
+    "Who may send you direct messages" : "Wer dir Direktnachrichten senden darf",
+    "A message from anybody else does not notify you, and waits among your requests." : "Eine Nachricht von allen anderen benachrichtigt dich nicht und wartet bei deinen Anfragen.",
+    "Everybody" : "Alle",
+    "Anybody can start a conversation with you." : "Alle können eine Unterhaltung mit dir beginnen.",
+    "People you follow" : "Personen, denen du folgst",
+    "Messages from anybody else wait among your requests." : "Nachrichten von allen anderen warten bei deinen Anfragen.",
+    "Every message waits among your requests, except from people you allowed there." : "Jede Nachricht wartet bei deinen Anfragen, außer von Personen, die du dort zugelassen hast.",
     "Shared lists" : "Geteilte Listen",
     "Lists of accounts that somebody else keeps, to mute or block everybody on them. Whoever they add later is muted or blocked too; whoever they take off is not any more. Ending a subscription undoes only what the list did." : "Listen von Konten, die jemand anderes pflegt, um alle darauf stummzuschalten oder zu blockieren. Wen sie später hinzufügen, wird ebenfalls stummgeschaltet oder blockiert; wen sie entfernen, nicht mehr. Ein beendetes Abo nimmt nur zurück, was die Liste getan hat.",
     "Link to the list" : "Link zur Liste",

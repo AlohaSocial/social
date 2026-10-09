@@ -1,6 +1,13 @@
 { "translations": {
     "This account has blocked you" : "Dieses Konto hat Sie blockiert",
     "Relays carry this server" : "Relays tragen diesen Server",
+    "Who may send you direct messages" : "Wer Ihnen Direktnachrichten senden darf",
+    "A message from anybody else does not notify you, and waits among your requests." : "Eine Nachricht von allen anderen benachrichtigt Sie nicht und wartet bei Ihren Anfragen.",
+    "Everybody" : "Alle",
+    "Anybody can start a conversation with you." : "Alle können eine Unterhaltung mit Ihnen beginnen.",
+    "People you follow" : "Personen, denen Sie folgen",
+    "Messages from anybody else wait among your requests." : "Nachrichten von allen anderen warten bei Ihren Anfragen.",
+    "Every message waits among your requests, except from people you allowed there." : "Jede Nachricht wartet bei Ihren Anfragen, außer von Personen, die Sie dort zugelassen haben.",
     "Shared lists" : "Geteilte Listen",
     "Lists of accounts that somebody else keeps, to mute or block everybody on them. Whoever they add later is muted or blocked too; whoever they take off is not any more. Ending a subscription undoes only what the list did." : "Listen von Konten, die jemand anderes pflegt, um alle darauf stummzuschalten oder zu blockieren. Wen sie später hinzufügen, wird ebenfalls stummgeschaltet oder blockiert; wen sie entfernen, nicht mehr. Ein beendetes Abo nimmt nur zurück, was die Liste getan hat.",
     "Link to the list" : "Link zur Liste",

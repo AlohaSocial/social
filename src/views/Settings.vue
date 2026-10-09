@@ -141,6 +141,7 @@ import IconArchive from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconBluesky from 'vue-material-design-icons/ButterflyOutline.vue'
 import IconBellRing from 'vue-material-design-icons/BellRingOutline.vue'
 import IconDelete from 'vue-material-design-icons/DeleteOutline.vue'
+import IconDirectMessages from 'vue-material-design-icons/MessageLockOutline.vue'
 import IconHelp from 'vue-material-design-icons/HelpCircleOutline.vue'
 import IconInterests from 'vue-material-design-icons/TagHeartOutline.vue'
 import IconIntroduction from 'vue-material-design-icons/HandWaveOutline.vue'
@@ -171,6 +172,7 @@ import { currentSection, scrollToSection, watchSections } from '../services/sect
 // they travel in a chunk of their own rather than in the entry every reader
 // loads.
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
+const DirectMessagesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/DirectMessagesSettings.vue'))
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
 const RecapSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/RecapSettings.vue'))
 const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ListsSettings.vue'))
@@ -219,6 +221,7 @@ export default {
 		AuthorizedApps,
 		BlueskySettings,
 		DeleteAccount,
+		DirectMessagesSettings,
 		ExternalStorage,
 		FeaturedTagsSettings,
 		HeldPosts,
@@ -232,6 +235,7 @@ export default {
 		IconBluesky,
 		IconBellRing,
 		IconDelete,
+		IconDirectMessages,
 		IconHelp,
 		IconInterests,
 		IconIntroduction,
@@ -305,6 +309,14 @@ export default {
 					component: 'AccountSettings',
 					title: t('social', 'Who can find and follow you'),
 					lede: t('social', 'How others find you, and who sees what you post.'),
+				},
+				{
+					id: 'direct-messages',
+					group: 'profile',
+					icon: 'IconDirectMessages',
+					component: 'DirectMessagesSettings',
+					title: t('social', 'Who may send you direct messages'),
+					lede: t('social', 'A message from anybody else does not notify you, and waits among your requests.'),
 				},
 				{
 					id: 'featured-tags',

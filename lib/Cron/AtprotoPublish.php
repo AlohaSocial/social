@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Cron;
 
 use OCA\Social\Atproto\Chat\ChatSender;
+use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Service\BlockedBy\BlockedByService;
@@ -28,11 +29,13 @@ use Throwable;
  * message, or profile with an actor's id) and the `id`; for a like or
  * repost (`like`, `unlike`, `repost`,
  * `unrepost`) the id is the Like's or Announce's, with the `post` and the
- * `actor` when one is made. A failure is logged and, for a post, left to
- * the reconcile pass. Before a like, a repost or a new post's mentions
- * reach accounts on Bluesky, whether they have blocked the local account
- * is asked and recorded (`BlockedByService`); what is written does not
- * change with the answer.
+ * `actor` when one is made; for `chat` the id is the person's, with what
+ * `ChatState` does to their Bluesky conversations (`chat`, `convos`,
+ * `member`). A failure is logged and, for a post, left to the reconcile
+ * pass. Before a like, a repost or a new post's mentions reach accounts on
+ * Bluesky, whether they have blocked the local account is asked and
+ * recorded (`BlockedByService`); what is written does not change with the
+ * answer.
  */
 class AtprotoPublish extends QueuedJob {
 	public function __construct(
@@ -43,6 +46,7 @@ class AtprotoPublish extends QueuedJob {
 		private CacheActorService $cacheActorService,
 		private LoggerInterface $logger,
 		private ChatSender $chat,
+		private ChatState $chatState,
 		private ?BlockedByService $blockedBy = null,
 	) {
 		parent::__construct($time);
@@ -69,6 +73,12 @@ class AtprotoPublish extends QueuedJob {
 			}
 			if ($action === 'message') {
 				$this->chat->send($this->streamService->getStreamById($id));
+
+				return;
+			}
+			if ($action === 'chat') {
+				$convos = is_array($argument['convos'] ?? null) ? array_values(array_filter($argument['convos'], 'is_string')) : [];
+				$this->chatState->apply($id, (string)($argument['chat'] ?? ''), $convos, (string)($argument['member'] ?? ''));
 
 				return;
 			}

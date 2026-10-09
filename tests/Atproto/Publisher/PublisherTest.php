@@ -342,6 +342,46 @@ class PublisherTest extends TestCase {
 		$this->assertFalse($this->publisher->writeRecord($remote, RecordMapper::LIKE, ['$type' => RecordMapper::LIKE], 'https://social.test/like/1'));
 	}
 
+	/** A setting kept as the one record of its collection: written once, rewritten when it changed. */
+	public function testASelfRecordIsWrittenUnderSelfAndOnlyWhenItChanged(): void {
+		$collection = 'chat.bsky.actor.declaration';
+		$stored = null;
+		$repositories = $this->createMock(RepositoryService::class);
+		$repositories->method('getRecord')->willReturnCallback(function (string $did, string $c, string $rkey) use (&$stored, $collection): ?StoredRecord {
+			return ($c === $collection && $rkey === 'self') ? $stored : null;
+		});
+		$writes = [];
+		$repositories->method('write')->willReturnCallback(function (string $did, PrivateKey $key, array $w) use (&$writes, &$stored, $collection): CommitResult {
+			$writes[] = $w[0];
+			$stored = new StoredRecord(self::DID, $collection, 'self', Cid::forRaw('d'), DagCbor::encode($w[0]->record), '', 0);
+
+			return $this->written();
+		});
+		$config = $this->createMock(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$identities = $this->createMock(IdentityService::class);
+		$identities->method('forActor')->willReturn($this->identity);
+		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
+		$publisher = new Publisher($config, $identities, $repositories, $this->mapper, $this->videos, $this->streamRequest, $this->createMock(CacheActorService::class), $this->time, new NullLogger(), $this->imported);
+		$alice = new Person();
+		$alice->setId('https://social.test/@alice');
+		$alice->setLocal(true);
+
+		$this->assertFalse($publisher->hasSelfRecord($alice, $collection));
+		$this->assertTrue($publisher->writeSelfRecord($alice, $collection, ['$type' => $collection, 'allowIncoming' => 'following']));
+		$this->assertTrue($publisher->hasSelfRecord($alice, $collection));
+		$this->assertFalse($publisher->writeSelfRecord($alice, $collection, ['$type' => $collection, 'allowIncoming' => 'following']), 'unchanged');
+		$this->assertTrue($publisher->writeSelfRecord($alice, $collection, ['$type' => $collection, 'allowIncoming' => 'none']));
+
+		$this->assertSame([RepoWrite::CREATE, RepoWrite::UPDATE], [$writes[0]->action, $writes[1]->action]);
+		$this->assertSame(['self', 'self'], [$writes[0]->rkey, $writes[1]->rkey]);
+		$this->assertSame('', $writes[0]->localId, 'a setting, which no object here stands for');
+
+		$remote = new Person();
+		$remote->setId('https://mastodon.test/users/bob');
+		$this->assertFalse($publisher->writeSelfRecord($remote, $collection, ['$type' => $collection, 'allowIncoming' => 'all']));
+	}
+
 	private function mappedBytes(): string {
 		return DagCbor::encode(['$type' => RecordMapper::POST, 'text' => 'hi', 'createdAt' => '2026-10-08T10:00:00.000Z']);
 	}

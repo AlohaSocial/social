@@ -651,6 +651,12 @@ person does waits together — mentions, replies, direct messages, likes,
 boosts, follows. A choice is saved the moment you make it; if the server
 refuses it, the row goes back and says why.
 
+**Who may send you direct messages** — in Settings → Profile and privacy —
+is the private-mentions row seen from the other side: *Everybody*, *People
+you follow* (a message from anybody else waits with the rest), or *Nobody*
+(every direct message waits, except from people you allowed). People on
+Bluesky go by the same choice.
+
 A new account starts calm: people you don't follow, new accounts, private
 mentions you didn't ask for and accounts this server limited are held, and
 everybody else is allowed. An account that existed before this setting keeps

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Chat;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\Watch;
@@ -27,7 +28,9 @@ use Throwable;
  * read into their messages here (`ChatStore`): a Bluesky conversation is a
  * conversation here like any other. The chat log (`getLog`) is read as each
  * account, from where it was read up to; an account's first read starts at
- * the newest message of each conversation that has unread ones.
+ * the newest message of each conversation that has unread ones. The log
+ * also brings what the account wrote in a Bluesky app, and how far it read
+ * a conversation there, which is read here too.
  */
 class ChatPoller {
 	public const INTERVAL = 120;
@@ -41,6 +44,12 @@ class ChatPoller {
 	private const TABLE = CoreRequestBuilder::TABLE_ATPROTO_CHAT_CURSOR;
 	private const CREATE = 'chat.bsky.convo.defs#logCreateMessage';
 	private const DELETE = 'chat.bsky.convo.defs#logDeleteMessage';
+	private const READ = 'chat.bsky.convo.defs#logReadConvo';
+	/** the older name of `logReadConvo`, which a chat service may still send */
+	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
+
+	/** @var array<string, list<string>> the members of the conversations this run asked about, by convo */
+	private array $members = [];
 
 	public function __construct(
 		private AtprotoConfig $config,
@@ -50,6 +59,7 @@ class ChatPoller {
 		private ChatStore $store,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ChatDeclaration $declaration,
 	) {
 	}
 
@@ -139,10 +149,13 @@ class ChatPoller {
 	/**
 	 * The first read: the unread messages of the newest conversations, and
 	 * the newest `rev` among them, which the log is read from next time.
+	 * Who may write to the account is told to Bluesky first, where its
+	 * repository does not say it yet.
 	 *
 	 * @return array{0: int, 1: string}
 	 */
 	private function first(Identity $identity): array {
+		$this->declaration->ensure($identity);
 		$key = $this->identities->signingKey($identity);
 		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', ['limit' => self::FIRST_CONVOS]);
 		$handled = 0;
@@ -160,8 +173,9 @@ class ChatPoller {
 			$messages = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', ['convoId' => $id, 'limit' => min($unread, self::FIRST_MESSAGES)]);
 			// newest first on the wire; stored oldest first, so each answers the one before
 			$list = is_array($messages['messages'] ?? null) ? array_reverse($messages['messages']) : [];
+			$members = self::dids($convo['members'] ?? null);
 			foreach ($list as $message) {
-				$handled += is_array($message) && $this->store->received($identity, $id, $message) ? 1 : 0;
+				$handled += is_array($message) && $this->store->received($identity, $id, $message, $members) ? 1 : 0;
 			}
 		}
 
@@ -174,7 +188,8 @@ class ChatPoller {
 	 * @return array{0: int, 1: string}
 	 */
 	private function since(Identity $identity, string $rev): array {
-		$answer = $this->appView->chatAs($identity->did, $this->identities->signingKey($identity), 'chat.bsky.convo.getLog', ['cursor' => $rev]);
+		$key = $this->identities->signingKey($identity);
+		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getLog', ['cursor' => $rev]);
 		$handled = 0;
 		$newest = $rev;
 		foreach (is_array($answer['logs'] ?? null) ? $answer['logs'] : [] as $log) {
@@ -188,14 +203,54 @@ class ChatPoller {
 				continue;
 			}
 			$handled += match ((string)($log['$type'] ?? '')) {
-				self::CREATE => $this->store->received($identity, $convo, $message) ? 1 : 0,
-				self::DELETE => $this->store->deleted($convo, $message) ? 1 : 0,
+				self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
+				self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
+				self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
 				default => 0,
 			};
 		}
 		$cursor = (string)($answer['cursor'] ?? '');
 
 		return [$handled, max($newest, $cursor)];
+	}
+
+	/**
+	 * A message the log says was written: the account's own one, written in
+	 * a Bluesky app, is addressed to the conversation's other members, asked
+	 * for once a run; one sent from here needs nobody.
+	 */
+	private function create(Identity $identity, PrivateKey $key, string $convo, array $message): bool {
+		$own = ($message['sender']['did'] ?? '') === $identity->did
+			&& $this->store->sentHere($identity->did, (string)($message['id'] ?? '')) === '';
+		if ($own && !isset($this->members[$convo])) {
+			try {
+				$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvo', ['convoId' => $convo]);
+				$this->members[$convo] = self::dids($answer['convo']['members'] ?? null);
+			} catch (Throwable $e) {
+				// a conversation that cannot be asked about holds up nothing else in the log
+				$this->logger->notice('Members of a Bluesky conversation not read', ['convo' => $convo, 'exception' => $e]);
+				$this->members[$convo] = [];
+			}
+		}
+
+		return $this->store->received($identity, $convo, $message, $own ? $this->members[$convo] : []);
+	}
+
+	/**
+	 * The DIDs of a conversation's members (`profileViewBasic`).
+	 *
+	 * @return list<string>
+	 */
+	private static function dids(mixed $members): array {
+		$dids = [];
+		foreach (is_array($members) ? $members : [] as $member) {
+			$did = is_array($member) ? (string)($member['did'] ?? '') : '';
+			if ($did !== '') {
+				$dids[] = $did;
+			}
+		}
+
+		return $dids;
 	}
 
 	/**

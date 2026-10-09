@@ -23,7 +23,9 @@ use Psr\Log\LoggerInterface;
  * Bluesky direct message: one conversation with all of them
  * (`getConvoForMembers`), the text without the mentions that address it,
  * its links and hashtags as facets. Pictures stay here: Bluesky's direct
- * messages carry none.
+ * messages carry none. Answering a conversation that is a request on
+ * Bluesky (somebody the person does not follow started it) accepts it
+ * there, as answering it in a Bluesky app does.
  */
 class ChatSender {
 	/** Bluesky's limit for one message */
@@ -93,17 +95,22 @@ class ChatSender {
 			return false;
 		}
 		$key = $this->identities->signingKey($identity);
-		$convo = (string)($this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvoForMembers', ['members' => $recipients])['convo']['id'] ?? '');
+		$view = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvoForMembers', ['members' => $recipients])['convo'] ?? [];
+		$convo = is_array($view) ? (string)($view['id'] ?? '') : '';
 		if ($convo === '') {
 			$this->logger->notice('No Bluesky conversation for a direct message', ['post' => $post->getId()]);
 
 			return false;
 		}
-		$this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.sendMessage', [], [
+		if (($view['status'] ?? '') === ChatState::REQUEST) {
+			$this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.acceptConvo', [], ['convoId' => $convo]);
+		}
+		$sent = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.sendMessage', [], [
 			'convoId' => $convo,
 			'message' => ['text' => $message['text']] + ($message['facets'] === [] ? [] : ['facets' => $message['facets']]),
 		]);
-		$this->store->remember($identity->did, $convo, $post->getId());
+		// so the log's copy of it is known to be this one
+		$this->store->sent($identity->did, $convo, (string)($sent['id'] ?? ''), $post->getId());
 		// the answer is likely soon
 		$this->poller->wake($identity->did);
 

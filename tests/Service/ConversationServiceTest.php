@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\StreamNotFoundException;
@@ -23,6 +24,7 @@ use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\StreamService;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 
 /**
  * What turns a direct timeline into conversations.
@@ -77,6 +79,15 @@ class ConversationServiceTest extends TestCase {
 				}
 
 				throw new StreamNotFoundException('stream not found');
+			});
+
+		$this->streamService->method('getStreamById')
+			->willReturnCallback(function (string $id): Stream {
+				if (!array_key_exists($id, $this->stored)) {
+					throw new StreamNotFoundException('stream not found');
+				}
+
+				return $this->note($id, $this->stored[$id]['nid'], $this->stored[$id]['inReplyTo'], self::BOB);
 			});
 
 		$this->cacheActorService = $this->createStub(CacheActorService::class);
@@ -134,10 +145,33 @@ class ConversationServiceTest extends TestCase {
 			});
 	}
 
-	private function service(): ConversationService {
+	private function service(?ChatState $chat = null): ConversationService {
+		$container = null;
+		if ($chat !== null) {
+			$container = $this->createStub(ContainerInterface::class);
+			$container->method('get')->willReturnCallback(static fn (string $id): ?object => $id === ChatState::class ? $chat : null);
+		}
+
 		return new ConversationService(
-			$this->streamService, $this->cacheActorService, $this->conversationsRequest
+			$this->streamService, $this->cacheActorService, $this->conversationsRequest, $container
 		);
+	}
+
+	/**
+	 * Where the conversations' state goes to Bluesky, as what it was told.
+	 *
+	 * @param list<array> $told
+	 */
+	private function chat(array &$told): ChatState {
+		$chat = $this->createStub(ChatState::class);
+		$chat->method('read')->willReturnCallback(function (Person $viewer, array $ids, bool $all = false) use (&$told): void {
+			$told[] = ['read', $ids, $all];
+		});
+		$chat->method('dismissed')->willReturnCallback(function (Person $viewer, array $ids) use (&$told): void {
+			$told[] = ['dismissed', $ids];
+		});
+
+		return $chat;
 	}
 
 	private function person(string $id): Person {
@@ -574,6 +608,59 @@ class ConversationServiceTest extends TestCase {
 		$this->given();
 
 		$this->assertSame(0, $this->service()->markAllRead($this->viewer()));
+		$this->assertSame([], $this->writes);
+	}
+	// the same conversation on Bluesky
+
+	public function testReadingAConversationIsToldByItsFirstAndNewestMessage(): void {
+		$told = [];
+		$this->note('https://a/1', 10);
+		$this->threads['https://a/1'] = ['https://a/1' => 10, 'https://a/2' => 12, 'https://a/3' => 11];
+
+		$this->service($this->chat($told))->markRead($this->viewer(), 10);
+
+		$this->assertSame([['read', ['https://a/1', 'https://a/2'], false]], $told);
+	}
+
+	public function testReadingEveryConversationIsToldAsAll(): void {
+		$told = [];
+		$this->given($this->note('https://a/1', 10), $this->note('https://b/1', 11));
+
+		$this->service($this->chat($told))->markAllRead($this->viewer());
+
+		$this->assertSame('read', $told[0][0]);
+		$this->assertTrue($told[0][2]);
+		$this->assertEqualsCanonicalizing(['https://a/1', 'https://b/1'], array_values(array_unique($told[0][1])));
+	}
+
+	public function testRemovingAConversationIsToldAsTurningItDown(): void {
+		$told = [];
+		$this->note('https://a/1', 10);
+		$this->threads['https://a/1'] = ['https://a/1' => 10, 'https://a/2' => 12];
+
+		$this->service($this->chat($told))->remove($this->viewer(), 10);
+
+		$this->assertSame([['dismissed', ['https://a/1', 'https://a/2']]], $told);
+	}
+
+	/** Read somewhere else up to a message: read here up to that one, and not past it. */
+	public function testAConversationReadElsewhereIsReadUpToThatMessage(): void {
+		$told = [];
+		$this->note('https://a/1', 10);
+		$this->note('https://a/2', 11, 'https://a/1');
+		$this->threads['https://a/1'] = ['https://a/1' => 10, 'https://a/2' => 11, 'https://a/3' => 12];
+
+		$this->assertTrue($this->service($this->chat($told))->markReadUpTo($this->viewer(), 'https://a/2'));
+
+		$this->assertSame([['markRead', self::VIEWER, 'https://a/1', 11]], $this->writes);
+		$this->assertSame([], $told, 'nothing goes back to where it came from');
+	}
+
+	public function testAMessageInNoConversationOfTheViewersIsNotMarked(): void {
+		$this->note('https://a/1', 10);
+
+		$this->assertFalse($this->service()->markReadUpTo($this->viewer(), 'https://a/1'));
+		$this->assertFalse($this->service()->markReadUpTo($this->viewer(), 'https://nowhere/1'));
 		$this->assertSame([], $this->writes);
 	}
 }
