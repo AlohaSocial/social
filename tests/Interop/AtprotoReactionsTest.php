@@ -44,6 +44,9 @@ class AtprotoReactionsTest extends TestCase {
 
 		$likerDid = $this->network->createUser('liker' . bin2hex(random_bytes(3)));
 		$liker = $this->network->userHandle();
+		// until the AppView has verified a new handle it lists the account as
+		// `handle.invalid`
+		$this->assertNotNull($this->network->await(fn (): ?bool => $this->network->resolveHandle($liker) === $likerDid ? true : null), 'the AppView knows the liker\'s handle');
 		$this->network->like($post['uri'], $post['cid']);
 		$words = 'Quoting it ' . bin2hex(random_bytes(4));
 		[$code, $answer] = $this->network->asUser('POST', 'com.atproto.repo.createRecord', [
@@ -54,12 +57,14 @@ class AtprotoReactionsTest extends TestCase {
 		$this->assertNotNull($this->network->await(fn (): ?bool => in_array($likerDid, $this->network->likers($post['uri']), true) ? true : null), 'the AppView has the like');
 
 		$interactions = Server::get(InteractionService::class);
-		$liked = $this->network->await(function () use ($interactions, $postId, $nid, $liker): ?bool {
+		$listed = [];
+		$liked = $this->network->await(function () use ($interactions, $postId, $nid, $liker, &$listed): ?bool {
 			$interactions->fill($postId, 'Like');
+			$listed = array_column($this->alice->get('/api/v1/statuses/' . $nid . '/favourited_by'), 'acct');
 
-			return in_array($liker, array_column($this->alice->get('/api/v1/statuses/' . $nid . '/favourited_by'), 'acct'), true) ? true : null;
+			return in_array($liker, $listed, true) ? true : null;
 		});
-		$this->assertTrue($liked ?? false, 'the account that liked it on Bluesky is in its likes here');
+		$this->assertTrue($liked ?? false, 'the account that liked it on Bluesky is in its likes here, which has ' . json_encode($listed));
 
 		$quoted = $this->network->await(function () use ($interactions, $postId, $nid, $words): ?bool {
 			$interactions->fill($postId, InteractionService::QUOTES);
