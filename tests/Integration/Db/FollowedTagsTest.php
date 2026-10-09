@@ -9,12 +9,15 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Integration\Db;
 
+use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\FollowedTagsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
@@ -39,6 +42,7 @@ class FollowedTagsTest extends TestCase {
 	private const BASE = 'https://cloud.example.org/ftag';
 	private const VIEWER = self::BASE . '/users/viewer';
 	private const STRANGER = 'https://remote.example/ftag/users/stranger';
+	private const BLUESKY_DID = 'did:plc:ftagblueskyauthor000000';
 
 	private const TAG = 'ftagfollowed';
 	private const OTHER_TAG = 'ftagsecond';
@@ -72,7 +76,9 @@ class FollowedTagsTest extends TestCase {
 			$this->followedTags->delete(self::VIEWER, $tag);
 			$this->followedTags->delete(self::STRANGER, $tag);
 		}
-		foreach ([self::VIEWER, self::STRANGER] as $id) {
+		$this->streamRequest->deleteById(BlueskyIds::postId(self::BLUESKY_DID, '3ftagpost'), Note::TYPE);
+		Server::get(ActorRelationRequest::class)->deleteRelatedId(self::VIEWER);
+		foreach ([self::VIEWER, self::STRANGER, BlueskyIds::actorId(self::BLUESKY_DID)] as $id) {
 			$this->cacheActorsRequest->deleteCacheById($id);
 		}
 	}
@@ -277,5 +283,78 @@ class FollowedTagsTest extends TestCase {
 		$this->followedTags->delete(self::VIEWER, self::TAG);
 
 		$this->assertNotContains($tagged->getId(), $this->homeTimeline($viewer));
+	}
+
+	/**
+	 * A post read from Bluesky — by a page, or by the background read of the
+	 * hashtags people here follow — is stored as `PostStore` stores one:
+	 * addressed to the public collection, its hashtags as tags. The home
+	 * timeline's join reads it like any other, and a muted author stays out.
+	 */
+	public function testAPostReadFromBlueskyWithAFollowedTagReachesHomeUnlessItsAuthorIsMuted(): void {
+		$viewer = $this->cachedPerson(self::VIEWER, 'ftagviewer', true);
+		$author = new Person();
+		$author->setId(BlueskyIds::actorId(self::BLUESKY_DID))
+			->setPreferredUsername('ftagsky');
+		$author->setAccount('ftagsky.bsky.social@bsky.app')
+			->setFollowers(BlueskyIds::followersId(self::BLUESKY_DID))
+			->setFollowing($author->getId() . '/following')
+			->setInbox($author->getId() . '/inbox')
+			->setOutbox($author->getId() . '/outbox')
+			->setLocal(false);
+		$this->cacheActorsRequest->save($author);
+		$this->followedTags->save(self::VIEWER, self::TAG);
+
+		$note = new Note();
+		$note->setId(BlueskyIds::postId(self::BLUESKY_DID, '3ftagpost'));
+		$note->setAttributedTo($author->getId());
+		$note->setTo(ACore::CONTEXT_PUBLIC);
+		$note->addCc(BlueskyIds::followersId(self::BLUESKY_DID));
+		$note->setContent('<p>from elsewhere</p>');
+		$note->setHashtags(['FtagFollowed']);
+		$note->setPublishedTime(time());
+		$note->setPublished(gmdate('Y-m-d\TH:i:s\Z'));
+		$this->streamRequest->save($note);
+
+		$this->assertContains($note->getId(), $this->homeTimeline($viewer));
+
+		Server::get(ActorRelationRequest::class)->save(self::VIEWER, $author->getId(), ActorRelation::TYPE_MUTE);
+
+		$this->assertNotContains($note->getId(), $this->homeTimeline($viewer));
+	}
+
+	// what the background read of followed tags picks
+
+	public function testEachFollowedTagIsDueOnceNeverReadFirstThenReadLongestAgo(): void {
+		$this->followedTags->save(self::VIEWER, self::TAG);
+		$this->followedTags->save(self::STRANGER, self::TAG);
+		$this->followedTags->save(self::VIEWER, self::OTHER_TAG);
+		$this->followedTags->save(self::VIEWER, self::UNFOLLOWED_TAG);
+		$this->followedTags->markFilled(self::TAG, 2000);
+		$this->followedTags->markFilled(self::UNFOLLOWED_TAG, 1000);
+
+		$ours = array_values(array_filter(
+			$this->followedTags->dueForFill(1000),
+			static fn (array $due): bool => in_array($due['hashtag'], [self::TAG, self::OTHER_TAG, self::UNFOLLOWED_TAG], true)
+		));
+
+		$this->assertSame([
+			['hashtag' => self::OTHER_TAG, 'filled' => 0],
+			['hashtag' => self::UNFOLLOWED_TAG, 'filled' => 1000],
+			['hashtag' => self::TAG, 'filled' => 2000],
+		], $ours, 'a tag two accounts follow is read once, as both rows were stamped');
+	}
+
+	public function testATagFollowedAgainAfterItWasReadIsNotReadAsNew(): void {
+		$this->followedTags->save(self::VIEWER, self::TAG);
+		$this->followedTags->markFilled(self::TAG, 2000);
+		$this->followedTags->save(self::STRANGER, self::TAG);
+
+		$due = array_values(array_filter(
+			$this->followedTags->dueForFill(1000),
+			static fn (array $due): bool => $due['hashtag'] === self::TAG
+		));
+
+		$this->assertSame([['hashtag' => self::TAG, 'filled' => 2000]], $due);
 	}
 }

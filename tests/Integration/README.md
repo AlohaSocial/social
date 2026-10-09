@@ -39,8 +39,10 @@ to stop.
   home timeline: the unique index that makes following twice a no-op, paging on
   the row id, a 127-character multi-byte tag, and the join itself — a public
   post carrying a followed tag reaches home whatever case its author typed the
-  tag in, a followers-only one does not, and a post carrying two followed tags
-  is listed once.
+  tag in, a followers-only one does not, a post carrying two followed tags
+  is listed once, and a post read from Bluesky is in it like any other unless
+  its author is muted — and which tags the background read of followed tags
+  picks: each once, never read first, then read longest ago.
 - `Db/HomeMentionTest` — a post that names the reader is on their home timeline
   whether the fast page query or the old join answers it: the Loopback row is
   what carries a mention from an account they do not follow, and a set of

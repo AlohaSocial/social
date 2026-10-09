@@ -194,6 +194,19 @@ class PostMapperTest extends TestCase {
 		$this->assertContains(['type' => 'Mention', 'href' => 'https://social.test/@alice', 'name' => '@' . self::OTHER], $note['tag']);
 	}
 
+	public function testTheHashtagsBesideTheTextAreThePostsTooOnce(): void {
+		$view = $this->postView();
+		$view['record']['tags'] = ['Interop', 'sometag', '#other', '', 7];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(
+			['#interop', '#sometag', '#other'],
+			array_column(array_filter($note['tag'], static fn (array $tag): bool => $tag['type'] === 'Hashtag'), 'name'),
+			'one in the text is not named twice, whatever its case'
+		);
+	}
+
 	private function postView(array $overrides = []): array {
 		return array_merge([
 			'uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22',

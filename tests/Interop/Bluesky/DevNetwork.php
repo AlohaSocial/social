@@ -371,6 +371,17 @@ final class DevNetwork {
 		return $replies;
 	}
 
+	/**
+	 * The posts the AppView's search finds, newest first, by `at://` URI.
+	 *
+	 * @return string[]
+	 */
+	public function searchPosts(string $query): array {
+		$answer = $this->get($this->appView, 'app.bsky.feed.searchPosts', ['q' => $query, 'sort' => 'latest']);
+
+		return array_values(array_map(static fn (array $post): string => (string)($post['uri'] ?? ''), array_filter(is_array($answer['posts'] ?? null) ? $answer['posts'] : [], 'is_array')));
+	}
+
 	/** One post as the AppView shows it, or null. */
 	public function postView(string $uri): ?array {
 		$answer = $this->get($this->appView, 'app.bsky.feed.getPosts', ['uris' => $uri]);

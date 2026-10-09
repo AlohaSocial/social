@@ -191,4 +191,14 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertTrue($this->queue->fillPosts('search', 'open source', $this->remote('https://social.test/@bob')), 'asked as each person');
 		$this->assertFalse($this->queue->fillPosts('search', ''));
 	}
+
+	public function testAReadOfAHashtagElsewhereSharesTheOneThrottle(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->never())->method('add');
+
+		$this->assertTrue($this->queue->claimPostsFill('tag', 'Nextcloud'), 'nobody read it yet');
+		$this->assertFalse($this->queue->fillPosts('tag', 'nextcloud'), 'a page looking at it right after queues nothing');
+		$this->assertFalse($this->queue->claimPostsFill('tag', 'nextcloud'));
+		$this->assertFalse($this->queue->claimPostsFill('tag', '  '));
+	}
 }

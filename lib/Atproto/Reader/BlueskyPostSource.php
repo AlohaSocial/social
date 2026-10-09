@@ -36,8 +36,8 @@ class BlueskyPostSource implements PostSource {
 	}
 
 	#[\Override]
-	public function tagged(string $tag, int $limit, ?Person $viewer): int {
-		return $this->search(['q' => '#' . $tag, 'tag' => [$tag]], $limit, $viewer);
+	public function tagged(string $tag, int $limit, ?Person $viewer, int $since = 0): int {
+		return $this->search(['q' => '#' . $tag, 'tag' => [$tag]], $limit, $viewer, $since);
 	}
 
 	#[\Override]
@@ -45,7 +45,7 @@ class BlueskyPostSource implements PostSource {
 		return $this->search(['q' => $query], $limit, $viewer);
 	}
 
-	private function search(array $params, int $limit, ?Person $viewer): int {
+	private function search(array $params, int $limit, ?Person $viewer, int $since = 0): int {
 		if (!$this->config->isEnabled()) {
 			return 0;
 		}
@@ -65,11 +65,28 @@ class BlueskyPostSource implements PostSource {
 		}
 		$stored = 0;
 		foreach (is_array($answer['posts'] ?? null) ? $answer['posts'] : [] as $post) {
-			if (is_array($post) && $this->store->storePost($post, false)) {
+			if (!is_array($post) || ($since > 0 && self::writtenAt($post) < $since)) {
+				continue;
+			}
+			if ($this->store->storePost($post, false)) {
 				$stored++;
 			}
 		}
 
 		return $stored;
+	}
+
+	/**
+	 * When a post was written as Bluesky sorts it: the earlier of what its
+	 * record claims and when the AppView first saw it, so a record dated
+	 * ahead is not newer than it is; 0 when neither says.
+	 */
+	private static function writtenAt(array $post): int {
+		$times = array_filter([
+			strtotime((string)($post['record']['createdAt'] ?? '')),
+			strtotime((string)($post['indexedAt'] ?? '')),
+		], static fn (int|false $time): bool => $time !== false);
+
+		return $times === [] ? 0 : min($times);
 	}
 }
