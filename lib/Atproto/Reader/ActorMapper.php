@@ -30,6 +30,28 @@ class ActorMapper {
 	private const LIMITING_LABELS = ['!hide', '!takedown'];
 
 	/**
+	 * Bluesky's pronouns and website as the profile rows the rest of the
+	 * network writes them in (`PropertyValue`), so they show where any
+	 * other account's do.
+	 *
+	 * @return list<array{type: string, name: string, value: string}>
+	 */
+	private static function profileRows(array $profile): array {
+		$rows = [];
+		$pronouns = trim((string)($profile['pronouns'] ?? ''));
+		if ($pronouns !== '') {
+			$rows[] = ['type' => 'PropertyValue', 'name' => 'Pronouns', 'value' => htmlspecialchars(mb_substr($pronouns, 0, 200), ENT_QUOTES | ENT_HTML5)];
+		}
+		$website = trim((string)($profile['website'] ?? ''));
+		if (preg_match('~^https?://\S+$~i', $website) === 1 && filter_var($website, FILTER_VALIDATE_URL) !== false) {
+			$escaped = htmlspecialchars($website, ENT_QUOTES | ENT_HTML5);
+			$rows[] = ['type' => 'PropertyValue', 'name' => 'Website', 'value' => '<a href="' . $escaped . '" target="_blank" rel="nofollow noopener noreferrer me">' . $escaped . '</a>'];
+		}
+
+		return $rows;
+	}
+
+	/**
 	 * @param array $profile an `app.bsky.actor.defs#profileViewDetailed`
 	 * @param string $pds the PDS endpoint the DID document names, '' when unknown
 	 */
@@ -45,6 +67,7 @@ class ActorMapper {
 			'summary' => $description === '' ? '' : '<p>' . nl2br(htmlspecialchars($description, ENT_QUOTES | ENT_HTML5), false) . '</p>',
 			'url' => BlueskyIds::profileUrl($handle !== '' ? $handle : $did),
 			'followers' => BlueskyIds::followersId($did),
+			'attachment' => self::profileRows($profile),
 		];
 		foreach (['avatar' => 'icon', 'banner' => 'image'] as $field => $key) {
 			$url = (string)($profile[$field] ?? '');

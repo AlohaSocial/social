@@ -182,6 +182,31 @@ class WriteServiceTest extends TestCase {
 		]]);
 	}
 
+	public function testThePronounsAndTheWebsiteAnAppSavesAreTheProfileRows(): void {
+		$this->publishedProfile(Cid::forRaw('a face'), Cid::forRaw('the sea'));
+		$this->alice->setFields([['name' => 'Mastodon', 'value' => 'https://mastodon.example/@alice']]);
+		$this->accounts->expects($this->once())->method('setFields')->with('alice', [
+			['name' => 'Mastodon', 'value' => 'https://mastodon.example/@alice'],
+			['name' => 'Pronouns', 'value' => 'she/her'],
+			['name' => 'Website', 'value' => 'https://alice.example'],
+		]);
+		$face = ['$type' => 'blob', 'ref' => ['$link' => Cid::forRaw('a face')->toString()], 'mimeType' => 'image/jpeg', 'size' => 6];
+		$sea = ['$type' => 'blob', 'ref' => ['$link' => Cid::forRaw('the sea')->toString()], 'mimeType' => 'image/jpeg', 'size' => 7];
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
+			'$type' => RecordMapper::PROFILE, 'displayName' => 'Alice', 'avatar' => $face, 'banner' => $sea, 'pronouns' => 'she/her', 'website' => 'https://alice.example',
+		]]);
+	}
+
+	public function testAProfileSavedWithItsRowsAsTheyWereLeavesThemAlone(): void {
+		$this->publishedProfile(Cid::forRaw('a face'), Cid::forRaw('the sea'));
+		$this->accounts->expects($this->never())->method('setFields');
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
+			'$type' => RecordMapper::PROFILE, 'displayName' => 'Alice A.',
+		]]);
+	}
+
 	public function testAPictureLeftOutOfTheProfileIsTakenAway(): void {
 		$this->publishedProfile(Cid::forRaw('a face'), Cid::forRaw('the sea'));
 		$this->avatars->expects($this->never())->method('setFromFile');

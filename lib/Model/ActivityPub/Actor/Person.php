@@ -849,6 +849,12 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		'voornaamwoorden', 'zaimki', 'местоимения',
 	];
 
+	/** the names a field goes by when it holds the account's website */
+	private const WEBSITE_NAMES = [
+		'website', 'web', 'homepage', 'home page', 'site', 'blog', 'webseite',
+		'site web', 'sitio web', 'sito web', 'strona',
+	];
+
 	private const SUPPORT_NAMES = [
 		'support', 'donate', 'donation', 'donations', 'tip', 'tips', 'sponsor',
 		'funding', 'unterstützen', 'spenden', 'soutien', 'apoyo', 'doar',
@@ -883,16 +889,81 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	}
 
 	/**
+	 * The account's website, or `''`: the field named for one, else the
+	 * first field that is an address and nothing else — the one link a
+	 * Bluesky profile has room for.
+	 */
+	public function getWebsite(): string {
+		$named = $this->fieldNamed(self::WEBSITE_NAMES);
+		if (self::isAddress($named)) {
+			return $named;
+		}
+		foreach ($this->fields as $field) {
+			$value = trim(strip_tags((string)($field['value'] ?? '')));
+			if (self::isAddress($value)) {
+				return $value;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * The fields with the pronoun row and the website row set to these, as a
+	 * Bluesky app saving the profile says them: a row already there is
+	 * rewritten in place, a new one added while there is room for it, and
+	 * one given as `''` taken away. `null` leaves that row as it is.
+	 *
+	 * @param array[] $fields [['name' => string, 'value' => string], …]
+	 * @return array[]
+	 */
+	public static function withProfileRows(array $fields, ?string $pronouns, ?string $website): array {
+		foreach ([[self::PRONOUN_NAMES, 'Pronouns', $pronouns], [self::WEBSITE_NAMES, 'Website', $website]] as [$names, $label, $value]) {
+			if ($value === null) {
+				continue;
+			}
+			$value = trim($value);
+			$found = false;
+			foreach ($fields as $i => $field) {
+				if (in_array(self::fieldKey((string)($field['name'] ?? '')), $names, true)) {
+					$found = true;
+					if ($value === '') {
+						unset($fields[$i]);
+					} else {
+						$fields[$i]['value'] = $value;
+					}
+					break;
+				}
+			}
+			$fields = array_values($fields);
+			if (!$found && $value !== '' && count($fields) < 4) {
+				$fields[] = ['name' => $label, 'value' => $value];
+			}
+		}
+
+		return $fields;
+	}
+
+	private static function isAddress(string $value): bool {
+		return preg_match('~^https?://\S+$~i', $value) === 1 && filter_var($value, FILTER_VALIDATE_URL) !== false;
+	}
+
+	/**
+	 * A field's name as it is matched: lowercase, without the colon or the
+	 * mark it is often written with.
+	 */
+	private static function fieldKey(string $name): string {
+		return trim(mb_strtolower(trim($name)), " \t:：*-–—_#");
+	}
+
+	/**
 	 * The value of the first field whose name is one of these.
 	 *
 	 * @param string[] $names
 	 */
 	private function fieldNamed(array $names): string {
 		foreach ($this->fields as $field) {
-			$name = mb_strtolower(trim((string)($field['name'] ?? '')));
-			// a field is often written with a colon or an emoji beside it
-			$name = trim($name, " \t:：*-–—_#");
-			if (in_array($name, $names, true)) {
+			if (in_array(self::fieldKey((string)($field['name'] ?? '')), $names, true)) {
 				return trim(strip_tags((string)($field['value'] ?? '')));
 			}
 		}
