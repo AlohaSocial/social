@@ -77,8 +77,8 @@ class AvatarServiceTest extends TestCase {
 		$actor->setPreferredUsername(self::USER);
 		$this->accountService = $this->createStub(AccountService::class);
 		$this->accountService->method('getActorFromUserId')->willReturn($actor);
-		$this->accountService->method('cacheLocalActorByUsername')
-			->willReturnCallback(function (string $username): void {
+		$this->accountService->method('avatarChanged')
+			->willReturnCallback(function (string $userId, string $username): void {
 				$this->refreshed[] = $username;
 			});
 

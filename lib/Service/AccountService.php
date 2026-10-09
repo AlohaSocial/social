@@ -98,6 +98,8 @@ class AccountService {
 	/** whether `changingProfile()` is collecting changes to tell about once */
 	private bool $holdingProfileUpdates = false;
 	private bool $profileChanged = false;
+	/** @var array<string, int> the avatar version told, by user, in this request */
+	private array $avatarsTold = [];
 
 	public function __construct(
 		private IUserManager $userManager,
@@ -760,6 +762,14 @@ class AccountService {
 	 * change is part of a profile edit (`changingProfile()`).
 	 */
 	public function avatarChanged(string $userId, string $username): void {
+		// the change arrives twice — from the app that made it and from
+		// Nextcloud's event for it — and is told once per avatar version
+		$version = $this->configService->getUserValueInt('version', $userId, 'avatar');
+		if (($this->avatarsTold[$userId] ?? null) === $version) {
+			return;
+		}
+		$this->avatarsTold[$userId] = $version;
+
 		$this->cacheLocalActorByUsername($username);
 		$this->federateProfile($userId);
 	}

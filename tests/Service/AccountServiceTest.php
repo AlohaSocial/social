@@ -1436,11 +1436,13 @@ class AccountServiceTest extends TestCase {
 		});
 	}
 
-	public function testANewAvatarOnItsOwnIsTold(): void {
+	/** Told by the app that made it and by Nextcloud's event for it: one Update. */
+	public function testANewAvatarOnItsOwnIsToldOnce(): void {
 		$alice = $this->alice();
 		$this->aliceIsKnown($alice);
 		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
 
+		$this->service->avatarChanged('alice', 'alice');
 		$this->service->avatarChanged('alice', 'alice');
 	}
 
