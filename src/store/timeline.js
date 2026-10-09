@@ -32,6 +32,7 @@ const prefetching = new Set()
 
 import logger from '../services/logger.js'
 import { isNewerId, newerId } from '../utils/snowflake.js'
+import { isBlockedBy } from '../utils/blockedBy.js'
 import { noteTimelineRequest } from '../services/boot.js'
 import { excludeTypesFor } from '../services/notifications.js'
 import { useAccountStore } from './account.js'
@@ -1222,7 +1223,10 @@ export const useTimelineStore = defineStore('timeline', {
 					logger.info('Post held for review')
 					return { held_for_review: true }
 				}
-				showError(t('social', 'Could not send the post'))
+				// a reply to or quote of an account that has blocked the author
+				showError(isBlockedBy(error)
+					? t('social', 'This account has blocked you')
+					: t('social', 'Could not send the post'))
 				logger.error('Failed to create a status', { error })
 			}
 		},

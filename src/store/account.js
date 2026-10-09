@@ -13,6 +13,7 @@ import logger from '../services/logger.js'
 import { useErrorsStore } from './errors.js'
 import { useTimelineStore } from './timeline.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
+import { isBlockedBy } from '../utils/blockedBy.js'
 
 /**
  * How many followers or followed accounts one page holds.
@@ -598,7 +599,9 @@ export const useAccountStore = defineStore('account', {
 				return response
 			} catch (error) {
 				this.restoreFollowing(previous)
-				showError(t('social', 'Could not follow {account}', { account: accountToFollow }))
+				showError(isBlockedBy(error)
+					? t('social', 'This account has blocked you')
+					: t('social', 'Could not follow {account}', { account: accountToFollow }))
 				logger.error(`Failed to follow user ${accountToFollow}`, { error })
 			}
 		},

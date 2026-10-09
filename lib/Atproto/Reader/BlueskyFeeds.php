@@ -54,6 +54,7 @@ class BlueskyFeeds {
 		private StreamRequest $streams,
 		private ICacheFactory $cacheFactory,
 		private LoggerInterface $logger,
+		private ?BlueskyBlockedBy $blockedBy = null,
 	) {
 	}
 
@@ -153,6 +154,10 @@ class BlueskyFeeds {
 		$answer = $identity !== null
 			? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), $method, $params)
 			: $this->appView->query($method, $params);
+		if ($identity !== null) {
+			// before the page is read back, so a blocker's posts leave it
+			$this->blockedBy?->learn($actor, $answer);
+		}
 
 		$this->streams->setViewer($actor);
 		$page = [];

@@ -1449,6 +1449,18 @@ class ApiControllerTest extends TestCase {
 		$this->assertStringContainsString('has moved', $response->getData()['error']);
 	}
 
+	/** A reply or quote to an account that has blocked the author is refused with the reason. */
+	public function testAPostToAnAccountThatHasBlockedTheAuthorIsForbiddenWithTheReason(): void {
+		$this->loggedInAs();
+		$this->postService->method('createPost')
+			->willThrowException(new \OCA\Social\Exceptions\BlockedByException('This account has blocked you'));
+
+		$response = $this->controller()->statusNew('hello');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertSame('This account has blocked you', $response->getData()['error']);
+	}
+
 	/**
 	 * Found on devel with the review queue on: the first-post hold ran before
 	 * the moved guard, so a moderator was shown a post from an account that

@@ -19,6 +19,7 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheContentDecodeException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
@@ -568,6 +569,9 @@ class LocalController extends Controller {
 			}
 
 			return $this->success([]);
+		} catch (BlockedByException $e) {
+			// the reason is the person's to read, not an internal failure
+			return new DataResponse(['status' => -1, 'error' => $e->getMessage(), 'blocked_by' => true], Http::STATUS_FORBIDDEN);
 		} catch (Exception $e) {
 			return $this->failFor($e);
 		}

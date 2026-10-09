@@ -14,6 +14,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\AccountMovedException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
@@ -463,6 +464,9 @@ abstract class MastodonApiController extends Controller {
 		[FollowNotFoundException::class, Http::STATUS_NOT_FOUND],
 		[InstanceDoesNotExistException::class, Http::STATUS_NOT_FOUND],
 		[NotFoundException::class, Http::STATUS_NOT_FOUND],
+		// the account it reaches has blocked this one, as Mastodon answers a
+		// follow of it. Ahead of InvalidActionException, which it extends
+		[BlockedByException::class, Http::STATUS_FORBIDDEN],
 		// the request was understood and refused: retrying it unchanged cannot help
 		[InvalidActionException::class, Http::STATUS_UNPROCESSABLE_ENTITY],
 		[UnknownProbeException::class, Http::STATUS_UNPROCESSABLE_ENTITY],

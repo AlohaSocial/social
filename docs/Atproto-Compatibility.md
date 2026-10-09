@@ -608,8 +608,8 @@ ActivityPub; nothing downstream knows a Bluesky post from any other.
 `occ social:atproto:listen` (`Reader\Jetstream\JetstreamListener`): one
 WebSocket to the configured Jetstream's legacy `/subscribe` endpoint (the
 one Jetstream v2 keeps wire-frozen for v1 consumers), asking for
-`app.bsky.feed.post`, `app.bsky.feed.repost` and `app.bsky.actor.profile`
-with `requireHello=true`, so nothing arrives until an `options_update`
+`app.bsky.feed.post`, `app.bsky.feed.repost`, `app.bsky.actor.profile` and
+`app.bsky.graph.block` with `requireHello=true`, so nothing arrives until an `options_update`
 names the watched DIDs — at most 10,000, Jetstream's limit; an empty list
 would be the whole network, so with no watches there is no connection. The
 list is read again every minute and re-sent when it changed. The cursor
@@ -625,7 +625,8 @@ indexed it — and again after five and twenty seconds while the post, or
 the boost the repost is, is still not here; then the watch is made due for
 the poller's next pass (`AtprotoWatchRequest::wake()`). A deleted post is
 deleted here at once (`PostStore::delete()`); a changed profile, or an
-`#identity` event, reads the account again and keeps the new handle.
+`#identity` event, reads the account again and keeps the new handle. A
+block of a local account is recorded (§12.4).
 Interactions *on* local accounts by anybody else (likes, replies, follows)
 are not in a DID-filtered stream; they keep arriving through the
 notification poller (§10). The poller keeps running beside the listener,
@@ -881,10 +882,45 @@ keeps the blocked account from replying to, quoting or mentioning them on
 Bluesky (D16). Turning it on publishes the blocks of Bluesky accounts they
 hold; turning it off withdraws every published one; an unblock withdraws
 its record. A blocked Bluesky account's interactions are dropped on
-arrival either way. A Bluesky user's public block *of* a
-local account is read from their repository when it is encountered (the
-AppView says `viewer.blockedBy`) and honoured: no replies, no quotes of
-their posts are published by the blocked local account.
+arrival either way.
+
+A Bluesky user's block *of* a local account (`app.bsky.graph.block` in
+their repository, subject the local DID) is never delivered here, and the
+AppView says it only to the blocked account, as `viewer.blockedBy`. It is
+learnt as that account and recorded as the same `blocked_by` relation an
+incoming Fediverse `Block` is (`Service\BlockedBy\BlockedByService`, the
+Bluesky side `Reader\BlueskyBlockedBy`), so everything that reads that
+relation — the timelines, notifications, suggestions, the relationship's
+`blocked_by` — applies unchanged; a block found gone takes it away. It is
+learnt:
+
+- **before an interaction reaches the account**: a reply, a quote or a
+  follow asks the AppView as the local account
+  (`app.bsky.actor.getProfiles`, 25 at a time) in the request, a like, a
+  repost or a new post's mentions in the queued job that writes them
+  (`Cron\AtprotoPublish`). The answer is believed for five minutes
+  (`DurableCache::setShared`); when the AppView cannot be asked, what is
+  recorded stands;
+- **when a profile is looked at**: the relationship asked for one account
+  asks too;
+- **from reads already made as the person** — custom feeds and lists,
+  post search, suggested accounts, starter packs — from every account view
+  in the answer that carries a `viewer`, writing only what changed;
+- **from Jetstream** (§9.4), when the listener runs: a block by a watched
+  account whose subject is a local DID is recorded at once; a deleted block
+  names nobody, so the local accounts that blocker is recorded as blocking
+  are asked about again after two, five and twenty seconds, until the
+  AppView no longer says so. Blocks by accounts nobody here follows are not
+  in that stream; they are learnt the other ways.
+
+A reply to a post whose author, or whose thread's first author (every
+AppView keeps such a reply out), has blocked the local account is refused
+with "This account has blocked you", before the thread gate and the
+author's reply rule (`PostService`); so is a quote of one of their posts,
+and a new follow of them (`FollowService`) — wherever the author is, since
+a Fediverse block is the same relation. A like or a repost is still made,
+and the follows already there stay, as Bluesky keeps them: the AppView
+hides them, and the blocker's posts leave the local account's timelines.
 
 The administrator's federation blocklist gains Bluesky: a blocked **PDS
 host** or **DID** (`social_atproto_blocklist`, managed on the admin page and
@@ -1372,8 +1408,6 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   result naming the label, a hide leaves the post out. The status entity
   carries `bluesky: {uri, url, labels}` for this. Labeler definitions are
   read from the AppView once a day.
-- Not done: reading a Bluesky user's public block of a local account
-  (`viewer.blockedBy` is per viewer, and the reads here are anonymous).
 
 **3c as built** — `Atproto\Client\` (`AppPasswordService`, `SessionService`,
 `AppViewProxy`, `Preferences`, `WriteService`, `ClientXrpc`), tables

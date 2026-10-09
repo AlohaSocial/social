@@ -16,6 +16,7 @@ use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Exceptions\AccountMovedException;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -31,6 +32,7 @@ use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
@@ -98,6 +100,8 @@ class PostServiceTest extends TestCase {
 	private ReplyRuleService $replyRules;
 	/** @var ContainerInterface&MockObject */
 	private ContainerInterface $container;
+	/** @var BlockedByService&MockObject */
+	private BlockedByService $blockedBy;
 
 	protected function setUp(): void {
 		$this->interestService = $this->createMock(\OCA\Social\Service\InterestService::class);
@@ -153,9 +157,11 @@ class PostServiceTest extends TestCase {
 		$this->container = $this->createMock(ContainerInterface::class);
 		$this->postgates = $this->createMock(Postgates::class);
 		$this->replyRules = $this->createMock(ReplyRuleService::class);
+		$this->blockedBy = $this->createMock(BlockedByService::class);
 		$this->container->method('get')->willReturnCallback(fn (string $id): object => match ($id) {
 			Postgates::class => $this->postgates,
 			ReplyRuleService::class => $this->replyRules,
+			BlockedByService::class => $this->blockedBy,
 			default => $this->threadgates,
 		});
 		$this->service = new PostService(
@@ -601,6 +607,44 @@ class PostServiceTest extends TestCase {
 
 		$this->expectException(InvalidActionException::class);
 		$this->expectExceptionMessage('only from their followers');
+		$this->service->createPost($post);
+	}
+
+	public function testAReplyToAnAuthorWhoHasBlockedTheReplierIsRefusedBeforeAnythingIsSent(): void {
+		$parent = new Note();
+		$parent->setId('https://remote.example/notes/parent');
+		$parent->setAttributedTo(self::BOB_ID);
+		$parent->setTo(\OCA\Social\Model\ActivityPub\ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($parent);
+		$this->blockedBy->expects($this->once())->method('assertMayReply')
+			->with($this->isInstanceOf(Person::class), $parent)
+			->willThrowException(new BlockedByException(BlockedByService::REFUSAL));
+		$this->threadgates->expects($this->never())->method('refusal');
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('I agree');
+		$post->setReplyTo($parent->getId());
+
+		$this->expectException(BlockedByException::class);
+		$this->expectExceptionMessage('This account has blocked you');
+		$this->service->createPost($post);
+	}
+
+	public function testAQuoteOfAnAuthorWhoHasBlockedTheQuoterIsRefusedBeforeAnythingIsSent(): void {
+		$quoted = new Note();
+		$quoted->setId('https://bsky.app/profile/did:plc:bob/post/3kpost');
+		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:bob');
+		$quoted->setTo(\OCA\Social\Model\ActivityPub\ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->willReturn($quoted);
+		$this->blockedBy->expects($this->once())->method('assertNotBlocked')
+			->with($this->isInstanceOf(Person::class), ['https://bsky.app/profile/did:plc:bob'])
+			->willThrowException(new BlockedByException(BlockedByService::REFUSAL));
+		$this->activityService->expects($this->never())->method('createActivity');
+
+		$post = $this->post('Look at this');
+		$post->setQuotedId($quoted->getId());
+
+		$this->expectException(BlockedByException::class);
 		$this->service->createPost($post);
 	}
 

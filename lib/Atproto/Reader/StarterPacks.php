@@ -41,6 +41,7 @@ class StarterPacks {
 		private FollowService $follows,
 		private BlueskyFeeds $feeds,
 		private LoggerInterface $logger,
+		private ?BlueskyBlockedBy $blockedBy = null,
 	) {
 	}
 
@@ -194,9 +195,12 @@ class StarterPacks {
 	 */
 	private function query(Person $viewer, string $method, array $params): array {
 		$identity = $this->identities->forActor($viewer, false);
+		if ($identity === null) {
+			return $this->appView->query($method, $params);
+		}
+		$answer = $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), $method, $params);
+		$this->blockedBy?->learn($viewer, $answer);
 
-		return $identity !== null
-			? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), $method, $params)
-			: $this->appView->query($method, $params);
+		return $answer;
 	}
 }

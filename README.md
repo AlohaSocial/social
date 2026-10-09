@@ -603,6 +603,9 @@ are synthesised in the browser, so there is nothing to download.
 ## 🛡️ Safety, and privacy that is the default
 
 - **Block** to sever a relationship in both directions and hide somebody everywhere.
+- **Somebody who has blocked you is respected**, wherever they are: their posts leave
+  your timelines, and a reply, quote or follow that would only be dropped on their side
+  is refused with "This account has blocked you" instead.
 - **Mute** to hide them from your timelines and optionally your notifications without
   them ever knowing — **for an hour, a day, seven days, thirty, or until you lift it**.
   A profile says when a timed mute runs out.

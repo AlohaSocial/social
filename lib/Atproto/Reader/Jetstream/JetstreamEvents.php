@@ -12,10 +12,12 @@ namespace OCA\Social\Atproto\Reader\Jetstream;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\FeedPoller;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -26,13 +28,17 @@ use Throwable;
  * as the poller reads it (`FeedPoller::pollWatch()`), a moment later, when
  * the AppView has it — and again a little later if it did not yet, until
  * the poller is left to it. A deleted post is deleted here at once; a
- * changed profile or handle is read again.
+ * changed profile or handle is read again. A block of a local account is
+ * recorded at once (`BlockedByService`); a deleted block names nobody, so
+ * the local accounts the blocker is recorded as blocking are asked about
+ * again a moment later, when the AppView knows.
  */
 class JetstreamEvents {
 	public const POST = 'app.bsky.feed.post';
 	public const REPOST = 'app.bsky.feed.repost';
 	public const PROFILE = 'app.bsky.actor.profile';
-	public const COLLECTIONS = [self::POST, self::REPOST, self::PROFILE];
+	public const BLOCK = 'app.bsky.graph.block';
+	public const COLLECTIONS = [self::POST, self::REPOST, self::PROFILE, self::BLOCK];
 	/** seconds after an event, and after each read that did not find it yet */
 	public const DELAYS = [2, 5, 20];
 
@@ -40,6 +46,8 @@ class JetstreamEvents {
 	private array $watched = [];
 	/** @var array<string, array{due: int, attempts: int, expect: list<array{0: string, 1: string}>}> by DID: what each event announced, as the kind and the id */
 	private array $pending = [];
+	/** @var array<string, array{due: int, attempts: int}> by DID: a blocker whose blocks are to be asked about again */
+	private array $rechecks = [];
 
 	public function __construct(
 		private AtprotoWatchRequest $watches,
@@ -49,6 +57,8 @@ class JetstreamEvents {
 		private BlueskyActorService $actors,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ?BlockedByService $blockedBy = null,
+		private ?LocalRecordResolver $local = null,
 	) {
 	}
 
@@ -60,7 +70,7 @@ class JetstreamEvents {
 	}
 
 	public function hasPending(): bool {
-		return $this->pending !== [];
+		return $this->pending !== [] || $this->rechecks !== [];
 	}
 
 	/**
@@ -90,6 +100,7 @@ class JetstreamEvents {
 	 */
 	public function due(): int {
 		$now = $this->time->getTime();
+		$this->recheckBlocks($now);
 		$stored = 0;
 		foreach ($this->pending as $did => $pending) {
 			if ($pending['due'] > $now) {
@@ -139,6 +150,50 @@ class JetstreamEvents {
 			}
 		} elseif ($collection === self::PROFILE && $operation !== 'delete') {
 			$this->actors->resolve($did, true);
+		} elseif ($collection === self::BLOCK) {
+			$this->block($did, $operation, (string)($commit['record']['subject'] ?? ''));
+		}
+	}
+
+	/**
+	 * A block made by `$did`: recorded when it names a local account; when
+	 * it was deleted, asked about again for the local accounts it may have
+	 * named.
+	 */
+	private function block(string $did, string $operation, string $subject): void {
+		if ($this->blockedBy === null) {
+			return;
+		}
+		if ($operation === 'create') {
+			$local = $this->local?->actorId($subject) ?? '';
+			if ($local !== '') {
+				$this->blockedBy->record($local, [BlueskyIds::actorId($did) => true]);
+			}
+		} elseif ($operation === 'delete') {
+			$this->rechecks[$did] ??= ['due' => $this->time->getTime() + self::DELAYS[0], 'attempts' => 0];
+		}
+	}
+
+	/**
+	 * The blockers whose time has come asked about again, each a little
+	 * later while the AppView still says they block somebody here.
+	 */
+	private function recheckBlocks(int $now): void {
+		foreach ($this->rechecks as $did => $recheck) {
+			if ($recheck['due'] > $now) {
+				continue;
+			}
+			unset($this->rechecks[$did]);
+			try {
+				$still = $this->blockedBy?->recheck(BlueskyIds::actorId($did)) ?? [];
+			} catch (Throwable $e) {
+				$this->logger->info('Jetstream: blocks not asked about again', ['did' => $did, 'exception' => $e]);
+				$still = [];
+			}
+			$attempts = max(1, $recheck['attempts'] + 1);
+			if ($still !== [] && $attempts < count(self::DELAYS)) {
+				$this->rechecks[$did] = ['due' => $now + self::DELAYS[$attempts], 'attempts' => $attempts];
+			}
 		}
 	}
 

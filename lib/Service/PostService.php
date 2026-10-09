@@ -32,6 +32,7 @@ use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
@@ -117,8 +118,10 @@ class PostService {
 		$parent = $this->replyParent($post);
 		if ($parent !== null) {
 			$post->setType(self::visibilityOfReply($post->getType(), $parent));
-			// who a Bluesky thread lets reply, and who the author of one of
-			// this instance's own posts does, before anything is written
+			// an author who has blocked the replier, who a Bluesky thread lets
+			// reply, and who the author of one of this instance's own posts
+			// does, before anything is written
+			$this->blockedBy()?->assertMayReply($post->getActor(), $parent);
 			$refusal = $this->threadgates()?->refusal($post->getActor(), $parent) ?? '';
 			if ($refusal === '') {
 				$refusal = $this->replyRules()?->refusal($parent, $post->getActor()->getId()) ?? '';
@@ -272,6 +275,12 @@ class PostService {
 		$service = $this->container?->get(Threadgates::class);
 
 		return $service instanceof Threadgates ? $service : null;
+	}
+
+	private function blockedBy(): ?BlockedByService {
+		$service = $this->container?->get(BlockedByService::class);
+
+		return $service instanceof BlockedByService ? $service : null;
 	}
 
 	private function replyRules(): ?ReplyRuleService {
@@ -494,6 +503,8 @@ class PostService {
 		} catch (\Exception $e) {
 			throw new InvalidActionException('the post to quote is unknown here');
 		}
+
+		$this->blockedBy()?->assertNotBlocked($quoter, [$quoted->getAttributedTo()]);
 
 		if (BlueskyIds::isPostId($quoted->getId())) {
 			// Bluesky asks nobody's permission to quote: the author's postgate

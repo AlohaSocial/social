@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Atproto\Reader\BlueskyBlockedBy;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\StarterPacks;
 use OCA\Social\Exceptions\FollowSameAccountException;
@@ -43,6 +44,7 @@ class StarterPacksTest extends TestCase {
 	private array $followed = [];
 	/** @var string[] kept through BlueskyFeeds */
 	private array $kept = [];
+	private ?BlueskyBlockedBy $blockedBy = null;
 
 	private function packs(): StarterPacks {
 		$appView = $this->createMock(AppViewClient::class);
@@ -83,7 +85,7 @@ class StarterPacksTest extends TestCase {
 			return [];
 		});
 
-		return new StarterPacks($appView, $identities, $cacheActors, $follows, $feeds, new NullLogger());
+		return new StarterPacks($appView, $identities, $cacheActors, $follows, $feeds, new NullLogger(), $this->blockedBy);
 	}
 
 	public function testAPackIsReadByItsAddressAsTheViewer(): void {
@@ -119,5 +121,15 @@ class StarterPacksTest extends TestCase {
 		$this->packs()->read(new Person(), self::PACK);
 
 		$this->assertSame([false, false], array_column($this->asked, 2));
+	}
+
+	public function testWhoHasBlockedThePersonIsTakenFromAPackReadAsThem(): void {
+		$blockedBy = $this->createMock(BlueskyBlockedBy::class);
+		$blockedBy->expects($this->exactly(2))->method('learn');
+		$this->blockedBy = $blockedBy;
+
+		$this->packs()->read(new Person(), self::PACK);
+		$this->hasIdentity = false;
+		$this->packs()->read(new Person(), self::PACK);
 	}
 }

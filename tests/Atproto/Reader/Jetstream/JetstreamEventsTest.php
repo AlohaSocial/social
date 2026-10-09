@@ -13,12 +13,14 @@ use OCA\Social\Atproto\Model\Watch;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
 use OCA\Social\Atproto\Reader\FeedPoller;
 use OCA\Social\Atproto\Reader\Jetstream\JetstreamEvents;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -128,5 +130,64 @@ class JetstreamEventsTest extends TestCase {
 		$this->events->handle(self::commit('delete', 'app.bsky.feed.post', '3kpost', [], 'did:plc:stranger'));
 
 		$this->assertFalse($this->events->hasPending());
+	}
+
+	/**
+	 * @param list<array{0: string, 1: array}> $recorded what is recorded
+	 * @param list<string> $rechecked the blockers asked about again
+	 * @param list<string> $stillBlocking the local accounts each of those still blocks
+	 */
+	private function eventsWithBlocks(array &$recorded, array &$rechecked, array &$stillBlocking): JetstreamEvents {
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+		$blockedBy = $this->createMock(BlockedByService::class);
+		$blockedBy->method('record')->willReturnCallback(static function (string $local, array $answers) use (&$recorded): void {
+			$recorded[] = [$local, $answers];
+		});
+		$blockedBy->method('recheck')->willReturnCallback(static function (string $actorId) use (&$rechecked, &$stillBlocking): array {
+			$rechecked[] = $actorId;
+
+			return $stillBlocking;
+		});
+		$local = $this->createMock(LocalRecordResolver::class);
+		$local->method('actorId')->willReturnCallback(static fn (string $did): string => $did === 'did:plc:alice' ? 'https://social.test/@alice' : '');
+		$events = new JetstreamEvents($this->watches, $this->createMock(FeedPoller::class), $this->store, $this->streams, $this->actors, $time, new NullLogger(), $blockedBy, $local);
+		$events->setWatched([self::BOB]);
+
+		return $events;
+	}
+
+	public function testABlockOfALocalAccountIsRecordedAtOnceAndOneOfAnybodyElseIsNot(): void {
+		$recorded = $rechecked = $still = [];
+		$events = $this->eventsWithBlocks($recorded, $rechecked, $still);
+
+		$events->handle(self::commit('create', 'app.bsky.graph.block', '3kblock', ['$type' => 'app.bsky.graph.block', 'subject' => 'did:plc:alice', 'createdAt' => '2026-10-09T00:00:00Z']));
+		$events->handle(self::commit('create', 'app.bsky.graph.block', '3kother', ['$type' => 'app.bsky.graph.block', 'subject' => 'did:plc:somebody', 'createdAt' => '2026-10-09T00:00:00Z']));
+
+		$this->assertSame([['https://social.test/@alice', ['https://bsky.app/profile/did:plc:bob' => true]]], $recorded);
+		$this->assertFalse($events->hasPending());
+	}
+
+	public function testAWithdrawnBlockIsAskedAboutAgainUntilTheAppViewKnows(): void {
+		$recorded = $rechecked = [];
+		$still = ['https://social.test/@alice'];
+		$events = $this->eventsWithBlocks($recorded, $rechecked, $still);
+
+		$events->handle(self::commit('delete', 'app.bsky.graph.block', '3kblock'));
+		$this->assertTrue($events->hasPending());
+		$events->due();
+		$this->assertSame([], $rechecked, 'not before the AppView can know');
+
+		$this->now += JetstreamEvents::DELAYS[0];
+		$events->due();
+		$this->assertSame(['https://bsky.app/profile/did:plc:bob'], $rechecked);
+		$this->assertTrue($events->hasPending(), 'the AppView still said so');
+
+		$still = [];
+		$this->now += JetstreamEvents::DELAYS[1];
+		$events->due();
+		$this->assertCount(2, $rechecked);
+		$this->assertFalse($events->hasPending());
+		$this->assertSame([], $recorded, 'the recheck records what it finds');
 	}
 }

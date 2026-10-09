@@ -14,6 +14,7 @@ use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AccountAlreadyExistsException;
 use OCA\Social\Exceptions\AccountDoesNotExistException;
 use OCA\Social\Exceptions\ActorDoesNotExistException;
+use OCA\Social\Exceptions\BlockedByException;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\FollowLimitException;
@@ -418,6 +419,17 @@ class LocalControllerTest extends TestCase {
 			$this->controller()->actionFollow('alice'), FollowSameAccountException::class, "Don't follow yourself, be your own lead",
 			Http::STATUS_UNPROCESSABLE_ENTITY
 		);
+	}
+
+	public function testActionFollowOfAnAccountThatHasBlockedThePersonSaysSo(): void {
+		$this->actorForUser();
+		$this->followService->method('followAccount')->willThrowException(new BlockedByException('This account has blocked you'));
+		$this->accountService->expects($this->never())->method('bumpActorCount');
+
+		$response = $this->controller()->actionFollow('bob.bsky.social');
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertSame(['status' => -1, 'error' => 'This account has blocked you', 'blocked_by' => true], $response->getData());
 	}
 
 	public function testActionFollowOverTheLimitAnswersTooManyRequests(): void {
