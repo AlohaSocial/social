@@ -139,6 +139,18 @@ class AtprotoWatchRequest extends CoreRequestBuilder {
 		$qb->executeStatement();
 	}
 
+	/**
+	 * Due no later than `$at`: read on the poller's next pass after then.
+	 */
+	public function wake(string $did, int $at, string $table = self::TABLE_ATPROTO_WATCH): void {
+		$qb = $this->getQueryBuilder();
+		$qb->update($table)
+			->set('next_sync', $qb->createNamedParameter(new DateTime('@' . $at), IQueryBuilder::PARAM_DATE))
+			->where($qb->expr()->eq('did', $qb->createNamedParameter($did)))
+			->andWhere($qb->expr()->gt('next_sync', $qb->createNamedParameter(new DateTime('@' . $at), IQueryBuilder::PARAM_DATE)));
+		$qb->executeStatement();
+	}
+
 	public function setHandle(string $did, string $handle, string $table = self::TABLE_ATPROTO_WATCH): void {
 		$qb = $this->getQueryBuilder();
 		$qb->update($table)

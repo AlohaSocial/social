@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Firehose\FirehoseDaemon;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\InstanceKeyService;
 use OCA\Social\Atproto\Moderation\Blocklist;
+use OCA\Social\Atproto\Reader\Jetstream\JetstreamListener;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
@@ -51,6 +52,7 @@ class AtprotoStatusService {
 		private ITimeFactory $time,
 		private ?AtprotoWatchRequest $watches = null,
 		private ?Blocklist $blocklist = null,
+		private ?JetstreamListener $listener = null,
 	) {
 	}
 
@@ -75,6 +77,8 @@ class AtprotoStatusService {
 				'blocks' => $this->blocklist?->list() ?? [],
 				'rotation_key_age' => $this->rotationKeyAgeDays(),
 				'daemon' => $this->daemon->status(),
+				// the Jetstream listener, where one is configured
+				'listener' => $this->config->jetstream() === '' ? null : $this->listener?->status(),
 			],
 			'checks' => $this->checks(),
 		];

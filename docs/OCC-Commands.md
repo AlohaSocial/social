@@ -477,6 +477,32 @@ order and hands each to every connected relay, replaying from the cursor a relay
 reconnects with out of the 72-hour window the table keeps. Run it under systemd
 (see [Admin.md](Admin.md#bluesky)); the setup checks say when it is not running.
 
+### `social:atproto:listen`
+
+Read the Bluesky accounts somebody here follows from Jetstream, as they post.
+
+```
+php occ social:atproto:listen [--max-seconds SECONDS] [--once]
+```
+
+| Option | Value | Description |
+|--------|-------|-------------|
+| `--max-seconds` | int (0) | Stop after this long, so a supervisor can restart it; `0` runs until stopped |
+| `--once` | none | Read what is there now and return |
+
+**Why it matters:** without it, a followed Bluesky account's new post arrives
+when the poller next reads that account's feed — two minutes at best, hours for
+an account that posts rarely. With it, the post is here within seconds. It holds
+one WebSocket to the Jetstream set on the admin page (`atproto_jetstream`),
+naming the followed accounts (at most 10,000) and nothing else — a listener
+with nobody to listen for does not connect at all, since an empty list would be
+the whole network. A post or a repost makes it read that account's feed the way
+the poller does; a deleted post is deleted here at once; a changed profile or
+handle is read again. Where it got to is kept, and a restart picks up from a few
+seconds before. The poller keeps running beside it, so the listener being down
+costs latency and nothing else. Run it under systemd beside the firehose daemon
+(see [Admin.md](Admin.md#bluesky)).
+
 ### `social:atproto:identities`
 
 Give every local account its Bluesky identity now, rather than on first need.

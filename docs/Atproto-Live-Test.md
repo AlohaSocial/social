@@ -88,6 +88,7 @@ Tick each line, and note the time of any failure, so the server log can be read 
 
 ### 3.5 Reading Bluesky
 
+- [ ] With a Jetstream endpoint set and `occ social:atproto:listen` running, a new post by an account alice follows appears in her home timeline within seconds. The card's "Jetstream listener" line says it is connected.
 - [ ] A custom feed ("Discover", or any feed) opens as a timeline. A list does too.
 - [ ] A starter pack link (`https://bsky.app/starter-pack/...`), pasted into search, opens here, and "Follow all" follows everybody in it.
 - [ ] Discover shows Bluesky's trending topics and suggested accounts. The real AppView answers both; the dev one answers neither.

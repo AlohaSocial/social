@@ -599,14 +599,33 @@ ActivityPub; nothing downstream knows a Bluesky post from any other.
 
 ### 9.4 Jetstream (optional)
 
-`occ social:atproto:listen`: one WebSocket to a Jetstream instance,
-`wantedCollections=app.bsky.feed.post,app.bsky.feed.repost,app.bsky.feed.like,app.bsky.graph.follow`,
-`wantedDids` the watched DIDs **and the local DIDs** (§10), re-sent as a
-`#options_update` when a watch is added, cursor persisted every second.
-Each event is handed to the same storer the poller uses; the poller keeps
-running, backing off watches the listener keeps current, so the daemon
-being down costs latency and nothing else. Over 10,000 DIDs the listener
-opens a second connection. *verify the per-connection limit*
+`occ social:atproto:listen` (`Reader\Jetstream\JetstreamListener`): one
+WebSocket to the configured Jetstream's legacy `/subscribe` endpoint (the
+one Jetstream v2 keeps wire-frozen for v1 consumers), asking for
+`app.bsky.feed.post`, `app.bsky.feed.repost` and `app.bsky.actor.profile`
+with `requireHello=true`, so nothing arrives until an `options_update`
+names the watched DIDs — at most 10,000, Jetstream's limit; an empty list
+would be the whole network, so with no watches there is no connection. The
+list is read again every minute and re-sent when it changed. The cursor
+(`time_us`) is kept every second (`atproto_jetstream_cursor`) and a
+reconnect starts five seconds before it; a lost connection is retried with
+backoff up to a minute. The client (`JetstreamClient`) is this app's own,
+on PHP streams: no compression is asked for, so every message is JSON.
+
+What an event does (`JetstreamEvents`): a post or a repost created by a
+watched account reads that account's feed the way the poller does
+(`FeedPoller::pollWatch()`), two seconds later — when the AppView has
+indexed it — and again after five and twenty seconds while the post, or
+the boost the repost is, is still not here; then the watch is made due for
+the poller's next pass (`AtprotoWatchRequest::wake()`). A deleted post is
+deleted here at once (`PostStore::delete()`); a changed profile, or an
+`#identity` event, reads the account again and keeps the new handle.
+Interactions *on* local accounts by anybody else (likes, replies, follows)
+are not in a DID-filtered stream; they keep arriving through the
+notification poller (§10). The poller keeps running beside the listener,
+so the daemon being down costs latency and nothing else. The admin page
+shows whether the listener is connected, for how many accounts, and when
+it last heard something (`atproto_jetstream_status`).
 
 ### 9.5 Deletes and edits from Bluesky
 
