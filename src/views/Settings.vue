@@ -174,6 +174,7 @@ const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
 const RecapSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/RecapSettings.vue'))
 const ListsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ListsSettings.vue'))
+const BlueskyFeedsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskyFeedsSettings.vue'))
 const FeaturedTagsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/FeaturedTagsSettings.vue'))
 const InterestsSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/InterestsSettings.vue'))
 const SensesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/SensesSettings.vue'))
@@ -253,6 +254,7 @@ export default {
 		IconStorage,
 		IconTags,
 		ListsSettings,
+		BlueskyFeedsSettings,
 		NcTextField,
 		NotificationDeliverySettings,
 		NotificationPolicySettings,
@@ -340,6 +342,16 @@ export default {
 					title: t('social', 'Lists'),
 					lede: t('social', 'A list is a few of the people you follow, read as a timeline of its own. Your lists are in the sidebar.'),
 				},
+				...(this.serverData?.bluesky?.enabled === true
+					? [{
+							id: 'bluesky-feeds',
+							group: 'reading',
+							icon: 'IconBluesky',
+							component: 'BlueskyFeedsSettings',
+							title: t('social', 'Bluesky feeds'),
+							lede: t('social', 'Custom feeds and lists from Bluesky, read here as timelines of their own. A Bluesky app signed in to this account keeps the same ones.'),
+						}]
+					: []),
 				{
 					id: 'sensitive',
 					group: 'reading',

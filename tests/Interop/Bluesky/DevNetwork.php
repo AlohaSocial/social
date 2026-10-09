@@ -35,6 +35,8 @@ final class DevNetwork {
 	/** the domain of the network's handle server, and where to tell it the DID */
 	public string $customHandle = '';
 	public string $handleServer = '';
+	/** the DID of the network's feed generator, which serves what `serveFeed()` gave it */
+	public string $feedGenDid = '';
 
 	/** null when the job did not start the network */
 	public static function fromEnvironment(): ?self {
@@ -57,6 +59,7 @@ final class DevNetwork {
 		$network->videoHost = (string)($addresses['videoHost'] ?? '');
 		$network->customHandle = (string)($addresses['customHandle'] ?? '');
 		$network->handleServer = rtrim((string)($addresses['handleServer'] ?? ''), '/');
+		$network->feedGenDid = (string)($addresses['feedGenDid'] ?? '');
 
 		return $network;
 	}
@@ -305,6 +308,18 @@ final class DevNetwork {
 	 */
 	public function serveHandleDid(string $did): void {
 		[$status, $body] = $this->request('POST', $this->handleServer . '/did', $did, ['Content-Type: text/plain']);
+		if ($status !== 204) {
+			throw new RuntimeException('the handle server answered ' . $status . ': ' . $body);
+		}
+	}
+
+	/**
+	 * What every feed of the network's feed generator answers from now on.
+	 *
+	 * @param string[] $uris the posts, in the feed's order
+	 */
+	public function serveFeed(array $uris): void {
+		[$status, $body] = $this->request('POST', $this->handleServer . '/feed', implode("\n", $uris), ['Content-Type: text/plain']);
 		if ($status !== 204) {
 			throw new RuntimeException('the handle server answered ' . $status . ': ' . $body);
 		}

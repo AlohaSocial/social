@@ -20,6 +20,7 @@ const ProfileTagged = () => import(/* webpackChunkName: "profile" */'./views/Pro
 const Portfolio = () => import(/* webpackChunkName: "portfolio" */'./views/Portfolio.vue')
 const CollectionPage = () => import(/* webpackChunkName: "profile" */'./views/CollectionPage.vue')
 const PlacePage = () => import(/* webpackChunkName: "profile" */'./views/PlacePage.vue')
+const StarterPack = () => import(/* webpackChunkName: "profile" */'./views/StarterPack.vue')
 const FollowRequests = () => import(/* webpackChunkName: "settings" */'./views/FollowRequests.vue')
 const BlockedAccounts = () => import(/* webpackChunkName: "settings" */'./views/BlockedAccounts.vue')
 const Discover = () => import('./views/Discover.vue')
@@ -227,6 +228,12 @@ const router = createRouter({
 					path: 'list/:id',
 					name: 'list',
 				}),
+				// a Bluesky feed or list, its `at://` URI spelled as segments
+				// (services/blueskyFeeds.js says why)
+				/** @type {import('vue-router').RouteRecordRaw} */ ({
+					path: 'bluesky/:did/:kind(feed|list)/:rkey',
+					name: 'bluesky-feed',
+				}),
 			],
 		},
 		{
@@ -297,6 +304,14 @@ const router = createRouter({
 			},
 			props: true,
 			name: 'place',
+		},
+		{
+			// a Bluesky starter pack, at the path bsky.app gives it
+			path: '/starter-pack/:actor/:rkey',
+			components: {
+				default: StarterPack,
+			},
+			name: 'starter-pack',
 		},
 		{
 			path: '/discover',

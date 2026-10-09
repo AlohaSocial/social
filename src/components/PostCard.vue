@@ -6,9 +6,10 @@
 	<a
 		v-if="card && card.title"
 		class="post-card"
-		:href="card.url"
-		target="_blank"
-		rel="nofollow noopener noreferrer">
+		:href="href"
+		:target="inside ? null : '_blank'"
+		:rel="inside ? null : 'nofollow noopener noreferrer'"
+		@click="open">
 		<img
 			v-if="image"
 			class="post-card__image"
@@ -25,6 +26,8 @@
 </template>
 
 <script>
+import { starterPackRoute } from '../utils/starterPack.js'
+
 export default {
 	name: 'PostCard',
 	props: {
@@ -42,6 +45,23 @@ export default {
 	},
 
 	computed: {
+		/**
+		 * Where the card opens here rather than on its site: a Bluesky
+		 * starter pack, inside the app, where there is a router to open it.
+		 *
+		 * @return {object|null} the route
+		 */
+		inside() {
+			const route = starterPackRoute(this.card?.url)
+
+			return route !== null && this.$router ? route : null
+		},
+
+		/** @return {string} what the card links to */
+		href() {
+			return this.inside ? this.$router.resolve(this.inside).href : this.card.url
+		},
+
 		provider() {
 			if (this.card.provider_name) {
 				return this.card.provider_name
@@ -57,6 +77,18 @@ export default {
 	watch: {
 		card(value) {
 			this.image = value?.image ?? ''
+		},
+	},
+
+	methods: {
+		/**
+		 * @param {MouseEvent} event the click
+		 */
+		open(event) {
+			if (this.inside && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0) {
+				event.preventDefault()
+				this.$router.push(this.inside)
+			}
 		},
 	},
 }

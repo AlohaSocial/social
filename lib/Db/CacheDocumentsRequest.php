@@ -167,7 +167,7 @@ class CacheDocumentsRequest extends CacheDocumentsRequestBuilder {
 			->andWhere($expr->notIn(
 				'cd.local_copy',
 				$qb->createNamedParameter(
-					['', 'avatar', 'header', Document::COPY_STREAMED],
+					['', Document::COPY_LOCAL_AVATAR, 'header', Document::COPY_STREAMED],
 					IQueryBuilder::PARAM_STR_ARRAY
 				)
 			));

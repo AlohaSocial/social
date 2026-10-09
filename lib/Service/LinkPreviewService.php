@@ -63,6 +63,14 @@ class LinkPreviewService {
 		if ($url === '') {
 			return false;
 		}
+		try {
+			// a card for this link is there already: one the post came with,
+			// such as a Bluesky feed's, or this page read before an edit
+			if ($this->streamCardsRequest->getByStreamId($post->getId())->getUrl() === $url) {
+				return true;
+			}
+		} catch (CardNotFoundException) {
+		}
 
 		try {
 			$html = $this->fetch($url);

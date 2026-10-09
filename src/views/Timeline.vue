@@ -186,6 +186,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import eventBus, { NOTIFICATIONS_READ } from './../services/eventBus.js'
 import { rememberFilter, rememberedFilter } from './../services/notifications.js'
 import { hasInterestsFeed, isTracking } from './../services/interests.js'
+import { fetchSavedFeeds, uriOf } from './../services/blueskyFeeds.js'
 import { contextFor } from './../services/interestTracker.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
@@ -286,6 +287,8 @@ export default {
 					// the sidebar knows the title; the page asks for it itself
 					// so that a link opened cold has a heading too
 					return this.listTitle || t('social', 'List')
+				case 'bluesky':
+					return this.listTitle || t('social', 'Bluesky feed')
 				case 'photos':
 					return t('social', 'Photos')
 				case 'videos':
@@ -491,7 +494,7 @@ export default {
 			// Photos and Videos are views of their own rather than a filter of
 			// a list you were already on, so they say which one you are
 			// looking at
-			return this.type === 'tags' || this.type === 'list' || this.type === 'notifications' || this.isScopedPage
+			return this.type === 'tags' || this.type === 'list' || this.type === 'bluesky' || this.type === 'notifications' || this.isScopedPage
 		},
 
 		/**
@@ -522,6 +525,8 @@ export default {
 				return { tag: this.$route.params.tag }
 			} else if (this.$route.name === 'list') {
 				return { id: this.$route.params.id }
+			} else if (this.$route.name === 'bluesky-feed') {
+				return { feed: uriOf(this.$route.params) }
 			} else if (this.$route.name === 'single-post') {
 				return this.$route.params
 			} else if (this.isScopedPage) {
@@ -578,6 +583,9 @@ export default {
 			}
 			if (this.$route.name === 'list') {
 				return 'list'
+			}
+			if (this.$route.name === 'bluesky-feed') {
+				return 'bluesky'
 			}
 			if (this.$route.params.type) {
 				return String(this.$route.params.type)
@@ -694,6 +702,10 @@ export default {
 
 		/** Asks for the list's title; nothing to ask when this is not a list. */
 		async fetchListTitle() {
+			if (this.type === 'bluesky') {
+				this.fetchFeedName()
+				return
+			}
 			if (this.type !== 'list') {
 				this.listTitle = ''
 				return
@@ -704,6 +716,20 @@ export default {
 				// the reader may have moved on while the server was answering
 				if (this.type === 'list' && this.$route.params.id === id) {
 					this.listTitle = data?.title ?? ''
+				}
+			} catch {
+				this.listTitle = ''
+			}
+		},
+
+		/** A Bluesky feed's name, when the reader keeps it. */
+		async fetchFeedName() {
+			const uri = this.params.feed
+			this.listTitle = ''
+			try {
+				const feed = (await fetchSavedFeeds()).find((saved) => saved.uri === uri)
+				if (this.type === 'bluesky' && this.params.feed === uri) {
+					this.listTitle = feed?.name ?? ''
 				}
 			} catch {
 				this.listTitle = ''

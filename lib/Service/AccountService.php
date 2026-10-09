@@ -98,6 +98,8 @@ class AccountService {
 	/** whether `changingProfile()` is collecting changes to tell about once */
 	private bool $holdingProfileUpdates = false;
 	private bool $profileChanged = false;
+	/** @var array<string, int> the avatar version told, by user, in this request */
+	private array $avatarsTold = [];
 
 	public function __construct(
 		private IUserManager $userManager,
@@ -754,6 +756,24 @@ class AccountService {
 		}
 	}
 
+	/**
+	 * The account's Nextcloud avatar changed: the actor takes the new icon,
+	 * and the followers and Bluesky are told — once, at the end, when the
+	 * change is part of a profile edit (`changingProfile()`).
+	 */
+	public function avatarChanged(string $userId, string $username): void {
+		// the change arrives twice — from the app that made it and from
+		// Nextcloud's event for it — and is told once per avatar version
+		$version = $this->configService->getUserValueInt('version', $userId, 'avatar');
+		if (($this->avatarsTold[$userId] ?? null) === $version) {
+			return;
+		}
+		$this->avatarsTold[$userId] = $version;
+
+		$this->cacheLocalActorByUsername($username);
+		$this->federateProfile($userId);
+	}
+
 	/** Whether a held change is waiting to be told, forgetting it. */
 	private function takeProfileChanged(): bool {
 		$changed = $this->profileChanged;
@@ -763,8 +783,10 @@ class AccountService {
 	}
 
 	/**
-	 * Tells the followers about a profile change, with the display name the
-	 * actor document is served with: the stored actor row does not carry it.
+	 * Tells the followers about a profile change, with the actor document as
+	 * it is served: the stored actor row carries neither the picture nor the
+	 * banner, and a peer reads an `Update` without an `icon` as the picture
+	 * taken away. Signed with the account's own key, which only the row has.
 	 */
 	private function federateProfile(string $userId): void {
 		if ($this->holdingProfileUpdates) {
@@ -775,7 +797,8 @@ class AccountService {
 
 		try {
 			$actor = $this->getActorFromUserId($userId);
-			$this->updateCacheLocalActorName($actor);
+			// every change re-caches the actor before it is told
+			$served = $this->cacheActorsRequest->getFromLocalAccount($actor->getPreferredUsername());
 		} catch (Exception $e) {
 			$this->logger->warning(
 				'could not tell the followers that a local actor changed',
@@ -785,7 +808,7 @@ class AccountService {
 			return;
 		}
 
-		$this->federateActorUpdate($actor);
+		$this->federateActorUpdate($actor, $served);
 		$this->queueBlueskyProfile($actor);
 	}
 
@@ -807,9 +830,9 @@ class AccountService {
 	 * A failure is logged and swallowed: the change is stored either way, and
 	 * a remote server picks it up when it next refreshes the actor.
 	 */
-	private function federateActorUpdate(Person $actor): void {
+	private function federateActorUpdate(Person $actor, Person $served): void {
 		try {
-			$update = clone $actor;
+			$update = clone $served;
 			$update->addInstancePath(
 				new InstancePath(
 					$actor->getId(), InstancePath::TYPE_FOLLOWERS, InstancePath::PRIORITY_LOW

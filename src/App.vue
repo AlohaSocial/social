@@ -116,6 +116,7 @@
 
 <script>
 import { defineAsyncComponent } from 'vue'
+import { starterPackRoute } from './utils/starterPack.js'
 import NcContent from '@nextcloud/vue/components/NcContent'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -427,6 +428,13 @@ export default {
 				return
 			}
 
+			// a Bluesky starter pack someone was sent is opened, not searched for
+			const pack = starterPackRoute(query)
+			if (pack !== null) {
+				this.$router.push(pack)
+				return
+			}
+
 			// replace while the term is being refined, so Back does not have
 			// to walk out through every keystroke
 			const navigate = this.$route.name === 'search' ? this.$router.replace : this.$router.push
@@ -434,11 +442,10 @@ export default {
 		},
 
 		fromPushApp(data) {
-			let timeline = 'home'
-			if (this.$route.name === 'tags') {
-				timeline = 'tags'
-			} else if (this.$route.params.type) {
-				timeline = String(this.$route.params.type)
+			// a tag, a list or a Bluesky feed is a route of its own, not home
+			let timeline = String(this.$route.name ?? '')
+			if (timeline === 'timeline') {
+				timeline = String(this.$route.params.type || 'home')
 			}
 
 			if (data.source === 'timeline.home' && timeline === 'home') {

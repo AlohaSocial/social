@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.163
+**App version:** 0.26.169
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -2003,7 +2003,9 @@ of the animation.
 **The Settings page, and what is on it.** `src/views/Settings.vue` describes
 every section once (`{ id, group, icon, component, title, lede }`) and sorts them
 into six groups: **Profile and privacy** (`#account`, `#featured-tags`,
-`#portfolio`), **Reading** (`#interests`, `#lists`, `#sensitive`, `#counts`,
+`#portfolio`), **Reading** (`#interests`, `#lists`, `#bluesky-feeds` where
+Bluesky is on — `BlueskyFeedsSettings.vue`, the Bluesky custom feeds and lists
+kept, read as timelines at `/timeline/bluesky/<DID>/<feed|list>/<key>` —, `#sensitive`, `#counts`,
 `#recap`, `#senses`), **Notifications** (`#notifications` for when,
 `#notification-policy` for who), **Your posts** (`#scheduled`, `#review`,
 `#archive`, `#files-comments`), **Apps and account** (`#apps`, `#bluesky`
@@ -2724,7 +2726,7 @@ unchanged, and mentions later in the message still render normally.
 | Profile Page | `ProfileSectionListener` | `Application::register()` (on `BeforeTemplateRenderedEvent`) | Adds the `social-profilePage` script to the user profile page |
 | Files | `FilesScriptsListener` | `Application::register()` (on `OCA\Files\Event\LoadAdditionalScriptsEvent`) | Adds the self-contained `social-filesAction` init script, which registers "Share to Aloha Social" on pictures and videos |
 | Files comments | `FileCommentsListener` | `Application::register()` (on `PostPublishedEvent`, `PostEditedEvent`, `PostDeletedEvent`, `CommentAddedEvent`, `CommentUpdatedEvent`, `CommentDeletedEvent`) and `NoteInterface` (incoming replies, edits and deletes) | Replies to a post made from Files as comments on the file, and the author's comments there as replies. See "Replies as comments in Files" below |
-| User Events | `UserAccountListener` | `Application::register()` (on `UserUpdatedEvent`) | Re-caches the local actor when the NC account changes |
+| User Events | `UserAccountListener` | `Application::register()` (on `UserUpdatedEvent` and `UserChangedEvent`) | Re-caches the local actor when the NC account changes; a new or removed avatar (`UserChangedEvent` feature `avatar`, made here or in Nextcloud's settings) also goes to the followers and Bluesky (`AccountService::avatarChanged()`), and is a new icon document at the avatar route with its version in the address (`DocumentService::cacheLocalAvatarByUsername()`), so peers fetch it again |
 
 ### Replies as comments in Files
 

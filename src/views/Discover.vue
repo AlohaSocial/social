@@ -49,7 +49,10 @@
 
 		<!-- the hashtags tab loads, ranks and follows on its own: which stretch
 		     of time it means is a question only this list has -->
-		<TrendingHashtags v-else-if="active === 'tags'" />
+		<template v-else-if="active === 'tags'">
+			<TrendingHashtags />
+			<BlueskyTrends v-if="bluesky" />
+		</template>
 
 		<template v-else-if="active === 'packs'">
 			<!-- one pack open: its accounts, with a follow-all -->
@@ -184,6 +187,16 @@
 				<FollowGraphSuggestions />
 			</section>
 
+			<section v-if="bluesky" class="discover__section">
+				<h3 class="discover__section-title">
+					{{ t('social', 'Suggested on Bluesky') }}
+				</h3>
+				<p class="discover__section-hint">
+					{{ t('social', 'People Bluesky suggests to you, from who you follow there. Follow them here like anybody else.') }}
+				</p>
+				<BlueskySuggestions />
+			</section>
+
 			<section class="discover__section">
 				<h3 class="discover__section-title">
 					{{ t('social', 'People this server knows') }}
@@ -242,6 +255,9 @@ import PersonCard from '../components/PersonCard.vue'
 import { useFollowByHandle } from '../composables/useFollowByHandle.js'
 import FollowGraphSuggestions from '../components/FollowGraphSuggestions.vue'
 import TrendingHashtags from '../components/TrendingHashtags.vue'
+import BlueskySuggestions from '../components/BlueskySuggestions.vue'
+import BlueskyTrends from '../components/BlueskyTrends.vue'
+import { useSettingsStore } from '../store/settings.js'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '../services/toast.js'
@@ -271,6 +287,8 @@ export default {
 
 	components: {
 		AccountMultipleOutline,
+		BlueskySuggestions,
+		BlueskyTrends,
 		ActorAvatar,
 		AccountMultiplePlusOutline,
 		ArrowLeft,
@@ -322,6 +340,11 @@ export default {
 	},
 
 	computed: {
+		/** @return {boolean} whether this server gives accounts a Bluesky identity */
+		bluesky() {
+			return useSettingsStore().getServerData?.bluesky?.enabled === true
+		},
+
 		/**
 		 * Pictures and Videos are one grid asked two questions, so the template
 		 * reads whichever list the tab on screen stands for rather than naming

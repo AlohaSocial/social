@@ -61,6 +61,7 @@ use OCP\Group\Events\GroupDeletedEvent;
 use OCP\Group\Events\UserAddedEvent;
 use OCP\Group\Events\UserRemovedEvent;
 use OCP\Profile\BeforeTemplateRenderedEvent;
+use OCP\User\Events\UserChangedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\User\Events\UserEnumerationFilterEvent;
 use OCP\User\Events\UserFirstTimeLoggedInEvent;
@@ -95,7 +96,7 @@ class ApplicationTest extends TestCase {
 		$listeners = [];
 		$all = [];
 		$priorities = [];
-		$context->expects($this->exactly(24))->method('registerEventListener')
+		$context->expects($this->exactly(25))->method('registerEventListener')
 			->willReturnCallback(function (string $event, string $listener, int $priority = 0) use (&$listeners, &$all, &$priorities): void {
 				if ($listener === FileCommentsListener::class) {
 					$all[] = $event;
@@ -116,6 +117,7 @@ class ApplicationTest extends TestCase {
 		$this->assertSame([
 			BeforeTemplateRenderedEvent::class => ProfileSectionListener::class,
 			UserUpdatedEvent::class => UserAccountListener::class,
+			UserChangedEvent::class => UserAccountListener::class,
 			// without this one a deleted user keeps a live Fediverse account
 			UserDeletedEvent::class => UserDeletedListener::class,
 			\OCA\Social\Events\PostPublishedEvent::class => \OCA\Social\Listeners\AtprotoPostListener::class,

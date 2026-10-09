@@ -145,7 +145,8 @@ export function shareOut(tags, lists, cap) {
 
 /**
  * The entries the Explore item shows: what the reader follows, then their
- * lists, then what the instance is talking about.
+ * lists and the Bluesky feeds they keep, then what the instance is talking
+ * about. A kept feed was chosen as a list was, and shares the lists' room.
  *
  * Trending takes only the room the first two leave, and never a tag the reader
  * already follows — that tag is in the list above under the same name, and two
@@ -156,18 +157,22 @@ export function shareOut(tags, lists, cap) {
  * @param {Array<{id: string, title: string}>} lists the reader's lists
  * @param {Array<{name: string}>} trending what the instance is talking about
  * @param {number} cap how many there is room for
+ * @param {Array<{uri: string, name: string}>} feeds the Bluesky feeds and lists the reader keeps
  * @return {Array<object>} what to draw, each carrying the `kind` it came from
  */
-export function chooseEntries(tags, lists, trending, cap) {
+export function chooseEntries(tags, lists, trending, cap, feeds = []) {
 	const safeTags = Array.isArray(tags) ? tags : []
-	const safeLists = Array.isArray(lists) ? lists : []
+	const safeLists = [
+		...(Array.isArray(lists) ? lists : []).map((list) => ({ kind: 'list', list })),
+		...(Array.isArray(feeds) ? feeds : []).map((feed) => ({ kind: 'feed', feed })),
+	]
 	const safeTrending = Array.isArray(trending) ? trending : []
 	const room = Math.max(0, Math.floor(Number(cap) || 0))
 	const share = shareOut(safeTags.length, safeLists.length, room)
 
 	const chosen = [
 		...safeTags.slice(0, share.tags).map((tag) => ({ kind: 'tag', tag })),
-		...safeLists.slice(0, share.lists).map((list) => ({ kind: 'list', list })),
+		...safeLists.slice(0, share.lists),
 	]
 
 	const followed = new Set(safeTags.map((tag) => String(tag.name).toLowerCase()))

@@ -27,6 +27,10 @@
  *   and, on `/plc-token?did=`, the code the dev PDS would have e-mailed an
  *   account for a PLC operation, which a move here needs; and `/card`, a
  *   page with a preview picture (`/card.png`), for a link card;
+ * - a feed generator, the one dev-env ships: every feed it is asked for
+ *   answers the posts the test last gave the handle server (`POST /feed`,
+ *   their `at://` URIs one per line), so a feed record a test publishes
+ *   naming the generator's DID reads as a custom feed;
  * - a stand-in for Bluesky's video service, which does what that service
  *   does for the app: takes a video with the token the account signed,
  *   stores it in the account's repository on its own PDS with that token
@@ -39,7 +43,7 @@
  */
 import { writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { TestNetwork } from '@atproto/dev-env'
+import { TestFeedGen, TestNetwork } from '@atproto/dev-env'
 import { RepoSubscription } from '@atproto/bsky'
 
 const SOCIAL_URL = (process.env.SOCIAL_URL ?? 'https://nextcloud.test').replace(/\/$/, '')
@@ -185,6 +189,12 @@ const videoService = createServer(async (req, res) => {
 })
 videoService.listen(VIDEO_PORT, '127.0.0.1')
 
+/** the posts every feed of the feed generator answers, as `at://` URIs */
+let feedPosts = []
+const feedGen = await TestFeedGen.create(network.plc.url, new Proxy({}, {
+	get: () => async () => ({ encoding: 'application/json', body: { feed: feedPosts.map((post) => ({ post })) } }),
+}))
+
 let handleDid = ''
 const handleServer = createServer(async (req, res) => {
 	if (req.method === 'POST' && req.url === '/did') {
@@ -193,6 +203,15 @@ const handleServer = createServer(async (req, res) => {
 			chunks.push(chunk)
 		}
 		handleDid = Buffer.concat(chunks).toString().trim()
+		res.writeHead(204)
+		return res.end()
+	}
+	if (req.method === 'POST' && req.url === '/feed') {
+		const chunks = []
+		for await (const chunk of req) {
+			chunks.push(chunk)
+		}
+		feedPosts = Buffer.concat(chunks).toString().split('\n').map((line) => line.trim()).filter((line) => line !== '')
 		res.writeHead(204)
 		return res.end()
 	}
@@ -242,6 +261,7 @@ const addresses = {
 	videoHost: VIDEO_HOST,
 	handleServer: `http://127.0.0.1:${HANDLE_PORT}`,
 	customHandle: CUSTOM_HANDLE,
+	feedGenDid: feedGen.did,
 }
 writeFileSync(NETWORK_FILE, JSON.stringify(addresses, null, 2))
 console.log('dev network up', addresses)
@@ -249,6 +269,7 @@ console.log('dev network up', addresses)
 const stop = async () => {
 	videoService.close()
 	handleServer.close()
+	await feedGen.close()
 	await socialFirehose.destroy()
 	await network.close()
 	process.exit(0)

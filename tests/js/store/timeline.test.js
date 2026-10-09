@@ -417,6 +417,7 @@ describe('timeline store getters', () => {
 		['interests', {}],
 		['photos', { scope: 'interests' }],
 		['videos', { scope: 'interests' }],
+		['bluesky', { feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }],
 	])('keeps the order a ranking came in for %s %o', async (type, params) => {
 		await store.changeTimelineType({ type, params })
 		const older = makeStatus('1', { created_at: '2026-01-01T10:00:00.000Z' })
@@ -1244,6 +1245,7 @@ describe('timeline store actions', () => {
 			['interests', { media: 'podcasts' }, `${API}/timelines/interests`, { limit: 15 }],
 			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'photos' }],
 			['videos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
+			['bluesky', { feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }, `${API}/timelines/bluesky`, { limit: 15, feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }],
 		])('requests the %s timeline from its endpoint and appends the result', async (type, params, url, query) => {
 			await store.changeTimelineType({ type, params })
 

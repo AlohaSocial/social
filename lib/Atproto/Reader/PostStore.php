@@ -14,10 +14,12 @@ use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\ImportService;
 use OCA\Social\Service\SignatureService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -44,6 +46,7 @@ class PostStore {
 		private StreamRequest $streams,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private StreamCardsRequest $cards,
 	) {
 	}
 
@@ -223,8 +226,11 @@ class PostStore {
 
 	private function process(array $data): bool {
 		$details = $data['object']['_atproto'] ?? null;
+		$card = null;
 		if (is_array($details)) {
 			unset($data['object']['_atproto']);
+			$card = is_array($details['card'] ?? null) ? $details['card'] : null;
+			unset($details['card']);
 		}
 		try {
 			$activity = AP::instance()->getItemFromData($data);
@@ -242,6 +248,13 @@ class PostStore {
 				}
 			}
 			$this->import->parseIncomingRequest($activity);
+			if ($card !== null && $activity->hasObject()) {
+				$this->cards->save((new StreamCard($activity->getObject()->getId(), $card['url']))
+					->setTitle($card['title'])
+					->setDescription($card['description'])
+					->setImage($card['image'])
+					->setProviderName($card['provider']));
+			}
 		} catch (Throwable $e) {
 			$this->logger->warning('Bluesky ' . ($data['type'] ?? '') . ' not stored', ['id' => $data['id'] ?? '', 'exception' => $e]);
 

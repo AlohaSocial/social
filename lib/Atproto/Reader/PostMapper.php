@@ -41,6 +41,10 @@ class PostMapper {
 	private const RECORD = 'app.bsky.embed.record#view';
 	private const RECORD_WITH_MEDIA = 'app.bsky.embed.recordWithMedia#view';
 	private const VIEW_RECORD = 'app.bsky.embed.record#viewRecord';
+	/** the records a post can embed that are shown as a card */
+	private const GENERATOR_VIEW = 'app.bsky.feed.defs#generatorView';
+	private const LIST_VIEW = 'app.bsky.graph.defs#listView';
+	private const STARTER_PACK_VIEW = 'app.bsky.graph.defs#starterPackViewBasic';
 	private const REPOST = 'app.bsky.feed.defs#reasonRepost';
 
 	/** labels that make the pictures sensitive and warn when the post did not */
@@ -123,6 +127,10 @@ class PostMapper {
 		$embed = is_array($post['embed'] ?? null) ? $post['embed'] : [];
 		[$attachments, $quote, $appended] = $this->embed($embed, $text, $id);
 		$content .= $appended;
+		$card = self::cardOf($embed);
+		if ($card !== null && !str_contains($text, $card['url'])) {
+			$content .= '<p><a href="' . self::escape($card['url']) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($card['title']) . '</a></p>';
+		}
 
 		$warning = $this->warning($labels);
 		$adult = array_intersect($labels, self::ADULT) !== [];
@@ -156,7 +164,10 @@ class PostMapper {
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
-			],
+			] + ($card === null ? [] : [
+				// the card of a feed, a list or a starter pack the post embeds
+				'card' => $card,
+			]),
 		];
 		$video = self::videoOf($embed);
 		if ($video !== null) {
@@ -178,6 +189,10 @@ class PostMapper {
 		// here (a narrower gate is checked when somebody replies; Threadgates)
 		if (($post['threadgate']['record']['allow'] ?? null) === []) {
 			$note['interactionPolicy'] = ['canReply' => ['automaticApproval' => []]];
+		}
+		// a post read as a viewer its author's postgate keeps from quoting it
+		if (($post['viewer']['embeddingDisabled'] ?? false) === true) {
+			$note['interactionPolicy'] = ($note['interactionPolicy'] ?? []) + ['canQuote' => ['automaticApproval' => []]];
 		}
 		$langs = $record['langs'] ?? [];
 		if (is_array($langs) && is_string($langs[0] ?? null) && $langs[0] !== '') {
@@ -250,6 +265,59 @@ class PostMapper {
 		}
 
 		return [[], '', ''];
+	}
+
+	/**
+	 * The card for a feed, a list or a starter pack a post embeds — alone or
+	 * beside pictures — from what the AppView says of it, so its page on
+	 * bsky.app need not be read.
+	 *
+	 * @return array{url: string, title: string, description: string, image: string, provider: string}|null
+	 */
+	public static function cardOf(array $embed): ?array {
+		if (($embed['$type'] ?? '') === self::RECORD_WITH_MEDIA) {
+			$embed = ['$type' => self::RECORD, 'record' => $embed['record']['record'] ?? null];
+		}
+		$view = ($embed['$type'] ?? '') === self::RECORD && is_array($embed['record'] ?? null) ? $embed['record'] : [];
+		$parsed = Syntax::parseAtUri((string)($view['uri'] ?? ''));
+		$creator = is_array($view['creator'] ?? null) ? $view['creator'] : [];
+		$handle = strtolower((string)($creator['handle'] ?? ''));
+		$owner = $handle !== '' && $handle !== 'handle.invalid' ? $handle : (string)($parsed['authority'] ?? '');
+		$rkey = (string)($parsed['rkey'] ?? '');
+		if ($owner === '' || $rkey === '') {
+			return null;
+		}
+		$by = $handle !== '' && $handle !== 'handle.invalid' ? ' by @' . $handle : '';
+		[$url, $title, $description, $image, $provider] = match ((string)($view['$type'] ?? '')) {
+			self::GENERATOR_VIEW => [
+				'https://bsky.app/profile/' . $owner . '/feed/' . $rkey,
+				(string)($view['displayName'] ?? ''), (string)($view['description'] ?? ''), (string)($view['avatar'] ?? ''),
+				'Bluesky feed' . $by,
+			],
+			self::LIST_VIEW => [
+				'https://bsky.app/profile/' . $owner . '/lists/' . $rkey,
+				(string)($view['name'] ?? ''), (string)($view['description'] ?? ''), (string)($view['avatar'] ?? ''),
+				'Bluesky list' . $by,
+			],
+			self::STARTER_PACK_VIEW => [
+				'https://bsky.app/starter-pack/' . $owner . '/' . $rkey,
+				(string)($view['record']['name'] ?? ''), (string)($view['record']['description'] ?? ''),
+				(string)($creator['avatar'] ?? ''),
+				'Bluesky starter pack' . $by,
+			],
+			default => ['', '', '', '', ''],
+		};
+		if ($url === '') {
+			return null;
+		}
+
+		return [
+			'url' => $url,
+			'title' => $title !== '' ? $title : $url,
+			'description' => $description,
+			'image' => preg_match('#^https://#i', $image) === 1 ? $image : '',
+			'provider' => $provider,
+		];
 	}
 
 	/**

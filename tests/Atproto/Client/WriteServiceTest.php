@@ -11,6 +11,9 @@ namespace OCA\Social\Tests\Atproto\Client;
 
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Crypto\Curve;
+use OCA\Social\Atproto\Crypto\PrivateKey;
+use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\RepoHead;
@@ -24,7 +27,9 @@ use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Atproto\Repository\CommitResult;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Atproto\Xrpc\XrpcException;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Model\ActivityPub\Activity\Create;
@@ -126,11 +131,13 @@ class WriteServiceTest extends TestCase {
 			'at://' . self::BOB . '/app.bsky.feed.post/3kbob' => 'https://bsky.app/profile/' . self::BOB . '/post/3kbob',
 			default => '',
 		});
+		$identities = $this->createMock(IdentityService::class);
+		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->createMock(BoostService::class), $this->createMock(FollowService::class),
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
-			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners,
+			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -183,6 +190,54 @@ class WriteServiceTest extends TestCase {
 		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => RecordMapper::PROFILE_RKEY, 'record' => [
 			'$type' => RecordMapper::PROFILE, 'avatar' => ['$type' => 'blob', 'ref' => ['$link' => Cid::forRaw('elsewhere')->toString()], 'mimeType' => 'image/jpeg', 'size' => 9],
 		]]);
+	}
+
+	/** Writes go into the repository double as they would into the repository. */
+	private function keepWrites(): void {
+		$this->repositories->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+			foreach ($writes as $write) {
+				$this->records = array_values(array_filter($this->records, static fn (StoredRecord $r): bool => !($r->collection === $write->collection && $r->rkey === $write->rkey)));
+				if ($write->action !== RepoWrite::DELETE) {
+					$bytes = DagCbor::encode($write->record);
+					$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+				}
+			}
+
+			return new CommitResult($did, Cid::forRaw('commit'), '3krev', 1, []);
+		});
+	}
+
+	public function testAListAndItsMembersAreKeptAsTheAppWroteThem(): void {
+		$this->keepWrites();
+		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => $list]);
+		$this->assertStringStartsWith('at://' . self::DID . '/app.bsky.graph.list/', $made['uri']);
+		$rkey = substr($made['uri'], (int)strrpos($made['uri'], '/') + 1);
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey, 'record' => ['name' => 'Close friends'] + $list]);
+		$this->assertSame('Close friends', DagCbor::decode($this->records[0]->bytes)['name'], 'replaced under its key');
+
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey]);
+		$this->assertSame([], $this->records);
+	}
+
+	public function testAGateIsKeptOnlyUnderTheKeyOfTheAccountsOwnPost(): void {
+		$this->keepWrites();
+		$gate = static fn (string $post): array => ['$type' => 'app.bsky.feed.threadgate', 'post' => $post, 'allow' => [], 'createdAt' => '2026-10-09T10:00:00.000Z'];
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.feed.threadgate', 'record' => $gate('at://' . self::DID . '/app.bsky.feed.post/3kmine')]);
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.threadgate/3kmine', $made['uri']);
+
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.feed.threadgate', 'record' => $gate('at://' . self::BOB . '/app.bsky.feed.post/3kbob')]);
+	}
+
+	public function testAListBlockIsABlockAndRefused(): void {
+		$this->repositories->expects($this->never())->method('write');
+
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => ['$type' => 'app.bsky.graph.listblock', 'subject' => 'at://x', 'createdAt' => '2026-10-09T10:00:00.000Z']]);
 	}
 
 	public function testAPostFromAnAppIsASocialPostAndTheAnswerIsItsRecord(): void {
@@ -352,7 +407,7 @@ class WriteServiceTest extends TestCase {
 		foreach ([
 			[['repo' => self::BOB, 'collection' => RecordMapper::POST, 'record' => []], 'another repository'],
 			[['repo' => self::DID, 'collection' => 'app.bsky.graph.block', 'record' => ['subject' => self::BOB]], 'Blocks stay on this server'],
-			[['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => []], 'does not write app.bsky.graph.list'],
+			[['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => []], 'does not write app.bsky.graph.listblock'],
 			[['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [], 'validate' => false], 'always validated'],
 		] as [$body, $why]) {
 			try {

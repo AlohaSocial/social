@@ -79,6 +79,7 @@ use OCP\Group\Events\UserRemovedEvent;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use OCP\Profile\BeforeTemplateRenderedEvent;
+use OCP\User\Events\UserChangedEvent;
 use OCP\User\Events\UserDeletedEvent;
 use OCP\User\Events\UserEnumerationFilterEvent;
 use OCP\User\Events\UserFirstTimeLoggedInEvent;
@@ -116,6 +117,7 @@ class Application extends App implements IBootstrap {
 		$context->registerWellKnownHandler(WebfingerHandler::class);
 		$context->registerEventListener(BeforeTemplateRenderedEvent::class, ProfileSectionListener::class);
 		$context->registerEventListener(UserUpdatedEvent::class, UserAccountListener::class);
+		$context->registerEventListener(UserChangedEvent::class, UserAccountListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 		// a public post goes to Bluesky as it is made, edited or deleted
 		$context->registerEventListener(PostPublishedEvent::class, AtprotoPostListener::class);

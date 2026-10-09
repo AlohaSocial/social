@@ -105,10 +105,9 @@ class AvatarService {
 			throw new InvalidActionException('the avatar could not be removed');
 		}
 
-		// the same catch-up the upload path does: the actor's icon is a copy of
-		// the account's, and nothing refreshes it on its own
-		$this->accountService->cacheLocalActorByUsername(
-			$this->accountService->getActorFromUserId($userId)->getPreferredUsername()
+		// the same as the upload path: a new icon, told to the followers
+		$this->accountService->avatarChanged(
+			$userId, $this->accountService->getActorFromUserId($userId)->getPreferredUsername()
 		);
 	}
 
@@ -264,10 +263,10 @@ class AvatarService {
 			throw new InvalidActionException('the uploaded avatar could not be stored');
 		}
 
-		// the actor's icon follows the account's, but only once something asks
-		// the cache to catch up
-		$this->accountService->cacheLocalActorByUsername(
-			$this->accountService->getActorFromUserId($userId)->getPreferredUsername()
+		// the actor takes the new icon and the followers are told; Nextcloud's
+		// own event for the change says the same, and is not told twice
+		$this->accountService->avatarChanged(
+			$userId, $this->accountService->getActorFromUserId($userId)->getPreferredUsername()
 		);
 	}
 }
