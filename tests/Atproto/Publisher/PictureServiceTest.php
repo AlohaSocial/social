@@ -17,13 +17,16 @@ use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\DocumentService;
+use OCP\Accounts\IAccountManager;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAvatar;
 use OCP\IAvatarManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -36,6 +39,8 @@ class PictureServiceTest extends TestCase {
 	private string $reencoded = '';
 	/** @var string[] what was stored as a document of its own */
 	private array $stored = [];
+	private bool $customAvatar = true;
+	private bool $avatarPublished = true;
 
 	/** A PNG of noise, which no encoder makes small: between a card's limit and a post picture's. */
 	private static function noise(): string {
@@ -78,10 +83,15 @@ class PictureServiceTest extends TestCase {
 
 		$avatar = $this->createMock(IAvatar::class);
 		$avatar->method('getFile')->with(-1)->willReturn($file);
+		$avatar->method('isCustomAvatar')->willReturnCallback(fn (): bool => $this->customAvatar);
 		$avatars = $this->createMock(IAvatarManager::class);
 		$avatars->method('getAvatar')->with('alice')->willReturn($avatar);
+		$accounts = $this->createMock(AccountService::class);
+		$accounts->method('mayPublish')->with($this->anything(), IAccountManager::PROPERTY_AVATAR)->willReturnCallback(fn (): bool => $this->avatarPublished);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(AccountService::class)->willReturn($accounts);
 
-		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, $avatars, new NullLogger());
+		return new PictureService($blobRequest, $this->createMock(AtprotoRepoRequest::class), $cache, $documents, $avatars, new NullLogger(), $container);
 	}
 
 	private function document(): Document {
@@ -114,21 +124,34 @@ class PictureServiceTest extends TestCase {
 		$this->assertTrue(Cid::forRaw($this->reencoded)->equals($blob->cid), 'the blob is the stored copy');
 	}
 
-	public function testALocalAvatarIsTheNextcloudAvatarStoredOnce(): void {
+	private static function alice(): Person {
 		$alice = new Person();
 		$alice->setUserId('alice');
-		$avatar = new Document();
-		$avatar->setId('https://social.test/documents/avatar/1');
-		$avatar->setLocalCopy('avatar');
+		$alice->setLocal(true);
+
+		return $alice;
+	}
+
+	public function testALocalAvatarIsTheNextcloudAvatarStoredOnce(): void {
 		$pictures = $this->pictures(self::png());
 
-		$blob = $pictures->blobFor($this->identity(), $alice, $avatar);
-		$again = $pictures->blobFor($this->identity(), $alice, $avatar);
+		$blob = $pictures->avatarBlob($this->identity(), self::alice());
+		$again = $pictures->avatarBlob($this->identity(), self::alice());
 
 		$this->assertSame(['https://social.test/documents/copy', 'image/png', 4, 3], [$blob['blob']->documentId ?? null, $blob['blob']->mime ?? null, $blob['width'] ?? null, $blob['height'] ?? null]);
 		$this->assertTrue(Cid::forRaw(self::png())->equals($blob['blob']->cid));
 		$this->assertSame([self::png()], $this->stored, 'stored once, the second time known by its bytes');
 		$this->assertTrue($again['blob']->cid->equals($blob['blob']->cid));
+	}
+
+	public function testAGeneratedAvatarOrOneKeptFromOtherServersIsNotPublished(): void {
+		$this->customAvatar = false;
+		$this->assertNull($this->pictures(self::png())->avatarBlob($this->identity(), self::alice()), 'generated');
+
+		$this->customAvatar = true;
+		$this->avatarPublished = false;
+		$this->assertNull($this->pictures(self::png())->avatarBlob($this->identity(), self::alice()), 'kept from other servers');
+		$this->assertSame([], $this->stored);
 	}
 
 	public function testACopyIsStoredOnceHoweverOftenItIsAskedFor(): void {

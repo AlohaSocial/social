@@ -19,9 +19,12 @@ use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
+use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheDocumentService;
 use OCA\Social\Service\DocumentService;
+use OCP\Accounts\IAccountManager;
 use OCP\IAvatarManager;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -33,9 +36,8 @@ use Throwable;
  * is when it fits Bluesky's 2,000,000 bytes and is a type Bluesky shows;
  * otherwise it is re-encoded as JPEG — descending quality, then smaller —
  * and the result stored as a document of its own beside the original. A
- * local account's avatar has no stored copy — its document points at the
- * Nextcloud avatar — so its picture is stored as a document of its own too.
- * A picture whose bytes are a blob already is that blob.
+ * local account's avatar is read from Nextcloud and stored the same way. A
+ * picture whose bytes are a blob already is that blob.
  */
 class PictureService {
 	/** Bluesky's limit per picture */
@@ -44,8 +46,6 @@ class PictureService {
 	private const SHOWN_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 	private const QUALITIES = [85, 75, 65];
 	private const WIDTHS = [2000, 1600, 1200, 800];
-	/** the local copy of a local account's avatar document: the Nextcloud avatar */
-	private const LOCAL_AVATAR = 'avatar';
 
 	public function __construct(
 		private AtprotoBlobRequest $blobRequest,
@@ -54,6 +54,7 @@ class PictureService {
 		private DocumentService $documents,
 		private IAvatarManager $avatars,
 		private LoggerInterface $logger,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -70,21 +71,57 @@ class PictureService {
 			return ['blob' => $existing, 'width' => (int)$width, 'height' => (int)$height];
 		}
 
-		$avatar = $document->getLocalCopy() === self::LOCAL_AVATAR;
 		try {
-			$bytes = $avatar
-				? $this->avatars->getAvatar($owner->getUserId())->getFile(-1)->getContent()
-				: $this->cache->getFromUuid($document->getLocalCopy())->getContent();
+			$bytes = $this->cache->getFromUuid($document->getLocalCopy())->getContent();
 		} catch (Throwable $e) {
 			$this->logger->notice('Picture not readable for Bluesky', ['document' => $document->getId(), 'exception' => $e]);
 
 			return null;
 		}
-		$mime = $avatar ? (string)(new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes) : $document->getMimeType();
-		if ($avatar) {
-			[$width, $height] = getimagesizefromstring($bytes) ?: [0, 0];
+
+		return $this->blobOf($identity, $owner, $bytes, $document->getMimeType(), (int)$width, (int)$height, $maxBytes, $document);
+	}
+
+	/**
+	 * The blob for a local account's own avatar, the picture it chose in
+	 * Nextcloud: none for a generated one, or where the account keeps its
+	 * avatar from other servers. It is read from the avatar itself — the
+	 * actor's icon document names the avatar's address, not its bytes — and
+	 * stored as a document of its own, so `getBlob` serves the bytes the CID
+	 * names after the avatar changes.
+	 *
+	 * @return array{blob: BlobRef, width: int, height: int}|null
+	 */
+	public function avatarBlob(Identity $identity, Person $owner, int $maxBytes = self::MAX_BYTES): ?array {
+		if (!$owner->isLocal() || $owner->getUserId() === ''
+			|| $this->container?->get(AccountService::class)->mayPublish($owner, IAccountManager::PROPERTY_AVATAR) === false) {
+			return null;
 		}
-		$copied = $avatar;
+		try {
+			$avatar = $this->avatars->getAvatar($owner->getUserId());
+			if (!$avatar->isCustomAvatar()) {
+				return null;
+			}
+			$bytes = $avatar->getFile(-1)->getContent();
+		} catch (Throwable $e) {
+			$this->logger->notice('Avatar not readable for Bluesky', ['user' => $owner->getUserId(), 'exception' => $e]);
+
+			return null;
+		}
+		[$width, $height] = getimagesizefromstring($bytes) ?: [0, 0];
+
+		return $this->blobOf($identity, $owner, $bytes, (string)(new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes), $width, $height, $maxBytes, null);
+	}
+
+	/**
+	 * A picture's bytes as a blob: re-encoded when they do not fit, the
+	 * blob they are already when they are one, and stored as a document of
+	 * their own unless they are the original document's.
+	 *
+	 * @return array{blob: BlobRef, width: int, height: int}|null
+	 */
+	private function blobOf(Identity $identity, Person $owner, string $bytes, string $mime, int $width, int $height, int $maxBytes, ?Document $original): ?array {
+		$copied = $original === null;
 		if (strlen($bytes) > $maxBytes || !in_array($mime, self::SHOWN_TYPES, true)) {
 			$encoded = $this->reencode($bytes, $maxBytes);
 			if ($encoded === null) {
@@ -98,11 +135,11 @@ class PictureService {
 		$cid = Cid::forRaw($bytes);
 		$known = $this->blobRequest->get($identity->did, $cid->toString());
 		if ($known !== null) {
-			return ['blob' => $known, 'width' => (int)$width, 'height' => (int)$height];
+			return ['blob' => $known, 'width' => $width, 'height' => $height];
 		}
-		$storedId = $document->getId();
+		$storedId = $original?->getId() ?? '';
 		if ($copied) {
-			$copy = $this->store($owner, $bytes, $document);
+			$copy = $this->store($owner, $bytes, $original);
 			if ($copy === null) {
 				return null;
 			}
@@ -113,7 +150,7 @@ class PictureService {
 		$this->blobRequest->put($blob);
 		$this->repoRequest->addBlobBytes($identity->did, $blob->size);
 
-		return ['blob' => $blob, 'width' => (int)$width, 'height' => (int)$height];
+		return ['blob' => $blob, 'width' => $width, 'height' => $height];
 	}
 
 	/**
@@ -160,7 +197,7 @@ class PictureService {
 		return null;
 	}
 
-	private function store(Person $owner, string $bytes, Document $original): ?Document {
+	private function store(Person $owner, string $bytes, ?Document $original): ?Document {
 		$path = tempnam(sys_get_temp_dir(), 'social-atproto-');
 		if ($path === false) {
 			return null;
@@ -168,7 +205,7 @@ class PictureService {
 		try {
 			file_put_contents($path, $bytes);
 
-			return $this->documents->storeLocalAttachment($owner, $path, $original->getParentId(), $original->getDescription(), true);
+			return $this->documents->storeLocalAttachment($owner, $path, $original?->getParentId() ?? '', $original?->getDescription() ?? '', true);
 		} catch (Throwable $e) {
 			$this->logger->warning('Picture for Bluesky could not be stored', ['exception' => $e]);
 

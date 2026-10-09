@@ -964,10 +964,11 @@ each for a reason:
   the key is derived from them.
 - **Pictures** are the stored original when it fits Bluesky's 2,000,000
   bytes and is a type Bluesky shows, re-encoded as JPEG otherwise and stored
-  as a document of their own. The profile's avatar is the Nextcloud
-  account's own picture, stored as a document of its own when it is
-  published, since the avatar can change under it. A picture whose bytes are
-  a blob already is that blob, so a copy is stored once. A post with a link and no pictures carries
+  as a document of their own. The profile's avatar is the picture the
+  person chose for their Nextcloud account — none for a generated one, or
+  where they keep their avatar from other servers — read from Nextcloud and
+  stored as a document of its own. A picture whose bytes are a blob already
+  is that blob, so a copy is stored once. A post with a link and no pictures carries
   its link card (§8.3) — title and description, and the page's
   picture: fetched once as a cached remote document, through the guards
   any remote file passes, and re-encoded when it is over a card's
