@@ -194,7 +194,7 @@ class StarterPacks {
 	 * The AppView's answer, as the person where they are on Bluesky.
 	 */
 	private function query(Person $viewer, string $method, array $params): array {
-		$identity = $this->identities->forActor($viewer, false);
+		$identity = $this->identities->activeForActor($viewer);
 		if ($identity === null) {
 			return $this->appView->query($method, $params);
 		}

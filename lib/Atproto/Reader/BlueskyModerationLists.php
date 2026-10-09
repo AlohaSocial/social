@@ -110,7 +110,7 @@ class BlueskyModerationLists implements AccountListSource {
 		}
 		try {
 			if ($kind === ActorRelation::TYPE_MUTE) {
-				$identity = $this->identities->forActor($viewer, false);
+				$identity = $this->identities->activeForActor($viewer);
 				if ($identity !== null) {
 					$this->appView->procedureAs($identity->did, $this->identities->signingKey($identity), $on ? 'app.bsky.graph.muteActorList' : 'app.bsky.graph.unmuteActorList', ['list' => $uri]);
 				}

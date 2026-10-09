@@ -111,14 +111,17 @@ class BlueskyFeeds {
 	}
 
 	/**
-	 * The feeds Bluesky suggests to the person.
+	 * The feeds Bluesky suggests to the person, or to anybody while the
+	 * person is not on Bluesky.
 	 *
 	 * @return list<array{uri: string, type: string, name: string, description: string, avatar: string, creator: string}>
 	 */
 	public function suggested(Person $actor): array {
 		try {
-			$identity = $this->identityOf($actor);
-			$answer = $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), 'app.bsky.feed.getSuggestedFeeds', ['limit' => 25]);
+			$identity = $this->identities->activeForActor($actor);
+			$answer = $identity !== null
+				? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), 'app.bsky.feed.getSuggestedFeeds', ['limit' => 25])
+				: $this->appView->query('app.bsky.feed.getSuggestedFeeds', ['limit' => 25]);
 		} catch (Throwable $e) {
 			$this->logger->info('Suggested Bluesky feeds not read', ['exception' => $e]);
 
@@ -150,7 +153,7 @@ class BlueskyFeeds {
 		}
 		$method = $type === self::FEED ? 'app.bsky.feed.getFeed' : 'app.bsky.feed.getListFeed';
 		$params = [$type === self::FEED ? 'feed' : 'list' => $uri, 'limit' => max(1, min(100, $limit))] + ($cursor !== '' ? ['cursor' => $cursor] : []);
-		$identity = $this->identities->forActor($actor, false);
+		$identity = $this->identities->activeForActor($actor);
 		$answer = $identity !== null
 			? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), $method, $params)
 			: $this->appView->query($method, $params);

@@ -126,6 +126,13 @@ describe('the Bluesky card', () => {
 		expect(text).toContain('Running as pid 4242 for 2 hours, serving 2 subscribers')
 	})
 
+	it('counts the identities their owners switched off apart', () => {
+		const cells = (wrapper) => wrapper.findAll('.bluesky__number-cell').map((cell) => [cell.find('dt').text(), cell.find('dd').text()])
+
+		expect(cells(mountCard(admin({ status: { identities_off: 2 } })))).toContainEqual(['Switched off by their owners', '2'])
+		expect(cells(mountCard())).toContainEqual(['Switched off by their owners', '0'])
+	})
+
 	it('shows the reading side, with each lag as a duration or as caught up', () => {
 		const text = mountCard(admin({ status: { reading: { watches: 7, lag: 0, accounts: 3, lag_notifications: 5400 } } })).text()
 

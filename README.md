@@ -121,7 +121,8 @@ you follow, of this instance and of the whole Fediverse are one click apart.
   what is trending on Bluesky and whom Bluesky suggests to you. Bluesky apps sign in here, their direct messages included, with Bluesky sign-in, or with an app
   password made in your settings, and post videos as they would on Bluesky. A Bluesky account of your
   own moves here with its followers and its posts — from Bluesky, from Bridgy Fed's bridge of your Fediverse account,
-  or with any migration tool — and can move away again. Switched on by the administrator once the requirements
+  or with any migration tool — and can move away again. Anybody can switch their own presence on Bluesky off in
+  their settings, and on again with their profile and earlier posts back. Switched on by the administrator once the requirements
   are met; see [docs/Atproto-Compatibility.md](docs/Atproto-Compatibility.md) for what is done and
   what is next.
 - **For you** — the second feed in the switcher, right after My Feed, made of the hashtags you actually

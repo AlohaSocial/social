@@ -163,7 +163,7 @@ class ChatState {
 	 * @param list<string> $convos
 	 */
 	private function queue(Person $viewer, string $action, array $convos, string $member = ''): void {
-		if (!$this->poller->isOn() || $this->identities->forActor($viewer, false) === null) {
+		if (!$this->poller->isOn() || $this->identities->activeForActor($viewer) === null) {
 			return;
 		}
 		$this->jobList->add(AtprotoPublish::class, [

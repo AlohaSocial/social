@@ -17,6 +17,7 @@ use OCA\Social\Atproto\Protocol\Car;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
 use OCA\Social\Db\AtprotoBlobRequest;
+use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Db\AtprotoEventRequest;
 use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoPlcLogRequest;
@@ -106,10 +107,12 @@ class RepositoryIntegrationTest extends TestCase {
 		$this->assertGreaterThan(0, $byDid->creation);
 
 		$this->identityRequest->setRecoveryPublic(self::DID, 'did:key:zRecovery');
+		$off = $this->identityRequest->countInState('deactivated');
 		$this->identityRequest->setState(self::DID, 'deactivated');
 		$again = $this->identityRequest->getByDid(self::DID);
 		$this->assertSame('did:key:zRecovery', $again->recoveryPublic);
 		$this->assertFalse($again->isActive());
+		$this->assertSame($off + 1, $this->identityRequest->countInState('deactivated'), 'counted by its state');
 
 		$logId = $this->plcLog->record(self::DID, 'bafyop', ['type' => 'plc_operation', 'prev' => null]);
 		$this->assertSame('bafyop', $this->plcLog->latestCid(self::DID));
@@ -117,6 +120,18 @@ class RepositoryIntegrationTest extends TestCase {
 		$this->plcLog->markConfirmed($logId);
 		$this->assertSame([], array_filter($this->plcLog->getUnconfirmed(), static fn (array $row): bool => $row['did'] === self::DID));
 		$this->assertGreaterThan(0, $this->plcLog->getByDid(self::DID)[0]['confirmed']);
+	}
+
+	public function testSigningAPersonOutOfBlueskyAppsEndsTheirSessionsOnly(): void {
+		$clients = Server::get(AtprotoClientRequest::class);
+		$clients->addSession('integration-alice', 'atproto-integration-alice', self::DID, 1, time() + 3600);
+		$clients->addSession('integration-bob', 'atproto-integration-bob', 'did:plc:integrationbob000000000', 2, time() + 3600);
+
+		$clients->removeSessionsOfUser('atproto-integration-alice');
+
+		$this->assertNull($clients->getSession('integration-alice'));
+		$this->assertNotNull($clients->getSession('integration-bob'));
+		$clients->removeSession('integration-bob');
 	}
 
 	public function testBlobsAreListedByCid(): void {

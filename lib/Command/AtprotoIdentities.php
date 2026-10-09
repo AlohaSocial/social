@@ -23,6 +23,8 @@ use Throwable;
 /**
  * `occ social:atproto:identities`: gives every local account its Bluesky
  * identity now rather than on first need, and writes the profile record.
+ * An identity its owner switched off stays off: it is listed with its
+ * state, never made again nor switched back on.
  */
 class AtprotoIdentities extends SocialCommand {
 	public function __construct(
@@ -79,7 +81,8 @@ class AtprotoIdentities extends SocialCommand {
 				$fresh = $identity === null;
 				$identity ??= $this->identities->create($actor);
 				$this->publisher->publishProfile($actor);
-				$output->writeln(sprintf('%s %s  %s  %s', $fresh ? '+' : '=', $actor->getPreferredUsername(), $identity->handle, $identity->did));
+				$output->writeln(sprintf('%s %s  %s  %s', $fresh ? '+' : '=', $actor->getPreferredUsername(), $identity->handle, $identity->did)
+					. ($identity->isActive() ? '' : '  (' . $identity->state . ')'));
 				if ($fresh) {
 					$made++;
 				}

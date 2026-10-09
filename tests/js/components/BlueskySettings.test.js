@@ -112,48 +112,57 @@ describe('BlueskySettings', () => {
 		expect(buttonByText(wrapper, 'Create recovery phrase')).toBeUndefined()
 	})
 
-	describe('showing posts on Bluesky', () => {
+	describe('being on Bluesky', () => {
 		const STATE = '/index.php/apps/social/api/v1/social/bluesky/state'
-		const pauseSwitch = (wrapper) => wrapper.find('.bluesky-settings__switch input')
+		const presenceSwitch = (wrapper) => wrapper.find('.bluesky-settings__switch input')
 
-		it('is on while the account is live there, and says nothing more', async () => {
+		it('is on while the person is there, and says what off would mean', async () => {
 			serverHas(identity({ active: true }))
 			const wrapper = mountSettings()
 			await flushPromises()
 
-			expect(wrapper.text()).toContain('Show my posts on Bluesky')
-			expect(pauseSwitch(wrapper).element.checked).toBe(true)
-			expect(wrapper.text()).not.toContain('paused on Bluesky')
+			expect(wrapper.text()).toContain('Be on Bluesky')
+			expect(presenceSwitch(wrapper).element.checked).toBe(true)
+			expect(wrapper.text()).toContain('Switched off, your Bluesky profile and posts are no longer shown there')
+			expect(wrapper.text()).not.toContain('You are not on Bluesky')
 		})
 
-		it('pauses the account, and follows what the server answered', async () => {
-			serverHas(identity({ active: true }))
-			axios.post.mockResolvedValue({ data: identity({ active: false }) })
+		it('switches off, and follows what the server answered', async () => {
+			serverHas(identity({ active: true, recovery_key: true }))
+			axios.post.mockResolvedValue({ data: identity({ active: false, state: 'deactivated', recovery_key: true }) })
 			const wrapper = mountSettings()
 			await flushPromises()
 
-			await pauseSwitch(wrapper).setValue(false)
+			await presenceSwitch(wrapper).setValue(false)
 			await flushPromises()
 
 			expect(axios.post).toHaveBeenCalledWith(STATE, { active: false })
-			expect(pauseSwitch(wrapper).element.checked).toBe(false)
-			expect(wrapper.text()).toContain('This account is paused on Bluesky: nothing new is published there')
+			expect(presenceSwitch(wrapper).element.checked).toBe(false)
+			expect(wrapper.text()).toContain('You are not on Bluesky: your profile and posts are not shown there')
+			expect(wrapper.text()).toContain('Bluesky apps are signed out of your account')
+			expect(wrapper.text()).toContain('your likes, replies and messages to them stay here')
+			expect(wrapper.text()).toContain('posts written while off stay off Bluesky')
 			// the handle stays: the address is still theirs
 			expect(wrapper.find('a.bluesky-settings__code').text()).toBe('@alice.cloud.example.org')
+			// what only means something while on Bluesky is not offered
+			expect(wrapper.text()).not.toContain('Publish my blocks of Bluesky accounts')
+			expect(buttonByText(wrapper, 'Create a new recovery phrase')).toBeUndefined()
 		})
 
 		it('switches back on the same way', async () => {
-			serverHas(identity({ active: false }))
+			serverHas(identity({ active: false, state: 'deactivated' }))
 			axios.post.mockResolvedValue({ data: identity({ active: true }) })
 			const wrapper = mountSettings()
 			await flushPromises()
-			expect(pauseSwitch(wrapper).element.checked).toBe(false)
+			expect(presenceSwitch(wrapper).element.checked).toBe(false)
 
-			await pauseSwitch(wrapper).setValue(true)
+			await presenceSwitch(wrapper).setValue(true)
 			await flushPromises()
 
 			expect(axios.post).toHaveBeenCalledWith(STATE, { active: true })
-			expect(wrapper.text()).not.toContain('paused on Bluesky')
+			expect(presenceSwitch(wrapper).element.checked).toBe(true)
+			expect(wrapper.text()).not.toContain('You are not on Bluesky')
+			expect(wrapper.text()).toContain('Publish my blocks of Bluesky accounts')
 		})
 
 		it('stays where the server left it when the change is refused', async () => {
@@ -162,11 +171,11 @@ describe('BlueskySettings', () => {
 			const wrapper = mountSettings()
 			await flushPromises()
 
-			await pauseSwitch(wrapper).setValue(false)
+			await presenceSwitch(wrapper).setValue(false)
 			await flushPromises()
 
-			expect(showError).toHaveBeenCalledWith('Could not change whether your posts show on Bluesky')
-			expect(pauseSwitch(wrapper).element.checked).toBe(true)
+			expect(showError).toHaveBeenCalledWith('Could not switch your presence on Bluesky')
+			expect(presenceSwitch(wrapper).element.checked).toBe(true)
 		})
 	})
 
@@ -913,6 +922,7 @@ describe('BlueskySettings', () => {
 	describe('publishing blocks', () => {
 		it('is off until the person turns it on, and says what it means either way', async () => {
 			const { default: axios } = await import('@nextcloud/axios')
+			serverHas()
 			axios.post.mockResolvedValue({ data: { publish_blocks: true } })
 			const wrapper = mountSettings()
 			await flushPromises()

@@ -72,7 +72,7 @@ class BlueskyModerationListsTest extends TestCase {
 		});
 
 		$identities = $this->createMock(IdentityService::class);
-		$identities->method('forActor')->willReturn(new Identity(1, 'https://social.test/users/alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0));
+		$identities->method('activeForActor')->willReturn(new Identity(1, 'https://social.test/users/alice', 'did:plc:alice', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0));
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 
 		$actors = $this->createMock(BlueskyActorService::class);

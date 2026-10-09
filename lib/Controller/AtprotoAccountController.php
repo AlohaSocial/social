@@ -13,6 +13,7 @@ use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PresenceService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\Move;
 use OCA\Social\Atproto\Moderation\LabelerService;
@@ -38,7 +39,7 @@ use Throwable;
 
 /**
  * A person's own Bluesky identity, for Settings → Your account: the handle
- * and DID, and the recovery phrase.
+ * and DID, whether the person is on Bluesky at all, and the recovery phrase.
  */
 class AtprotoAccountController extends Controller {
 	public function __construct(
@@ -57,6 +58,7 @@ class AtprotoAccountController extends Controller {
 		private InboundMoveService $inbound,
 		private BridgyTwin $bridgy,
 		private BlueskyBlocks $blocks,
+		private PresenceService $presence,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -86,14 +88,10 @@ class AtprotoAccountController extends Controller {
 	}
 
 	/**
-	 * `POST /api/v1/social/bluesky/recovery`: issues a recovery phrase —
-	 * the first, or a new one that replaces the last. Shown once, never
-	 * stored, so the password is asked for first.
-	 */
-	/**
-	 * Switches the viewer's own Bluesky presence off or on: deactivated, the
-	 * account is announced inactive and nothing more goes to Bluesky; the
-	 * DID and the repository stay theirs for switching back on.
+	 * `POST /api/v1/social/bluesky/state`: switches the viewer's own presence
+	 * on Bluesky off or on (§4.6). Off, the account is deactivated there and
+	 * every Bluesky app is signed out of it; on, it is served as it was left,
+	 * with the profile as it is now. The DID and the handle stay theirs.
 	 */
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/state')]
@@ -103,17 +101,14 @@ class AtprotoAccountController extends Controller {
 		}
 		try {
 			$actor = $this->accountService->getActorFromUserId($this->userId(), true);
-			$identity = $this->identities->forActor($actor, false);
-			if ($identity === null) {
-				return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
-			}
+			$identity = $active ? $this->presence->switchOn($actor) : $this->presence->switchOff($actor);
 			if ($active) {
-				$this->identities->activate($identity);
-			} else {
-				$this->identities->deactivate($identity);
+				$this->publisher->publishProfile($actor);
 			}
 
-			return new DataResponse(self::export($this->identities->getByDid($identity->did)));
+			return new DataResponse(self::export($identity) + ['publish_blocks' => $this->blocks->isPublished($this->userId())]);
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_NOT_FOUND);
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
@@ -445,6 +440,11 @@ class AtprotoAccountController extends Controller {
 		return new DataResponse(['sessions' => $this->oauth->sessionsOf($this->userId())]);
 	}
 
+	/**
+	 * `POST /api/v1/social/bluesky/recovery`: issues a recovery phrase —
+	 * the first, or a new one that replaces the last. Shown once, never
+	 * stored, so the password is asked for first.
+	 */
 	#[NoAdminRequired]
 	#[PasswordConfirmationRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/recovery')]
@@ -475,6 +475,8 @@ class AtprotoAccountController extends Controller {
 			'did' => $identity->did,
 			'url' => 'https://bsky.app/profile/' . $identity->handle,
 			'state' => $identity->state,
+			// false while the person has switched their presence on Bluesky off
+			'active' => $identity->isActive(),
 			'recovery_key' => $identity->recoveryPublic !== '',
 			// the handle this server gave, which keeps resolving, and the one
 			// on the person's own domain when they set one

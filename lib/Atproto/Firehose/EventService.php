@@ -11,7 +11,9 @@ namespace OCA\Social\Atproto\Firehose;
 
 use OCA\Social\Atproto\Model\Event;
 use OCA\Social\Atproto\Protocol\Bytes;
+use OCA\Social\Atproto\Protocol\Car;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\Commit;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Db\AtprotoEventRequest;
@@ -48,7 +50,7 @@ class EventService {
 			'commit' => $commitCid,
 			'rev' => $rev,
 			'since' => $since,
-			'blocks' => new Bytes(\OCA\Social\Atproto\Protocol\Car::encode([$commitCid], $blocks)),
+			'blocks' => new Bytes(Car::encode([$commitCid], $blocks)),
 			'ops' => array_map(static function (array $op): array {
 				$out = ['action' => $op['action'], 'path' => $op['path'], 'cid' => $op['cid']];
 				if ($op['prev'] !== null) {
@@ -82,6 +84,21 @@ class EventService {
 		}
 
 		return $this->append($did, Event::KIND_ACCOUNT, $body);
+	}
+
+	/**
+	 * The repository is at this commit, whatever the stream said before: a
+	 * relay that missed or dropped commits fetches the repository again.
+	 */
+	public function sync(string $did, Commit $commit): int {
+		$cid = $commit->cid();
+
+		return $this->append($did, Event::KIND_SYNC, [
+			'did' => $did,
+			'blocks' => new Bytes(Car::encode([$cid], [$cid->toString() => $commit->toBytes()])),
+			'rev' => $commit->rev,
+			'time' => $this->now(),
+		]);
 	}
 
 	/**

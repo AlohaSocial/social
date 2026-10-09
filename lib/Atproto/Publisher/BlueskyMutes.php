@@ -82,7 +82,7 @@ class BlueskyMutes {
 			return;
 		}
 		try {
-			$identity = $this->identities->forActor($viewer, false);
+			$identity = $this->identities->activeForActor($viewer);
 			if ($identity === null) {
 				return;
 			}

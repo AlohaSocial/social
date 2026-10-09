@@ -180,6 +180,26 @@ class SessionServiceTest extends TestCase {
 		$this->assertRefused(fn () => $this->sessions->create('alice.social.test', $password, '203.0.113.5'), 'AccountTakedown');
 	}
 
+	/**
+	 * Switched off for Bluesky, the account takes no sign-in and no app
+	 * signed in goes on, not even by refreshing; on again, the same app
+	 * password signs in.
+	 */
+	public function testAnAccountSwitchedOffForBlueskyTakesNoAppUntilItIsOnAgain(): void {
+		$password = $this->appPasswords->create('alice', 'phone')['password'];
+		$session = $this->sessions->create('alice.social.test', $password, '203.0.113.5');
+		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_DEACTIVATED, '', 0);
+
+		$this->assertRefused(fn () => $this->sessions->authenticate('Bearer ' . $session['accessJwt']), 'AccountDeactivated');
+		$this->assertRefused(fn () => $this->sessions->refresh('Bearer ' . $session['refreshJwt']), 'AccountDeactivated');
+		$this->assertRefused(fn () => $this->sessions->create('alice.social.test', $password, '203.0.113.5'), 'AccountDeactivated');
+
+		$this->request->removeSessionsOfUser('alice');
+		$this->assertSame([], $this->request->sessions, 'signed out');
+		$this->identity = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0);
+		$this->assertTrue($this->sessions->create('alice.social.test', $password, '203.0.113.5')['active']);
+	}
+
 	private function claims(string $jwt): array {
 		[$header, $payload, $signature] = explode('.', $jwt);
 		$this->assertTrue($this->serviceKey->publicKey()->verify($header . '.' . $payload, Encoding::base64UrlDecode($signature)));

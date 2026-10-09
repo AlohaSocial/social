@@ -3,10 +3,10 @@
  - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<!-- the same account as the other network sees it. Nothing here is a
-	     setting: the identity exists because this server offers one, and
-	     the one thing the person can take away is the phrase that proves
-	     it is theirs without this server -->
+	<!-- the same account as the other network sees it. The identity exists
+	     because this server offers one; the person can switch their
+	     presence there off, and take away the phrase that proves it is
+	     theirs without this server -->
 	<div class="bluesky-settings">
 		<p v-if="blueskyError" class="bluesky-settings__hint">
 			{{ blueskyError }}
@@ -53,22 +53,32 @@
 					</dd>
 				</div>
 			</dl>
-			<!-- off, the account stays and so does its address; nothing
-			     new goes out until it is on again -->
+			<!-- off is Bluesky's own deactivation: the account, its address
+			     and its repository stay, nothing new goes out, and on again
+			     it is back as it was -->
 			<NcCheckboxRadioSwitch
 				:modelValue="blueskyActive"
 				type="switch"
 				class="bluesky-settings__switch"
 				:disabled="switchingBluesky"
 				@update:modelValue="setBlueskyActive">
-				{{ t('social', 'Show my posts on Bluesky') }}
+				{{ t('social', 'Be on Bluesky') }}
 			</NcCheckboxRadioSwitch>
-			<p v-if="bluesky.active === false" class="bluesky-settings__hint">
-				{{ t('social', 'This account is paused on Bluesky: nothing new is published there until it is switched back on.') }}
+			<template v-if="bluesky.active === false">
+				<p class="bluesky-settings__hint">
+					{{ t('social', 'You are not on Bluesky: your profile and posts are not shown there, and nothing new goes there. Bluesky apps are signed out of your account, and your Bluesky messages and notifications are not read.') }}
+				</p>
+				<p class="bluesky-settings__hint">
+					{{ t('social', 'You can still follow and read Bluesky accounts here, but your likes, replies and messages to them stay here. Switched back on, your handle, profile and earlier posts are back; posts written while off stay off Bluesky.') }}
+				</p>
+			</template>
+			<p v-else class="bluesky-settings__hint">
+				{{ t('social', 'Switched off, your Bluesky profile and posts are no longer shown there and nothing new goes there. Your handle stays yours, and switching back on brings everything back except what you wrote while off.') }}
 			</p>
 			<!-- on Bluesky a block is a public record, and only a published one
 			     keeps the blocked account from replying to you there -->
 			<NcCheckboxRadioSwitch
+				v-if="bluesky.active !== false"
 				:modelValue="publishBlocks"
 				type="switch"
 				class="bluesky-settings__switch"
@@ -76,12 +86,12 @@
 				@update:modelValue="setPublishBlocks">
 				{{ t('social', 'Publish my blocks of Bluesky accounts') }}
 			</NcCheckboxRadioSwitch>
-			<p class="bluesky-settings__hint">
+			<p v-if="bluesky.active !== false" class="bluesky-settings__hint">
 				{{ publishBlocks
 					? t('social', 'Bluesky keeps the accounts you block from replying to you, quoting or mentioning you there. Bluesky blocks are public: anybody can see whom you blocked.')
 					: t('social', 'Your blocks stay on this server: you do not see those accounts here, but on Bluesky they can still reply to you, quote or mention you. Publishing them stops that, and makes them public, as all Bluesky blocks are.') }}
 			</p>
-			<div class="bluesky-settings__recovery">
+			<div v-if="bluesky.active !== false" class="bluesky-settings__recovery">
 				<NcButton :disabled="recovering" @click="createRecoveryPhrase">
 					<template #icon>
 						<NcLoadingIcon v-if="recovering" :size="20" />
@@ -873,13 +883,6 @@ export default {
 		},
 
 		/**
-		 * Pauses or resumes the account on Bluesky; the block follows what
-		 * the server answered, so the switch never says what did not happen.
-		 *
-		 * @param {boolean} active whether the account should be live there
-		 * @return {Promise<void>}
-		 */
-		/**
 		 * @param {boolean} publish whether to publish the blocks of Bluesky accounts
 		 */
 		async setPublishBlocks(publish) {
@@ -897,6 +900,14 @@ export default {
 			}
 		},
 
+		/**
+		 * Switches the person's presence on Bluesky off or on; the switch
+		 * follows what the server answered, so it never says what did not
+		 * happen.
+		 *
+		 * @param {boolean} active whether the person should be on Bluesky
+		 * @return {Promise<void>}
+		 */
 		async setBlueskyActive(active) {
 			this.blueskyActive = active
 			this.switchingBluesky = true
@@ -905,7 +916,7 @@ export default {
 				this.takeIdentity(data)
 			} catch (error) {
 				logger.debug('Could not change the Bluesky state', { error })
-				showError(t('social', 'Could not change whether your posts show on Bluesky'))
+				showError(t('social', 'Could not switch your presence on Bluesky'))
 				this.blueskyActive = this.bluesky?.active !== false
 			} finally {
 				this.switchingBluesky = false

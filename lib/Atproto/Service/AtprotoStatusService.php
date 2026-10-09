@@ -67,6 +67,8 @@ class AtprotoStatusService {
 				'pds_endpoint' => $this->safe(fn (): string => $this->config->pdsEndpoint()),
 				'service_did' => $this->safe(fn (): string => $this->config->serviceDid()),
 				'identities' => $this->identities->count(),
+				// of those, the ones their owners switched off for Bluesky
+				'identities_off' => $this->identities->countDeactivated(),
 				'repositories' => $this->repoRequest->countHeads(),
 				'events_in_window' => $this->events->countInWindow(),
 				'head_seq' => $this->events->latestSeq(),

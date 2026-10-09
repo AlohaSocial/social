@@ -123,6 +123,17 @@ class AtprotoIdentityRequest extends CoreRequestBuilder {
 		return (int)($row['n'] ?? 0);
 	}
 
+	public function countInState(string $state): int {
+		$qb = $this->getQueryBuilder();
+		$qb->select($qb->func()->count('id', 'n'))->from(self::TABLE_ATPROTO_IDENTITY)
+			->where($qb->expr()->eq('state', $qb->createNamedParameter($state)));
+		$cursor = $qb->executeQuery();
+		$row = $cursor->fetch();
+		$cursor->closeCursor();
+
+		return (int)($row['n'] ?? 0);
+	}
+
 	public function setState(string $did, string $state): void {
 		$qb = $this->getQueryBuilder();
 		$qb->update(self::TABLE_ATPROTO_IDENTITY)

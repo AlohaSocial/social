@@ -51,7 +51,7 @@ class BlueskyPostSource implements PostSource {
 		}
 		$params += ['sort' => 'latest', 'limit' => max(1, min(100, $limit))];
 		try {
-			$identity = $viewer === null ? null : $this->identities->forActor($viewer, false);
+			$identity = $viewer === null ? null : $this->identities->activeForActor($viewer);
 			$answer = $identity !== null
 				? $this->appView->queryAs($identity->did, $this->identities->signingKey($identity), 'app.bsky.feed.searchPosts', $params)
 				: $this->appView->query('app.bsky.feed.searchPosts', $params, ['atproto-accept-labelers' => $this->labelers->acceptHeader()]);

@@ -40,7 +40,7 @@ class ActivitySubscriptions {
 		if (!$this->config->isEnabled() || !BlueskyIds::isActorId($target->getId())) {
 			return;
 		}
-		$identity = $this->identities->forActor($subscriber, false);
+		$identity = $this->identities->activeForActor($subscriber);
 		if ($identity === null) {
 			return;
 		}
