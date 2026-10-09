@@ -11,6 +11,7 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Publisher\BlueskyBlocks;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -22,6 +23,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActorRelation;
 use OCA\Social\Model\InstancePath;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -42,6 +44,7 @@ class RelationshipService {
 		private ConfigService $configService,
 		private TimelineRevisionService $timelineRevisionService,
 		private LoggerInterface $logger,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -110,6 +113,10 @@ class RelationshipService {
 			return;
 		}
 
+		// a Bluesky account's block goes to Bluesky when the person publishes
+		// theirs; resolved here, as the Bluesky side needs services that need this one
+		$this->container?->get(BlueskyBlocks::class)->blocked($viewer, $target);
+
 		if ($this->configService->isBlockFederationEnabled()) {
 			/** @var Block $block */
 			$block = AP::instance()->getItemFromType(Block::TYPE);
@@ -130,6 +137,8 @@ class RelationshipService {
 
 			return;
 		}
+
+		$this->container?->get(BlueskyBlocks::class)->unblocked($viewer, $target);
 
 		if ($this->configService->isBlockFederationEnabled()) {
 			/** @var Block $block */

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\Publisher\BlueskyBlocks;
 use OCA\Social\Db\ActorRelationRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Exceptions\FollowNotFoundException;
@@ -32,6 +33,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 
@@ -243,6 +245,20 @@ class RelationshipServiceTest extends TestCase {
 		$this->expectException(InvalidResourceException::class);
 
 		$this->service->mute($this->alice(), $this->alice());
+	}
+
+	public function testABlockOfABlueskyAccountGoesToBlueskyWhereThePersonPublishesTheirs(): void {
+		$blocks = $this->createMock(BlueskyBlocks::class);
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(BlueskyBlocks::class)->willReturn($blocks);
+		$service = new RelationshipService($this->actorRelationRequest, $this->followsRequest, $this->activityService, $this->cacheActorService, $this->configService, $this->timelineRevisionService, $this->logger, $container);
+		$viewer = (new Person())->setId('https://social.test/@alice');
+		$bob = (new Person())->setId('https://bsky.app/profile/did:plc:bob');
+		$blocks->expects($this->once())->method('blocked')->with($viewer, $bob);
+		$blocks->expects($this->once())->method('unblocked')->with($viewer, $bob);
+
+		$service->block($viewer, $bob);
+		$service->unblock($viewer, $bob);
 	}
 
 	public function testBlockingYourselfIsRefused(): void {

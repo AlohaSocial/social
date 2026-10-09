@@ -89,7 +89,7 @@ Taken by the product owner; the date is the interview. **Do not re-ask.**
 | D13 | Bluesky posts appear **in the same timelines**, their authors addressed as bare `@alice.bsky.social` with a **badge**. | 09-25, confirmed 10-06 |
 | D14 | **All Bluesky interactions** (like, repost, follow, reply, mention, quote) show in Activities like their ActivityPub counterparts, under the same **notification policy** and requests inbox. | 10-06 |
 | D15 | **Direct messages** are Bluesky's chat service's: a Bluesky app signed in here reaches them through this PDS (`chat.bsky.*` proxied to the configured chat service), with a privileged app password or an OAuth app given `transition:chat.bsky`, as on Bluesky. They are not bridged into this app's own direct messages. | 10-06, revised 10-09 |
-| D16 | **Blocks and mutes are never published**; in scope: honour Bluesky's moderation labels, let users subscribe to labelers, file reports with Bluesky's moderation service, instance-level blocks of PDS hosts and DIDs. | 09-25, extended 10-06 |
+| D16 | **Mutes are never published, and blocks only as the person chooses** (revised 10-09: "Publish my blocks of Bluesky accounts", off by default, since a Bluesky block is public); in scope: honour Bluesky's moderation labels, let users subscribe to labelers, file reports with Bluesky's moderation service, instance-level blocks of PDS hosts and DIDs. | 09-25, extended 10-06 |
 | D17 | The client API is a PDS: Bluesky apps may log in here, with `app.bsky.*` proxied to the AppView; no AppView of our own. | 09-25 |
 | D18 | Bridgy Fed twins of local accounts are folded into the native identity (§13.3). | 09-25 |
 | D19 | **Moving an existing Bluesky account here** is its own phase. | 10-06 |
@@ -244,7 +244,8 @@ Collection → written when:
 | `app.bsky.graph.follow` | a local actor follows a Bluesky account (§9.2) | `subject` DID |
 | `app.bsky.feed.threadgate`, `app.bsky.feed.postgate` | a Bluesky app signed in here writes one for one of the account's own posts (§6), kept under that post's key | as the app wrote it |
 | `app.bsky.graph.list`, `listitem`, `starterpack`, `app.bsky.feed.generator` | a Bluesky app signed in here writes one (§9.6) | as the app wrote it |
-| `app.bsky.graph.block`, `app.bsky.graph.listblock` | **never** (D16) | — |
+| `app.bsky.graph.block` | a local actor blocks a Bluesky account, **only when the person publishes their blocks** (D16, `Publisher\BlueskyBlocks`) | `subject` DID |
+| `app.bsky.graph.listblock` | **never** (D16) | — |
 | `chat.*` | never | — |
 
 Records are built by `RecordMapper` from the Social model (§8) and
@@ -767,9 +768,15 @@ report id.
 ### 12.4 Blocks, mutes, instance blocks
 
 Local blocks and mutes of Bluesky accounts work as they do for anybody —
-stored in `social_actor_relation`, applied on read — and are **never
-written as `app.bsky.graph.block`** (D16); a blocked Bluesky account's
-interactions are dropped on arrival. A Bluesky user's public block *of* a
+stored in `social_actor_relation`, applied on read. A mute is never
+published; a block is written as `app.bsky.graph.block` **only when the
+person chose to publish their blocks** (Settings → Bluesky, off by
+default, because a Bluesky block is public), and only a published one
+keeps the blocked account from replying to, quoting or mentioning them on
+Bluesky (D16). Turning it on publishes the blocks of Bluesky accounts they
+hold; turning it off withdraws every published one; an unblock withdraws
+its record. A blocked Bluesky account's interactions are dropped on
+arrival either way. A Bluesky user's public block *of* a
 local account is read from their repository when it is encountered (the
 AppView says `viewer.blockedBy`) and honoured: no replies, no quotes of
 their posts are published by the blocked local account.
@@ -1246,8 +1253,9 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   not in one commit. Lists and their members, starter packs, feed
   generators, thread gates and post gates have no Social counterpart and
   are kept as the app wrote them, validated against their lexicon; a gate
-  only for one of the account's own posts, under that post's key. Blocks
-  and list blocks are refused (D16). `uploadBlob` stores a picture as any upload is, named by its CID,
+  only for one of the account's own posts, under that post's key. A block
+  is a block here, published, when the person publishes their blocks, and
+  refused while they do not; list blocks are refused (D16). `uploadBlob` stores a picture as any upload is, named by its CID,
   for the post that uses it. A report an app files is a report here, passed
   on in this server's name (3b).
 - The app's profile editor sets the avatar and the banner too: a picture

@@ -909,4 +909,23 @@ describe('BlueskySettings', () => {
 			expect(section(wrapper).exists()).toBe(false)
 		})
 	})
+
+	describe('publishing blocks', () => {
+		it('is off until the person turns it on, and says what it means either way', async () => {
+			const { default: axios } = await import('@nextcloud/axios')
+			axios.post.mockResolvedValue({ data: { publish_blocks: true } })
+			const wrapper = mountSettings()
+			await flushPromises()
+			const settings = wrapper.findComponent({ name: 'BlueskySettings' })
+
+			expect(settings.vm.publishBlocks).toBe(false)
+			expect(wrapper.text()).toContain('Your blocks stay on this server')
+
+			await settings.vm.setPublishBlocks(true)
+			await flushPromises()
+
+			expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('/api/v1/social/bluesky/publish-blocks'), { publish: true })
+			expect(wrapper.text()).toContain('Bluesky blocks are public')
+		})
+	})
 })
