@@ -20,8 +20,8 @@ use Throwable;
  * Finding Bluesky accounts by name: the public AppView's typeahead, asked
  * for text that looks like the start of a handle — a dot in it and no `@`
  * — so a Fediverse address or a plain username never leaves the instance.
- * What comes back are accounts shaped as cached actors but not stored:
- * one becomes a cached actor when somebody follows or mentions it.
+ * What comes back are cached actors: the one already here, or the account
+ * stored now, so it has the id a client opens or follows it by.
  */
 class BlueskySearch {
 	public const LIMIT = 8;
@@ -32,6 +32,7 @@ class BlueskySearch {
 		private ActorMapper $mapper,
 		private Blocklist $blocklist,
 		private LoggerInterface $logger,
+		private ?BlueskyActorService $actors = null,
 	) {
 	}
 
@@ -51,7 +52,7 @@ class BlueskySearch {
 	}
 
 	/**
-	 * @return Person[] accounts, not stored, the handle as account
+	 * @return Person[] cached accounts, the handle as account
 	 */
 	public function typeahead(string $query, int $limit = self::LIMIT): array {
 		if (!$this->isCandidate($query)) {
@@ -70,12 +71,29 @@ class BlueskySearch {
 				continue;
 			}
 			try {
-				$people[] = $this->mapper->person($actor);
+				$people[] = $this->cachedOf($this->mapper->person($actor), (string)$actor['did']);
 			} catch (Throwable $e) {
 				$this->logger->debug('Bluesky account not mapped', ['did' => $actor['did'], 'exception' => $e]);
 			}
 		}
 
 		return $people;
+	}
+
+	/**
+	 * The account as it is cached here, stored first when it is new: an
+	 * account without a stored row has no id a client can use.
+	 */
+	private function cachedOf(Person $person, string $did): Person {
+		if ($this->actors === null) {
+			return $person;
+		}
+		$cached = $this->actors->cached($did);
+		if ($cached === null) {
+			$this->actors->store($person);
+			$cached = $this->actors->cached($did);
+		}
+
+		return $cached ?? $person;
 	}
 }
