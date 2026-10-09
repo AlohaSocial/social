@@ -47,6 +47,8 @@ const FOLLOW_PAGE_SIZE = 20
  * @property {Record<string, boolean>} accountsFollowingsAllLoaded whether the following list is complete
  * @property {Record<string, boolean>} accountsFollowersFailed whether the followers list failed to load
  * @property {Record<string, boolean>} accountsFollowingsFailed whether the following list failed to load
+ * @property {Record<string, boolean>} accountsFollowersFilling whether more followers are being read from where the account lives
+ * @property {Record<string, boolean>} accountsFollowingsFilling whether more followed accounts are being read from where the account lives
  */
 
 /**
@@ -196,6 +198,13 @@ export const useAccountStore = defineStore('account', {
 		 */
 		accountsFollowersFailed: {},
 		accountsFollowingsFailed: {},
+		/**
+		 * Whether the server said, on the last page of a list, that it is
+		 * reading more of it from where the account lives just now
+		 * (`X-Social-Filling`), keyed the same way.
+		 */
+		accountsFollowersFilling: {},
+		accountsFollowingsFilling: {},
 	}),
 
 	getters: {
@@ -742,6 +751,7 @@ export const useAccountStore = defineStore('account', {
 				if (response.data.length < FOLLOW_PAGE_SIZE) {
 					this.setFollowersAllLoaded({ actorId: key, loaded: true })
 				}
+				this.accountsFollowersFilling = { ...this.accountsFollowersFilling, [key]: response.headers?.['x-social-filling'] === '1' }
 				this.setFollowersFailed({ actorId: key, failed: false })
 				return response.data
 			} catch (error) {
@@ -776,6 +786,7 @@ export const useAccountStore = defineStore('account', {
 				if (response.data.length < FOLLOW_PAGE_SIZE) {
 					this.setFollowingsAllLoaded({ actorId: key, loaded: true })
 				}
+				this.accountsFollowingsFilling = { ...this.accountsFollowingsFilling, [key]: response.headers?.['x-social-filling'] === '1' }
 				this.setFollowingsFailed({ actorId: key, failed: false })
 				return response.data
 			} catch (error) {

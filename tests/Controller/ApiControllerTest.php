@@ -183,6 +183,7 @@ class ApiControllerTest extends TestCase {
 	private \OCA\Social\Service\AiContentService|Stub $aiContentService;
 	private \OCA\Social\Service\CountsService|Stub $countsService;
 	private \OCA\Social\Service\RemoteFetchQueue|MockObject $remoteFetchQueue;
+	private \OCA\Social\Service\FollowList\FollowListService|MockObject $followLists;
 	/** what the AI switch stub answers for the viewer */
 	private bool $hidesAi = false;
 	private bool $hidesCounts = true;
@@ -327,6 +328,7 @@ class ApiControllerTest extends TestCase {
 		$this->aiContentService = $this->createStub(\OCA\Social\Service\AiContentService::class);
 		$this->aiContentService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesAi);
 		$this->remoteFetchQueue = $this->createMock(\OCA\Social\Service\RemoteFetchQueue::class);
+		$this->followLists = $this->createMock(\OCA\Social\Service\FollowList\FollowListService::class);
 		$this->countsService = $this->createStub(\OCA\Social\Service\CountsService::class);
 		$this->countsService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesCounts);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
@@ -458,6 +460,7 @@ class ApiControllerTest extends TestCase {
 			'aiContentService' => $this->aiContentService,
 			'countsService' => $this->countsService,
 			'remoteFetchQueue' => $this->remoteFetchQueue,
+			'followLists' => $this->followLists,
 			'viewCountService' => $this->viewCountService,
 			'teamService' => $this->teamService,
 			'emojiService' => $this->emojiService,
@@ -3347,17 +3350,10 @@ class ApiControllerTest extends TestCase {
 		$this->assertNotFound($this->controller()->accountStatuses('nobody'), 'who?');
 	}
 
-	private function localHosts(): void {
-		$this->configService->method('getCloudHost')->willReturn('cloud.example');
-		$this->configService->method('getSocialAddress')->willReturn('social.example');
-	}
-
 	public function testAccountFollowersOfLocalAccountAreProbedLocally(): void {
-		$this->localHosts();
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
 		$this->cacheActorService->method('getFromAccount')->with('alice@cloud.example')->willReturn($actor);
-		$this->curlService->expects($this->never())->method('retrieveObject');
 		$captured = null;
 		$this->cacheActorService->method('probeActors')->willReturnCallback(function (ProbeOptions $o) use (&$captured): array {
 			$captured = $o;
@@ -3374,7 +3370,6 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAccountFollowingOfBareUsernameIsProbedLocally(): void {
-		$this->localHosts();
 		$actor = $this->createStub(Person::class);
 		$this->cacheActorService->method('getFromAccount')->with('alice')->willReturn($actor);
 		$captured = null;
@@ -3389,146 +3384,80 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(ProbeOptions::FOLLOWING, $captured->getProbe());
 	}
 
-	public function testAccountFollowersOfRemoteAccountAreFetchedFromTheirCollection(): void {
+	/** @return Person&MockObject a remote account the session can look at */
+	private function remoteAccount(): Person {
 		$this->loggedInAs();
-		$this->localHosts();
-		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
+		$actor = $this->createMock(Person::class);
+		$actor->method('getId')->willReturn('https://remote.example/users/bob');
+		$actor->method('isLocal')->willReturn(false);
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->curlService->method('retrieveObject')->willReturnMap([
-			['https://remote.example/users/bob/followers', true, ['first' => 'https://remote.example/users/bob/followers?page=1']],
-			['https://remote.example/users/bob/followers?page=1', true, ['orderedItems' => [
-				'https://remote.example/users/x',
-				'https://remote.example/users/y',
-				'https://remote.example/users/z',
-			]]],
-		]);
-		$x = $this->createMock(Person::class);
-		$x->method('getNid')->willReturn(11);
-		$y = $this->createStub(Person::class);
-		$y->method('getNid')->willReturn(12);
-		$this->cacheActorService->expects($this->once())->method('getCachedFromIds')
-			->with(['https://remote.example/users/x', 'https://remote.example/users/y'])
-			->willReturn(['https://remote.example/users/x' => $x, 'https://remote.example/users/y' => $y]);
-		$x->expects($this->once())->method('setExportFormat')->with(ACore::FORMAT_LOCAL);
+
+		return $actor;
+	}
+
+	public function testTheFollowersOfARemoteAccountAreWhatTheServiceMerged(): void {
+		$actor = $this->remoteAccount();
+		$known = $this->createStub(Person::class);
+		$known->method('getNid')->willReturn(30);
+		$listed = $this->createStub(Person::class);
+		$listed->method('getNid')->willReturn(12);
+		$this->requestUri('/api/v1/accounts/bob@remote.example/followers');
 		$this->cacheActorService->expects($this->never())->method('probeActors');
+		$this->followLists->expects($this->once())->method('page')
+			->with($actor, ProbeOptions::FOLLOWERS, $this->callback(fn (ProbeOptions $o): bool => $o->getLimit() === 2 && $o->getAccountId() === 'https://remote.example/users/bob'))
+			->willReturn(['accounts' => [$known, $listed], 'next' => '12', 'filling' => true]);
 
 		$response = $this->controller()->accountFollowers('bob@remote.example', 2);
 
-		$this->assertSame([$x, $y], $response->getData(), 'limit is applied and the third actor is never asked for');
+		$this->assertSame([$known, $listed], $response->getData());
+		$this->assertSame('1', $response->getHeaders()['X-Social-Filling'] ?? null);
+		$this->assertStringContainsString('max_id=12>; rel="next"', $response->getHeaders()['Link'] ?? '', 'continued after the last account on the page');
 	}
 
-	/**
-	 * Resolving the entries over HTTP while the caller waited was a fetch per
-	 * account at the federation timeout each: only what is cached is
-	 * answered, and the rest is fetched in the background.
-	 */
-	public function testRemoteCollectionAnswersTheCachedAccountsAndQueuesTheRest(): void {
-		$this->loggedInAs();
-		$this->localHosts();
-		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowing')->willReturn('https://remote.example/users/bob/following');
-		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [
-			'https://remote.example/users/x',
-			['id' => 'https://other.example/users/y', 'type' => 'Person'],
-			'https://other.example/users/z#main-key',
-		]]);
-		$x = $this->createStub(Person::class);
-		$x->method('getNid')->willReturn(11);
-		$this->cacheActorService->method('getCachedFromIds')
-			->willReturn(['https://remote.example/users/x' => $x]);
-		$this->cacheActorService->expects($this->never())->method('getFromId');
-		$this->remoteFetchQueue->expects($this->once())->method('resolveActors')
-			->with(['https://other.example/users/y', 'https://other.example/users/z']);
+	public function testTheEndOfWhatTheNetworkListsLinksNowhere(): void {
+		$actor = $this->remoteAccount();
+		$listed = $this->createStub(Person::class);
+		$listed->method('getNid')->willReturn(12);
+		$this->followLists->method('page')->with($actor, ProbeOptions::FOLLOWING)
+			->willReturn(['accounts' => [$listed], 'next' => '', 'filling' => false]);
 
-		$this->assertSame([$x], $this->controller()->accountFollowing('bob@remote.example')->getData());
+		$response = $this->controller()->accountFollowing('bob@remote.example');
+
+		$this->assertSame([$listed], $response->getData());
+		$this->assertArrayNotHasKey('Link', $response->getHeaders());
+		$this->assertArrayNotHasKey('X-Social-Filling', $response->getHeaders());
 	}
 
-	/** Paging through a profile or opening it again does not fetch the collection again. */
-	public function testRemoteCollectionIsKeptForAFewMinutes(): void {
-		$this->loggedInAs();
-		$this->localHosts();
-		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
-		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->curlService->expects($this->once())->method('retrieveObject')
-			->willReturn(['orderedItems' => ['https://remote.example/users/x']]);
-		$x = $this->createStub(Person::class);
-		$x->method('getNid')->willReturn(11);
-		$this->cacheActorService->method('getCachedFromIds')
-			->willReturn(['https://remote.example/users/x' => $x]);
-
-		$this->assertSame([$x], $this->controller()->accountFollowers('bob@remote.example')->getData());
-		$this->assertSame([$x], $this->controller()->accountFollowers('bob@remote.example')->getData());
-	}
-
-	public function testRemoteCollectionDropsActorsWithoutANumericId(): void {
-		$this->loggedInAs();
-		$this->localHosts();
-		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
-		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		// the page carries the actors inline, as Mastodon's collections do
-		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [
-			['id' => 'https://remote.example/users/x', 'type' => 'Person'],
-			['id' => 'https://remote.example/users/y', 'type' => 'Person'],
-		]]);
-
-		$uncached = $this->createStub(Person::class);
-		$uncached->method('getNid')->willReturn(0);
+	public function testAPageOfOnlyWhatIsKnownHereKeepsItsPaging(): void {
+		$this->remoteAccount();
+		$this->requestUri('/api/v1/accounts/bob@remote.example/followers');
 		$known = $this->createStub(Person::class);
-		$known->method('getNid')->willReturn(9);
-		$this->cacheActorService->method('getCachedFromIds')->willReturn([
-			'https://remote.example/users/x' => $uncached,
-			'https://remote.example/users/y' => $known,
-		]);
+		$known->method('getNid')->willReturn(30);
+		$this->followLists->method('page')->willReturn(['accounts' => [$known], 'next' => null, 'filling' => false]);
 
-		// every entity in the API is addressed by its numeric id, so a page of
-		// accounts all sharing id "0" is one a client cannot act on at all
-		$this->assertSame(
-			[$known], $this->controller()->accountFollowers('bob@remote.example', 5)->getData()
-		);
+		$link = $this->controller()->accountFollowers('bob@remote.example', 1)->getHeaders()['Link'] ?? '';
+
+		$this->assertStringContainsString('max_id=30>; rel="next"', $link);
+		$this->assertStringContainsString('min_id=30>; rel="prev"', $link);
 	}
 
-	public function testRemoteCollectionFetchFailureYieldsAnEmptyList(): void {
-		$this->loggedInAs();
-		$this->localHosts();
-		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
-		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->curlService->method('retrieveObject')->willThrowException(new \RuntimeException('timeout'));
+	public function testAListThatCouldNotBeMergedIsAnError(): void {
+		$this->remoteAccount();
+		$this->followLists->method('page')->willThrowException(new \RuntimeException('database gone'));
 
-		$response = $this->controller()->accountFollowers('bob@remote.example');
-
-		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame([], $response->getData());
+		$this->assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $this->controller()->accountFollowers('bob@remote.example')->getStatus());
 	}
 
-	public function testRemoteFollowerFanOutIsBoundedByMaxLimit(): void {
+	public function testTheFollowersOfALocalAccountAreThisServersAlone(): void {
 		$this->loggedInAs();
-		$this->localHosts();
 		$actor = $this->createStub(Person::class);
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
+		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
+		$actor->method('isLocal')->willReturn(true);
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
+		$this->followLists->expects($this->never())->method('page');
+		$this->cacheActorService->expects($this->once())->method('probeActors')->willReturn(['f']);
 
-		// a remote page far larger than MAX_LIMIT: the walk itself stops there,
-		// whatever the (already large) limit the caller asked for
-		$ids = [];
-		for ($i = 0; $i < 500; $i++) {
-			$ids[] = 'https://remote.example/users/u' . $i;
-		}
-		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => $ids]);
-		$this->cacheActorService->method('getCachedFromIds')
-			->willReturnCallback(function (array $asked): array {
-				$this->assertLessThanOrEqual(ProbeOptions::MAX_LIMIT, count($asked));
-
-				return [];
-			});
-		$this->remoteFetchQueue->expects($this->once())->method('resolveActors')
-			->with($this->callback(fn (array $queued): bool => count($queued) <= ProbeOptions::MAX_LIMIT));
-
-		$this->assertSame([], $this->controller()->accountFollowers('bob@remote.example', 500)->getData());
+		$this->assertSame(['f'], $this->controller()->accountFollowers('alice')->getData());
 	}
 
 	// favourites / notifications / tag
@@ -3684,7 +3613,6 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testFollowerPagesArePagedByTheirActorIds(): void {
-		$this->localHosts();
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://cloud.example/apps/social/@alice');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
@@ -3791,12 +3719,10 @@ class ApiControllerTest extends TestCase {
 	}
 
 	public function testAnAnonymousCallerDoesNotMakeTheInstanceReadARemoteCollection(): void {
-		$this->localHosts();
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
-		$actor->method('getFollowers')->willReturn('https://remote.example/users/bob/followers');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->curlService->expects($this->never())->method('retrieveObject');
+		$this->followLists->expects($this->never())->method('page');
 		$this->cacheActorService->expects($this->once())->method('probeActors')->willReturn([]);
 
 		$this->assertSame([], $this->controller()->accountFollowers('bob@remote.example')->getData());

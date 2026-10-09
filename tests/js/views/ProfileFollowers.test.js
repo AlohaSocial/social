@@ -6,7 +6,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, reactive } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import ProfileFollowers from '../../../src/views/ProfileFollowers.vue'
+import ProfileFollowers, { REFILL_MS } from '../../../src/views/ProfileFollowers.vue'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 
@@ -119,6 +119,61 @@ describe('ProfileFollowers', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.followers-error').text()).toContain('The followed accounts could not be loaded.')
+		})
+	})
+
+	describe('a list being read from where the account lives', () => {
+		beforeEach(() => {
+			vi.useFakeTimers()
+			store.fetchAccountFollowers.mockImplementation(async ({ account: handle }) => {
+				store.addFollowers({ account: handle, data: [dave] })
+				store.accountsFollowersFilling = { ...store.accountsFollowersFilling, [store.getActorIdForAccount(handle) || handle]: true }
+			})
+		})
+
+		afterEach(() => {
+			vi.useRealTimers()
+		})
+
+		it('is asked for again a little later, once', async () => {
+			mountView({ name: 'profile.followers', params: { account: 'bob@remote.example' } })
+			await flushPromises()
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(1)
+
+			vi.advanceTimersByTime(REFILL_MS - 1)
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(1)
+			vi.advanceTimersByTime(1)
+			await flushPromises()
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(2)
+			expect(store.fetchAccountFollowers).toHaveBeenLastCalledWith({ account: 'bob@remote.example' })
+
+			vi.advanceTimersByTime(REFILL_MS * 3)
+			await flushPromises()
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(2)
+		})
+
+		it('is not asked for again when nothing more is being read', async () => {
+			store.fetchAccountFollowers.mockImplementation(fetchFollowers)
+			mountView({ name: 'profile.followers', params: { account: 'bob@remote.example' } })
+			await flushPromises()
+
+			vi.advanceTimersByTime(REFILL_MS * 2)
+			await flushPromises()
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(1)
+		})
+
+		it('is not asked for again once the reader has moved on', async () => {
+			const route = reactive({ name: 'profile.followers', params: { account: 'bob@remote.example' } })
+			const wrapper = mountView(route)
+			await flushPromises()
+			route.name = 'profile.following'
+			await flushPromises()
+
+			vi.advanceTimersByTime(REFILL_MS * 2)
+			await flushPromises()
+			expect(store.fetchAccountFollowers).toHaveBeenCalledTimes(1)
+
+			wrapper.unmount()
 		})
 	})
 

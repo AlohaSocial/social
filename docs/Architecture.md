@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.191
+**App version:** 0.26.192
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -335,7 +335,7 @@ The business logic lives in `lib/Service/`.
 - **FollowService** — Follow/unfollow flows, follower/following collections, and relationship lookups
 - **LikeService** — Creates and undoes Like activities
 - **StreamPruneService** — Retention: deletes remote statuses older than `retention_days` (default 0 = disabled) that no local user interacted with, whose author nobody follows, that no local status replies to or boosts, and that are not DMs — together with their dest/action/tag rows and cached attachments. Runs bounded in the Cache cron and unbounded via `occ social:stream:prune`. Whatever `retention_days` says, every pass also purges the queue rows nothing will act on again and the `SocialAppNotification` rows older than `notification_retention_days` (default 90): local rows about a local user's post, read once from the bell and never federated
-- **RemoteFetchQueue** — The remote fetches a page would like done and must not wait for. A page shows what is cached here and hands what is missing to this, which queues one background job per piece (`IJobList::has()` first, so a page asked for a hundred times before cron runs is still one job per argument, and at most `MAX_PER_CALL`, 20, per call); the next look at the page has it. `resolveActors()` queues a `Cron\ResolveActor` per uncached actor — used for the people named in a page's pictures (`StreamService::attachTaggedPeople()`, which reads them from the cache in one query and used to fetch each miss over HTTP while the timeline was being built) and for the entries of a remote account's followers/following page (`AccountApiController::fetchRemoteCollection()`, which answers the cached accounts only and keeps the collection's ids in `DurableCache` under `social.collections` for five minutes; it used to resolve up to 80 entries one after another at the federation timeout each). `syncTimeline()` queues a `Cron\SyncRemoteTimeline` for a remote account whose profile's first page a signed-in reader opened, at most once per `TIMELINE_SYNC_INTERVAL` (15 minutes) per account, stamped in `DurableCache` (`social.outboxsync`) when queued; the profile route used to read the outbox and import up to 20 posts before answering, on every page including each scroll
+- **RemoteFetchQueue** — The remote fetches a page would like done and must not wait for. A page shows what is cached here and hands what is missing to this, which queues one background job per piece (`IJobList::has()` first, so a page asked for a hundred times before cron runs is still one job per argument, and at most `MAX_PER_CALL`, 20, per call); the next look at the page has it. `resolveActors()` queues a `Cron\ResolveActor` per uncached actor — used for the people named in a page's pictures (`StreamService::attachTaggedPeople()`, which reads them from the cache in one query and used to fetch each miss over HTTP while the timeline was being built) and for the accounts a remote account's followers/following collection names (`ActivityPubFollowListSource`, read in the background; the list used to resolve up to 80 entries one after another at the federation timeout each while the reader waited). `fillFollowList()` queues that read, a `Cron\FillFollowLists`, at most once per `FOLLOW_LISTS_INTERVAL` (ten minutes) per account and direction (`social.followfill`). `syncTimeline()` queues a `Cron\SyncRemoteTimeline` for a remote account whose profile's first page a signed-in reader opened, at most once per `TIMELINE_SYNC_INTERVAL` (15 minutes) per account, stamped in `DurableCache` (`social.outboxsync`) when queued; the profile route used to read the outbox and import up to 20 posts before answering, on every page including each scroll
 - **CacheActorSweepService** — The other half of retention, for accounts rather than posts: evicts the cached remote actors nothing here refers to any more, with their avatars and headers. A row is written the first time this instance meets an account — a like on a local post, a boost seen in a timeline, a reply in a thread — and until this existed nothing removed one but the account's own instance sending a `Delete` (`PersonInterface`) or a moderator purging its domain (`ModerationService`), so a year of federating left tens of thousands of rows and a picture each for accounts nobody here has anything to do with. An actor goes when nobody here follows it, it follows nobody here, no post of its is stored, no follow request or block/mute/endorsement names it either way, and it has been neither seen nor tried for `cache_actor_days` (default 180; 0 disables). Paged like `StreamPruneService` and bounded per cron pass (`Cron\Cache::SWEEP_BATCH`, 500). What is swept is fetched again the moment it is needed, so what is lost is a request and never a relationship or a post. A like or a boost of a local post is deliberately not one of the conditions — the same line `tootctl accounts prune` draws: the `social_action` row stays and names the actor, and the profile is fetched again when the list of who liked the post is opened
 - **BoostService** — Creates and undoes Announce (boost/reblog) activities. One Announce stream row per (post, booster), looked up with `StreamRequest::getAnnounceBy()`: a second booster gets a row of their own rather than being folded into the first one's, so the row names who boosted and an Undo names an Announce its signer made; a boost is counted from the per-booster `social_action` rows. Rows stored before boosts had one row each — attributed to one booster, carrying the others' followers in `cc` — are left as they are. Two followers boosting the same post are two cards in the home timeline, each naming its booster; `filterDuplicate()` only hides the viewer's own boosts
 - **ActionService** — Dispatcher for the Mastodon-style status actions. favourite/unfavourite create and delete a Like, reblog/unreblog an Announce, and bookmark/unbookmark toggle the viewer's local `bookmarked` flag (never federated, served by `/api/v1/bookmarks`), and pin/unpin hand off to `PinService`; `mute`/`unmute` mute the conversation. `translate` is deliberately **not** one of these: it used to be, returning the status unchanged, which a client cannot tell from a translation — it is `StatusApiController::statusTranslate()` now, answering a Translation entity from a real provider
@@ -1588,6 +1588,42 @@ Who reacted is kept an hour in the durable cache's table (`DurableCache::setShar
 counts on a post, and the notifications, stay what they were. Quoting
 posts are stored as posts, so the quotes list reads them like any other.
 The answers say `X-Social-Filling` while the read was just asked for.
+
+### Who follows an account, and whom it follows
+
+The same idea for the followers and following lists of an account on
+another server: the follows this server knows come first, as always, and
+after them the ones the network the account lives on lists, with nothing
+to tell them apart and nobody twice. `FollowListService` asks each network
+the account is on (`FollowListSource`) in the background
+(`Cron\FillFollowLists`, queued by `RemoteFetchQueue::fillFollowList()` at
+most every ten minutes per account and direction, for a signed-in reader):
+
+- `ActivityPubFollowListSource` reads the actor's `followers` or
+  `following` collection as its server describes it, at most four
+  documents (the collection and its first pages), and has the accounts not
+  cached here fetched (`RemoteFetchQueue::resolveActors()`). A server can
+  keep the lists to itself: Mastodon's "hide your social graph" answers the
+  collection and refuses its pages (401/403), others give only
+  `totalItems`; either is a hidden list, and a hidden list is empty here
+  too, the follows this server knows included — what Mastodon itself does;
+- `Atproto\Reader\BlueskyFollowListSource` asks the AppView
+  (`app.bsky.graph.getFollowers`, `getFollows`, up to three pages and 100
+  accounts) for an account on Bluesky, caches each account as it is found
+  (`BlueskyActorService::store()`), and names one of this server's own
+  accounts by its local id (`LocalRecordResolver`). Bluesky has no hidden
+  lists.
+
+What a network listed is kept an hour in the durable cache's table
+(`DurableCache::setShared()`, `social.followlists`). The routes
+(`AccountApiController::accountFollowers()`/`accountFollowing()`) page the
+follows known here by their ids as before; the last of those pages is
+filled up with the listed accounts, and a page that reaches into them is
+continued by the `max_id` of its last account, which the service finds
+among the listed ones. A page asked for with `min_id` or `since` is the
+follows known here alone. The answers say `X-Social-Filling` while the
+read was just asked for; the web app's list asks for its first page once
+more six seconds later. An account of this server's own is unchanged.
 
 ### Hashtags and searches beyond this server
 
