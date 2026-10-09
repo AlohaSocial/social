@@ -571,7 +571,10 @@ A Bluesky post is a stream row of type `Note` with id `at://…/app.bsky.feed.po
 link, `attributed_to` the cached actor, `content` rebuilt from text and
 facets (links and mentions as anchors, hashtags as hashtag links), pictures
 as `social_cache_doc` rows pointing at the AppView's CDN URL with the
-blob's CID and alt text, a quote as `quoted_id`, a reply as `in_reply_to`,
+blob's CID and alt text, a quote as `quoted_id`, an embedded custom feed,
+list or starter pack as a link to its bsky.app page with a card made from
+what the AppView says of it — its name, description, creator and picture,
+no page read (`PostMapper::cardOf()`) — a reply as `in_reply_to`,
 labels as `summary` (content warning) or `sensitive` per §12.1, `published`
 from `indexedAt`, `local` false, and `details.atproto` with the CID and
 the like/repost/reply counts the AppView reported. It goes through

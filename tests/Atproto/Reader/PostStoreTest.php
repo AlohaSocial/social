@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
@@ -33,6 +34,7 @@ use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\ImportService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -60,6 +62,8 @@ class PostStoreTest extends TestCase {
 	private array $known = [];
 	/** @var ACore[] what reached the import path */
 	private array $imported = [];
+	/** @var StreamCardsRequest&\PHPUnit\Framework\MockObject\MockObject */
+	private StreamCardsRequest $cards;
 
 	protected function setUp(): void {
 		$ap = $this->createMock(AP::class);
@@ -98,7 +102,8 @@ class PostStoreTest extends TestCase {
 		$time->method('getTime')->willReturn(1760000000);
 		$this->appView = $this->createMock(AppViewClient::class);
 		$this->interactions = $this->createMock(InteractionPublisher::class);
-		$this->store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $this->import, $this->streams, $time, new NullLogger());
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->store = new PostStore(new PostMapper($this->resolver()), $this->appView, $this->interactions, new ActorMapper(), $this->actors, $this->createMock(Blocklist::class), $this->createMock(LabelerService::class), $this->import, $this->streams, $time, new NullLogger(), $this->cards);
 	}
 
 	protected function tearDown(): void {
@@ -120,6 +125,22 @@ class PostStoreTest extends TestCase {
 		$this->assertSame(3, $note->getDetailInt(Details::REMOTE_LIKES));
 		$this->assertSame(1, $note->getDetailInt(Details::BOOSTS));
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', $note->getDetails(PostMapper::DETAIL)['uri']);
+	}
+
+	public function testAFeedThePostEmbedsIsItsCard(): void {
+		$this->actors->method('cached')->willReturn($this->person(self::DID));
+		$view = $this->postView();
+		$view['embed'] = ['$type' => 'app.bsky.embed.record#view', 'record' => [
+			'$type' => 'app.bsky.feed.defs#generatorView', 'uri' => 'at://' . self::DID . '/app.bsky.feed.generator/cats', 'cid' => 'bafyfeed', 'did' => 'did:web:feeds.test',
+			'creator' => ['did' => self::DID, 'handle' => 'alice.bsky.social'], 'displayName' => 'Cats', 'description' => 'Only cats', 'avatar' => 'https://cdn.bsky.app/img/avatar/plain/cats@jpeg', 'indexedAt' => '2026-10-08T10:00:00.000Z',
+		]];
+		$this->cards->expects($this->once())->method('save')->willReturnCallback(function (StreamCard $card): void {
+			$this->assertSame(['https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22', 'https://bsky.app/profile/alice.bsky.social/feed/cats', 'Cats', 'Only cats', 'https://cdn.bsky.app/img/avatar/plain/cats@jpeg', 'Bluesky feed by @alice.bsky.social'],
+				[$card->getStreamId(), $card->getUrl(), $card->getTitle(), $card->getDescription(), $card->getImage(), $card->getProviderName()]);
+		});
+
+		$this->assertSame(1, $this->store->storeFeedItem(['post' => $view]));
+		$this->assertArrayNotHasKey('card', $this->imported[0]->getObject()->getDetails(PostMapper::DETAIL), 'not kept twice');
 	}
 
 	public function testAKnownPostIsNotStoredAgain(): void {
