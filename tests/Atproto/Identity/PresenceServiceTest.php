@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\PresenceService;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoOAuthRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -78,7 +79,10 @@ class PresenceServiceTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
 
-		return new PresenceService($identities, $this->clients, $this->oauth, $config, $time, new NullLogger());
+		$actors = $this->createMock(ActorsRequest::class);
+		$actors->method('getFromId')->willReturnCallback(fn (string $id): Person => $id === $this->alice->getId() ? $this->alice : throw new \RuntimeException('no such account'));
+
+		return new PresenceService($identities, $this->clients, $this->oauth, $config, $time, new NullLogger(), $actors);
 	}
 
 	private static function post(int $published): Note {
@@ -115,6 +119,17 @@ class PresenceServiceTest extends TestCase {
 		$this->assertFalse($presence->writtenWhileOff($this->alice, self::post(self::NOW)));
 		$this->assertFalse($presence->writtenWhileOff($this->alice, self::post(self::NOW + 60)));
 		$this->assertFalse($presence->writtenWhileOff($this->alice, self::post(0)), 'a post without a time is not guessed at');
+	}
+
+	public function testAPostByTheCachedActorIsHeldBackAsTheAccountsWouldBe(): void {
+		$this->identity = self::identity(Identity::STATE_DEACTIVATED);
+		$presence = $this->presence();
+		$presence->switchOn($this->alice);
+		// what the publisher has: the cached actor, which carries no user
+		$cached = (new Person())->setId($this->alice->getId())->setLocal(true);
+
+		$this->assertTrue($presence->writtenWhileOff($cached, self::post(self::NOW - 60)));
+		$this->assertFalse($presence->writtenWhileOff((new Person())->setId('https://social.test/@nobody')->setLocal(true), self::post(self::NOW - 60)), 'an account not found is not held back');
 	}
 
 	public function testOnWhileOnChangesNothing(): void {

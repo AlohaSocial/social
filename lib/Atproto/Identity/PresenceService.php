@@ -12,6 +12,7 @@ namespace OCA\Social\Atproto\Identity;
 use InvalidArgumentException;
 use OCA\Social\AppInfo\Application;
 use OCA\Social\Atproto\Model\Identity;
+use OCA\Social\Db\ActorsRequest;
 use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Db\AtprotoOAuthRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -19,6 +20,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * A person's own switch for their presence on Bluesky (D22, §4.6). Off, the
@@ -39,6 +41,7 @@ class PresenceService {
 		private IConfig $config,
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
+		private ?ActorsRequest $actors = null,
 	) {
 	}
 
@@ -77,10 +80,22 @@ class PresenceService {
 	 * comes by to publish what is missing.
 	 */
 	public function writtenWhileOff(Person $author, Stream $post): bool {
-		if (!$author->isLocal() || $author->getUserId() === '') {
+		if (!$author->isLocal()) {
 			return false;
 		}
-		$onSince = (int)$this->config->getUserValue($author->getUserId(), Application::APP_ID, self::ON_SINCE, '0');
+		$userId = $author->getUserId();
+		if ($userId === '' && $this->actors !== null) {
+			// a cached actor does not carry its Nextcloud user: the account does
+			try {
+				$userId = $this->actors->getFromId($author->getId())->getUserId();
+			} catch (Throwable) {
+				return false;
+			}
+		}
+		if ($userId === '') {
+			return false;
+		}
+		$onSince = (int)$this->config->getUserValue($userId, Application::APP_ID, self::ON_SINCE, '0');
 		$published = $post->getPublishedTime();
 
 		return $onSince > 0 && $published > 0 && $published < $onSince;
