@@ -66,6 +66,21 @@
 			<p v-if="bluesky.active === false" class="bluesky-settings__hint">
 				{{ t('social', 'This account is paused on Bluesky: nothing new is published there until it is switched back on.') }}
 			</p>
+			<!-- on Bluesky a block is a public record, and only a published one
+			     keeps the blocked account from replying to you there -->
+			<NcCheckboxRadioSwitch
+				:modelValue="publishBlocks"
+				type="switch"
+				class="bluesky-settings__switch"
+				:disabled="switchingBlocks"
+				@update:modelValue="setPublishBlocks">
+				{{ t('social', 'Publish my blocks of Bluesky accounts') }}
+			</NcCheckboxRadioSwitch>
+			<p class="bluesky-settings__hint">
+				{{ publishBlocks
+					? t('social', 'Bluesky keeps the accounts you block from replying to you, quoting or mentioning you there. Bluesky blocks are public: anybody can see whom you blocked.')
+					: t('social', 'Your blocks stay on this server: you do not see those accounts here, but on Bluesky they can still reply to you, quote or mention you. Publishing them stops that, and makes them public, as all Bluesky blocks are.') }}
+			</p>
 			<div class="bluesky-settings__recovery">
 				<NcButton :disabled="recovering" @click="createRecoveryPhrase">
 					<template #icon>
@@ -451,6 +466,9 @@ export default {
 			/** the pause switch: it moves at once, and comes back if the server refuses */
 			blueskyActive: true,
 			switchingBluesky: false,
+			/** whether blocks of Bluesky accounts go to Bluesky, where they are public */
+			publishBlocks: false,
+			switchingBlocks: false,
 			/** what was just copied: one of the copyBluesky names, or '' */
 			blueskyCopied: '',
 			blueskyCopyTimer: null,
@@ -705,6 +723,9 @@ export default {
 		takeIdentity(identity) {
 			this.bluesky = identity
 			this.blueskyActive = identity?.active !== false
+			if (identity && 'publish_blocks' in identity) {
+				this.publishBlocks = identity.publish_blocks === true
+			}
 		},
 
 		/**
@@ -858,6 +879,24 @@ export default {
 		 * @param {boolean} active whether the account should be live there
 		 * @return {Promise<void>}
 		 */
+		/**
+		 * @param {boolean} publish whether to publish the blocks of Bluesky accounts
+		 */
+		async setPublishBlocks(publish) {
+			this.publishBlocks = publish
+			this.switchingBlocks = true
+			try {
+				const { data } = await axios.post(generateUrl('apps/social/api/v1/social/bluesky/publish-blocks'), { publish })
+				this.publishBlocks = data.publish_blocks === true
+			} catch (error) {
+				logger.debug('Could not change whether blocks are published', { error })
+				showError(t('social', 'Could not change whether your blocks are published'))
+				this.publishBlocks = !publish
+			} finally {
+				this.switchingBlocks = false
+			}
+		},
+
 		async setBlueskyActive(active) {
 			this.blueskyActive = active
 			this.switchingBluesky = true

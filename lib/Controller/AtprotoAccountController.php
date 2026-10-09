@@ -21,6 +21,7 @@ use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\Move\MoveAwayService;
 use OCA\Social\Atproto\Move\MoveInService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
+use OCA\Social\Atproto\Publisher\BlueskyBlocks;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Exceptions\AtprotoException;
@@ -55,6 +56,7 @@ class AtprotoAccountController extends Controller {
 		private MoveInService $moveIn,
 		private InboundMoveService $inbound,
 		private BridgyTwin $bridgy,
+		private BlueskyBlocks $blocks,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -77,7 +79,7 @@ class AtprotoAccountController extends Controller {
 			}
 			$this->publisher->publishProfile($actor);
 
-			return new DataResponse(self::export($identity));
+			return new DataResponse(self::export($identity) + ['publish_blocks' => $this->blocks->isPublished($this->userId())]);
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
@@ -112,6 +114,26 @@ class AtprotoAccountController extends Controller {
 			}
 
 			return new DataResponse(self::export($this->identities->getByDid($identity->did)));
+		} catch (Throwable $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+	}
+
+	/**
+	 * Whether the viewer's blocks of Bluesky accounts are published to
+	 * Bluesky, where a block is public: on, the ones they hold are published
+	 * now; off, every published one is withdrawn.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/v1/social/bluesky/publish-blocks')]
+	public function publishBlocks(bool $publish): DataResponse {
+		if ($this->ownIdentity() === null) {
+			return new DataResponse(['error' => 'No Bluesky identity for this account'], Http::STATUS_NOT_FOUND);
+		}
+		try {
+			$this->blocks->setPublished($this->accountService->getActorFromUserId($this->userId()), $publish);
+
+			return new DataResponse(['publish_blocks' => $this->blocks->isPublished($this->userId())]);
 		} catch (Throwable $e) {
 			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}

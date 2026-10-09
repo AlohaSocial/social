@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Model\RepoHead;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Publisher\BlueskyBlocks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
@@ -49,6 +50,7 @@ use OCA\Social\Service\LikeService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
+use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
@@ -95,6 +97,11 @@ class WriteServiceTest extends TestCase {
 	/** @var BannerService&MockObject */
 	private BannerService $banners;
 	private WriteService $writes;
+	/** @var RelationshipService&MockObject */
+	private RelationshipService $relationships;
+	/** @var BlueskyBlocks&MockObject */
+	private BlueskyBlocks $blocks;
+	private bool $publishesBlocks = false;
 	private ClientSession $session;
 	private Person $alice;
 	/** @var StoredRecord[] */
@@ -131,6 +138,9 @@ class WriteServiceTest extends TestCase {
 			'at://' . self::BOB . '/app.bsky.feed.post/3kbob' => 'https://bsky.app/profile/' . self::BOB . '/post/3kbob',
 			default => '',
 		});
+		$this->relationships = $this->createMock(RelationshipService::class);
+		$this->blocks = $this->createMock(BlueskyBlocks::class);
+		$this->blocks->method('isPublished')->willReturnCallback(fn (): bool => $this->publishesBlocks);
 		$identities = $this->createMock(IdentityService::class);
 		$identities->method('signingKey')->willReturn(PrivateKey::generate(Curve::K256));
 		$this->writes = new WriteService(
@@ -138,6 +148,7 @@ class WriteServiceTest extends TestCase {
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
 			$this->publisher, $this->pictures, $this->videos, $this->createMock(InteractionPublisher::class), $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
+			$this->relationships, $this->blocks,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -231,6 +242,26 @@ class WriteServiceTest extends TestCase {
 
 		$this->expectException(XrpcException::class);
 		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.feed.threadgate', 'record' => $gate('at://' . self::BOB . '/app.bsky.feed.post/3kbob')]);
+	}
+
+	public function testABlockFromAnAppIsABlockHereWhenThePersonPublishesTheirs(): void {
+		$this->publishesBlocks = true;
+		$bob = (new Person())->setId('https://bsky.app/profile/' . self::BOB);
+		$this->cacheActors->method('getFromId')->with('https://bsky.app/profile/' . self::BOB)->willReturn($bob);
+		$this->relationships->expects($this->once())->method('block')->with($this->alice, $bob)->willReturnCallback(function (): void {
+			$bytes = DagCbor::encode(['$type' => BlueskyBlocks::COLLECTION, 'subject' => self::BOB, 'createdAt' => '2026-10-09T10:00:00.000Z']);
+			$this->records[] = new StoredRecord(self::DID, BlueskyBlocks::COLLECTION, '3kblock', Cid::forDagCbor($bytes), $bytes, BlueskyBlocks::localId($this->alice->getId(), 'https://bsky.app/profile/' . self::BOB), 0);
+		});
+
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => BlueskyBlocks::COLLECTION, 'record' => ['$type' => BlueskyBlocks::COLLECTION, 'subject' => self::BOB, 'createdAt' => '2026-10-09T10:00:00.000Z']]);
+
+		$this->assertSame('at://' . self::DID . '/' . BlueskyBlocks::COLLECTION . '/3kblock', $made['uri']);
+		// as BlueskyBlocks does once unblocked: the record is withdrawn
+		$this->relationships->expects($this->once())->method('unblock')->with($this->alice, $bob)->willReturnCallback(function (): void {
+			$this->records = [];
+		});
+		$this->repositories->expects($this->never())->method('write');
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => BlueskyBlocks::COLLECTION, 'rkey' => '3kblock']);
 	}
 
 	public function testAListBlockIsABlockAndRefused(): void {

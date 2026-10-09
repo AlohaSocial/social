@@ -122,10 +122,10 @@ class AtprotoAppsTest extends TestCase {
 		$this->assertNotNull($liked, 'the like was made once the AppView knew the post');
 		$this->assertNotNull($this->network->await(fn () => in_array($identity->did, $this->network->likers($bobs['uri']), true) ? true : null), 'and counted there');
 
-		// a block is refused: blocks are never published
+		// a block is refused while the person does not publish theirs
 		[$status, $refused] = $app->procedure('com.atproto.repo.createRecord', ['repo' => $identity->did, 'collection' => 'app.bsky.graph.block', 'record' => ['$type' => 'app.bsky.graph.block', 'subject' => $this->network->userDid(), 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z')]]);
 		$this->assertSame(400, $status);
-		$this->assertStringContainsString('never published', (string)($refused['message'] ?? ''));
+		$this->assertStringContainsString('unless you publish them', (string)($refused['message'] ?? ''));
 
 		// the app's profile editor: a new picture becomes the account's avatar,
 		// asked of the server (this process keeps the account's settings cached

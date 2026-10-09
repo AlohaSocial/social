@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
+use OCA\Social\Atproto\Publisher\BlueskyBlocks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
@@ -46,6 +47,7 @@ use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\PostReviewService;
 use OCA\Social\Service\PostService;
+use OCA\Social\Service\RelationshipService;
 use OCA\Social\Service\ReportService;
 use OCA\Social\Service\StreamService;
 use OCP\IURLGenerator;
@@ -105,6 +107,8 @@ class WriteService {
 		private AvatarService $avatars,
 		private BannerService $banners,
 		private IdentityService $identities,
+		private RelationshipService $relationships,
+		private BlueskyBlocks $blocks,
 	) {
 	}
 
@@ -123,6 +127,7 @@ class WriteService {
 			RecordMapper::LIKE => $this->like($actor, $record),
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
+			BlueskyBlocks::COLLECTION => $this->block($session, $actor, $record),
 			default => in_array($collection, self::KEPT_AS_WRITTEN, true)
 				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record)
 				: throw $this->unsupported($collection),
@@ -255,6 +260,7 @@ class WriteService {
 			RecordMapper::LIKE => $this->undo($actor, $record, true),
 			RecordMapper::REPOST => $this->undo($actor, $record, false),
 			RecordMapper::FOLLOW => $this->unfollow($actor, $record),
+			BlueskyBlocks::COLLECTION => $this->unblock($session, $actor, $record),
 			default => throw $this->unsupported($collection),
 		};
 
@@ -505,6 +511,53 @@ class WriteService {
 		$like ? $this->interactions->unlike($record->localId) : $this->interactions->unrepost($record->localId);
 	}
 
+	/**
+	 * A block an app makes: a block here, published as the person publishes
+	 * theirs — and refused while they do not, since it would stay here.
+	 *
+	 * @throws XrpcException
+	 */
+	private function block(ClientSession $session, Person $actor, array $record): StoredRecord {
+		if (!$this->blocks->isPublished($session->userId)) {
+			throw $this->unsupported(BlueskyBlocks::COLLECTION);
+		}
+		$did = (string)($record['subject'] ?? '');
+		if (!Syntax::isDid($did)) {
+			throw XrpcException::invalidRequest('A block names a DID');
+		}
+		try {
+			$localId = $this->local->actorId($did);
+			$target = $this->cacheActors->getFromId($localId !== '' ? $localId : BlueskyIds::actorId($did));
+			$this->relationships->block($actor, $target);
+		} catch (Throwable $e) {
+			throw XrpcException::invalidRequest('Could not block: ' . $e->getMessage());
+		}
+		foreach ($this->repositories->getRecordsByLocalId(BlueskyBlocks::localId($actor->getId(), $target->getId())) as $stored) {
+			if ($stored->collection === BlueskyBlocks::COLLECTION) {
+				return $stored;
+			}
+		}
+
+		throw new XrpcException(400, 'InvalidRequest', 'Blocking that account writes no Bluesky record');
+	}
+
+	/**
+	 * A published block an app takes back: unblocked here, which withdraws
+	 * the record; a record this server did not write is only deleted.
+	 */
+	private function unblock(ClientSession $session, Person $actor, StoredRecord $record): void {
+		$did = (string)($record->value()['subject'] ?? '');
+		try {
+			$localId = $this->local->actorId($did);
+			$this->relationships->unblock($actor, $this->cacheActors->getFromId($localId !== '' ? $localId : BlueskyIds::actorId($did)));
+		} catch (Throwable $e) {
+			$this->logger->notice('Unblock from a Bluesky app failed', ['exception' => $e]);
+		}
+		if ($this->repositories->getRecord($session->identity->did, $record->collection, $record->rkey) !== null) {
+			$this->writeRaw($session, RepoWrite::delete($record->collection, $record->rkey));
+		}
+	}
+
 	private function unfollow(Person $actor, StoredRecord $record): void {
 		$did = (string)($record->value()['subject'] ?? '');
 		try {
@@ -734,8 +787,8 @@ class WriteService {
 	}
 
 	private function unsupported(string $collection): XrpcException {
-		if ($collection === 'app.bsky.graph.block') {
-			return XrpcException::invalidRequest('Blocks stay on this server and are never published; block from Aloha Social instead');
+		if ($collection === BlueskyBlocks::COLLECTION) {
+			return XrpcException::invalidRequest('Blocks stay on this server unless you publish them: turn on publishing your blocks in Aloha Social\'s Bluesky settings');
 		}
 
 		return XrpcException::invalidRequest('This server does not write ' . $collection . ' records');
