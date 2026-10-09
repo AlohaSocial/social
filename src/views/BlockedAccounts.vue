@@ -146,6 +146,66 @@
 			</transition-group>
 		</section>
 
+		<!-- the same decisions, made by somebody the reader trusts and kept
+		     up to date by them -->
+		<section v-if="blueskyOffered" id="moderation-lists" class="block-card">
+			<header class="block-card__head">
+				<span class="block-card__icon">
+					<FormatListBulleted :size="20" />
+				</span>
+				<h3 class="block-card__title">
+					{{ t('social', 'Shared lists') }}
+				</h3>
+				<span v-if="lists.length" class="block-card__count">{{ lists.length }}</span>
+			</header>
+			<p class="block-card__lede">
+				{{ t('social', 'Lists of accounts that somebody else keeps, to mute or block everybody on them. Whoever they add later is muted or blocked too; whoever they take off is not any more. Ending a subscription undoes only what the list did.') }}
+			</p>
+
+			<form class="blocked-domain__add" @submit.prevent="subscribeList">
+				<NcTextField
+					v-model="listDraft"
+					class="blocked-domain__field"
+					:label="t('social', 'Link to the list')"
+					placeholder="https://bsky.app/profile/…/lists/…"
+					:disabled="subscribing" />
+				<NcSelect
+					v-model="listKind"
+					class="blocked-domain__kind"
+					:inputLabel="t('social', 'Everybody on it is')"
+					:options="listKinds"
+					:clearable="false"
+					:searchable="false"
+					:disabled="subscribing"
+					label="text" />
+				<NcButton type="submit" :disabled="subscribing || listDraft.trim() === ''">
+					{{ t('social', 'Subscribe') }}
+				</NcButton>
+			</form>
+
+			<p v-if="!loading && lists.length === 0" class="block-card__empty">
+				{{ t('social', 'No shared lists') }} — {{ t('social', 'Paste the link of a moderation list to subscribe to it.') }}
+			</p>
+			<transition-group name="collapse" tag="div" class="blocked-account-list">
+				<div v-for="list in lists" :key="`list-${list.uri}`" class="blocked-account">
+					<div class="blocked-account__user blocked-account__user--column">
+						<span class="blocked-account__name">{{ list.name || list.uri }}</span>
+						<span class="blocked-account__acct">
+							{{ list.kind === 'block'
+								? n('social', 'Blocks %n account', 'Blocks %n accounts', list.accounts)
+								: n('social', 'Mutes %n account', 'Mutes %n accounts', list.accounts) }}
+						</span>
+					</div>
+					<NcButton
+						:disabled="busy.includes(list.uri)"
+						:aria-label="t('social', 'Unsubscribe')"
+						@click="unsubscribeList(list)">
+						{{ t('social', 'Unsubscribe') }}
+					</NcButton>
+				</div>
+			</transition-group>
+		</section>
+
 		<!-- last: the three above are people and servers, and this one applies
 		     to everybody, the people you follow included -->
 		<section id="filters" class="block-card">
@@ -245,17 +305,20 @@ import BlueskyLabelersSettings from '../components/BlueskyLabelersSettings.vue'
 import FiltersSettings from '../components/FiltersSettings.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AccountCancelOutline from 'vue-material-design-icons/AccountCancelOutline.vue'
 import Cancel from 'vue-material-design-icons/Cancel.vue'
 import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import DomainOff from 'vue-material-design-icons/DomainOff.vue'
 import FilterOutline from 'vue-material-design-icons/FilterOutline.vue'
+import FormatListBulleted from 'vue-material-design-icons/FormatListBulleted.vue'
 import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
 import TagOutline from 'vue-material-design-icons/TagOutline.vue'
 import VolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import logger from '../services/logger.js'
+import { fetchModerationLists, subscribeModerationList, unsubscribeModerationList } from '../services/moderationLists.js'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useServerData } from '../composables/useServerData.js'
@@ -270,9 +333,11 @@ export default {
 		DomainOff,
 		FilterOutline,
 		FiltersSettings,
+		FormatListBulleted,
 		IconInboxOutline,
 		NcButton,
 		NcCheckboxRadioSwitch,
+		NcSelect,
 		NcTextField,
 		Cancel,
 		TagOutline,
@@ -296,6 +361,11 @@ export default {
 			domains: [],
 			domainDraft: '',
 			hidingDomain: false,
+			/** @type {import('../services/moderationLists.js').ModerationList[]} */
+			lists: [],
+			listDraft: '',
+			listKind: null,
+			subscribing: false,
 			busy: [],
 			loading: true,
 			/** whether posts made with AI are hidden, as the server last confirmed it */
@@ -312,12 +382,21 @@ export default {
 		blueskyOffered() {
 			return this.serverData?.bluesky?.enabled === true
 		},
+
+		/** @return {{id: string, text: string}[]} what a shared list may do */
+		listKinds() {
+			return [
+				{ id: 'mute', text: t('social', 'Muted') },
+				{ id: 'block', text: t('social', 'Blocked') },
+			]
+		},
 	},
 
 	async mounted() {
 		// side by side: the one switch is not one of the lists, and a server
 		// that cannot answer for it must not take the lists down with it
-		await Promise.all([this.fetchAll(), this.loadAiContent()])
+		this.listKind = this.listKinds[0]
+		await Promise.all([this.fetchAll(), this.loadAiContent(), this.loadLists()])
 	},
 
 	methods: {
@@ -348,6 +427,61 @@ export default {
 				logger.error('Could not save whether posts made with AI are hidden', { error })
 				showError(error?.response?.data?.error || t('social', 'Could not save that setting'))
 				this.hideAi = before
+			}
+		},
+
+		/**
+		 * The shared lists stand on their own: a server that cannot answer
+		 * for them must not take the accounts down with them.
+		 */
+		async loadLists() {
+			if (!this.blueskyOffered) {
+				return
+			}
+			try {
+				this.lists = await fetchModerationLists()
+			} catch (error) {
+				logger.debug('Could not read the shared lists', { error })
+			}
+		},
+
+		/**
+		 * Subscribes to the list the link names; what it muted or blocked is
+		 * read again, as it is the server that knows.
+		 */
+		async subscribeList() {
+			const link = this.listDraft.trim()
+			if (link === '') {
+				return
+			}
+			this.subscribing = true
+			try {
+				await subscribeModerationList(link, this.listKind?.id ?? 'mute')
+				this.listDraft = ''
+				await Promise.all([this.loadLists(), this.fetchAll()])
+			} catch (error) {
+				logger.error('Failed to subscribe to the list', { error })
+				showError(error?.response?.status === 422
+					? t('social', 'That is not a list that can be read here')
+					: t('social', 'Could not subscribe to that list'))
+			} finally {
+				this.subscribing = false
+			}
+		},
+
+		/**
+		 * @param {import('../services/moderationLists.js').ModerationList} list the subscription to end
+		 */
+		async unsubscribeList(list) {
+			this.busy.push(list.uri)
+			try {
+				this.lists = await unsubscribeModerationList(list.uri)
+				await this.fetchAll()
+			} catch (error) {
+				logger.error('Failed to unsubscribe from the list', { error })
+				showError(t('social', 'Could not unsubscribe from that list'))
+			} finally {
+				this.busy = this.busy.filter((one) => one !== list.uri)
 			}
 		},
 
@@ -569,6 +703,12 @@ export default {
 		}
 	}
 
+	&__user--column {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0;
+	}
+
 	&__name {
 		font-weight: bold;
 	}
@@ -652,6 +792,10 @@ export default {
 
 .blocked-domain__field {
 	max-width: 320px;
+}
+
+.blocked-domain__kind {
+	min-width: 140px;
 }
 
 .block-card__links {

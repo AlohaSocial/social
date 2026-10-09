@@ -107,6 +107,7 @@ You can pin your own posts to the top of your profile, bookmark any post, and se
 		<job>OCA\Social\Cron\ExternalSignups</job>
 		<job>OCA\Social\Cron\AtprotoMaintenance</job>
 		<job>OCA\Social\Cron\AtprotoSync</job>
+		<job>OCA\Social\Cron\ModerationLists</job>
 		<job>OCA\Social\Cron\AtprotoVideo</job>
 	</background-jobs>
 
