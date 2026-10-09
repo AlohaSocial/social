@@ -176,6 +176,17 @@ class TeamsRequest extends CoreRequestBuilder {
 	}
 
 	/** The trail of a post goes with the post. */
+	/**
+	 * Which of a team's posts one person wrote: the posts stay the team's.
+	 */
+	public function deleteByAuthor(string $actorId): void {
+		$qb = $this->getQueryBuilder();
+		$qb->delete(self::TABLE_TEAM_POSTS)
+			->where($qb->expr()->eq('author_id_prim', $qb->createNamedParameter(md5($actorId))));
+
+		$qb->executeStatement();
+	}
+
 	public function deleteByStream(string $streamId): void {
 		$qb = $this->getQueryBuilder();
 		$qb->delete(self::TABLE_TEAM_POSTS)

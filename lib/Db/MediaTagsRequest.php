@@ -191,4 +191,13 @@ class MediaTagsRequest extends CoreRequestBuilder {
 
 		$qb->executeStatement();
 	}
+
+	/** The tags one account put on pictures, whoever is named in them. */
+	public function deleteByTagger(string $actorId): void {
+		$qb = $this->getQueryBuilder();
+		$qb->delete(self::TABLE_MEDIA_TAGS)
+			->where($qb->expr()->eq('tagger_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
+
+		$qb->executeStatement();
+	}
 }

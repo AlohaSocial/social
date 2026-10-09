@@ -124,6 +124,19 @@ class FileCommentsRequest extends CoreRequestBuilder {
 	}
 
 	/** Forgets which files a post was made from, and every comment copied for it. */
+	/**
+	 * Everything one person posted from Files: the posts a file was shared
+	 * in and the comments they wrote there.
+	 */
+	public function deleteByUser(string $userId): void {
+		foreach ([self::TABLE_FILE_POSTS, self::TABLE_FILE_COMMENTS] as $table) {
+			$qb = $this->getQueryBuilder();
+			$qb->delete($table)
+				->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+			$qb->executeStatement();
+		}
+	}
+
 	public function deletePost(string $postId): void {
 		$qb = $this->getQueryBuilder();
 		$prim = self::primOf($postId);

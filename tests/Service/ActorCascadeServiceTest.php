@@ -19,14 +19,18 @@ use OCA\Social\Db\CollectionsRequest;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\DomainBlocksRequest;
 use OCA\Social\Db\FeaturedTagsRequest;
+use OCA\Social\Db\FileCommentsRequest;
 use OCA\Social\Db\FiltersRequest;
+use OCA\Social\Db\FollowedTagsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ImportedPostsRequest;
+use OCA\Social\Db\ImportsRequest;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\MuteExpiryRequest;
 use OCA\Social\Db\PortfoliosRequest;
 use OCA\Social\Db\PostHoldsRequest;
+use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\RequestQueueRequest;
@@ -35,6 +39,7 @@ use OCA\Social\Db\StoriesRequest;
 use OCA\Social\Db\StoryInteractionsRequest;
 use OCA\Social\Db\StreamActionsRequest;
 use OCA\Social\Db\StreamViewsRequest;
+use OCA\Social\Db\TeamsRequest;
 use OCA\Social\Db\WatchRequest;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Service\ActorCascadeService;
@@ -64,6 +69,8 @@ class ActorCascadeServiceTest extends TestCase {
 	/** @var array<class-string, MockObject> */
 	private array $mocks = [];
 	private CacheDocumentService|Stub $cacheDocumentService;
+	private FileCommentsRequest&MockObject $files;
+	private ImportsRequest&MockObject $imports;
 
 	/**
 	 * Every table the cascade clears, as `class => [method, argument]`.
@@ -95,6 +102,10 @@ class ActorCascadeServiceTest extends TestCase {
 			'portfolio' => [PortfoliosRequest::class, 'deleteByActor'],
 			'stories' => [StoriesRequest::class, 'deleteRelatedId'],
 			'media tags' => [MediaTagsRequest::class, 'deleteByActor'],
+			'the tags it put on pictures' => [MediaTagsRequest::class, 'deleteByTagger'],
+			'followed hashtags' => [FollowedTagsRequest::class, 'deleteByActor'],
+			'quote approvals' => [QuoteGrantRequest::class, 'deleteRelatedId'],
+			'what it wrote as a team' => [TeamsRequest::class, 'deleteByAuthor'],
 			'imported posts' => [ImportedPostsRequest::class, 'deleteByActor'],
 			'posts held for a moderator' => [PostHoldsRequest::class, 'deleteByActor'],
 			'queued deliveries' => [RequestQueueRequest::class, 'deleteByAuthor'],
@@ -105,6 +116,8 @@ class ActorCascadeServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->cacheDocumentService = $this->createStub(CacheDocumentService::class);
+		$this->files = $this->createMock(FileCommentsRequest::class);
+		$this->imports = $this->createMock(ImportsRequest::class);
 		foreach (self::tables() as [$class, $method]) {
 			$this->mocks[$class] ??= $this->createMock($class);
 		}
@@ -147,6 +160,11 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->request(PostHoldsRequest::class),
 			$this->request(MediaTagsRequest::class),
 			$this->request(PortfoliosRequest::class),
+			$this->request(FollowedTagsRequest::class),
+			$this->request(QuoteGrantRequest::class),
+			$this->request(TeamsRequest::class),
+			$this->files,
+			$this->imports,
 			$this->request(WatchRequest::class),
 			$this->request(RequestQueueRequest::class),
 			$this->request(CacheDocumentsRequest::class),
@@ -218,7 +236,7 @@ class ActorCascadeServiceTest extends TestCase {
 
 	/** Everything else a suspension does take is what a deletion takes. */
 	public function testASuspensionClearsEveryOtherTableADeletionDoes(): void {
-		$spared = [ReportsRequest::class, AccountNotesRequest::class];
+		$spared = [ReportsRequest::class, AccountNotesRequest::class, QuoteGrantRequest::class, TeamsRequest::class];
 		$rewritten = [ActorRelationRequest::class, MuteExpiryRequest::class];
 
 		foreach (self::tables() as [$class, $method]) {
@@ -229,6 +247,22 @@ class ActorCascadeServiceTest extends TestCase {
 			$this->request($class)->expects($this->once())->method($method)->with(self::BOB);
 		}
 
+		$this->service()->purge(self::BOB, reversible: true);
+	}
+
+	/** What is kept by Nextcloud user goes with a deleted account, given its user. */
+	public function testWhatAPersonPostedFromFilesAndTheirImportsGoWithTheirAccount(): void {
+		$this->files->expects($this->once())->method('deleteByUser')->with('bob');
+		$this->imports->expects($this->once())->method('deleteByUser')->with('bob');
+
+		$this->service()->purge(self::BOB, false, 'bob');
+	}
+
+	public function testWithoutAUserNothingIsDeletedByUser(): void {
+		$this->files->expects($this->never())->method('deleteByUser');
+		$this->imports->expects($this->never())->method('deleteByUser');
+
+		$this->service()->purge(self::BOB);
 		$this->service()->purge(self::BOB, reversible: true);
 	}
 

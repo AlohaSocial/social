@@ -20,15 +20,19 @@ use OCA\Social\Db\CollectionsRequest;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Db\DomainBlocksRequest;
 use OCA\Social\Db\FeaturedTagsRequest;
+use OCA\Social\Db\FileCommentsRequest;
 use OCA\Social\Db\FiltersRequest;
+use OCA\Social\Db\FollowedTagsRequest;
 use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\ImportedPostsRequest;
+use OCA\Social\Db\ImportsRequest;
 use OCA\Social\Db\InterestsRequest;
 use OCA\Social\Db\ListsRequest;
 use OCA\Social\Db\MediaTagsRequest;
 use OCA\Social\Db\MuteExpiryRequest;
 use OCA\Social\Db\PortfoliosRequest;
 use OCA\Social\Db\PostHoldsRequest;
+use OCA\Social\Db\QuoteGrantRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\ReportsRequest;
 use OCA\Social\Db\RequestQueueRequest;
@@ -37,6 +41,7 @@ use OCA\Social\Db\StoriesRequest;
 use OCA\Social\Db\StoryInteractionsRequest;
 use OCA\Social\Db\StreamActionsRequest;
 use OCA\Social\Db\StreamViewsRequest;
+use OCA\Social\Db\TeamsRequest;
 use OCA\Social\Db\WatchRequest;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
@@ -91,6 +96,11 @@ class ActorCascadeService {
 		private PostHoldsRequest $postHoldsRequest,
 		private MediaTagsRequest $mediaTagsRequest,
 		private PortfoliosRequest $portfoliosRequest,
+		private FollowedTagsRequest $followedTagsRequest,
+		private QuoteGrantRequest $quoteGrantRequest,
+		private TeamsRequest $teamsRequest,
+		private FileCommentsRequest $fileCommentsRequest,
+		private ImportsRequest $importsRequest,
 		private WatchRequest $watchRequest,
 		private RequestQueueRequest $requestQueueRequest,
 		private CacheDocumentsRequest $cacheDocumentsRequest,
@@ -107,9 +117,11 @@ class ActorCascadeService {
 	 * @param bool $reversible a suspension rather than a deletion: the account
 	 *                         can be let back in, so the rows other accounts
 	 *                         own are left to them
+	 * @param string $userId the Nextcloud user of a local account, for what
+	 *                       is kept by user rather than by account
 	 */
-	public function purge(string $actorId, bool $reversible = false): void {
-		foreach ($this->steps($actorId, $reversible) as $what => $delete) {
+	public function purge(string $actorId, bool $reversible = false, string $userId = ''): void {
+		foreach ($this->steps($actorId, $reversible, $userId) as $what => $delete) {
 			try {
 				$delete();
 			} catch (Throwable $e) {
@@ -123,7 +135,7 @@ class ActorCascadeService {
 	/**
 	 * @return array<string, callable():void>
 	 */
-	private function steps(string $actorId, bool $reversible): array {
+	private function steps(string $actorId, bool $reversible, string $userId): array {
 		$steps = [
 			// its Bluesky identity: the DID is tombstoned on a deletion and
 			// left alone on a suspension, which can be lifted
@@ -171,6 +183,26 @@ class ActorCascadeService {
 			'stories' => fn () => $this->storiesRequest->deleteRelatedId($actorId),
 			// where it is named in somebody else's picture
 			'mediaTags' => fn () => $this->mediaTagsRequest->deleteByActor($actorId),
+			// and the tags it put on pictures, whoever they name
+			'mediaTagsMade' => fn () => $this->mediaTagsRequest->deleteByTagger($actorId),
+			// the hashtags it followed, as the ones it featured
+			'followedTags' => fn () => $this->followedTagsRequest->deleteByActor($actorId),
+			// the approvals of quotes it gave or was given
+			'quoteGrants' => fn () => $this->quoteGrantRequest->deleteRelatedId($actorId),
+			// which of a team's posts it wrote; the posts stay the team's
+			'teamPosts' => fn () => $this->teamsRequest->deleteByAuthor($actorId),
+			// what it posted from Files and the imports it ran, kept by its
+			// Nextcloud user
+			'filesPosts' => function () use ($userId): void {
+				if ($userId !== '') {
+					$this->fileCommentsRequest->deleteByUser($userId);
+				}
+			},
+			'imports' => function () use ($userId): void {
+				if ($userId !== '') {
+					$this->importsRequest->deleteByUser($userId);
+				}
+			},
 			// the memory of what it brought over from another server, which
 			// names posts that go with it
 			'imported' => fn () => $this->importedPostsRequest->deleteByActor($actorId),
@@ -204,7 +236,9 @@ class ActorCascadeService {
 		// this account may quietly undo.
 		$steps['relations'] = fn () => $this->actorRelationRequest->deleteByActor($actorId);
 		$steps['muteExpiry'] = fn () => $this->muteExpiryRequest->deleteByActor($actorId);
-		unset($steps['notes'], $steps['reports'], $steps['verification']);
+		// approvals of quotes and attributions of team posts are other
+		// accounts' records too
+		unset($steps['notes'], $steps['reports'], $steps['verification'], $steps['quoteGrants'], $steps['teamPosts']);
 
 		return $steps;
 	}

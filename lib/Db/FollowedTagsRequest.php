@@ -74,6 +74,14 @@ class FollowedTagsRequest extends FollowedTagsRequestBuilder {
 	}
 
 	/** Unfollowing a tag that is not followed is not an error either. */
+	/** Every hashtag one account follows. */
+	public function deleteByActor(string $actorId): void {
+		$qb = $this->getFollowedTagsDeleteSql();
+		$qb->where($qb->expr()->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
+
+		$qb->executeStatement();
+	}
+
 	public function delete(string $actorId, string $hashtag): void {
 		$qb = $this->getFollowedTagsDeleteSql();
 		$qb->where(
