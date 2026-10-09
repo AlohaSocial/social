@@ -294,7 +294,7 @@ Collection → written when:
 
 | Collection | Written | Content |
 |---|---|---|
-| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName`, `description` (plain text, bio), `pronouns` (the profile row named for them, at most 20 graphemes) and `website` (the row named for one, else the first row that is an address), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
+| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName` (the name the account federates, as far as its Nextcloud privacy setting allows; its username without one), `description` (plain text, bio), `pronouns` (the profile row named for them, at most 20 graphemes) and `website` (the row named for one, else the first row that is an address), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
 | `app.bsky.feed.post` | public post created (D8) | §8 |
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |

@@ -491,7 +491,7 @@ class RecordMapperTest extends TestCase {
 	}
 
 	public function testAProfile(): void {
-		$this->author->setDisplayName('Alice ' . str_repeat('x', 100));
+		$this->author->setName('Alice ' . str_repeat('x', 100));
 		$this->author->setDescription('<p>I run <a href="https://nextcloud.com">Nextcloud</a></p>');
 
 		$record = $this->mapper->profile($this->author, $this->identity);
@@ -505,8 +505,15 @@ class RecordMapperTest extends TestCase {
 	}
 
 	/** A verification of the account names the name the profile carries, or it does not hold. */
+	public function testTheProfilesDisplayNameIsTheNameTheAccountFederates(): void {
+		$this->author->setName('Alice Liddell');
+
+		$this->assertSame('Alice Liddell', $this->mapper->profile($this->author, $this->identity)['displayName'], 'not the username');
+		$this->assertSame('alice', RecordMapper::displayNameOf((new Person())->setPreferredUsername('alice')), 'one that federates none: its username, as on the Fediverse');
+	}
+
 	public function testTheProfilesDisplayNameIsTheOneAVerificationNames(): void {
-		$this->author->setDisplayName('  Alice ' . str_repeat('x', 100));
+		$this->author->setName('  Alice ' . str_repeat('x', 100));
 
 		$this->assertSame($this->mapper->profile($this->author, $this->identity)['displayName'], RecordMapper::displayNameOf($this->author));
 		$this->assertSame('', RecordMapper::displayNameOf((new Person())->setPreferredUsername('')));

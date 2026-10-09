@@ -508,7 +508,10 @@ class RecordMapper {
 	 * what a verification of the account names for it to hold.
 	 */
 	public static function displayNameOf(Person $actor): string {
-		$name = trim($actor->getDisplayName());
+		// `name` is the name the account federates (`AccountService` fills it
+		// from Nextcloud as far as its privacy setting allows), as a Fediverse
+		// server shows it
+		$name = trim($actor->getName());
 
 		return $name === '' ? '' : self::clip($name, 64, 640);
 	}
