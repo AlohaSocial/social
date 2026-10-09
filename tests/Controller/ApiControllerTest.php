@@ -246,6 +246,7 @@ class ApiControllerTest extends TestCase {
 	private array $headers = [];
 
 	protected function setUp(): void {
+		$this->blockedBy = $this->createMock(\OCA\Social\Service\BlockedBy\BlockedByService::class);
 		$this->filesBackup = $_FILES;
 		$_FILES = [];
 
@@ -501,6 +502,7 @@ class ApiControllerTest extends TestCase {
 				$this->remoteFetchQueue,
 				new NullLogger(),
 			),
+			'blockedBy' => $this->blockedBy,
 		]);
 	}
 
@@ -508,6 +510,8 @@ class ApiControllerTest extends TestCase {
 	 * A session user "alice" whose actor is cached: what initViewer() needs.
 	 * @return Person&MockObject
 	 */
+	private \OCA\Social\Service\BlockedBy\BlockedByService|MockObject $blockedBy;
+
 	/** the stored `source.privacy` of the logged-in account */
 	private string $defaultPrivacy = 'public';
 	/** @var array<string, mixed> what the viewer's `source` half answers */
@@ -1655,6 +1659,23 @@ class ApiControllerTest extends TestCase {
 		$this->controller()->statusNew();
 
 		$this->assertSame('', $created->getReplyTo());
+	}
+
+	public function testAReplyToAPostHiddenByItsAuthorsBlockIsRefusedNotPostedAlone(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'hi', 'in_reply_to_id' => 99]);
+		$blocker = new Note();
+		$blocker->setAttributedTo('https://bsky.app/profile/did:plc:bob');
+		$this->streamService->method('getStreamByNid')->willReturnCallback(static fn (int|string $nid, bool $asViewer = true): Stream => $asViewer ? throw new StreamNotFoundException() : $blocker);
+		$this->blockedBy->expects($this->once())->method('assertNotBlocked')
+			->with($this->anything(), ['https://bsky.app/profile/did:plc:bob'])
+			->willThrowException(new \OCA\Social\Exceptions\BlockedByException('This account has blocked you'));
+		$this->postService->expects($this->never())->method('createPost');
+
+		$response = $this->controller()->statusNew();
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+		$this->assertSame('This account has blocked you', $response->getData()['error'] ?? '');
 	}
 
 	/**
