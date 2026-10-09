@@ -1326,7 +1326,14 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   Bluesky, "Allow direct messages", off by default, as Bluesky's), or an
   OAuth app given `transition:chat.bsky` (D15).
   `app.bsky.actor.getPreferences`/`putPreferences` are kept here, per person,
-  within the `app.bsky` namespace and 256 KB — except the **muted words**
+  within the `app.bsky` namespace and 256 KB. **Bookmarks** are the
+  person's bookmarks here (`Publisher\BlueskyBookmarks`): the app's
+  `createBookmark`/`deleteBookmark` go to the AppView, which keeps the
+  bookmark button's state, and once it took one it is set or taken away
+  here; `getBookmarks` is answered from the bookmarks here that are on
+  Bluesky, each as the AppView shows the post, so older bookmarks are in
+  it; and a bookmark set here of a post on Bluesky is told to the AppView.
+  The preferences are kept — except the **muted words**
   (`mutedWordsPref`), which are the person's filters (`Client\MutedWords`):
   the app reads every keyword of the filters that apply, a hashtag-only
   word as `#tag`; a word it takes away removes its keyword, one it changes

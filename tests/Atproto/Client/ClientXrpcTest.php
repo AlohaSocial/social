@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\BlueskyMutes;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
@@ -49,6 +50,8 @@ class ClientXrpcTest extends TestCase {
 	private InboundMoveService $inbound;
 	/** @var BlueskyMutes&MockObject */
 	private BlueskyMutes $mutes;
+	/** @var BlueskyBookmarks&MockObject */
+	private BlueskyBookmarks $bookmarks;
 	private ClientXrpc $client;
 	private ClientSession $session;
 
@@ -67,7 +70,7 @@ class ClientXrpcTest extends TestCase {
 		$this->oauth->method('issuer')->willReturn('https://social.test');
 		$this->inbound = $this->createMock(InboundMoveService::class);
 		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class));
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class));
 	}
 
 	protected function tearDown(): void {
@@ -122,6 +125,16 @@ class ClientXrpcTest extends TestCase {
 
 		$this->assertSame(200, $this->client->procedure('app.bsky.graph.muteActor', '{"actor":"did:plc:bob"}', $headers, '1.2.3.4')->status);
 		$this->assertSame(400, $this->client->procedure('app.bsky.graph.muteActor', '{"actor":"did:plc:carol"}', $headers, '1.2.3.4')->status, 'refused there, not made here');
+	}
+
+	public function testTheAppsBookmarksAreTheOnesHereAndItsBookmarkIsMadeHereOnceTheAppViewTookIt(): void {
+		$headers = ['authorization' => 'Bearer t'];
+		$this->bookmarks->expects($this->once())->method('list')->with($this->session, 30, 'c1')->willReturn(['bookmarks' => []]);
+		$this->proxy->method('forward')->willReturn(new XrpcBytes('{}', 'application/json'));
+		$this->bookmarks->expects($this->once())->method('fromApp')->with($this->session, BlueskyBookmarks::CREATE, ['uri' => 'at://did:plc:bob/app.bsky.feed.post/3k', 'cid' => 'bafy']);
+
+		$this->assertSame(['bookmarks' => []], $this->client->query(BlueskyBookmarks::LIST, 'limit=30&cursor=c1', $headers));
+		$this->client->procedure(BlueskyBookmarks::CREATE, '{"uri":"at://did:plc:bob/app.bsky.feed.post/3k","cid":"bafy"}', $headers, '1.2.3.4');
 	}
 
 	public function testAnAccountMovingHereIsAnsweredByTheMoveAlone(): void {

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\ConversationsRequest;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -17,6 +18,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\StreamAction;
 use OCA\Social\Tools\Traits\TStringTools;
+use Psr\Container\ContainerInterface;
 
 class ActionService {
 	use TStringTools;
@@ -60,6 +62,7 @@ class ActionService {
 		private ConversationsRequest $conversationsRequest,
 		private DislikeService $dislikeService,
 		private InterestService $interestService,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -239,12 +242,17 @@ class ActionService {
 	}
 
 	/**
-	 * Bookmarks are a purely local, per-viewer flag (as on Mastodon) — nothing
-	 * is federated.
+	 * Bookmarks are a per-viewer flag (as on Mastodon) — nothing is federated.
+	 * A post that is on Bluesky is bookmarked there too, privately, so a
+	 * Bluesky app signed in here shows the same bookmark (`BlueskyBookmarks`).
 	 */
 	private function bookmark(Person $actor, string $postId, bool $enabled = true): void {
 		$this->streamActionService->setActionBool(
 			$actor->getId(), $postId, StreamAction::BOOKMARKED, $enabled
 		);
+		$bookmarks = $this->container?->get(BlueskyBookmarks::class);
+		if ($bookmarks instanceof BlueskyBookmarks) {
+			$bookmarks->bookmarked($actor, $postId, $enabled);
+		}
 	}
 }
