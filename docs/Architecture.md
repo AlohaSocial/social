@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.188
+**App version:** 0.26.189
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -1650,6 +1650,23 @@ forward-only, like the quote policy: replies already made stay. It
 re-snapshots the stored source, as the quote policy does, and rewrites the
 threadgate in one commit (`Publisher::updateGates()`), which a quote-policy
 change now uses for the postgate too.
+
+### Shared lists to mute or block
+
+A person subscribes to somebody else's list of accounts, to mute or block
+everybody on it (`ModerationListService`, **Blocking → Shared lists**,
+`/api/v1/social/moderation_lists`). Each network that publishes such lists
+is an `AccountListSource`; today that is Bluesky's
+(`Atproto\Reader\BlueskyModerationLists`, read with `getList`, each
+account cached as it is found). Every account on a list gets an ordinary
+mute or block in `social_actor_relation`, so the timelines hide them as
+any other. The subscription keeps which relations it made (user value
+`moderation_lists`), and only those are taken back when it ends or an
+account leaves the list. `Cron\ModerationLists` reads each list again
+every six hours. Where the list lives is told too, as D16 of the Bluesky
+specification allows: a mute list is muted at the AppView, and a block
+list is published as a `listblock` record only for somebody who publishes
+their blocks.
 
 ### Discovery
 

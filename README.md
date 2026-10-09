@@ -622,6 +622,9 @@ are synthesised in the browser, so there is nothing to download.
   write themselves.
 - **Per-user domain blocks** — **Blocking → Hidden servers** — and conversation
   mute, in the menu of any post.
+- **Shared lists** — **Blocking → Shared lists**: subscribe to a moderation list
+  somebody else keeps, by its link, and everybody on it is muted or blocked here, kept
+  up to date as they change it. Ending the subscription undoes only what the list did.
 - **Nothing is sent to a third party.** No geocoder — a place on a post is one this
   instance has seen or one you name yourself, because sending somebody's location to a
   stranger at the moment they are deciding whether to publish it is exactly the failure
