@@ -143,7 +143,7 @@ class AppViewProxyTest extends TestCase {
 		$config->method('setUserValue')->willReturnCallback(static function (string $user, string $app, string $key, string $value) use (&$stored): void {
 			$stored = $value;
 		});
-		$preferences = new Preferences($config);
+		$preferences = new Preferences($config, $this->createMock(\OCA\Social\Atproto\Client\MutedWords::class), $this->createMock(\OCA\Social\Service\AccountService::class));
 		$wanted = [['$type' => 'app.bsky.actor.defs#savedFeedsPrefV2', 'items' => []], ['$type' => 'app.bsky.actor.defs#adultContentPref', 'enabled' => false]];
 
 		$this->assertSame([], $preferences->put($this->session, ['preferences' => $wanted]));
@@ -156,5 +156,28 @@ class AppViewProxyTest extends TestCase {
 				$this->assertSame('InvalidRequest', $e->error);
 			}
 		}
+	}
+
+	public function testTheMutedWordsAreTheFiltersNotWhatTheAppWrote(): void {
+		$stored = '[]';
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnCallback(static function () use (&$stored): string {
+			return $stored;
+		});
+		$config->method('setUserValue')->willReturnCallback(static function (string $user, string $app, string $key, string $value) use (&$stored): void {
+			$stored = $value;
+		});
+		$words = $this->createMock(\OCA\Social\Atproto\Client\MutedWords::class);
+		$fromFilters = ['$type' => 'app.bsky.actor.defs#mutedWordsPref', 'items' => [['id' => 'f1k2', 'value' => 'spoilers', 'targets' => ['content', 'tag'], 'actorTarget' => 'all']]];
+		$words->method('pref')->willReturn($fromFilters);
+		$sent = ['$type' => 'app.bsky.actor.defs#mutedWordsPref', 'items' => [['value' => 'crypto', 'targets' => ['content']]]];
+		$words->expects($this->once())->method('apply')->with($this->anything(), $sent);
+		$preferences = new Preferences($config, $words, $this->createMock(\OCA\Social\Service\AccountService::class));
+		$feeds = ['$type' => 'app.bsky.actor.defs#savedFeedsPrefV2', 'items' => []];
+
+		$preferences->put($this->session, ['preferences' => [$feeds, $sent]]);
+
+		$this->assertSame([$feeds], json_decode($stored, true), 'the words are not kept beside the filters');
+		$this->assertSame(['preferences' => [$feeds, $fromFilters]], $preferences->get($this->session));
 	}
 }
