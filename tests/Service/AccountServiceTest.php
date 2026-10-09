@@ -1047,6 +1047,8 @@ class AccountServiceTest extends TestCase {
 		$this->userManager->method('get')->with('alice')->willReturn($this->user('alice'));
 		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($alice);
 		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		// the actor document as served, which an Update carries
+		$this->cacheActorsRequest->method('getFromLocalAccount')->with('alice')->willReturn($alice);
 	}
 
 	public function testSetActorFlagsStoresBothFlagsAndRefreshesTheCache(): void {
@@ -1363,6 +1365,7 @@ class AccountServiceTest extends TestCase {
 		$this->userManager->method('get')->with('alice')->willReturn($user);
 		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($alice);
 		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		$this->cacheActorsRequest->method('getFromLocalAccount')->with('alice')->willReturn($alice);
 		$this->withDisplayName('Alice Liddell', IAccountManager::SCOPE_FEDERATED);
 
 		$this->activityService->expects($this->once())->method('updateActivity')
@@ -1385,6 +1388,34 @@ class AccountServiceTest extends TestCase {
 			'locked' => $this->service->setLocked('alice', true),
 			'flags' => $this->service->setActorFlags('alice', ['discoverable' => true]),
 		};
+	}
+
+	/**
+	 * The Update carries the actor as it is served, picture and banner
+	 * included: a peer reads one without an `icon` as the picture taken away,
+	 * and the stored actor row has neither.
+	 */
+	public function testAProfileChangeCarriesTheServedPictureAndBanner(): void {
+		$alice = $this->alice();
+		$this->userManager->method('get')->with('alice')->willReturn($this->user('alice'));
+		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($alice);
+		$this->actorsRequest->method('getFromUsername')->with('alice')->willReturn($alice);
+		$served = $this->alice();
+		$icon = new \OCA\Social\Model\ActivityPub\Object\Image();
+		$icon->setUrl('https://cloud.example.com/avatar/alice/128?v=3');
+		$served->setIcon($icon);
+		$served->setHeader('https://cloud.example.com/media/banner.png');
+		$this->cacheActorsRequest->method('getFromLocalAccount')->willReturn($served);
+		$this->activityService->expects($this->once())->method('updateActivity')
+			->willReturnCallback(function (Person $actor, Person $item) use ($alice): string {
+				$this->assertSame($alice, $actor, 'signed by the account itself');
+				$this->assertSame('https://cloud.example.com/avatar/alice/128?v=3', $item->getIcon()->getUrl());
+				$this->assertSame('https://cloud.example.com/media/banner.png', $item->getHeader());
+
+				return 'token';
+			});
+
+		$this->service->setSummary('alice', 'I keep bees.');
 	}
 
 	/** @return iterable<string, array{string}> */
@@ -1422,6 +1453,28 @@ class AccountServiceTest extends TestCase {
 		});
 
 		$this->assertSame('done', $answer);
+	}
+
+	/** A new picture and a new bio in one profile edit are one Update, as the rest are. */
+	public function testANewAvatarInAProfileEditIsToldInTheSameUpdate(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$this->service->changingProfile('alice', function (): void {
+			$this->service->setSummary('alice', 'I keep bees.');
+			$this->service->avatarChanged('alice', 'alice');
+		});
+	}
+
+	/** Told by the app that made it and by Nextcloud's event for it: one Update. */
+	public function testANewAvatarOnItsOwnIsToldOnce(): void {
+		$alice = $this->alice();
+		$this->aliceIsKnown($alice);
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$this->service->avatarChanged('alice', 'alice');
+		$this->service->avatarChanged('alice', 'alice');
 	}
 
 	public function testNothingChangedTellsNobody(): void {

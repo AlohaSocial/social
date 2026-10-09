@@ -799,7 +799,7 @@ class DocumentService {
 			// wasted request, while a streamed file is a PeerTube video, and
 			// fetching one would spend hundreds of megabytes of disk to hand
 			// back exactly the bytes the publishing instance already streams.
-			if ($item->getLocalCopy() === 'avatar'
+			if ($item->getLocalCopy() === Document::COPY_LOCAL_AVATAR
 				|| $item->getLocalCopy() === 'header'
 				|| $item->isStreamed()) {
 				continue;
@@ -862,22 +862,34 @@ class DocumentService {
 	}
 
 	/**
-	 * @param Person $actor
+	 * The icon document of a local account: Nextcloud's avatar route with
+	 * the avatar's version in the address. Each version is a document of its
+	 * own, so the address changes with the picture — a peer fetches the
+	 * picture again only when the address changes, and the avatar route is
+	 * served unchanged for a day. The document is local and points at the
+	 * avatar itself; nothing is downloaded from this server's own address.
 	 *
-	 * @return string
+	 * @return string the document's id
 	 * @throws SocialAppConfigException
 	 * @throws UrlCloudException
 	 * @throws ItemUnknownException
 	 * @throws ItemAlreadyExistsException
 	 */
 	public function cacheLocalAvatarByUsername(Person $actor): string {
+		$version = $this->configService->getUserValueInt('version', $actor->getUserId(), 'avatar');
 		$url = $this->urlGenerator->linkToRouteAbsolute(
-			'core.avatar.getAvatar', ['userId' => $actor->getUserId(), 'size' => 128]
+			'core.avatar.getAvatar', ['userId' => $actor->getUserId(), 'size' => 128, 'v' => $version]
 		);
 
-		$versionCurrent = $this->configService->getUserValueInt('version', $actor->getUserId(), 'avatar');
-		$versionCached = $actor->getAvatarVersion();
-		if ($versionCurrent > $versionCached) {
+		try {
+			$icon = $this->cacheDocumentsRequest->getByUrl($url);
+			if ($icon->getMediaType() === '') {
+				// cached before the mime was recorded: fill it in on the way
+				// past rather than wait for the avatar to change
+				$icon->setMediaType($this->localAvatarMimeType($actor->getUserId()));
+				$this->cacheDocumentsRequest->update($icon);
+			}
+		} catch (CacheDocumentDoesNotExistException $e) {
 			/** @var Image $icon */
 			$icon = AP::instance()->getItemFromType(Image::TYPE);
 			$icon->generateUniqueId('/documents/avatar');
@@ -885,26 +897,15 @@ class DocumentService {
 			// what the avatar route will actually serve. It used to be left
 			// empty, and an empty `mediaType` is a field peers validate
 			$icon->setMediaType($this->localAvatarMimeType($actor->getUserId()));
-			$icon->setLocalCopy('avatar');
+			$icon->setLocalCopy(Document::COPY_LOCAL_AVATAR);
+			$icon->setLocal(true);
 
-			$interface = AP::instance()->getInterfaceFromType(Image::TYPE);
-			$interface->save($icon);
+			AP::instance()->getInterfaceFromType(Image::TYPE)->save($icon);
+		}
 
-			$actor->setAvatarVersion($versionCurrent);
+		if ($actor->getAvatarVersion() !== $version) {
+			$actor->setAvatarVersion($version);
 			$this->actorRequest->update($actor);
-		} else {
-			try {
-				$icon = $this->cacheDocumentsRequest->getByUrl($url);
-			} catch (CacheDocumentDoesNotExistException $e) {
-				return '';
-			}
-
-			if ($icon->getMediaType() === '') {
-				// cached before the mime was recorded: fill it in on the way
-				// past rather than wait for the avatar to change
-				$icon->setMediaType($this->localAvatarMimeType($actor->getUserId()));
-				$this->cacheDocumentsRequest->update($icon);
-			}
 		}
 
 		return $icon->getId();

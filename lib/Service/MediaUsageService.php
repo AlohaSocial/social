@@ -195,7 +195,7 @@ class MediaUsageService {
 			return;
 		}
 
-		if ($copy === 'avatar' || $copy === 'header') {
+		if ($copy === Document::COPY_LOCAL_AVATAR || $copy === 'header') {
 			// served straight out of Nextcloud's own avatar store, never copied
 			$usage['elsewhere']++;
 

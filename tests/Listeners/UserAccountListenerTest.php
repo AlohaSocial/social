@@ -18,6 +18,7 @@ use OCA\Social\Service\AccountService;
 use OCP\Accounts\UserUpdatedEvent;
 use OCP\EventDispatcher\Event;
 use OCP\IUser;
+use OCP\User\Events\UserChangedEvent;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -115,5 +116,27 @@ class UserAccountListenerTest extends TestCase {
 			->with('issue while updating user account', ['exception' => $exception]);
 
 		$this->listener->handle($this->userUpdated('bob'));
+	}
+
+	private function userChanged(string $uid, string $feature): UserChangedEvent {
+		$user = $this->createStub(IUser::class);
+		$user->method('getUID')->willReturn($uid);
+
+		return new UserChangedEvent($user, $feature, 'value');
+	}
+
+	public function testANewAvatarIsToldToTheFollowersAndBluesky(): void {
+		$this->actor('ali', 'alice');
+		$this->accountService->expects($this->once())->method('avatarChanged')->with('alice', 'ali');
+		$this->accountService->expects($this->never())->method('cacheLocalActorByUsername');
+
+		$this->listener->handle($this->userChanged('alice', 'avatar'));
+	}
+
+	public function testOtherChangesOfTheUserAreNotThisListenersBusiness(): void {
+		$this->actorsRequest->expects($this->never())->method('getFromUserId');
+		$this->accountService->expects($this->never())->method('avatarChanged');
+
+		$this->listener->handle($this->userChanged('alice', 'enabled'));
 	}
 }
