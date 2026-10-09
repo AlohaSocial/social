@@ -14,6 +14,8 @@ use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Reader\BlueskyFeeds;
 use OCA\Social\Atproto\Reader\BlueskyIds;
+use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
@@ -76,6 +78,20 @@ class AtprotoFeedsTest extends TestCase {
 
 		$feeds->remove($this->alice->actor, $feed);
 		$this->assertSame([], $feeds->saved($this->alice->actor));
+
+		// a post that embeds the feed shows it as a card here
+		[$status, $shared] = $this->network->asUser('POST', 'com.atproto.repo.createRecord', [
+			'repo' => $bob, 'collection' => 'app.bsky.feed.post',
+			'record' => ['$type' => 'app.bsky.feed.post', 'text' => 'Try my feed', 'createdAt' => gmdate('Y-m-d\TH:i:s.000\Z'),
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $feed, 'cid' => (string)$answer['cid']]]],
+		]);
+		$this->assertSame(200, $status, json_encode($shared));
+		$this->assertNotNull($this->network->await(fn (): ?bool => ($this->network->postView((string)$shared['uri'])['embed']['record']['$type'] ?? '') === 'app.bsky.feed.defs#generatorView' ? true : null), 'the AppView shows the feed in the post');
+		$this->assertTrue(Server::get(PostStore::class)->storeByUri((string)$shared['uri']));
+		$nid = (string)Server::get(StreamRequest::class)->getStreamById(BlueskyIds::postIdOfUri((string)$shared['uri']))->getNid();
+		$card = $this->alice->status($nid)['card'] ?? null;
+		$this->assertSame('Interop picks', $card['title'] ?? null, json_encode($card));
+		$this->assertStringEndsWith('/feed/interop', (string)($card['url'] ?? ''));
 	}
 
 	public function testAListAnAppMakesHereIsPublishedAndReadAsItsFeed(): void {

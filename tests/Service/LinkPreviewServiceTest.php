@@ -118,6 +118,23 @@ class LinkPreviewServiceTest extends TestCase {
 
 	// --- what the page says about itself
 
+	public function testACardTheLinkHasAlreadyIsNotReadAgain(): void {
+		$this->streamCardsRequest->method('getByStreamId')->willReturn(new StreamCard(self::POST_ID, 'https://bsky.app/profile/bob.test/feed/cats'));
+		$this->curlService->expects($this->never())->method('doRequest');
+		$this->streamCardsRequest->expects($this->never())->method('save');
+
+		$this->assertTrue($this->service->generate($this->post('<a href="https://bsky.app/profile/bob.test/feed/cats">Cats</a>')));
+	}
+
+	public function testAnEditedLinkIsReadAgain(): void {
+		$this->streamCardsRequest->method('getByStreamId')->willReturn(new StreamCard(self::POST_ID, 'https://example.org/old'));
+		$this->serves('<html><head><title>New</title></head></html>');
+		$stored = $this->stored();
+
+		$this->assertTrue($this->service->generate($this->post('<a href="https://example.org/new">new</a>')));
+		$this->assertSame('https://example.org/new', $stored()?->getUrl());
+	}
+
 	public function testOpenGraphBecomesTheCard(): void {
 		$this->serves(<<<'HTML'
 			<html><head>

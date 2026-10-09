@@ -44,6 +44,22 @@ class PostMapperTest extends TestCase {
 		$this->assertSame(['canReply' => ['automaticApproval' => []], 'canQuote' => ['automaticApproval' => []]], (new PostMapper($this->resolver()))->note($view)['interactionPolicy'] ?? null);
 	}
 
+	public function testAnEmbeddedFeedListOrStarterPackIsACardAndALink(): void {
+		$creator = ['did' => self::OTHER, 'handle' => 'bob.test', 'avatar' => 'https://cdn.bsky.app/img/avatar/plain/bob@jpeg'];
+		$record = static fn (array $view): array => ['$type' => 'app.bsky.embed.record#view', 'record' => $view];
+		$list = ['$type' => 'app.bsky.graph.defs#listView', 'uri' => 'at://' . self::OTHER . '/app.bsky.graph.list/3kl', 'name' => 'Friends', 'purpose' => 'app.bsky.graph.defs#curatelist', 'creator' => $creator];
+		$pack = ['$type' => 'app.bsky.graph.defs#starterPackViewBasic', 'uri' => 'at://' . self::OTHER . '/app.bsky.graph.starterpack/3ks', 'record' => ['name' => 'Start here', 'description' => 'Good people'], 'creator' => $creator];
+
+		$this->assertSame(['url' => 'https://bsky.app/profile/bob.test/lists/3kl', 'title' => 'Friends', 'description' => '', 'image' => '', 'provider' => 'Bluesky list by @bob.test'], PostMapper::cardOf($record($list)));
+		$this->assertSame(['url' => 'https://bsky.app/starter-pack/bob.test/3ks', 'title' => 'Start here', 'description' => 'Good people', 'image' => 'https://cdn.bsky.app/img/avatar/plain/bob@jpeg', 'provider' => 'Bluesky starter pack by @bob.test'],
+			PostMapper::cardOf(['$type' => 'app.bsky.embed.recordWithMedia#view', 'record' => $record($pack), 'media' => ['$type' => 'app.bsky.embed.images#view', 'images' => []]]), 'beside pictures');
+		$this->assertNull(PostMapper::cardOf($record(['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kp'])), 'a quoted post is a quote');
+
+		$note = (new PostMapper($this->resolver()))->note($this->postView(['embed' => $record($list)]));
+		$this->assertStringContainsString('<a href="https://bsky.app/profile/bob.test/lists/3kl"', $note['content']);
+		$this->assertSame('Friends', $note['_atproto']['card']['title']);
+	}
+
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
 		$create = (new PostMapper($this->resolver()))->create($this->postView());
 		$this->assertNotNull($create);
