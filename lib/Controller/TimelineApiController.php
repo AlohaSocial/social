@@ -18,11 +18,13 @@ use OCA\Social\Model\Client\Options\ProbeOptions;
 use OCA\Social\Service\AccountService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
+use OCA\Social\Service\Discovery\PostDiscoveryService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\MarkerService;
 use OCA\Social\Service\NotificationInboxService;
 use OCA\Social\Service\NotificationPolicyService;
+use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TimelineRevisionService;
 use OCA\Social\Service\WatchService;
@@ -63,6 +65,7 @@ class TimelineApiController extends MastodonApiController {
 		private WatchService $watchService,
 		private TimelineRevisionService $timelineRevisionService,
 		private NotificationInboxService $notificationInboxService,
+		private RemoteFetchQueue $remoteFetchQueue,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -225,11 +228,18 @@ class TimelineApiController extends MastodonApiController {
 
 			$posts = $this->streamService->getTimeline($options);
 
-			return $this->paged(
+			$response = $this->paged(
 				$this->filterService->apply($posts, Filter::CONTEXT_PUBLIC, $this->viewer),
 				$options->getLimit(),
 				$posts
 			);
+			// the hashtag's posts beyond this server, read in the background:
+			// the next look at the timeline has them
+			if (!$local && (string)$max_id === '0' && $this->remoteFetchQueue->fillPosts(PostDiscoveryService::TAG, $hashtag)) {
+				$response->addHeader('X-Social-Filling', '1');
+			}
+
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}

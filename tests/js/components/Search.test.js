@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import axios from '@nextcloud/axios'
-import Search from '../../../src/components/Search.vue'
+import Search, { SEARCH_REFILL_MS } from '../../../src/components/Search.vue'
 import { useAccountStore } from '../../../src/store/account.js'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
@@ -256,6 +256,24 @@ describe('Search', () => {
 			await flushPromises()
 			expect(get).toHaveBeenCalledTimes(2)
 			expect(get).toHaveBeenLastCalledWith(SEARCH_URL, { params: { q: 'bob', limit: 20 } })
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('asks once more a little later while posts beyond this server are being read', async () => {
+		vi.useFakeTimers()
+		try {
+			get.mockResolvedValueOnce({ ...response({ statuses: [status('1')] }), headers: { 'x-social-filling': '1' } })
+				.mockResolvedValueOnce(response({ statuses: [status('1'), status('2')] }))
+			const wrapper = mountSearch('open source')
+			await flushPromises()
+			expect(get).toHaveBeenCalledTimes(1)
+
+			await vi.advanceTimersByTimeAsync(SEARCH_REFILL_MS)
+			await flushPromises()
+			expect(get).toHaveBeenCalledTimes(2)
+			expect(wrapper.vm.statusIds).toEqual(['1', '2'])
 		} finally {
 			vi.useRealTimers()
 		}

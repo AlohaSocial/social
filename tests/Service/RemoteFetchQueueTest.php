@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Service;
 
 use OCA\Social\Cron\FillInteractions;
+use OCA\Social\Cron\FillPosts;
 use OCA\Social\Cron\FillThread;
 use OCA\Social\Cron\ResolveActor;
 use OCA\Social\Cron\SyncRemoteTimeline;
@@ -166,5 +167,16 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertTrue($this->queue->fillInteractions($remote, 'Like'));
 		$this->assertFalse($this->queue->fillInteractions($remote, 'Like'));
 		$this->assertTrue($this->queue->fillInteractions($remote, 'Announce'));
+	}
+
+	public function testAHashtagIsReadOncePerIntervalAndASearchPerPerson(): void {
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(3))->method('add')->with(FillPosts::class, $this->anything());
+
+		$this->assertTrue($this->queue->fillPosts('tag', 'Nextcloud'));
+		$this->assertFalse($this->queue->fillPosts('tag', 'nextcloud'), 'one hashtag, however it is written');
+		$this->assertTrue($this->queue->fillPosts('search', 'open source', $this->remote('https://social.test/@alice')));
+		$this->assertTrue($this->queue->fillPosts('search', 'open source', $this->remote('https://social.test/@bob')), 'asked as each person');
+		$this->assertFalse($this->queue->fillPosts('search', ''));
 	}
 }

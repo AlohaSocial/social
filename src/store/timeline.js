@@ -1496,7 +1496,9 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 
 			this.addToTimeline(response.data)
-			if (response.headers?.['x-social-thread-filling'] === '1') {
+			// more of it is being read from elsewhere: the rest of a
+			// conversation, or a hashtag's posts beyond this server
+			if (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1') {
 				this.refetchThreadLater(url, params, identity)
 			}
 
@@ -1504,9 +1506,9 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 
 		/**
-		 * The rest of a conversation is being read from the servers it lives
-		 * on: asked for once more a little later, and the replies that came
-		 * in meanwhile added below the ones already shown.
+		 * The rest of a page is being read from the servers it lives on: asked
+		 * for once more a little later, and what came in meanwhile added to
+		 * what is already shown.
 		 *
 		 * @param {string} url the context the page was read from
 		 * @param {object} params its query

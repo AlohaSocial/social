@@ -76,6 +76,7 @@ One box, and everything a post can carry.
   can add their own on top with `occ social:gif add`, or turn the shipped set off
   with `occ config:app:set social gif_pack --value=0`.
 - **Read the whole conversation.** Opening a post brings in its replies from everywhere they were written, not only from the people somebody here follows.
+- **Hashtags and searches everywhere.** A hashtag's page and a search of posts bring in what was written beyond this server too.
 - **See who reacted, everywhere.** The likes, boosts and quotes of a post list the people wherever they were, not only the ones on this server.
 - **Quote a post**, with the original author's permission carried on the wire (FEP-044f).
 - **Say what language it is in**, starting from your Nextcloud language.
