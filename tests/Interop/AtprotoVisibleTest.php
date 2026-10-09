@@ -95,6 +95,12 @@ class AtprotoVisibleTest extends TestCase {
 		});
 		$this->assertSame(1, $liked, 'the like counted on the AppView');
 
+		// a pin here is the profile's pinned post there
+		$this->alice->post('/api/v1/statuses/' . rawurlencode((string)$status['id']) . '/pin');
+		Server::get(Publisher::class)->publishProfile($this->alice->actor);
+		$pinned = $this->network->await(fn () => ($this->network->profile($identity->did)['pinnedPost']['uri'] ?? '') === $feedItem['uri'] ? true : null);
+		$this->assertNotNull($pinned, 'the AppView shows the post pinned');
+
 		// the relay, when the job runs one, has verified the commits
 		$relayStatus = $this->network->await(fn () => $this->network->relayRepoStatus($identity->did), 30);
 		if ($this->network->relay !== '') {

@@ -21,6 +21,9 @@ describe('OAuth2Authorize', () => {
 		setState('account', null)
 		setState('scopes', [])
 		setState('protocol', '')
+		setState('permissions', [])
+		setState('appLogo', '')
+		setState('trusted', false)
 		wrapper = mount(OAuth2Authorize)
 	})
 
@@ -184,6 +187,33 @@ describe('OAuth2Authorize', () => {
 			expect(items[2].text()).toContain('See your e-mail address')
 			expect(view.findAll('.scopes__icon').map((icon) => icon.classes('scopes__icon--write')))
 				.toEqual([false, true, false])
+		})
+
+		it('shows each permission as the server worded it, a set with what it holds', () => {
+			setState('scopes', ['atproto', 'include:app.example.authPosting', 'blob:image/*'])
+			setState('permissions', [
+				{ scope: 'atproto', label: 'Know which account you are', detail: '', writes: false, items: [] },
+				{ scope: 'include:app.example.authPosting', label: 'Posting', detail: 'Write posts', writes: true, items: ['Create, change and delete posts'] },
+				{ scope: 'blob:image/*', label: 'Upload pictures', detail: '', writes: true, items: [] },
+			])
+			const view = mount(OAuth2Authorize)
+			const items = view.findAll('.scopes > .scopes__item')
+
+			expect(items).toHaveLength(3)
+			expect(items[1].find('.scopes__label').text()).toBe('Posting')
+			expect(items[1].find('.scopes__detail').text()).toBe('Write posts')
+			expect(items[1].findAll('.scopes__items li').map((li) => li.text())).toEqual(['Create, change and delete posts'])
+			expect(items[1].find('.scopes__name').text()).toBe('include:app.example.authPosting')
+			expect(view.findAll('.scopes__icon').map((icon) => icon.classes('scopes__icon--write'))).toEqual([false, true, true])
+		})
+
+		it('shows a trusted app\'s own logo, and says who vouches for it', () => {
+			setState('trusted', true)
+			setState('appLogo', 'https://bsky.app/logo.png')
+			const view = mount(OAuth2Authorize)
+
+			expect(view.find('img.oauth__seal--logo').attributes('src')).toBe('https://bsky.app/logo.png')
+			expect(view.find('.oauth__client-note').text()).toBe('An app this server\'s administrator vouches for, by this address.')
 		})
 
 		/** The client_id is what the app is known by; its name is not checked. */

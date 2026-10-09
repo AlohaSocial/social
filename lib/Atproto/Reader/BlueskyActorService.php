@@ -21,6 +21,7 @@ use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\ActorService;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -39,6 +40,7 @@ class BlueskyActorService {
 		private ActorService $actorService,
 		private Blocklist $blocklist,
 		private LoggerInterface $logger,
+		private ?ContainerInterface $container = null,
 	) {
 	}
 
@@ -82,8 +84,20 @@ class BlueskyActorService {
 		}
 		$person = $this->mapper->person($profile, $pds);
 		$this->store($person);
+		$this->pins()?->keep($person, (string)($profile['pinnedPost']['uri'] ?? ''));
 
 		return $person;
+	}
+
+	/**
+	 * Resolved when first needed rather than injected: the pins need the
+	 * post store, which needs this service. Null without a container, as in
+	 * a unit test.
+	 */
+	private function pins(): ?BlueskyPins {
+		$service = $this->container?->get(BlueskyPins::class);
+
+		return $service instanceof BlueskyPins ? $service : null;
 	}
 
 	/**

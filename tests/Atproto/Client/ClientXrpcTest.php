@@ -52,6 +52,7 @@ class ClientXrpcTest extends TestCase {
 	protected function setUp(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(true);
+		$config->method('appViewDid')->willReturn('did:web:api.bsky.app');
 		$this->sessions = $this->createMock(SessionService::class);
 		$this->session = new ClientSession('alice', new Identity(1, 'https://social.test/@alice', 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'alice.social.test', '', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 		$this->sessions->method('authenticate')->willReturnCallback(fn (string $h): ?ClientSession => $h === '' ? null : $this->session);
@@ -205,6 +206,34 @@ class ClientXrpcTest extends TestCase {
 			$this->assertSame(403, $e->status);
 			$this->assertSame('InsufficientScope', $e->error);
 		}
+	}
+
+	public function testAnAppIsHeldToTheGranularPermissionsItWasGiven(): void {
+		$this->oauth->method('authenticate')->willReturn(new ClientSession('alice', $this->session->identity, 'sid', [
+			'atproto', 'repo:app.bsky.feed.post?action=create', 'rpc:app.bsky.feed.getTimeline?aud=did:web:api.bsky.app%23bsky_appview', 'blob:image/*',
+		]));
+		$headers = ['authorization' => 'DPoP token', 'dpop' => 'proof'];
+		$this->writes->method('create')->willReturn(['uri' => 'at://x']);
+		$this->proxy->method('forward')->willReturn(new XrpcBytes('{}', 'application/json'));
+		$this->writes->method('upload')->willReturn(['blob' => []]);
+		$refused = function (callable $call): string {
+			try {
+				$call();
+			} catch (XrpcException $e) {
+				return $e->status . ' ' . $e->error;
+			}
+
+			return 'allowed';
+		};
+
+		$this->assertSame('allowed', $refused(fn () => $this->client->procedure('com.atproto.repo.createRecord', '{"collection":"app.bsky.feed.post"}', $headers, 'ip')));
+		$this->assertSame('403 InsufficientScope', $refused(fn () => $this->client->procedure('com.atproto.repo.createRecord', '{"collection":"app.bsky.feed.like"}', $headers, 'ip')));
+		$this->assertSame('403 InsufficientScope', $refused(fn () => $this->client->procedure('com.atproto.repo.applyWrites', '{"writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"app.bsky.feed.post"},{"$type":"com.atproto.repo.applyWrites#delete","collection":"app.bsky.feed.post"}]}', $headers, 'ip')), 'every write of a batch is its own');
+		$this->assertSame('allowed', $refused(fn () => $this->client->query('app.bsky.feed.getTimeline', '', $headers)));
+		$this->assertSame('403 InsufficientScope', $refused(fn () => $this->client->query('app.bsky.feed.getAuthorFeed', '', $headers)));
+		$this->assertSame('403 InsufficientScope', $refused(fn () => $this->client->query('app.bsky.feed.getTimeline', '', $headers + ['atproto-proxy' => 'did:web:other.example#bsky_appview'])), 'another service');
+		$this->assertSame('allowed', $refused(fn () => $this->client->upload($this->file('pixels'), $headers + ['content-type' => 'image/png'])));
+		$this->assertSame('403 InsufficientScope', $refused(fn () => $this->client->upload($this->file('frames'), $headers + ['content-type' => 'video/mp4'])));
 	}
 
 	public function testASuspendedAccountsAppIsTurnedAway(): void {

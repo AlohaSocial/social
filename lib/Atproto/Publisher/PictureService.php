@@ -43,6 +43,9 @@ class PictureService {
 	/** Bluesky's limit per picture */
 	public const MAX_BYTES = 2000000;
 	public const MAX_PER_POST = 4;
+	/** what a profile's avatar or banner may weigh, and be */
+	public const PROFILE_MAX_BYTES = 1000000;
+	public const PROFILE_TYPES = ['image/jpeg', 'image/png'];
 	private const SHOWN_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 	private const QUALITIES = [85, 75, 65];
 	private const WIDTHS = [2000, 1600, 1200, 800];
@@ -61,13 +64,14 @@ class PictureService {
 	/**
 	 * The blob for a picture, made the first time it is asked for.
 	 *
-	 * @param int $maxBytes what the blob may weigh: a post's picture, or less for a link card's
+	 * @param int $maxBytes what the blob may weigh: a post's picture, or less for a link card's or a profile's
+	 * @param string[] $types what it may be; anything else is re-encoded as JPEG
 	 * @return array{blob: BlobRef, width: int, height: int}|null null when the picture cannot be shown on Bluesky
 	 */
-	public function blobFor(Identity $identity, Person $owner, Document $document, int $maxBytes = self::MAX_BYTES): ?array {
+	public function blobFor(Identity $identity, Person $owner, Document $document, int $maxBytes = self::MAX_BYTES, array $types = self::SHOWN_TYPES): ?array {
 		$existing = $this->blobRequest->getByDocument($identity->did, $document->getId());
 		[$width, $height] = $document->getLocalCopySize();
-		if ($existing !== null && $existing->size <= $maxBytes) {
+		if ($existing !== null && $existing->size <= $maxBytes && in_array($existing->mime, $types, true)) {
 			return ['blob' => $existing, 'width' => (int)$width, 'height' => (int)$height];
 		}
 
@@ -79,7 +83,7 @@ class PictureService {
 			return null;
 		}
 
-		return $this->blobOf($identity, $owner, $bytes, $document->getMimeType(), (int)$width, (int)$height, $maxBytes, $document);
+		return $this->blobOf($identity, $owner, $bytes, $document->getMimeType(), (int)$width, (int)$height, $maxBytes, $types, $document);
 	}
 
 	/**
@@ -90,9 +94,10 @@ class PictureService {
 	 * stored as a document of its own, so `getBlob` serves the bytes the CID
 	 * names after the avatar changes.
 	 *
+	 * @param string[] $types what it may be; anything else is re-encoded as JPEG
 	 * @return array{blob: BlobRef, width: int, height: int}|null
 	 */
-	public function avatarBlob(Identity $identity, Person $owner, int $maxBytes = self::MAX_BYTES): ?array {
+	public function avatarBlob(Identity $identity, Person $owner, int $maxBytes = self::MAX_BYTES, array $types = self::SHOWN_TYPES): ?array {
 		if (!$owner->isLocal()) {
 			return null;
 		}
@@ -115,7 +120,7 @@ class PictureService {
 		}
 		[$width, $height] = getimagesizefromstring($bytes) ?: [0, 0];
 
-		return $this->blobOf($identity, $owner, $bytes, (string)(new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes), $width, $height, $maxBytes, null);
+		return $this->blobOf($identity, $owner, $bytes, (string)(new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes), $width, $height, $maxBytes, $types, null);
 	}
 
 	/**
@@ -123,11 +128,12 @@ class PictureService {
 	 * blob they are already when they are one, and stored as a document of
 	 * their own unless they are the original document's.
 	 *
+	 * @param string[] $types
 	 * @return array{blob: BlobRef, width: int, height: int}|null
 	 */
-	private function blobOf(Identity $identity, Person $owner, string $bytes, string $mime, int $width, int $height, int $maxBytes, ?Document $original): ?array {
+	private function blobOf(Identity $identity, Person $owner, string $bytes, string $mime, int $width, int $height, int $maxBytes, array $types, ?Document $original): ?array {
 		$copied = $original === null;
-		if (strlen($bytes) > $maxBytes || !in_array($mime, self::SHOWN_TYPES, true)) {
+		if (strlen($bytes) > $maxBytes || !in_array($mime, $types, true)) {
 			$encoded = $this->reencode($bytes, $maxBytes);
 			if ($encoded === null) {
 				return null;

@@ -786,7 +786,14 @@ class AccountService {
 		}
 
 		$this->federateActorUpdate($actor);
-		// the Bluesky profile follows, off the request
+		$this->queueBlueskyProfile($actor);
+	}
+
+	/**
+	 * Has the account's Bluesky profile written again, off the request: after
+	 * anything it shows changed — the name, the bio, a picture, a pin.
+	 */
+	public function queueBlueskyProfile(Person $actor): void {
 		if ($this->atprotoConfig->isEnabled()) {
 			$this->jobList->add(AtprotoPublish::class, ['action' => 'profile', 'id' => $actor->getId()]);
 		}

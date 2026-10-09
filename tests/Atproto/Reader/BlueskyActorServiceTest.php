@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Reader\ActorMapper;
 use OCA\Social\Atproto\Reader\BlueskyActorService;
+use OCA\Social\Atproto\Reader\BlueskyPins;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Exceptions\AppViewNotFoundException;
@@ -24,6 +25,7 @@ use OCA\Social\Service\ActorService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -139,5 +141,18 @@ class BlueskyActorServiceTest extends TestCase {
 			} catch (CacheActorDoesNotExistException) {
 			}
 		}
+	}
+
+	public function testTheProfilesPinnedPostIsKeptAsAPin(): void {
+		$this->appView->method('query')->willReturn(['did' => 'did:plc:ewvi7nxzyoun6zhxrhs64oiz', 'handle' => 'bob.bsky.social', 'pinnedPost' => ['uri' => 'at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.feed.post/3kpin', 'cid' => 'x']]);
+		$pins = $this->createMock(BlueskyPins::class);
+		$pins->expects($this->once())->method('keep')->with($this->isInstanceOf(Person::class), 'at://did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.feed.post/3kpin');
+		$container = $this->createMock(ContainerInterface::class);
+		$container->method('get')->with(BlueskyPins::class)->willReturn($pins);
+		$mapper = $this->createMock(ActorMapper::class);
+		$mapper->method('person')->willReturn(new Person());
+		$service = new BlueskyActorService($this->config, $this->appView, $this->plc, $mapper, $this->cache, $this->actors, $this->createMock(Blocklist::class), new NullLogger(), $container);
+
+		$service->resolve('bob.bsky.social', true);
 	}
 }

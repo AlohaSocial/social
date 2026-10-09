@@ -237,7 +237,7 @@ Collection → written when:
 
 | Collection | Written | Content |
 |---|---|---|
-| `app.bsky.actor.profile` (rkey `self`) | account created or profile edited | `displayName`, `description` (plain text, bio), `avatar` and `banner` blobs, `createdAt` |
+| `app.bsky.actor.profile` (rkey `self`) | account created, profile edited, a picture or a pin changed | `displayName`, `description` (plain text, bio), `avatar` and `banner` blobs (each at most 1,000,000 bytes, JPEG or PNG, re-encoded otherwise), `pinnedPost` (the newest pin that is on Bluesky), `createdAt`; written again when the pinned post's record is replaced by an edit or deleted |
 | `app.bsky.feed.post` | public post created (D8) | §8 |
 | `app.bsky.feed.like` | a local actor likes a post that **exists on Bluesky** (a Bluesky post, or a local post that was published, §8.6) | `subject` {uri, cid} |
 | `app.bsky.feed.repost` | a local actor boosts such a post | `subject` {uri, cid} |
@@ -456,6 +456,15 @@ when crossed.
   to a post that is not on Bluesky is published as a top-level post with
   the parent's URL as a `#link` — the thread cannot be joined, and saying
   nothing would hide the post.
+- **Who may reply** (`app.bsky.feed.threadgate` on the thread's root): a
+  thread its author closed to everybody is marked when it is read, so the
+  reply is not offered here (`interaction_policy.reply` false); a narrower
+  gate — the accounts the root mentions, its author's followers, the
+  accounts the author follows, a list's members — is checked when somebody
+  replies (`Reader\Threadgates`, through the AppView), and a reply it does
+  not let through is refused with the reason: every AppView would hide it.
+  This app's own posts carry no gate: Social has no reply controls of its
+  own yet.
 - **Language**: `langs: [<post language>]` when known.
 - **Link card**: when the post has a `StreamCard` and no pictures,
   `app.bsky.embed.external` with title, description and the preview image
@@ -509,7 +518,8 @@ result is a **cached actor** (`social_cache_actor`) with id `at://<did>`,
 account `alice.bsky.social` (the handle, no `@…@` form), type `Person`,
 `host` the handle's host, the profile fields mapped (`displayName` →
 name, `description` → summary as plain text, avatar and banner as cached
-documents, `followersCount`/`followsCount`/`postsCount` into the counts),
+documents, `followersCount`/`followsCount`/`postsCount` into the counts,
+the profile's `pinnedPost` a pin as a Fediverse account's pins are),
 and a `details.atproto` block with the DID, the PDS endpoint and the
 labels. The cache refresh cron (`manageCacheRemoteActors`) refreshes it
 through `getProfile` the way it refreshes an ActivityPub actor through its
@@ -1262,9 +1272,31 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   signs one out. An OAuth app without `transition:generic` may only ask who
   it is (`getSession`); `getSession` shows the e-mail address only with
   `transition:email`.
-- **Not built**: the granular permission scopes (`repo:`, `rpc:`,
-  `include:`) — an app asking only for those gets `atproto` alone — and a
-  list of trusted apps whose names and logos would be shown.
+- **Granular permissions** (atproto.com/specs/permission) are granted and
+  held to: `repo:` records of a collection and an action, `rpc:` methods at
+  a service (the AppView's `#bsky_appview` unless `atproto-proxy` names
+  another), `blob:` uploads of a type, `account:email`, `identity:`, and
+  `include:` permission sets. A set is resolved as Lexicon resolution
+  says — the `_lexicon` TXT record of its authority, then the
+  `com.atproto.lexicon.schema` record of that DID — kept a day at most, and
+  only its `repo` and `rpc` permissions within its own namespace are taken;
+  an `rpc` permission that inherits takes the `aud` the `include` named. A
+  scope written wrong, or a set that cannot be resolved, is refused at the
+  pushed request (`invalid_scope`). Each call is checked: a write per
+  collection and action (every write of an `applyWrites` on its own), an
+  AppView call per method and service, a service-auth token per method and
+  audience, an upload per type; `getSession` is always answered and shows
+  the e-mail address with `account:email` or `transition:email`. The
+  transitional scopes stay as they were.
+- **The consent page says what each permission means**: a sentence per
+  scope, a permission set by its own title and detail (in the person's
+  language where the set has it) with what it holds listed beneath, and a
+  mark on what lets the app act rather than read.
+- **Trusted apps**: the administrator may list client IDs (Bluesky admin
+  section); for those, the consent page shows the app's own `client_name`
+  and `logo_uri` (https only) and says the administrator vouches for it.
+  Any other app is shown by its address only, because an app can call
+  itself anything.
 
 ### Phase 4 as it lands
 

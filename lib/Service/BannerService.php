@@ -73,6 +73,7 @@ class BannerService {
 
 		$this->forget($previous, $actor->getPreferredUsername());
 		$this->announce($cached);
+		$this->accountService->queueBlueskyProfile($actor);
 
 		return $image;
 	}
@@ -107,6 +108,7 @@ class BannerService {
 		// an actor whose header is gone here but not on the servers that follow
 		// it is a profile that still has a banner everywhere else
 		$this->announce($cached);
+		$this->accountService->queueBlueskyProfile($actor);
 	}
 
 	/** What the profile has on it now, or '' for an actor nothing is cached for. */

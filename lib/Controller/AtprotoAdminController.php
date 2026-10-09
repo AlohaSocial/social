@@ -64,6 +64,7 @@ class AtprotoAdminController extends Controller {
 		?string $appview = null,
 		?string $jetstream = null,
 		?int $sync_ceiling = null,
+		?array $trusted_clients = null,
 	): DataResponse {
 		try {
 			if ($relays !== null) {
@@ -96,6 +97,18 @@ class AtprotoAdminController extends Controller {
 					throw new \InvalidArgumentException('A Jetstream endpoint is a WebSocket URL');
 				}
 				$this->configService->setAppValue(ConfigService::ATPROTO_JETSTREAM, $jetstream);
+			}
+			if ($trusted_clients !== null) {
+				$clients = array_values(array_filter(array_map(
+					static fn (mixed $client): string => is_string($client) ? trim($client) : '',
+					$trusted_clients,
+				), static fn (string $client): bool => $client !== ''));
+				foreach ($clients as $client) {
+					if (!str_starts_with($client, 'https://') || filter_var($client, FILTER_VALIDATE_URL) === false) {
+						throw new \InvalidArgumentException('A Bluesky app is named by its client ID, an https address');
+					}
+				}
+				$this->config->setTrustedClients($clients);
 			}
 			if ($sync_ceiling !== null) {
 				$this->configService->setAppValue(ConfigService::ATPROTO_SYNC_CEILING, (string)max(1, min(10000, $sync_ceiling)));

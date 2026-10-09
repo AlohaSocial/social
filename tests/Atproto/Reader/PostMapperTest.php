@@ -26,6 +26,15 @@ class PostMapperTest extends TestCase {
 	private const DID = 'did:plc:ewvi7nxzyoun6zhxrhs64oiz';
 	private const OTHER = 'did:plc:z72i7hdynmk6r22z27h6tvur';
 
+	public function testAThreadNobodyMayReplyToIsMarkedSo(): void {
+		$view = $this->postView();
+		$view['threadgate'] = ['uri' => 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.threadgate/3k', 'record' => ['$type' => 'app.bsky.feed.threadgate', 'post' => $view['uri'], 'allow' => [], 'createdAt' => '2026-01-01T00:00:00.000Z']];
+
+		$this->assertSame(['canReply' => ['automaticApproval' => []]], (new PostMapper($this->resolver()))->note($view)['interactionPolicy'] ?? null);
+		$view['threadgate']['record']['allow'] = [['$type' => 'app.bsky.feed.threadgate#mentionRule']];
+		$this->assertArrayNotHasKey('interactionPolicy', (new PostMapper($this->resolver()))->note($view), 'a narrower gate is checked on replying');
+	}
+
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
 		$create = (new PostMapper($this->resolver()))->create($this->postView());
 		$this->assertNotNull($create);

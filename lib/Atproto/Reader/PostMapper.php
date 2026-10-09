@@ -174,6 +174,11 @@ class PostMapper {
 		if ($quote !== '') {
 			$note['quote'] = $quote;
 		}
+		// a thread its author lets nobody reply to: the reply is not offered
+		// here (a narrower gate is checked when somebody replies; Threadgates)
+		if (($post['threadgate']['record']['allow'] ?? null) === []) {
+			$note['interactionPolicy'] = ['canReply' => ['automaticApproval' => []]];
+		}
 		$langs = $record['langs'] ?? [];
 		if (is_array($langs) && is_string($langs[0] ?? null) && $langs[0] !== '') {
 			$note['contentMap'] = [$langs[0] => $content];

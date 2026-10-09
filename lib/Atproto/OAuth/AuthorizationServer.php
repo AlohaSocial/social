@@ -43,6 +43,8 @@ class AuthorizationServer {
 	/** listed, so an app that asks for it is not refused outright; never granted */
 	public const SCOPES_LISTED = ['atproto', 'transition:generic', 'transition:chat.bsky', 'transition:email'];
 	public const ACCESS_LIFETIME = 900;
+	/** what the scopes of a session may come to, as stored */
+	private const MAX_SCOPE = 1024;
 	private const REQUEST_LIFETIME = 300;
 	private const CODE_LIFETIME = 300;
 	/** an untrusted public client's session and each of its refresh tokens */
@@ -60,6 +62,7 @@ class AuthorizationServer {
 		private InstanceKeyService $instanceKeys,
 		private ActorsRequest $actors,
 		private ITimeFactory $time,
+		private PermissionSets $permissionSets,
 	) {
 	}
 
@@ -142,6 +145,18 @@ class AuthorizationServer {
 		}
 		if (array_diff($requested, $declared) !== []) {
 			throw new OAuthException('invalid_scope', 'The client did not declare every scope it asks for');
+		}
+		foreach ($requested as $scope) {
+			$parsed = Permissions::parse($scope);
+			if (!in_array($scope, self::SCOPES_LISTED, true) && $parsed === null) {
+				throw new OAuthException('invalid_scope', 'Not a scope: ' . $scope);
+			}
+			if (($parsed['resource'] ?? '') === 'include' && $this->permissionSets->expand((string)$parsed['nsid'], (string)$parsed['aud']) === null) {
+				throw new OAuthException('invalid_scope', 'The permission set ' . $parsed['nsid'] . ' could not be resolved');
+			}
+		}
+		if (strlen(implode(' ', $requested)) > self::MAX_SCOPE) {
+			throw new OAuthException('invalid_scope', 'The scopes asked for are too long');
 		}
 		$responseMode = self::field($params, 'response_mode') ?: 'query';
 		if (!in_array($responseMode, ['query', 'fragment'], true)) {
@@ -288,7 +303,25 @@ class AuthorizationServer {
 			$this->request->sessionUsed($session->sessionId);
 		}
 
-		return new ClientSession($session->userId, $identity, $session->sessionId, $session->scopes());
+		return new ClientSession($session->userId, $identity, $session->sessionId, $session->scopes(), $this->permissionsOf($session->scopes()));
+	}
+
+	/**
+	 * What scopes allow, the permission sets they include expanded; a set
+	 * that cannot be resolved now allows nothing.
+	 *
+	 * @param string[] $scopes
+	 */
+	public function permissionsOf(array $scopes): Permissions {
+		$included = [];
+		foreach ($scopes as $scope) {
+			$parsed = Permissions::parse($scope);
+			if (($parsed['resource'] ?? '') === 'include') {
+				array_push($included, ...($this->permissionSets->expand((string)$parsed['nsid'], (string)$parsed['aud']) ?? []));
+			}
+		}
+
+		return Permissions::of($scopes, $included);
 	}
 
 	/**
@@ -316,12 +349,16 @@ class AuthorizationServer {
 	}
 
 	/**
-	 * The scopes of a request that are granted: those offered here.
+	 * The scopes of a request that are granted: the transitional ones offered
+	 * here, and every granular one.
 	 *
 	 * @return string[]
 	 */
 	public static function granted(string $scope): array {
-		return array_values(array_intersect(self::scopes($scope), self::SCOPES));
+		return array_values(array_filter(
+			self::scopes($scope),
+			static fn (string $s): bool => in_array($s, self::SCOPES, true) || Permissions::parse($s) !== null,
+		));
 	}
 
 	/**

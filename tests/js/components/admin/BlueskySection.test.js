@@ -28,6 +28,7 @@ function admin(overrides = {}) {
 			appview: 'https://public.api.bsky.app',
 			jetstream: '',
 			sync_ceiling: 200,
+			trusted_clients: [],
 			...(overrides.settings ?? {}),
 		},
 		status: {
@@ -214,6 +215,16 @@ describe('the Bluesky card', () => {
 			await flushPromises()
 
 			expect(post).toHaveBeenCalledWith(ROUTE, { relays: ['https://bsky.network', 'https://relay.example'] })
+		})
+
+		it('sends the trusted apps as a list of client IDs', async () => {
+			const wrapper = mountCard()
+			await wrapper.findAllComponents({ name: 'NcTextArea' })[1].find('textarea')
+				.setValue('https://bsky.app/oauth-client-metadata.json\n\n')
+			await buttonByText(wrapper, 'Save').trigger('click')
+			await flushPromises()
+
+			expect(post).toHaveBeenCalledWith(ROUTE, { trusted_clients: ['https://bsky.app/oauth-client-metadata.json'] })
 		})
 
 		it('shows what the server would not take', async () => {

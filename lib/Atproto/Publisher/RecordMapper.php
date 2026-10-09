@@ -16,6 +16,7 @@ use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Repository\RepositoryService;
+use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\CardNotFoundException;
@@ -24,6 +25,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\DocumentService;
+use OCA\Social\Service\PinService;
 use Throwable;
 
 /**
@@ -55,6 +57,8 @@ class RecordMapper {
 		private PostRefs $refs,
 		private StreamCardsRequest $cards,
 		private CardThumbnail $thumbnails,
+		private CacheDocumentsRequest $cacheDocuments,
+		private PinService $pins,
 	) {
 	}
 
@@ -199,9 +203,17 @@ class RecordMapper {
 		if ($bio !== '') {
 			$record['description'] = self::clip($bio, 256, 2560);
 		}
-		$avatar = $this->pictures->avatarBlob($identity, $actor);
+		$avatar = $this->pictures->avatarBlob($identity, $actor, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES);
 		if ($avatar !== null) {
 			$record['avatar'] = $avatar['blob']->toRecordValue();
+		}
+		$banner = $this->bannerOf($identity, $actor);
+		if ($banner !== null) {
+			$record['banner'] = $banner;
+		}
+		$pinned = $this->pinnedOf($identity, $actor);
+		if ($pinned !== null) {
+			$record['pinnedPost'] = $pinned;
 		}
 		if ($actor->getCreation() > 0) {
 			$record['createdAt'] = Syntax::datetime($actor->getCreation());
@@ -340,6 +352,49 @@ class RecordMapper {
 		}
 
 		return $ordered;
+	}
+
+	/**
+	 * The banner, the stored document the actor's header names.
+	 */
+	private function bannerOf(Identity $identity, Person $actor): ?array {
+		$url = trim($actor->getHeader());
+		if ($url === '') {
+			return null;
+		}
+		try {
+			$document = $this->cacheDocuments->getByUrl($url);
+		} catch (Throwable) {
+			return null;
+		}
+
+		return $document->getLocalCopy() === '' ? null : $this->profilePicture($identity, $actor, $document);
+	}
+
+	/**
+	 * A picture as the profile takes one: a megabyte at most, JPEG or PNG.
+	 */
+	private function profilePicture(Identity $identity, Person $actor, Document $document): ?array {
+		$picture = $this->pictures->blobFor($identity, $actor, $document, PictureService::PROFILE_MAX_BYTES, PictureService::PROFILE_TYPES);
+
+		return $picture === null ? null : $picture['blob']->toRecordValue();
+	}
+
+	/**
+	 * The newest pin that is on Bluesky, as the profile's `pinnedPost`.
+	 *
+	 * @return array{uri: string, cid: string}|null
+	 */
+	private function pinnedOf(Identity $identity, Person $actor): ?array {
+		foreach ($this->pins->getPinnedIds($actor->getId()) as $postId) {
+			foreach ($this->repositories->getRecordsByLocalId($postId) as $record) {
+				if ($record->collection === self::POST && $record->did === $identity->did) {
+					return ['uri' => $record->uri(), 'cid' => $record->cid->toString()];
+				}
+			}
+		}
+
+		return null;
 	}
 
 	private static function publishedAt(Stream $post): int {
