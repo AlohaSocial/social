@@ -41,7 +41,7 @@
 		"@noble/secp256k1": "3.2.0",
 		"blurhash": "^2.0.5",
 		"debounce": "^3.0.0",
-		"dompurify": "^3.4.16",
+		"dompurify": "^3.4.17",
 		"hls.js": "^1.7.3",
 		"mitt": "^3.0.1",
 		"pinia": "^4.0.3",
