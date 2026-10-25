@@ -24,6 +24,7 @@ use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\ModerationRequest;
 use OCA\Social\Model\Moderation;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Tests\Integration\QueryCounter;
 use OCP\Server;
@@ -53,7 +54,7 @@ class ListReposQueryBudgetTest extends TestCase {
 		$this->xrpc = new XrpcService(
 			$config, Server::get(IdentityService::class), Server::get(RepositoryService::class), $this->repoRequest,
 			Server::get(AtprotoBlobRequest::class), Server::get(PictureService::class), Server::get(VideoBlobService::class),
-			Server::get(ConfigService::class), Server::get(ModerationService::class), $this->identityRequest, Server::get(HandleVerifier::class), Server::get(PlcClient::class),
+			Server::get(ConfigService::class), Server::get(ModerationService::class), $this->identityRequest, Server::get(HandleVerifier::class), Server::get(PlcClient::class), Server::get(CurlService::class),
 		);
 	}
 

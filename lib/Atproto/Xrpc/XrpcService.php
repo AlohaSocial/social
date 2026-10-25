@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Xrpc;
 
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Identity\DidWebResolver;
 use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\PlcClient;
@@ -30,6 +31,7 @@ use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 
 /**
@@ -53,6 +55,7 @@ class XrpcService {
 		private AtprotoIdentityRequest $identityRequest,
 		private HandleVerifier $handles,
 		private PlcClient $plc,
+		private CurlService $curl,
 	) {
 	}
 
@@ -152,9 +155,13 @@ class XrpcService {
 			$identity = $this->identities->getByDid($did);
 		} catch (AtprotoIdentityNotFoundException) {
 			try {
-				$document = Syntax::isDidPlc($did) ? $this->plc->document($did) : null;
+				$document = match (true) {
+					Syntax::isDidPlc($did) => $this->plc->document($did),
+					str_starts_with($did, 'did:web:') => DidWebResolver::document($did, $this->curl),
+					default => null,
+				};
 			} catch (AtprotoException $e) {
-				throw new XrpcException(502, 'DidResolutionFailed', 'DID directory could not be reached');
+				throw new XrpcException(502, 'DidResolutionFailed', 'The DID resolution service could not be reached');
 			}
 			if ($document === null || ($document['id'] ?? '') !== $did) {
 				throw new XrpcException(404, 'DidNotFound', 'Could not resolve DID');
