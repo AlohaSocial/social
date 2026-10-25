@@ -520,6 +520,8 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame('public', $post->getType());
 			$this->assertSame('de', $post->getLanguage());
 			$this->assertSame('https://bsky.app/profile/' . self::BOB . '/post/3kbob', $post->getReplyTo());
+			$this->assertSame(['custom-label', 'porn'], $post->getAtprotoSelfLabels());
+			$this->assertTrue($post->isSensitive());
 
 			return true;
 		}))->willReturnCallback(function () use ($made): Create {
@@ -541,6 +543,7 @@ class WriteServiceTest extends TestCase {
 			'facets' => [['index' => ['byteStart' => $start, 'byteEnd' => $end], 'features' => [['$type' => 'app.bsky.richtext.facet#link', 'uri' => 'https://example.com/a/very/long/path?x=1']]]],
 			'langs' => ['de'],
 			'reply' => ['root' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => 'x'], 'parent' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => 'x']],
+			'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'custom-label'], ['val' => 'porn']]],
 			'createdAt' => '2026-10-08T10:00:00.000Z',
 		]]);
 
@@ -677,7 +680,7 @@ class WriteServiceTest extends TestCase {
 		$this->documents->expects($this->once())->method('updateDescription')
 			->with($this->callback(static fn (Document $document): bool => $document->getDescription() === 'New alt text'));
 		$this->posts->expects($this->once())->method('editPost')
-			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22], null, false, false, '', null)
+			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22], null, false, false, '', null, [])
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -725,7 +728,7 @@ class WriteServiceTest extends TestCase {
 			'provider' => 'example.com',
 		];
 		$this->posts->expects($this->once())->method('editPost')
-			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true, false, '', null)
+			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true, false, '', null, [])
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -769,7 +772,7 @@ class WriteServiceTest extends TestCase {
 		$this->postStore->method('isKnown')->willReturn(true);
 		$newCid = Cid::forRaw('new quote');
 		$this->posts->expects($this->once())->method('editPost')
-			->with(46, $this->alice, 'After', '', false, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null)
+			->with(46, $this->alice, 'After', '', false, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null, ['custom-label'])
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -785,6 +788,7 @@ class WriteServiceTest extends TestCase {
 					'uri' => $newUri,
 					'cid' => ['$link' => $newCid->toString()],
 				]],
+				'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'custom-label']]],
 			],
 		]);
 	}
@@ -817,7 +821,7 @@ class WriteServiceTest extends TestCase {
 			'provider' => 'Bluesky',
 		];
 		$this->posts->expects($this->once())->method('editPost')
-			->with(47, $this->alice, 'After', '', false, '', [], null, false, [], $linkCard, true, true, '', $recordEmbed)
+			->with(47, $this->alice, 'After', '', false, '', [], null, false, [], $linkCard, true, true, '', $recordEmbed, [])
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 

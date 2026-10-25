@@ -192,6 +192,15 @@ class StatusAssemblyServiceTest extends TestCase {
 		$this->assertSame(['options' => ['yes', 'no']], $post->getPoll());
 	}
 
+	public function testAHeldAtProtoPostKeepsItsSelfLabelsWhenItIsApproved(): void {
+		$post = $this->service->fromParams($this->actor(), $this->params([
+			'text' => 'A labeled post',
+			'atproto_self_labels' => ['!warn', 'custom-label'],
+		]));
+
+		$this->assertSame(['!warn', 'custom-label'], $post->getAtprotoSelfLabels());
+	}
+
 	public function testWhoMayReplyWaitsWithTheScheduledPost(): void {
 		$this->assertArrayNotHasKey('reply_policy', $this->service->paramsOf(new Status(), Stream::TYPE_PUBLIC));
 		$params = $this->service->paramsOf((new Status())->setReplyRule(Stream::REPLY_RULE_MENTIONED), Stream::TYPE_PUBLIC);
