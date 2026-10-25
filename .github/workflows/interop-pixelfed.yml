@@ -105,7 +105,8 @@ jobs:
         # without the dev ones, as the app store ships it: the app's autoloader
         # is prepended to the server's, so a dev-only package the server also
         # carries (symfony/console) is served in place of the server's own
-        run: composer i --no-dev
+        # GitHub archive downloads can fail transiently; share the bounded retry policy.
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction
 
       - name: Give both servers a name, an address and a certificate
         # Pixelfed fetches and delivers over https only, so both ends need a
@@ -323,7 +324,7 @@ jobs:
         # and the app enabled with what ships. One class at a time, so each
         # prints its own failures even if the other hangs.
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction
           status=0
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PixelfedDeliveryTest || status=1
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter PixelfedInboundTest || status=1
