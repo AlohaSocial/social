@@ -12,8 +12,8 @@ namespace OCA\Social\Cron;
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Lexicon\LexiconException;
-use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
+use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\Backoff;
@@ -41,6 +41,7 @@ use Throwable;
  *
  * `argument`: `action` (publish, delete, edit, bookmark, unbookmark, message for a direct
  * message, profile with an actor's id, or verifications, with any `id`,
+
  * for every verification moved to another verifying account) and the
  * `id`; for a like or repost (`like`, `unlike`, `repost`, `unrepost`) the
  * id is the Like's or Announce's, with the `post` and the `actor` when one
@@ -69,9 +70,8 @@ class AtprotoPublish extends QueuedJob {
 		private VerificationService $verifications,
 		private ActionsRequest $actions,
 		private IJobList $jobList,
+		private BlueskyBookmarks $bookmarks,
 		private ?BlockedByService $blockedBy = null,
-		private ?BlueskyBookmarks $bookmarks = null,
-		private ?StreamActionService $streamActions = null,
 	) {
 		parent::__construct($time);
 	}
@@ -89,14 +89,14 @@ class AtprotoPublish extends QueuedJob {
 
 				return;
 			}
-			if (in_array($action, ['bookmark', 'unbookmark'], true)) {
-				$this->bookmark($action, $id, (string)($argument['actor'] ?? ''));
-
-				return;
-			}
 			if ($action === 'delete') {
 				$this->publisher->deletePost($id);
 				$this->interactions->removeAllOf($id);
+
+				return;
+			}
+			if (in_array($action, ['bookmark', 'unbookmark'], true)) {
+				$this->bookmarks->syncCurrent($this->cacheActorService->getFromId((string)($argument['actor'] ?? '')), $id);
 
 				return;
 			}
@@ -198,18 +198,6 @@ class AtprotoPublish extends QueuedJob {
 		} else {
 			$this->interactions->repost($actor, $post, $id);
 		}
-	}
-
-	/** Applies only the latest local bookmark state; a superseded job is a no-op. */
-	private function bookmark(string $action, string $postId, string $actorId): void {
-		if ($this->bookmarks === null || $this->streamActions === null || $actorId === '' || $postId === '') {
-			return;
-		}
-		$on = $action === 'bookmark';
-		if ($this->streamActions->getActionBool($actorId, $postId, StreamAction::BOOKMARKED) !== $on) {
-			return;
-		}
-		$this->bookmarks->sync($this->cacheActorService->getFromId($actorId), $postId, $on);
 	}
 
 	/**

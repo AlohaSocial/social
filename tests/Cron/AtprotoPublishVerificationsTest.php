@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Cron;
 
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Cron\AtprotoPublish;
@@ -42,6 +43,7 @@ class AtprotoPublishVerificationsTest extends TestCase {
 			$verifications,
 			$this->createStub(ActionsRequest::class),
 			$this->createStub(IJobList::class),
+			$this->createStub(BlueskyBookmarks::class),
 		);
 		(new ReflectionMethod(AtprotoPublish::class, 'run'))->invoke($job, $argument);
 	}
