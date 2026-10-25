@@ -38,6 +38,7 @@ class AppViewProxy {
 		'x-atproto-device-id' => 'X-Atproto-Device-Id',
 		'x-atproto-session-id' => 'X-Atproto-Session-Id',
 		'x-atproto-bsky-topics' => 'X-Atproto-Bsky-Topics',
+		'x-bsky-topics' => 'X-Bsky-Topics',
 	];
 	/** the most a request body may carry on its way through */
 	public const MAX_BODY = 1048576;

@@ -69,6 +69,7 @@ class AppViewProxyTest extends TestCase {
 			$this->assertSame('device-123', $options['headers']['X-Atproto-Device-Id']);
 			$this->assertSame('session-456', $options['headers']['X-Atproto-Session-Id']);
 			$this->assertSame('for-you,following', $options['headers']['X-Atproto-Bsky-Topics']);
+			$this->assertSame('following', $options['headers']['X-Bsky-Topics']);
 			$this->assertArrayNotHasKey('authorization', $options['headers'], 'the app\'s own token stays here');
 
 			return $options['accept_errors'] === true;
@@ -85,6 +86,7 @@ class AppViewProxyTest extends TestCase {
 			'x-atproto-device-id' => 'device-123',
 			'x-atproto-session-id' => 'session-456',
 			'x-atproto-bsky-topics' => 'for-you,following',
+			'x-bsky-topics' => 'following',
 		]);
 		$this->assertSame('{"feed":[]}', $answer->bytes);
 		$this->assertSame(200, $answer->status);
