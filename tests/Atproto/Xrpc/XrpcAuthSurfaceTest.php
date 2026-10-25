@@ -68,6 +68,8 @@ class XrpcAuthSurfaceTest extends TestCase {
 		'_health' => 'the liveness probe, naming the version only',
 		'com.atproto.server.describeServer' => 'the server description every client reads before signing in',
 		'com.atproto.identity.resolveHandle' => 'handle resolution is public by design',
+		'com.atproto.identity.resolveDid' => 'DID documents are public identity data',
+		'com.atproto.identity.resolveIdentity' => 'identity information is public and handles are validated before being returned',
 		'com.atproto.repo.describeRepo' => 'repository reads are public: the repository holds public posts only (§16.5)',
 		'com.atproto.repo.getRecord' => 'as describeRepo',
 		'com.atproto.repo.listRecords' => 'as describeRepo',

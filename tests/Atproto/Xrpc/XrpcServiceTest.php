@@ -93,6 +93,30 @@ class XrpcServiceTest extends TestCase {
 		$this->assertSame(['did' => self::DID], $this->xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'Alice.Social.Test']));
 	}
 
+	public function testResolveDidReturnsTheManagedDidDocument(): void {
+		$this->identities->expects($this->once())->method('document')->with($this->alice)->willReturn(['id' => self::DID]);
+		$this->assertSame(['didDoc' => ['id' => self::DID]], $this->xrpc->query('com.atproto.identity.resolveDid', ['did' => self::DID]));
+	}
+
+	public function testResolveIdentityReturnsTheManagedIdentity(): void {
+		$this->identities->expects($this->once())->method('document')->with($this->alice)->willReturn(['id' => self::DID]);
+		$this->assertSame([
+			'did' => self::DID,
+			'handle' => 'alice.social.test',
+			'didDoc' => ['id' => self::DID],
+		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => self::DID]));
+	}
+
+	public function testResolveDidRejectsMalformedIdentifiers(): void {
+		try {
+			$this->xrpc->query('com.atproto.identity.resolveDid', ['did' => 'not-a-did']);
+			$this->fail();
+		} catch (XrpcException $e) {
+			$this->assertSame(400, $e->status);
+			$this->assertSame('InvalidRequest', $e->error);
+		}
+	}
+
 	public function testAnUnknownHandleIsAnInvalidRequest(): void {
 		try {
 			$this->xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'nobody.social.test']);
