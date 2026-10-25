@@ -72,7 +72,22 @@ jobs:
         # without the dev ones, as the app store ships it: the app's autoloader
         # is prepended to the server's, so a dev-only package the server also
         # carries (symfony/console) is served in place of the server's own
-        run: composer i --no-dev
+        # GitHub's archive endpoint sometimes drops TLS connections while
+        # Composer downloads the lockfile; retry before treating that transient
+        # failure as an outage.
+        env:
+          COMPOSER_MAX_PARALLEL_HTTP: 4
+        run: |
+          for attempt in 1 2 3; do
+            if composer i --no-dev --no-interaction; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Composer install failed; retrying in $((attempt * 10)) seconds (attempt $((attempt + 1))/3)."
+            sleep $((attempt * 10))
+          done
 
       - name: Give both servers a name and a certificate
         # GoToSocial fetches and delivers over https only, and verifies the
