@@ -1858,7 +1858,7 @@ describe('TimelinePost', () => {
 
 			const edit = store.postEdit.mock.calls[0][0]
 			expect(edit.event).toMatchObject({ name: 'New meetup', location: 'New hall' })
-			expect(edit.event.start_time).toBe(wrapper.vm.fromLocalDateTime('2026-10-26T11:30'))
+			expect(edit.event.start_time).toBe(new Date('2026-10-26T11:30').toISOString())
 		})
 
 		it('never seeds the editor from the author bio, and refuses an over-long edit', async () => {
