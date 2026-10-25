@@ -9,8 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
-use OCA\Social\Db\StreamRequest;
 use OCA\Social\Atproto\Reader\ActiveHomeFeedRefresh;
+use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\UnknownProbeException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -160,6 +160,7 @@ class TimelineApiController extends MastodonApiController {
 				$notModified = $this->notModified(
 					'h' . (($this->viewer === null) ? '0' : $this->streamRequest->newestHomeNid($this->viewer))
 					. '-' . $limit
+					. '-' . hash('sha256', (string)json_encode($this->feedDisplayService->blueskyHomePreferences($this->viewer?->getUserId() ?? '')))
 					. '-' . $this->timelineRevisionService->of($this->currentSession())
 				);
 				if ($notModified !== null) {
@@ -182,9 +183,14 @@ class TimelineApiController extends MastodonApiController {
 
 			$posts = $this->streamService->getTimeline($options);
 			$pagePosts = $posts;
+			if (strtolower($timeline) === ProbeOptions::HOME && $this->viewer !== null) {
+				$pagePosts = $this->feedDisplayService->filterBlueskyHomePosts(
+					$pagePosts, $this->viewer->getUserId(), $this->viewer, $this->followService
+				);
+			}
 			if ($this->feedDisplayService->hidesReplies($this->viewer?->getUserId() ?? '')
 				&& in_array(strtolower($timeline), [ProbeOptions::HOME, ProbeOptions::PUBLIC], true)) {
-				$pagePosts = array_values(array_filter($posts, static fn ($post): bool => $post->getInReplyTo() === ''));
+				$pagePosts = array_values(array_filter($pagePosts, static fn ($post): bool => $post->getInReplyTo() === ''));
 			}
 			$this->logger->debug('[' . static::class . '] Timeline retrieved', [
 				'timeline' => $timeline,

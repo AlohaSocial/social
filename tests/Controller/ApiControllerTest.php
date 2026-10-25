@@ -351,6 +351,7 @@ class ApiControllerTest extends TestCase {
 		$this->countsService->method('hides')->willReturnCallback(fn (string $userId): bool => $this->hidesCounts);
 		$this->feedDisplayService = $this->createStub(FeedDisplayService::class);
 		$this->feedDisplayService->method('hidesReplies')->willReturnCallback(fn (string $userId): bool => $this->hidesRepliesInFeeds);
+		$this->feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
