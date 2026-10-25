@@ -43,4 +43,12 @@ class FeedDisplayServiceTest extends TestCase {
 	public function testNobodyInParticularHasNoFeedPreference(): void {
 		$this->assertFalse($this->service->hidesReplies(''));
 	}
+
+	public function testThreadOrderComesFromTheSavedBlueskyPreference(): void {
+		$this->stored['alice'] = json_encode([
+			['$type' => 'app.bsky.actor.defs#threadViewPref', 'sort' => 'most-likes'],
+	]);
+
+		$this->assertSame('most-likes', $this->service->threadSort('alice'));
+	}
 }
