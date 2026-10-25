@@ -130,15 +130,14 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 				return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
 			}
 
-			// The effective generation exposed to clients includes the global
-			// admin epoch. Lock that row before reading the profile so an admin
-			// switch cannot pass this check while an event from the old epoch is
-			// being committed. Shared state is read in the same transaction that
-			// records the event and its aggregates.
+			// Read the epoch in this transaction to validate the generation the
+			// client submitted. The exclusive lock is taken again just before
+			// commit, after the per-user aggregates have been written, so events
+			// for different readers can do their expensive work concurrently.
 			$epochQuery = $this->getQueryBuilder();
 			$epochQuery->select('epoch')->from(RecommendationPreferenceRequest::TABLE_EPOCH)
 				->where($epochQuery->expr()->eq('id', $epochQuery->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
-				->forUpdate(ConflictResolutionMode::Ordinary);
+				->setMaxResults(1);
 			$epochResult = $epochQuery->executeQuery();
 			$epochRow = $epochResult->fetch();
 			$epochResult->closeCursor();
@@ -197,6 +196,22 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 						$this->recordImpression($actorKey, $postKey, $impression['session_key'], $generation, $now);
 					}
 				}
+			}
+
+			// Linearize an administrator's global switch against signal commits.
+			// Holding this lock only across the final comparison and commit avoids
+			// serializing profile lookups, deduplication, and aggregate folding for
+			// all users on the one global epoch row.
+			$commitEpochQuery = $this->getQueryBuilder();
+			$commitEpochQuery->select('epoch')->from(RecommendationPreferenceRequest::TABLE_EPOCH)
+				->where($commitEpochQuery->expr()->eq('id', $commitEpochQuery->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+				->forUpdate(ConflictResolutionMode::Ordinary);
+			$commitEpochResult = $commitEpochQuery->executeQuery();
+			$commitEpochRow = $commitEpochResult->fetch();
+			$commitEpochResult->closeCursor();
+			if ($commitEpochRow === false || (int)$commitEpochRow['epoch'] !== (int)$epochRow['epoch']) {
+				$connection->rollBack();
+				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
 			}
 			$connection->commit();
 		} catch (DBException $e) {
