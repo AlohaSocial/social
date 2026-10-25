@@ -31,6 +31,14 @@ use Throwable;
  */
 class AppViewProxy {
 	private const TIMEOUT = 20;
+	private const FORWARDED_HEADERS = [
+		'atproto-accept-labelers' => 'atproto-accept-labelers',
+		'accept-language' => 'accept-language',
+		'content-type' => 'content-type',
+		'x-atproto-device-id' => 'X-Atproto-Device-Id',
+		'x-atproto-session-id' => 'X-Atproto-Session-Id',
+		'x-atproto-bsky-topics' => 'X-Atproto-Bsky-Topics',
+	];
 	/** the most a request body may carry on its way through */
 	public const MAX_BODY = 1048576;
 
@@ -54,7 +62,7 @@ class AppViewProxy {
 	 * @param string $verb `get` or `post`
 	 * @param string $query the raw query string, passed on as it came
 	 * @param string $body the raw body of a procedure
-	 * @param array<string, string> $headers the caller's `atproto-proxy`, `atproto-accept-labelers`, `content-type` and `accept-language`
+	 * @param array<string, string> $headers the caller's proxy, labeler, device/session, Bsky topics, content type and language headers
 	 * @throws XrpcException
 	 */
 	public function forward(ClientSession $session, string $method, string $verb, string $query, string $body, array $headers): XrpcBytes {
@@ -64,9 +72,10 @@ class AppViewProxy {
 		}
 		$token = $this->serviceAuth->token($this->identities->signingKey($session->identity), $session->identity->did, $audience, $method);
 		$outgoing = ['Authorization' => 'Bearer ' . $token, 'Accept' => 'application/json'];
-		foreach (['atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
-			if (($headers[$name] ?? '') !== '') {
-				$outgoing[$name] = substr((string)$headers[$name], 0, 2048);
+		foreach (self::FORWARDED_HEADERS as $name => $outgoingName) {
+			$value = trim((string)($headers[$name] ?? ''));
+			if ($value !== '' && !str_contains($value, "\r") && !str_contains($value, "\n")) {
+				$outgoing[$outgoingName] = substr($value, 0, 2048);
 			}
 		}
 		$url = $endpoint . '/xrpc/' . $method . ($query !== '' ? '?' . $query : '');

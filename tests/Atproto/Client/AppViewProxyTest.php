@@ -66,6 +66,9 @@ class AppViewProxyTest extends TestCase {
 			$this->assertSame('app.bsky.feed.getTimeline', $claims['lxm']);
 			$this->assertTrue($this->userKey->publicKey()->verify($header . '.' . $payload, Encoding::base64UrlDecode($signature)));
 			$this->assertSame('did:plc:labeler', $options['headers']['atproto-accept-labelers']);
+			$this->assertSame('device-123', $options['headers']['X-Atproto-Device-Id']);
+			$this->assertSame('session-456', $options['headers']['X-Atproto-Session-Id']);
+			$this->assertSame('for-you,following', $options['headers']['X-Atproto-Bsky-Topics']);
 			$this->assertArrayNotHasKey('authorization', $options['headers'], 'the app\'s own token stays here');
 
 			return $options['accept_errors'] === true;
@@ -76,7 +79,13 @@ class AppViewProxyTest extends TestCase {
 			return '{"feed":[]}';
 		});
 
-		$answer = $this->proxy->forward($this->session, 'app.bsky.feed.getTimeline', 'get', 'limit=30&cursor=x%3Ay', '', ['authorization' => 'Bearer app-token', 'atproto-accept-labelers' => 'did:plc:labeler']);
+		$answer = $this->proxy->forward($this->session, 'app.bsky.feed.getTimeline', 'get', 'limit=30&cursor=x%3Ay', '', [
+			'authorization' => 'Bearer app-token',
+			'atproto-accept-labelers' => 'did:plc:labeler',
+			'x-atproto-device-id' => 'device-123',
+			'x-atproto-session-id' => 'session-456',
+			'x-atproto-bsky-topics' => 'for-you,following',
+		]);
 		$this->assertSame('{"feed":[]}', $answer->bytes);
 		$this->assertSame(200, $answer->status);
 		$this->assertSame('application/json; charset=utf-8', $answer->contentType);
@@ -143,6 +152,8 @@ class AppViewProxyTest extends TestCase {
 			$claims = json_decode(Encoding::base64UrlDecode(explode('.', substr($options['headers']['Authorization'], 7))[1]), true);
 			$this->assertSame(['did:web:api.bsky.chat#bsky_chat', 'chat.bsky.convo.sendMessage'], [$claims['aud'], $claims['lxm']]);
 			$this->assertSame('{"convoId":"c1"}', $options['body']);
+			$this->assertSame('device-123', $options['headers']['X-Atproto-Device-Id']);
+			$this->assertSame('session-456', $options['headers']['X-Atproto-Session-Id']);
 
 			return true;
 		}))->willReturnCallback(static function (string $m, string $u, array $o, &$contentType, &$status): string {
@@ -151,7 +162,31 @@ class AppViewProxyTest extends TestCase {
 			return '{}';
 		});
 
-		$this->proxy->forward($this->session, 'chat.bsky.convo.sendMessage', 'post', '', '{"convoId":"c1"}', ['atproto-proxy' => 'did:web:api.bsky.chat#bsky_chat', 'content-type' => 'application/json']);
+		$this->proxy->forward($this->session, 'chat.bsky.convo.sendMessage', 'post', '', '{"convoId":"c1"}', [
+			'atproto-proxy' => 'did:web:api.bsky.chat#bsky_chat',
+			'content-type' => 'application/json',
+			'x-atproto-device-id' => 'device-123',
+			'x-atproto-session-id' => 'session-456',
+		]);
+	}
+
+	public function testDeviceAndSessionHeaderValuesCannotInjectAnotherUpstreamHeader(): void {
+		$this->curl->expects($this->once())->method('doRequest')->with('get', 'https://api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=alice.test', $this->callback(static function (array $options): bool {
+			self::assertArrayNotHasKey('X-Atproto-Device-Id', $options['headers']);
+			self::assertArrayNotHasKey('X-Atproto-Session-Id', $options['headers']);
+
+			return true;
+		}))->willReturnCallback(static function (string $method, string $url, array $options, &$contentType, &$status): string {
+			$status = 200;
+			$contentType = 'application/json';
+
+			return '{}';
+		});
+
+		$this->proxy->forward($this->session, 'app.bsky.actor.getProfile', 'get', 'actor=alice.test', '', [
+			'x-atproto-device-id' => "device-123\r\nX-Injected: yes",
+			'x-atproto-session-id' => "session-456\nX-Injected: yes",
+		]);
 	}
 
 	public function testOnlyTheConfiguredServicesAreATarget(): void {
