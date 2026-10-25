@@ -52,101 +52,12 @@
 			</NcButton>
 		</p>
 
-		<div v-if="isEditing" class="post-edit-inline">
-			<div v-if="item.event" class="post-edit-event">
-				<label>
-					{{ t('social', 'Event title') }}
-					<input
-						v-model="editEvent.name"
-						type="text"
-						maxlength="300"
-						required>
-				</label>
-				<label>
-					{{ t('social', 'Starts') }}
-					<input v-model="editEvent.start_time" type="datetime-local" required>
-				</label>
-				<label>
-					{{ t('social', 'Ends (optional)') }}
-					<input v-model="editEvent.end_time" type="datetime-local">
-				</label>
-				<label>
-					{{ t('social', 'Event location (optional)') }}
-					<input v-model="editEvent.location" type="text" maxlength="500">
-				</label>
-			</div>
-			<input
-				v-model="editSpoiler"
-				type="text"
-				class="post-edit-warning"
-				dir="auto"
-				maxlength="200"
-				:aria-label="t('social', 'Content warning')"
-				:placeholder="t('social', 'Content warning, e.g. what the post is about')">
-			<label class="post-edit-sensitive">
-				<input v-model="editSensitive" type="checkbox">
-				{{ t('social', 'Mark media as sensitive') }}
-			</label>
-			<div class="post-edit-media">
-				<div v-for="(media, index) in editMedia" :key="media.id" class="post-edit-media__item">
-					<label>
-						<span>{{ t('social', 'Description for attachment {number}', { number: index + 1 }) }}</span>
-						<div class="post-edit-media__attachment">
-							<img
-								v-if="media.previewUrl"
-								class="post-edit-media__thumbnail"
-								:src="media.previewUrl"
-								:alt="t('social', 'Preview of attachment {number}', { number: index + 1 })">
-							<textarea
-								v-model="media.description"
-								maxlength="1500"
-								:aria-label="t('social', 'Description for attachment {number}', { number: index + 1 })"
-								:placeholder="t('social', 'Describe this media for people who cannot see it')" />
-						</div>
-					</label>
-					<NcButton variant="tertiary" :aria-label="t('social', 'Remove attachment {number}', { number: index + 1 })" @click.stop="removeEditMedia(index)">
-						{{ t('social', 'Remove attachment') }}
-					</NcButton>
-				</div>
-				<label class="post-edit-media__add">
-					<span>{{ t('social', 'Add media') }}</span>
-					<input
-						type="file"
-						accept="image/*,video/*,audio/*"
-						multiple
-						:disabled="editMedia.length >= 10 || editMediaUploading"
-						@change="addEditMedia">
-				</label>
-			</div>
-			<textarea
-				ref="editInput"
-				v-model="editContent"
-				class="post-edit-textarea"
-				dir="auto"
-				:maxlength="maxLength"
-				:aria-describedby="editIsTooLong ? `post-edit-count-${item.id}` : undefined"
-				:placeholder="t('social', 'Edit your post')"
-				@keydown.ctrl.enter="saveEdit" />
-			<div class="post-edit-actions">
-				<span
-					:id="`post-edit-count-${item.id}`"
-					class="post-edit-count"
-					:class="{ 'post-edit-count--over': editIsTooLong }"
-					role="status">
-					{{ editCharactersLeftLabel }}
-				</span>
-				<NcButton
-					variant="primary"
-					:disabled="!editCanSave || editMediaUploading"
-					:aria-label="t('social', 'Save')"
-					@click="saveEdit">
-					{{ t('social', 'Save') }}
-				</NcButton>
-				<NcButton :aria-label="t('social', 'Cancel')" @click="cancelEdit">
-					{{ t('social', 'Cancel') }}
-				</NcButton>
-			</div>
-		</div>
+		<PostEditForm
+			v-if="isEditing"
+			:item="item"
+			:maxLength="maxLength"
+			@save="saveEdit"
+			@cancel="cancelEdit" />
 		<!--
 		  A filter the reader wrote themselves matched this post. Same shape as
 		  the content warning below, and for the same reason: the body is not in
@@ -505,6 +416,7 @@ import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
 import TimelineEventCard from './TimelineEventCard.vue'
 import TimelinePostHeader from './TimelinePostHeader.vue'
+import PostEditForm from './PostEditForm.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -539,7 +451,6 @@ import { useAccountStore } from '../store/account.js'
 import { feel } from '../services/senses.js'
 import { useInstanceStore } from '../store/instance.js'
 import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
-import { htmlToPlainText } from '../utils/plainText.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 import { defineAsyncComponent } from 'vue'
@@ -567,6 +478,7 @@ export default {
 		IconAccountBoxMultiple,
 		TimelineEventCard,
 		TimelinePostHeader,
+		PostEditForm,
 		QuoteControlDialog,
 		ReplyControlDialog,
 		TagPeopleDialog,
@@ -653,13 +565,6 @@ export default {
 			warningLifted: false,
 			/** and so does one the reader's own keyword filters matched */
 			filterLifted: false,
-			editContent: '',
-			editSpoiler: '',
-			editSensitive: false,
-			editMedia: [],
-			editOriginalMediaIds: [],
-			editMediaUploading: false,
-			editEvent: { name: '', start_time: '', end_time: '', location: '' },
 			showReportDialog: false,
 			showMuteDialog: false,
 			/** the menu's own button, which the focus goes back to after a dialog */
@@ -850,39 +755,6 @@ export default {
 		 */
 		mediaLeads() {
 			return this.hasAttachments && !this.hasSpoiler && !this.isEditing
-		},
-
-		/** @return {number} how many characters the edit has left */
-		editCharsLeft() {
-			return this.maxLength - this.editContent.length
-		},
-
-		editIsTooLong() {
-			return this.editCharsLeft < 0
-		},
-
-		editCanSave() {
-			return (this.editContent.trim() !== '' || this.editMedia.length > 0 || Boolean(this.item.event))
-				&& !this.editIsTooLong && this.editEventIsValid && !this.editMediaUploading
-		},
-
-		editMediaChanged() {
-			return JSON.stringify(this.editMedia.map(({ id }) => String(id))) !== JSON.stringify(this.editOriginalMediaIds)
-		},
-
-		editEventIsValid() {
-			if (!this.item.event) {
-				return true
-			}
-			return this.editEvent.name.trim() !== ''
-				&& this.editEvent.start_time !== ''
-				&& (!this.editEvent.end_time || this.editEvent.end_time > this.editEvent.start_time)
-		},
-
-		editCharactersLeftLabel() {
-			return this.editIsTooLong
-				? n('social', '%n character too many', '%n characters too many', -this.editCharsLeft)
-				: n('social', '%n character left', '%n characters left', this.editCharsLeft)
 		},
 
 		/** Who wrote it, so moving between posts by landmark says something. */
@@ -1507,111 +1379,22 @@ export default {
 		},
 
 		editPost() {
-			this.editContent = htmlToPlainText(this.item.content || '')
-			this.editSpoiler = this.item.spoiler_text || ''
-			this.editSensitive = this.item.sensitive === true
-			this.editMedia = (this.item.media_attachments || []).map((media) => ({
-				id: media.id,
-				description: media.description || '',
-				previewUrl: media.preview_url || (media.type === 'image' ? media.url : ''),
-			}))
-			this.editOriginalMediaIds = this.editMedia.map(({ id }) => String(id))
-			this.editEvent = {
-				name: this.item.event?.name || '',
-				start_time: this.toLocalDateTime(this.item.event?.start_time),
-				end_time: this.toLocalDateTime(this.item.event?.end_time),
-				location: this.item.event?.location || '',
-			}
 			this.isEditing = true
-			this.$nextTick(() => {
-				if (this.$refs.editInput) {
-					/** @type {HTMLTextAreaElement} */ (this.$refs.editInput).focus()
-				}
-			})
 		},
 
-		async saveEdit() {
-			if (!this.editCanSave) {
-				return
-			}
-			const event = this.item.event
-				? {
-						name: this.editEvent.name.trim(),
-						start_time: this.fromLocalDateTime(this.editEvent.start_time),
-						end_time: this.fromLocalDateTime(this.editEvent.end_time),
-						location: this.editEvent.location.trim(),
-					}
-				: undefined
+		async saveEdit(edit) {
 			const response = await this.timelineStore.postEdit({
 				status: this.item,
-				content: this.editContent.trim(),
-				spoiler_text: this.editSpoiler.trim(),
-				sensitive: this.editSensitive,
-				media_attributes: this.editMedia.map(({ id, description }) => ({ id, description })),
-				...(this.editMediaChanged ? { media_ids: this.editMedia.map(({ id }) => id) } : {}),
-				...(event === undefined ? {} : { event }),
+				...edit,
 			})
 			if (response === undefined) {
 				return
 			}
 			this.isEditing = false
-			this.editContent = ''
-			this.editSpoiler = ''
-			this.editMedia = []
-			this.editOriginalMediaIds = []
-		},
-
-		removeEditMedia(index) {
-			this.editMedia.splice(index, 1)
-		},
-
-		async addEditMedia(event) {
-			const files = Array.from(event.target.files || []).slice(0, Math.max(0, 10 - this.editMedia.length))
-			event.target.value = ''
-			if (files.length === 0) {
-				return
-			}
-
-			this.editMediaUploading = true
-			try {
-				for (const file of files) {
-					const uploaded = await this.timelineStore.createMedia(file)
-					if (!uploaded) {
-						continue
-					}
-					this.editMedia.push({
-						id: uploaded.id,
-						description: uploaded.description || '',
-						previewUrl: uploaded.preview_url || uploaded.url || '',
-					})
-				}
-			} finally {
-				this.editMediaUploading = false
-			}
 		},
 
 		cancelEdit() {
 			this.isEditing = false
-			this.editContent = ''
-			this.editSpoiler = ''
-			this.editMedia = []
-			this.editOriginalMediaIds = []
-		},
-
-		toLocalDateTime(value) {
-			if (!value) {
-				return ''
-			}
-			const date = new Date(value)
-			return Number.isNaN(date.getTime()) ? '' : new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-		},
-
-		fromLocalDateTime(value) {
-			if (!value) {
-				return null
-			}
-			const date = new Date(value)
-			return Number.isNaN(date.getTime()) ? null : date.toISOString()
 		},
 
 		/**
@@ -2163,62 +1946,6 @@ export default {
 			border-radius: 999px;
 		}
 	}
-}
-
-.post-edit-inline {
-	margin-bottom: 10px;
-
-	.post-edit-event {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
-		margin-bottom: 10px;
-
-		label { display: grid; gap: 4px; font-size: .9rem; }
-		input { min-width: 0; width: 100%; }
-	}
-
-	.post-edit-textarea {
-		box-sizing: border-box;
-		width: 100%;
-		min-height: 100px;
-		padding: 8px;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		background: var(--color-main-background);
-		color: var(--color-main-text);
-		font: inherit;
-		resize: vertical;
-	}
-
-	.post-edit-warning {
-		box-sizing: border-box;
-		width: 100%;
-		margin-bottom: 6px;
-		padding: 8px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		background: var(--color-main-background);
-		color: var(--color-main-text);
-	}
-
-	.post-edit-sensitive { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-	.post-edit-media { display: grid; gap: 8px; margin: 8px 0; }
-	.post-edit-media label { display: grid; gap: 4px; font-size: .9rem; }
-	.post-edit-media__item { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; }
-	.post-edit-media__attachment { display: flex; align-items: flex-start; gap: 8px; }
-	.post-edit-media__thumbnail { width: 72px; height: 72px; flex: 0 0 72px; object-fit: cover; border-radius: 6px; }
-	.post-edit-media__attachment textarea { flex: 1; min-width: 0; }
-	.post-edit-media textarea { box-sizing: border-box; width: 100%; min-height: 64px; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); font: inherit; resize: vertical; }
-	.post-edit-media__add { padding: 8px; border: 1px dashed var(--color-border); border-radius: 8px; cursor: pointer; }
-	.post-edit-media__add input { display: block; max-width: 100%; margin-top: 4px; }
-	.post-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-	.post-edit-count { margin-inline-end: auto; color: var(--color-text-lighter); font-size: 12px; }
-	.post-edit-count--over { color: var(--color-error); font-weight: 600; }
-}
-
-@media (max-width: 600px) {
-	.post-edit-inline .post-edit-event { grid-template-columns: 1fr; }
 }
 
 .post-action-group {
