@@ -12,7 +12,7 @@
 					type="text"
 					maxlength="300"
 					required
-					@input="updateEvent('name', $event.target.value)">
+					@input="updateEvent('name', inputValue($event))">
 			</label>
 			<label>
 				{{ t('social', 'Starts') }}
@@ -20,14 +20,14 @@
 					:value="event.start_time"
 					type="datetime-local"
 					required
-					@input="updateEvent('start_time', $event.target.value)">
+					@input="updateEvent('start_time', inputValue($event))">
 			</label>
 			<label>
 				{{ t('social', 'Ends (optional)') }}
 				<input
 					:value="event.end_time"
 					type="datetime-local"
-					@input="updateEvent('end_time', $event.target.value)">
+					@input="updateEvent('end_time', inputValue($event))">
 			</label>
 			<label>
 				{{ t('social', 'Event location (optional)') }}
@@ -35,7 +35,7 @@
 					:value="event.location"
 					type="text"
 					maxlength="500"
-					@input="updateEvent('location', $event.target.value)">
+					@input="updateEvent('location', inputValue($event))">
 			</label>
 		</div>
 		<input
@@ -46,12 +46,12 @@
 			maxlength="200"
 			:aria-label="t('social', 'Content warning')"
 			:placeholder="t('social', 'Content warning, e.g. what the post is about')"
-			@input="$emit('update:spoiler', $event.target.value)">
+			@input="$emit('update:spoiler', inputValue($event))">
 		<label class="post-edit-sensitive">
 			<input
 				:checked="sensitive"
 				type="checkbox"
-				@change="$emit('update:sensitive', $event.target.checked)">
+				@change="$emit('update:sensitive', inputChecked($event))">
 			{{ t('social', 'Mark media as sensitive') }}
 		</label>
 		<textarea
@@ -62,7 +62,7 @@
 			:maxlength="maxLength"
 			:aria-describedby="isTooLong ? `post-edit-count-${statusId}` : undefined"
 			:placeholder="t('social', 'Edit your post')"
-			@input="$emit('update:content', $event.target.value)"
+			@input="$emit('update:content', inputValue($event))"
 			@keydown.ctrl.enter="$emit('save')" />
 		<div class="post-edit-actions">
 			<span
@@ -107,12 +107,20 @@ export default {
 
 	emits: ['update:content', 'update:spoiler', 'update:sensitive', 'update:event', 'save', 'cancel'],
 	methods: {
+		inputValue(event) {
+			return /** @type {HTMLInputElement | HTMLTextAreaElement} */ (event.target).value
+		},
+
+		inputChecked(event) {
+			return /** @type {HTMLInputElement} */ (event.target).checked
+		},
+
 		updateEvent(field, value) {
 			this.$emit('update:event', { ...this.event, [field]: value })
 		},
 
 		focus() {
-			this.$refs.editInput?.focus()
+			/** @type {HTMLTextAreaElement | undefined} */ (this.$refs.editInput)?.focus()
 		},
 	},
 }

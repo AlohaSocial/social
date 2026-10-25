@@ -1433,7 +1433,7 @@ export default {
 			}
 			this.isEditing = true
 			this.$nextTick(() => {
-				this.$refs.editForm?.focus()
+				/** @type {{ focus: () => void } | undefined} */ (this.$refs.editForm)?.focus()
 			})
 		},
 
