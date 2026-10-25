@@ -9,10 +9,9 @@ declare(strict_types=1);
 
 namespace OCP\AppFramework\Http\Attribute {
 	/**
-	 * Psalm's constant resolver currently drops the repeatable bit from the
-	 * OCP attribute's `Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE`
-	 * expression. Keep the equivalent flags explicit. PHP 8.5 added
-	 * `Attribute::TARGET_CONSTANT`, which moves `IS_REPEATABLE` from 64 to 128.
+	 * Psalm's constant resolver drops the repeatable bit from OCP's composed
+	 * attribute flags. PHP 8.3 uses 64 and PHP 8.5 added TARGET_CONSTANT,
+	 * moving the repeatable bit to 128.
 	 */
 	#[\Attribute(\Attribute::TARGET_METHOD | (PHP_VERSION_ID >= 80500 ? 128 : 64))]
 	class FrontpageRoute extends Route {

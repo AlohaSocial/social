@@ -690,7 +690,7 @@ class PostMapper {
 				'provider' => parse_url($url, PHP_URL_HOST) ?: '',
 			];
 		}
-		if (($embed['$type'] ?? '') === self::RECORD_WITH_MEDIA) {
+		if (in_array(($embed['$type'] ?? ''), [self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
 			$media = is_array($embed['media'] ?? null) ? $embed['media'] : [];
 			if (in_array(($media['$type'] ?? ''), [self::EXTERNAL, self::RECORD_EXTERNAL], true)) {
 				return self::cardOf($media, $authorDid);

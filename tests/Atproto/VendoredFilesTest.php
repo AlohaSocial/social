@@ -108,7 +108,11 @@ class VendoredFilesTest extends TestCase {
 
 	/** tests/Atproto/lexicons, each file as upstream has it at ATPROTO_COMMIT */
 	private const QUERY_LEXICONS = [
+		'com.atproto.identity.defs.json' => '234dc3c841462e3c6a53df427aab5b43d67d98a0ae2f59e1334f2a79cca70d15',
+		'com.atproto.identity.refreshIdentity.json' => 'e77698c19e6e9f98ea1748c91021769f92f7f88b5db85a92d6d5ce73bfd2b3e2',
+		'com.atproto.identity.resolveDid.json' => 'b906fd0103c1fecfc47843298a197f4131d547b51d9c64e874110209ce275929',
 		'com.atproto.identity.resolveHandle.json' => 'd1cdbbc2a1a89d905228e0dc65546a140bd96262c60c4756e51027597ec5ebea',
+		'com.atproto.identity.resolveIdentity.json' => '985a4fe82cfab549e4c8748e8961391cbd729316340e5f9dd6e7ba29e80f6343',
 		'com.atproto.repo.describeRepo.json' => 'e9fa5f3461cbf1e9bfae4aab4c64893a0211125855371734ea4ab387e59f621b',
 		'com.atproto.repo.getRecord.json' => 'd61aee451f284dd251b3451d16826e75f2bf8a6af32705120e1f67a3db4df8ff',
 		'com.atproto.repo.listRecords.json' => 'd862390bf7b25d7f41b113570380320ce96ada19a529b4f50d88f509a7b20b5c',
