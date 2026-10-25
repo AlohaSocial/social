@@ -212,9 +212,9 @@ class WriteService {
 	}
 
 	/**
-	 * Replace the text and labels of an existing Bluesky post without changing
-	 * its AT URI. Replies and embeds must remain byte-for-byte equivalent until
-	 * Social can represent their replacement without losing media or policy.
+	 * Replace the text, labels and supported picture/video embeds of a post
+	 * without changing its AT URI. Reply targets and record cards remain fixed:
+	 * Social must be able to represent their replacement before accepting it.
 	 *
 	 * @throws XrpcException
 	 */
@@ -229,16 +229,40 @@ class WriteService {
 			throw new XrpcException(404, 'RecordNotFound', 'There is no post at that record key');
 		}
 		$currentRecord = $stored->value();
-		foreach (['reply', 'embed'] as $field) {
-			try {
-				$current = DagCbor::encode($currentRecord[$field] ?? null);
-				$replacement = DagCbor::encode(DagCbor::fromLexJson($record[$field] ?? null));
-			} catch (Throwable) {
-				throw XrpcException::invalidRequest('The post update contains an invalid ' . $field);
+		try {
+			$currentReply = DagCbor::encode($currentRecord['reply'] ?? null);
+			$replacementReply = DagCbor::encode(DagCbor::fromLexJson($record['reply'] ?? null));
+		} catch (Throwable) {
+			throw XrpcException::invalidRequest('The post update contains an invalid reply');
+		}
+		if ($currentReply !== $replacementReply) {
+			throw XrpcException::invalidRequest('Changing a post reply target is not supported yet');
+		}
+
+		$currentEmbed = is_array($currentRecord['embed'] ?? null) ? $currentRecord['embed'] : [];
+		if (array_key_exists('embed', $record) && $record['embed'] !== null
+			&& (!is_array($record['embed']) || !is_string($record['embed']['$type'] ?? null))) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		try {
+			$replacementEmbed = is_array($record['embed'] ?? null) ? DagCbor::fromLexJson($record['embed']) : [];
+			$embedChanged = DagCbor::encode($currentEmbed) !== DagCbor::encode($replacementEmbed);
+		} catch (Throwable) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		if (!is_array($replacementEmbed)) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		$mediaIds = null;
+		if ($embedChanged) {
+			if (self::recordReference($currentEmbed) !== self::recordReference($replacementEmbed)) {
+				throw XrpcException::invalidRequest('Changing a post quote or record card is not supported yet');
 			}
-			if ($current !== $replacement) {
-				throw XrpcException::invalidRequest('Changing a post reply or embed is not supported yet');
+			if (PostMapper::cardOf($currentEmbed, $session->identity->did) !== null
+				|| PostMapper::cardOf($replacementEmbed, $session->identity->did) !== null) {
+				throw XrpcException::invalidRequest('Changing an external or record card is not supported yet');
 			}
+			$mediaIds = $this->mediaIdsFromEmbed($session, $replacementEmbed);
 		}
 
 		try {
@@ -287,7 +311,7 @@ class WriteService {
 		}
 
 		try {
-			$updated = $this->posts->editPost($post->getNid(), $actor, $text, $spoilerText, $sensitive, $language);
+			$updated = $this->posts->editPost($post->getNid(), $actor, $text, $spoilerText, $sensitive, $language, [], null, false, $mediaIds);
 			$this->publisher->editPost($updated);
 		} catch (Throwable $e) {
 			$this->logger->warning('AT Protocol post replacement failed', ['rkey' => $rkey, 'exception' => $e]);
@@ -299,6 +323,78 @@ class WriteService {
 		}
 
 		return $this->created($session, $replacement);
+	}
+
+	/**
+	 * Resolve picture or video blobs in an edited post to this author's uploads.
+	 * Card changes are deliberately kept out of this path; they also alter the
+	 * social card table and need to be committed with the post update.
+	 *
+	 * @return list<int>
+	 * @throws XrpcException
+	 */
+	private function mediaIdsFromEmbed(ClientSession $session, array $embed): array {
+		$type = (string)($embed['$type'] ?? '');
+		$media = $type === 'app.bsky.embed.recordWithMedia'
+			? (is_array($embed['media'] ?? null) ? $embed['media'] : [])
+			: $embed;
+		$mediaType = (string)($media['$type'] ?? '');
+		if ($mediaType === '' || $mediaType === 'app.bsky.embed.record') {
+			return [];
+		}
+		if ($mediaType === 'app.bsky.embed.external') {
+			throw XrpcException::invalidRequest('Changing an external link card is not supported yet');
+		}
+
+		if ($mediaType === 'app.bsky.embed.images') {
+			$images = is_array($media['images'] ?? null) ? $media['images'] : [];
+		} elseif ($mediaType === 'app.bsky.embed.gallery') {
+			$items = is_array($media['items'] ?? null) ? $media['items'] : [];
+			$images = [];
+			foreach ($items as $item) {
+				if (!is_array($item) || !is_array($item['image'] ?? null)) {
+					throw XrpcException::invalidRequest('A gallery image is invalid');
+				}
+				$images[] = [
+					'image' => $item['image'],
+					'alt' => is_string($item['alt'] ?? null) ? $item['alt'] : '',
+					'aspectRatio' => is_array($item['aspectRatio'] ?? null) ? $item['aspectRatio'] : ['width' => 1, 'height' => 1],
+				];
+			}
+		} else {
+			$video = self::videoEmbedOf($embed);
+			if ($video === null) {
+				throw XrpcException::invalidRequest('This post embed cannot be edited yet');
+			}
+			$document = $this->uploaded($session, self::blobCid($video['video'] ?? []), (string)($video['alt'] ?? ''));
+
+			return [(int)$document->getNid()];
+		}
+
+		if (count($images) > 4) {
+			throw XrpcException::invalidRequest('A post can contain at most four images');
+		}
+		$documents = $images === [] ? [] : $this->pictures($session, $images);
+
+		return array_map(static fn (Document $document): int => (int)$document->getNid(), $documents);
+	}
+
+	/** The strong reference is separate from media in `recordWithMedia`. */
+	private static function recordReference(array $embed): ?array {
+		$record = is_array($embed['record'] ?? null) ? $embed['record'] : [];
+		$reference = is_array($record['record'] ?? null) ? $record['record'] : $record;
+		$uri = $reference['uri'] ?? null;
+		$cid = $reference['cid'] ?? null;
+		if (!is_string($uri) || $uri === '') {
+			return null;
+		}
+		if ($cid instanceof Cid) {
+			$cid = $cid->toString();
+		} elseif (is_array($cid) && is_string($cid['$link'] ?? null)) {
+			$cid = $cid['$link'];
+		}
+
+		return is_string($cid) ? ['uri' => $uri, 'cid' => $cid] : ['uri' => $uri];
 	}
 
 	/**
@@ -712,7 +808,7 @@ class WriteService {
 		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
 		$video = self::videoEmbedOf($embed);
 		if ($video !== null && $documents === []) {
-			$documents = [$this->uploaded($session, (string)($video['video']['ref']['$link'] ?? ''), (string)($video['alt'] ?? ''))];
+			$documents = [$this->uploaded($session, self::blobCid($video['video'] ?? []), (string)($video['alt'] ?? ''))];
 		}
 		$post->setMedias(array_map(
 			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
@@ -980,7 +1076,7 @@ class WriteService {
 	private function pictures(ClientSession $session, array $images): array {
 		$documents = [];
 		foreach (array_slice($images, 0, 4) as $image) {
-			$documents[] = $this->uploaded($session, (string)($image['image']['ref']['$link'] ?? ''), (string)($image['alt'] ?? ''));
+			$documents[] = $this->uploaded($session, self::blobCid(is_array($image['image'] ?? null) ? $image['image'] : []), (string)($image['alt'] ?? ''));
 		}
 
 		return $documents;
@@ -1000,6 +1096,9 @@ class WriteService {
 			$document = $this->documents->getDocumentById($blob->documentId);
 		} catch (Throwable) {
 			throw XrpcException::invalidRequest('A file is gone: ' . $cid);
+		}
+		if ($document->getAccount() !== $this->actor($session)->getPreferredUsername()) {
+			throw XrpcException::invalidRequest('A post can only use the signed-in account\'s own uploads');
 		}
 		$alt = trim($alt);
 		if ($alt !== '') {
