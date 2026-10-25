@@ -259,6 +259,39 @@ class InterestFeedServiceTest extends TestCase {
 		$this->assertSame(8, $tags['cats']);
 	}
 
+	public function testLegacySpreadCapsOneStoryAtThreePlusOneSparseFeedOverflow(): void {
+		$ranked = [];
+		$incidentTerms = ['php', 'security', 'release', 'maintainer', 'vulnerability', 'patch', 'disclosure', 'exploit'];
+		for ($i = 1; $i <= 8; $i++) {
+			$ranked[] = [
+				'nid' => 'incident-' . $i,
+				'author' => 'incident-author-' . $i,
+				'tags' => ['incident-' . $i],
+				'story_terms' => [...$incidentTerms, 'detail' . $i],
+			];
+		}
+		$ranked[] = [
+			'nid' => 'garden-story',
+			'author' => 'garden-author',
+			'tags' => ['garden'],
+			'story_terms' => ['garden', 'community', 'flowers', 'local', 'weekend', 'people'],
+		];
+		$ranked[] = [
+			'nid' => 'music-story',
+			'author' => 'music-author',
+			'tags' => ['music'],
+			'story_terms' => ['music', 'concert', 'guitar', 'album', 'local', 'weekend'],
+		];
+
+		$spread = $this->service()->spread($ranked, []);
+		$incidentPosts = array_filter($spread, static fn (array $post): bool => str_starts_with($post['nid'], 'incident-'));
+
+		$this->assertCount(6, $spread, 'the legacy feed should stop after distinct stories and one sparse-feed overflow are exhausted');
+		$this->assertCount(4, $incidentPosts, 'the legacy feed may show one extra post from a story cluster');
+		$this->assertContains('garden-story', array_column($spread, 'nid'));
+		$this->assertContains('music-story', array_column($spread, 'nid'));
+	}
+
 	public function testOneSlotInTenIsATagThatKeepsCompanyWithTheReadersOwn(): void {
 		$this->weights(['cats' => 1.0]);
 		foreach (range(1, 12) as $i) {
