@@ -87,6 +87,16 @@
 				<input v-model="editSensitive" type="checkbox">
 				{{ t('social', 'Mark media as sensitive') }}
 			</label>
+			<div v-if="editMedia.length" class="post-edit-media">
+				<label v-for="(media, index) in editMedia" :key="media.id">
+					{{ t('social', 'Description for attachment %s', { s: index + 1 }) }}
+					<textarea
+						v-model="media.description"
+						maxlength="1500"
+						:aria-label="t('social', 'Description for attachment %s', { s: index + 1 })"
+						:placeholder="t('social', 'Describe this media for people who cannot see it')" />
+				</label>
+			</div>
 			<textarea
 				ref="editInput"
 				v-model="editContent"
@@ -625,6 +635,7 @@ export default {
 			editContent: '',
 			editSpoiler: '',
 			editSensitive: false,
+			editMedia: [],
 			editEvent: { name: '', start_time: '', end_time: '', location: '' },
 			showReportDialog: false,
 			showMuteDialog: false,
@@ -1471,6 +1482,10 @@ export default {
 			this.editContent = htmlToPlainText(this.item.content || '')
 			this.editSpoiler = this.item.spoiler_text || ''
 			this.editSensitive = this.item.sensitive === true
+			this.editMedia = (this.item.media_attachments || []).map((media) => ({
+				id: media.id,
+				description: media.description || '',
+			}))
 			this.editEvent = {
 				name: this.item.event?.name || '',
 				start_time: this.toLocalDateTime(this.item.event?.start_time),
@@ -1502,6 +1517,7 @@ export default {
 				content: this.editContent.trim(),
 				spoiler_text: this.editSpoiler.trim(),
 				sensitive: this.editSensitive,
+				media_attributes: this.editMedia.map(({ id, description }) => ({ id, description })),
 				...(event === undefined ? {} : { event }),
 			})
 			if (response === undefined) {
@@ -1510,12 +1526,14 @@ export default {
 			this.isEditing = false
 			this.editContent = ''
 			this.editSpoiler = ''
+			this.editMedia = []
 		},
 
 		cancelEdit() {
 			this.isEditing = false
 			this.editContent = ''
 			this.editSpoiler = ''
+			this.editMedia = []
 		},
 
 		toLocalDateTime(value) {
@@ -2123,6 +2141,9 @@ export default {
 	}
 
 	.post-edit-sensitive { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+	.post-edit-media { display: grid; gap: 8px; margin: 8px 0; }
+	.post-edit-media label { display: grid; gap: 4px; font-size: .9rem; }
+	.post-edit-media textarea { box-sizing: border-box; width: 100%; min-height: 64px; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); font: inherit; resize: vertical; }
 	.post-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 	.post-edit-count { margin-inline-end: auto; color: var(--color-text-lighter); font-size: 12px; }
 	.post-edit-count--over { color: var(--color-error); font-weight: 600; }

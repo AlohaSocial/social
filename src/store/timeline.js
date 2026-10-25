@@ -1464,11 +1464,17 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.error('Failed to create a status', { error })
 			}
 		},
-		async postEdit({ status, content, spoiler_text, sensitive, event = undefined }) {
+		async postEdit({ status, content, spoiler_text, sensitive, event = undefined, media_attributes = [] }) {
 			try {
 				const response = await axios.put(
 					generateUrl(`apps/social/api/v1/statuses/${status.id}`),
-					{ status: content, spoiler_text, sensitive, ...(event !== undefined ? { event } : {}) },
+					{
+						status: content,
+						spoiler_text,
+						sensitive,
+						...(media_attributes.length > 0 ? { media_attributes } : {}),
+						...(event !== undefined ? { event } : {}),
+					},
 				)
 				this.updateStatus(response.data)
 				logger.info('Post edited', response.data.id)
