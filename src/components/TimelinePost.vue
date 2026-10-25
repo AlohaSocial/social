@@ -52,70 +52,22 @@
 			</NcButton>
 		</p>
 
-		<div v-if="isEditing" class="post-edit-inline">
-			<div v-if="item.event" class="post-edit-event">
-				<label>
-					{{ t('social', 'Event title') }}
-					<input
-						v-model="editEvent.name"
-						type="text"
-						maxlength="300"
-						required>
-				</label>
-				<label>
-					{{ t('social', 'Starts') }}
-					<input v-model="editEvent.start_time" type="datetime-local" required>
-				</label>
-				<label>
-					{{ t('social', 'Ends (optional)') }}
-					<input v-model="editEvent.end_time" type="datetime-local">
-				</label>
-				<label>
-					{{ t('social', 'Event location (optional)') }}
-					<input v-model="editEvent.location" type="text" maxlength="500">
-				</label>
-			</div>
-			<input
-				v-model="editSpoiler"
-				type="text"
-				class="post-edit-warning"
-				dir="auto"
-				maxlength="200"
-				:aria-label="t('social', 'Content warning')"
-				:placeholder="t('social', 'Content warning, e.g. what the post is about')">
-			<label class="post-edit-sensitive">
-				<input v-model="editSensitive" type="checkbox">
-				{{ t('social', 'Mark media as sensitive') }}
-			</label>
-			<textarea
-				ref="editInput"
-				v-model="editContent"
-				class="post-edit-textarea"
-				dir="auto"
-				:maxlength="maxLength"
-				:aria-describedby="editIsTooLong ? `post-edit-count-${item.id}` : undefined"
-				:placeholder="t('social', 'Edit your post')"
-				@keydown.ctrl.enter="saveEdit" />
-			<div class="post-edit-actions">
-				<span
-					:id="`post-edit-count-${item.id}`"
-					class="post-edit-count"
-					:class="{ 'post-edit-count--over': editIsTooLong }"
-					role="status">
-					{{ editCharactersLeftLabel }}
-				</span>
-				<NcButton
-					variant="primary"
-					:disabled="!editCanSave"
-					:aria-label="t('social', 'Save')"
-					@click="saveEdit">
-					{{ t('social', 'Save') }}
-				</NcButton>
-				<NcButton :aria-label="t('social', 'Cancel')" @click="cancelEdit">
-					{{ t('social', 'Cancel') }}
-				</NcButton>
-			</div>
-		</div>
+		<TimelinePostEditForm
+			v-if="isEditing"
+			ref="editForm"
+			v-model:content="editContent"
+			v-model:spoiler="editSpoiler"
+			v-model:sensitive="editSensitive"
+			:event="editEvent"
+			:isEvent="Boolean(item.event)"
+			:maxLength="maxLength"
+			:statusId="String(item.id)"
+			:isTooLong="editIsTooLong"
+			:charactersLeftLabel="editCharactersLeftLabel"
+			:canSave="editCanSave"
+			@update:event="editEvent = $event"
+			@save="saveEdit"
+			@cancel="cancelEdit" />
 		<!--
 		  A filter the reader wrote themselves matched this post. Same shape as
 		  the content warning below, and for the same reason: the body is not in
@@ -473,6 +425,7 @@ import PostAttachment from './PostAttachment.vue'
 import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
 import TimelineEventCard from './TimelineEventCard.vue'
+import TimelinePostEditForm from './TimelinePostEditForm.vue'
 import TimelinePostHeader from './TimelinePostHeader.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -535,6 +488,7 @@ export default {
 		DeliveryDialog,
 		IconAccountBoxMultiple,
 		TimelineEventCard,
+		TimelinePostEditForm,
 		TimelinePostHeader,
 		QuoteControlDialog,
 		ReplyControlDialog,
@@ -1479,9 +1433,7 @@ export default {
 			}
 			this.isEditing = true
 			this.$nextTick(() => {
-				if (this.$refs.editInput) {
-					/** @type {HTMLTextAreaElement} */ (this.$refs.editInput).focus()
-				}
+				this.$refs.editForm?.focus()
 			})
 		},
 
@@ -2083,53 +2035,6 @@ export default {
 			border-radius: 999px;
 		}
 	}
-}
-
-.post-edit-inline {
-	margin-bottom: 10px;
-
-	.post-edit-event {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
-		margin-bottom: 10px;
-
-		label { display: grid; gap: 4px; font-size: .9rem; }
-		input { min-width: 0; width: 100%; }
-	}
-
-	.post-edit-textarea {
-		box-sizing: border-box;
-		width: 100%;
-		min-height: 100px;
-		padding: 8px;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		background: var(--color-main-background);
-		color: var(--color-main-text);
-		font: inherit;
-		resize: vertical;
-	}
-
-	.post-edit-warning {
-		box-sizing: border-box;
-		width: 100%;
-		margin-bottom: 6px;
-		padding: 8px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		background: var(--color-main-background);
-		color: var(--color-main-text);
-	}
-
-	.post-edit-sensitive { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-	.post-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-	.post-edit-count { margin-inline-end: auto; color: var(--color-text-lighter); font-size: 12px; }
-	.post-edit-count--over { color: var(--color-error); font-weight: 600; }
-}
-
-@media (max-width: 600px) {
-	.post-edit-inline .post-edit-event { grid-template-columns: 1fr; }
 }
 
 .post-action-group {
