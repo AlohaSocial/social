@@ -143,6 +143,24 @@ class PostMapperTest extends TestCase {
 		$this->assertNull($mapper->create($this->postView(['uri' => 'at://alice.bsky.social/app.bsky.feed.post/3k'])), 'a handle authority is not an id');
 	}
 
+	public function testSelfWarningTextBecomesTheSummaryAndItsFacetsKeepTheirOffsets(): void {
+		$view = $this->postView(['labels' => [['src' => self::DID, 'uri' => 'at://x', 'val' => '!warn']]]);
+		$view['record']['text'] = "Content warning: family emergency\n\nHello @bob.bsky.social";
+		$mention = '@bob.bsky.social';
+		$start = strlen("Content warning: family emergency\n\nHello ");
+		$view['record']['facets'] = [[
+			'index' => ['byteStart' => $start, 'byteEnd' => $start + strlen($mention)],
+			'features' => [['$type' => 'app.bsky.richtext.facet#mention', 'did' => self::OTHER]],
+		]];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame('family emergency', $note['summary']);
+		$this->assertTrue($note['sensitive']);
+		$this->assertSame('<p>Hello <span class="h-card"><a href="https://bsky.app/profile/' . self::OTHER . '" class="u-url mention">@bob.bsky.social</a></span></p>', $note['content']);
+		$this->assertContains(['type' => 'Mention', 'href' => 'https://bsky.app/profile/' . self::OTHER, 'name' => '@bob.bsky.social'], $note['tag']);
+	}
+
 	public function testQuotesExternalLinksAndVideoAreAppendedOrLinked(): void {
 		$mapper = new PostMapper($this->resolver());
 		$quote = $mapper->note($this->postView(['embed' => ['$type' => 'app.bsky.embed.record#view', 'record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kquoted', 'cid' => 'bafyq']]]));
