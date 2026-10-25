@@ -14,6 +14,7 @@ use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Move\PdsClient;
+use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Db\StreamCardsRequest;
@@ -98,6 +99,7 @@ class PostStore {
 		$id = (string)$create['object']['id'];
 		$known = $this->knownPost($id);
 		if ($known !== null) {
+			$this->refreshKnownPostRecord($post, $create, $known);
 			// Feed views already carry the latest AppView counters. Keep those
 			// current as the timeline is read, instead of waiting for a separate
 			// count refresh request or for somebody to open the thread.
@@ -134,6 +136,69 @@ class PostStore {
 		}
 
 		return $this->process($create);
+	}
+
+	/**
+	 * AppView returns the current record even for a post already in the local
+	 * stream. A changed CID is an edit, so import it through the ordinary Update
+	 * path; otherwise the cache kept the old words and media forever.
+	 *
+	 * @param array $post an `app.bsky.feed.defs#postView`
+	 * @param array<string, mixed> $create the ActivityPub-shaped version of the post
+	 */
+	private function refreshKnownPostRecord(array $post, array $create, Stream $known): void {
+		if ($known->isLocal()) {
+			return;
+		}
+		$did = (string)($post['author']['did'] ?? '');
+		if (!Syntax::isDid($did) || $known->getAttributedTo() !== BlueskyIds::actorId($did)) {
+			return;
+		}
+		$atproto = is_array($create['object']['_atproto'] ?? null) ? $create['object']['_atproto'] : [];
+		$newCid = $atproto['cid'] ?? '';
+		if (!is_string($newCid) || !Cid::isValid($newCid)) {
+			return;
+		}
+		$previous = $known->getDetails(Details::ATPROTO);
+		if (($previous['cid'] ?? '') === $newCid) {
+			return;
+		}
+
+		$embed = $post['record']['embed'] ?? null;
+		if (PostMapper::hasGenericBlobs($embed) && !PostMapper::isLoggedInOnly($post)) {
+			$pds = $this->pdsOf($did);
+			if ($pds !== '') {
+				$create = $this->mapper->create($post, $pds) ?? $create;
+			} else {
+				// Do not lose media that is already cached just because the PDS is
+				// temporarily unavailable while the AppView has the edited text.
+				$create['object']['attachment'] = array_map(
+					static fn ($attachment): array => $attachment->jsonSerialize(),
+					$known->getAttachments()
+				);
+			}
+		}
+
+		$atproto = is_array($create['object']['_atproto'] ?? null) ? $create['object']['_atproto'] : [];
+		$indexedAt = is_string($atproto['indexed_at'] ?? null) ? $atproto['indexed_at'] : '';
+		$create['type'] = 'Update';
+		$create['id'] = $known->getId() . '/activity/update/' . $newCid;
+		$create['object']['nid'] = $known->getNid();
+		$create['object']['updated'] = $this->editTime($indexedAt);
+
+		if (!$this->process($create)) {
+			return;
+		}
+		if (!is_array($atproto['card'] ?? null)) {
+			$this->cards->deleteByStreamId($known->getId());
+		}
+	}
+
+	/** Use the AppView indexing time as the revision time, with a valid fallback. */
+	private function editTime(string $indexedAt): string {
+		$timestamp = $indexedAt !== '' ? strtotime($indexedAt) : false;
+
+		return gmdate('Y-m-d\\TH:i:s\\Z', $timestamp !== false ? $timestamp : $this->time->getTime());
 	}
 
 	/**
