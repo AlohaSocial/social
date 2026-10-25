@@ -716,18 +716,19 @@ class StreamService {
 		$descendants = $threadSort === 'oldest'
 			? $this->streamRequest->getDescendants($post->getId())
 			: $this->streamRequest->getDescendants($post->getId(), $threadSort);
+		$visibleDescendants = [];
 		foreach ($descendants as $reply) {
 			$isHidden = isset($hidden[$reply->getId()]);
 			$hiddenCount += $isHidden ? 1 : 0;
 			if ($isHidden && !$withHidden) {
 				continue;
 			}
-			$descendants[] = $reply->setThreadVisibility($isHidden, $readerIsAuthor);
+			$visibleDescendants[] = $reply->setThreadVisibility($isHidden, $readerIsAuthor);
 		}
 
 		$context = [
 			'ancestors' => array_reverse($ancestors),
-			'descendants' => $descendants,
+			'descendants' => $visibleDescendants,
 			'filling' => $filling,
 			'hidden' => $hiddenCount,
 		];

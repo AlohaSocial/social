@@ -461,9 +461,12 @@ class PostService {
 			// Keep the Bluesky self-label in step, while retaining every other
 			// label the original Bluesky author supplied.
 			$details = $stream->getDetails(Details::ATPROTO);
-			$labels = is_array($details[Details::ATPROTO_SELF_LABELS] ?? null)
-				? $details[Details::ATPROTO_SELF_LABELS] : [];
-			$labels = array_values(array_filter($labels, static fn (mixed $value): bool => $value !== '!warn'));
+			$labels = [];
+			foreach (is_array($details[Details::ATPROTO_SELF_LABELS] ?? null) ? $details[Details::ATPROTO_SELF_LABELS] : [] as $label) {
+				if ($label !== '!warn') {
+					$labels[] = $label;
+				}
+			}
 			if (trim($spoilerText) !== '') {
 				array_unshift($labels, '!warn');
 			}

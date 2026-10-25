@@ -13,9 +13,11 @@ use OCA\Social\Atproto\Client\AppPasswordService;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Tests\Interop\Bluesky\AppClient;
 use OCA\Social\Tests\Interop\Bluesky\DevNetwork;
+use OCP\BackgroundJob\IJobList;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -57,6 +59,7 @@ class AtprotoBookmarksTest extends TestCase {
 		$this->assertContains($nid($first), array_column($this->alice->get('/api/v1/bookmarks'), 'id'), 'the app\'s bookmark is a bookmark here');
 
 		$this->alice->post('/api/v1/statuses/' . $nid($second) . '/bookmark');
+		$this->runQueuedJobs();
 		[$status, $listed] = $app->query('app.bsky.bookmark.getBookmarks', ['limit' => 20]);
 		$this->assertSame(200, $status, json_encode($listed));
 		$uris = array_map(static fn (array $b): string => (string)($b['subject']['uri'] ?? ''), $listed['bookmarks'] ?? []);
@@ -67,5 +70,13 @@ class AtprotoBookmarksTest extends TestCase {
 
 			return ($posts['posts'][0]['viewer']['bookmarked'] ?? false) === true ? true : null;
 		}), 'the app shows it bookmarked');
+	}
+
+	/** The bookmark is synchronized by its retryable background job. */
+	private function runQueuedJobs(): void {
+		$jobs = Server::get(IJobList::class);
+		foreach ($jobs->getJobsIterator(AtprotoPublish::class, 50, 0) as $job) {
+			$job->start($jobs);
+		}
 	}
 }

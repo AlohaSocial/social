@@ -170,6 +170,7 @@ trait StreamThreads {
 			}
 
 			$level = $this->getRepliesTo($parents, $remaining, $sort);
+			$parents = [];
 			foreach ($level as $reply) {
 				$byParent[$reply->getInReplyTo()][] = $reply;
 				$parents[] = $reply->getId();

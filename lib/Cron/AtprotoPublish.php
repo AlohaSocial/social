@@ -39,7 +39,7 @@ use Throwable;
  *
  * `argument`: `action` (publish, delete, edit, bookmark, unbookmark, message for a direct
  * message, profile with an actor's id, or verifications, with any `id`,
-
+ *
  * for every verification moved to another verifying account) and the
  * `id`; for a like or repost (`like`, `unlike`, `repost`, `unrepost`) the
  * id is the Like's or Announce's, with the `post` and the `actor` when one

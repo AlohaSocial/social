@@ -3,7 +3,7 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="post-edit-inline" @click.stop>
+	<div class="post-edit-inline">
 		<div v-if="item.event" class="post-edit-event">
 			<label>
 				{{ t('social', 'Event title') }}
@@ -41,23 +41,23 @@
 		<div class="post-edit-media">
 			<div v-for="(media, index) in editMedia" :key="media.id" class="post-edit-media__item">
 				<label>
-					<span>{{ t('social', 'Description for attachment {number}', { number: index + 1 }) }}</span>
+					<span>{{ t('social', 'Description for attachment {number}', { number: Number(index) + 1 }) }}</span>
 					<div class="post-edit-media__attachment">
 						<img
 							v-if="media.previewUrl"
 							class="post-edit-media__thumbnail"
 							:src="media.previewUrl"
-							:alt="t('social', 'Preview of attachment {number}', { number: index + 1 })">
+							:alt="t('social', 'Preview of attachment {number}', { number: Number(index) + 1 })">
 						<textarea
 							v-model="media.description"
 							maxlength="1500"
-							:aria-label="t('social', 'Description for attachment {number}', { number: index + 1 })"
+							:aria-label="t('social', 'Description for attachment {number}', { number: Number(index) + 1 })"
 							:placeholder="t('social', 'Describe this media for people who cannot see it')" />
 					</div>
 				</label>
 				<NcButton
 					variant="tertiary"
-					:aria-label="t('social', 'Remove attachment {number}', { number: index + 1 })"
+					:aria-label="t('social', 'Remove attachment {number}', { number: Number(index) + 1 })"
 					@click.stop="removeEditMedia(index)">
 					{{ t('social', 'Remove attachment') }}
 				</NcButton>
@@ -178,7 +178,7 @@ export default {
 
 	mounted() {
 		this.$nextTick(() => {
-			const input = this.$refs.editInput
+			const input = /** @type {HTMLTextAreaElement | undefined} */ (this.$refs.editInput)
 			if (input) {
 				input.focus()
 			}

@@ -1287,8 +1287,8 @@ class PostServiceTest extends TestCase {
 			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
 		$this->activityService->method('updateActivity')->willReturn('token');
 		$replacement = [(new MediaAttachment())->setId('12')];
-		$this->documentService->expects($this->once())->method('replaceMediaAttachments')
-			->with([12], 'alice', true)
+		$this->documentService->expects($this->once())->method('mediaAttachmentsForEdit')
+			->with([12], 'alice', Stream::TYPE_PUBLIC)
 			->willReturn($replacement);
 
 		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, [12]);
@@ -1302,8 +1302,8 @@ class PostServiceTest extends TestCase {
 		$this->streamRequest->method('getStreamByNid')
 			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
 		$this->activityService->method('updateActivity')->willReturn('token');
-		$this->documentService->expects($this->once())->method('replaceMediaAttachments')
-			->with([], 'alice', true)
+		$this->documentService->expects($this->once())->method('mediaAttachmentsForEdit')
+			->with([], 'alice', Stream::TYPE_PUBLIC)
 			->willReturn([]);
 
 		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, []);

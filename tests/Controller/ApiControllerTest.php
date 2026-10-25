@@ -352,6 +352,7 @@ class ApiControllerTest extends TestCase {
 		$this->feedDisplayService = $this->createStub(FeedDisplayService::class);
 		$this->feedDisplayService->method('hidesReplies')->willReturnCallback(fn (string $userId): bool => $this->hidesRepliesInFeeds);
 		$this->feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
+		$this->feedDisplayService->method('blueskyHomePreferences')->willReturn([]);
 		$this->sensitiveMediaService = $this->createStub(\OCA\Social\Service\SensitiveMediaService::class);
 		// the three states PeerTube's NSFW policies map onto; `default` is
 		// what an instance that has not chosen does
@@ -453,6 +454,7 @@ class ApiControllerTest extends TestCase {
 			'cacheDocumentService' => $this->cacheDocumentService,
 			'documentService' => $this->documentService,
 			'followService' => $this->followService,
+			'activeHomeFeedRefresh' => $this->createStub(\OCA\Social\Atproto\Reader\ActiveHomeFeedRefresh::class),
 			'relationshipService' => $this->relationshipService,
 			'streamService' => $this->streamService,
 			'actionService' => $this->actionService,
@@ -4268,7 +4270,7 @@ class ApiControllerTest extends TestCase {
 
 		$response = $this->controller()->timelines('home');
 
-		$this->assertSame('"h55-20-3"', $response->getHeaders()['ETag'] ?? null);
+		$this->assertSame('"h55-20-' . hash('sha256', '[]') . '-3"', $response->getHeaders()['ETag'] ?? null);
 	}
 
 	public function testAPollHoldingTheCurrentTagIsAnsweredWithoutReadingThePage(): void {
@@ -4277,7 +4279,8 @@ class ApiControllerTest extends TestCase {
 		$this->timelineRevisionService->method('of')->willReturn(3);
 		$this->streamService->expects($this->never())->method('getTimeline');
 
-		$response = $this->controllerWithHeaders('', ['If-None-Match' => '"h55-20-3"'])->timelines('home');
+		$etag = '"h55-20-' . hash('sha256', '[]') . '-3"';
+		$response = $this->controllerWithHeaders('', ['If-None-Match' => $etag])->timelines('home');
 
 		$this->assertSame(Http::STATUS_NOT_MODIFIED, $response->getStatus());
 	}
