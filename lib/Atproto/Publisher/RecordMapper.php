@@ -168,7 +168,7 @@ class RecordMapper {
 		if ($dropped > 0) {
 			$extra[] = $l10n->n('+%n more picture', '+%n more pictures', $dropped);
 		}
-		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive() && $warning === '') {
+		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive()) {
 			$labels[] = ['val' => 'graphic-media'];
 		}
 

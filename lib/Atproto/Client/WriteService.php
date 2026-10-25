@@ -625,10 +625,30 @@ class WriteService {
 			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
 			$documents
 		));
+		$warningLabels = [];
+		$hasWarningLabel = false;
 		foreach (is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [] as $label) {
-			if (in_array($label['val'] ?? '', ['porn', 'sexual', 'nudity', 'graphic-media'], true)) {
+			$value = is_array($label) && is_string($label['val'] ?? null) ? $label['val'] : '';
+			$warning = match ($value) {
+				'porn' => 'Pornography',
+				'sexual' => 'Sexual content',
+				'nudity' => 'Nudity',
+				'graphic-media' => 'Graphic media',
+				default => null,
+			};
+			if ($warning !== null) {
 				$post->setSensitive(true);
+				$warningLabels[] = $warning;
+			} elseif ($value === '!warn') {
+				$hasWarningLabel = true;
 			}
+		}
+		$warningLabels = array_values(array_unique($warningLabels));
+		if ($warningLabels !== []) {
+			$post->setSpoilerText(implode(', ', $warningLabels));
+		} elseif ($hasWarningLabel) {
+			$post->setSpoilerText('Content warning');
+			$post->setSensitive(true);
 		}
 		$this->holdForReview($actor, $post, $documents);
 		try {
