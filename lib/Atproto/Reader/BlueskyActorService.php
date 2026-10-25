@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\Atproto\AppView\AppViewClient;
+use OCA\Social\Atproto\Identity\DidWebResolver;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Protocol\Syntax;
@@ -153,7 +154,9 @@ class BlueskyActorService {
 			return $this->pdsEndpoints[$did];
 		}
 		try {
-			$document = Syntax::isDidPlc($did) ? $this->plc->document($did) : $this->webDidDocument($did);
+			$document = Syntax::isDidPlc($did)
+				? $this->plc->document($did)
+				: ($this->curlService === null ? null : DidWebResolver::document($did, $this->curlService));
 		} catch (Throwable $e) {
 			$this->logger->notice('DID document not read', ['did' => $did, 'exception' => $e]);
 
@@ -173,51 +176,6 @@ class BlueskyActorService {
 		$this->pdsEndpoints[$did] = '';
 
 		return '';
-	}
-
-	/** Reads the HTTPS DID document of a did:web account through Social's guarded HTTP client. */
-	private function webDidDocument(string $did): ?array {
-		if ($this->curlService === null) {
-			return null;
-		}
-		$parts = explode(':', substr($did, strlen('did:web:')));
-		$host = rawurldecode((string)array_shift($parts));
-		$hostParts = parse_url('https://' . $host);
-		$hostName = is_array($hostParts) ? strtolower($hostParts['host'] ?? '') : '';
-		if (!is_array($hostParts) || $hostName === ''
-			|| isset($hostParts['user']) || isset($hostParts['pass']) || isset($hostParts['path'])
-			|| isset($hostParts['query']) || isset($hostParts['fragment'])
-			|| filter_var(trim($hostName, '[]'), FILTER_VALIDATE_IP) !== false
-			|| preg_match('/(?:^|\.)(?:localhost|local)$/i', $hostName) === 1) {
-			return null;
-		}
-		$path = [];
-		foreach ($parts as $part) {
-			$part = rawurldecode($part);
-			if ($part === '' || $part === '.' || $part === '..' || str_contains($part, '/') || str_contains($part, '\\')) {
-				return null;
-			}
-			$path[] = rawurlencode($part);
-		}
-		$origin = 'https://' . $hostName . (isset($hostParts['port']) ? ':' . $hostParts['port'] : '');
-		$url = $origin . ($path === []
-			? '/.well-known/did.json'
-			: '/' . implode('/', $path) . '/did.json');
-		$status = 0;
-		try {
-			$body = $this->curlService->doRequest('get', $url, [
-				'timeout' => 5,
-				'json_headers' => false,
-				'headers' => ['Accept' => 'application/did+json, application/json'],
-			], $contentType, $status);
-		} catch (Throwable $e) {
-			$this->logger->debug('did:web document not read', ['did' => $did, 'exception' => $e]);
-
-			return null;
-		}
-		$document = $status >= 200 && $status < 300 ? json_decode($body, true) : null;
-
-		return is_array($document) && ($document['id'] ?? '') === $did ? $document : null;
 	}
 
 	/** The public PDS endpoint for a DID, or '' when it cannot be resolved safely. */

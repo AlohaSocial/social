@@ -157,7 +157,7 @@ class BlueskyActorServiceTest extends TestCase {
 		$did = 'did:web:example.com:users:alice';
 		$curl = $this->createMock(CurlService::class);
 		$curl->expects($this->once())->method('doRequest')->with(
-			'get', 'https://example.com/users/alice/did.json', $this->callback(static fn (array $options): bool => $options['timeout'] === 5 && $options['json_headers'] === false),
+			'get', 'https://example.com/users/alice/did.json', $this->callback(static fn (array $options): bool => $options['timeout'] === 5 && $options['json_headers'] === false && $options['max_redirects'] === 0),
 			$this->anything(), $this->anything(),
 		)->willReturnCallback(static function (string $method, string $url, array $options, ?string &$contentType, ?int &$statusCode) use ($did): string {
 			$contentType = 'application/did+json';

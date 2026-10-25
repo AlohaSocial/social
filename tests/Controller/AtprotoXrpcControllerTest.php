@@ -30,6 +30,7 @@ use OCA\Social\Exceptions\AtprotoKeysSealedException;
 use OCA\Social\Response\StreamedPiecesResponse;
 use OCA\Social\Response\StreamedRemoteResponse;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\IOutput;
@@ -184,7 +185,7 @@ class AtprotoXrpcControllerTest extends TestCase {
 		$videos->method('open')->willReturnCallback(static fn (): array => ['stream' => fopen('php://memory', 'rb'), 'size' => 4]);
 		$xrpc = new XrpcService(
 			$config, $identities, $repositories, $this->createMock(AtprotoRepoRequest::class), $blobs, $pictures, $videos,
-			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class),
+			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class), $this->createMock(CurlService::class),
 		);
 		if ($client === null) {
 			$client = $this->createMock(ClientXrpc::class);

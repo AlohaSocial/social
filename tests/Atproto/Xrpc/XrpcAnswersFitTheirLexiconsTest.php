@@ -39,6 +39,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 use OCA\Social\Tests\Atproto\Repository\InMemoryRepoRequest;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -128,7 +129,7 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 		$configService->method('getAppValue')->willReturn('0.26.180');
 		$configService->method('getCloudUrl')->willReturn('https://social.example.com');
 
-		$this->xrpc = new XrpcService($config, $identities, $this->repositories, $this->store, $blobRequest, $pictures, $this->createMock(VideoBlobService::class), $configService, $this->createMock(ModerationService::class), $identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
+		$this->xrpc = new XrpcService($config, $identities, $this->repositories, $this->store, $blobRequest, $pictures, $this->createMock(VideoBlobService::class), $configService, $this->createMock(ModerationService::class), $identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class), $this->createMock(CurlService::class));
 
 		$this->identities[self::ALICE] = $this->identity(self::ALICE, 'alice.social.example.com', Identity::STATE_ACTIVE);
 		$this->identities[self::BOB] = $this->identity(self::BOB, 'bob.social.example.com', Identity::STATE_DEACTIVATED);

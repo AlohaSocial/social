@@ -30,6 +30,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -66,6 +67,7 @@ class XrpcServiceTest extends TestCase {
 	private AtprotoIdentityRequest $identityRequest;
 	private HandleVerifier $handles;
 	private PlcClient $plc;
+	private CurlService $curl;
 
 	protected function setUp(): void {
 		$this->config = $this->createMock(AtprotoConfig::class);
@@ -87,8 +89,9 @@ class XrpcServiceTest extends TestCase {
 		$this->identityRequest = $this->createMock(AtprotoIdentityRequest::class);
 		$this->handles = $this->createMock(HandleVerifier::class);
 		$this->plc = $this->createMock(PlcClient::class);
+		$this->curl = $this->createMock(CurlService::class);
 		$this->identityRequest->method('getByDids')->willReturnCallback(fn (array $dids): array => in_array(self::DID, $dids, true) ? [self::DID => $this->alice] : []);
-		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->handles, $this->plc);
+		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->handles, $this->plc, $this->curl);
 
 		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0);
 		$this->identities->method('getByDid')->willReturnCallback(fn (string $did): Identity => $did === self::DID ? $this->alice : throw new AtprotoIdentityNotFoundException());
@@ -155,6 +158,29 @@ class XrpcServiceTest extends TestCase {
 			'handle' => 'alice.example.org',
 			'didDoc' => $document,
 		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => 'Alice.Example.Org']));
+	}
+
+	public function testResolveDidFetchesAValidatedExternalDidWebDocument(): void {
+		$did = 'did:web:remote.example.org';
+		$this->curl->expects($this->once())->method('doRequest')->with(
+			'get', 'https://remote.example.org/.well-known/did.json', $this->anything(), $this->anything(), $this->anything(),
+		)->willReturnCallback(static function (string $method, string $url, array $options, ?string &$contentType, ?int &$status): string {
+			$status = 200;
+
+			return '{"id":"did:web:remote.example.org"}';
+		});
+		$this->assertSame(['didDoc' => ['id' => $did]], $this->xrpc->query('com.atproto.identity.resolveDid', ['did' => $did]));
+	}
+
+	public function testResolveDidReportsAnUnavailableDidWebHostAsAnUpstreamFailure(): void {
+		$this->curl->method('doRequest')->willThrowException(new \RuntimeException('unreachable'));
+		try {
+			$this->xrpc->query('com.atproto.identity.resolveDid', ['did' => 'did:web:offline.example.org']);
+			$this->fail();
+		} catch (XrpcException $e) {
+			$this->assertSame(502, $e->status);
+			$this->assertSame('DidResolutionFailed', $e->error);
+		}
 	}
 
 	public function testAnUnknownHandleIsNotFound(): void {
@@ -363,7 +389,7 @@ class XrpcServiceTest extends TestCase {
 		$this->moderation->expects($this->never())->method('isSuspended');
 		$this->identities->expects($this->never())->method('getByDid');
 		$configService = $this->createMock(ConfigService::class);
-		$xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
+		$xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class), $this->createMock(CurlService::class));
 
 		$repos = $xrpc->query('com.atproto.sync.listRepos', [])['repos'];
 
@@ -408,7 +434,7 @@ class XrpcServiceTest extends TestCase {
 	public function testNothingIsServedWhenBlueskyIsOff(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(false);
-		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(VideoBlobService::class), $this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
+		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(VideoBlobService::class), $this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class), $this->createMock(CurlService::class));
 
 		$this->expectException(XrpcException::class);
 		$xrpc->query('com.atproto.server.describeServer', []);
