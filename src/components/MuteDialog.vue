@@ -39,8 +39,9 @@ import { translate as t } from '@nextcloud/l10n'
 import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
-import { isTracking } from '../services/interests.js'
-import { contextFor, signalNow } from '../services/interestTracker.js'
+import { isTracking, sendSignals } from '../services/interests.js'
+import { contextFor } from '../services/interestTracker.js'
+import logger from '../services/logger.js'
 import { focusedElement, returnFocusTo } from '../utils/focus.js'
 
 /**
@@ -83,19 +84,13 @@ export default {
 			required: true,
 		},
 
-		/**
-		 * The post the mute was asked for from, when it was: muting somebody
-		 * over a post says something about its hashtags, which For you
-		 * is told. Null from a profile, which is about the person.
-		 *
-		 */
+		/** The post the mute was asked for from, when there was one. */
 		status: {
-			/** @type {import('vue').PropType<import('../types/Mastodon.js').Status|null>} */
-			type: Object,
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').Status|null>} */ (Object),
 			default: null,
 		},
 
-		/** the timeline that post was shown in, for the signal's context */
+		/** Timeline where the post was shown. */
 		timelineType: {
 			type: String,
 			default: '',
@@ -167,16 +162,17 @@ export default {
 	methods: {
 		t,
 
-		/** Tells For you, when the mute came from a post and learning is on. */
+		/** Reports a successful post-menu mute to the legacy hashtag profile. */
 		reportToInterests() {
 			if (this.status === null || !isTracking(useSettingsStore().getServerData.interests)) {
 				return
 			}
 
-			// a profile or a list is not one of the places signals come
-			// from; the post was still read somewhere, and home is where
-			// most reading happens
-			signalNow(this.status, 'mute', contextFor(this.timelineType) ?? 'home')
+			sendSignals([{
+				status_id: this.status.id,
+				kind: 'mute',
+				context: contextFor(this.timelineType) ?? 'home',
+			}]).catch((error) => logger.debug('Could not report a mute signal', { error }))
 		},
 
 		async mute() {

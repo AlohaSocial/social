@@ -167,7 +167,7 @@ class InterestService {
 	 * The reader's own switches, with the administrator's default filled in
 	 * for somebody who never touched theirs.
 	 *
-	 * @return array{enabled: bool, learning: bool, paused: bool, languages: string[], noticeAcknowledged: bool}
+	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool}
 	 */
 	public function settingsFor(string $userId): array {
 		$learning = $this->userValue($userId, self::KEY_LEARNING);
@@ -181,6 +181,7 @@ class InterestService {
 			'enabled' => $this->isEnabled(),
 			'learning' => $learning === '1',
 			'paused' => $this->userValue($userId, self::KEY_PAUSED_AT) !== '',
+			'instancePaused' => $this->configService->getAppValueBool(ConfigService::REC_LEARNING_PAUSED),
 			'languages' => is_array($languages) ? array_values(array_filter($languages, 'is_string')) : [],
 			'noticeAcknowledged' => $this->userValue($userId, self::KEY_NOTICE) === '1',
 		];
@@ -208,7 +209,7 @@ class InterestService {
 
 		$settings = $this->settingsFor($userId);
 
-		return $settings['enabled'] && $settings['learning'] && !$settings['paused'];
+		return $settings['enabled'] && $settings['learning'] && !$settings['paused'] && !$settings['instancePaused'];
 	}
 
 	/**

@@ -9,7 +9,7 @@
 	<section class="interests-notice" :aria-label="t('social', 'About For you')">
 		<TagHeart class="interests-notice__icon" :size="20" />
 		<p class="interests-notice__text">
-			{{ t('social', 'Aloha Social now learns which hashtags interest you from how you read, to build your For you feed. This stays on this server and is only visible to you.') }}
+			{{ t('social', 'For You learns from posts you open and actions such as liking, boosting or saving. Watching a substantial part of a video can count too; simply leaving a post on screen does not increase your interests. This activity profile stays on this server and is not shared with other users.') }}
 		</p>
 		<div class="interests-notice__actions">
 			<NcButton variant="tertiary" :to="{ name: 'settings', hash: '#interests' }">

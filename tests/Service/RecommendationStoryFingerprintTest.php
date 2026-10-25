@@ -66,4 +66,52 @@ class RecommendationStoryFingerprintTest extends TestCase {
 		);
 		$this->assertGreaterThanOrEqual(RecommendationStoryFingerprint::SHORT_STORY_MATCH_COUNT, count(array_intersect(array_slice($first, 1), array_slice($variant, 1))));
 	}
+
+	public function testLongStoryFingerprintsAlsoIncludeOwnerScopedHeadlineSamples(): void {
+		$secret = 'an instance secret used only for test signatures';
+		$headline = array_map(static fn (int $i): string => 'headline' . $i, range(1, 20));
+		$first = RecommendationStoryFingerprint::keys(
+			[...$headline, ...array_map(static fn (int $i): string => 'firstbody' . $i, range(1, 40))],
+			$secret,
+			'alice',
+			$headline,
+		);
+		$variant = RecommendationStoryFingerprint::keys(
+			[...$headline, ...array_map(static fn (int $i): string => 'variantbody' . $i, range(1, 40))],
+			$secret,
+			'alice',
+			$headline,
+		);
+		$otherOwner = RecommendationStoryFingerprint::keys(
+			[...$headline, ...array_map(static fn (int $i): string => 'variantbody' . $i, range(1, 40))],
+			$secret,
+			'bob',
+			$headline,
+		);
+
+		$this->assertCount(RecommendationStoryFingerprint::MINHASH_BAND_COUNT * 2, $first);
+		$this->assertSame(
+			array_slice($first, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+			array_slice($variant, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+		);
+		$this->assertNotSame(
+			array_slice($first, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+			array_slice($otherOwner, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+		);
+		foreach ($first as $key) {
+			$this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $key);
+		}
+	}
+
+	public function testHeadlineFingerprintsAreKeptWhenOnlyOneBodyTermFollows(): void {
+		$headline = array_map(static fn (int $i): string => 'headline' . $i, range(1, 20));
+		$keys = RecommendationStoryFingerprint::keys(
+			[...$headline, 'body'],
+			'an instance secret used only for test signatures',
+			'alice',
+			$headline,
+		);
+
+		$this->assertCount(RecommendationStoryFingerprint::MINHASH_BAND_COUNT * 2, $keys);
+	}
 }

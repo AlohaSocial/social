@@ -57,7 +57,7 @@ final class RecommendationFeatureExtractor {
 	 * Topics marked sensitive are deliberately omitted until a separate reviewed
 	 * policy allows their use in recommendation ranking.
 	 *
-	 * @return array{version: int, topics: array<string, array{score: float, evidence: string}>, format: string, language: string, story_terms?: list<string>}
+	 * @return array{version: int, topics: array<string, array{score: float, evidence: string}>, format: string, language: string, story_terms?: list<string>, story_headline_terms?: list<string>}
 	 */
 	public function extract(Stream $post, bool $includeStoryTerms = false): array {
 		$content = $post->getContent();
@@ -124,6 +124,7 @@ final class RecommendationFeatureExtractor {
 		];
 		if ($includeStoryTerms) {
 			$features['story_terms'] = $storyTerms;
+			$features['story_headline_terms'] = array_slice($storyTerms, 0, 20);
 		}
 
 		return $features;

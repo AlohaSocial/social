@@ -15,6 +15,7 @@ use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Service\InterestService;
 use OCA\Social\Service\RecommendationFeatureExtractor;
 use OCA\Social\Service\RecommendationPreferenceService;
 use OCA\Social\Service\RecommendationSignalService;
@@ -28,6 +29,7 @@ class RecommendationSignalServiceTest extends TestCase {
 	private RecommendationPreferenceService $preferences;
 	private RecommendationSignalRequest $signals;
 	private StreamRequest $streams;
+	private CacheActorsRequest $cachedActors;
 	private RecommendationSignalService $service;
 	private IConfig $config;
 	private int $generation = 7;
@@ -42,6 +44,8 @@ class RecommendationSignalServiceTest extends TestCase {
 		]);
 		$this->signals = $this->createMock(RecommendationSignalRequest::class);
 		$this->streams = $this->createMock(StreamRequest::class);
+		$this->cachedActors = $this->createStub(CacheActorsRequest::class);
+		$this->cachedActors->method('getFromId')->willThrowException(new \LogicException('Unexpected profile lookup'));
 		$clock = $this->createStub(ITimeFactory::class);
 		$clock->method('getTime')->willReturn(2_000_000_000);
 		$this->config = $this->createStub(IConfig::class);
@@ -54,7 +58,7 @@ class RecommendationSignalServiceTest extends TestCase {
 			$this->streams,
 			$clock,
 			$this->config,
-			$this->createStub(CacheActorsRequest::class),
+			$this->cachedActors,
 		);
 	}
 
@@ -129,12 +133,46 @@ class RecommendationSignalServiceTest extends TestCase {
 		$this->service->recordAction($this->viewer(), $this->parentPost(), 'like');
 	}
 
+	public function testSignalBatchesAreBoundedBeforeValidationAndPostLookup(): void {
+		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$this->signals->expects($this->never())->method('record');
+		$events = array_fill(0, RecommendationSignalService::MAX_EVENTS + 1, null);
+
+		$result = $this->service->recordEvents($this->viewer(), $events);
+
+		$this->assertSame(0, $result['accepted']);
+		$this->assertSame(0, $result['duplicates']);
+		$this->assertSame(RecommendationSignalService::MAX_EVENTS + 1, $result['discarded']);
+	}
+
+	public function testNonStringPostAndProfileIdsAreDiscardedWithoutLookup(): void {
+		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$this->signals->expects($this->never())->method('record');
+		$events = [
+			[
+				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
+				'kind' => 'open', 'context' => 'interests', 'status_id' => ['123'],
+			],
+			[
+				'event_id' => '2d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
+				'kind' => 'profile_visit', 'context' => 'profile', 'profile_id' => ['https://remote.example/@bob'],
+			],
+		];
+
+		$result = $this->service->recordEvents($this->viewer(), $events);
+
+		$this->assertSame(0, $result['accepted']);
+		$this->assertSame(2, $result['discarded']);
+	}
+
 	public function testImpressionRequiresAQualifiedVisiblePostAndSessionId(): void {
 		$this->streams->expects($this->once())->method('getVisibleByNids')->willReturn(['123' => $this->parentPost()]);
+		$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($this->parentPost(), true);
 		$storyKeys = RecommendationStoryFingerprint::keys(
-			(new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($this->parentPost(), true)['story_terms'],
+			$features['story_terms'],
 			'test-server-secret',
 			'alice',
+			$features['story_headline_terms'],
 		);
 		$this->signals->expects($this->once())->method('record')->with(
 			'alice', '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 7, 'impression', [],
@@ -148,6 +186,27 @@ class RecommendationSignalServiceTest extends TestCase {
 		]]);
 
 		$this->assertSame(1, $result['accepted']);
+	}
+
+	public function testMalformedImpressionNumbersAreDiscardedBeforeReadingPosts(): void {
+		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$this->signals->expects($this->never())->method('record');
+
+		$result = $this->service->recordEvents($this->viewer(), [
+			[
+				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
+				'kind' => 'impression', 'context' => 'interests', 'status_id' => '123',
+				'session_id' => 'f7f454f1-d33d-4fb5-a132-335837049d23', 'visible_ms' => '750',
+			],
+			[
+				'event_id' => '2d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
+				'kind' => 'impression', 'context' => 'interests', 'status_id' => '123',
+				'session_id' => 'f7f454f1-d33d-4fb5-a132-335837049d23', 'visible_ms' => 750.5,
+			],
+		]);
+
+		$this->assertSame(0, $result['accepted']);
+		$this->assertSame(2, $result['discarded']);
 	}
 
 	public function testSensitiveImpressionUsesAnOwnerScopedExactPostHmac(): void {
@@ -174,10 +233,12 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testQualifiedImpressionsReduceLaterCandidatesFromTheSameStory(): void {
 		$post = $this->parentPost();
 		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true);
 		$storyKeys = RecommendationStoryFingerprint::keys(
-			(new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true)['story_terms'],
+			$features['story_terms'],
 			'test-server-secret',
 			'alice',
+			$features['story_headline_terms'],
 		);
 		$this->signals->expects($this->once())->method('exposures')->with(
 			'alice', 7, $this->callback(static fn (array $keys): bool => count($keys) === count($storyKeys) && array_diff($storyKeys, $keys) === []),
@@ -188,10 +249,12 @@ class RecommendationSignalServiceTest extends TestCase {
 				$sessions[$session] = ['impressions' => 1, 'updated_at' => 2_000_000_000 - 3600];
 			}
 			$keys = [];
+			$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true);
 			foreach (RecommendationStoryFingerprint::keys(
-				(new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true)['story_terms'],
+				$features['story_terms'],
 				'test-server-secret',
 				'alice',
+				$features['story_headline_terms'],
 			) as $key) {
 				$keys[$key] = $sessions;
 			}
@@ -233,6 +296,28 @@ class RecommendationSignalServiceTest extends TestCase {
 		$this->assertSame(1, $result['accepted']);
 	}
 
+	public function testAllDocumentedTimelineContextsAreAcceptedWhenConsentIsOn(): void {
+		$this->streams->expects($this->once())->method('getVisibleByNids')->with(['123'])->willReturn(['123' => $this->parentPost()]);
+		$this->signals->expects($this->exactly(count(InterestService::CONTEXTS)))->method('record')
+			->willReturn(['accepted' => true, 'duplicate' => false, 'profile_version' => 9]);
+
+		$events = [];
+		foreach (InterestService::CONTEXTS as $index => $context) {
+			$events[] = [
+				'event_id' => sprintf('%08x-69e6-4bb8-b7fc-854df448d310', $index + 1),
+				'generation' => 7,
+				'kind' => 'open',
+				'context' => $context,
+				'status_id' => '123',
+			];
+		}
+
+		$result = $this->service->recordEvents($this->viewer(), $events);
+
+		$this->assertSame(count(InterestService::CONTEXTS), $result['accepted']);
+		$this->assertSame(0, $result['discarded']);
+	}
+
 	public function testPassiveDwellIsDiscardedBeforeReadingThePost(): void {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
 		$this->signals->expects($this->never())->method('record');
@@ -250,6 +335,25 @@ class RecommendationSignalServiceTest extends TestCase {
 		}
 
 		$result = $this->service->recordEvents($this->viewer(), $events);
+
+		$this->assertSame(0, $result['accepted']);
+		$this->assertSame(2, $result['discarded']);
+	}
+
+	public function testSignalGenerationMustBeAnInteger(): void {
+		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$this->signals->expects($this->never())->method('record');
+
+		$result = $this->service->recordEvents($this->viewer(), [
+			[
+				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => '7',
+				'kind' => 'open', 'context' => 'interests', 'status_id' => '123',
+			],
+			[
+				'event_id' => '2d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7.8,
+				'kind' => 'open', 'context' => 'interests', 'status_id' => '123',
+			],
+		]);
 
 		$this->assertSame(0, $result['accepted']);
 		$this->assertSame(2, $result['discarded']);
@@ -306,24 +410,30 @@ class RecommendationSignalServiceTest extends TestCase {
 		$result = $this->service->recordEvents($this->viewer(), [
 			[
 				'event_id' => '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
-				'kind' => 'video_watch_ratio', 'context' => 'shorts', 'status_id' => '123', 'ratio' => 1.1,
+				'kind' => 'video_watch_ratio', 'context' => 'shorts', 'status_id' => '123', 'ratio' => '0.75',
 			],
 			[
 				'event_id' => '2d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
+				'kind' => 'video_watch_ratio', 'context' => 'shorts', 'status_id' => '123', 'ratio' => 1.1,
+			],
+			[
+				'event_id' => '3d9cfd49-4e69-4bb8-b7fc-854df448d310', 'generation' => 7,
 				'kind' => 'video_watch_ratio', 'context' => 'shorts', 'status_id' => '123', 'ratio' => 0.95,
 			],
 		]);
 
-		$this->assertSame(2, $result['discarded']);
+		$this->assertSame(3, $result['discarded']);
 	}
 
 	public function testRepeatedImpressionsInOneSessionIncreaseTheExposurePenaltyWithoutCountingEachBand(): void {
 		$post = $this->parentPost();
 		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true);
 		$keys = RecommendationStoryFingerprint::keys(
-			(new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true)['story_terms'],
+			$features['story_terms'],
 			'test-server-secret',
 			'alice',
+			$features['story_headline_terms'],
 		);
 		$session = 'f7f454f1-d33d-4fb5-a132-335837049d23';
 		$exposures = [];
@@ -403,6 +513,42 @@ class RecommendationSignalServiceTest extends TestCase {
 		)->willReturn($exposures);
 
 		$this->assertSame([], $this->service->exposurePenalties($this->viewer(), [$current]), 'five one-row matches do not count as a repeated story');
+	}
+
+	public function testLongStoryExposureMatchesARepeatedHeadlineAcrossDifferentBodies(): void {
+		$opening = array_map(static fn (int $i): string => 'headline' . $i, range(1, 20));
+		$previous = (new Note())->setContent('<p>' . implode(' ', $opening) . '. ' . implode(' ', array_map(static fn (int $i): string => 'previousbody' . $i, range(1, 40))));
+		$current = (new Note())
+			->setNid('127')
+			->setId('https://remote.test/posts/127')
+			->setAttributedTo('https://remote.test/users/bob')
+			->setContent('<p>' . implode(' ', $opening) . '. ' . implode(' ', array_map(static fn (int $i): string => 'currentbody' . $i, range(1, 40))));
+		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$features = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
+		$previousFeatures = $features->extract($previous, true);
+		$currentFeatures = $features->extract($current, true);
+		$previousKeys = RecommendationStoryFingerprint::keys(
+			$previousFeatures['story_terms'], 'test-server-secret', 'alice', $previousFeatures['story_headline_terms']
+		);
+		$currentKeys = RecommendationStoryFingerprint::keys(
+			$currentFeatures['story_terms'], 'test-server-secret', 'alice', $currentFeatures['story_headline_terms']
+		);
+		$headlineKeys = array_values(array_intersect(
+			array_slice($previousKeys, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+			array_slice($currentKeys, RecommendationStoryFingerprint::MINHASH_BAND_COUNT),
+		));
+		$this->assertCount(RecommendationStoryFingerprint::MINHASH_BAND_COUNT, $headlineKeys);
+		$session = 'f7f454f1-d33d-4fb5-a132-335837049d23';
+		$exposures = [];
+		foreach ($headlineKeys as $key) {
+			$exposures[$key] = [$session => ['impressions' => 3, 'updated_at' => 2_000_000_000]];
+		}
+		$this->signals->expects($this->once())->method('exposures')->with(
+			'alice', 7, $this->callback(static fn (array $keys): bool => count($keys) === count($currentKeys) && array_diff($currentKeys, $keys) === []),
+			2_000_000_000 - 30 * 86400,
+		)->willReturn($exposures);
+
+		$this->assertEqualsWithDelta(['127' => 0.6], $this->service->exposurePenalties($this->viewer(), [$current]), 0.00001);
 	}
 
 	public function testLearningOffDoesNotReadStoredExposureHistory(): void {

@@ -16,7 +16,7 @@ const NcActions = { name: 'NcActions', emits: ['update:open'], template: '<div><
 const NcActionButton = {
 	name: 'NcActionButton',
 	// `closeAfterClick` is written as a bare attribute, which is only true for a Boolean prop
-	props: { disabled: Boolean, icon: String, closeAfterClick: Boolean },
+	props: { disabled: Boolean, icon: String, closeAfterClick: Boolean, title: String },
 	emits: ['click'],
 	template: '<button class="action" :disabled="disabled" :data-closes="closeAfterClick ? \'yes\' : \'no\'" @click="$emit(\'click\')"><slot /></button>',
 }
@@ -116,7 +116,7 @@ describe('the post menu', () => {
 				.toContain('Hide this post from For You')
 		})
 
-		it('does not offer similarity feedback when no automatic cluster is available', () => {
+		it('keeps context-dependent actions present and disabled when no automatic cluster is available', () => {
 			const post = { id: '2', nid: '123', account: { acct: 'bob@remote.example' } }
 			const wrapper = mountMenu(post, {
 				timelineType: 'interests',
@@ -124,8 +124,48 @@ describe('the post menu', () => {
 				feedbackContext: { similarity_available: false, format: 'text' },
 			})
 
-			expect(items(wrapper)).not.toContain('Show me more like this post')
-			expect(items(wrapper)).not.toContain('Show me less like this post')
+			expect(itemFor(wrapper, 'Show me more like this post').element.disabled).toBe(true)
+			expect(itemFor(wrapper, 'Show me less like this post').element.disabled).toBe(true)
+			expect(itemFor(wrapper, 'Show me more text posts').element.disabled).toBe(false)
+		})
+
+		it('keeps recommendation menu rows stable while their context loads', async () => {
+			const post = { id: '2', nid: '123', account: { acct: 'bob@remote.example' } }
+			const wrapper = mountMenu(post, {
+				timelineType: 'interests',
+				recommendationFeedbackEnabled: true,
+				recommendationFeedbackLoading: true,
+			})
+			const labels = [
+				'Show me more like this post',
+				'Show me less like this post',
+				'Hide this post from For You',
+				'Show me more from this author',
+				'Show me more posts like this',
+			]
+
+			const before = items(wrapper)
+			const beforeCount = before.length
+			expect(before).toContain(labels[0])
+			expect(before).toContain(labels[1])
+			expect(before).toContain(labels[4])
+			for (const label of [labels[0], labels[1], labels[4]]) {
+				expect(itemFor(wrapper, label).element.disabled).toBe(true)
+			}
+
+			await wrapper.setProps({
+				recommendationFeedbackLoading: false,
+				feedbackContext: { similarity_available: true, format: 'image' },
+			})
+
+			const after = items(wrapper)
+			expect(after).toHaveLength(beforeCount)
+			expect(after.indexOf(labels[0])).toBe(before.indexOf(labels[0]))
+			expect(after.indexOf(labels[1])).toBe(before.indexOf(labels[1]))
+			expect(after.indexOf('Show me more photo posts')).toBe(before.indexOf(labels[4]))
+			expect(itemFor(wrapper, labels[0]).element.disabled).toBe(false)
+			expect(itemFor(wrapper, labels[1]).element.disabled).toBe(false)
+			expect(itemFor(wrapper, 'Show me more photo posts').element.disabled).toBe(false)
 		})
 
 		it('offers to unmute the conversation it is in once it is muted, and says so to the post', async () => {

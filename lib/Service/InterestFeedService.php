@@ -57,6 +57,7 @@ class InterestFeedService {
 	public const DIVERSITY_WINDOW = 20;
 	public const PER_AUTHOR = 2;
 	public const TAG_SHARE = 0.4;
+	private const STORY_LIMIT = 3;
 	/** One slot in this many is an exploration post. */
 	public const EXPLORE_EVERY = 10;
 	public const RELATED_TAGS = 5;
@@ -80,6 +81,7 @@ class InterestFeedService {
 		private TrendService $trendService,
 		private ICacheFactory $cacheFactory,
 		private ITimeFactory $timeFactory,
+		private RecommendationFeatureExtractor $features,
 	) {
 	}
 
@@ -195,20 +197,28 @@ class InterestFeedService {
 	 *
 	 * @param string $media one of `MEDIA`
 	 *
-	 * @return list<array{nid: string, tags: string[], reason: string}>
+	 * @return list<array{nid: string, tags: string[], reason: string, ...}>
 	 */
 	public function rank(Person $viewer, string $media = ''): array {
 		$media = self::media($media);
+		$this->streamRequest->setViewer($viewer);
 		$hidden = $this->interestService->hiddenFor($viewer);
 		$ranking = $this->ranked($viewer, $media, $hidden);
 
 		if (count($ranking) < self::POPULAR_FILL) {
-			$ranking = array_merge($ranking, $this->popular(
+			$popular = $this->popular(
 				$viewer, $media, array_merge($hidden, array_column($ranking, 'nid')), self::POPULAR_FILL - count($ranking)
-			));
+			);
+			$ranking = $this->spread(
+				$this->withStoryTerms(array_merge($ranking, $popular)),
+				[]
+			);
 		}
 
-		return $ranking;
+		return array_map(
+			static fn (array $entry): array => ['nid' => $entry['nid'], 'tags' => $entry['tags'], 'reason' => $entry['reason']],
+			array_slice($ranking, 0, self::SNAPSHOT_MAX)
+		);
 	}
 
 	/**
@@ -216,7 +226,7 @@ class InterestFeedService {
 	 *
 	 * @param string[] $hidden the posts the reader hid
 	 *
-	 * @return list<array{nid: string, tags: string[], reason: string}>
+	 * @return list<array{nid: string, tags: string[], reason: string, ...}>
 	 */
 	private function ranked(Person $viewer, string $media, array $hidden): array {
 		$profile = $this->interestService->feedProfile($viewer);
@@ -272,11 +282,12 @@ class InterestFeedService {
 		usort($ranked, static fn (array $a, array $b): int => $b['rank'] <=> $a['rank']);
 
 		$related = $profile['thin'] ? [] : $this->related($ranked, $profile, $since, $hidden, $languages, $media);
+		$rankedCount = count($ranked);
+		$withStoryTerms = $this->withStoryTerms(array_merge($ranked, $related));
+		$ranked = array_slice($withStoryTerms, 0, $rankedCount);
+		$related = array_slice($withStoryTerms, $rankedCount);
 
-		return array_map(
-			static fn (array $entry): array => ['nid' => $entry['nid'], 'tags' => $entry['tags'], 'reason' => $entry['reason']],
-			array_slice($this->spread($ranked, $related), 0, self::SNAPSHOT_MAX)
-		);
+		return array_slice($this->spread($ranked, $related), 0, self::SNAPSHOT_MAX);
 	}
 
 	/**
@@ -294,14 +305,29 @@ class InterestFeedService {
 	 * @return list<array{nid: string, author: string, tags: string[], reason: string, ...}>
 	 */
 	public function spread(array $ranked, array $related): array {
+		$candidates = array_merge($ranked, $related);
+		$storyClusters = RecommendationReRanker::storyClusterIds($candidates);
+		foreach ($storyClusters as $index => $cluster) {
+			$candidates[$index]['_story_cluster'] = $cluster;
+		}
+		$ranked = array_slice($candidates, 0, count($ranked));
+		$related = array_slice($candidates, count($ranked));
 		$placed = [];
+		$storyCounts = [];
 		$tagLimit = (int)floor((float)self::DIVERSITY_WINDOW * self::TAG_SHARE);
 
 		while ($ranked !== [] || $related !== []) {
 			$slot = count($placed);
 			if ($related !== [] && ($slot % self::EXPLORE_EVERY) === self::EXPLORE_EVERY - 1) {
-				$placed[] = array_shift($related);
-				continue;
+				$relatedIndex = self::firstStoryAlternative($related, $storyCounts);
+				if ($relatedIndex !== null) {
+					self::appendWithStoryCount($placed, $storyCounts, $related[$relatedIndex]);
+					array_splice($related, $relatedIndex, 1);
+					continue;
+				}
+				if ($ranked === []) {
+					break;
+				}
 			}
 			if ($ranked === []) {
 				// the related posts are a seasoning, not a feed of their own
@@ -311,6 +337,8 @@ class InterestFeedService {
 			$window = array_slice($placed, -(self::DIVERSITY_WINDOW - 1));
 			$authors = array_count_values(array_column($window, 'author'));
 			$tags = array_count_values(array_map(static fn (array $e): string => $e['tags'][0] ?? '', $window));
+			$hasStoryAlternative = self::firstStoryAlternative($ranked, $storyCounts) !== null
+				|| self::firstStoryAlternative($related, $storyCounts) !== null;
 
 			// the best post that breaks neither limit; failing that, one from
 			// an author with room, since a run of one hashtag is a topic and a
@@ -318,6 +346,10 @@ class InterestFeedService {
 			$pick = null;
 			$authorOnly = null;
 			foreach ($ranked as $index => $entry) {
+				$cluster = $entry['_story_cluster'] ?? null;
+				if ($hasStoryAlternative && is_int($cluster) && ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT) {
+					continue;
+				}
 				if (($authors[$entry['author']] ?? 0) >= self::PER_AUTHOR) {
 					continue;
 				}
@@ -327,13 +359,67 @@ class InterestFeedService {
 					break;
 				}
 			}
-			$pick ??= $authorOnly ?? 0;
+			$pick ??= $authorOnly;
+			if ($pick === null && $hasStoryAlternative) {
+				$pick = self::firstStoryAlternative($ranked, $storyCounts);
+				if ($pick === null) {
+					$relatedPick = self::firstStoryAlternative($related, $storyCounts);
+					if ($relatedPick !== null) {
+						self::appendWithStoryCount($placed, $storyCounts, $related[$relatedPick]);
+						array_splice($related, $relatedPick, 1);
+						continue;
+					}
+				}
+			}
+			$pick ??= 0;
 
-			$placed[] = $ranked[$pick];
+			self::appendWithStoryCount($placed, $storyCounts, $ranked[$pick]);
 			array_splice($ranked, $pick, 1);
 		}
 
 		return $placed;
+	}
+
+	/** @param list<array<string, mixed>> $entries @return list<array<string, mixed>> */
+	private function withStoryTerms(array $entries): array {
+		$indexByNid = [];
+		foreach ($entries as $index => $entry) {
+			if (!array_key_exists('story_terms', $entry)) {
+				$indexByNid[(string)$entry['nid']] = $index;
+			}
+		}
+
+		foreach (array_chunk(array_keys($indexByNid), 200) as $nids) {
+			foreach ($this->streamRequest->getVisibleByNids($nids) as $nid => $post) {
+				$index = $indexByNid[(string)$nid] ?? null;
+				if ($index !== null) {
+					$entries[$index]['story_terms'] = $this->features->extract($post, true)['story_terms'] ?? [];
+					$entries[$index]['author'] = $post->getAttributedTo() ?: 'post:' . $nid;
+				}
+			}
+		}
+
+		return $entries;
+	}
+
+	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, mixed> $candidate */
+	private static function appendWithStoryCount(array &$placed, array &$storyCounts, array $candidate): void {
+		$cluster = $candidate['_story_cluster'] ?? null;
+		if (is_int($cluster)) {
+			$storyCounts[$cluster] = ($storyCounts[$cluster] ?? 0) + 1;
+		}
+		$placed[] = $candidate;
+	}
+
+	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts */
+	private static function firstStoryAlternative(array $entries, array $storyCounts): ?int {
+		foreach ($entries as $index => $entry) {
+			$cluster = $entry['_story_cluster'] ?? null;
+			if (!is_int($cluster) || ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT) {
+				return $index;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -383,7 +469,7 @@ class InterestFeedService {
 	 *
 	 * @param string[] $seen the posts to leave out
 	 *
-	 * @return list<array{nid: string, tags: string[], reason: string}>
+	 * @return list<array{nid: string, tags: string[], reason: string, author: string}>
 	 */
 	private function popular(Person $viewer, string $media, array $seen, int $wanted): array {
 		$statuses = $this->trendService->trendingStatuses(
@@ -401,7 +487,7 @@ class InterestFeedService {
 				continue;
 			}
 			$seen[$nid] = true;
-			$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular'];
+			$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid];
 		}
 
 		// a narrowed ranking's trending is already topped up with the newest
@@ -414,7 +500,7 @@ class InterestFeedService {
 					continue;
 				}
 				$seen[$nid] = true;
-				$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular'];
+				$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid];
 			}
 		}
 

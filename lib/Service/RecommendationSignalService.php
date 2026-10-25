@@ -22,7 +22,6 @@ use Throwable;
 /** Consent-gated projector from validated observations to compact recommendation profiles. */
 final class RecommendationSignalService implements IRecommendationSignalRecorder, IRecommendationSignalEvents {
 	public const MAX_EVENTS = 100;
-	public const MAX_DWELL_MS = 30000;
 	public const IMPRESSION_MS = 750;
 	private const EVENT_KINDS = ['impression', 'skip', 'open', 'media', 'link', 'video_watch_ratio', 'profile_visit'];
 
@@ -48,27 +47,39 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 		$batch = [];
 		$postIds = [];
 		$discarded = max(0, count($events) - self::MAX_EVENTS);
-		foreach (array_slice(array_values($events), 0, self::MAX_EVENTS) as $event) {
-			if (!is_array($event) || !self::validUuid((string)($event['event_id'] ?? ''))
-				|| (int)($event['generation'] ?? -1) !== $state['generation']) {
+		$processed = 0;
+		foreach ($events as $event) {
+			if ($processed++ >= self::MAX_EVENTS) {
+				break;
+			}
+			if (!is_array($event)) {
 				$discarded++;
 				continue;
 			}
-			$kind = (string)($event['kind'] ?? '');
+			$eventId = $event['event_id'] ?? null;
+			$generation = $event['generation'] ?? null;
+			$kind = $event['kind'] ?? null;
+			$context = $event['context'] ?? null;
+			if (!is_string($eventId) || !self::validUuid($eventId)
+				|| !is_int($generation) || $generation !== $state['generation']
+				|| !is_string($kind) || !is_string($context)) {
+				$discarded++;
+				continue;
+			}
 			if (!in_array($kind, self::EVENT_KINDS, true)) {
 				$discarded++;
 				continue;
 			}
-			$context = (string)($event['context'] ?? '');
 			$validContext = $kind === 'profile_visit'
 				? $context === 'profile'
-				: in_array($context, ['interests', 'photos', 'videos', 'shorts', 'reels', 'detail'], true);
+				: in_array($context, InterestService::CONTEXTS, true);
 			if (!$validContext) {
 				$discarded++;
 				continue;
 			}
 			if ($kind === 'profile_visit') {
-				$author = trim((string)($event['profile_id'] ?? ''));
+				$profileId = $event['profile_id'] ?? null;
+				$author = is_string($profileId) ? trim($profileId) : '';
 				if ($author !== '' && strlen($author) <= 2048) {
 					$batch[] = ['event' => $event, 'kind' => $kind, 'profile_id' => $author];
 				} else {
@@ -76,16 +87,26 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				}
 				continue;
 			}
-			$postId = (string)($event['status_id'] ?? '');
-			if (preg_match('/^[0-9]{1,20}$/', $postId) !== 1) {
+			$postId = $event['status_id'] ?? null;
+			if (!is_string($postId) || preg_match('/^[0-9]{1,20}$/', $postId) !== 1) {
 				$discarded++;
 				continue;
 			}
 			if ($kind === 'video_watch_ratio'
-				&& (!is_numeric($event['ratio'] ?? null) || !is_finite((float)$event['ratio'])
+				&& ((!is_int($event['ratio'] ?? null) && !is_float($event['ratio'] ?? null))
+					|| !is_finite((float)$event['ratio'])
 					|| (float)$event['ratio'] < 0.0 || (float)$event['ratio'] > 1.0)) {
 				$discarded++;
 				continue;
+			}
+			if ($kind === 'impression') {
+				$sessionId = $event['session_id'] ?? null;
+				$visibleMs = $event['visible_ms'] ?? null;
+				if (!is_string($sessionId) || !self::validUuid($sessionId)
+					|| !is_int($visibleMs) || $visibleMs < self::IMPRESSION_MS) {
+					$discarded++;
+					continue;
+				}
 			}
 			$batch[] = ['event' => $event, 'kind' => $kind, 'status_id' => $postId];
 			$postIds[] = $postId;
@@ -127,17 +148,13 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 					continue;
 				}
 				if ($kind === 'impression') {
-					$sessionId = (string)($event['session_id'] ?? '');
-					$visibleMs = max(0, min(self::MAX_DWELL_MS, (int)($event['visible_ms'] ?? 0)));
-					if (!self::validUuid($sessionId) || $visibleMs < self::IMPRESSION_MS) {
-						$counts['discarded']++;
-						continue;
-					}
+					$sessionId = (string)$event['session_id'];
 					$features = $this->features->extract($post, true);
 					$postKeys = RecommendationStoryFingerprint::keys(
 						$features['story_terms'] ?? [],
 						$this->config->getSystemValueString('secret', ''),
 						$viewer->getUserId(),
+						$features['story_headline_terms'] ?? [],
 					);
 					// Short, sensitive or unclassifiable text keeps the existing
 					// exact-post exposure behaviour without retaining its contents or
@@ -278,6 +295,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				$features['story_terms'] ?? [],
 				$this->config->getSystemValueString('secret', ''),
 				$viewer->getUserId(),
+				$features['story_headline_terms'] ?? [],
 			);
 			$exactPostKey = RecommendationStoryFingerprint::exactPostKey(
 				$nid,
@@ -301,10 +319,13 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 		foreach ($keysByNid as $nid => $keys) {
 			$bySession = [];
 			$exactKey = count($keys) === RecommendationStoryFingerprint::MINHASH_BAND_COUNT + 1 ? $keys[0] : null;
-			foreach ($keys as $key) {
+			$hasHeadlineKeys = count($keys) === RecommendationStoryFingerprint::MINHASH_BAND_COUNT * 2;
+			foreach ($keys as $index => $key) {
 				foreach ($exposures[$key] ?? [] as $session => $exposure) {
 					if ($key === $exactKey) {
 						$bySession[$session]['exact'] = true;
+					} elseif ($hasHeadlineKeys && $index >= RecommendationStoryFingerprint::MINHASH_BAND_COUNT) {
+						$bySession[$session]['headline_bands'] = ($bySession[$session]['headline_bands'] ?? 0) + 1;
 					} else {
 						$bySession[$session]['bands'] = ($bySession[$session]['bands'] ?? 0) + 1;
 					}
@@ -319,7 +340,9 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 			$impressionCount = 0;
 			$updatedAt = 0;
 			foreach ($bySession as $exposure) {
-				if (($exposure['bands'] ?? 0) < $minimumMatches && !($exposure['exact'] ?? false)) {
+				$matchesBody = ($exposure['bands'] ?? 0) >= $minimumMatches;
+				$matchesHeadline = ($exposure['headline_bands'] ?? 0) >= RecommendationStoryFingerprint::HEADLINE_MATCH_COUNT;
+				if (!$matchesBody && !$matchesHeadline && !($exposure['exact'] ?? false)) {
 					continue;
 				}
 				// Each HMAC band tracks the same views. Use the largest band count
@@ -353,7 +376,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 
 		return [
 			'topic' => $signal,
-			'author' => $kind === 'profile_visit' ? 0.08 : 0.0,
+			'author' => 0.0,
 			'format' => in_array($kind, ['media', 'video_watch_ratio', 'skip'], true) ? $signal : 0.0,
 		];
 	}

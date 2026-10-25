@@ -216,8 +216,19 @@ jobs:
         # the suite needs phpunit; installed only now, once the server is up
         # and the app enabled with what ships. One class at a time, so each
         # prints its own failures even if the other hangs.
+        env:
+          COMPOSER_MAX_PARALLEL_HTTP: 4
         run: |
-          composer i
+          for attempt in 1 2 3; do
+            if composer i --no-interaction; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Composer install failed; retrying in $((attempt * 10)) seconds (attempt $((attempt + 1))/3)."
+            sleep $((attempt * 10))
+          done
           status=0
           timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter GoToSocialDeliveryTest || status=1
           timeout 600 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter GoToSocialInboundTest || status=1

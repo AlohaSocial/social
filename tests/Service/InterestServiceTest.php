@@ -411,6 +411,19 @@ class InterestServiceTest extends TestCase {
 		$this->assertTrue($this->service()->settingsFor('alice')['learning']);
 	}
 
+	public function testInstanceLearningPauseStopsLegacySignalsAndActions(): void {
+		$this->post('1', ['cats']);
+		$this->app[ConfigService::REC_LEARNING_PAUSED] = '1';
+
+		$service = $this->service();
+		self::assertFalse($service->settingsFor('alice')['paused']);
+		self::assertTrue($service->settingsFor('alice')['instancePaused']);
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'open']]);
+		$service->recordAction($this->actor(), $this->post('2', ['dogs']), InterestService::ACTION_FAVOURITE);
+
+		self::assertSame([], $this->rows);
+	}
+
 	public function testAnActionCountsWhereverItHappensAndNeverThrows(): void {
 		$post = $this->post('1', ['cats', 'dogs']);
 		$service = $this->service();

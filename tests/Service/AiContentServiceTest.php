@@ -106,6 +106,15 @@ class AiContentServiceTest extends TestCase {
 		}
 	}
 
+	public function testGenericAiTagCannotBeEnabledAsAnAdministratorLabel(): void {
+		$this->appValues[ConfigService::SOCIAL_AI_TAGS] = 'AI, #AI, Synthetic';
+
+		$this->assertNotContains('ai', $this->service->tags());
+		$this->assertContains('synthetic', $this->service->tags());
+		$this->assertFalse($this->service->isLabelled(['tags' => [['name' => 'AI', 'url' => '']]]));
+		$this->assertTrue($this->service->isLabelled(['tags' => [['name' => 'Synthetic', 'url' => '']]]));
+	}
+
 	public function testAStatusTaggedWithAnAdministratorsTagIsLabelled(): void {
 		$this->appValues[ConfigService::SOCIAL_AI_TAGS] = 'synthetic';
 

@@ -52,7 +52,9 @@ describe('the first-use notice', () => {
 	})
 
 	it('says what is learned and where it stays', () => {
-		expect(mountNotice().text()).toContain('This stays on this server and is only visible to you.')
+		const text = mountNotice().text()
+		expect(text).toContain('Watching a substantial part of a video can count too')
+		expect(text).toContain('This activity profile stays on this server and is not shared with other users.')
 	})
 
 	it('leads to the interests section of the settings', () => {

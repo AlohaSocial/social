@@ -30,6 +30,10 @@ vi.mock('../../../src/services/interestTracker.js', async (importOriginal) => ({
 	...(await importOriginal()),
 	createInterestTracker: vi.fn(),
 }))
+vi.mock('../../../src/services/interests.js', async (importOriginal) => ({
+	...(await importOriginal()),
+	fetchRecommendationPreferences: vi.fn(() => Promise.resolve({ learning_mode: 'on', generation: 7 })),
+}))
 
 class FakeIntersectionObserver {
 	constructor(callback) {
@@ -45,13 +49,18 @@ const TimelineEntryStub = {
 	name: 'TimelineEntry',
 	props: ['item', 'type'],
 	template: `<li class="timeline-entry" :data-status-id="item.id">
-		<div class="post-message">
-			<a class="out" href="https://news.example/story">a story</a>
-			<a class="tag" href="/apps/social/timeline/tags/film">#film</a>
-			<a class="mention" href="https://remote.example/@bob">@bob</a>
-		</div>
-		<div class="post-attachments"><button class="picture">picture</button></div>
-		<video class="video" />
+		<article class="post-content--openable">
+			<div class="post-message">
+				<a class="out" href="https://news.example/story">a story</a>
+				<a class="tag" href="/apps/social/timeline/tags/film">#film</a>
+				<a class="mention" href="https://remote.example/@bob">@bob</a>
+			</div>
+			<a class="post-timestamp" href="/apps/social/post/1">time</a>
+			<button class="like">like</button>
+			<p class="post-body">post body</p>
+			<div class="post-attachments"><button class="picture">picture</button></div>
+			<video class="video" />
+		</article>
 	</li>`,
 }
 
@@ -118,7 +127,7 @@ describe('TimelineList and For you', () => {
 	beforeEach(() => {
 		vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver)
 		vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
-		fake = { sync: vi.fn(), record: vi.fn(), destroy: vi.fn() }
+		fake = { sync: vi.fn(), record: vi.fn(), recordVideoWatchRatio: vi.fn(), setLearningGeneration: vi.fn(), destroy: vi.fn() }
 		createInterestTracker.mockReset().mockReturnValue(fake)
 		window.localStorage.clear()
 	})
@@ -183,7 +192,7 @@ describe('TimelineList and For you', () => {
 			await flushPromises()
 
 			const item = wrapper.findComponent(EmptyContent).props('item')
-			expect(item.description).toContain('learns which hashtags you care about')
+			expect(item.description).toContain('Watching most of a video also counts')
 			expect(item.action.to).toEqual({ name: 'settings', hash: '#interests' })
 		})
 	})
@@ -250,6 +259,30 @@ describe('TimelineList and For you', () => {
 			expect(createInterestTracker).not.toHaveBeenCalled()
 		})
 
+		it('keeps recommendation learning separate from the legacy interest pause', async () => {
+			({ wrapper } = mountList({
+				type: 'interests',
+				interests: { ...ON, paused: true, recommendationsEnabled: true },
+			}))
+			await flushPromises()
+
+			expect(createInterestTracker).toHaveBeenCalledOnce()
+			expect(fake.setLearningGeneration).toHaveBeenCalledWith(7)
+			expect(fake.destroy).not.toHaveBeenCalled()
+		})
+
+		it('loads consented recommendation signals from My Feed without legacy hashtag consent', async () => {
+			({ wrapper } = mountList({
+				type: 'home',
+				interests: { ...ON, learning: false, recommendationsEnabled: true },
+			}))
+			await flushPromises()
+
+			expect(createInterestTracker).toHaveBeenCalledWith(expect.objectContaining({ context: 'home', legacyLearning: false }))
+			expect(fake.setLearningGeneration).toHaveBeenCalledWith(7)
+			expect(fake.destroy).not.toHaveBeenCalled()
+		})
+
 		it('records a picture opened, a video played and a link followed, and not a hashtag or a mention', async () => {
 			({ wrapper } = mountList({ type: 'home', timeline: [post('1', '10')] }))
 			await flushPromises()
@@ -270,6 +303,51 @@ describe('TimelineList and For you', () => {
 				['1', 'media'],
 				['1', 'link'],
 			])
+		})
+
+		it('records opening a post but ignores its like control', async () => {
+			({ wrapper } = mountList({ type: 'home', timeline: [post('1', '10')] }))
+			await flushPromises()
+
+			wrapper.find('.post-body').element.click()
+			wrapper.find('.like').element.click()
+
+			expect(fake.record.mock.calls.map(([status, kind]) => [status.id, kind])).toEqual([['1', 'open']])
+		})
+
+		it('does not treat selecting post text or modified clicks as opening it', async () => {
+			({ wrapper } = mountList({ type: 'home', timeline: [post('1', '10')] }))
+			await flushPromises()
+			vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'selected text' })
+
+			wrapper.find('.post-body').element.click()
+			wrapper.find('.post-body').element.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
+
+			expect(fake.record).not.toHaveBeenCalled()
+		})
+
+		it('measures video playback from played ranges when progress events are sparse', async () => {
+			({ wrapper } = mountList({ type: 'home', timeline: [post('1', '10')] }))
+			await flushPromises()
+
+			const video = wrapper.find('.video').element
+			Object.defineProperties(video, {
+				currentTime: { configurable: true, value: 6 },
+				duration: { configurable: true, value: 10 },
+				played: {
+					configurable: true,
+					value: {
+						length: 2,
+						start: (index) => [0, 4][index],
+						end: (index) => [3, 6][index],
+					},
+				},
+			})
+			video.dispatchEvent(new Event('play'))
+			video.dispatchEvent(new Event('timeupdate'))
+			video.dispatchEvent(new Event('ended'))
+
+			expect(fake.recordVideoWatchRatio).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }), 0.5)
 		})
 
 		it('finishes the tracker when learning is turned off, and when the list goes', async () => {

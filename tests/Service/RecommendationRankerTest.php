@@ -354,6 +354,57 @@ class RecommendationRankerTest extends TestCase {
 		$this->assertCount(5, $page);
 	}
 
+	public function testSharedOpeningKeepsLongCoverageOfOneStoryTogether(): void {
+		$opening = array_map(static fn (int $i): string => 'headline' . $i, range(1, 20));
+		$ranked = [];
+		for ($i = 1; $i <= 8; $i++) {
+			$ranked[] = [
+				'nid' => 'long-incident-' . $i,
+				'rank_score' => 0.99 - ($i * 0.001),
+				'story_terms' => [...$opening, ...array_map(static fn (int $term): string => 'article' . $i . 'term' . $term, range(1, 40))],
+			];
+		}
+		$ranked[] = [
+			'nid' => 'other-story',
+			'rank_score' => 0.7,
+			'story_terms' => ['garden', 'community', 'event', 'local', 'meeting', 'weekend', 'people'],
+		];
+
+		$page = (new RecommendationReRanker())->page($ranked, 5, 'shared-opening-long-articles');
+		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'long-incident-'));
+
+		$this->assertCount(4, $incidentPosts);
+		$this->assertContains('other-story', array_column($page, 'nid'));
+		$this->assertCount(5, $page);
+	}
+
+	public function testHalfMatchingHeadlinesClusterEvenWhenArticleBodiesDiffer(): void {
+		$sharedOpening = array_map(static fn (int $i): string => 'incident' . $i, range(1, 10));
+		$ranked = [];
+		for ($i = 1; $i <= 8; $i++) {
+			$headline = $i % 2 === 0
+				? [...$sharedOpening, ...array_map(static fn (int $term): string => 'variant' . $term, range(1, 10))]
+				: [...$sharedOpening, ...array_map(static fn (int $term): string => 'original' . $term, range(1, 10))];
+			$ranked[] = [
+				'nid' => 'coverage-' . $i,
+				'rank_score' => 0.99 - ($i * 0.001),
+				'story_terms' => [...$headline, ...array_map(static fn (int $term): string => 'body' . $i . 'term' . $term, range(1, 40))],
+			];
+		}
+		$ranked[] = [
+			'nid' => 'different-event',
+			'rank_score' => 0.7,
+			'story_terms' => ['garden', 'community', 'event', 'local', 'meeting', 'weekend', 'people'],
+		];
+
+		$page = (new RecommendationReRanker())->page($ranked, 5, 'shared-half-headline');
+		$coverage = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'coverage-'));
+
+		$this->assertCount(4, $coverage);
+		$this->assertContains('different-event', array_column($page, 'nid'));
+		$this->assertCount(5, $page);
+	}
+
 	public function testSimilarStoryLimitStillAppliesWhenItWouldLeaveThePageUnderfilled(): void {
 		$terms = ['php', 'security', 'release', 'maintainer', 'vulnerability', 'patch', 'disclosure', 'exploit'];
 		$ranked = [];

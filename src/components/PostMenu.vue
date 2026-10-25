@@ -172,47 +172,11 @@
 			</template>
 			{{ t('social', 'Less like this') }}
 		</NcActionButton>
-		<template v-if="canOfferRecommendationFeedback">
-			<NcActionButton
-				v-if="feedbackContext?.similarity_available"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
-				<template #icon>
-					<ThumbUpOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me more like this post') }}
-			</NcActionButton>
-			<NcActionButton
-				v-if="feedbackContext?.similarity_available"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
-				<template #icon>
-					<ThumbDownOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me less like this post') }}
-			</NcActionButton>
-			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'HIDE_POST')">
-				<template #icon>
-					<IconEyeOffOutline :size="20" />
-				</template>
-				{{ t('social', 'Hide this post from For You') }}
-			</NcActionButton>
-			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'MORE_AUTHOR')">
-				<template #icon>
-					<AccountPlusOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me more from this author') }}
-			</NcActionButton>
-			<NcActionButton
-				v-if="feedbackContext?.format"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'MORE_FORMAT')">
-				<template #icon>
-					<ShapeOutline :size="20" />
-				</template>
-				{{ t('social', 'Show me more {format}', { format: formatLabel(feedbackContext.format) }) }}
-			</NcActionButton>
-		</template>
+		<RecommendationFeedbackActions
+			:enabled="canOfferRecommendationFeedback"
+			:loading="recommendationFeedbackLoading"
+			:context="feedbackContext"
+			@feedback="$emit('recommendationFeedback', $event)" />
 		<!-- what to do about somebody else, from the post that made the reader
 		     want to: both take their posts out of every timeline at once -->
 		<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('mute')">
@@ -263,11 +227,9 @@ import Pin from 'vue-material-design-icons/Pin.vue'
 import PinOff from 'vue-material-design-icons/PinOff.vue'
 import SendCheck from 'vue-material-design-icons/SendCheck.vue'
 import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
-import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
-import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
-import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
 import Translate from 'vue-material-design-icons/Translate.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import RecommendationFeedbackActions from './RecommendationFeedbackActions.vue'
 import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { hasInterestsFeed } from '../services/interests.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
@@ -304,9 +266,7 @@ export default {
 		IconEyeOffOutline,
 		IconEyeOutline,
 		ThumbDownOutline,
-		ThumbUpOutline,
-		AccountPlusOutline,
-		ShapeOutline,
+		RecommendationFeedbackActions,
 		NcActionButton,
 		NcActionLink,
 		NcActions,
@@ -369,6 +329,11 @@ export default {
 		},
 
 		recommendationFeedbackEnabled: {
+			type: Boolean,
+			default: false,
+		},
+
+		recommendationFeedbackLoading: {
 			type: Boolean,
 			default: false,
 		},
@@ -519,18 +484,6 @@ export default {
 
 	methods: {
 		t,
-		/** @param {string} format a server-detected post format @return {string} */
-		formatLabel(format) {
-			return {
-				audio: t('social', 'audio posts'),
-				image: t('social', 'photo posts'),
-				poll: t('social', 'polls'),
-				short: t('social', 'short videos'),
-				text: t('social', 'text posts'),
-				video: t('social', 'video posts'),
-			}[format] || t('social', 'posts like this')
-		},
-
 		async copyEmbedCode() {
 			try {
 				const embedUrl = new URL(this.item.url)

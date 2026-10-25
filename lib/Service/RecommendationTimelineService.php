@@ -23,7 +23,7 @@ class RecommendationTimelineService {
 	private const MAX_REFRESH_TOPICS = 2;
 	private const LOOKBACK_DAYS = RecommendationFreshness::LOOKBACK_DAYS;
 	private const MIN_COVERAGE = 15;
-	private const MODE = 'for-you-v12-php-security-alias';
+	private const MODE = 'for-you-v15-topic-hierarchy-diversity';
 
 	public function __construct(
 		private RecommendationPreferenceService $preferences,
@@ -161,6 +161,18 @@ class RecommendationTimelineService {
 			if ($nid !== '' && !isset($posts[$nid])) {
 				$posts[$nid] = $automaticPost;
 			}
+		}
+		// A new reader has no topic terms to retrieve against. Reuse the bounded
+		// discovery sample to fill the candidate pool instead of leaving the
+		// topic-source reservation unused; the query reapplies every hard filter.
+		if ($candidateTopics === [] && count($posts) < $candidateBudget) {
+			$posts += $this->streams->recommendationExplorationCandidates(
+				$sinceNid,
+				$candidateBudget - count($posts),
+				intdiv($now, 6 * 3600),
+				array_values(array_unique(array_merge($hiddenNids, array_keys($posts)))),
+				$languages
+			);
 		}
 		$automaticSignals = $this->interests->isEnabled()
 			? $this->legacyFeed->recommendationSignals($viewer, array_values($posts))
@@ -333,7 +345,8 @@ class RecommendationTimelineService {
 			if (count($items) >= $limit || $nextCursor === null) {
 				break;
 			}
-			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $limit);
+			$remaining = $limit - count($items);
+			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $remaining);
 			if ($page === null) {
 				$nextCursor = null;
 				break;
@@ -342,7 +355,7 @@ class RecommendationTimelineService {
 		}
 
 		return [
-			'items' => array_slice($items, 0, $limit),
+			'items' => $items,
 			'session_id' => $sessionId,
 			'next_cursor' => $nextCursor,
 			'mode' => 'RANKED',

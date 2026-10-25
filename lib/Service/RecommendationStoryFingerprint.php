@@ -15,6 +15,7 @@ final class RecommendationStoryFingerprint {
 	private const MINHASH_COUNT = 64;
 	public const MINHASH_BAND_COUNT = 16;
 	public const SHORT_STORY_MATCH_COUNT = 6;
+	public const HEADLINE_MATCH_COUNT = 6;
 	private const ROWS_PER_BAND = 4;
 
 	/**
@@ -31,20 +32,19 @@ final class RecommendationStoryFingerprint {
 
 	/**
 	 * @param list<string> $terms bounded, normalised terms extracted from a post
-	 * @return list<string> owner-scoped MinHash fingerprints, plus a backwards-compatible exact key for short stories
+	 * @param list<string> $headlineTerms opening terms extracted from a post
+	 * @return list<string> owner-scoped body and optional headline fingerprints, plus a backwards-compatible exact key for short stories
 	 */
-	public static function keys(array $terms, string $secret, string $owner): array {
+	public static function keys(array $terms, string $secret, string $owner, array $headlineTerms = []): array {
 		if ($secret === '' || $owner === '') {
 			return [];
 		}
 
-		$terms = array_values(array_unique(array_filter(
-			array_map(static fn (mixed $term): string => is_string($term) ? mb_strtolower(trim($term), 'UTF-8') : '', $terms),
-			static fn (string $term): bool => $term !== ''
-		)));
+		$terms = self::normaliseTerms($terms);
 		if (count($terms) < self::MIN_TERMS) {
 			return [];
 		}
+		$termCount = count($terms);
 		$shortStory = count($terms) < 6;
 		$keys = [];
 		if ($shortStory) {
@@ -58,6 +58,9 @@ final class RecommendationStoryFingerprint {
 		// sixteen four-value bands; short headlines use individual samples
 		// below, where requiring several matches gives better recall.
 		$firstTerm = array_shift($terms);
+		if ($firstTerm === null) {
+			return [];
+		}
 		$firstToken = hash_hmac('sha256', $owner . "\0story-term-v2\0" . $firstTerm, $secret, true);
 		$signatures = [];
 		for ($seed = 0; $seed < self::MINHASH_COUNT; $seed++) {
@@ -92,6 +95,35 @@ final class RecommendationStoryFingerprint {
 			$keys[] = hash_hmac('sha256', $owner . "\0story-minhash-v2\0" . $band . "\0" . implode('', $values), $secret);
 		}
 
+		$headlineTerms = self::normaliseTerms($headlineTerms);
+		if (count($headlineTerms) >= self::HEADLINE_MATCH_COUNT && $termCount > count($headlineTerms)) {
+			$headlineTokens = array_map(
+				static fn (string $term): string => hash_hmac('sha256', $owner . "\0story-headline-term-v1\0" . $term, $secret, true),
+				$headlineTerms,
+			);
+			for ($seed = 0; $seed < self::MINHASH_BAND_COUNT; $seed++) {
+				$minimum = null;
+				foreach ($headlineTokens as $token) {
+					$hash = hash('xxh3', pack('N', $seed) . $token, true);
+					if ($minimum === null || strcmp($hash, $minimum) < 0) {
+						$minimum = $hash;
+					}
+				}
+				if ($minimum === null) {
+					continue;
+				}
+				$keys[] = hash_hmac('sha256', $owner . "\0story-headline-v1\0" . $seed . "\0" . $minimum, $secret);
+			}
+		}
+
 		return $keys;
+	}
+
+	/** @param array<array-key, mixed> $terms @return list<string> */
+	private static function normaliseTerms(array $terms): array {
+		return array_values(array_unique(array_filter(
+			array_map(static fn (mixed $term): string => is_string($term) ? mb_strtolower(trim($term), 'UTF-8') : '', $terms),
+			static fn (string $term): bool => $term !== ''
+		)));
 	}
 }

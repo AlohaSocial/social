@@ -51,6 +51,17 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 		return $this->get($actorKey);
 	}
 
+	/** Invalidate every open client buffer when the instance learning switch changes. */
+	public function invalidateAllLearningGenerations(): void {
+		$qb = $this->getQueryBuilder();
+		$one = $qb->expr()->literal(1);
+		$qb->update(self::TABLE_PROFILE)
+			->set('profile_ver', $qb->func()->add('profile_ver', $one))
+			->set('generation', $qb->func()->add('generation', $one))
+			->set('updated_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
+			->executeStatement();
+	}
+
 	/** @return array{revision: int, generation: int, learning_mode: string}|null */
 	public function reset(string $actorKey, int $expectedRevision): ?array {
 		$this->ensureProfile($actorKey);

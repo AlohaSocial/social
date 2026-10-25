@@ -1150,6 +1150,19 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
 	}
 
+	public function testASecondEditGetsANewerActivityPubTimestampEvenWithinTheSameSecond(): void {
+		$stored = $this->storedNote();
+		$previousTimestamp = time() + 60;
+		$stored->setUpdated(gmdate('Y-m-d\\TH:i:s\\Z', $previousTimestamp));
+		$this->streamRequest->method('getStreamByNid')->with(7)
+			->willReturnOnConsecutiveCalls($stored, $stored);
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$this->service->editPost(7, $this->actor(), 'new');
+
+		$this->assertSame($previousTimestamp + 1, strtotime($stored->getUpdated()));
+	}
+
 	public function testAnEditCanRemoveItsContentWarningAndExplicitlyClearSensitive(): void {
 		$stored = $this->storedNote();
 		$stored->setSensitive(true);

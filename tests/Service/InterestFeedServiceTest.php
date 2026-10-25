@@ -15,6 +15,8 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\RecommendationFeatureExtractor;
+use OCA\Social\Service\RecommendationTopicCatalog;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TrendService;
 use OCA\Social\Tools\Nid;
@@ -153,7 +155,15 @@ class InterestFeedServiceTest extends TestCase {
 			}
 		);
 
-		return new InterestFeedService($interests, $streamRequest, $streamService, $trends, $cacheFactory, $time);
+		return new InterestFeedService(
+			$interests,
+			$streamRequest,
+			$streamService,
+			$trends,
+			$cacheFactory,
+			$time,
+			new RecommendationFeatureExtractor(new RecommendationTopicCatalog())
+		);
 	}
 
 	private function viewer(): Person {

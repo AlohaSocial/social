@@ -23,6 +23,8 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 	private const MAX_FORMATS = 20;
 	private const MAX_SEEN = 8000;
 	private const MAX_EVENTS = 10000;
+	private const SIGNAL_RETENTION_SECONDS = 180 * 86400;
+	private const MAX_UNIQUE_CONFLICT_RETRIES = 2;
 	private const EVENT_TTL = 7 * 86400;
 	private const SEEN_TTL = 30 * 86400;
 
@@ -55,7 +57,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 	 * Results retain session grouping so fuzzy story bands must match within a
 	 * single exposure session, without returning raw post identifiers or text.
 	 *
-	 * @param list<string> $postKeys owner-scoped HMAC story bands or exact-post keys
+	 * @param list<string> $postKeys owner-scoped HMAC story and headline bands or exact-post keys
 	 * @return array<string, array<string, array{impressions: int, updated_at: int}>> keyed by fingerprint, then session key
 	 */
 	public function exposures(string $actorKey, int $generation, array $postKeys, int $since): array {
@@ -92,7 +94,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 	 * to consent, reset generation and duplicate event delivery.
 	 *
 	 * @param list<array{dimension: string, entity_key: string, delta: float}> $signals
-	 * @param array{post_keys: list<string>, session_key: string}|null $impression owner-scoped HMAC story bands or exact-post keys
+	 * @param array{post_keys: list<string>, session_key: string}|null $impression owner-scoped HMAC story and headline bands or exact-post keys
 	 * @return array{accepted: bool, duplicate: bool, profile_version: int}
 	 */
 	public function record(
@@ -103,6 +105,20 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 		array $signals,
 		?array $impression,
 		int $now,
+	): array {
+		return $this->recordAttempt($actorKey, $eventId, $generation, $kind, $signals, $impression, $now, 0);
+	}
+
+	/** @param list<array{dimension: string, entity_key: string, delta: float}> $signals @param array{post_keys: list<string>, session_key: string}|null $impression */
+	private function recordAttempt(
+		string $actorKey,
+		string $eventId,
+		int $generation,
+		string $kind,
+		array $signals,
+		?array $impression,
+		int $now,
+		int $attempt,
 	): array {
 		$connection = $this->getConnection();
 		$connection->beginTransaction();
@@ -149,8 +165,13 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			$connection->commit();
 		} catch (DBException $e) {
 			$connection->rollBack();
-			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION && $this->event($actorKey, $eventId) !== null) {
-				return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
+			if ($e->getReason() === DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				if ($this->event($actorKey, $eventId) !== null) {
+					return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
+				}
+				if ($attempt < self::MAX_UNIQUE_CONFLICT_RETRIES) {
+					return $this->recordAttempt($actorKey, $eventId, $generation, $kind, $signals, $impression, $now, $attempt + 1);
+				}
 			}
 			throw $e;
 		} catch (\Throwable $e) {
@@ -194,7 +215,8 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 		$row = $result->fetch();
 		$result->closeCursor();
 
-		if ($row === false && $this->dimensionCount($actorKey, $dimension) >= self::limitFor($dimension)) {
+		if ($row === false && $this->dimensionCount($actorKey, $dimension) >= self::limitFor($dimension)
+			&& !$this->evictStaleSignal($actorKey, $dimension, $now)) {
 			return;
 		}
 
@@ -230,7 +252,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 
 	private function recordImpression(string $actorKey, string $postKey, string $sessionKey, int $generation, int $now): void {
 		$qb = $this->getQueryBuilder();
-		$qb->select('impressions')->from(self::TABLE_SEEN)
+		$qb->select('generation', 'impressions')->from(self::TABLE_SEEN)
 			->where($qb->expr()->eq('actor_key', $qb->createNamedParameter($actorKey)))
 			->andWhere($qb->expr()->eq('post_key', $qb->createNamedParameter($postKey)))
 			->andWhere($qb->expr()->eq('session_key', $qb->createNamedParameter($sessionKey)))->setMaxResults(1);
@@ -253,8 +275,12 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 				->executeStatement();
 			return;
 		}
+		$impressions = (int)$row['generation'] === $generation
+			? min(32767, (int)$row['impressions'] + 1)
+			: 1;
 		$qb->update(self::TABLE_SEEN)
-			->set('impressions', $qb->createNamedParameter(min(32767, (int)$row['impressions'] + 1), IQueryBuilder::PARAM_INT))
+			->set('generation', $qb->createNamedParameter($generation, IQueryBuilder::PARAM_INT))
+			->set('impressions', $qb->createNamedParameter($impressions, IQueryBuilder::PARAM_INT))
 			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('actor_key', $qb->createNamedParameter($actorKey)))
 			->andWhere($qb->expr()->eq('post_key', $qb->createNamedParameter($postKey)))
@@ -302,6 +328,31 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 		$row = $result->fetch();
 		$result->closeCursor();
 		return (int)($row['count'] ?? 0);
+	}
+
+	private function evictStaleSignal(string $actorKey, string $dimension, int $now): bool {
+		$cutoff = $now - self::SIGNAL_RETENTION_SECONDS;
+		$lookup = $this->getQueryBuilder();
+		$lookup->select('entity_key')->from(self::TABLE_SIGNAL)
+			->where($lookup->expr()->eq('actor_key', $lookup->createNamedParameter($actorKey)))
+			->andWhere($lookup->expr()->eq('dimension', $lookup->createNamedParameter($dimension)))
+			->andWhere($lookup->expr()->lt('updated_at', $lookup->createNamedParameter($cutoff, IQueryBuilder::PARAM_INT)))
+			->orderBy('updated_at', 'ASC')->setMaxResults(1);
+		$result = $lookup->executeQuery();
+		$row = $result->fetch();
+		$result->closeCursor();
+		if ($row === false) {
+			return false;
+		}
+
+		$delete = $this->getQueryBuilder();
+		$delete->delete(self::TABLE_SIGNAL)
+			->where($delete->expr()->eq('actor_key', $delete->createNamedParameter($actorKey)))
+			->andWhere($delete->expr()->eq('dimension', $delete->createNamedParameter($dimension)))
+			->andWhere($delete->expr()->eq('entity_key', $delete->createNamedParameter((string)$row['entity_key'])))
+			->andWhere($delete->expr()->lt('updated_at', $delete->createNamedParameter($cutoff, IQueryBuilder::PARAM_INT)));
+
+		return $delete->executeStatement() === 1;
 	}
 
 	private function seenCount(string $actorKey): int {

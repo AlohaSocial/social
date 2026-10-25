@@ -26,6 +26,9 @@ class RecommendationPreferenceService {
 	}
 
 	public function setEnabled(bool $enabled): bool {
+		if ($this->isEnabled() !== $enabled) {
+			$this->request->invalidateAllLearningGenerations();
+		}
 		$this->configService->setAppValue(ConfigService::REC_V4_ENABLED, $enabled ? '1' : '0');
 		return $this->isEnabled();
 	}
@@ -60,9 +63,14 @@ class RecommendationPreferenceService {
 		if ($enabled !== null) {
 			$this->setEnabled($enabled);
 		}
+		if ($learningPaused !== null) {
+			if ($this->learningPaused() !== $learningPaused) {
+				$this->request->invalidateAllLearningGenerations();
+			}
+			$this->configService->setAppValue(ConfigService::REC_LEARNING_PAUSED, $learningPaused ? '1' : '0');
+		}
 		foreach ([
 			ConfigService::REC_REMOTE_DISCOVERY_PAUSED => $remoteDiscoveryPaused,
-			ConfigService::REC_LEARNING_PAUSED => $learningPaused,
 			ConfigService::REC_FORCE_LEGACY_FEED => $forceLegacyFeed,
 		] as $key => $value) {
 			if ($value !== null) {

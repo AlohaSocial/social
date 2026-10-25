@@ -21,7 +21,7 @@ class RemotePostDiscoveryBudgetTest extends TestCase {
 		$now = 1_801;
 		$claimed = [];
 		$attempts = 0;
-		$cache = $this->createMock(DurableCache::class);
+		$cache = $this->createStub(DurableCache::class);
 		$cache->method('addShared')->willReturnCallback(static function (string $namespace, string $key, mixed $value, int $ttl) use (&$claimed, &$attempts): bool {
 			self::assertSame('social.post-discovery.budget', $namespace);
 			self::assertSame(1, $value);

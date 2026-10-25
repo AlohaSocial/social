@@ -418,8 +418,9 @@ class PostService {
 		// `published` stays the creation time. The edit used to be stamped
 		// there instead, and Mastodon — which reads an Update without
 		// `updated` as an implicit one — refreshed the poll counters and threw
-		// the new content away. UTC and second-resolution like `published`.
-		$stream->setUpdated(gmdate('Y-m-d\TH:i:s\Z'));
+		// the new content away. UTC and second-resolution like `published`, but
+		// strictly later than the prior edit so remote peers can order updates.
+		$stream->setUpdated(self::nextEditTimestamp($original));
 		$this->snapshotSource($stream);
 
 		// An edit can name a person who was not in the original audience.
@@ -470,6 +471,23 @@ class PostService {
 			);
 		}
 		return $updated;
+	}
+
+	/**
+	 * ActivityPub update timestamps have second precision. Advance past the
+	 * previous edit when two local edits happen within the same second so peers
+	 * can order the resulting Update activities reliably.
+	 */
+	private static function nextEditTimestamp(Stream $previous): string {
+		$timestamp = time();
+		if ($previous->getUpdated() !== '') {
+			$previousTimestamp = strtotime($previous->getUpdated());
+			if ($previousTimestamp !== false) {
+				$timestamp = max($timestamp, $previousTimestamp + 1);
+			}
+		}
+
+		return gmdate('Y-m-d\\TH:i:s\\Z', $timestamp);
 	}
 
 	/**

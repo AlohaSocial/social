@@ -14,11 +14,16 @@ final class RecommendationReRanker {
 	private const WINDOW_SIZE = 20;
 	private const MAX_AUTHOR_IN_WINDOW = 2;
 	private const MAX_TOPIC_IN_WINDOW = 3;
+	private const MAX_FORMAT_IN_WINDOW = 5;
+	private const FORMAT_CONCENTRATION_COST = 0.08;
 	private const MAX_STORY_IN_PAGE = 3;
 	private const MAX_STORY_OVERFLOW = 1;
 	private const MIN_STORY_TERMS = 3;
 	private const MIN_FUZZY_STORY_OVERLAP = 3;
 	private const MAX_STORY_TERMS = 60;
+	private const HEADLINE_TERMS = 20;
+	private const MIN_HEADLINE_OVERLAP = 6;
+	private const MIN_HEADLINE_SIMILARITY = 0.50;
 	private const MIN_STORY_OVERLAP = 0.60;
 	private const TOPIC_CONCENTRATION_COST = 0.18;
 	private const STORY_FATIGUE_THRESHOLD = 0.75;
@@ -70,7 +75,7 @@ final class RecommendationReRanker {
 			foreach ($window as $candidate) {
 				$author = (string)($candidate['author_key'] ?? '');
 				$storySaturated = self::storyCount($candidate, $selected) >= self::MAX_STORY_IN_PAGE;
-				$topicSaturated = self::hasSaturatedTopic(self::topicIds($candidate), $saturatedTopics);
+				$topicSaturated = self::allTopicsSaturated(self::topicIds($candidate), $saturatedTopics);
 				$authorSaturated = $author !== '' && isset($saturatedAuthors[$author]);
 				if (!$storySaturated && !$topicSaturated && !$authorSaturated) {
 					$hasDiverseAlternative = true;
@@ -89,7 +94,7 @@ final class RecommendationReRanker {
 				$author = (string)($candidate['author_key'] ?? '');
 				$storyCount = self::storyCount($candidate, $selected);
 				$storySaturated = $storyCount >= self::MAX_STORY_IN_PAGE;
-				$topicSaturated = self::hasSaturatedTopic(self::topicIds($candidate), $saturatedTopics);
+				$topicSaturated = self::allTopicsSaturated(self::topicIds($candidate), $saturatedTopics);
 				$authorSaturated = $author !== '' && isset($saturatedAuthors[$author]);
 				$storyOverflow = $storySaturated
 					&& !$hasDiverseAlternative
@@ -109,6 +114,11 @@ final class RecommendationReRanker {
 				foreach ($topics as $topic) {
 					$recentTopicCount = self::recentTopicCount($selected, $topic);
 					$penalty += max(0.0, (float)($recentTopicCount - self::MAX_TOPIC_IN_WINDOW + 1)) * self::TOPIC_CONCENTRATION_COST;
+				}
+				$format = (string)($candidate['format'] ?? '');
+				if ($format !== '') {
+					$recentFormatCount = self::recentCount($selected, $format, 'format');
+					$penalty += max(0.0, (float)($recentFormatCount - self::MAX_FORMAT_IN_WINDOW + 1)) * self::FORMAT_CONCENTRATION_COST;
 				}
 				$adjusted = (float)($candidate['rank_score'] ?? 0.0) - $penalty;
 				$adjustedScores[$index] = $adjusted;
@@ -230,14 +240,17 @@ final class RecommendationReRanker {
 	}
 
 	/** @param list<string> $topics @param array<string, true> $saturated */
-	private static function hasSaturatedTopic(array $topics, array $saturated): bool {
+	private static function allTopicsSaturated(array $topics, array $saturated): bool {
+		if ($topics === []) {
+			return false;
+		}
 		foreach ($topics as $topic) {
-			if (isset($saturated[$topic])) {
-				return true;
+			if (!isset($saturated[$topic])) {
+				return false;
 			}
 		}
 
-		return false;
+		return true;
 	}
 
 	/** @param array<string, mixed> $candidate @param list<array<string, mixed>> $selected */
@@ -284,17 +297,33 @@ final class RecommendationReRanker {
 		}
 
 		$indices = array_keys($termsByIndex);
-		foreach ($indices as $offset => $leftIndex) {
-			for ($prior = 0; $prior < $offset; $prior++) {
-				$rightIndex = $indices[$prior];
-				if (!self::sameStoryTerms($termsByIndex[$leftIndex], $termsByIndex[$rightIndex])) {
+		$postings = [];
+		foreach ($indices as $index) {
+			$terms = $termsByIndex[$index];
+			$overlaps = [];
+			foreach ($terms as $term) {
+				foreach ($postings[$term] ?? [] as $priorIndex) {
+					$overlaps[$priorIndex] = ($overlaps[$priorIndex] ?? 0) + 1;
+				}
+			}
+
+			$termSet = array_fill_keys($terms, true);
+			$headlineSet = array_fill_keys(array_slice($terms, 0, self::HEADLINE_TERMS), true);
+			foreach ($overlaps as $priorIndex => $overlap) {
+				if ($overlap < self::MIN_FUZZY_STORY_OVERLAP) {
 					continue;
 				}
-				$leftRoot = self::storyRoot($parents, $leftIndex);
-				$rightRoot = self::storyRoot($parents, $rightIndex);
-				if ($leftRoot !== $rightRoot) {
-					$parents[$rightRoot] = $leftRoot;
+				$leftRoot = self::storyRoot($parents, $index);
+				$rightRoot = self::storyRoot($parents, $priorIndex);
+				if ($leftRoot === $rightRoot
+					|| !self::sameStoryTerms($terms, $termsByIndex[$priorIndex], $termSet, $headlineSet)) {
+					continue;
 				}
+				$parents[$rightRoot] = $leftRoot;
+			}
+
+			foreach ($terms as $term) {
+				$postings[$term][] = $index;
 			}
 		}
 
@@ -325,8 +354,8 @@ final class RecommendationReRanker {
 		return $root;
 	}
 
-	/** @param list<string> $left @param list<string> $right @param array<string, true>|null $leftSet */
-	private static function sameStoryTerms(array $left, array $right, ?array $leftSet = null): bool {
+	/** @param list<string> $left @param list<string> $right @param array<string, true>|null $leftSet @param array<string, true>|null $leftHeadlineSet */
+	private static function sameStoryTerms(array $left, array $right, ?array $leftSet = null, ?array $leftHeadlineSet = null): bool {
 		$leftCount = count($left);
 		$rightCount = count($right);
 		if (min($leftCount, $rightCount) < self::MIN_STORY_TERMS) {
@@ -339,9 +368,26 @@ final class RecommendationReRanker {
 		}
 
 		$union = $leftCount + $rightCount - $overlap;
-		return $overlap >= self::MIN_FUZZY_STORY_OVERLAP
+		if ($overlap >= self::MIN_FUZZY_STORY_OVERLAP
 			&& $union > 0
-			&& $overlap / $union >= self::MIN_STORY_OVERLAP;
+			&& $overlap / $union >= self::MIN_STORY_OVERLAP) {
+			return true;
+		}
+
+		$leftHeadline = array_slice($left, 0, self::HEADLINE_TERMS);
+		$rightHeadline = array_slice($right, 0, self::HEADLINE_TERMS);
+		if (min(count($leftHeadline), count($rightHeadline)) < self::MIN_HEADLINE_OVERLAP) {
+			return false;
+		}
+		$leftHeadlineSet ??= array_fill_keys($leftHeadline, true);
+		$headlineOverlap = 0;
+		foreach ($rightHeadline as $term) {
+			$headlineOverlap += isset($leftHeadlineSet[$term]) ? 1 : 0;
+		}
+		$headlineTerms = count($leftHeadline) + count($rightHeadline);
+
+		return $headlineOverlap >= self::MIN_HEADLINE_OVERLAP
+			&& (2 * $headlineOverlap) / $headlineTerms >= self::MIN_HEADLINE_SIMILARITY;
 	}
 
 	/** @param array<string, mixed> $candidate @return list<string> */

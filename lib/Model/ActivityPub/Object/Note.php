@@ -205,39 +205,34 @@ class Note extends Stream implements JsonSerializable {
 			return $result;
 		}
 
-		$event = $this->getDetails(Details::EVENT);
-		if (($event['start_time'] ?? null) === null) {
+		$event = ActivityPubEvent::fromStream($this);
+		if ($event === null || $event['start_time'] === null) {
 			return $result;
 		}
 
 		$result['type'] = 'Event';
-		// Mastodon accepts Event objects by converting them to ordinary
-		// statuses. Its parser uses `name` and `url` for that conversion, but
-		// does not render startTime, endTime or location. Keep those structured
-		// properties below, and include a compact readable fallback in `name`
-		// so Mastodon users still see when and where the event happens.
-		$name = trim((string)($event['name'] ?? ''));
-		$times = [];
-		foreach (['start_time', 'end_time'] as $field) {
-			$value = $event[$field] ?? null;
-			if (is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/', $value) === 1) {
-				$label = $field === 'start_time' ? 'Starts ' : 'Ends ';
-				$times[] = $label . substr($value, 0, 10) . ' ' . substr($value, 11, 5) . ' UTC';
-			}
+		// Mastodon converts Event objects into statuses using `content`, or
+		// `name` only when content is absent. Keep the title in `name` for
+		// Event-aware servers and append readable details for status clients.
+		$escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+		$details = [];
+		if ($event['name'] !== '') {
+			$details[] = '<strong>' . $escape($event['name']) . '</strong>';
 		}
-		if ($times !== []) {
-			$name .= ' · ' . implode(' – ', $times);
+		$details[] = 'Starts: ' . substr($event['start_time'], 0, 10) . ' ' . substr($event['start_time'], 11, 5) . ' UTC';
+		if ($event['end_time'] !== null) {
+			$details[] = 'Ends: ' . substr($event['end_time'], 0, 10) . ' ' . substr($event['end_time'], 11, 5) . ' UTC';
 		}
-		$location = trim((string)($event['location'] ?? ''));
-		if ($location !== '') {
-			$name .= ' · At ' . mb_substr($location, 0, 120);
+		if ($event['location'] !== '') {
+			$details[] = 'Location: ' . $escape($event['location']);
 		}
-		$result['name'] = mb_substr($name, 0, 420);
+		$result['content'] = (string)($result['content'] ?? '') . '<p>' . implode('<br>', $details) . '</p>';
+		$result['name'] = $event['name'];
 		$result['startTime'] = $event['start_time'];
-		if (is_string($event['end_time'] ?? null) && $event['end_time'] !== '') {
+		if ($event['end_time'] !== null) {
 			$result['endTime'] = $event['end_time'];
 		}
-		if (is_string($event['location'] ?? null) && $event['location'] !== '') {
+		if ($event['location'] !== '') {
 			$result['location'] = ['type' => 'Place', 'name' => $event['location']];
 		}
 
