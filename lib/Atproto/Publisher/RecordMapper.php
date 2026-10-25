@@ -399,8 +399,9 @@ class RecordMapper {
 		$recordRef = $quoted ?? $recordEmbed;
 		if ($recordRef !== null) {
 			$record = ['$type' => 'app.bsky.embed.record', 'record' => $recordRef];
+			$media = $pictures ?? $this->linkCard($post, $identity, $author);
 
-			return $pictures === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $pictures];
+			return $media === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $media];
 		}
 		if ($pictures !== null) {
 			return $pictures;

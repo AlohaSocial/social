@@ -691,6 +691,10 @@ class PostMapper {
 			];
 		}
 		if (($embed['$type'] ?? '') === self::RECORD_WITH_MEDIA) {
+			$media = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+			if (in_array(($media['$type'] ?? ''), [self::EXTERNAL, self::RECORD_EXTERNAL], true)) {
+				return self::cardOf($media, $authorDid);
+			}
 			$embed = ['$type' => self::RECORD, 'record' => $embed['record']['record'] ?? null];
 		}
 		$view = ($embed['$type'] ?? '') === self::RECORD && is_array($embed['record'] ?? null) ? $embed['record'] : [];
