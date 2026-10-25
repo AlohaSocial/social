@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -18,8 +20,6 @@ use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\StatusParams;
-use OCA\Social\Atproto\Protocol\Cid;
-use OCA\Social\Atproto\Protocol\Syntax;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Throwable;

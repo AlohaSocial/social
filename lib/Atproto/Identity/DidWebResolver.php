@@ -57,7 +57,7 @@ final class DidWebResolver {
 			return null;
 		}
 		if ($status < 200 || $status >= 300) {
-			throw new AtprotoException('DID document endpoint answered ' . $status);
+			throw new AtprotoException('DID document endpoint answered ' . (string)$status);
 		}
 		$document = json_decode($body, true);
 

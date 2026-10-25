@@ -238,7 +238,8 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testQualifiedImpressionsReduceLaterCandidatesFromTheSameStory(): void {
 		$post = $this->parentPost();
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true);
+		$featureExtractor = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
+		$features = $featureExtractor->extract($post, true);
 		$storyKeys = RecommendationStoryFingerprint::keys(
 			$features['story_terms'],
 			'test-server-secret',
@@ -436,7 +437,8 @@ class RecommendationSignalServiceTest extends TestCase {
 	public function testRepeatedImpressionsInOneSessionIncreaseTheExposurePenaltyWithoutCountingEachBand(): void {
 		$post = $this->parentPost();
 		$this->streams->expects($this->never())->method('getVisibleByNids');
-		$features = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true);
+		$featureExtractor = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
+		$features = $featureExtractor->extract($post, true);
 		$keys = RecommendationStoryFingerprint::keys(
 			$features['story_terms'],
 			'test-server-secret',
@@ -466,12 +468,20 @@ class RecommendationSignalServiceTest extends TestCase {
 			->setAttributedTo('https://remote.test/users/bob')
 			->setContent('<p>Annual community picnic returns</p>');
 		$this->streams->expects($this->never())->method('getVisibleByNids');
+		$featureExtractor = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
+		$features = $featureExtractor->extract($post, true);
 		$keys = RecommendationStoryFingerprint::keys(
-			(new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->extract($post, true)['story_terms'],
+			$features['story_terms'],
 			'test-server-secret',
 			'alice',
+			$features['story_headline_terms'],
 		);
-		$this->assertCount(RecommendationStoryFingerprint::MINHASH_BAND_COUNT + 1, $keys);
+		$topicId = $featureExtractor->exposureTopics(array_keys($features['topics']))[0] ?? '';
+		$topicKey = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		if ($topicKey !== null) {
+			$keys[] = $topicKey;
+		}
+		$this->assertCount(RecommendationStoryFingerprint::MINHASH_BAND_COUNT + ($topicKey === null ? 1 : 2), $keys);
 		$this->signals->expects($this->once())->method('exposures')->with(
 			'alice', 7, $keys, 1_997_408_000
 		)->willReturn([
