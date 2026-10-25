@@ -28,9 +28,9 @@ use OCP\IConfig;
  * own posts, the posts they said "less like this" about, and anything not in
  * their languages. Each is ranked by how well it matches, halved for every day
  * of its age. Then the page is spread out: no author more than twice in any
- * twenty, no one hashtag more than two fifths of them, and one post in ten
- * from a hashtag that often travels with the reader's own but is not on their
- * list yet.
+ * twenty, no one hashtag more than two fifths of them or ten posts across a
+ * snapshot while alternatives remain, and one post in ten from a hashtag that
+ * often travels with the reader's own but is not on their list yet.
  *
  * A ranked feed cannot be paged by id the way a timeline is, because the next
  * page is not "older than the last post". So the ranking is made once, kept
@@ -59,6 +59,7 @@ class InterestFeedService {
 	public const PER_AUTHOR = 2;
 	public const TAG_SHARE = 0.4;
 	private const STORY_LIMIT = 3;
+	private const MAX_TAG_IN_SNAPSHOT = 10;
 	/** One slot in this many is an exploration post. */
 	public const EXPLORE_EVERY = 10;
 	public const RELATED_TAGS = 5;
@@ -347,13 +348,22 @@ class InterestFeedService {
 	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param list<array<string, mixed>> $ranked @param list<array<string, mixed>> $related */
 	private function spreadFrom(array $placed, array $storyCounts, array $ranked, array $related): array {
 		$tagLimit = (int)floor((float)self::DIVERSITY_WINDOW * self::TAG_SHARE);
+		$tagCounts = [];
+		foreach ($placed as $entry) {
+			$tag = self::primaryTag($entry);
+			if ($tag !== '') {
+				$tagCounts[$tag] = ($tagCounts[$tag] ?? 0) + 1;
+			}
+		}
 
 		while ($ranked !== [] || $related !== []) {
 			$slot = count($placed);
+			$hasTagAlternative = self::hasTagAlternative($ranked, $tagCounts)
+				|| self::hasTagAlternative($related, $tagCounts);
 			if ($related !== [] && ($slot % self::EXPLORE_EVERY) === self::EXPLORE_EVERY - 1) {
-				$relatedIndex = self::firstStoryAlternative($related, $storyCounts);
+				$relatedIndex = self::firstAvailableAlternative($related, $storyCounts, $tagCounts, $hasTagAlternative);
 				if ($relatedIndex !== null) {
-					self::appendWithStoryCount($placed, $storyCounts, $related[$relatedIndex]);
+					self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $related[$relatedIndex]);
 					array_splice($related, $relatedIndex, 1);
 					continue;
 				}
@@ -382,6 +392,10 @@ class InterestFeedService {
 				if ($hasStoryAlternative && is_int($cluster) && ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT) {
 					continue;
 				}
+				$tag = self::primaryTag($entry);
+				if ($hasTagAlternative && $tag !== '' && ($tagCounts[$tag] ?? 0) >= self::MAX_TAG_IN_SNAPSHOT) {
+					continue;
+				}
 				if (($authors[$entry['author']] ?? 0) >= self::PER_AUTHOR) {
 					continue;
 				}
@@ -393,11 +407,11 @@ class InterestFeedService {
 			}
 			$pick ??= $authorOnly;
 			if ($pick === null && $hasStoryAlternative) {
-				$pick = self::firstStoryAlternative($ranked, $storyCounts);
+				$pick = self::firstAvailableAlternative($ranked, $storyCounts, $tagCounts, $hasTagAlternative);
 			}
 			$pick ??= 0;
 
-			self::appendWithStoryCount($placed, $storyCounts, $ranked[$pick]);
+			self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $ranked[$pick]);
 			array_splice($ranked, $pick, 1);
 		}
 
@@ -468,23 +482,53 @@ class InterestFeedService {
 		return $this->storyTermCache ??= $this->cacheFactory->createDistributed('social.interests.stories');
 	}
 
-	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, mixed> $candidate */
-	private static function appendWithStoryCount(array &$placed, array &$storyCounts, array $candidate): void {
+	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, int> $tagCounts @param array<string, mixed> $candidate */
+	private static function appendWithStoryAndTagCount(array &$placed, array &$storyCounts, array &$tagCounts, array $candidate): void {
 		$cluster = $candidate['_story_cluster'] ?? null;
 		if (is_int($cluster)) {
 			$storyCounts[$cluster] = ($storyCounts[$cluster] ?? 0) + 1;
 		}
+		$tag = self::primaryTag($candidate);
+		if ($tag !== '') {
+			$tagCounts[$tag] = ($tagCounts[$tag] ?? 0) + 1;
+		}
 		$placed[] = $candidate;
 	}
 
-	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts */
-	private static function firstStoryAlternative(array $entries, array $storyCounts): ?int {
-		foreach ($entries as $index => $entry) {
-			$cluster = $entry['_story_cluster'] ?? null;
-			if (!is_int($cluster) || ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT) {
-				return $index;
+	/** @param array<string, mixed> $candidate */
+	private static function primaryTag(array $candidate): string {
+		$tags = $candidate['tags'] ?? [];
+		$tag = is_array($tags) && is_string($tags[0] ?? null) ? FollowedTagsRequest::normalise($tags[0]) : '';
+
+		return $tag;
+	}
+
+	/** @param list<array<string, mixed>> $entries @param array<string, int> $tagCounts */
+	private static function hasTagAlternative(array $entries, array $tagCounts): bool {
+		foreach ($entries as $entry) {
+			$tag = self::primaryTag($entry);
+			if ($tag === '' || ($tagCounts[$tag] ?? 0) < self::MAX_TAG_IN_SNAPSHOT) {
+				return true;
 			}
 		}
+
+		return false;
+	}
+
+	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts @param array<string, int> $tagCounts */
+	private static function firstAvailableAlternative(array $entries, array $storyCounts, array $tagCounts, bool $hasTagAlternative): ?int {
+		foreach ($entries as $index => $entry) {
+			$cluster = $entry['_story_cluster'] ?? null;
+			if (is_int($cluster) && ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT) {
+				continue;
+			}
+			$tag = self::primaryTag($entry);
+			if ($hasTagAlternative && $tag !== '' && ($tagCounts[$tag] ?? 0) >= self::MAX_TAG_IN_SNAPSHOT) {
+				continue;
+			}
+			return $index;
+		}
+
 		return null;
 	}
 

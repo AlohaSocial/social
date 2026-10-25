@@ -14,6 +14,7 @@ final class RecommendationReRanker {
 	private const WINDOW_SIZE = 20;
 	private const MAX_AUTHOR_IN_WINDOW = 2;
 	private const MAX_TOPIC_IN_WINDOW = 3;
+	private const MAX_TOPIC_IN_SNAPSHOT = 6;
 	private const MAX_FORMAT_IN_WINDOW = 5;
 	private const FORMAT_CONCENTRATION_COST = 0.08;
 	private const MAX_STORY_IN_PAGE = 3;
@@ -68,14 +69,21 @@ final class RecommendationReRanker {
 		$selected = [];
 		while ($remaining !== [] && count($selected) < $pageSize) {
 			$window = array_slice($remaining, 0, self::LOOKAHEAD);
-			$saturatedTopics = array_fill_keys(self::saturatedTopics($selected), true);
+			$saturatedTopics = array_fill_keys(array_merge(
+				self::saturatedTopics($selected),
+				self::snapshotSaturatedTopics($selected),
+			), true);
 			$saturatedAuthors = array_fill_keys(self::saturatedAuthors($selected), true);
 			$hasDiverseAlternative = false;
 			$hasUnseenAlternative = false;
+			$hasTopicAlternative = false;
 			foreach ($window as $candidate) {
 				$author = (string)($candidate['author_key'] ?? '');
 				$storySaturated = self::storyCount($candidate, $selected) >= self::MAX_STORY_IN_PAGE;
 				$topicSaturated = self::allTopicsSaturated(self::topicIds($candidate), $saturatedTopics);
+				if (!$topicSaturated) {
+					$hasTopicAlternative = true;
+				}
 				$authorSaturated = $author !== '' && isset($saturatedAuthors[$author]);
 				if (!$storySaturated && !$topicSaturated && !$authorSaturated) {
 					$hasDiverseAlternative = true;
@@ -101,7 +109,8 @@ final class RecommendationReRanker {
 					&& $storyCount < self::MAX_STORY_IN_PAGE + self::MAX_STORY_OVERFLOW;
 				$exposureFatigued = self::exposurePenalty($candidate) >= self::STORY_FATIGUE_THRESHOLD;
 				if (($storySaturated && !$storyOverflow)
-					|| ($hasDiverseAlternative && ($topicSaturated || $authorSaturated))
+					|| ($hasTopicAlternative && $topicSaturated)
+					|| ($hasDiverseAlternative && $authorSaturated)
 					|| ($hasUnseenAlternative && $exposureFatigued)) {
 					continue;
 				}
@@ -224,6 +233,18 @@ final class RecommendationReRanker {
 		}
 
 		return array_keys(array_filter($counts, static fn (int $count): bool => $count >= self::MAX_TOPIC_IN_WINDOW));
+	}
+
+	/** @param list<array<string, mixed>> $selected @return list<string> */
+	private static function snapshotSaturatedTopics(array $selected): array {
+		$counts = [];
+		foreach ($selected as $candidate) {
+			foreach (self::topicIds($candidate) as $topic) {
+				$counts[$topic] = ($counts[$topic] ?? 0) + 1;
+			}
+		}
+
+		return array_keys(array_filter($counts, static fn (int $count): bool => $count >= self::MAX_TOPIC_IN_SNAPSHOT));
 	}
 
 	/** @param list<array<string, mixed>> $selected @return list<string> */
