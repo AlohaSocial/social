@@ -201,6 +201,12 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 		$this->assertNotSame($repos['repos'][0]['did'], $rest['repos'][0]['did']);
 	}
 
+	public function testRefreshIdentityReturnsTheIdentityInfoLexicon(): void {
+		$answer = $this->xrpc->procedure('com.atproto.identity.refreshIdentity', ['identifier' => self::ALICE]);
+
+		$this->assertFits('com.atproto.identity.resolveIdentity', $answer);
+	}
+
 	/**
 	 * `getLatestCommit` names the commit the CAR of `getRepo` has as its
 	 * root, and the revision in it; the CAR holds a signed v3 commit whose

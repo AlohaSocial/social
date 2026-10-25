@@ -116,6 +116,22 @@ class XrpcServiceTest extends TestCase {
 		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => self::DID]));
 	}
 
+	public function testRefreshIdentityReturnsTheCurrentVerifiedIdentityWithoutChangingIt(): void {
+		$this->identities->expects($this->once())->method('document')->with($this->alice)->willReturn(['id' => self::DID]);
+		$this->identityRequest->expects($this->never())->method('setCustomHandle');
+
+		$this->assertSame([
+			'did' => self::DID,
+			'handle' => 'alice.social.test',
+			'didDoc' => ['id' => self::DID],
+		], $this->xrpc->procedure('com.atproto.identity.refreshIdentity', ['identifier' => self::DID]));
+	}
+
+	public function testRefreshIdentityRequiresAStringIdentifier(): void {
+		$this->expectException(XrpcException::class);
+		$this->xrpc->procedure('com.atproto.identity.refreshIdentity', ['identifier' => ['did:plc:ewvi7nxzyoun6zhxrhs64oiz']]);
+	}
+
 	public function testResolveIdentityDoesNotAdvertiseAnUnverifiedCustomHandle(): void {
 		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.example.org', '', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0, 'alice.social.test', 'alice.example.org');
 		$this->identities->expects($this->once())->method('document')->with($this->alice)->willReturn([

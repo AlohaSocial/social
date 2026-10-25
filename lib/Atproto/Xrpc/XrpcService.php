@@ -105,6 +105,7 @@ class XrpcService {
 		}
 
 		return match ($method) {
+			'com.atproto.identity.refreshIdentity' => $this->resolveIdentity(self::bodyString($body, 'identifier')),
 			'com.atproto.server.createSession', 'com.atproto.server.refreshSession', 'com.atproto.server.deleteSession',
 			'com.atproto.repo.createRecord', 'com.atproto.repo.putRecord', 'com.atproto.repo.deleteRecord',
 			'com.atproto.repo.applyWrites', 'com.atproto.repo.uploadBlob', 'com.atproto.repo.importRepo' => throw XrpcException::authenticationRequired(),
@@ -119,6 +120,16 @@ class XrpcService {
 			'inviteCodeRequired' => true,
 			'blobUploadLimit' => ClientXrpc::MAX_UPLOAD,
 		];
+	}
+
+	/** @param array<string, mixed> $body */
+	private static function bodyString(array $body, string $name): string {
+		$value = $body[$name] ?? null;
+		if (!is_string($value) || trim($value) === '') {
+			throw XrpcException::invalidRequest('Input must have the property "' . $name . '"');
+		}
+
+		return trim($value);
 	}
 
 	private function resolveHandle(string $handle): array {

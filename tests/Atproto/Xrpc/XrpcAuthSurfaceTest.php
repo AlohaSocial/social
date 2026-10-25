@@ -73,6 +73,7 @@ class XrpcAuthSurfaceTest extends TestCase {
 		'com.atproto.identity.resolveHandle' => 'handle resolution is public by design',
 		'com.atproto.identity.resolveDid' => 'DID documents are public identity data',
 		'com.atproto.identity.resolveIdentity' => 'identity information is public and handles are validated before being returned',
+		'com.atproto.identity.refreshIdentity' => 're-resolves the supplied public identity without changing account state',
 		'com.atproto.repo.describeRepo' => 'repository reads are public: the repository holds public posts only (§16.5)',
 		'com.atproto.repo.getRecord' => 'as describeRepo',
 		'com.atproto.repo.listRecords' => 'as describeRepo',
