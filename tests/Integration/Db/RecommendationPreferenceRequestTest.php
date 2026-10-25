@@ -111,6 +111,41 @@ class RecommendationPreferenceRequestTest extends TestCase {
 		self::assertSame(1, $result['discarded'], 'events from before the instance epoch change are rejected');
 	}
 
+	public function testLearningSignalsUseTheCurrentGenerationAfterAdminDisableAndReenable(): void {
+		$enabled = $this->preferences->setLearningMode($this->owner, 0, 'on');
+		self::assertNotNull($enabled);
+		$staleGeneration = $enabled['generation'];
+
+		$this->preferences->setEnabled(false);
+		$this->preferences->setEnabled(true);
+		$current = $this->request->get($this->owner);
+		self::assertSame(2 * RecommendationPreferenceRequest::GENERATION_EPOCH_STRIDE, $current['generation'] - $staleGeneration);
+
+		$signal = ['dimension' => 'topics', 'entity_key' => 'tech.php', 'delta' => 0.35];
+		$accepted = $this->signals->record(
+			$this->owner,
+			'4274a2bf-63a2-4a41-8c77-7bb2175224c7',
+			$current['generation'],
+			'like',
+			[$signal],
+			null,
+			2_000_000_010,
+		);
+		self::assertTrue($accepted['accepted'], 'the current effective generation is accepted after the admin switch');
+
+		$stale = $this->signals->record(
+			$this->owner,
+			'82eb11b0-ecbb-459d-9f99-34b5bb8b4e7e',
+			$staleGeneration,
+			'like',
+			[$signal],
+			null,
+			2_000_000_011,
+		);
+		self::assertFalse($stale['accepted'], 'a pre-switch event remains invalid');
+		self::assertCount(1, $this->signals->profile($this->owner)['topics']);
+	}
+
 	public function testResetPurgesExplicitFeedbackAtomicallyWithThePreferenceGeneration(): void {
 		$this->preferences->get($this->owner);
 		$eventId = '792b7610-e146-422c-9c87-d703412e9874';
