@@ -12,7 +12,9 @@ namespace OCA\Social\Tests\Atproto\Xrpc;
 use OCA\Social\Atproto\Crypto\Curve;
 use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Firehose\EventService;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Identity\PlcOperation;
 use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Lexicon\LexiconException;
@@ -126,7 +128,7 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 		$configService->method('getAppValue')->willReturn('0.26.180');
 		$configService->method('getCloudUrl')->willReturn('https://social.example.com');
 
-		$this->xrpc = new XrpcService($config, $identities, $this->repositories, $this->store, $blobRequest, $pictures, $this->createMock(VideoBlobService::class), $configService, $this->createMock(ModerationService::class), $identityRequest);
+		$this->xrpc = new XrpcService($config, $identities, $this->repositories, $this->store, $blobRequest, $pictures, $this->createMock(VideoBlobService::class), $configService, $this->createMock(ModerationService::class), $identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
 
 		$this->identities[self::ALICE] = $this->identity(self::ALICE, 'alice.social.example.com', Identity::STATE_ACTIVE);
 		$this->identities[self::BOB] = $this->identity(self::BOB, 'bob.social.example.com', Identity::STATE_DEACTIVATED);
@@ -302,7 +304,7 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 			'getRecord of a path that is not one' => ['com.atproto.repo.getRecord', ['repo' => self::ALICE, 'collection' => 'app.bsky.feed.post', 'rkey' => '../..'], 400],
 			'listRecords of something not a collection' => ['com.atproto.repo.listRecords', ['repo' => self::ALICE, 'collection' => 'not a collection'], 400],
 			'resolveHandle without a handle' => ['com.atproto.identity.resolveHandle', [], 400],
-			'resolveHandle of a handle not here' => ['com.atproto.identity.resolveHandle', ['handle' => 'carol.social.example.com'], 400],
+			'resolveHandle of a handle not here' => ['com.atproto.identity.resolveHandle', ['handle' => 'carol.social.example.com'], 404],
 			'getRepo of a deactivated account' => ['com.atproto.sync.getRepo', ['did' => self::BOB], 400],
 			'getLatestCommit of a deactivated account' => ['com.atproto.sync.getLatestCommit', ['did' => self::BOB], 400],
 			'sync.getRecord of a deactivated account' => ['com.atproto.sync.getRecord', ['did' => self::BOB, 'collection' => 'app.bsky.feed.post', 'rkey' => '3kznmn7xqxl25'], 400],

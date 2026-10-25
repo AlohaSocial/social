@@ -9,7 +9,9 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Atproto\Xrpc;
 
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\RepoHead;
@@ -62,6 +64,8 @@ class XrpcServiceTest extends TestCase {
 	private ModerationService $moderation;
 	/** @var AtprotoIdentityRequest&MockObject */
 	private AtprotoIdentityRequest $identityRequest;
+	private HandleVerifier $handles;
+	private PlcClient $plc;
 
 	protected function setUp(): void {
 		$this->config = $this->createMock(AtprotoConfig::class);
@@ -81,8 +85,10 @@ class XrpcServiceTest extends TestCase {
 		$this->moderation->method('isSuspended')->willReturnCallback(fn (string $actorId): bool => $this->suspended && $actorId === 'https://social.test/@alice');
 		$this->moderation->method('suspendedAmong')->willReturnCallback(fn (array $actorIds): array => $this->suspended && in_array('https://social.test/@alice', $actorIds, true) ? ['https://social.test/@alice' => true] : []);
 		$this->identityRequest = $this->createMock(AtprotoIdentityRequest::class);
+		$this->handles = $this->createMock(HandleVerifier::class);
+		$this->plc = $this->createMock(PlcClient::class);
 		$this->identityRequest->method('getByDids')->willReturnCallback(fn (array $dids): array => in_array(self::DID, $dids, true) ? [self::DID => $this->alice] : []);
-		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest);
+		$this->xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->handles, $this->plc);
 
 		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.social.test', '', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0);
 		$this->identities->method('getByDid')->willReturnCallback(fn (string $did): Identity => $did === self::DID ? $this->alice : throw new AtprotoIdentityNotFoundException());
@@ -107,6 +113,21 @@ class XrpcServiceTest extends TestCase {
 		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => self::DID]));
 	}
 
+	public function testResolveIdentityDoesNotAdvertiseAnUnverifiedCustomHandle(): void {
+		$this->alice = new Identity(1, 'https://social.test/@alice', self::DID, 'alice.example.org', '', 'did:key:z', '', Identity::STATE_ACTIVE, '', 0, 'alice.social.test', 'alice.example.org');
+		$this->identities->expects($this->once())->method('document')->with($this->alice)->willReturn([
+			'id' => self::DID,
+			'alsoKnownAs' => ['at://alice.example.org'],
+		]);
+		$this->handles->expects($this->once())->method('verify')->with('alice.example.org', self::DID)->willReturn('');
+
+		$this->assertSame([
+			'did' => self::DID,
+			'handle' => 'handle.invalid',
+			'didDoc' => ['id' => self::DID, 'alsoKnownAs' => ['at://alice.example.org']],
+		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => self::DID]));
+	}
+
 	public function testResolveDidRejectsMalformedIdentifiers(): void {
 		try {
 			$this->xrpc->query('com.atproto.identity.resolveDid', ['did' => 'not-a-did']);
@@ -117,13 +138,32 @@ class XrpcServiceTest extends TestCase {
 		}
 	}
 
-	public function testAnUnknownHandleIsAnInvalidRequest(): void {
+	public function testResolveHandleFindsAnExternalAtprotoHandle(): void {
+		$this->handles->expects($this->once())->method('resolve')->with('alice.example.org')->willReturn(self::DID);
+		$this->assertSame(['did' => self::DID], $this->xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'Alice.Example.Org']));
+	}
+
+	public function testResolveIdentityVerifiesAnExternalHandleAgainstItsPlcDocument(): void {
+		$remoteDid = 'did:plc:z72i7hdynmk6r22z27h6tvur';
+		$document = ['id' => $remoteDid, 'alsoKnownAs' => ['at://alice.example.org']];
+		$this->handles->expects($this->once())->method('resolve')->with('alice.example.org')->willReturn($remoteDid);
+		$this->handles->expects($this->once())->method('verify')->with('alice.example.org', $remoteDid)->willReturn('dns');
+		$this->plc->expects($this->once())->method('document')->with($remoteDid)->willReturn($document);
+
+		$this->assertSame([
+			'did' => $remoteDid,
+			'handle' => 'alice.example.org',
+			'didDoc' => $document,
+		], $this->xrpc->query('com.atproto.identity.resolveIdentity', ['identifier' => 'Alice.Example.Org']));
+	}
+
+	public function testAnUnknownHandleIsNotFound(): void {
 		try {
 			$this->xrpc->query('com.atproto.identity.resolveHandle', ['handle' => 'nobody.social.test']);
 			$this->fail();
 		} catch (XrpcException $e) {
-			$this->assertSame(400, $e->status);
-			$this->assertSame(['error' => 'InvalidRequest', 'message' => 'Unable to resolve handle'], $e->toArray());
+			$this->assertSame(404, $e->status);
+			$this->assertSame(['error' => 'HandleNotFound', 'message' => 'Unable to resolve handle'], $e->toArray());
 		}
 	}
 
@@ -323,7 +363,7 @@ class XrpcServiceTest extends TestCase {
 		$this->moderation->expects($this->never())->method('isSuspended');
 		$this->identities->expects($this->never())->method('getByDid');
 		$configService = $this->createMock(ConfigService::class);
-		$xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest);
+		$xrpc = new XrpcService($this->config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->videos, $configService, $this->moderation, $this->identityRequest, $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
 
 		$repos = $xrpc->query('com.atproto.sync.listRepos', [])['repos'];
 
@@ -368,7 +408,7 @@ class XrpcServiceTest extends TestCase {
 	public function testNothingIsServedWhenBlueskyIsOff(): void {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(false);
-		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(VideoBlobService::class), $this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class));
+		$xrpc = new XrpcService($config, $this->identities, $this->repositories, $this->repoRequest, $this->blobRequest, $this->pictures, $this->createMock(VideoBlobService::class), $this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class));
 
 		$this->expectException(XrpcException::class);
 		$xrpc->query('com.atproto.server.describeServer', []);

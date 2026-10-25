@@ -17,7 +17,9 @@ use OCA\Social\Atproto\Client\Preferences;
 use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\DpopNonce;
@@ -134,7 +136,7 @@ class XrpcAuthSurfaceTest extends TestCase {
 		$xrpc = new XrpcService(
 			$config, $identities, $this->createMock(RepositoryService::class), $this->createMock(AtprotoRepoRequest::class),
 			$this->createMock(AtprotoBlobRequest::class), $this->createMock(PictureService::class), $this->createMock(VideoBlobService::class),
-			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class),
+			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class),
 		);
 
 		$request = $this->createMock(IRequest::class);
