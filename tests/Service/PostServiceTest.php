@@ -1274,6 +1274,37 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(['Old words'], $revisions, 'the revision is the version the edit replaced');
 	}
 
+	public function testAnEditCanReplaceItsMediaWithTheAuthorsSelectedUploads(): void {
+		$stored = $this->storedNote();
+		$stored->setAttachments([(new MediaAttachment())->setId('11')]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$replacement = [(new MediaAttachment())->setId('12')];
+		$this->documentService->expects($this->once())->method('replaceMediaAttachments')
+			->with([12], 'alice', true)
+			->willReturn($replacement);
+
+		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, [12]);
+
+		$this->assertSame($replacement, $stored->getAttachments());
+	}
+
+	public function testAnEditCanRemoveEveryAttachmentWithAnExplicitEmptyMediaList(): void {
+		$stored = $this->storedNote();
+		$stored->setAttachments([(new MediaAttachment())->setId('11')]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->documentService->expects($this->once())->method('replaceMediaAttachments')
+			->with([], 'alice', true)
+			->willReturn([]);
+
+		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, []);
+
+		$this->assertSame([], $stored->getAttachments());
+	}
+
 	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {
 		$stored = $this->storedNote();
 		$this->streamRequest->method('getStreamByNid')

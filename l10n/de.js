@@ -3018,6 +3018,7 @@ OC.L10N.register(
     "Nothing" : "Nichts",
     "_%n attachment has no description_::_%n attachments have no description_" : ["%n Anhang hat keine Beschreibung","%n Anhänge haben keine Beschreibung"],
     "_A post can carry %n attachment_::_A post can carry %n attachments_" : ["Ein Beitrag kann %n Anhang enthalten","Ein Beitrag kann %n Anhänge enthalten"],
+    "A post can have up to four attachments" : "Ein Beitrag kann bis zu vier Anhänge enthalten",
     "Pick files to attach" : "Dateien zum Anhängen auswählen",
     "Attach" : "Anhängen",
     "Attaching…" : "Wird angehängt…",

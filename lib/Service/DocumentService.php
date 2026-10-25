@@ -23,6 +23,7 @@ use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
 use OCA\Social\Exceptions\ItemUnknownException;
+use OCA\Social\Exceptions\RefusalException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Exceptions\UrlCloudException;
@@ -749,6 +750,43 @@ class DocumentService {
 	 */
 	public function getMediaFromArray(array $getMediaIds, string $account = ''): array {
 		return $this->cacheDocumentsRequest->getFromArray($getMediaIds, $account);
+	}
+
+	/**
+	 * Resolves an edited post's complete attachment list from the author's own uploads.
+	 * The requested order is preserved; an unknown or other account's id is refused
+	 * rather than silently publishing a different list from the one the client chose.
+	 *
+	 * @param list<int> $mediaIds
+	 * @return MediaAttachment[]
+	 * @throws RefusalException
+	 */
+	public function replaceMediaAttachments(array $mediaIds, string $account, bool $public): array {
+		$mediaIds = array_values(array_unique(array_filter(array_map('intval', $mediaIds), static fn (int $id): bool => $id > 0)));
+		if ($mediaIds === []) {
+			return [];
+		}
+
+		$documents = $this->getMediaFromArray($mediaIds, $account);
+		$byId = [];
+		foreach ($documents as $document) {
+			$byId[(int)$document->getNid()] = $document;
+		}
+		if (count($byId) !== count($mediaIds)) {
+			throw new RefusalException('One or more media attachments are unavailable', 'media-ids-invalid');
+		}
+
+		$attachments = [];
+		foreach ($mediaIds as $id) {
+			$document = $byId[$id];
+			if ($document->isPublic() !== $public) {
+				$document->setPublic($public);
+				$this->cacheDocumentsRequest->update($document);
+			}
+			$attachments[] = $document->convertToMediaAttachment($this->urlGenerator);
+		}
+
+		return $attachments;
 	}
 
 	/**

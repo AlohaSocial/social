@@ -444,6 +444,7 @@ class StatusApiController extends MastodonApiController {
 			$input = file_get_contents('php://input');
 			$status = new Status();
 			$fields = $this->convertInput($input);
+			$mediaIds = array_key_exists('media_ids', $fields) ? $this->mediaIds($fields['media_ids']) : null;
 			$status->import($fields);
 			$event = $status->getEvent();
 			if (array_key_exists('event', $fields) && $fields['event'] !== null
@@ -535,6 +536,29 @@ class StatusApiController extends MastodonApiController {
 		}
 
 		return $attributes;
+	}
+
+	/**
+	 * A present `media_ids` is a complete replacement list. Reject malformed
+	 * values rather than letting integer coercion turn them into an empty list,
+	 * which would unexpectedly remove every attachment.
+	 *
+	 * @return list<int>
+	 */
+	private function mediaIds(mixed $raw): array {
+		if (!is_array($raw)) {
+			throw new \OCA\Social\Exceptions\RefusalException('media_ids must be a list of positive upload ids', 'media-ids-invalid');
+		}
+
+		$ids = [];
+		foreach ($raw as $id) {
+			if ((!is_string($id) && !is_int($id)) || !ctype_digit((string)$id) || (int)$id < 1) {
+				throw new \OCA\Social\Exceptions\RefusalException('media_ids must be a list of positive upload ids', 'media-ids-invalid');
+			}
+			$ids[] = (int)$id;
+		}
+
+		return $ids;
 	}
 
 	/**

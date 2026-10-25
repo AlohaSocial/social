@@ -2101,7 +2101,7 @@ class ApiControllerTest extends TestCase {
 		]);
 		$item = $this->createMock(Stream::class);
 		$this->postService->expects($this->once())->method('editPost')
-			->with(5, $this->isInstanceOf(Person::class), "edited\ntext", 'cw', true, null, [], null, false)
+			->with(5, $this->isInstanceOf(Person::class), "edited\ntext", 'cw', true, null, [], null, false, null)
 			->willReturn($item);
 		$item->expects($this->once())->method('setExportFormat')->with(ACore::FORMAT_LOCAL);
 
@@ -2119,7 +2119,7 @@ class ApiControllerTest extends TestCase {
 			'sensitive' => false,
 		]);
 		$this->postService->expects($this->once())->method('editPost')
-			->with(5, $this->anything(), 'edited', '', false, null, [], null, false)
+			->with(5, $this->anything(), 'edited', '', false, null, [], null, false, null)
 			->willReturn($this->createStub(Stream::class));
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
@@ -2135,7 +2135,7 @@ class ApiControllerTest extends TestCase {
 		];
 		$this->request->method('getParams')->willReturn(['status' => 'updated', 'event' => $event]);
 		$this->postService->expects($this->once())->method('editPost')
-			->with(5, $this->anything(), 'updated', null, null, null, [], $event, true)
+			->with(5, $this->anything(), 'updated', null, null, null, [], $event, true, null)
 			->willReturn($this->createStub(Stream::class));
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
@@ -2159,7 +2159,7 @@ class ApiControllerTest extends TestCase {
 			->with(5, $this->anything(), 'same words', null, null, null, [
 				['id' => '11', 'description' => 'New words', 'focus' => '0.5,-0.2'],
 				['id' => '12', 'description' => 'Second'],
-			], null, false)
+			], null, false, null)
 			->willReturn($this->createStub(Stream::class));
 
 		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
@@ -2170,17 +2170,48 @@ class ApiControllerTest extends TestCase {
 		$attributes = [['id' => '11', 'description' => 'New words'], ['id' => '12', 'focus' => '0,0']];
 		$this->request->method('getParams')->willReturn(['status' => 'x', 'media_attributes' => $attributes]);
 		$this->postService->expects($this->once())->method('editPost')
-			->with(5, $this->anything(), 'x', null, null, null, $attributes, null, false)
+			->with(5, $this->anything(), 'x', null, null, null, $attributes, null, false, null)
 			->willReturn($this->createStub(Stream::class));
 
 		$this->controller()->statusUpdate(5);
+	}
+
+	public function testStatusUpdateCanReplaceOrRemoveAttachmentsWhenMediaIdsArePresent(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn([
+			'status' => 'edited',
+			'media_ids' => ['21', '22'],
+		]);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'edited', null, null, null, [], null, false, [21, 22])
+			->willReturn($this->createStub(Stream::class));
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->statusUpdate(5)->getStatus());
+	}
+
+	public function testStatusUpdateDoesNotReplaceAttachmentsWhenMediaIdsAreOmitted(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'edited']);
+		$this->postService->expects($this->once())->method('editPost')
+			->with(5, $this->anything(), 'edited', null, null, null, [], null, false, null)
+			->willReturn($this->createStub(Stream::class));
+
+		$this->controller()->statusUpdate(5);
+	}
+
+	public function testStatusUpdateRejectsMalformedMediaIdsInsteadOfClearingAttachments(): void {
+		$this->loggedInAs();
+		$this->request->method('getParams')->willReturn(['status' => 'edited', 'media_ids' => ['not-an-id']]);
+		$this->postService->expects($this->never())->method('editPost');
+
+		$this->assertSame(Http::STATUS_UNPROCESSABLE_ENTITY, $this->controller()->statusUpdate(5)->getStatus());
 	}
 
 	public function testStatusUpdateWithoutSpoilerPassesNull(): void {
 		$this->loggedInAs();
 		$this->request->method('getParams')->willReturn(['status' => 'x']);
 		$this->postService->expects($this->once())->method('editPost')
-			->with(5, $this->anything(), 'x', null, null, null, [], null, false)
+			->with(5, $this->anything(), 'x', null, null, null, [], null, false, null)
 			->willReturn($this->createStub(Stream::class));
 
 		$this->controller()->statusUpdate(5);
