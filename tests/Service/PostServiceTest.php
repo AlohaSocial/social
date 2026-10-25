@@ -1151,6 +1151,23 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
 	}
 
+	public function testAnEditReplacesAttachmentsOnlyWhenMediaIdsWereProvided(): void {
+		$stored = $this->storedNote();
+		$reloaded = $this->storedNote();
+		$attachment = (new MediaAttachment())->setId('12');
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $reloaded);
+		$this->documentService->expects($this->once())
+			->method('mediaAttachmentsForEdit')
+			->with(['12'], 'alice', Stream::TYPE_PUBLIC)
+			->willReturn([$attachment]);
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$this->service->editPost(7, $this->actor(), 'edited', mediaIds: ['12']);
+
+		$this->assertSame([$attachment], $stored->getAttachments());
+	}
+
 	public function testASecondEditGetsANewerActivityPubTimestampEvenWithinTheSameSecond(): void {
 		$stored = $this->storedNote();
 		$previousTimestamp = time() + 60;

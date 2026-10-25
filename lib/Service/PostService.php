@@ -12,9 +12,9 @@ namespace OCA\Social\Service;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
-use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidOriginException;
@@ -384,6 +384,7 @@ class PostService {
 	public function editPost(
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
+		?array $mediaIds = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -416,6 +417,11 @@ class PostService {
 			$stream->setSensitive($sensitive);
 		}
 		$stream->setLanguage($this->languageFor((string)$language, $actor, $stream->getLanguage()));
+		if ($mediaIds !== null) {
+			$stream->setAttachments($this->documentService->mediaAttachmentsForEdit(
+				$mediaIds, $actor->getPreferredUsername(), $stream->getVisibility()
+			));
+		}
 
 		// a new list rather than changed objects: `$original` shares them, and
 		// the revision recorded below is the version with the old words

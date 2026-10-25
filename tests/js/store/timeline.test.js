@@ -1088,6 +1088,21 @@ describe('timeline store actions', () => {
 			})
 		})
 
+		it('sends an explicit replacement attachment list, including an empty list', async () => {
+			const status = makeStatus('1')
+			store.addToTimeline([status])
+			axios.put.mockResolvedValue({ data: makeStatus('1') })
+
+			await store.postEdit({ status, content: 'edited', spoiler_text: '', sensitive: false, media_ids: [] })
+
+			expect(axios.put).toHaveBeenCalledWith(`${API}/statuses/1`, {
+				status: 'edited',
+				spoiler_text: '',
+				sensitive: false,
+				media_ids: [],
+			})
+		})
+
 		it('leaves the status untouched and shows an error when editing fails', async () => {
 			const status = makeStatus('1')
 			store.addToTimeline([status])
