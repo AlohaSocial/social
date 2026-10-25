@@ -148,8 +148,10 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 
 			$profileState = $this->getQueryBuilder();
 			$profileState->select('generation', 'learning_mode')->from(RecommendationPreferenceRequest::TABLE_PROFILE)
-				->where($profileState->expr()->eq('actor_key', $profileState->createNamedParameter($actorKey)))
-				->forUpdate(ConflictResolutionMode::Ordinary);
+				->where($profileState->expr()->eq('actor_key', $profileState->createNamedParameter($actorKey)));
+			if ($this->supportsRowLevelLocks()) {
+				$profileState->forUpdate(ConflictResolutionMode::Ordinary);
+			}
 			$profileResult = $profileState->executeQuery();
 			$profileRow = $profileResult->fetch();
 			$profileResult->closeCursor();
@@ -204,8 +206,10 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 			// all users on the one global epoch row.
 			$commitEpochQuery = $this->getQueryBuilder();
 			$commitEpochQuery->select('epoch')->from(RecommendationPreferenceRequest::TABLE_EPOCH)
-				->where($commitEpochQuery->expr()->eq('id', $commitEpochQuery->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
-				->forUpdate(ConflictResolutionMode::Ordinary);
+				->where($commitEpochQuery->expr()->eq('id', $commitEpochQuery->createNamedParameter(1, IQueryBuilder::PARAM_INT)));
+			if ($this->supportsRowLevelLocks()) {
+				$commitEpochQuery->forUpdate(ConflictResolutionMode::Ordinary);
+			}
 			$commitEpochResult = $commitEpochQuery->executeQuery();
 			$commitEpochRow = $commitEpochResult->fetch();
 			$commitEpochResult->closeCursor();
@@ -251,6 +255,13 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 		$row = $result->fetch();
 		$result->closeCursor();
 		return $row === false ? null : ['generation' => (int)$row['generation']];
+	}
+
+	/** SQLite serializes writers at the database level and does not support FOR UPDATE. */
+	private function supportsRowLevelLocks(): bool {
+		$platform = strtolower(get_class($this->getConnection()->getDatabasePlatform()));
+
+		return !str_contains($platform, 'sqlite');
 	}
 
 	private function fold(string $actorKey, string $dimension, string $entityKey, float $delta, int $now): void {
