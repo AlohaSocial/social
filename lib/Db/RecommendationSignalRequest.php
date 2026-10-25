@@ -10,8 +10,8 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use InvalidArgumentException;
-use OCP\DB\QueryBuilder\ConflictResolutionMode;
 use OCP\DB\Exception as DBException;
+use OCP\DB\QueryBuilder\ConflictResolutionMode;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 /** Owner-scoped, bounded storage for behavioural aggregates and HMAC exposure keys. */
