@@ -197,6 +197,11 @@ class PostService {
 			$atproto[Details::ATPROTO_RECORD_EMBED] = $post->getAtprotoRecordEmbed();
 			$note->setDetailArray(Details::ATPROTO, $atproto);
 		}
+		if ($post->getAtprotoSelfLabels() !== []) {
+			$atproto = $note->getDetails(Details::ATPROTO);
+			$atproto[Details::ATPROTO_SELF_LABELS] = $post->getAtprotoSelfLabels();
+			$note->setDetailArray(Details::ATPROTO, $atproto);
+		}
 		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId(), $post->getActor());
 		$this->streamService->addRecipients($note, $post->getType(), $post->getTo());
 		$this->streamService->addChannelFollowers($note);
@@ -386,6 +391,7 @@ class PostService {
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
 		?array $mediaIds = null, ?array $linkCard = null, bool $linkCardProvided = false,
 		bool $atprotoEmbedProvided = false, string $quotedId = '', ?array $atprotoRecordEmbed = null,
+		?array $atprotoSelfLabels = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -439,6 +445,32 @@ class PostService {
 				unset($details[Details::ATPROTO_RECORD_EMBED]);
 			} else {
 				$details[Details::ATPROTO_RECORD_EMBED] = $atprotoRecordEmbed;
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		}
+		if ($atprotoSelfLabels !== null) {
+			$details = $stream->getDetails(Details::ATPROTO);
+			if ($atprotoSelfLabels === []) {
+				unset($details[Details::ATPROTO_SELF_LABELS]);
+			} else {
+				$details[Details::ATPROTO_SELF_LABELS] = array_values(array_unique($atprotoSelfLabels));
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		} elseif ($spoilerText !== null) {
+			// A Fediverse client can explicitly add or remove the warning.
+			// Keep the Bluesky self-label in step, while retaining every other
+			// label the original Bluesky author supplied.
+			$details = $stream->getDetails(Details::ATPROTO);
+			$labels = is_array($details[Details::ATPROTO_SELF_LABELS] ?? null)
+				? $details[Details::ATPROTO_SELF_LABELS] : [];
+			$labels = array_values(array_filter($labels, static fn (mixed $value): bool => $value !== '!warn'));
+			if (trim($spoilerText) !== '') {
+				array_unshift($labels, '!warn');
+			}
+			if ($labels === []) {
+				unset($details[Details::ATPROTO_SELF_LABELS]);
+			} else {
+				$details[Details::ATPROTO_SELF_LABELS] = array_values(array_unique($labels));
 			}
 			$stream->setDetailArray(Details::ATPROTO, $details);
 		}

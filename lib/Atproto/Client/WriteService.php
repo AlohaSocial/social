@@ -310,6 +310,7 @@ class WriteService {
 		}
 
 		$labels = is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [];
+		$selfLabels = self::selfLabels($record);
 		$warning = false;
 		$sensitive = false;
 		foreach ($labels as $label) {
@@ -334,7 +335,7 @@ class WriteService {
 			$updated = $this->posts->editPost(
 				$post->getNid(), $actor, $text, $spoilerText, $sensitive, $language,
 				[], null, false, $mediaIds, $linkCard, $linkCardProvided,
-				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed
+				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed, $selfLabels
 			);
 			$this->publisher->editPost($updated);
 		} catch (Throwable $e) {
@@ -806,6 +807,7 @@ class WriteService {
 		$text = self::fullText((string)($record['text'] ?? ''), $record['facets'] ?? []);
 		$post = new Post($actor);
 		$card = null;
+		$post->setAtprotoSelfLabels(self::selfLabels($record));
 		$post->setContent($text);
 		$post->setType(Stream::TYPE_PUBLIC);
 		$langs = $record['langs'] ?? [];
@@ -1113,6 +1115,7 @@ class WriteService {
 				'visibility' => $post->getType(),
 				'language' => $post->getLanguage(),
 				'atproto_record_embed' => $post->getAtprotoRecordEmbed(),
+				'atproto_self_labels' => $post->getAtprotoSelfLabels(),
 				'atproto_card' => $post->getLinkCard(),
 			], $reason);
 		} catch (Throwable $e) {
@@ -1120,6 +1123,33 @@ class WriteService {
 		}
 
 		throw XrpcException::invalidRequest('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.');
+	}
+
+	/** @return list<string> */
+	private static function selfLabels(array $record): array {
+		$container = $record['labels'] ?? null;
+		if ($container === null) {
+			return [];
+		}
+		if (!is_array($container)
+			|| ($container['$type'] ?? '') !== 'com.atproto.label.defs#selfLabels'
+			|| !is_array($container['values'] ?? null)
+			|| !array_is_list($container['values'])) {
+			throw XrpcException::invalidRequest('Post labels must be a list');
+		}
+		$result = [];
+		foreach ($container['values'] as $label) {
+			if (!is_array($label) || !is_string($label['val'] ?? null)) {
+				throw XrpcException::invalidRequest('A post self-label must have a string value');
+			}
+			$value = trim($label['val']);
+			if ($value === '' || mb_strlen($value) > 128) {
+				throw XrpcException::invalidRequest('A post self-label must contain 1 to 128 characters');
+			}
+			$result[] = $value;
+		}
+
+		return array_values(array_unique($result));
 	}
 
 	/**

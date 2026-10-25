@@ -807,7 +807,10 @@ go there).
 - **Content warning** (`spoiler_text`): self-label `!warn` plus the warning
   as the first line, `Content warning: <warning>` then a blank line, counted
   against the 300. A Social post marked sensitive also gets `graphic-media` on its
-  pictures as a self-label when it carries pictures. *verify label set*
+  pictures as a self-label when it carries pictures. Self-labels received
+  from a Bluesky post are retained when the post is mirrored back to Bluesky;
+  a `putRecord` replaces that set, and editing the warning from a Fediverse
+  client adds or removes `!warn` without discarding the other self-labels.
 - **Poll**: the question and options as text (`Poll: A / B / C`), then
   the link; results are not synchronised.
 - The words these add ("Content warning", "Poll", "+N more pictures" in
@@ -2695,9 +2698,10 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   a follow a follow — the record the publisher writes for it is the answer,
   so the app sees what Social published, which may differ (a long post cut
   with a link). `putRecord` of the profile sets the display name and bio; of an existing
-  post it replaces the text, language and supported warning labels under the
-  same record key, so its AT URI stays stable. A changed reply target or embed
-  is refused until Social can replace it without losing media or quote data.
+  post it replaces the text, language, media and self-labels under the same
+  record key, so its AT URI stays stable. Supported quoted-post and non-post
+  record embeds can be replaced or removed; changing a reply target or an
+  embed Social cannot represent without loss is refused.
   `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
   send direct messages here, which writes the record (§10.1).
   `deleteRecord` undoes the action. `applyWrites` keeps a batch of

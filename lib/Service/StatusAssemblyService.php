@@ -102,6 +102,12 @@ class StatusAssemblyService {
 			&& is_string($recordCid) && Cid::isValid($recordCid)) {
 			$post->setAtprotoRecordEmbed(['uri' => $recordUri, 'cid' => $recordCid]);
 		}
+		$labels = $params->paramArray('atproto_self_labels');
+		if ($labels !== null) {
+			$post->setAtprotoSelfLabels(array_values(array_filter(
+				$labels, static fn (mixed $value): bool => is_string($value) && $value !== '' && mb_strlen($value) <= 128
+			)));
+		}
 
 		$card = $params->paramArray('atproto_card');
 		if ($card !== null

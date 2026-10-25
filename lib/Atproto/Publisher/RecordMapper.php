@@ -171,6 +171,12 @@ class RecordMapper {
 		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive()) {
 			$labels[] = ['val' => 'graphic-media'];
 		}
+		foreach (is_array($atproto[Details::ATPROTO_SELF_LABELS] ?? null) ? $atproto[Details::ATPROTO_SELF_LABELS] : [] as $value) {
+			if (is_string($value) && $value !== '' && mb_strlen($value) <= 128
+				&& !in_array($value, array_column($labels, 'val'), true)) {
+				$labels[] = ['val' => $value];
+			}
+		}
 
 		$extra = array_values(array_filter($extra, static fn (string $line): bool => $line !== ''));
 		// a video that is not a Bluesky video is watched here

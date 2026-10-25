@@ -56,6 +56,8 @@ final class Details {
 	public const ATPROTO = 'atproto';
 	/** a local post's non-post AT Protocol record embed, as its original strong reference */
 	public const ATPROTO_RECORD_EMBED = 'record_embed';
+	/** the self-label values received with an AT Protocol post record */
+	public const ATPROTO_SELF_LABELS = 'self_labels';
 
 	/**
 	 * The page a post is at on the server it came from.

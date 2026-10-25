@@ -35,6 +35,8 @@ class Post implements JsonSerializable {
 	private string $quotedId = '';
 	/** An AT Protocol record embed that is not a quoted feed post. */
 	private ?array $atprotoRecordEmbed = null;
+	/** @var list<string> AT Protocol self-labels to preserve when this post is republished */
+	private array $atprotoSelfLabels = [];
 	/** @var array{url:string,title:string,description:string,image:string,provider:string}|null */
 	private ?array $linkCard = null;
 	/** who may quote this post: '', 'public', 'followers' or 'nobody' */
@@ -146,6 +148,18 @@ class Post implements JsonSerializable {
 	/** @param array{uri: string, cid: string}|null $recordEmbed */
 	public function setAtprotoRecordEmbed(?array $recordEmbed): Post {
 		$this->atprotoRecordEmbed = $recordEmbed;
+
+		return $this;
+	}
+
+	/** @return list<string> */
+	public function getAtprotoSelfLabels(): array {
+		return $this->atprotoSelfLabels;
+	}
+
+	/** @param list<string> $labels */
+	public function setAtprotoSelfLabels(array $labels): Post {
+		$this->atprotoSelfLabels = array_values(array_unique($labels));
 
 		return $this;
 	}

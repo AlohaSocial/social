@@ -1187,9 +1187,11 @@ class PostServiceTest extends TestCase {
 	public function testAnEditCanRemoveItsContentWarningAndExplicitlyClearSensitive(): void {
 		$stored = $this->storedNote();
 		$stored->setSensitive(true);
+		$stored->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['!warn', 'custom-label']]);
 		$reloaded = clone $stored;
 		$reloaded->setSpoilerText('');
 		$reloaded->setSensitive(false);
+		$reloaded->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['custom-label']]);
 		$this->streamRequest->method('getStreamByNid')->with(7)
 			->willReturnOnConsecutiveCalls($stored, $reloaded);
 		$this->activityService->method('updateActivity')->willReturn('token');
@@ -1198,6 +1200,7 @@ class PostServiceTest extends TestCase {
 
 		$this->assertSame('', $stored->getSpoilerText());
 		$this->assertFalse($stored->isSensitive());
+		$this->assertSame(['custom-label'], $stored->getDetails(Details::ATPROTO)[Details::ATPROTO_SELF_LABELS]);
 	}
 
 	public function testAnEditWithoutSensitiveFieldPreservesSensitiveStatus(): void {
@@ -1359,7 +1362,10 @@ class PostServiceTest extends TestCase {
 		$stored = $this->storedNote();
 		$stored->setQuote($oldQuote);
 		$stored->setQuoteAuthorization('https://remote.example/old-authorization');
-		$stored->setDetailArray(Details::ATPROTO, [Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:old/app.bsky.feed.generator/old', 'cid' => 'bafyreia']]);
+		$stored->setDetailArray(Details::ATPROTO, [
+			Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:old/app.bsky.feed.generator/old', 'cid' => 'bafyreia'],
+			Details::ATPROTO_SELF_LABELS => ['old-label'],
+		]);
 		$quoted = new Note();
 		$quoted->setId($newQuote);
 		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:new');
@@ -1369,7 +1375,10 @@ class PostServiceTest extends TestCase {
 		$reloaded->setQuote($newQuote);
 		$reloaded->setQuoteAuthorization('');
 		$reloaded->setQuoteState(Stream::QUOTE_ACCEPTED);
-		$reloaded->setDetailArray(Details::ATPROTO, [Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew']]);
+		$reloaded->setDetailArray(Details::ATPROTO, [
+			Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'],
+			Details::ATPROTO_SELF_LABELS => ['new-label'],
+		]);
 		$this->streamRequest->method('getStreamByNid')->with(7)->willReturnOnConsecutiveCalls($stored, $reloaded);
 		$this->streamRequest->expects($this->once())->method('update')->with($stored, true);
 		$recountedQuotes = [];
@@ -1382,7 +1391,7 @@ class PostServiceTest extends TestCase {
 		$result = $this->service->editPost(
 			7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, false,
 			true, $newQuote,
-			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew']
+			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'], ['new-label']
 		);
 
 		$this->assertSame($reloaded, $result);
@@ -1393,6 +1402,7 @@ class PostServiceTest extends TestCase {
 			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'],
 			$stored->getDetails(Details::ATPROTO)[Details::ATPROTO_RECORD_EMBED]
 		);
+		$this->assertSame(['new-label'], $stored->getDetails(Details::ATPROTO)[Details::ATPROTO_SELF_LABELS]);
 	}
 
 	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {

@@ -37,6 +37,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\PinService;
@@ -440,6 +441,20 @@ class RecordMapperTest extends TestCase {
 		$this->assertSame('app.bsky.embed.recordWithMedia', $record['embed']['$type']);
 		$this->assertSame('app.bsky.embed.external', $record['embed']['media']['$type']);
 		$this->assertSame('https://example.com/story', $record['embed']['media']['external']['uri']);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testSelfLabelsFromAnImportedPostSurviveRepublishing(): void {
+		$post = $this->post('Sensitive announcement');
+		$post->setSpoilerText('Content warning');
+		$post->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['!warn', 'custom-label']]);
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$this->assertSame([
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => '!warn'], ['val' => 'custom-label']],
+		], $record['labels']);
 		$this->lexicon->validateRecord($record);
 	}
 
