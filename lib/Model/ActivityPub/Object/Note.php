@@ -227,6 +227,10 @@ class Note extends Stream implements JsonSerializable {
 			$details[] = 'Location: ' . $escape($event['location']);
 		}
 		$result['content'] = (string)($result['content'] ?? '') . '<p>' . implode('<br>', $details) . '</p>';
+		$language = $this->getLanguage();
+		if ($language !== '' && isset($result['contentMap'][$language])) {
+			$result['contentMap'][$language] = $result['content'];
+		}
 		$result['name'] = $event['name'];
 		$result['startTime'] = $event['start_time'];
 		if ($event['end_time'] !== null) {

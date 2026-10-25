@@ -549,6 +549,7 @@ class NoteTest extends TestCase {
 		$note->setLocal(true);
 		$note->setAttributedTo('https://cloud.example.org/apps/social/@alice');
 		$note->setContent('<p>Join the neighborhood meetup</p>');
+		$note->setLanguage('en');
 		$note->setSubType('Event');
 		$note->setDetailArray(Details::EVENT, [
 			'name' => 'Community & meetup',
@@ -567,6 +568,7 @@ class NoteTest extends TestCase {
 		$this->assertStringContainsString('Starts: 2026-04-05 16:30 UTC', $published['content']);
 		$this->assertStringContainsString('Ends: 2026-04-05 18:00 UTC', $published['content']);
 		$this->assertStringContainsString('Location: Community &amp; hall', $published['content']);
+		$this->assertSame(['en' => $published['content']], $published['contentMap']);
 		$this->assertSame('2026-04-05T16:30:00Z', $published['startTime']);
 		$this->assertSame('2026-04-05T18:00:00Z', $published['endTime']);
 		$this->assertSame(['type' => 'Place', 'name' => 'Community & hall'], $published['location']);

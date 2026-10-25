@@ -840,7 +840,7 @@ describe('VideoShorts', () => {
 
 			// newest first: the first slide is the second post
 			const sent = sendSignals.mock.calls.map(([events]) => events[0])
-			expect(sent).toHaveLength(2)
+			expect(sent).toHaveLength(3)
 			expect(sent[0]).toMatchObject({
 				event_id: expect.stringMatching(/^[a-f0-9-]{36}$/i),
 				generation: 7,
@@ -850,6 +850,12 @@ describe('VideoShorts', () => {
 				context: 'shorts',
 			})
 			expect(sent[1]).toMatchObject({
+				status_id: '2',
+				kind: 'dwell',
+				ms: 6000,
+				context: 'shorts',
+			})
+			expect(sent[2]).toMatchObject({
 				event_id: expect.stringMatching(/^[a-f0-9-]{36}$/i),
 				generation: 7,
 				status_id: '1',
@@ -1093,6 +1099,7 @@ describe('VideoShorts', () => {
 				slide.scrollIntoView = () => scrolled.push(at)
 			})
 
+			await player.trigger('loadedmetadata')
 			await player.trigger('ended')
 
 			expect(scrolled).toEqual([1])

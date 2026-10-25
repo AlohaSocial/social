@@ -5,6 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { Fragment, h } from 'vue'
 
 vi.mock('@nextcloud/dialogs', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
 
@@ -12,7 +13,22 @@ import PostMenu from '../../../src/components/PostMenu.vue'
 
 const ME = { acct: 'alice' }
 
-const NcActions = { name: 'NcActions', emits: ['update:open'], template: '<div><slot /></div>' }
+const NcActions = {
+	name: 'NcActions',
+	emits: ['update:open'],
+	render() {
+		const actions = []
+		const collect = (vnodes) => vnodes.forEach((vnode) => {
+			if (vnode.type === Fragment) {
+				collect(vnode.children)
+			} else if (vnode.type?.name?.startsWith('NcAction')) {
+				actions.push(vnode)
+			}
+		})
+		collect(this.$slots.default?.() ?? [])
+		return h('div', actions)
+	},
+}
 const NcActionButton = {
 	name: 'NcActionButton',
 	// `closeAfterClick` is written as a bare attribute, which is only true for a Boolean prop

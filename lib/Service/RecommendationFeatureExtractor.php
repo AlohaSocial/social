@@ -68,19 +68,9 @@ final class RecommendationFeatureExtractor {
 		// tail. Do not create any story fingerprints from a partial view.
 		$hasSensitiveEvidence = $includeStoryTerms && ($contentExceedsBound
 			|| self::hasSensitiveEvidence($bodySegments, $hashtagTerms, $this->compiledSensitiveAliases));
-		$storyTerms = [];
-		$seenStoryTerms = [];
-		if ($includeStoryTerms && !$hasSensitiveEvidence) {
-			foreach ($bodySegments as $segment) {
-				foreach ($segment as $term) {
-					if (!SearchTerms::isStopWord($term) && !isset($seenStoryTerms[$term])) {
-						$seenStoryTerms[$term] = true;
-						$storyTerms[] = $term;
-					}
-				}
-			}
-			$storyTerms = self::boundedStoryTerms($storyTerms);
-		}
+		$storyTerms = $includeStoryTerms && !$hasSensitiveEvidence
+			? self::storyTermsFromSegments($bodySegments)
+			: [];
 		$matches = [];
 
 		foreach ($this->compiledAliases as $topicId => $aliases) {
@@ -128,6 +118,43 @@ final class RecommendationFeatureExtractor {
 		}
 
 		return $features;
+	}
+
+	/**
+	 * Extract only the bounded, sensitive-aware story fingerprint terms.
+	 * Legacy feed diversity does not need topic classification or media metadata.
+	 *
+	 * @return list<string>
+	 */
+	public function extractStoryTerms(Stream $post): array {
+		$content = $post->getContent();
+		if (mb_strlen($content, 'UTF-8') > self::MAX_CONTENT_CHARS) {
+			return [];
+		}
+
+		$segments = self::contentSegments($content);
+		$hashtags = array_map(self::normaliseHashtag(...), $post->getHashtags());
+		if (self::hasSensitiveEvidence($segments, $hashtags, $this->compiledSensitiveAliases)) {
+			return [];
+		}
+
+		return self::storyTermsFromSegments($segments);
+	}
+
+	/** @param list<list<string>> $segments @return list<string> */
+	private static function storyTermsFromSegments(array $segments): array {
+		$terms = [];
+		$seen = [];
+		foreach ($segments as $segment) {
+			foreach ($segment as $term) {
+				if (!SearchTerms::isStopWord($term) && !isset($seen[$term])) {
+					$seen[$term] = true;
+					$terms[] = $term;
+				}
+			}
+		}
+
+		return self::boundedStoryTerms($terms);
 	}
 
 	/**

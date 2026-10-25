@@ -23,6 +23,7 @@ use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 
 /** How the For you feed ranks, spreads and pages. */
@@ -44,6 +45,7 @@ class InterestFeedServiceTest extends TestCase {
 	private array $gone = [];
 	private array $cache = [];
 	private bool $memory = true;
+	private int $storyLookups = 0;
 	/** @var array[] the arguments of every candidate query */
 	private array $queries = [];
 
@@ -53,7 +55,7 @@ class InterestFeedServiceTest extends TestCase {
 
 	private function given(int $ageSeconds, array $tags, string $author = 'a', int $n = 1, string $media = ''): string {
 		$nid = $this->nid($ageSeconds, $n);
-		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags, 'media' => $media];
+		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags, 'media' => $media, 'content' => implode(' ', $tags)];
 
 		return $nid;
 	}
@@ -82,7 +84,7 @@ class InterestFeedServiceTest extends TestCase {
 						continue;
 					}
 					foreach (array_intersect($post['tags'], $tags) as $tag) {
-						$rows[] = ['nid' => $post['nid'], 'idPrim' => 'p' . $post['nid'], 'tag' => $tag, 'author' => $post['author']];
+						$rows[] = ['nid' => $post['nid'], 'idPrim' => 'p' . $post['nid'], 'tag' => $tag, 'author' => $post['author'], 'updated' => ''];
 					}
 				}
 
@@ -98,6 +100,24 @@ class InterestFeedServiceTest extends TestCase {
 			}
 
 			return $tags;
+		});
+		$streamRequest->method('getVisibleByNids')->willReturnCallback(function (array $nids): array {
+			$this->storyLookups++;
+			$nids = array_map('strval', $nids);
+			$statuses = [];
+			foreach ($this->posts as $post) {
+				if (!in_array($post['nid'], $nids, true)) {
+					continue;
+				}
+				$status = (new Note())
+					->setNid($post['nid'])
+					->setAttributedTo($post['author'])
+					->setHashtags($post['tags'])
+					->setContent($post['content']);
+				$statuses[$post['nid']] = $status;
+			}
+
+			return $statuses;
 		});
 
 		$streamService = $this->createStub(StreamService::class);
@@ -126,6 +146,8 @@ class InterestFeedServiceTest extends TestCase {
 
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
+		$config = $this->createStub(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('test-secret');
 
 		$trends = $this->createStub(TrendService::class);
 		$trends->method('trendingStatuses')->willReturnCallback(
@@ -162,7 +184,8 @@ class InterestFeedServiceTest extends TestCase {
 			$trends,
 			$cacheFactory,
 			$time,
-			new RecommendationFeatureExtractor(new RecommendationTopicCatalog())
+			new RecommendationFeatureExtractor(new RecommendationTopicCatalog()),
+			$config
 		);
 	}
 
@@ -244,7 +267,6 @@ class InterestFeedServiceTest extends TestCase {
 		$related = $this->given(2 * self::HOUR, ['kittens'], 'someone', 99);
 
 		$ranked = $this->service()->rank($this->viewer());
-
 		$this->assertSame($related, $ranked[9]['nid']);
 		$this->assertSame(['tags' => ['kittens'], 'reason' => 'related'], ['tags' => $ranked[9]['tags'], 'reason' => $ranked[9]['reason']]);
 	}
@@ -273,6 +295,21 @@ class InterestFeedServiceTest extends TestCase {
 		$this->given(8 * 86400, ['cats'], 'b', 2);
 
 		$this->assertCount(1, $this->service()->rank($this->viewer()));
+	}
+
+	public function testStoryTermCacheAvoidsRehydratingUnchangedCandidates(): void {
+		$this->weights(['php' => 3.0]);
+		$this->given(60, ['php'], 'a', 1);
+		$this->given(120, ['php'], 'b', 2);
+		$this->given(180, ['php'], 'c', 3);
+
+		$this->service()->rank($this->viewer());
+		$lookupsAfterFirstRank = $this->storyLookups;
+		self::assertGreaterThan(0, $lookupsAfterFirstRank);
+
+		$this->service()->rank($this->viewer());
+
+		self::assertSame($lookupsAfterFirstRank, $this->storyLookups);
 	}
 
 	public function testPagingByTheLastPostContinuesTheSameRanking(): void {

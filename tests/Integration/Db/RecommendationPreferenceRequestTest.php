@@ -12,7 +12,9 @@ namespace OCA\Social\Tests\Integration\Db;
 use OCA\Social\Db\RecommendationFeedbackRequest;
 use OCA\Social\Db\RecommendationPreferenceRequest;
 use OCA\Social\Db\RecommendationSignalRequest;
+use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\RecommendationPreferenceService;
+use OCA\Social\Service\RecommendationSignalService;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\Server;
@@ -53,13 +55,12 @@ class RecommendationPreferenceRequestTest extends TestCase {
 	public function testConcurrentStaleWritesCannotOverwriteAndResetInvalidatesTheGeneration(): void {
 		$initial = $this->preferences->get($this->owner);
 		$this->assertSame(0, $initial['revision']);
-		$this->assertSame(0, $initial['generation']);
 		$this->assertSame('off', $initial['learning_mode']);
 
 		$saved = $this->preferences->setLearningMode($this->owner, 0, 'on');
 		$this->assertNotNull($saved);
 		$this->assertSame(1, $saved['revision']);
-		$this->assertSame(1, $saved['generation']);
+		$this->assertSame($initial['generation'] + 1, $saved['generation']);
 		$this->assertSame('on', $saved['learning_mode']);
 		$this->assertNull($this->preferences->setLearningMode($this->owner, 0, 'off'));
 		$this->assertSame('on', $this->preferences->get($this->owner)['learning_mode']);
@@ -67,7 +68,7 @@ class RecommendationPreferenceRequestTest extends TestCase {
 		$reset = $this->preferences->reset($this->owner, 1);
 		$this->assertNotNull($reset);
 		$this->assertSame(2, $reset['revision']);
-		$this->assertSame(2, $reset['generation']);
+		$this->assertSame($saved['generation'] + 1, $reset['generation']);
 		$this->assertSame($reset, $this->preferences->reset($this->owner, 1), 'repeating the same reset is idempotent');
 	}
 
@@ -78,21 +79,36 @@ class RecommendationPreferenceRequestTest extends TestCase {
 		$this->assertSame(0, $this->preferences->get($this->otherOwner)['revision']);
 	}
 
-	public function testInstanceLearningSwitchInvalidatesEveryOwnersOpenConsentGeneration(): void {
+	public function testInstanceLearningSwitchAdvancesOneGlobalEpochWithoutRewritingProfiles(): void {
 		$owner = $this->preferences->setLearningMode($this->owner, 0, 'on');
 		$other = $this->preferences->setLearningMode($this->otherOwner, 0, 'on');
 		self::assertNotNull($owner);
 		self::assertNotNull($other);
+		$staleGeneration = $owner['generation'];
 
 		$this->request->invalidateAllLearningGenerations();
 
 		$ownerAfter = $this->preferences->get($this->owner);
 		$otherAfter = $this->preferences->get($this->otherOwner);
-		self::assertSame($owner['revision'] + 1, $ownerAfter['revision']);
-		self::assertSame($owner['generation'] + 1, $ownerAfter['generation']);
-		self::assertSame($other['revision'] + 1, $otherAfter['revision']);
-		self::assertSame($other['generation'] + 1, $otherAfter['generation']);
-		self::assertNull($this->request->setLearningMode($this->owner, $owner['revision'], 'off'));
+		self::assertSame($owner['revision'], $ownerAfter['revision']);
+		self::assertSame($other['revision'], $otherAfter['revision']);
+		self::assertSame(RecommendationPreferenceRequest::GENERATION_EPOCH_STRIDE, $ownerAfter['generation'] - $owner['generation']);
+		self::assertSame(RecommendationPreferenceRequest::GENERATION_EPOCH_STRIDE, $otherAfter['generation'] - $other['generation']);
+		self::assertNotSame($staleGeneration, $ownerAfter['generation']);
+		self::assertSame('on', $this->preferences->get($this->owner)['learning_mode']);
+
+		$staleEvent = [
+			'event_id' => 'abf8e00c-97b8-45a1-9438-7794ce65edbc',
+			'generation' => $staleGeneration,
+			'kind' => 'like',
+			'context' => 'home',
+			'status_id' => '123',
+		];
+		$result = Server::get(RecommendationSignalService::class)->recordEvents(
+			(new Person())->setId('https://local.test/users/' . $this->owner)->setUserId($this->owner),
+			[$staleEvent],
+		);
+		self::assertSame(1, $result['discarded'], 'events from before the instance epoch change are rejected');
 	}
 
 	public function testResetPurgesExplicitFeedbackAtomicallyWithThePreferenceGeneration(): void {

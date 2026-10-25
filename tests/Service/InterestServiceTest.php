@@ -243,6 +243,20 @@ class InterestServiceTest extends TestCase {
 		$this->assertSame('', $this->user['interests_baseline'] ?? '', 'video playback does not change a reading pace');
 	}
 
+	public function testShortsPlaybackUsesTheCombinedDurationOfEveryVideoOnThePost(): void {
+		$post = $this->post('5', ['multi']);
+		$post->setAttachments([
+			(new MediaAttachment())->setType('video')->setMeta((new AttachmentMeta())->setDuration(10.0)),
+			(new MediaAttachment())->setType('video')->setMeta((new AttachmentMeta())->setDuration(20.0)),
+		]);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '5', 'kind' => 'dwell', 'ms' => 15000, 'context' => 'shorts'],
+		]);
+
+		$this->assertSame(['multi' => InterestScorer::SIGNAL_DWELL], $this->scores());
+	}
+
 	/** On a timeline the video player's playback time is unavailable, so screen time stays neutral. */
 	public function testVideoScreenTimeOnATimelineDoesNotTeachTheTopic(): void {
 		$this->video('1', ['cats'], 60.0);

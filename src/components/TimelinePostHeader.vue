@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="post-header">
-		<div v-if="!hideAuthor" class="post-author-wrapper" :title="item.account.acct">
+		<div v-if="!hideAuthor && item.account" class="post-author-wrapper" :title="item.account.acct">
 			<component
 				:is="isLocalAccount(item.account) ? 'a' : 'router-link'"
 				v-if="item.account"

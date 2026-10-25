@@ -100,6 +100,10 @@ class RecommendationTimelineService {
 		$socialGraphBudget = min($socialGraphBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget);
 		$savedFeedBudget = min(RecommendationSavedFeedCandidates::MAX_CANDIDATES, max(1, intdiv($candidateBudget, 10)));
 		$savedFeedBudget = min($savedFeedBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget);
+		if ($candidateTopics === []) {
+			$unusedTopicBudget = max(0, $candidateBudget - $automaticBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget - $savedFeedBudget);
+			$explorationBudget += $unusedTopicBudget;
+		}
 		$hiddenNids = array_values(array_unique(array_merge(
 			$this->interests->hiddenFor($viewer),
 			$feedback['hidden_nids']
@@ -161,18 +165,6 @@ class RecommendationTimelineService {
 			if ($nid !== '' && !isset($posts[$nid])) {
 				$posts[$nid] = $automaticPost;
 			}
-		}
-		// A new reader has no topic terms to retrieve against. Reuse the bounded
-		// discovery sample to fill the candidate pool instead of leaving the
-		// topic-source reservation unused; the query reapplies every hard filter.
-		if ($candidateTopics === [] && count($posts) < $candidateBudget) {
-			$posts += $this->streams->recommendationExplorationCandidates(
-				$sinceNid,
-				$candidateBudget - count($posts),
-				intdiv($now, 6 * 3600),
-				array_values(array_unique(array_merge($hiddenNids, array_keys($posts)))),
-				$languages
-			);
 		}
 		$automaticSignals = $this->interests->isEnabled()
 			? $this->legacyFeed->recommendationSignals($viewer, array_values($posts))

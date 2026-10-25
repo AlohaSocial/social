@@ -20,6 +20,9 @@ import { accumulateVideoPlayback } from './videoPlayback.js'
  *  - otherwise a measured **video_watch_ratio**, based on the player's
  *    played ranges rather than the furthest position reached by seeking.
  *
+ * When a post contains several video slides, their played and total durations
+ * are combined into one duration-weighted ratio before the post is reported.
+ *
  * Kept apart from the view, which only tells it where the reader is and what
  * the player says: the stack's player can change without the rules changing.
  */
@@ -60,11 +63,13 @@ export function createShortSignals({
 	let learningGeneration = Number.isInteger(generation) && generation >= 0 ? generation : null
 	/** posts whose one signal this page view has already sent */
 	const said = new Set()
+	/** @type {Map<string, {status: object, watchedSeconds: number, durationSeconds: number, skipped: boolean}>} */
+	const postPlayback = new Map()
 
 	/**
 	 * @param {'skip'|'video_watch_ratio'} kind accepted server signal
 	 * @param {object} status the post
-	 * @param {object} [extra] event details
+	 * @param {{ratio?: number, ms?: number}} [extra] event details
 	 */
 	function report(kind, status, extra = {}) {
 		const mayLearnLegacy = legacyLearning()
@@ -72,7 +77,70 @@ export function createShortSignals({
 			return
 		}
 		said.add(String(status.id))
+		if (kind === 'video_watch_ratio') {
+			const ratio = extra.ratio
+			const ms = extra.ms
+			// The ratio is a V4-only signal. Keep the legacy channel on its
+			// established dwell contract, using player time rather than screen time.
+			signalNow(status, kind, context, isOwn, { ratio }, send, learningGeneration, allowUntagged, false)
+			if (mayLearnLegacy && Array.isArray(status.tags) && status.tags.length > 0 && Number.isFinite(ms)) {
+				signalNow(status, 'dwell', context, isOwn, { ms }, send, null, false, true)
+			}
+			return
+		}
+
 		signalNow(status, kind, context, isOwn, extra, send, learningGeneration, allowUntagged, mayLearnLegacy)
+	}
+
+	/** @return {string|null} post key whose aggregate was updated */
+	function finishCurrent() {
+		if (current === null) {
+			return null
+		}
+
+		const view = current
+		current = null
+		const key = String(view.status.id)
+		const aggregate = postPlayback.get(key) ?? {
+			status: view.status,
+			watchedSeconds: 0,
+			durationSeconds: 0,
+			skipped: false,
+		}
+		aggregate.status = view.status
+		const watchedSeconds = view.completed
+			&& view.duration > 0
+			&& view.watchedSeconds / view.duration >= LOOP_TAIL
+			? view.duration
+			: view.watchedSeconds
+		aggregate.watchedSeconds += watchedSeconds
+		aggregate.durationSeconds += view.duration
+		aggregate.skipped ||= !view.completed && now() - view.enteredAt < SKIP_WITHIN
+		postPlayback.set(key, aggregate)
+
+		return key
+	}
+
+	/** @param {string} key post identifier to report */
+	function flushPost(key) {
+		const aggregate = postPlayback.get(key)
+		if (!aggregate) {
+			return
+		}
+		postPlayback.delete(key)
+
+		const watchedMs = Math.round(aggregate.watchedSeconds * 1000)
+		if (watchedMs >= MIN_WATCH && aggregate.durationSeconds > 0) {
+			const ratio = Math.min(1, aggregate.watchedSeconds / aggregate.durationSeconds)
+			if (ratio > 0) {
+				report('video_watch_ratio', aggregate.status, { ratio: Math.round(ratio * 1000) / 1000, ms: watchedMs })
+				return
+			}
+		}
+
+		if (aggregate.skipped) {
+			report('skip', aggregate.status)
+		}
 	}
 
 	const signals = {
@@ -95,7 +163,10 @@ export function createShortSignals({
 			if (current !== null && current.status.id === status?.id && current.slideId === slideId) {
 				return
 			}
-			signals.leave()
+			const previousKey = finishCurrent()
+			if (previousKey !== null && previousKey !== String(status?.id ?? '')) {
+				flushPost(previousKey)
+			}
 			if (status?.id) {
 				current = { status, slideId, enteredAt: now(), watchedSeconds: 0, lastTime: 0, position: 0, duration: 0, completed: false }
 			}
@@ -141,23 +212,9 @@ export function createShortSignals({
 
 		/** The reader left the slide they were on: the stack scrolled, or went away. */
 		leave() {
-			if (current === null) {
-				return
-			}
-			const view = current
-			current = null
-
-			if (!view.completed && now() - view.enteredAt < SKIP_WITHIN) {
-				report('skip', view.status)
-				return
-			}
-
-			if (view.watchedSeconds * 1000 >= MIN_WATCH) {
-				const watchedRatio = view.duration > 0 ? view.watchedSeconds / view.duration : 0
-				const ratio = Math.min(1, view.completed && watchedRatio >= LOOP_TAIL ? 1 : watchedRatio)
-				if (ratio > 0) {
-					report('video_watch_ratio', view.status, { ratio: Math.round(ratio * 1000) / 1000 })
-				}
+			finishCurrent()
+			for (const key of postPlayback.keys()) {
+				flushPost(key)
 			}
 		},
 	}

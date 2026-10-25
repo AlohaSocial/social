@@ -172,11 +172,38 @@
 			</template>
 			{{ t('social', 'Less like this') }}
 		</NcActionButton>
-		<RecommendationFeedbackActions
-			:enabled="canOfferRecommendationFeedback"
-			:loading="recommendationFeedbackLoading"
-			:context="feedbackContext"
-			@feedback="$emit('recommendationFeedback', $event)" />
+		<template v-if="canOfferRecommendationFeedback">
+			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
+				<template #icon>
+					<ThumbUpOutline :size="20" />
+				</template>
+				{{ t('social', 'Show me more like this post') }}
+			</NcActionButton>
+			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
+				<template #icon>
+					<ThumbDownOutline :size="20" />
+				</template>
+				{{ t('social', 'Show me less like this post') }}
+			</NcActionButton>
+			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'HIDE_POST')">
+				<template #icon>
+					<IconEyeOffOutline :size="20" />
+				</template>
+				{{ t('social', 'Hide this post from For You') }}
+			</NcActionButton>
+			<NcActionButton closeAfterClick @click="$emit('recommendationFeedback', 'MORE_AUTHOR')">
+				<template #icon>
+					<AccountPlusOutline :size="20" />
+				</template>
+				{{ t('social', 'Show me more from this author') }}
+			</NcActionButton>
+			<NcActionButton :disabled="recommendationFeedbackLoading || !feedbackContext?.format" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_FORMAT')">
+				<template #icon>
+					<ShapeOutline :size="20" />
+				</template>
+				{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel }) }}
+			</NcActionButton>
+		</template>
 		<!-- what to do about somebody else, from the post that made the reader
 		     want to: both take their posts out of every timeline at once -->
 		<NcActionButton v-if="canModerateAuthor" closeAfterClick @click="$emit('mute')">
@@ -221,15 +248,17 @@ import IconArchiveOutline from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconCommentAccountOutline from 'vue-material-design-icons/CommentAccountOutline.vue'
 import IconEyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
+import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import PencilBoxOutline from 'vue-material-design-icons/PencilBoxOutline.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
 import PinOff from 'vue-material-design-icons/PinOff.vue'
+import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
 import SendCheck from 'vue-material-design-icons/SendCheck.vue'
 import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
+import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
 import Translate from 'vue-material-design-icons/Translate.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import RecommendationFeedbackActions from './RecommendationFeedbackActions.vue'
 import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
 import { hasInterestsFeed } from '../services/interests.js'
 import { isBlueskyAccount } from '../utils/accountLocality.js'
@@ -265,8 +294,10 @@ export default {
 		IconCommentAccountOutline,
 		IconEyeOffOutline,
 		IconEyeOutline,
+		AccountPlusOutline,
 		ThumbDownOutline,
-		RecommendationFeedbackActions,
+		ThumbUpOutline,
+		ShapeOutline,
 		NcActionButton,
 		NcActionLink,
 		NcActions,
@@ -377,6 +408,18 @@ export default {
 				&& !!this.currentAccount
 				&& !this.isMine
 				&& !!this.item.nid
+		},
+
+		/** @return {string} readable name for a supported recommendation format */
+		recommendationFormatLabel() {
+			return {
+				audio: t('social', 'audio posts'),
+				image: t('social', 'photo posts'),
+				poll: t('social', 'polls'),
+				short: t('social', 'short videos'),
+				text: t('social', 'text posts'),
+				video: t('social', 'video posts'),
+			}[this.feedbackContext?.format] || t('social', 'posts like this')
 		},
 
 		/** @return {boolean} whether the reader wrote this post */

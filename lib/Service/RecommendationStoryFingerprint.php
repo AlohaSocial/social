@@ -31,6 +31,24 @@ final class RecommendationStoryFingerprint {
 	}
 
 	/**
+	 * Keep cached story tokens comparable without retaining readable post words.
+	 * Tokens are scoped to this instance secret and one reader.
+	 *
+	 * @param list<string> $terms
+	 * @return list<string>
+	 */
+	public static function opaqueTerms(array $terms, string $secret, string $owner): array {
+		if ($secret === '' || $owner === '') {
+			return [];
+		}
+
+		return array_values(array_unique(array_map(
+			static fn (string $term): string => hash_hmac('sha256', $owner . "\0story-cache-term-v1\0" . $term, $secret),
+			$terms,
+		)));
+	}
+
+	/**
 	 * @param list<string> $terms bounded, normalised terms extracted from a post
 	 * @param list<string> $headlineTerms opening terms extracted from a post
 	 * @return list<string> owner-scoped body and optional headline fingerprints, plus a backwards-compatible exact key for short stories

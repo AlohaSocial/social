@@ -74,6 +74,9 @@ export default {
 	computed: {
 		eventTimeLabel() {
 			const format = (value) => {
+				if (value === null || value === undefined || value === '') {
+					return ''
+				}
 				const date = new Date(value)
 				return Number.isNaN(date.getTime())
 					? ''

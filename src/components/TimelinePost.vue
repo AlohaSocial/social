@@ -259,23 +259,45 @@
 				class="post-actions-reveal"
 				:class="{ 'post-actions-reveal--held': menuOpen }">
 				<div class="post-actions">
+					<PostMenu
+						:item="item"
+						:currentAccount="currentAccount"
+						:isPublic="serverData.public"
+						:canTranslate="canTranslate"
+						:translating="translating"
+						:translated="translation !== null"
+						:archiving="archiving"
+						:interests="serverData.interests"
+						:timelineType="type"
+						:recommendationFeedbackEnabled="canUseRecommendationFeedback"
+						:recommendationFeedbackLoading="recommendationContextLoading"
+						:feedbackContext="recommendationContext"
+						@update:open="onMenuToggle"
+						@quote="quote"
+						@edit="editPost"
+						@archive="toggleArchive"
+						@manageQuotes="managingQuotes = true"
+						@manageReplies="managingReplies = true"
+						@hideReply="hideReply"
+						@tagPeople="taggingPeople = true"
+						@delete="askToDelete(false)"
+						@redraft="askToDelete(true)"
+						@translate="toggleTranslation"
+						@delivery="showDeliveryDialog = true"
+						@bookmark="toggleBookmark"
+						@react="askForReaction"
+						@muteConversation="toggleConversationMute"
+						@collect="showCollectionDialog = true"
+						@pin="togglePin"
+						@lessLikeThis="lessLikeThis"
+						@recommendationFeedback="applyRecommendationFeedback"
+						@mute="showMuteDialog = true"
+						@block="showBlockDialog = true"
+						@report="showReportDialog = true" />
 					<div class="post-actions__groups">
 						<!-- the same three controls on every post, so nothing moves
 						     from one post to the next: one that cannot be used
 						     here is there, disabled, and says why -->
-						<div class="post-action-group post-action-group--reply" :title="refusedBecause.reply || undefined">
-							<NcButton
-								:title="refusedBecause.reply || t('social', 'Reply')"
-								:aria-label="t('social', 'Reply')"
-								:disabled="!canReply"
-								variant="tertiary"
-								@click="reply">
-								<template #icon>
-									<Reply :size="20" />
-								</template>
-							</NcButton>
-							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
-						</div>
 						<div
 							class="post-action-group"
 							:class="{ 'post-action-group--refused': refused === 'boost' }"
@@ -335,6 +357,19 @@
 							</NcButton>
 							<RollingCount v-if="!hidesCounts" :count="item.favourites_count || 0" />
 						</div>
+						<div class="post-action-group post-action-group--reply" :title="refusedBecause.reply || undefined">
+							<NcButton
+								:title="refusedBecause.reply || t('social', 'Reply')"
+								:aria-label="t('social', 'Reply')"
+								:disabled="!canReply"
+								variant="tertiary"
+								@click="reply">
+								<template #icon>
+									<Reply :size="20" />
+								</template>
+							</NcButton>
+							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
+						</div>
 						<!-- only ever on the author's own copy: the server sends
 						     `view_count` as null on everybody else's, because how
 						     many people read a post is the author's business -->
@@ -346,42 +381,6 @@
 							<RollingCount :count="item.view_count" />
 						</div>
 					</div>
-					<!-- The menu opens in a portal; keeping it at the end preserves its edge position when open. -->
-					<PostMenu
-						:item="item"
-						:currentAccount="currentAccount"
-						:isPublic="serverData.public"
-						:canTranslate="canTranslate"
-						:translating="translating"
-						:translated="translation !== null"
-						:archiving="archiving"
-						:interests="serverData.interests"
-						:timelineType="type"
-						:recommendationFeedbackEnabled="canUseRecommendationFeedback"
-						:recommendationFeedbackLoading="recommendationContextLoading"
-						:feedbackContext="recommendationContext"
-						@update:open="onMenuToggle"
-						@quote="quote"
-						@edit="editPost"
-						@archive="toggleArchive"
-						@manageQuotes="managingQuotes = true"
-						@manageReplies="managingReplies = true"
-						@hideReply="hideReply"
-						@tagPeople="taggingPeople = true"
-						@delete="askToDelete(false)"
-						@redraft="askToDelete(true)"
-						@translate="toggleTranslation"
-						@delivery="showDeliveryDialog = true"
-						@bookmark="toggleBookmark"
-						@react="askForReaction"
-						@muteConversation="toggleConversationMute"
-						@collect="showCollectionDialog = true"
-						@pin="togglePin"
-						@lessLikeThis="lessLikeThis"
-						@recommendationFeedback="applyRecommendationFeedback"
-						@mute="showMuteDialog = true"
-						@block="showBlockDialog = true"
-						@report="showReportDialog = true" />
 				</div>
 			</div>
 		</div>
@@ -2140,6 +2139,10 @@ export default {
 		animation: post-refused .4s ease;
 	}
 }
+
+	.post-action-group--reply {
+		margin-inline-start: auto;
+	}
 
 .post-action--popped :deep(.material-design-icon) {
 	animation: post-pop .45s cubic-bezier(.34, 1.56, .64, 1);

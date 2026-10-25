@@ -86,7 +86,7 @@ trait StreamInterests {
 	 * @param string[] $languages empty for every language
 	 * @param string $media '', 'photos', 'videos', 'shorts' or 'media'
 	 *
-	 * @return list<array{nid: string, idPrim: string, tag: string, author: string}>
+	 * @return list<array{nid: string, idPrim: string, tag: string, author: string, updated: string}>
 	 */
 	public function interestCandidates(
 		array $tags, string $sinceNid, int $cap, array $excludeNids = [], array $languages = [], string $media = '',
@@ -96,7 +96,7 @@ trait StreamInterests {
 		}
 
 		$qb = $this->getStreamNidsSelectSql(true);
-		$qb->addSelect('s.id_prim', 's.attributed_to_prim', 'st.hashtag');
+		$qb->addSelect('s.id_prim', 's.attributed_to_prim', 's.updated', 'st.hashtag');
 		$expr = $qb->expr();
 
 		$qb->limitToStatusTypes();
@@ -153,6 +153,7 @@ trait StreamInterests {
 				'idPrim' => (string)$row['id_prim'],
 				'tag' => mb_strtolower((string)$row['hashtag'], 'UTF-8'),
 				'author' => (string)$row['attributed_to_prim'],
+				'updated' => is_string($row['updated'] ?? null) ? (string)$row['updated'] : '',
 			];
 		}
 		$cursor->closeCursor();

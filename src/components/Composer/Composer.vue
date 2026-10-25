@@ -1522,6 +1522,9 @@ export default {
 			this.pollMultiple = false
 			this.showWarning = false
 			this.spoilerText = ''
+			this.videoTitle = ''
+			this.videoCategory = ''
+			this.videoLicence = ''
 			this.scheduling = false
 			this.scheduledAt = null
 			this.placing = false

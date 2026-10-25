@@ -315,7 +315,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			->setPublishedTime(1_999_999_900);
 		$this->streams->method('recommendationCandidatesByTerms')->willReturn([]);
 		$this->streams->expects($this->once())->method('recommendationExplorationCandidates')->with(
-			$this->isString(), 10, intdiv(2_000_000_000, 6 * 3600), [], ['en']
+			$this->isString(), 30, intdiv(2_000_000_000, 6 * 3600), [], ['en']
 		)->willReturn(['125' => $post]);
 		$this->snapshots->method('create')->willReturn(null);
 		$this->queue->method('fillPosts')->willReturn(false);

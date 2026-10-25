@@ -26,7 +26,7 @@ vi.mock('@nextcloud/auth', async (importOriginal) => ({
 }))
 
 const API = '/index.php/apps/social/api/v1/interests'
-const events = [{ status_id: '1789344497747043682', kind: 'dwell', ms: 5400, context: 'home' }]
+const makeEvents = () => [{ status_id: '1789344497747043682', kind: 'dwell', ms: 5400, context: 'home' }]
 
 describe('the interests API', () => {
 	beforeEach(() => {
@@ -87,6 +87,7 @@ describe('the interests API', () => {
 	})
 
 	it('posts signals as a request while the page stays', async () => {
+		const events = makeEvents()
 		await sendSignals(events)
 
 		expect(axios.post).toHaveBeenCalledWith(API + '/signals', { events })
@@ -163,6 +164,7 @@ describe('the interests API', () => {
 	})
 
 	it('sends a beacon on the way out, the token in the query and the body as JSON', async () => {
+		const events = makeEvents()
 		const sendBeacon = vi.fn(() => true)
 		vi.stubGlobal('navigator', { sendBeacon })
 
@@ -198,10 +200,11 @@ describe('the interests API', () => {
 	})
 
 	it('falls back to a request when the browser will not queue the beacon', async () => {
+		const events = makeEvents()
 		vi.stubGlobal('navigator', { sendBeacon: vi.fn(() => false) })
 
 		await sendSignals(events, { beacon: true })
 
-		expect(axios.post).toHaveBeenCalledWith(API + '/signals', { events })
+		expect(axios.post).toHaveBeenCalledWith(API + '/signals?requesttoken=token%2F%2B1', { events })
 	})
 })

@@ -736,10 +736,10 @@ export function createInterestTracker({
  * ranked-feed context.
  *
  * @param {import('../types/Mastodon.js').Status} status the post
- * @param {'open'|'media'|'link'|'skip'|'video_watch_ratio'} kind what happened
+ * @param {'open'|'media'|'link'|'skip'|'dwell'|'video_watch_ratio'} kind what happened
  * @param {string} context where
  * @param {(status: object) => boolean} [isOwn] whether the reader wrote it
- * @param {{ratio?: number}} [extra] the watched video fraction
+ * @param {{ratio?: number, ms?: number}} [extra] watched video fraction or playback time
  * @param {(events: object[], options?: {legacy: boolean}) => Promise<void>} [send] how it goes out
  * @param {number|null} [generation] current consent/reset generation, when already known
  * @param {boolean} [allowUntagged] whether the ranked feed may learn from posts without hashtags
@@ -747,7 +747,7 @@ export function createInterestTracker({
  * @return {Promise<void>}
  */
 export async function signalNow(status, kind, context, isOwn = () => false, extra = {}, send = sendSignals, generation = null, allowUntagged = false, legacyLearning = false) {
-	if (!['open', 'media', 'link', 'skip', 'video_watch_ratio'].includes(kind)
+	if (!['open', 'media', 'link', 'skip', 'dwell', 'video_watch_ratio'].includes(kind)
 		|| !isTrackable(status, isOwn, allowUntagged)) {
 		return
 	}

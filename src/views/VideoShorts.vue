@@ -110,14 +110,39 @@
 				<NcActions
 					v-if="canOfferRecommendationFeedback(entry)"
 					class="short__recommendation-menu"
-					:aria-label="t('social', 'Recommendation feedback')"
-					:menuName="t('social', 'For You feedback')"
+					:aria-label="t('social', 'For You recommendations')"
+					:menuName="t('social', 'For You recommendations')"
 					@update:open="onRecommendationMenuToggle(entry.status, $event)">
-					<RecommendationFeedbackActions
-						:enabled="true"
-						:loading="recommendationContextLoading[String(entry.status.nid)] === true"
-						:context="recommendationContexts[String(entry.status.nid)] ?? null"
-						@feedback="applyRecommendationFeedback(entry.status, $event)" />
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_SIMILAR')">
+						<template #icon>
+							<ThumbUpOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more like this post') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'LESS_SIMILAR')">
+						<template #icon>
+							<ThumbDownOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me less like this post') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'HIDE_POST')">
+						<template #icon>
+							<EyeOffOutline :size="20" />
+						</template>
+						{{ t('social', 'Hide this post from For You') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_AUTHOR')">
+						<template #icon>
+							<AccountPlusOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more from this author') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || !recommendationContext(entry.status)?.format" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_FORMAT')">
+						<template #icon>
+							<ShapeOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel(entry.status) }) }}
+					</NcActionButton>
 				</NcActions>
 
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
@@ -276,6 +301,7 @@ import { mapStores } from 'pinia'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
@@ -283,7 +309,11 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import RecommendationFeedbackActions from '../components/RecommendationFeedbackActions.vue'
+import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
+import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
+import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
+import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
+import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
@@ -336,11 +366,16 @@ export default {
 		IconRefresh,
 		IconVolumeHigh,
 		IconVolumeOff,
+		AccountPlusOutline,
+		EyeOffOutline,
 		NcActions,
+		NcActionButton,
 		NcButton,
 		NcLoadingIcon,
-		RecommendationFeedbackActions,
+		ShapeOutline,
 		ShortComposerDialog,
+		ThumbDownOutline,
+		ThumbUpOutline,
 	},
 
 	props: {
@@ -699,6 +734,29 @@ export default {
 				&& this.settingsStore.getServerData?.interests?.recommendationsEnabled === true
 				&& !!status?.nid
 				&& !this.isOwn(status)
+		},
+
+		/** @param {object} status a personalized video status @return {object|null} */
+		recommendationContext(status) {
+			return this.recommendationContexts[String(status?.nid)] ?? null
+		},
+
+		/** @param {object} status a personalized video status @return {boolean} */
+		recommendationActionLoading(status) {
+			return this.recommendationContextLoading[String(status?.nid)] === true
+		},
+
+		/** @param {object} status a personalized video status @return {string} */
+		recommendationFormatLabel(status) {
+			const format = this.recommendationContext(status)?.format
+			return {
+				audio: t('social', 'audio posts'),
+				image: t('social', 'photo posts'),
+				poll: t('social', 'polls'),
+				short: t('social', 'short videos'),
+				text: t('social', 'text posts'),
+				video: t('social', 'video posts'),
+			}[format] || t('social', 'posts like this')
 		},
 
 		/**

@@ -266,7 +266,13 @@ saving, liking or boosting carry the positive intent.
 
 A `dwell` from the Shorts stack (`context` `shorts`) on a video with a known
 duration is measured player playback, not screen time, and is judged by the
-fraction watched:
+fraction watched. When one post has several video slides, the client combines
+their played and total durations into one duration-weighted post signal. The
+legacy signal sender receives the summed playback milliseconds as `dwell`;
+V4 receives the combined `video_watch_ratio`. Shorts uses the sum of all video
+attachment durations as the expected duration, so both channels evaluate the
+same post-level playback fraction. The ordinary video player still uses its
+first playable attachment.
 
 ```
 expected_ms = min(30 000, duration_ms)
@@ -632,5 +638,7 @@ The internal ranker uses a deterministic, versioned linear score and assembles p
 | POST | `/api/v1/recommendations/reset` | Reset learned activity signals and explicit feedback with `if_revision` |
 | GET | `/api/v1/recommendations/export` | Export activity-learning status and explicit feedback; no topic preferences |
 | GET/PUT | `/admin/recommendations` | Administrator-only instance kill switch |
+
+Learning event generations combine an account's reset/consent generation with the instance epoch. Changing the administrator learning switch advances the single-row epoch, so queued events and open cursors become stale without updating every account profile.
 
 For local checks, run `composer test:unit -- --filter 'RecommendationPreferenceServiceTest|RecommendationPreferencesMigrationTest|UserDeletedListenerTest'`, then `npm test -- --run` and `npm run build`. Disable the instance switch to roll back the ranked feed; the additive schema is retained and the existing feed remains available.

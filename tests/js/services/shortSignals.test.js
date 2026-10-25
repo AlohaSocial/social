@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SKIP_WITHIN, createShortSignals } from '../../../src/services/shortSignals.js'
+import { fetchRecommendationPreferences } from '../../../src/services/interests.js'
 
 vi.mock('../../../src/services/interests.js', () => ({
 	fetchRecommendationPreferences: vi.fn(() => Promise.resolve({ learning_mode: 'on', generation: 7 })),
@@ -24,6 +25,7 @@ describe('what watching the Shorts teaches', () => {
 
 	beforeEach(() => {
 		clock = 1000
+		fetchRecommendationPreferences.mockReset().mockResolvedValue({ learning_mode: 'on', generation: 7 })
 		send = vi.fn(() => Promise.resolve())
 		signals = createShortSignals({ now: () => clock, send, generation: 7 })
 	})
@@ -101,27 +103,40 @@ describe('what watching the Shorts teaches', () => {
 		expectSignal(sent()[0], { status_id: '1', kind: 'video_watch_ratio', ratio: 1 })
 	})
 
-	it('finishes one video before measuring another video on the same post', () => {
+	it('aggregates playback across video slides in one post', () => {
 		const status = clip('multi-video-post')
-		signals.enter(status, 'multi-video-post:first')
-		signals.progress(status, {
+		const aggregatedSignals = createShortSignals({
+			now: () => clock,
+			send,
+			generation: 7,
+			legacyLearning: () => true,
+		})
+		aggregatedSignals.enter(status, 'multi-video-post:first')
+		aggregatedSignals.progress(status, {
 			currentTime: 4,
 			duration: 10,
 			played: { length: 1, start: () => 0, end: () => 4 },
 		}, 'multi-video-post:first')
 		clock += 5000
 
-		signals.enter(status, 'multi-video-post:second')
-		signals.progress(status, {
+		aggregatedSignals.enter(status, 'multi-video-post:second')
+		aggregatedSignals.progress(status, {
 			currentTime: 0.5,
 			duration: 10,
 			played: { length: 1, start: () => 0, end: () => 0.5 },
 		}, 'multi-video-post:second')
 		clock += 5000
-		signals.leave()
+		aggregatedSignals.leave()
 
-		expect(sent()).toHaveLength(1)
-		expectSignal(sent()[0], { status_id: 'multi-video-post', kind: 'video_watch_ratio', ratio: 0.4 })
+		expect(sent()).toHaveLength(2)
+		expectSignal(sent()[0], { status_id: 'multi-video-post', kind: 'video_watch_ratio', ratio: 0.225 })
+		expect(sent()[1]).toMatchObject({
+			status_id: 'multi-video-post',
+			kind: 'dwell',
+			ms: 4500,
+			context: 'shorts',
+		})
+		expect(send).toHaveBeenCalledWith([expect.objectContaining({ kind: 'dwell', ms: 4500 })], { legacy: true })
 	})
 
 	it('does not mistake seeking to the end for watched content', () => {
@@ -170,6 +185,7 @@ describe('what watching the Shorts teaches', () => {
 	})
 
 	it('keeps legacy Shorts learning separate from recommendation consent', () => {
+		fetchRecommendationPreferences.mockResolvedValue({ learning_active: false, generation: 7 })
 		const legacy = createShortSignals({ now: () => clock, send, legacyLearning: () => true, enabled: () => true })
 		legacy.enter(clip('legacy'))
 		legacy.progress(clip('legacy'), { currentTime: 1, duration: 2 })
@@ -177,7 +193,7 @@ describe('what watching the Shorts teaches', () => {
 		legacy.leave()
 
 		expect(sent()).toHaveLength(1)
-		expect(sent()[0]).toMatchObject({ status_id: 'legacy', kind: 'video_watch_ratio', ratio: 0.5 })
+		expect(sent()[0]).toMatchObject({ status_id: 'legacy', kind: 'dwell', ms: 1000 })
 		expect(sent()[0]).not.toHaveProperty('generation')
 		expect(send).toHaveBeenCalledWith([expect.any(Object)], { legacy: true })
 	})
