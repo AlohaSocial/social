@@ -206,6 +206,20 @@ final class Permissions {
 		return false;
 	}
 
+	/** Whether this session may change its handle (`identity:handle`). */
+	public function mayUpdateHandle(): bool {
+		if ($this->isGeneric()) {
+			return true;
+		}
+		foreach ($this->rules as $rule) {
+			if ($rule['resource'] === 'identity' && in_array($rule['attr'] ?? '', ['handle', '*'], true)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/** Whether the account's e-mail address may be read. */
 	public function mayReadEmail(): bool {
 		if (in_array(self::EMAIL, $this->scopes, true)) {
