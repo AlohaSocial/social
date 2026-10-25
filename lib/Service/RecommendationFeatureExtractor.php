@@ -141,6 +141,35 @@ final class RecommendationFeatureExtractor {
 		return self::storyTermsFromSegments($segments);
 	}
 
+	/** @param list<string> $topicIds @return list<string> the most specific classified topics */
+	public function diversityTopics(array $topicIds): array {
+		$parents = [];
+		foreach ($topicIds as $topicId) {
+			$parent = $this->catalog->parentOf($topicId);
+			while ($parent !== null) {
+				$parents[$parent] = true;
+				$parent = $this->catalog->parentOf($parent);
+			}
+		}
+
+		$leaves = array_values(array_filter($topicIds, static fn (string $topicId): bool => !isset($parents[$topicId])));
+
+		return $leaves !== [] ? $leaves : $topicIds;
+	}
+
+	/** @param list<string> $topicIds @return list<string> safe, most-specific topics for consented exposure history */
+	public function exposureTopics(array $topicIds): array {
+		$topicIds = array_values(array_unique(array_filter(
+			$topicIds,
+			fn (string $topicId): bool => ($topic = $this->catalog->find($topicId)) !== null
+				&& $topic['enabled'] && !in_array('sensitive-topic', $topic['policyTags'], true),
+		)));
+		$topics = $this->diversityTopics($topicIds);
+		sort($topics, SORT_STRING);
+
+		return $topics;
+	}
+
 	/** @param list<list<string>> $segments @return list<string> */
 	private static function storyTermsFromSegments(array $segments): array {
 		$terms = [];

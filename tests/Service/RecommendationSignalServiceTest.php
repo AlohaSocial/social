@@ -21,6 +21,7 @@ use OCA\Social\Service\RecommendationPreferenceService;
 use OCA\Social\Service\RecommendationSignalService;
 use OCA\Social\Service\RecommendationStoryFingerprint;
 use OCA\Social\Service\RecommendationTopicCatalog;
+use OCA\Social\Service\RecommendationTopicFingerprint;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
@@ -174,6 +175,10 @@ class RecommendationSignalServiceTest extends TestCase {
 			'alice',
 			$features['story_headline_terms'],
 		);
+		$topicId = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->exposureTopics(array_keys($features['topics']))[0];
+		$topicKey = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		$this->assertNotNull($topicKey);
+		$storyKeys[] = $topicKey;
 		$this->signals->expects($this->once())->method('record')->with(
 			'alice', '1d9cfd49-4e69-4bb8-b7fc-854df448d310', 7, 'impression', [],
 			['post_keys' => $storyKeys, 'session_key' => 'f7f454f1-d33d-4fb5-a132-335837049d23'], 2_000_000_000
@@ -240,8 +245,11 @@ class RecommendationSignalServiceTest extends TestCase {
 			'alice',
 			$features['story_headline_terms'],
 		);
+		$topicId = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->exposureTopics(array_keys($features['topics']))[0];
+		$topicKey = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		$this->assertNotNull($topicKey);
 		$this->signals->expects($this->once())->method('exposures')->with(
-			'alice', 7, $this->callback(static fn (array $keys): bool => count($keys) === count($storyKeys) && array_diff($storyKeys, $keys) === []),
+			'alice', 7, $this->callback(static fn (array $keys): bool => count($keys) === count($storyKeys) + 1 && array_diff([...$storyKeys, $topicKey], $keys) === []),
 			2_000_000_000 - 30 * 86400,
 		)->willReturnCallback(static function () use ($post): array {
 			$sessions = [];
@@ -435,6 +443,10 @@ class RecommendationSignalServiceTest extends TestCase {
 			'alice',
 			$features['story_headline_terms'],
 		);
+		$topicId = (new RecommendationFeatureExtractor(new RecommendationTopicCatalog()))->exposureTopics(array_keys($features['topics']))[0];
+		$topicKey = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		$this->assertNotNull($topicKey);
+		$keys[] = $topicKey;
 		$session = 'f7f454f1-d33d-4fb5-a132-335837049d23';
 		$exposures = [];
 		foreach ($keys as $key) {
@@ -479,7 +491,11 @@ class RecommendationSignalServiceTest extends TestCase {
 		$this->streams->expects($this->never())->method('getVisibleByNids');
 		$features = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
 		$previousKeys = RecommendationStoryFingerprint::keys($features->extract($previous, true)['story_terms'], 'test-server-secret', 'alice');
-		$currentKeys = RecommendationStoryFingerprint::keys($features->extract($current, true)['story_terms'], 'test-server-secret', 'alice');
+		$currentFeatures = $features->extract($current, true);
+		$currentKeys = RecommendationStoryFingerprint::keys($currentFeatures['story_terms'], 'test-server-secret', 'alice');
+		$topicId = $features->exposureTopics(array_keys($currentFeatures['topics']))[0];
+		$currentKeys[] = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		$currentKeys = array_values(array_filter($currentKeys));
 		$matchedKeys = array_values(array_intersect(array_slice($previousKeys, 1), array_slice($currentKeys, 1)));
 		$this->assertGreaterThanOrEqual(RecommendationStoryFingerprint::SHORT_STORY_MATCH_COUNT, count($matchedKeys), 'the two short headlines share enough MinHash samples');
 		$session = 'f7f454f1-d33d-4fb5-a132-335837049d23';
@@ -502,7 +518,11 @@ class RecommendationSignalServiceTest extends TestCase {
 			->setContent('<p>PHP security critical exploit</p>');
 		$this->streams->expects($this->never())->method('getVisibleByNids');
 		$features = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
-		$keys = RecommendationStoryFingerprint::keys($features->extract($current, true)['story_terms'], 'test-server-secret', 'alice');
+		$currentFeatures = $features->extract($current, true);
+		$keys = RecommendationStoryFingerprint::keys($currentFeatures['story_terms'], 'test-server-secret', 'alice');
+		$topicId = $features->exposureTopics(array_keys($currentFeatures['topics']))[0];
+		$keys[] = RecommendationTopicFingerprint::key($topicId, 'test-server-secret', 'alice');
+		$keys = array_values(array_filter($keys));
 		$session = 'f7f454f1-d33d-4fb5-a132-335837049d23';
 		$exposures = [];
 		foreach (array_slice($keys, 1, RecommendationStoryFingerprint::SHORT_STORY_MATCH_COUNT - 1) as $key) {

@@ -156,14 +156,30 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 						$viewer->getUserId(),
 						$features['story_headline_terms'] ?? [],
 					);
-					// Short, sensitive or unclassifiable text keeps the existing
-					// exact-post exposure behaviour without retaining its contents or
-					// a reversible, unsalted hash of the local post ID.
+					// An empty sensitive-aware story sample also means the source was
+					// clipped or matched a sensitive alias; do not retain a topic key.
+					$topicId = ($features['story_terms'] ?? []) !== []
+						? ($this->features->exposureTopics(array_keys($features['topics']))[0] ?? '')
+						: '';
+					$topicKey = RecommendationTopicFingerprint::key(
+						$topicId,
+						$this->config->getSystemValueString('secret', ''),
+						$viewer->getUserId(),
+					);
+					if ($topicKey !== null) {
+						$postKeys[] = $topicKey;
+					}
 					$exactPostKey = RecommendationStoryFingerprint::exactPostKey(
 						(string)$post->getNid(),
 						$this->config->getSystemValueString('secret', ''),
 						$viewer->getUserId(),
 					);
+					if (($features['story_terms'] ?? []) === [] && $exactPostKey !== null) {
+						$postKeys[] = $exactPostKey;
+					}
+					// Short, sensitive or unclassifiable text keeps the existing
+					// exact-post exposure behaviour without retaining its contents or
+					// a reversible, unsalted hash of the local post ID.
 					$postKeys = $postKeys !== [] ? $postKeys : ($exactPostKey === null ? [] : [$exactPostKey]);
 					$impression = ['post_keys' => $postKeys, 'session_key' => $sessionId];
 				} else {
@@ -283,7 +299,8 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 			return [];
 		}
 
-		$keysByNid = [];
+		$storyKeysByNid = [];
+		$topicKeysByNid = [];
 		$postKeys = [];
 		foreach ($posts as $post) {
 			$nid = (string)$post->getNid();
@@ -291,19 +308,29 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				continue;
 			}
 			$features = $this->features->extract($post, true);
-			$keys = RecommendationStoryFingerprint::keys(
+			$storyKeys = RecommendationStoryFingerprint::keys(
 				$features['story_terms'] ?? [],
 				$this->config->getSystemValueString('secret', ''),
 				$viewer->getUserId(),
 				$features['story_headline_terms'] ?? [],
 			);
+			$topicId = ($features['story_terms'] ?? []) !== []
+				? ($this->features->exposureTopics(array_keys($features['topics']))[0] ?? '')
+				: '';
+			$topicKey = RecommendationTopicFingerprint::key(
+				$topicId,
+				$this->config->getSystemValueString('secret', ''),
+				$viewer->getUserId(),
+			);
+			$topicKeys = $topicKey === null ? [] : [$topicKey];
 			$exactPostKey = RecommendationStoryFingerprint::exactPostKey(
 				$nid,
 				$this->config->getSystemValueString('secret', ''),
 				$viewer->getUserId(),
 			);
-			$keysByNid[$nid] = $keys !== [] ? $keys : ($exactPostKey === null ? [] : [$exactPostKey]);
-			foreach ($keysByNid[$nid] as $key) {
+			$storyKeysByNid[$nid] = $storyKeys !== [] ? $storyKeys : ($exactPostKey === null ? [] : [$exactPostKey]);
+			$topicKeysByNid[$nid] = $topicKeys;
+			foreach ([...$storyKeysByNid[$nid], ...$topicKeys] as $key) {
 				$postKeys[$key] = true;
 			}
 		}
@@ -316,7 +343,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 			$viewer->getUserId(), $state['generation'], array_keys($postKeys), $now - 30 * 86400
 		);
 		$penalties = [];
-		foreach ($keysByNid as $nid => $keys) {
+		foreach ($storyKeysByNid as $nid => $keys) {
 			$bySession = [];
 			$exactKey = count($keys) === RecommendationStoryFingerprint::MINHASH_BAND_COUNT + 1 ? $keys[0] : null;
 			$hasHeadlineKeys = count($keys) === RecommendationStoryFingerprint::MINHASH_BAND_COUNT * 2;
@@ -351,16 +378,39 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 				$impressionCount += $exposure['impressions'];
 				$updatedAt = max($updatedAt, $exposure['updated_at']);
 			}
-			if ($impressionCount === 0) {
-				continue;
+			$storyPenalty = self::exposurePenalty($impressionCount, $updatedAt, $now);
+			$topicBySession = [];
+			foreach ($topicKeysByNid[$nid] ?? [] as $topicKey) {
+				foreach ($exposures[$topicKey] ?? [] as $session => $exposure) {
+					$topicBySession[$session]['impressions'] = max($topicBySession[$session]['impressions'] ?? 0, $exposure['impressions']);
+					$topicBySession[$session]['updated_at'] = max($topicBySession[$session]['updated_at'] ?? 0, $exposure['updated_at']);
+				}
 			}
-			$ageSeconds = max(0, $now - $updatedAt);
-			$recency = exp(-0.6931471805599453 * (float)$ageSeconds / (72.0 * 3600.0));
-			$repetition = (float)$impressionCount / ((float)$impressionCount + 2.0);
-			$penalties[$nid] = min(1.0, max(0.0, $recency * $repetition));
+			$topicImpressions = 0;
+			$topicUpdatedAt = 0;
+			foreach ($topicBySession as $exposure) {
+				$topicImpressions += $exposure['impressions'];
+				$topicUpdatedAt = max($topicUpdatedAt, $exposure['updated_at']);
+			}
+			$topicPenalty = self::exposurePenalty($topicImpressions, $topicUpdatedAt, $now);
+			if (max($storyPenalty, $topicPenalty) > 0.0) {
+				$penalties[$nid] = max($storyPenalty, $topicPenalty);
+			}
 		}
 
 		return $penalties;
+	}
+
+	private static function exposurePenalty(int $impressions, int $updatedAt, int $now): float {
+		if ($impressions <= 0) {
+			return 0.0;
+		}
+
+		$ageSeconds = max(0, $now - $updatedAt);
+		$recency = exp(-0.6931471805599453 * (float)$ageSeconds / (72.0 * 3600.0));
+		$repetition = (float)$impressions / ((float)$impressions + 2.0);
+
+		return min(1.0, max(0.0, $recency * $repetition));
 	}
 
 	/** @return array{topic: float, author: float, format: float} */

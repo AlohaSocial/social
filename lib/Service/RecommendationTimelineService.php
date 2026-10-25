@@ -23,7 +23,7 @@ class RecommendationTimelineService {
 	private const MAX_REFRESH_TOPICS = 2;
 	private const LOOKBACK_DAYS = RecommendationFreshness::LOOKBACK_DAYS;
 	private const MIN_COVERAGE = 15;
-	private const MODE = 'for-you-v15-topic-hierarchy-diversity';
+	private const MODE = 'for-you-v16-topic-exposure-diversity';
 
 	public function __construct(
 		private RecommendationPreferenceService $preferences,
