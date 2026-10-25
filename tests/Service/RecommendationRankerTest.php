@@ -527,6 +527,33 @@ class RecommendationRankerTest extends TestCase {
 		$this->assertSame(['topic-1', 'topic-2', 'topic-3', 'topic-4', 'topic-5'], array_column($page, 'nid'));
 	}
 
+	public function testExhaustedStoryDoesNotKeepOtherTopicsFilteredOut(): void {
+		$ranked = [];
+		for ($i = 1; $i <= 8; $i++) {
+			$ranked[] = [
+				'nid' => 'topic-' . $i,
+				'rank_score' => 1.0 - ($i * 0.01),
+				'topic_ids' => ['topic.alpha'],
+				'story_terms' => ['alpha', 'local' . $i, 'community' . $i, 'story' . $i, 'variant' . $i],
+			];
+		}
+		$incidentTerms = ['php', 'security', 'release', 'maintainer', 'vulnerability', 'patch', 'disclosure', 'exploit'];
+		for ($i = 1; $i <= 5; $i++) {
+			$ranked[] = [
+				'nid' => 'incident-' . $i,
+				'rank_score' => 0.50 - ($i * 0.01),
+				'topic_ids' => ['topic.incident.' . $i],
+				'story_terms' => [...$incidentTerms, 'detail' . $i],
+			];
+		}
+
+		$page = (new RecommendationReRanker())->page($ranked, 8, 'exhausted-story-topic-fallback');
+
+		$this->assertCount(8, $page, 'an unselectable fifth post from one story must not suppress an otherwise available topic');
+		$this->assertContains('topic-4', array_column($page, 'nid'));
+		$this->assertCount(4, array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'incident-')));
+	}
+
 	public function testQualifiedExplorationUsesOneStableBoundedSlot(): void {
 		$ranked = [];
 		for ($i = 0; $i < 14; $i++) {

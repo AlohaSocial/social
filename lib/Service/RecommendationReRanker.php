@@ -79,9 +79,12 @@ final class RecommendationReRanker {
 			$hasTopicAlternative = false;
 			foreach ($window as $candidate) {
 				$author = (string)($candidate['author_key'] ?? '');
-				$storySaturated = self::storyCount($candidate, $selected) >= self::MAX_STORY_IN_PAGE;
+				$storyCount = self::storyCount($candidate, $selected);
+				$storySaturated = $storyCount >= self::MAX_STORY_IN_PAGE;
 				$topicSaturated = self::allTopicsSaturated(self::topicIds($candidate), $saturatedTopics);
-				if (!$topicSaturated) {
+				$storyCanStillAppear = !$storySaturated
+					|| $storyCount < self::MAX_STORY_IN_PAGE + self::MAX_STORY_OVERFLOW;
+				if (!$topicSaturated && $storyCanStillAppear) {
 					$hasTopicAlternative = true;
 				}
 				$authorSaturated = $author !== '' && isset($saturatedAuthors[$author]);
