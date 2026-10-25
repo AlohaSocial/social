@@ -59,6 +59,7 @@ class InterestFeedService {
 	public const PER_AUTHOR = 2;
 	public const TAG_SHARE = 0.4;
 	private const STORY_LIMIT = 3;
+	private const STORY_OVERFLOW = 1;
 	/** One slot in this many is an exploration post. */
 	public const EXPLORE_EVERY = 10;
 	public const RELATED_TAGS = 5;
@@ -379,7 +380,12 @@ class InterestFeedService {
 			$authorOnly = null;
 			foreach ($ranked as $index => $entry) {
 				$cluster = $entry['_story_cluster'] ?? null;
-				if ($hasStoryAlternative && is_int($cluster) && ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT) {
+				$storyCount = is_int($cluster) ? ($storyCounts[$cluster] ?? 0) : 0;
+				$storyOverflow = !$hasStoryAlternative
+					&& is_int($cluster)
+					&& $storyCount >= self::STORY_LIMIT
+					&& $storyCount < self::STORY_LIMIT + self::STORY_OVERFLOW;
+				if (is_int($cluster) && $storyCount >= self::STORY_LIMIT && !$storyOverflow) {
 					continue;
 				}
 				if (($authors[$entry['author']] ?? 0) >= self::PER_AUTHOR) {
@@ -395,7 +401,12 @@ class InterestFeedService {
 			if ($pick === null && $hasStoryAlternative) {
 				$pick = self::firstStoryAlternative($ranked, $storyCounts);
 			}
-			$pick ??= 0;
+			if ($pick === null && !$hasStoryAlternative) {
+				$pick = self::firstStoryOverflow($ranked, $storyCounts);
+			}
+			if ($pick === null) {
+				break;
+			}
 
 			self::appendWithStoryCount($placed, $storyCounts, $ranked[$pick]);
 			array_splice($ranked, $pick, 1);
@@ -492,12 +503,26 @@ class InterestFeedService {
 	private static function hasStoryAlternative(array $entries, array $storyCounts): bool {
 		foreach ($entries as $entry) {
 			$cluster = $entry['_story_cluster'] ?? null;
-			if (is_int($cluster) && ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT) {
+			if (!is_int($cluster) || ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT) {
 				return true;
 			}
 		}
 
 		return false;
+	}
+
+	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts */
+	private static function firstStoryOverflow(array $entries, array $storyCounts): ?int {
+		foreach ($entries as $index => $entry) {
+			$cluster = $entry['_story_cluster'] ?? null;
+			if (is_int($cluster)
+				&& ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT
+				&& ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT + self::STORY_OVERFLOW) {
+				return $index;
+			}
+		}
+
+		return null;
 	}
 
 	/**
