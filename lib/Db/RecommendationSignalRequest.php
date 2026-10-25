@@ -58,7 +58,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 	 * Results retain session grouping so fuzzy story bands must match within a
 	 * single exposure session, without returning raw post identifiers or text.
 	 *
-	 * @param list<string> $postKeys owner-scoped HMAC story and headline bands or exact-post keys
+	 * @param list<string> $postKeys owner-scoped HMAC story, headline, topic or exact-post keys
 	 * @return array<string, array<string, array{impressions: int, updated_at: int}>> keyed by fingerprint, then session key
 	 */
 	public function exposures(string $actorKey, int $generation, array $postKeys, int $since): array {
@@ -95,7 +95,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 	 * to consent, reset generation and duplicate event delivery.
 	 *
 	 * @param list<array{dimension: string, entity_key: string, delta: float}> $signals
-	 * @param array{post_keys: list<string>, session_key: string}|null $impression owner-scoped HMAC story and headline bands or exact-post keys
+	 * @param array{post_keys: list<string>, session_key: string}|null $impression owner-scoped HMAC story, headline, topic or exact-post keys
 	 * @return array{accepted: bool, duplicate: bool, profile_version: int}
 	 */
 	public function record(
