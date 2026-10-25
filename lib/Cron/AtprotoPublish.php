@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Lexicon\LexiconException;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\Backoff;
@@ -22,8 +23,10 @@ use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Exceptions\AtprotoKeysSealedException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Model\StreamAction;
 use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\VerificationService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -36,12 +39,12 @@ use Throwable;
  * One post's trip to Bluesky, queued by the listener the moment the post
  * is made, deleted or edited, so the Fediverse delivery never waits for it.
  *
- * `argument`: `action` (publish, delete, edit, message for a direct
+ * `argument`: `action` (publish, delete, edit, bookmark, unbookmark, message for a direct
  * message, profile with an actor's id, or verifications, with any `id`,
  * for every verification moved to another verifying account) and the
  * `id`; for a like or repost (`like`, `unlike`, `repost`, `unrepost`) the
  * id is the Like's or Announce's, with the `post` and the `actor` when one
- * is made; for `chat` the id is the person's, with what `ChatState` does to
+ * is made; a bookmark has the post id and actor; for `chat` the id is the person's, with what `ChatState` does to
  * their Bluesky conversations (`chat`, `convos`, `member`). A failure that
  * may pass — a service down, a lock that timed out — queues the job again
  * with the attempts so far in `tries`, later each time (`Backoff::bluesky()`),
@@ -67,6 +70,8 @@ class AtprotoPublish extends QueuedJob {
 		private ActionsRequest $actions,
 		private IJobList $jobList,
 		private ?BlockedByService $blockedBy = null,
+		private ?BlueskyBookmarks $bookmarks = null,
+		private ?StreamActionService $streamActions = null,
 	) {
 		parent::__construct($time);
 	}
@@ -81,6 +86,11 @@ class AtprotoPublish extends QueuedJob {
 		try {
 			if (in_array($action, ['like', 'unlike', 'repost', 'unrepost'], true)) {
 				$this->interact($action, $id, (string)($argument['post'] ?? ''), (string)($argument['actor'] ?? ''));
+
+				return;
+			}
+			if (in_array($action, ['bookmark', 'unbookmark'], true)) {
+				$this->bookmark($action, $id, (string)($argument['actor'] ?? ''));
 
 				return;
 			}
@@ -188,6 +198,18 @@ class AtprotoPublish extends QueuedJob {
 		} else {
 			$this->interactions->repost($actor, $post, $id);
 		}
+	}
+
+	/** Applies only the latest local bookmark state; a superseded job is a no-op. */
+	private function bookmark(string $action, string $postId, string $actorId): void {
+		if ($this->bookmarks === null || $this->streamActions === null || $actorId === '' || $postId === '') {
+			return;
+		}
+		$on = $action === 'bookmark';
+		if ($this->streamActions->getActionBool($actorId, $postId, StreamAction::BOOKMARKED) !== $on) {
+			return;
+		}
+		$this->bookmarks->sync($this->cacheActorService->getFromId($actorId), $postId, $on);
 	}
 
 	/**
