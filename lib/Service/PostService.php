@@ -385,6 +385,7 @@ class PostService {
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
 		?array $mediaIds = null, ?array $linkCard = null, bool $linkCardProvided = false,
+		bool $atprotoEmbedProvided = false, string $quotedId = '', ?array $atprotoRecordEmbed = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -401,6 +402,8 @@ class PostService {
 		// the revision recorded below is the version being replaced, so it has
 		// to be taken before any of the fields are overwritten
 		$original = clone $stream;
+		$oldQuotedId = $stream->getQuote();
+		$quotedAuthor = null;
 		// the tags first: they are what the markup below may link, and an edit
 		// is a fresh parse of the text
 		$this->reapplyEntities($stream, $content);
@@ -422,16 +425,26 @@ class PostService {
 				$mediaIds, $actor->getPreferredUsername(), $stream->getVisibility()
 			));
 		}
+		if ($atprotoEmbedProvided && $oldQuotedId !== $quotedId) {
+			$stream->setQuote('');
+			$stream->setQuoteAuthorization('');
+			$stream->setQuoteState('');
+			if ($quotedId !== '') {
+				$quotedAuthor = $this->applyQuote($stream, $quotedId, $actor);
+			}
+		}
+		if ($atprotoEmbedProvided) {
+			$details = $stream->getDetails(Details::ATPROTO);
+			if ($atprotoRecordEmbed === null) {
+				unset($details[Details::ATPROTO_RECORD_EMBED]);
+			} else {
+				$details[Details::ATPROTO_RECORD_EMBED] = $atprotoRecordEmbed;
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		}
 
 		// a new list rather than changed objects: `$original` shares them, and
 		// the revision recorded below is the version with the old words
-		if ($mediaIds !== null) {
-			$stream->setAttachments($this->documentService->replaceMediaAttachments(
-				$mediaIds,
-				$actor->getPreferredUsername(),
-				in_array($stream->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true)
-			));
-		}
 		if ($mediaAttributes !== []) {
 			$stream->setAttachments($this->documentService->applyMediaAttributes(
 				$stream->getAttachments(), $actor->getPreferredUsername(), $mediaAttributes
@@ -465,6 +478,10 @@ class PostService {
 		// Mention and inbox path, but no local delivery/timeline destination is
 		// recorded for the newly named account.
 		$this->streamService->updateStream($stream, true);
+		if ($atprotoEmbedProvided && $oldQuotedId !== $quotedId) {
+			$this->streamService->recountQuotes($oldQuotedId);
+			$this->streamService->recountQuotes($quotedId);
+		}
 		$this->revisionService->recordEdit($original, $stream);
 		if ($linkCardProvided) {
 			try {
@@ -513,6 +530,9 @@ class PostService {
 			// so it cannot overtake the Create or carry the old file
 			$holdUntil = $this->videoDeliveryHold->holdUntil($updated);
 			$this->activityService->updateActivity($actor, $updated, $holdUntil);
+			if ($quotedAuthor !== null) {
+				$this->requestQuoteApproval($actor, $updated, $quotedAuthor);
+			}
 			if ($holdUntil > 0) {
 				$this->videoDeliveryHold->convertSoon($updated);
 			}
@@ -622,7 +642,7 @@ class PostService {
 	 *                                client can act on, and the one PinService::pin() raises for the
 	 *                                same refusal
 	 */
-	private function applyQuote(Note $note, string $quotedId, Person $quoter): ?Person {
+	private function applyQuote(Stream $note, string $quotedId, Person $quoter): ?Person {
 		if ($quotedId === '') {
 			return null;
 		}
@@ -715,7 +735,8 @@ class PostService {
 	 */
 	private function requestQuoteApproval(Person $actor, Stream $note, Person $author): void {
 		$request = new QuoteRequest();
-		$request->setId($note->getId() . '#quote-request');
+		$quoteRequestKey = substr(hash('sha256', $note->getQuote() . "\0" . $note->getUpdated() . "\0" . $note->getPublished()), 0, 24);
+		$request->setId($note->getId() . '#quote-request-' . $quoteRequestKey);
 		$request->setActor($actor);
 		$request->setObjectId($note->getQuote());
 		$request->setInstrument($note->getId());

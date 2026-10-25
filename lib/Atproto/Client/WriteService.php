@@ -256,9 +256,27 @@ class WriteService {
 		$mediaIds = null;
 		$linkCard = null;
 		$linkCardProvided = false;
+		$atprotoEmbedProvided = false;
+		$quotedId = '';
+		$atprotoRecordEmbed = null;
 		if ($embedChanged) {
-			if (self::recordReference($currentEmbed) !== self::recordReference($replacementEmbed)) {
-				throw XrpcException::invalidRequest('Changing a post quote or record card is not supported yet');
+			$currentReference = self::recordReference($currentEmbed);
+			$replacementReference = self::recordReference($replacementEmbed);
+			if ($currentReference !== $replacementReference) {
+				$atprotoEmbedProvided = true;
+				$linkCardProvided = true;
+				if ($replacementReference !== null) {
+					$parsedReference = Syntax::parseAtUri($replacementReference['uri']);
+					if ($parsedReference === null || $parsedReference['rkey'] === '' || !Cid::isValid($replacementReference['cid'])) {
+						throw XrpcException::invalidRequest('The embedded record must have a valid AT URI and CID');
+					}
+					if ($parsedReference['collection'] === RecordMapper::POST) {
+						$quotedId = $this->knownPost($replacementReference['uri']);
+					} else {
+						$atprotoRecordEmbed = $replacementReference;
+						$linkCard = self::recordEmbedCard($parsedReference);
+					}
+				}
 			}
 			if (self::hasExternalCard($currentEmbed) || self::hasExternalCard($replacementEmbed)) {
 				$linkCardProvided = true;
@@ -315,7 +333,8 @@ class WriteService {
 		try {
 			$updated = $this->posts->editPost(
 				$post->getNid(), $actor, $text, $spoilerText, $sensitive, $language,
-				[], null, false, $mediaIds, $linkCard, $linkCardProvided
+				[], null, false, $mediaIds, $linkCard, $linkCardProvided,
+				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed
 			);
 			$this->publisher->editPost($updated);
 		} catch (Throwable $e) {

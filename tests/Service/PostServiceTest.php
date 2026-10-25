@@ -1353,6 +1353,48 @@ class PostServiceTest extends TestCase {
 		$this->service->editPost(7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, true);
 	}
 
+	public function testAnAtProtoEditCanReplaceItsQuoteAndGeneralRecordEmbed(): void {
+		$oldQuote = 'https://bsky.app/profile/did:plc:old/post/3kold';
+		$newQuote = 'https://bsky.app/profile/did:plc:new/post/3knew';
+		$stored = $this->storedNote();
+		$stored->setQuote($oldQuote);
+		$stored->setQuoteAuthorization('https://remote.example/old-authorization');
+		$stored->setDetailArray(Details::ATPROTO, [Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:old/app.bsky.feed.generator/old', 'cid' => 'bafyreia']]);
+		$quoted = new Note();
+		$quoted->setId($newQuote);
+		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:new');
+		$quoted->setTo(ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->with($newQuote)->willReturn($quoted);
+		$reloaded = clone $stored;
+		$reloaded->setQuote($newQuote);
+		$reloaded->setQuoteAuthorization('');
+		$reloaded->setQuoteState(Stream::QUOTE_ACCEPTED);
+		$reloaded->setDetailArray(Details::ATPROTO, [Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew']]);
+		$this->streamRequest->method('getStreamByNid')->with(7)->willReturnOnConsecutiveCalls($stored, $reloaded);
+		$this->streamRequest->expects($this->once())->method('update')->with($stored, true);
+		$recountedQuotes = [];
+		$this->streamRequest->expects($this->exactly(2))->method('recountQuotes')
+			->willReturnCallback(static function (string $quote) use (&$recountedQuotes): void {
+				$recountedQuotes[] = $quote;
+			});
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$result = $this->service->editPost(
+			7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, false,
+			true, $newQuote,
+			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew']
+		);
+
+		$this->assertSame($reloaded, $result);
+		$this->assertSame([$oldQuote, $newQuote], $recountedQuotes);
+		$this->assertSame($newQuote, $stored->getQuote());
+		$this->assertSame(Stream::QUOTE_ACCEPTED, $stored->getQuoteState());
+		$this->assertSame(
+			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'],
+			$stored->getDetails(Details::ATPROTO)[Details::ATPROTO_RECORD_EMBED]
+		);
+	}
+
 	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {
 		$stored = $this->storedNote();
 		$this->streamRequest->method('getStreamByNid')
