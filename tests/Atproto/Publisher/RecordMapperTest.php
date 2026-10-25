@@ -422,6 +422,27 @@ class RecordMapperTest extends TestCase {
 		$this->lexicon->validateRecord($withMedia);
 	}
 
+	public function testAQuoteKeepsItsExternalCardAsTheRecordWithMediaEmbed(): void {
+		$quoted = $this->blueskyPost('3kquoted');
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturn($quoted);
+		$card = new StreamCard(self::POST_ID, 'https://example.com/story');
+		$card->setTitle('A story');
+		$card->setDescription('Details');
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->with(self::POST_ID)->willReturn($card);
+		$this->mapper = $this->mapper();
+		$post = $this->post('<p>look at this</p>');
+		$post->setQuote($quoted->getId());
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$this->assertSame('app.bsky.embed.recordWithMedia', $record['embed']['$type']);
+		$this->assertSame('app.bsky.embed.external', $record['embed']['media']['$type']);
+		$this->assertSame('https://example.com/story', $record['embed']['media']['external']['uri']);
+		$this->lexicon->validateRecord($record);
+	}
+
 	public function testAVideoTheVideoServiceMadeIsAVideoEmbed(): void {
 		$post = $this->post('<p>At the beach</p>');
 		$blob = new BlobRef(self::DID, Cid::forRaw('a video'), 'https://social.test/documents/local/8', 'video/mp4', 4000000);
