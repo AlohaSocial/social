@@ -26,6 +26,7 @@ use OCA\Social\Service\AccountService;
 use OCA\Social\Service\IRecommendationSignalRecorder;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
+use OCP\BackgroundJob\IJobList;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -38,6 +39,7 @@ class BlueskyBookmarksTest extends TestCase {
 	private const URI = 'at://did:plc:bob/app.bsky.feed.post/3k';
 
 	private array $told = [];
+	private array $queued = [];
 	private array $set = [];
 	private BlueskyBookmarks $bookmarks;
 	private Identity $identity;
@@ -91,19 +93,31 @@ class BlueskyBookmarksTest extends TestCase {
 		$accounts->method('getActorFromUserId')->willReturn((new Person())->setId('https://social.test/@alice'));
 		$streams->method('getStreamById')->willReturn(new Note());
 		$this->recommendationSignals = $this->createMock(IRecommendationSignalRecorder::class);
-		$this->bookmarks = new BlueskyBookmarks($appView, $identities, $refs, $local, $store, $streamActions, $streams, $accounts, $this->recommendationSignals, new NullLogger());
+		$jobs = $this->createMock(IJobList::class);
+		$jobs->method('add')->willReturnCallback(function (string $job, array $argument): void {
+			$this->queued[] = [$job, $argument];
+		});
+		$this->bookmarks = new BlueskyBookmarks($appView, $identities, $refs, $local, $store, $streamActions, $streams, $accounts, $this->recommendationSignals, $jobs, new NullLogger());
 	}
 
-	public function testABookmarkHereOfAPostOnBlueskyIsToldToTheAppView(): void {
+	public function testABookmarkHereOfAPostOnBlueskyQueuesAnAppViewSyncThatReadsTheLatestState(): void {
 		$alice = (new Person())->setId('https://social.test/@alice');
 		$this->bookmarks->bookmarked($alice, self::BLUESKY_POST, true);
 		$this->bookmarks->bookmarked($alice, 'https://remote.example/notes/1', true);
 		$this->bookmarks->bookmarked($alice, self::BLUESKY_POST, false);
+		$this->currentlyBookmarked = true;
+		$this->bookmarks->syncCurrent($alice, self::BLUESKY_POST);
+		$this->currentlyBookmarked = false;
+		$this->bookmarks->syncCurrent($alice, self::BLUESKY_POST);
 
+		$this->assertSame([
+			[\OCA\Social\Cron\AtprotoPublish::class, ['action' => 'bookmark', 'id' => self::BLUESKY_POST, 'actor' => $alice->getId()]],
+			[\OCA\Social\Cron\AtprotoPublish::class, ['action' => 'bookmark', 'id' => self::BLUESKY_POST, 'actor' => $alice->getId()]],
+		], $this->queued, 'each state change is durably queued');
 		$this->assertSame([
 			[BlueskyBookmarks::CREATE, ['uri' => self::URI, 'cid' => 'bafy']],
 			[BlueskyBookmarks::DELETE, ['uri' => self::URI]],
-		], $this->told, 'a post that is not on Bluesky is not told');
+		], $this->told, 'the worker syncs the latest state; a post that is not on Bluesky is ignored');
 	}
 
 	public function testAnAppsBookmarkIsMadeHereWithoutBeingToldBack(): void {

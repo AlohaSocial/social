@@ -15,6 +15,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Reader\BlueskyCountSource;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Cron\AtprotoPublish;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Client\Options\ProbeOptions;
@@ -24,6 +25,7 @@ use OCA\Social\Service\IRecommendationSignalRecorder;
 use OCA\Social\Service\StreamActionService;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Tools\Nid;
+use OCP\BackgroundJob\IJobList;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -55,28 +57,45 @@ class BlueskyBookmarks {
 		private StreamService $streams,
 		private AccountService $accounts,
 		private IRecommendationSignalRecorder $recommendationSignals,
+		private IJobList $jobList,
 		private LoggerInterface $logger,
 	) {
 	}
 
 	/**
-	 * A bookmark just set or taken away here: told to the AppView, for a
-	 * post that is on Bluesky and a person with a Bluesky identity.
+	 * A bookmark just set or taken away here: queue its private AppView sync.
+	 * The queued worker reads the current local flag, so rapid changes coalesce
+	 * to the final state and transient AppView failures are retried.
 	 */
 	public function bookmarked(Person $viewer, string $postId, bool $on): void {
 		if ($this->fromApp) {
 			return;
 		}
 		try {
+			// The queued job reads the stored flag, rather than this possibly
+			// stale event value, so a later change supersedes an earlier one.
 			$ref = $this->refs->strongRef($postId);
 			$identity = $ref === null ? null : $this->identities->activeForActor($viewer);
 			if ($ref === null || $identity === null) {
 				return;
 			}
-			$this->appView->procedureAs($identity->did, $this->identities->signingKey($identity), $on ? self::CREATE : self::DELETE, $on ? $ref : ['uri' => $ref['uri']]);
+			$this->jobList->add(AtprotoPublish::class, ['action' => 'bookmark', 'id' => $postId, 'actor' => $viewer->getId()]);
 		} catch (Throwable $e) {
-			$this->logger->warning('Bookmark not told to Bluesky', ['post' => $postId, 'exception' => $e]);
+			$this->logger->warning('Bookmark sync to Bluesky was not queued', ['post' => $postId, 'exception' => $e]);
 		}
+	}
+
+	/** Retryable worker path: read the latest local state before synchronizing. */
+	public function syncCurrent(Person $viewer, string $postId): void {
+		$ref = $this->refs->strongRef($postId);
+		$identity = $ref === null ? null : $this->identities->activeForActor($viewer);
+		if ($ref === null || $identity === null) {
+			return;
+		}
+		$on = $this->streamActions->getActionBool($viewer->getId(), $postId, StreamAction::BOOKMARKED);
+		$method = $on ? self::CREATE : self::DELETE;
+		$input = $on ? $ref : ['uri' => $ref['uri']];
+		$this->appView->procedureAs($identity->did, $this->identities->signingKey($identity), $method, $input);
 	}
 
 	/**

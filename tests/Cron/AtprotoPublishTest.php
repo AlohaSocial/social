@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Cron;
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Lexicon\LexiconException;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Cron\AtprotoPublish;
@@ -100,7 +101,7 @@ class AtprotoPublishTest extends TestCase {
 		$this->job = new AtprotoPublish(
 			$time, $this->publisher, $this->interactions, $streams, $actors,
 			$this->logger, $this->createMock(ChatSender::class), $this->createMock(ChatState::class), $this->createMock(VerificationService::class),
-			$this->actions, $jobs, $this->blockedBy,
+			$this->actions, $jobs, $this->createMock(BlueskyBookmarks::class), $this->blockedBy,
 		);
 	}
 
@@ -146,6 +147,28 @@ class AtprotoPublishTest extends TestCase {
 		$this->runJob(['action' => 'unlike', 'id' => 'https://social.test/like/1']);
 
 		$this->assertSame([[self::NOW + Backoff::bluesky()->delay(1), ['tries' => 1, 'action' => 'unlike', 'id' => 'https://social.test/like/1']]], $this->requeued);
+	}
+
+	public function testABlueskyBookmarkSyncFailureIsRetried(): void {
+		$bookmarks = $this->createMock(BlueskyBookmarks::class);
+		$bookmarks->expects($this->once())->method('syncCurrent')->with($this->isInstanceOf(Person::class), $this->post->getId())
+			->willThrowException(new AtprotoException('AppView answered 503: unavailable', 503));
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(self::NOW);
+		$jobs = $this->createMock(IJobList::class);
+		$jobs->expects($this->once())->method('scheduleAfter')->willReturnCallback(function (string $job, int $runAfter, array $argument): void {
+			$this->assertSame(AtprotoPublish::class, $job);
+			$this->assertSame(self::NOW + Backoff::bluesky()->delay(1), $runAfter);
+			$this->assertSame(['tries' => 1, 'action' => 'bookmark', 'id' => $this->post->getId(), 'actor' => self::ALICE], $argument);
+		});
+		$this->job = new AtprotoPublish(
+			$time, $this->publisher, $this->interactions, $this->createMock(StreamService::class),
+			$this->createMock(CacheActorService::class), $this->logger, $this->createMock(ChatSender::class),
+			$this->createMock(ChatState::class), $this->createMock(VerificationService::class), $this->actions,
+			$jobs, $bookmarks, $this->blockedBy,
+		);
+
+		$this->runJob(['action' => 'bookmark', 'id' => $this->post->getId(), 'actor' => self::ALICE]);
 	}
 
 	public function testEachAttemptWaitsLongerThanTheOneBefore(): void {

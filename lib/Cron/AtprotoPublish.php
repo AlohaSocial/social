@@ -12,6 +12,7 @@ namespace OCA\Social\Cron;
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
 use OCA\Social\Atproto\Lexicon\LexiconException;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Db\ActionsRequest;
@@ -37,7 +38,8 @@ use Throwable;
  * is made, deleted or edited, so the Fediverse delivery never waits for it.
  *
  * `argument`: `action` (publish, delete, edit, message for a direct
- * message, profile with an actor's id, or verifications, with any `id`,
+ * message, profile with an actor's id, bookmark with a post id and actor,
+ * or verifications, with any `id`,
  * for every verification moved to another verifying account) and the
  * `id`; for a like or repost (`like`, `unlike`, `repost`, `unrepost`) the
  * id is the Like's or Announce's, with the `post` and the `actor` when one
@@ -66,6 +68,7 @@ class AtprotoPublish extends QueuedJob {
 		private VerificationService $verifications,
 		private ActionsRequest $actions,
 		private IJobList $jobList,
+		private BlueskyBookmarks $bookmarks,
 		private ?BlockedByService $blockedBy = null,
 	) {
 		parent::__construct($time);
@@ -87,6 +90,11 @@ class AtprotoPublish extends QueuedJob {
 			if ($action === 'delete') {
 				$this->publisher->deletePost($id);
 				$this->interactions->removeAllOf($id);
+
+				return;
+			}
+			if ($action === 'bookmark') {
+				$this->bookmarks->syncCurrent($this->cacheActorService->getFromId((string)($argument['actor'] ?? '')), $id);
 
 				return;
 			}
