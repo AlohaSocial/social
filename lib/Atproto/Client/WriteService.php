@@ -157,14 +157,17 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.putRecord`: the profile and who may send direct
-	 * messages, which are the records an app replaces.
+	 * `com.atproto.repo.putRecord`: replace supported records, including the
+	 * text and labels of an existing post under its original AT URI.
 	 *
 	 * @throws XrpcException
 	 */
 	public function put(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
+		if ($collection === RecordMapper::POST) {
+			return $this->updatePostRecord($session, $body);
+		}
 		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
@@ -206,6 +209,96 @@ class WriteService {
 		}
 
 		return $this->created($session, $stored);
+	}
+
+	/**
+	 * Replace the text and labels of an existing Bluesky post without changing
+	 * its AT URI. Replies and embeds must remain byte-for-byte equivalent until
+	 * Social can represent their replacement without losing media or policy.
+	 *
+	 * @throws XrpcException
+	 */
+	private function updatePostRecord(ClientSession $session, array $body): array {
+		$rkey = (string)($body['rkey'] ?? '');
+		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		if ($rkey === '' || ($record['$type'] ?? '') !== RecordMapper::POST || !is_string($record['text'] ?? null)) {
+			throw XrpcException::invalidRequest('A post update needs its record key, type and text');
+		}
+		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::POST, $rkey);
+		if ($stored === null) {
+			throw new XrpcException(404, 'RecordNotFound', 'There is no post at that record key');
+		}
+		$currentRecord = $stored->value();
+		foreach (['reply', 'embed'] as $field) {
+			try {
+				$current = DagCbor::encode($currentRecord[$field] ?? null);
+				$replacement = DagCbor::encode(DagCbor::fromLexJson($record[$field] ?? null));
+			} catch (Throwable) {
+				throw XrpcException::invalidRequest('The post update contains an invalid ' . $field);
+			}
+			if ($current !== $replacement) {
+				throw XrpcException::invalidRequest('Changing a post reply or embed is not supported yet');
+			}
+		}
+
+		try {
+			$post = $this->streams->getStreamById($stored->localId);
+		} catch (Throwable) {
+			throw new XrpcException(404, 'RecordNotFound', 'The post for that record key is no longer available');
+		}
+		$actor = $this->actor($session);
+		if ($post->getAttributedTo() !== $actor->getId()) {
+			throw new XrpcException(403, 'InvalidRequest', 'You cannot update another account post');
+		}
+
+		$langs = $record['langs'] ?? [];
+		if (!is_array($langs) || !array_is_list($langs)) {
+			throw XrpcException::invalidRequest('Post languages must be a list');
+		}
+		$language = '';
+		foreach ($langs as $candidate) {
+			if (!is_string($candidate) || !Syntax::isLanguage($candidate)) {
+				throw XrpcException::invalidRequest('Post language is invalid');
+			}
+		}
+		if (is_string($langs[0] ?? null)) {
+			$language = $langs[0];
+		}
+
+		$labels = is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [];
+		$warning = false;
+		$sensitive = false;
+		foreach ($labels as $label) {
+			$value = is_array($label) ? (string)($label['val'] ?? '') : '';
+			$warning = $warning || $value === '!warn';
+			$sensitive = $sensitive || in_array($value, ['!warn', 'porn', 'sexual', 'nudity', 'graphic-media'], true);
+		}
+		$text = self::fullText($record['text'], $record['facets'] ?? []);
+		$spoilerText = '';
+		if ($warning) {
+			$parts = preg_split('/\R\R/', $text, 2);
+			if (is_array($parts) && count($parts) === 2
+				&& preg_match('/^(?:content warning|inhaltswarnung|inhaltshinweis|cw):\s*(.*)$/iu', $parts[0], $match) === 1) {
+				$spoilerText = trim($match[1]);
+				$text = $parts[1];
+			} else {
+				$spoilerText = $post->getSpoilerText();
+			}
+		}
+
+		try {
+			$updated = $this->posts->editPost($post->getNid(), $actor, $text, $spoilerText, $sensitive, $language);
+			$this->publisher->editPost($updated);
+		} catch (Throwable $e) {
+			$this->logger->warning('AT Protocol post replacement failed', ['rkey' => $rkey, 'exception' => $e]);
+			throw new XrpcException(500, 'InternalServerError', 'The post update could not be committed');
+		}
+		$replacement = $this->repositories->getRecord($session->identity->did, RecordMapper::POST, $rkey);
+		if ($replacement === null) {
+			throw new XrpcException(500, 'InternalServerError', 'The updated post record is unavailable');
+		}
+
+		return $this->created($session, $replacement);
 	}
 
 	/**

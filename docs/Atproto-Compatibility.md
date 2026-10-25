@@ -2694,8 +2694,11 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   shortened is its whole address again), a like a like, a repost a boost,
   a follow a follow — the record the publisher writes for it is the answer,
   so the app sees what Social published, which may differ (a long post cut
-  with a link). `putRecord` of the profile sets the display name and bio;
-  of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
+  with a link). `putRecord` of the profile sets the display name and bio; of an existing
+  post it replaces the text, language and supported warning labels under the
+  same record key, so its AT URI stays stable. A changed reply target or embed
+  is refused until Social can replace it without losing media or quote data.
+  `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
   send direct messages here, which writes the record (§10.1).
   `deleteRecord` undoes the action. `applyWrites` keeps a batch of
   repository-native records (lists and their members, starter packs, feed
