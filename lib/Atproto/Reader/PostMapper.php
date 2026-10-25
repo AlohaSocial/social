@@ -164,7 +164,9 @@ class PostMapper {
 		}
 		$rkey = BlueskyIds::parsePostId($id)['rkey'] ?? '';
 		$text = (string)($record['text'] ?? '');
-		$content = FacetRenderer::html($text, $record['facets'] ?? []);
+		$facets = $record['facets'] ?? [];
+		[$text, $facets, $inlineWarning] = self::removeInlineWarning($text, $facets, in_array('!warn', $labels, true));
+		$content = FacetRenderer::html($text, $facets);
 		$viewEmbed = is_array($post['embed'] ?? null) ? $post['embed'] : [];
 		$embed = self::hasUsableEmbedView($viewEmbed, $did)
 			? $viewEmbed
@@ -179,7 +181,7 @@ class PostMapper {
 			$content .= '<p><a href="' . self::escape($card['url']) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($card['title']) . '</a></p>';
 		}
 
-		$warning = $this->warning($labels);
+		$warning = $this->warning($labels, $inlineWarning);
 		$adult = array_intersect($labels, self::ADULT) !== [];
 		$published = self::datetime((string)($record['createdAt'] ?? ''), (string)($post['indexedAt'] ?? ''));
 		$streamedBlobs = [];
@@ -199,7 +201,7 @@ class PostMapper {
 			'content' => $content,
 			'summary' => $warning,
 			'sensitive' => $adult || $warning !== '',
-			'tag' => $this->tags($text, $record['facets'] ?? [], (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
+			'tag' => $this->tags($text, $facets, (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
 			'attachment' => $attachments,
 			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
 			'_atproto' => [
@@ -852,17 +854,55 @@ class PostMapper {
 	 * The content warning the labels ask for: the post's own `!warn` with
 	 * no text of its own, or the service's label named.
 	 */
-	private function warning(array $labels): string {
+	private function warning(array $labels, string $inlineWarning = ''): string {
 		$named = [];
 		foreach ($labels as $label) {
 			if ($label === '!warn') {
-				$named[] = 'Content warning';
+				$named[] = $inlineWarning !== '' ? $inlineWarning : 'Content warning';
 			} elseif (!str_starts_with($label, '!')) {
 				$named[] = ucfirst(str_replace('-', ' ', $label));
 			}
 		}
 
 		return implode(', ', array_unique($named));
+	}
+
+	/**
+	 * Social writes the warning alongside `!warn` in the post text, because
+	 * ATProto labels carry no warning text of their own. Restore that warning
+	 * as the ActivityPub summary and keep the prefix out of the visible body.
+	 * Facets use UTF-8 byte offsets, so shift the remaining ones with the text.
+	 *
+	 * @return array{string, mixed, string}
+	 */
+	private static function removeInlineWarning(string $text, mixed $facets, bool $warned): array {
+		if (!$warned || preg_match('/^(?:content warning|inhaltswarnung|inhaltshinweis|cw):[ \t]*([^\r\n]+)\R\R/iu', $text, $match) !== 1) {
+			return [$text, $facets, ''];
+		}
+		$warning = trim($match[1]);
+		if ($warning === '') {
+			return [$text, $facets, ''];
+		}
+
+		$prefixLength = strlen($match[0]);
+		$body = substr($text, $prefixLength);
+		$adjustedFacets = [];
+		foreach (is_array($facets) ? $facets : [] as $facet) {
+			if (!is_array($facet) || !is_array($facet['index'] ?? null)) {
+				$adjustedFacets[] = $facet;
+				continue;
+			}
+			$start = $facet['index']['byteStart'] ?? null;
+			$end = $facet['index']['byteEnd'] ?? null;
+			if (!is_int($start) || !is_int($end) || $start < $prefixLength) {
+				continue;
+			}
+			$facet['index']['byteStart'] = $start - $prefixLength;
+			$facet['index']['byteEnd'] = $end - $prefixLength;
+			$adjustedFacets[] = $facet;
+		}
+
+		return [$body, $adjustedFacets, $warning];
 	}
 
 	/**
