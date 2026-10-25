@@ -53,6 +53,9 @@ class PostMapperTest extends TestCase {
 		$this->assertSame(['url' => 'https://bsky.app/profile/bob.test/lists/3kl', 'title' => 'Friends', 'description' => '', 'image' => '', 'provider' => 'List by @bob.test'], PostMapper::cardOf($record($list)));
 		$this->assertSame(['url' => 'https://bsky.app/starter-pack/bob.test/3ks', 'title' => 'Start here', 'description' => 'Good people', 'image' => 'https://cdn.bsky.app/img/avatar/plain/bob@jpeg', 'provider' => 'Starter pack by @bob.test'],
 			PostMapper::cardOf(['$type' => 'app.bsky.embed.recordWithMedia#view', 'record' => $record($pack), 'media' => ['$type' => 'app.bsky.embed.images#view', 'images' => []]]), 'beside pictures');
+		$external = ['$type' => 'app.bsky.embed.external', 'external' => ['uri' => 'https://example.com/story', 'title' => 'A story', 'description' => 'Details']];
+		$this->assertSame(['url' => 'https://example.com/story', 'title' => 'A story', 'description' => 'Details', 'image' => '', 'provider' => 'example.com'],
+			PostMapper::cardOf(['$type' => 'app.bsky.embed.recordWithMedia', 'record' => ['record' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kp']], 'media' => $external]), 'an external card beside a quoted record');
 		$this->assertNull(PostMapper::cardOf($record(['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kp'])), 'a quoted post is a quote');
 
 		$note = (new PostMapper($this->resolver()))->note($this->postView(['embed' => $record($list)]));
