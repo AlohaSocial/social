@@ -80,7 +80,7 @@ class ClientXrpcTest extends TestCase {
 		$this->oauth->method('issuer')->willReturn('https://social.test');
 		$this->inbound = $this->createMock(InboundMoveService::class);
 		$this->inbound->method('owns')->willReturnCallback(static fn (string $authorization): bool => $authorization === 'Bearer move');
-		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->threadMutes = $this->createMock(BlueskyThreadMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class), $this->notificationSettings = $this->createMock(NotificationSettings::class), $this->plcSignatures = $this->createMock(PlcSignatureService::class));
+		$this->client = new ClientXrpc($config, $this->sessions, $this->proxy, $this->createMock(Preferences::class), $this->writes, $this->grants, $this->oauth, $this->moderation, $this->inbound, $this->mutes = $this->createMock(BlueskyMutes::class), $this->threadMutes = $this->createMock(BlueskyThreadMutes::class), $this->bookmarks = $this->createMock(BlueskyBookmarks::class), $this->notificationSettings = $this->createMock(NotificationSettings::class), $this->plcSignatures = $this->createMock(PlcSignatureService::class), $this->createMock(\OCA\Social\Atproto\Identity\CustomHandleService::class));
 	}
 
 	protected function tearDown(): void {

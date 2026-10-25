@@ -57,6 +57,13 @@ class CustomHandleService {
 			throw new MoveErrorException($refusal, Syntax::isResolvableHandle($handle) ? 'handle-reserved' : 'handle-domain-invalid');
 		}
 		if ($handle === $identity->handle) {
+			if ($identity->customHandle !== '') {
+				return $this->identities->useCustomHandle($identity, '');
+			}
+
+			return $identity;
+		}
+		if ($handle === $identity->customHandle) {
 			return $identity;
 		}
 		if ($this->identityRequest->handleExists($handle)) {

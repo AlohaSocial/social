@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Atproto\Client;
 
+use OCA\Social\Atproto\Identity\CustomHandleService;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\OAuthException;
@@ -19,6 +20,7 @@ use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Atproto\Xrpc\XrpcBytes;
 use OCA\Social\Atproto\Xrpc\XrpcException;
+use OCA\Social\Exceptions\MoveErrorException;
 use OCA\Social\Service\ModerationService;
 
 /**
@@ -62,6 +64,7 @@ class ClientXrpc {
 		private BlueskyBookmarks $bookmarks,
 		private NotificationSettings $notificationSettings,
 		private PlcSignatureService $plcSignatures,
+		private CustomHandleService $customHandles,
 	) {
 	}
 
@@ -147,7 +150,7 @@ class ClientXrpc {
 			return null;
 		}
 		$session = $this->signedIn($headers, $method, 'POST');
-		$body = in_array($method, ['com.atproto.server.createAppPassword', 'com.atproto.server.revokeAppPassword'], true)
+		$body = in_array($method, ['com.atproto.server.createAppPassword', 'com.atproto.server.revokeAppPassword', 'com.atproto.identity.updateHandle'], true)
 			? self::json($rawBody) : [];
 		$writes = in_array($method, self::WRITES, true) ? self::writesOf($method, self::json($rawBody)) : null;
 		if ($writes !== null) {
@@ -157,7 +160,10 @@ class ClientXrpc {
 			}
 		} else {
 			$audience = str_starts_with($method, 'com.atproto.server.') ? $this->config->serviceDid() : $this->audience($headers);
-			self::assertAllowed($session->permissions()->mayCall($method, $audience), 'call ' . $method);
+			$allowed = $method === 'com.atproto.identity.updateHandle'
+				? $session->permissions()->mayUpdateHandle()
+				: $session->permissions()->mayCall($method, $audience);
+			self::assertAllowed($allowed, 'call ' . $method);
 		}
 
 		return match ($method) {
@@ -167,6 +173,7 @@ class ClientXrpc {
 				self::optionalBoolean($body, 'privileged'),
 			),
 			'com.atproto.server.revokeAppPassword' => $this->revokeAppPassword($session, self::requiredString($body, 'name')),
+			'com.atproto.identity.updateHandle' => $this->updateHandle($session, self::requiredString($body, 'handle')),
 			'app.bsky.actor.putPreferences' => $this->preferences->put($session, self::json($rawBody)),
 			'com.atproto.repo.createRecord' => $this->writes->create($session, self::writeBody($rawBody)),
 			'com.atproto.repo.putRecord' => $this->writes->put($session, self::writeBody($rawBody)),
@@ -241,7 +248,26 @@ class ClientXrpc {
 				'com.atproto.server.createAppPassword', 'com.atproto.server.listAppPasswords', 'com.atproto.server.revokeAppPassword',
 				'com.atproto.repo.createRecord', 'com.atproto.repo.putRecord', 'com.atproto.repo.deleteRecord',
 				'com.atproto.repo.applyWrites', 'com.atproto.moderation.createReport',
+				'com.atproto.identity.updateHandle',
 			], true);
+	}
+
+	/** @throws XrpcException */
+	private function updateHandle(ClientSession $session, string $handle): array {
+		try {
+			$this->customHandles->set($session->identity, $handle);
+		} catch (MoveErrorException $e) {
+			$error = match ($e->errorCode) {
+				'handle-in-use' => 'HandleNotAvailable',
+				'handle-not-verified' => 'HandleNotVerified',
+				'identity-inactive' => 'AccountNotActive',
+				default => 'InvalidHandle',
+			};
+
+			throw new XrpcException(400, $error, $e->getMessage());
+		}
+
+		return [];
 	}
 
 	/** @throws XrpcException */
