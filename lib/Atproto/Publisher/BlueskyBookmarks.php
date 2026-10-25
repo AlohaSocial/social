@@ -56,6 +56,7 @@ class BlueskyBookmarks {
 		private AccountService $accounts,
 		private IRecommendationSignalRecorder $recommendationSignals,
 		private LoggerInterface $logger,
+		private ?InteractionQueue $queue = null,
 	) {
 	}
 
@@ -67,16 +68,22 @@ class BlueskyBookmarks {
 		if ($this->fromApp) {
 			return;
 		}
-		try {
-			$ref = $this->refs->strongRef($postId);
-			$identity = $ref === null ? null : $this->identities->activeForActor($viewer);
-			if ($ref === null || $identity === null) {
-				return;
-			}
-			$this->appView->procedureAs($identity->did, $this->identities->signingKey($identity), $on ? self::CREATE : self::DELETE, $on ? $ref : ['uri' => $ref['uri']]);
-		} catch (Throwable $e) {
-			$this->logger->warning('Bookmark not told to Bluesky', ['post' => $postId, 'exception' => $e]);
+		if ($this->queue !== null) {
+			$this->queue->bookmarked($viewer->getId(), $postId, $on);
+
+			return;
 		}
+		$this->sync($viewer, $postId, $on);
+	}
+
+	/** Apply a queued local bookmark change to the Bluesky account. */
+	public function sync(Person $viewer, string $postId, bool $on): void {
+		$ref = $this->refs->strongRef($postId);
+		$identity = $ref === null ? null : $this->identities->activeForActor($viewer);
+		if ($ref === null || $identity === null) {
+			return;
+		}
+		$this->appView->procedureAs($identity->did, $this->identities->signingKey($identity), $on ? self::CREATE : self::DELETE, $on ? $ref : ['uri' => $ref['uri']]);
 	}
 
 	/**
