@@ -230,11 +230,17 @@ class XrpcAuthSurfaceTest extends TestCase {
 			$this->assertSame('*', $headers['Access-Control-Allow-Origin'] ?? null, $method);
 			$this->assertStringContainsString('DPoP', $headers['Access-Control-Allow-Headers'] ?? '');
 			$this->assertStringContainsString('X-Atproto-Session-Id', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Atproto-Device-Id', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Atproto-Bsky-Topics', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Bsky-Topics', $headers['Access-Control-Allow-Headers'] ?? '');
 			$this->assertStringContainsString('DPoP-Nonce', $headers['Access-Control-Expose-Headers'] ?? '');
 		}
 		$preflight = $this->controller->preflight('com.atproto.repo.createRecord');
 		$this->assertSame(204, $preflight->getStatus());
 		$this->assertStringContainsString('X-Atproto-Session-Id', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Atproto-Device-Id', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Atproto-Bsky-Topics', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Bsky-Topics', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
 	}
 
 	private function call(string $method, string $kind): Response {

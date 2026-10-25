@@ -270,7 +270,7 @@ class AtprotoXrpcController extends Controller {
 	private function cors(Response $response): Response {
 		$response->addHeader('Access-Control-Allow-Origin', '*');
 		$response->addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, DPoP, X-Atproto-Session-Id, X-Atproto-Device-Id, X-Atproto-Bsky-Topics, atproto-accept-labelers, atproto-proxy');
+		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, DPoP, X-Atproto-Session-Id, X-Atproto-Device-Id, X-Atproto-Bsky-Topics, X-Bsky-Topics, atproto-accept-labelers, atproto-proxy');
 		$response->addHeader('Access-Control-Expose-Headers', 'DPoP-Nonce, WWW-Authenticate');
 		$response->addHeader('Access-Control-Max-Age', '600');
 		if ($this->request->getHeader('DPoP') !== '' && !isset($response->getHeaders()['DPoP-Nonce'])) {
