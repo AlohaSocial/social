@@ -547,6 +547,52 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('valid', $answer['validationStatus']);
 	}
 
+	public function testARecordWithMediaExternalCardIsPreservedWhenAnAppCreatesAPost(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/4');
+		$feedUri = 'at://' . self::BOB . '/app.bsky.feed.generator/3kfeed';
+		$feedCid = Cid::forRaw('the quoted feed')->toString();
+		$this->posts->expects($this->once())->method('createPost')->with($this->callback(function (Post $post) use ($feedUri, $feedCid): bool {
+			$this->assertSame(['uri' => $feedUri, 'cid' => $feedCid], $post->getAtprotoRecordEmbed());
+			$this->assertSame([
+				'url' => 'https://example.com/guide',
+				'title' => 'A useful guide',
+				'description' => 'Details from the author',
+				'image' => 'https://cdn.bsky.app/card.jpg',
+				'provider' => 'example.com',
+			], $post->getLinkCard());
+
+			return true;
+		}))->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kcard', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made);
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+			'$type' => RecordMapper::POST,
+			'text' => 'A feed and its guide',
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia',
+				'record' => ['record' => ['uri' => $feedUri, 'cid' => $feedCid]],
+				'media' => [
+					'$type' => 'app.bsky.embed.external',
+					'external' => [
+						'uri' => 'https://example.com/guide',
+						'title' => 'A useful guide',
+						'description' => 'Details from the author',
+						'thumb' => 'https://cdn.bsky.app/card.jpg',
+					],
+				],
+			],
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+		]]);
+	}
+
 	public function testAPostTheReviewRulesHoldIsKeptAndNotPublished(): void {
 		$this->review->method('assess')->willReturn('first_post');
 		$this->review->expects($this->once())->method('hold')->with($this->alice, $this->callback(function (array $params): bool {
