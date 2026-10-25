@@ -254,13 +254,15 @@ class WriteService {
 			throw XrpcException::invalidRequest('The post update contains an invalid embed');
 		}
 		$mediaIds = null;
+		$linkCard = null;
+		$linkCardProvided = false;
 		if ($embedChanged) {
 			if (self::recordReference($currentEmbed) !== self::recordReference($replacementEmbed)) {
 				throw XrpcException::invalidRequest('Changing a post quote or record card is not supported yet');
 			}
-			if (PostMapper::cardOf($currentEmbed, $session->identity->did) !== null
-				|| PostMapper::cardOf($replacementEmbed, $session->identity->did) !== null) {
-				throw XrpcException::invalidRequest('Changing an external or record card is not supported yet');
+			if (self::hasExternalCard($currentEmbed) || self::hasExternalCard($replacementEmbed)) {
+				$linkCardProvided = true;
+				$linkCard = PostMapper::cardOf($replacementEmbed, $session->identity->did);
 			}
 			$mediaIds = $this->mediaIdsFromEmbed($session, $replacementEmbed);
 		}
@@ -311,7 +313,10 @@ class WriteService {
 		}
 
 		try {
-			$updated = $this->posts->editPost($post->getNid(), $actor, $text, $spoilerText, $sensitive, $language, [], null, false, $mediaIds);
+			$updated = $this->posts->editPost(
+				$post->getNid(), $actor, $text, $spoilerText, $sensitive, $language,
+				[], null, false, $mediaIds, $linkCard, $linkCardProvided
+			);
 			$this->publisher->editPost($updated);
 		} catch (Throwable $e) {
 			$this->logger->warning('AT Protocol post replacement failed', ['rkey' => $rkey, 'exception' => $e]);
@@ -327,8 +332,6 @@ class WriteService {
 
 	/**
 	 * Resolve picture or video blobs in an edited post to this author's uploads.
-	 * Card changes are deliberately kept out of this path; they also alter the
-	 * social card table and need to be committed with the post update.
 	 *
 	 * @return list<int>
 	 * @throws XrpcException
@@ -343,7 +346,7 @@ class WriteService {
 			return [];
 		}
 		if ($mediaType === 'app.bsky.embed.external') {
-			throw XrpcException::invalidRequest('Changing an external link card is not supported yet');
+			return [];
 		}
 
 		if ($mediaType === 'app.bsky.embed.images') {
@@ -395,6 +398,19 @@ class WriteService {
 		}
 
 		return is_string($cid) ? ['uri' => $uri, 'cid' => $cid] : ['uri' => $uri];
+	}
+
+	private static function hasExternalCard(array $embed): bool {
+		if (($embed['$type'] ?? '') === 'app.bsky.embed.external') {
+			return true;
+		}
+		if (($embed['$type'] ?? '') !== 'app.bsky.embed.recordWithMedia') {
+			return false;
+		}
+
+		$media = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+
+		return ($media['$type'] ?? '') === 'app.bsky.embed.external';
 	}
 
 	/**

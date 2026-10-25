@@ -698,6 +698,55 @@ class WriteServiceTest extends TestCase {
 		]);
 	}
 
+	public function testUpdatingExternalEmbedReplacesThePostLinkCard(): void {
+		$old = [
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/old', 'title' => 'Old title', 'description' => '',
+			]],
+		];
+		$bytes = DagCbor::encode($old);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kcard', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/45', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(45);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$card = [
+			'url' => 'https://example.com/new',
+			'title' => 'New title',
+			'description' => 'Card details',
+			'image' => '',
+			'provider' => 'example.com',
+		];
+		$this->posts->expects($this->once())->method('editPost')
+			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true)
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$record = [
+			'$type' => RecordMapper::POST,
+			'text' => 'After',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/new',
+				'title' => 'New title',
+				'description' => 'Card details',
+			]],
+		];
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kcard',
+			'record' => $record,
+		]);
+	}
+
 	private function file(string $bytes): string {
 		$path = (string)tempnam(sys_get_temp_dir(), 'social-test-');
 		file_put_contents($path, $bytes);
