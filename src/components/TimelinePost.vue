@@ -89,12 +89,19 @@
 			</label>
 			<div v-if="editMedia.length" class="post-edit-media">
 				<label v-for="(media, index) in editMedia" :key="media.id">
-					{{ t('social', 'Description for attachment %s', { s: index + 1 }) }}
+				<span>{{ t('social', 'Description for attachment {number}', { number: index + 1 }) }}</span>
+				<div class="post-edit-media__attachment">
+					<img
+						v-if="media.previewUrl"
+						class="post-edit-media__thumbnail"
+						:src="media.previewUrl"
+						:alt="t('social', 'Preview of attachment {number}', { number: index + 1 })">
 					<textarea
 						v-model="media.description"
 						maxlength="1500"
-						:aria-label="t('social', 'Description for attachment %s', { s: index + 1 })"
+						:aria-label="t('social', 'Description for attachment {number}', { number: index + 1 })"
 						:placeholder="t('social', 'Describe this media for people who cannot see it')" />
+				</div>
 				</label>
 			</div>
 			<textarea
@@ -1485,6 +1492,7 @@ export default {
 			this.editMedia = (this.item.media_attachments || []).map((media) => ({
 				id: media.id,
 				description: media.description || '',
+				previewUrl: media.preview_url || (media.type === 'image' ? media.url : ''),
 			}))
 			this.editEvent = {
 				name: this.item.event?.name || '',
@@ -2143,6 +2151,9 @@ export default {
 	.post-edit-sensitive { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
 	.post-edit-media { display: grid; gap: 8px; margin: 8px 0; }
 	.post-edit-media label { display: grid; gap: 4px; font-size: .9rem; }
+	.post-edit-media__attachment { display: flex; align-items: flex-start; gap: 8px; }
+	.post-edit-media__thumbnail { width: 72px; height: 72px; flex: 0 0 72px; object-fit: cover; border-radius: 6px; }
+	.post-edit-media__attachment textarea { flex: 1; min-width: 0; }
 	.post-edit-media textarea { box-sizing: border-box; width: 100%; min-height: 64px; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); font: inherit; resize: vertical; }
 	.post-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 	.post-edit-count { margin-inline-end: auto; color: var(--color-text-lighter); font-size: 12px; }
