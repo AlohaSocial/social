@@ -121,6 +121,9 @@ class NavigationControllerTest extends TestCase {
 	}
 
 	private function controller(?string $userId = 'alice', ?\OCA\Social\Service\ModeratorService $moderators = null): NavigationController {
+		$feedDisplayService = $this->createStub(\OCA\Social\Service\FeedDisplayService::class);
+		$feedDisplayService->method('filterBlueskyHomePosts')->willReturnArgument(0);
+
 		return new NavigationController(
 			$this->request,
 			$userId,
@@ -133,13 +136,14 @@ class NavigationControllerTest extends TestCase {
 			$this->checkService,
 			$this->sensitiveMediaService,
 			$this->countsService,
-			$this->createStub(\OCA\Social\Service\FeedDisplayService::class),
+			$feedDisplayService,
 			$this->sectionsService,
 			$this->createStub(\OCA\Social\Service\InterestService::class),
 			$this->streamService,
 			$this->filterService,
 			$this->createStub(\OCA\Social\Service\ExternalMediaQuota::class),
 			new NullLogger(),
+			$this->createStub(\OCA\Social\Service\FollowService::class),
 			$moderators,
 		);
 	}
