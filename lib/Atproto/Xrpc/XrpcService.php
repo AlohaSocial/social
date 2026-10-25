@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Xrpc;
 
 use OCA\Social\Atproto\Client\ClientXrpc;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Car;
@@ -49,6 +50,7 @@ class XrpcService {
 		private ConfigService $configService,
 		private ModerationService $moderation,
 		private AtprotoIdentityRequest $identityRequest,
+		private ?PlcClient $plc = null,
 	) {
 	}
 
@@ -66,6 +68,8 @@ class XrpcService {
 			'_health' => ['version' => 'aloha-social/' . $this->configService->getAppValue('installed_version')],
 			'com.atproto.server.describeServer' => $this->describeServer(),
 			'com.atproto.identity.resolveHandle' => $this->resolveHandle(self::string($params, 'handle')),
+			'com.atproto.identity.resolveDid' => $this->resolveDid(self::string($params, 'did')),
+			'com.atproto.identity.resolveIdentity' => $this->resolveIdentity(self::string($params, 'identifier')),
 			'com.atproto.sync.getRepo' => $this->getRepo(self::string($params, 'did')),
 			'com.atproto.sync.getLatestCommit' => $this->getLatestCommit(self::string($params, 'did')),
 			'com.atproto.sync.getRepoStatus' => $this->getRepoStatus(self::string($params, 'did')),
@@ -127,6 +131,74 @@ class XrpcService {
 		}
 
 		return ['did' => $identity->did];
+	}
+
+	/** Resolve a managed identity or a PLC DID without trusting its handle claim. */
+	private function resolveDid(string $did): array {
+		if (!Syntax::isDid($did)) {
+			throw XrpcException::invalidRequest('Not a DID');
+		}
+		if ($did === $this->config->serviceDid()) {
+			return ['didDoc' => $this->identities->instanceDocument()];
+		}
+		try {
+			$identity = $this->identities->getByDid($did);
+		} catch (AtprotoIdentityNotFoundException) {
+			try {
+				$document = Syntax::isDidPlc($did) ? $this->plc?->document($did) : null;
+			} catch (AtprotoException $e) {
+				throw new XrpcException(502, 'DidResolutionFailed', 'DID directory could not be reached');
+			}
+			if ($document === null || ($document['id'] ?? '') !== $did) {
+				throw new XrpcException(404, 'DidNotFound', 'Could not resolve DID');
+			}
+
+			return ['didDoc' => $document];
+		}
+		if ($identity->state === Identity::STATE_TOMBSTONED) {
+			throw new XrpcException(404, 'DidNotFound', 'Could not resolve DID');
+		}
+		if (!$identity->isActive()) {
+			throw new XrpcException(400, 'DidDeactivated', 'DID is deactivated');
+		}
+
+		return ['didDoc' => $this->identities->document($identity)];
+	}
+
+	/** Resolve local handles and DIDs into identityInfo; never advertise an unverified handle. */
+	private function resolveIdentity(string $identifier): array {
+		$identity = null;
+		if (Syntax::isDid($identifier)) {
+			try {
+				$identity = $this->identities->getByDid($identifier);
+			} catch (AtprotoIdentityNotFoundException) {
+			}
+		} elseif (Syntax::isResolvableHandle($identifier)) {
+			try {
+				$identity = $this->identities->getByHandle(Syntax::normalizeHandle($identifier));
+			} catch (AtprotoIdentityNotFoundException) {
+				throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+			}
+		} else {
+			throw XrpcException::invalidRequest('Not an atproto identifier');
+		}
+
+		if ($identity !== null) {
+			if (!$identity->isActive()) {
+				throw new XrpcException(400, 'DidDeactivated', 'DID is deactivated');
+			}
+			$handle = $identity->customHandleBroken() ? 'handle.invalid' : $identity->handle;
+
+			return ['did' => $identity->did, 'handle' => $handle, 'didDoc' => $this->identities->document($identity)];
+		}
+
+		if (!Syntax::isDid($identifier)) {
+			throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+		}
+		$resolved = $this->resolveDid($identifier);
+		$document = $resolved['didDoc'];
+
+		return ['did' => $identifier, 'handle' => 'handle.invalid', 'didDoc' => $document];
 	}
 
 	/**

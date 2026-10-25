@@ -152,6 +152,8 @@ class XrpcAnswersFitTheirLexiconsTest extends TestCase {
 		return [
 			'describeServer' => ['com.atproto.server.describeServer', []],
 			'resolveHandle' => ['com.atproto.identity.resolveHandle', ['handle' => 'alice.social.example.com']],
+			'resolveDid' => ['com.atproto.identity.resolveDid', ['did' => self::ALICE]],
+			'resolveIdentity' => ['com.atproto.identity.resolveIdentity', ['identifier' => self::ALICE]],
 			'getLatestCommit' => ['com.atproto.sync.getLatestCommit', $alice],
 			'getRepoStatus, active' => ['com.atproto.sync.getRepoStatus', $alice],
 			'getRepoStatus, deactivated' => ['com.atproto.sync.getRepoStatus', ['did' => self::BOB]],
