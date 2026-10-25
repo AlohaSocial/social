@@ -1779,6 +1779,7 @@ describe('TimelinePost', () => {
 				content: 'Edited text',
 				spoiler_text: '',
 				sensitive: false,
+				media_attributes: [],
 			})
 			expect(wrapper.find('textarea').exists()).toBe(false)
 			expect(wrapper.find('.post-message').exists()).toBe(true)
@@ -1802,6 +1803,7 @@ describe('TimelinePost', () => {
 				content: 'New text',
 				spoiler_text: 'politics',
 				sensitive: true,
+				media_attributes: [],
 			})
 		})
 
