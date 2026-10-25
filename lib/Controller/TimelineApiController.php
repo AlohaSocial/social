@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Controller;
 
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Atproto\Reader\ActiveHomeFeedRefresh;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\UnknownProbeException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -72,6 +73,7 @@ class TimelineApiController extends MastodonApiController {
 		private TimelineRevisionService $timelineRevisionService,
 		private NotificationInboxService $notificationInboxService,
 		private RemoteFetchQueue $remoteFetchQueue,
+		private ActiveHomeFeedRefresh $activeHomeFeedRefresh,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -148,6 +150,9 @@ class TimelineApiController extends MastodonApiController {
 			// timeline is worth tagging: a page reached with `max_id` is
 			// historical and a client asks for it once.
 			if ($timeline === ProbeOptions::HOME && (string)$max_id === '0' && (string)$min_id === '0') {
+				if ($this->viewer !== null) {
+					$this->activeHomeFeedRefresh->wakeFollowedFeeds($this->viewer);
+				}
 				// the newest id says whether anything arrived; the revision
 				// says whether the reader has changed what they are shown —
 				// a follow, a block, a mute, a filter, a followed hashtag —

@@ -63,6 +63,28 @@ class AtprotoWatchRequest extends CoreRequestBuilder {
 	}
 
 	/**
+	 * @param string[] $dids at most a few hundred DIDs
+	 * @return array<string, Watch> watches keyed by DID
+	 */
+	public function getByDids(array $dids, string $table = self::TABLE_ATPROTO_WATCH): array {
+		$dids = array_values(array_unique(array_filter($dids, static fn (string $did): bool => $did !== '')));
+		if ($dids === []) {
+			return [];
+		}
+
+		$qb = $this->getQueryBuilder();
+		$qb->select(...self::FIELDS)->from($table)
+			->where($qb->expr()->in('did', $qb->createNamedParameter($dids, IQueryBuilder::PARAM_STR_ARRAY)));
+
+		$watches = [];
+		foreach ($this->all($qb) as $watch) {
+			$watches[$watch->did] = $watch;
+		}
+
+		return $watches;
+	}
+
+	/**
 	 * The rows whose time has come, the longest overdue first.
 	 *
 	 * @return Watch[]

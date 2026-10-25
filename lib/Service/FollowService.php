@@ -601,8 +601,8 @@ class FollowService {
 	 *
 	 * @psalm-return array<Follow>
 	 */
-	public function getFollowing(Person $actor): array {
-		return $this->followsRequest->getFollowingByActorId($actor->getId());
+	public function getFollowing(Person $actor, int $limit = 0, int $offset = 0): array {
+		return $this->followsRequest->getFollowingByActorId($actor->getId(), $limit, $offset);
 	}
 
 	/**
