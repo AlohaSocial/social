@@ -39,6 +39,30 @@ class FeedDisplayService {
 
 	/** The switch as the client API answers it. */
 	public function export(string $userId): array {
-		return ['hide_replies' => $this->hidesReplies($userId)];
+		return [
+			'hide_replies' => $this->hidesReplies($userId),
+			'thread_sort' => $this->threadSort($userId),
+		];
+	}
+
+	/** The thread order saved by Bluesky clients on this account's PDS. */
+	public function threadSort(string $userId): string {
+		if ($userId === '') {
+			return 'oldest';
+		}
+
+		$preferences = json_decode($this->configService->getUserValue('atproto_preferences', $userId), true);
+		if (!is_array($preferences)) {
+			return 'oldest';
+		}
+
+		foreach ($preferences as $preference) {
+			if (($preference['$type'] ?? '') === 'app.bsky.actor.defs#threadViewPref'
+				&& in_array($preference['sort'] ?? null, ['oldest', 'newest', 'most-likes', 'random'], true)) {
+				return $preference['sort'];
+			}
+		}
+
+		return 'oldest';
 	}
 }

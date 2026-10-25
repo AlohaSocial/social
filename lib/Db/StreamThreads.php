@@ -159,7 +159,7 @@ trait StreamThreads {
 	 *
 	 * @return Stream[]
 	 */
-	public function getDescendants(string $id): array {
+	public function getDescendants(string $id, string $sort = 'oldest'): array {
 		$byParent = [];
 		$parents = [$id];
 		$count = 0;
@@ -169,14 +169,17 @@ trait StreamThreads {
 				break;
 			}
 
-			$level = $this->getRepliesTo($parents, $remaining);
-			$count += count($level);
-			$parents = [];
+			$level = $this->getRepliesTo($parents, $remaining, $sort);
 			foreach ($level as $reply) {
 				$byParent[$reply->getInReplyTo()][] = $reply;
 				$parents[] = $reply->getId();
 			}
+			$count += count($level);
 		}
+		foreach ($byParent as &$siblings) {
+			$this->sortReplies($siblings, $sort);
+		}
+		unset($siblings);
 
 		$thread = [];
 		$this->flattenThread($id, $byParent, $thread);
@@ -187,6 +190,35 @@ trait StreamThreads {
 		}
 
 		return $thread;
+	}
+
+	/** Keep a conversation's tree intact while ordering each set of siblings. */
+	private function sortReplies(array &$replies, string $sort): void {
+		if ($sort === 'random') {
+			shuffle($replies);
+
+			return;
+		}
+
+		$likesById = [];
+		if ($sort === 'most-likes') {
+			foreach ($replies as $reply) {
+				$likesById[$reply->getId()] = (int)($reply->jsonSerialize()['favourites_count'] ?? 0);
+			}
+		}
+
+		usort($replies, static function (Stream $left, Stream $right) use ($sort, $likesById): int {
+			if ($sort === 'most-likes') {
+				$likes = ($likesById[$right->getId()] ?? 0) <=> ($likesById[$left->getId()] ?? 0);
+				if ($likes !== 0) {
+					return $likes;
+				}
+			}
+
+			$time = $left->getPublishedTime() <=> $right->getPublishedTime();
+
+			return $sort === 'newest' ? -$time : $time;
+		});
 	}
 
 	/**
@@ -209,7 +241,7 @@ trait StreamThreads {
 	 *
 	 * @return Stream[]
 	 */
-	protected function getRepliesTo(array $ids, int $limit): array {
+	protected function getRepliesTo(array $ids, int $limit, string $sort = 'oldest'): array {
 		$qb = $this->getStreamSelectSql(ACore::FORMAT_LOCAL);
 
 		$qb->filterType(SocialAppNotification::TYPE);
@@ -226,7 +258,7 @@ trait StreamThreads {
 		// back fully hydrated: the context of a post that thousands replied to
 		// is not something to hand to PHP whole
 		$qb->setMaxResults($limit);
-		$qb->orderBy('s.published_time', 'asc');
+		$qb->orderBy('s.published_time', $sort === 'newest' ? 'desc' : 'asc');
 
 		$qb->linkToCacheActors('ca', 's.attributed_to_prim');
 

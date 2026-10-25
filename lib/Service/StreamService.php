@@ -651,7 +651,7 @@ class StreamService {
 	 *
 	 * @return array
 	 */
-	public function getContextByNid(int|string $nid, bool $withHidden = false): array {
+	public function getContextByNid(int|string $nid, bool $withHidden = false, string $threadSort = 'oldest'): array {
 		// Router path parameters arrive as decimal strings. Normalize the id at
 		// the service boundary before it reaches the query builder, whose
 		// integer predicate cannot accept even an in-range numeric string.
@@ -713,7 +713,10 @@ class StreamService {
 		$readerIsAuthor = $this->viewer !== null && $this->viewer->getId() === $root->getAttributedTo();
 		$descendants = [];
 		$hiddenCount = 0;
-		foreach ($this->streamRequest->getDescendants($post->getId()) as $reply) {
+		$descendants = $threadSort === 'oldest'
+			? $this->streamRequest->getDescendants($post->getId())
+			: $this->streamRequest->getDescendants($post->getId(), $threadSort);
+		foreach ($descendants as $reply) {
 			$isHidden = isset($hidden[$reply->getId()]);
 			$hiddenCount += $isHidden ? 1 : 0;
 			if ($isHidden && !$withHidden) {

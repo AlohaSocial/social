@@ -32,6 +32,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\DeliveryService;
+use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FilterService;
@@ -125,6 +126,7 @@ class StatusApiController extends MastodonApiController {
 		private InteractionService $interactions,
 		private CountService $counts,
 		private ?BlockedByService $blockedBy = null,
+		private ?FeedDisplayService $feedDisplayService = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -635,7 +637,10 @@ class StatusApiController extends MastodonApiController {
 	public function statusContext(int|string $nid, bool $with_hidden = false): DataResponse {
 		try {
 			$this->initViewer(false);
-			$context = $this->streamService->getContextByNid($nid, $with_hidden);
+			$threadSort = $this->viewer === null || $this->feedDisplayService === null
+				? 'oldest'
+				: $this->feedDisplayService->threadSort($this->viewer->getUserId());
+			$context = $this->streamService->getContextByNid($nid, $with_hidden, $threadSort);
 
 			$response = new DataResponse(
 				[
