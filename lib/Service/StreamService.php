@@ -753,6 +753,11 @@ class StreamService {
 		$this->streamRequest->update($stream, $generateDest);
 	}
 
+	/** Refresh the cached count on a post after a local quote was moved. */
+	public function recountQuotes(string $quotedId): void {
+		$this->streamRequest->recountQuotes($quotedId);
+	}
+
 	/**
 	 * @param string $id
 	 * @param int $since

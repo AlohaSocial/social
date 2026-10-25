@@ -164,6 +164,7 @@ class WriteServiceTest extends TestCase {
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
 			'at://' . self::DID . '/app.bsky.feed.post/3kmine' => 'https://social.test/@alice/1',
 			'at://' . self::BOB . '/app.bsky.feed.post/3kbob' => 'https://bsky.app/profile/' . self::BOB . '/post/3kbob',
+			'at://' . self::BOB . '/app.bsky.feed.post/3knew' => 'https://bsky.app/profile/' . self::BOB . '/post/3knew',
 			default => '',
 		});
 		$this->relationships = $this->createMock(RelationshipService::class);
@@ -676,7 +677,7 @@ class WriteServiceTest extends TestCase {
 		$this->documents->expects($this->once())->method('updateDescription')
 			->with($this->callback(static fn (Document $document): bool => $document->getDescription() === 'New alt text'));
 		$this->posts->expects($this->once())->method('editPost')
-			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22])
+			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22], null, false, false, '', null)
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -724,7 +725,7 @@ class WriteServiceTest extends TestCase {
 			'provider' => 'example.com',
 		];
 		$this->posts->expects($this->once())->method('editPost')
-			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true)
+			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true, false, '', null)
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -744,6 +745,95 @@ class WriteServiceTest extends TestCase {
 			'collection' => RecordMapper::POST,
 			'rkey' => '3kcard',
 			'record' => $record,
+		]);
+	}
+
+	public function testUpdatingAQuoteChangesTheLocalPostReference(): void {
+		$oldUri = 'at://' . self::BOB . '/app.bsky.feed.post/3kbob';
+		$newUri = 'at://' . self::BOB . '/app.bsky.feed.post/3knew';
+		$oldEmbed = ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $oldUri, 'cid' => Cid::forRaw('old quote')->toString()]];
+		$bytes = DagCbor::encode([
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => $oldEmbed,
+		]);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kquote', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/46', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(46);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$this->postStore->method('isKnown')->willReturn(true);
+		$newCid = Cid::forRaw('new quote');
+		$this->posts->expects($this->once())->method('editPost')
+			->with(46, $this->alice, 'After', '', false, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null)
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kquote',
+			'record' => [
+				'$type' => RecordMapper::POST,
+				'text' => 'After',
+				'createdAt' => '2026-10-08T10:00:00.000Z',
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => $newUri,
+					'cid' => ['$link' => $newCid->toString()],
+				]],
+			],
+		]);
+	}
+
+	public function testUpdatingAFeedRecordEmbedReplacesItsAtProtoReferenceAndCard(): void {
+		$oldUri = 'at://' . self::BOB . '/app.bsky.feed.generator/old';
+		$newUri = 'at://' . self::BOB . '/app.bsky.feed.generator/new';
+		$oldCid = Cid::forRaw('old feed');
+		$bytes = DagCbor::encode([
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $oldUri, 'cid' => $oldCid]],
+		]);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kfeed', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/47', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(47);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$newCid = Cid::forRaw('new feed');
+		$recordEmbed = ['uri' => $newUri, 'cid' => $newCid->toString()];
+		$linkCard = [
+			'url' => 'https://bsky.app/profile/' . self::BOB . '/feed/new',
+			'title' => 'Bluesky feed',
+			'description' => '',
+			'image' => '',
+			'provider' => 'Bluesky',
+		];
+		$this->posts->expects($this->once())->method('editPost')
+			->with(47, $this->alice, 'After', '', false, '', [], null, false, [], $linkCard, true, true, '', $recordEmbed)
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kfeed',
+			'record' => [
+				'$type' => RecordMapper::POST,
+				'text' => 'After',
+				'createdAt' => '2026-10-08T10:00:00.000Z',
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => $newUri,
+					'cid' => ['$link' => $newCid->toString()],
+				]],
+			],
 		]);
 	}
 
