@@ -187,7 +187,10 @@ class AtprotoXrpcController extends Controller {
 	 */
 	private function headers(): array {
 		$headers = [];
-		foreach (['authorization', 'dpop', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
+		foreach ([
+			'authorization', 'dpop', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type',
+			'x-atproto-session-id', 'x-atproto-device-id', 'x-atproto-bsky-topics', 'x-bsky-topics',
+		] as $name) {
 			$value = $this->request->getHeader($name);
 			if ($value !== '') {
 				$headers[$name] = $value;

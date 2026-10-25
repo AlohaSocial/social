@@ -167,7 +167,22 @@ class AtprotoXrpcControllerTest extends TestCase {
 		}
 	}
 
-	private function controller(?array $params = null, ?ClientXrpc $client = null): AtprotoXrpcController {
+	public function testAppViewRequestContextHeadersReachTheAuthenticatedProxy(): void {
+		$headers = [
+			'x-atproto-session-id' => 'session-123',
+			'x-atproto-device-id' => 'device-456',
+			'x-atproto-bsky-topics' => 'following,for-you',
+			'x-bsky-topics' => 'following',
+		];
+		$client = $this->createMock(ClientXrpc::class);
+		$client->expects($this->once())->method('query')->with('app.bsky.feed.getTimeline', '', $headers)->willReturn([]);
+
+		$response = $this->controller(null, $client, $headers)->query('app.bsky.feed.getTimeline');
+
+		$this->assertSame(200, $response->getStatus());
+	}
+
+	private function controller(?array $params = null, ?ClientXrpc $client = null, array $headers = []): AtprotoXrpcController {
 		$config = $this->createMock(AtprotoConfig::class);
 		$config->method('isEnabled')->willReturn(true);
 		$identities = $this->createMock(IdentityService::class);
@@ -193,7 +208,7 @@ class AtprotoXrpcControllerTest extends TestCase {
 		}
 		$request = $this->createMock(IRequest::class);
 		$request->method('getParams')->willReturn($params ?? ['did' => self::DID, 'cid' => Cid::forRaw('bytes')->toString()]);
-		$request->method('getHeader')->willReturn('');
+		$request->method('getHeader')->willReturnCallback(static fn (string $name): string => $headers[strtolower($name)] ?? '');
 
 		return new AtprotoXrpcController($request, $xrpc, $client, $this->createMock(DpopNonce::class), $this->createMock(LoggerInterface::class));
 	}
