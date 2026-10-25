@@ -133,6 +133,7 @@ class WriteServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->alice = new Person();
 		$this->alice->setId('https://social.test/@alice');
+		$this->alice->setPreferredUsername('alice');
 		$this->alice->setLocal(true);
 		$accounts = $this->createMock(AccountService::class);
 		$accounts->method('getActorFromUserId')->willReturn($this->alice);
@@ -660,6 +661,7 @@ class WriteServiceTest extends TestCase {
 		$video = new Document();
 		$video->setNid(9);
 		$video->setId('https://social.test/documents/local/2');
+		$video->setAccount('alice');
 		$video->setMimeType('video/mp4');
 		$video->setMediaType('video/mp4');
 		$this->blobs->method('get')->with(self::DID, $cid->toString())->willReturn(new BlobRef(self::DID, $cid, $video->getId(), 'video/mp4', 7));
@@ -687,6 +689,108 @@ class WriteServiceTest extends TestCase {
 		]]);
 
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kvid', $answer['uri']);
+	}
+
+	public function testUpdatingPostImagesReplacesTheSocialAttachmentsFromOwnedBlobs(): void {
+		$oldEmbed = ['$type' => 'app.bsky.embed.images', 'images' => []];
+		$old = [
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => $oldEmbed,
+		];
+		$bytes = DagCbor::encode($old);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kedit', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(44);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+
+		$cid = Cid::forRaw('edited picture');
+		$image = new Document();
+		$image->setNid(22);
+		$image->setId('https://social.test/documents/local/22');
+		$image->setAccount('alice');
+		$image->setMimeType('image/jpeg');
+		$image->setMediaType('image/jpeg');
+		$this->blobs->expects($this->once())->method('get')->with(self::DID, $cid->toString())
+			->willReturn(new BlobRef(self::DID, $cid, $image->getId(), 'image/jpeg', 20));
+		$this->documents->expects($this->once())->method('getDocumentById')->with($image->getId())->willReturn($image);
+		$this->documents->expects($this->once())->method('updateDescription')
+			->with($this->callback(static fn (Document $document): bool => $document->getDescription() === 'New alt text'));
+		$this->posts->expects($this->once())->method('editPost')
+			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22])
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$record = [
+			'$type' => RecordMapper::POST,
+			'text' => 'After',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.images', 'images' => [[
+				'image' => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 20],
+				'alt' => 'New alt text',
+			]]],
+		];
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kedit',
+			'record' => $record,
+		]);
+	}
+
+	public function testUpdatingExternalEmbedReplacesThePostLinkCard(): void {
+		$old = [
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/old', 'title' => 'Old title', 'description' => '',
+			]],
+		];
+		$bytes = DagCbor::encode($old);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kcard', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/45', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(45);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$card = [
+			'url' => 'https://example.com/new',
+			'title' => 'New title',
+			'description' => 'Card details',
+			'image' => '',
+			'provider' => 'example.com',
+		];
+		$this->posts->expects($this->once())->method('editPost')
+			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true)
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$record = [
+			'$type' => RecordMapper::POST,
+			'text' => 'After',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/new',
+				'title' => 'New title',
+				'description' => 'Card details',
+			]],
+		];
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kcard',
+			'record' => $record,
+		]);
 	}
 
 	private function file(string $bytes): string {

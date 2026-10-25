@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use DateTime;
 use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Exceptions\AccountMovedException;
@@ -75,6 +76,7 @@ class PostServiceTest extends TestCase {
 	private const CAROL_INBOX = 'https://third.example/users/carol/inbox';
 
 	private StreamRequest|MockObject $streamRequest;
+	private StreamCardsRequest|MockObject $streamCardsRequest;
 	private AccountService|MockObject $accountService;
 	private ActivityService|MockObject $activityService;
 	private CacheActorService|MockObject $cacheActorService;
@@ -108,6 +110,7 @@ class PostServiceTest extends TestCase {
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamCardsRequest = $this->createMock(StreamCardsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
@@ -178,7 +181,7 @@ class PostServiceTest extends TestCase {
 			$this->interestService,
 			$this->videoDeliveryHold,
 			$this->documentService,
-			$this->createStub(\OCA\Social\Db\StreamCardsRequest::class),
+			$this->streamCardsRequest,
 			$this->container,
 		);
 	}
@@ -1303,6 +1306,51 @@ class PostServiceTest extends TestCase {
 		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, []);
 
 		$this->assertSame([], $stored->getAttachments());
+	}
+
+	public function testAnEditCanReplaceTheExternalLinkCardForTheSamePost(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamCardsRequest->expects($this->once())->method('save')
+			->with($this->callback(static fn (\OCA\Social\Model\StreamCard $card): bool
+				=> $card->getStreamId() === 'https://social.example/@alice/7'
+				&& $card->getUrl() === 'https://example.com/new'
+				&& $card->getTitle() === 'New title'
+			));
+
+		$this->service->editPost(
+			7,
+			$this->actor(),
+			'new words',
+			null,
+			null,
+			null,
+			[],
+			null,
+			false,
+			null,
+			[
+				'url' => 'https://example.com/new',
+				'title' => 'New title',
+				'description' => 'Details',
+				'image' => 'https://example.com/image.jpg',
+				'provider' => 'example.com',
+			],
+			true
+		);
+	}
+
+	public function testAnEditCanRemoveAnExternalLinkCard(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamCardsRequest->expects($this->once())->method('deleteByStreamId')
+			->with($stored->getId());
+
+		$this->service->editPost(7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, true);
 	}
 
 	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {

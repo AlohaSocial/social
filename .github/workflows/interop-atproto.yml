@@ -112,7 +112,7 @@ jobs:
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/social
-        run: composer i --no-dev
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Give the server a name, an address and a certificate
         # The handle hosts are *.nextcloud.test; the certificate covers them,
@@ -297,7 +297,7 @@ jobs:
       - name: Interop tests
         working-directory: apps/social
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest|AtprotoHandleTest|AtprotoMoveAwayTest|AtprotoMoveInTest|AtprotoMoveByToolTest|AtprotoLinkCardTest|AtprotoThreadgateTest|AtprotoFeedsTest|AtprotoPostgateTest|AtprotoStarterPackTest|AtprotoBellTest|AtprotoChatTest|AtprotoBlocksTest|AtprotoBlockedByTest|AtprotoReplyRuleTest|AtprotoDetachQuoteTest|AtprotoProfileRowsTest|AtprotoMutesTest|AtprotoReactionsTest|AtprotoSearchTest|AtprotoBookmarksTest|AtprotoNotificationSettingsTest|AtprotoHiddenRepliesTest|AtprotoModerationListsTest|AtprotoFollowListsTest|AtprotoFollowedTagsTest|AtprotoChatDeclarationTest|AtprotoCountsTest|AtprotoListsSyncTest|AtprotoOptOutTest|AtprotoVerificationTest'
 
       - name: What each side saw, when it went wrong

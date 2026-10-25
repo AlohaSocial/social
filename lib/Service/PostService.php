@@ -384,7 +384,7 @@ class PostService {
 	public function editPost(
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
-		?array $mediaIds = null,
+		?array $mediaIds = null, ?array $linkCard = null, bool $linkCardProvided = false,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -466,6 +466,24 @@ class PostService {
 		// recorded for the newly named account.
 		$this->streamService->updateStream($stream, true);
 		$this->revisionService->recordEdit($original, $stream);
+		if ($linkCardProvided) {
+			try {
+				if ($linkCard === null) {
+					$this->streamCardsRequest->deleteByStreamId($stream->getId());
+				} else {
+					$this->streamCardsRequest->save((new StreamCard($stream->getId(), $linkCard['url']))
+						->setTitle($linkCard['title'])
+						->setDescription($linkCard['description'])
+						->setImage($linkCard['image'])
+						->setProviderName($linkCard['provider']));
+				}
+			} catch (Throwable $e) {
+				$this->logger->warning('Edited post link card was not stored', [
+					'post' => $stream->getId(),
+					'exception' => $e,
+				]);
+			}
+		}
 
 		$updated = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 		// The reloaded post carries the instance paths it was created with —
