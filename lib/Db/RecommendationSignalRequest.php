@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Db;
 
 use InvalidArgumentException;
+use OCP\DB\QueryBuilder\ConflictResolutionMode;
 use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
@@ -129,6 +130,41 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 				return ['accepted' => true, 'duplicate' => true, 'profile_version' => $this->profileVersion($actorKey)];
 			}
 
+			// The effective generation exposed to clients includes the global
+			// admin epoch. Lock that row before reading the profile so an admin
+			// switch cannot pass this check while an event from the old epoch is
+			// being committed. Shared state is read in the same transaction that
+			// records the event and its aggregates.
+			$epochQuery = $this->getQueryBuilder();
+			$epochQuery->select('epoch')->from(RecommendationPreferenceRequest::TABLE_EPOCH)
+				->where($epochQuery->expr()->eq('id', $epochQuery->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+				->forUpdate(ConflictResolutionMode::Ordinary);
+			$epochResult = $epochQuery->executeQuery();
+			$epochRow = $epochResult->fetch();
+			$epochResult->closeCursor();
+			if ($epochRow === false) {
+				$connection->rollBack();
+				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+			}
+
+			$profileState = $this->getQueryBuilder();
+			$profileState->select('generation', 'learning_mode')->from(RecommendationPreferenceRequest::TABLE_PROFILE)
+				->where($profileState->expr()->eq('actor_key', $profileState->createNamedParameter($actorKey)))
+				->forUpdate(ConflictResolutionMode::Ordinary);
+			$profileResult = $profileState->executeQuery();
+			$profileRow = $profileResult->fetch();
+			$profileResult->closeCursor();
+			if ($profileRow === false) {
+				$connection->rollBack();
+				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+			}
+			$localGeneration = (int)$profileRow['generation'];
+			$effectiveGeneration = RecommendationPreferenceRequest::effectiveGeneration((int)$epochRow['epoch'], $localGeneration);
+			if ($effectiveGeneration !== $generation || (string)$profileRow['learning_mode'] !== 'on') {
+				$connection->rollBack();
+				return ['accepted' => false, 'duplicate' => false, 'profile_version' => $this->profileVersion($actorKey)];
+			}
+
 			$profile = $this->getQueryBuilder();
 			$profile->update(RecommendationPreferenceRequest::TABLE_PROFILE)
 				// Keep the consent/CAS revision stable while observations arrive.
@@ -136,7 +172,7 @@ class RecommendationSignalRequest extends CoreRequestBuilder {
 				// only a consent change or reset invalidates their cursor.
 				->set('updated_at', $profile->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 				->where($profile->expr()->eq('actor_key', $profile->createNamedParameter($actorKey)))
-				->andWhere($profile->expr()->eq('generation', $profile->createNamedParameter($generation, IQueryBuilder::PARAM_INT)))
+				->andWhere($profile->expr()->eq('generation', $profile->createNamedParameter($localGeneration, IQueryBuilder::PARAM_INT)))
 				->andWhere($profile->expr()->eq('learning_mode', $profile->createNamedParameter('on')));
 			if ($profile->executeStatement() !== 1) {
 				$connection->rollBack();
