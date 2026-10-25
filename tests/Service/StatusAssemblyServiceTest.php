@@ -109,6 +109,12 @@ class StatusAssemblyServiceTest extends TestCase {
 				return (bool)($this->params[$key] ?? false);
 			}
 
+			public function paramArray(string $key): ?array {
+				$value = $this->params[$key] ?? null;
+
+				return is_array($value) ? $value : null;
+			}
+
 			public function paramPoll(): ?array {
 				return $this->params['poll'] ?? null;
 			}

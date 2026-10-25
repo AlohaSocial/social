@@ -46,6 +46,13 @@ trait TStatusParams {
 	}
 
 	/** @return array<string, mixed>|null */
+	public function paramArray(string $key): ?array {
+		$value = $this->params[$key] ?? null;
+
+		return is_array($value) ? $value : null;
+	}
+
+	/** @return array<string, mixed>|null */
 	public function paramPoll(): ?array {
 		$poll = $this->params['poll'] ?? null;
 
