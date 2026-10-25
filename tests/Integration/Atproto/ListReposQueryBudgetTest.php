@@ -9,7 +9,9 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Integration\Atproto;
 
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\VideoBlobService;
@@ -51,7 +53,7 @@ class ListReposQueryBudgetTest extends TestCase {
 		$this->xrpc = new XrpcService(
 			$config, Server::get(IdentityService::class), Server::get(RepositoryService::class), $this->repoRequest,
 			Server::get(AtprotoBlobRequest::class), Server::get(PictureService::class), Server::get(VideoBlobService::class),
-			Server::get(ConfigService::class), Server::get(ModerationService::class), $this->identityRequest,
+			Server::get(ConfigService::class), Server::get(ModerationService::class), $this->identityRequest, Server::get(HandleVerifier::class), Server::get(PlcClient::class),
 		);
 	}
 

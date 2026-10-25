@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Xrpc;
 
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Model\BlobRef;
@@ -50,7 +51,8 @@ class XrpcService {
 		private ConfigService $configService,
 		private ModerationService $moderation,
 		private AtprotoIdentityRequest $identityRequest,
-		private ?PlcClient $plc = null,
+		private HandleVerifier $handles,
+		private PlcClient $plc,
 	) {
 	}
 
@@ -124,7 +126,12 @@ class XrpcService {
 		try {
 			$identity = $this->identities->getByHandle($handle);
 		} catch (AtprotoIdentityNotFoundException) {
-			throw XrpcException::invalidRequest('Unable to resolve handle');
+			$did = $this->handles->resolve($handle);
+			if ($did === null) {
+				throw new XrpcException(404, 'HandleNotFound', 'Unable to resolve handle');
+			}
+
+			return ['did' => $did];
 		}
 		if (!$identity->isActive()) {
 			throw XrpcException::invalidRequest('Unable to resolve handle');
@@ -145,7 +152,7 @@ class XrpcService {
 			$identity = $this->identities->getByDid($did);
 		} catch (AtprotoIdentityNotFoundException) {
 			try {
-				$document = Syntax::isDidPlc($did) ? $this->plc?->document($did) : null;
+				$document = Syntax::isDidPlc($did) ? $this->plc->document($did) : null;
 			} catch (AtprotoException $e) {
 				throw new XrpcException(502, 'DidResolutionFailed', 'DID directory could not be reached');
 			}
@@ -165,19 +172,30 @@ class XrpcService {
 		return ['didDoc' => $this->identities->document($identity)];
 	}
 
-	/** Resolve local handles and DIDs into identityInfo; never advertise an unverified handle. */
+	/** Resolve handles and DIDs into identityInfo; never advertise an unverified handle. */
 	private function resolveIdentity(string $identifier): array {
 		$identity = null;
+		$handle = '';
 		if (Syntax::isDid($identifier)) {
 			try {
 				$identity = $this->identities->getByDid($identifier);
 			} catch (AtprotoIdentityNotFoundException) {
 			}
 		} elseif (Syntax::isResolvableHandle($identifier)) {
+			$handle = Syntax::normalizeHandle($identifier);
 			try {
-				$identity = $this->identities->getByHandle(Syntax::normalizeHandle($identifier));
+				$identity = $this->identities->getByHandle($handle);
 			} catch (AtprotoIdentityNotFoundException) {
-				throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+				$did = $this->handles->resolve($handle);
+				if ($did === null) {
+					throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+				}
+				try {
+					$identity = $this->identities->getByDid($did);
+				} catch (AtprotoIdentityNotFoundException) {
+					$identity = null;
+				}
+				$identifier = $did;
 			}
 		} else {
 			throw XrpcException::invalidRequest('Not an atproto identifier');
@@ -187,18 +205,39 @@ class XrpcService {
 			if (!$identity->isActive()) {
 				throw new XrpcException(400, 'DidDeactivated', 'DID is deactivated');
 			}
-			$handle = $identity->customHandleBroken() ? 'handle.invalid' : $identity->handle;
+			$document = $this->identities->document($identity);
+			$handleIsAssigned = $identity->handle === $identity->assignedHandle();
+			$handleIsVerified = $handleIsAssigned || (!$identity->customHandleBroken()
+				&& in_array('at://' . $identity->handle, $document['alsoKnownAs'] ?? [], true)
+				&& $this->handles->verify($identity->handle, $identity->did) !== '');
+			$resolvedHandle = $handleIsVerified ? $identity->handle : 'handle.invalid';
+			if ($handle === '') {
+				$handle = $resolvedHandle;
+			}
 
-			return ['did' => $identity->did, 'handle' => $handle, 'didDoc' => $this->identities->document($identity)];
+			return ['did' => $identity->did, 'handle' => $resolvedHandle, 'didDoc' => $document];
 		}
 
 		if (!Syntax::isDid($identifier)) {
 			throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
 		}
-		$resolved = $this->resolveDid($identifier);
-		$document = $resolved['didDoc'];
+		$document = $this->resolveDid($identifier)['didDoc'];
+		if ($handle === '') {
+			foreach (($document['alsoKnownAs'] ?? []) as $alias) {
+				if (is_string($alias) && str_starts_with($alias, 'at://')) {
+					$candidate = substr($alias, 5);
+					if (Syntax::isResolvableHandle($candidate)) {
+						$handle = $candidate;
+						break;
+					}
+				}
+			}
+		}
+		$verified = $handle !== ''
+			&& in_array('at://' . $handle, $document['alsoKnownAs'] ?? [], true)
+			&& $this->handles->verify($handle, $identifier) !== '';
 
-		return ['did' => $identifier, 'handle' => 'handle.invalid', 'didDoc' => $document];
+		return ['did' => $identifier, 'handle' => $verified ? $handle : 'handle.invalid', 'didDoc' => $document];
 	}
 
 	/**

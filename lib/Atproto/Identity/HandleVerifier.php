@@ -79,4 +79,32 @@ class HandleVerifier {
 
 		return trim($body) === $did ? 'https' : '';
 	}
+
+	/** Resolve a network handle to the DID it publishes, or null when no valid method answers. */
+	public function resolve(string $handle): ?string {
+		$handle = self::normal($handle);
+		if ($this->refusal($handle) !== '') {
+			return null;
+		}
+		foreach ($this->dns->txt('_atproto.' . $handle) as $text) {
+			if (preg_match('/^did=(.+)$/', trim($text), $match) === 1 && Syntax::isDid(trim($match[1]))) {
+				return trim($match[1]);
+			}
+		}
+
+		try {
+			$status = 0;
+			$body = $this->curl->doRequest('get', 'https://' . $handle . '/.well-known/atproto-did', [
+				'timeout' => 10,
+				'json_headers' => false,
+				'accept_errors' => true,
+				'max_redirects' => 0,
+			], $contentType, $status);
+		} catch (Throwable) {
+			return null;
+		}
+		$did = $status === 200 ? trim(substr($body, 0, self::MAX_BODY)) : '';
+
+		return Syntax::isDid($did) ? $did : null;
+	}
 }

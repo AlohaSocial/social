@@ -10,7 +10,9 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Controller;
 
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\OAuth\DpopNonce;
@@ -182,7 +184,7 @@ class AtprotoXrpcControllerTest extends TestCase {
 		$videos->method('open')->willReturnCallback(static fn (): array => ['stream' => fopen('php://memory', 'rb'), 'size' => 4]);
 		$xrpc = new XrpcService(
 			$config, $identities, $repositories, $this->createMock(AtprotoRepoRequest::class), $blobs, $pictures, $videos,
-			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class),
+			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class),
 		);
 		if ($client === null) {
 			$client = $this->createMock(ClientXrpc::class);
