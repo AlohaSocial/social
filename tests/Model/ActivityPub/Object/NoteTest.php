@@ -549,22 +549,29 @@ class NoteTest extends TestCase {
 		$note->setLocal(true);
 		$note->setAttributedTo('https://cloud.example.org/apps/social/@alice');
 		$note->setContent('<p>Join the neighborhood meetup</p>');
+		$note->setLanguage('en');
 		$note->setSubType('Event');
 		$note->setDetailArray(Details::EVENT, [
-			'name' => 'Community meetup',
-			'start_time' => '2026-04-05T16:30:00Z',
-			'end_time' => '2026-04-05T18:00:00Z',
-			'location' => 'Community hall',
+			'name' => 'Community & meetup',
+			'start_time' => '2026-04-05T18:30:00+02:00',
+			'end_time' => '2026-04-05T20:00:00+02:00',
+			'location' => 'Community & hall',
 		]);
 		$note->setExportFormat(ACore::FORMAT_ACTIVITYPUB);
 
 		$published = $note->jsonSerialize();
 
 		$this->assertSame('Event', $published['type']);
-		$this->assertSame('Community meetup · Starts 2026-04-05 16:30 UTC – Ends 2026-04-05 18:00 UTC · At Community hall', $published['name']);
+		$this->assertSame('Community & meetup', $published['name']);
+		$this->assertStringContainsString('<p>Join the neighborhood meetup</p>', $published['content']);
+		$this->assertStringContainsString('<strong>Community &amp; meetup</strong>', $published['content']);
+		$this->assertStringContainsString('Starts: 2026-04-05 16:30 UTC', $published['content']);
+		$this->assertStringContainsString('Ends: 2026-04-05 18:00 UTC', $published['content']);
+		$this->assertStringContainsString('Location: Community &amp; hall', $published['content']);
+		$this->assertSame(['en' => $published['content']], $published['contentMap']);
 		$this->assertSame('2026-04-05T16:30:00Z', $published['startTime']);
 		$this->assertSame('2026-04-05T18:00:00Z', $published['endTime']);
-		$this->assertSame(['type' => 'Place', 'name' => 'Community hall'], $published['location']);
+		$this->assertSame(['type' => 'Place', 'name' => 'Community & hall'], $published['location']);
 	}
 
 	/** Nothing to resolve the setting from must not lose the post. */

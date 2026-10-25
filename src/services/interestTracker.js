@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-import { sendSignals } from './interests.js'
+import { fetchRecommendationPreferences, isRecommendationLearningActive, sendSignals } from './interests.js'
 import logger from './logger.js'
+import { uuid } from '../utils/uuid.js'
 
 /**
  * How reading is measured for the For you feed.
@@ -49,19 +50,11 @@ const MAX_BUFFER_EVENTS = 1000
 /** A transient network failure is retried on later flushes, then discarded. */
 const MAX_SEND_ATTEMPTS = 5
 
+/** Actions accepted by the recommendation signal endpoint. */
+const ACTION_KINDS = new Set(['open', 'media', 'link'])
+
 /** Shorter than this is a post going past, not one being looked at. */
 const MIN_DWELL = 250
-
-/** @return {string} a unique identifier for one observation */
-function uuid() {
-	if (typeof globalThis.crypto?.randomUUID === 'function') {
-		return globalThis.crypto.randomUUID()
-	}
-	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
-		const value = Math.floor(Math.random() * 16)
-		return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16)
-	})
-}
 
 /**
  * Which context a timeline reports under, by the `type` the list is given.
@@ -72,6 +65,7 @@ const CONTEXTS = {
 	timeline: 'local',
 	federated: 'federated',
 	tags: 'tag',
+	explore: 'explore',
 	interests: 'interests',
 	photos: 'photos',
 	videos: 'videos',
@@ -89,19 +83,25 @@ export function contextFor(type) {
 }
 
 /**
- * Whether reading this post may teach anything: it carries a hashtag, and the
- * reader did not write it.
+ * Whether reading this post may teach anything: it is not the reader's own,
+ * and either carries a hashtag or comes from a consented ranked-feed context.
  *
  * @param {import('../types/Mastodon.js').Status|null|undefined} status the post the reader sees
  * @param {(status: object) => boolean} isOwn whether the reader wrote it
+ * @param {boolean} allowUntagged whether an enabled ranked feed may track posts without hashtags
  * @return {boolean}
  */
-export function isTrackable(status, isOwn = () => false) {
-	if (!status?.id || !Array.isArray(status.tags) || status.tags.length === 0) {
+export function isTrackable(status, isOwn = () => false, allowUntagged = false) {
+	if (!status?.id || (!allowUntagged && (!Array.isArray(status.tags) || status.tags.length === 0))) {
 		return false
 	}
 
 	return !isOwn(status)
+}
+
+/** @param {object|null|undefined} status the post */
+function hasTags(status) {
+	return Array.isArray(status?.tags) && status.tags.length > 0
 }
 
 /**
@@ -181,8 +181,9 @@ function sideOf(entry, viewportHeight) {
  * @param {object} options what the tracker works with
  * @param {string} options.context what the signals say they came from
  * @param {number|null} [options.generation] current recommendation consent/reset generation
+ * @param {boolean} [options.legacyLearning] whether the reader separately enabled legacy hashtag learning
  * @param {boolean} [options.allowUntagged] whether a consented recommendation context tracks without hashtags
- * @param {(events: object[], options: {beacon: boolean}) => Promise<void>} [options.send] how a batch goes out
+ * @param {(events: object[], options: {beacon: boolean, legacy: boolean}) => Promise<void>} [options.send] how a batch goes out
  * @param {(status: import('../types/Mastodon.js').Status) => boolean} [options.isOwn] whether the reader wrote a post
  * @param {() => number} [options.now] the clock
  * @param {Document} [options.document] where visibility and input are read
@@ -192,6 +193,7 @@ function sideOf(entry, viewportHeight) {
 export function createInterestTracker({
 	context,
 	generation = null,
+	legacyLearning = false,
 	allowUntagged = false,
 	send = sendSignals,
 	isOwn = () => false,
@@ -230,8 +232,15 @@ export function createInterestTracker({
 	 * @param {string} statusId the post whose event is being reported
 	 * @param {string} kind the observed action
 	 * @param {object} [extra] bounded event-specific details
+	 * @param {boolean} [legacyEligible] whether a separately enabled hashtag learner may receive it
 	 */
-	function signal(statusId, kind, extra = {}) {
+	function signal(statusId, kind, extra = {}, legacyEligible = true) {
+		if (!legacyEligible && learningGeneration === null) {
+			return
+		}
+		if (learningGeneration === null && !legacyLearning) {
+			return
+		}
 		if (buffer.length >= MAX_BUFFER_EVENTS) {
 			logger.debug('Reading signal buffer is full; dropping a new observation')
 			return
@@ -241,6 +250,9 @@ export function createInterestTracker({
 			kind,
 			context,
 			...extra,
+		}
+		if (!legacyEligible) {
+			event.legacy_eligible = false
 		}
 		if (learningGeneration !== null) {
 			event.event_id = uuid()
@@ -261,10 +273,11 @@ export function createInterestTracker({
 	const viewportHeight = () => win.innerHeight ?? 0
 
 	/** @return {boolean} whether the page as a whole lets anything count */
-	const pageCounts = () => pageVisible && focused && !idle
+	const pageCounts = () => pageVisible && focused && !idle && (learningGeneration !== null || legacyLearning)
 	const canTrack = (status) => allowUntagged
 		? Boolean(status?.id) && !isOwn(status)
 		: isTrackable(status, isOwn)
+	const canCount = (status) => pageCounts() && (hasTags(status) || learningGeneration !== null)
 
 	/**
 	 * Closes the stretch a post is counting, adding it to the view's total.
@@ -288,7 +301,7 @@ export function createInterestTracker({
 	 */
 	function refresh(at = now()) {
 		for (const [element, view] of watched) {
-			const counts = view.visible && pageCounts() && isReadable(element)
+			const counts = view.visible && canCount(view.status) && isReadable(element)
 			if (counts && view.since === null) {
 				view.since = at
 			} else if (!counts) {
@@ -315,13 +328,13 @@ export function createInterestTracker({
 		if (learningGeneration !== null && ms >= 750
 			&& (lastImpressionAt === undefined || at - lastImpressionAt >= IMPRESSION_COOLDOWN)) {
 			impressionAt.set(id, at)
-			signal(id, 'impression', { session_id: sessionId, visible_ms: Math.min(ms, VIEW_CAP) })
+			signal(id, 'impression', { session_id: sessionId, visible_ms: Math.min(ms, VIEW_CAP) }, hasTags(view.status))
 		}
 
 		if (leftTo !== null && leftTo !== view.enteredFrom && shown < SKIP_BELOW && scrolling) {
 			if (!skipped.has(id) && !longViews.has(id)) {
 				skipped.add(id)
-				signal(id, 'skip')
+				signal(id, 'skip', {}, hasTags(view.status))
 			}
 		} else if (ms >= MIN_DWELL && !longViews.has(id)) {
 			longViews.add(id)
@@ -333,7 +346,7 @@ export function createInterestTracker({
 		// nothing new to say about it
 		if (leftTo !== null) {
 			view.visible = false
-		} else if (view.visible && pageCounts() && isReadable(view.element)) {
+		} else if (view.visible && canCount(view.status) && isReadable(view.element)) {
 			view.since = at
 		}
 	}
@@ -432,8 +445,18 @@ export function createInterestTracker({
 
 	/** The page is going away: what is left goes by beacon. */
 	function onPageHide() {
+		pageVisible = false
 		finishVisible(now())
 		flush({ beacon: true })
+	}
+
+	/** The page returned, including from the back-forward cache. */
+	function onPageShow() {
+		pageVisible = doc.visibilityState !== 'hidden'
+		focused = typeof doc.hasFocus === 'function' ? doc.hasFocus() : true
+		onInput()
+		refresh()
+		armIdle()
 	}
 
 	/**
@@ -450,32 +473,25 @@ export function createInterestTracker({
 		}
 	}
 
-	/**
-	 * Sends what is buffered, a request per hundred events. A failed batch is
-	 * put back unchanged so its event IDs remain stable on retry. Both the
-	 * buffer and retry count are bounded while the server is unavailable.
-	 *
-	 * @param {object} [options] how
-	 * @param {boolean} [options.beacon] the page is going away
-	 */
-	function flush({ beacon = false } = {}) {
-		if (flushing || buffer.length === 0) {
-			return flushPromise ?? Promise.resolve()
-		}
-
-		flushing = true
+	/** @return {object[][]} the current buffer split into bounded requests */
+	function takeBatches() {
 		const batches = []
 		while (buffer.length > 0) {
-			const batch = buffer.slice(0, BATCH_SIZE)
+			batches.push(buffer.slice(0, BATCH_SIZE))
 			buffer = buffer.slice(BATCH_SIZE)
-			batches.push(batch)
 		}
+		return batches
+	}
 
-		// Start each bounded batch immediately: a pagehide beacon must be
-		// queued before its handler returns.
+	/**
+	 * @param {object[][]} batches events grouped by request size
+	 * @param {boolean} beacon whether requests are queued during page exit
+	 * @param {string} failureMessage debug message for failed requests
+	 */
+	function sendBatches(batches, beacon, failureMessage) {
 		const sends = batches.map((batch, index) => {
 			try {
-				return Promise.resolve(send(batch, { beacon })).then(
+				return Promise.resolve(send(batch, { beacon, legacy: legacyLearning })).then(
 					() => ({ index, batch }),
 					(error) => ({ index, batch, error }),
 				)
@@ -483,10 +499,11 @@ export function createInterestTracker({
 				return Promise.resolve({ index, batch, error })
 			}
 		})
-		flushPromise = Promise.all(sends).then((results) => {
+
+		return Promise.all(sends).then((results) => {
 			const retry = []
 			for (const result of results.filter((item) => 'error' in item).sort((a, b) => a.index - b.index)) {
-				logger.debug('Could not report reading signals', { error: result.error })
+				logger.debug(failureMessage, { error: result.error })
 				for (const event of result.batch) {
 					const attempts = (sendAttempts.get(event) ?? 0) + 1
 					if (attempts < MAX_SEND_ATTEMPTS) {
@@ -498,7 +515,31 @@ export function createInterestTracker({
 				}
 			}
 			buffer = retry.concat(buffer).slice(0, MAX_BUFFER_EVENTS)
-		}).finally(() => {
+		})
+	}
+
+	/**
+	 * Sends what is buffered, a request per hundred events. A failed batch is
+	 * put back unchanged so its event IDs remain stable on retry. Both the
+	 * buffer and retry count are bounded while the server is unavailable.
+	 *
+	 * @param {object} [options] how
+	 * @param {boolean} [options.beacon] the page is going away
+	 */
+	function flush({ beacon = false } = {}) {
+		if (flushing && beacon && buffer.length > 0) {
+			return sendBatches(takeBatches(), true, 'Could not report reading signals during page exit')
+		}
+		if (flushing || buffer.length === 0) {
+			return flushPromise ?? Promise.resolve()
+		}
+
+		flushing = true
+		const batches = takeBatches()
+
+		// Start each bounded batch immediately: a pagehide beacon must be
+		// queued before its handler returns.
+		flushPromise = sendBatches(batches, beacon, 'Could not report reading signals').finally(() => {
 			flushing = false
 			flushPromise = null
 			if (destroyed && buffer.length === 0) {
@@ -521,6 +562,7 @@ export function createInterestTracker({
 	win.addEventListener('focus', onFocus)
 	win.addEventListener('blur', onBlur)
 	win.addEventListener('pagehide', onPageHide)
+	win.addEventListener('pageshow', onPageShow)
 	armIdle()
 
 	// named rather than returned straight, so that `sync()` can call the two
@@ -528,12 +570,39 @@ export function createInterestTracker({
 	// TypeScript reads it as `{}`
 	const tracker = {
 		setLearningGeneration(value) {
-			learningGeneration = Number.isInteger(value) && value >= 0 ? value : null
+			const nextGeneration = Number.isInteger(value) && value >= 0 ? value : null
+			if (learningGeneration !== nextGeneration) {
+				buffer = buffer.flatMap((event) => {
+					if (!Number.isInteger(event.generation) || (nextGeneration !== null && event.generation === nextGeneration)) {
+						return [event]
+					}
+					if (!legacyLearning || event.legacy_eligible === false) {
+						return []
+					}
+					const legacyEvent = { ...event }
+					delete legacyEvent.event_id
+					delete legacyEvent.generation
+					delete legacyEvent.legacy_eligible
+					return [legacyEvent]
+				})
+				learningGeneration = nextGeneration
+				const at = now()
+				for (const view of watched.values()) {
+					view.ms = 0
+					view.since = null
+					view.enteredAt = at
+				}
+				longViews.clear()
+				skipped.clear()
+				recorded.clear()
+				impressionAt.clear()
+				refresh(at)
+			}
 		},
 
 		/**
-		 * Starts watching a post. Posts that cannot teach anything — the
-		 * reader's own, or ones without a hashtag — are never watched.
+		 * Starts watching a post. Own posts and posts without a hashtag outside
+		 * a consented ranked-feed context are never watched.
 		 *
 		 * @param {Element} element the entry on the page
 		 * @param {import('../types/Mastodon.js').Status} status the post the reader sees in it
@@ -582,15 +651,14 @@ export function createInterestTracker({
 		},
 
 		/**
-		 * Something the reader did to a post: opened it, a picture or a video
-		 * in it, a link from it, or muted its author. Once per post and kind
-		 * per page view.
+		 * Something the reader did to a post that the endpoint accepts.
+		 * Once per post and kind per page view.
 		 *
 		 * @param {import('../types/Mastodon.js').Status} status the post
-		 * @param {'open'|'media'|'link'|'mute'} kind what happened
+		 * @param {'open'|'media'|'link'} kind what happened
 		 */
 		record(status, kind) {
-			if (destroyed || !canTrack(status)) {
+			if (destroyed || !ACTION_KINDS.has(kind) || !canTrack(status)) {
 				return
 			}
 			const key = status.id + '|' + kind
@@ -598,7 +666,7 @@ export function createInterestTracker({
 				return
 			}
 			recorded.add(key)
-			signal(status.id, kind)
+			signal(status.id, kind, {}, hasTags(status))
 		},
 
 		/**
@@ -617,7 +685,7 @@ export function createInterestTracker({
 				return
 			}
 			recorded.add(key)
-			signal(status.id, 'video_watch_ratio', { ratio: Math.min(1, Math.round(ratio * 1000) / 1000) })
+			signal(status.id, 'video_watch_ratio', { ratio: Math.min(1, Math.round(ratio * 1000) / 1000) }, hasTags(status))
 		},
 
 		flush,
@@ -655,6 +723,7 @@ export function createInterestTracker({
 			win.removeEventListener('focus', onFocus)
 			win.removeEventListener('blur', onBlur)
 			win.removeEventListener('pagehide', onPageHide)
+			win.removeEventListener('pageshow', onPageShow)
 		},
 	}
 
@@ -662,25 +731,46 @@ export function createInterestTracker({
 }
 
 /**
- * Reports one thing at once, outside any list: opening a post, muting its
- * author from it. The same rules as the tracker — nothing for the reader's
- * own posts or for posts without a hashtag.
+ * Reports one action outside any list. The same rules as the tracker apply:
+ * nothing for the reader's own posts or for untagged posts outside a consented
+ * ranked-feed context.
  *
  * @param {import('../types/Mastodon.js').Status} status the post
- * @param {string} kind what happened
+ * @param {'open'|'media'|'link'|'skip'|'dwell'|'video_watch_ratio'} kind what happened
  * @param {string} context where
  * @param {(status: object) => boolean} [isOwn] whether the reader wrote it
- * @param {{ms?: number}} [extra] how long, for a dwell
- * @param {(events: object[]) => Promise<void>} [send] how it goes out
+ * @param {{ratio?: number, ms?: number}} [extra] watched video fraction or playback time
+ * @param {(events: object[], options?: {legacy: boolean}) => Promise<void>} [send] how it goes out
+ * @param {number|null} [generation] current consent/reset generation, when already known
+ * @param {boolean} [allowUntagged] whether the ranked feed may learn from posts without hashtags
+ * @param {boolean} [legacyLearning] whether legacy hashtag learning is separately enabled
  * @return {Promise<void>}
  */
-export async function signalNow(status, kind, context, isOwn = () => false, extra = {}, send = sendSignals) {
-	if (!isTrackable(status, isOwn)) {
+export async function signalNow(status, kind, context, isOwn = () => false, extra = {}, send = sendSignals, generation = null, allowUntagged = false, legacyLearning = false) {
+	if (!['open', 'media', 'link', 'skip', 'dwell', 'video_watch_ratio'].includes(kind)
+		|| !isTrackable(status, isOwn, allowUntagged)) {
 		return
 	}
 
 	try {
-		await send([{ status_id: status.id, kind, context, ...extra }])
+		const untaggedRankedPost = allowUntagged && !hasTags(status)
+		if ((!Number.isInteger(generation) || generation < 0) && (!legacyLearning || untaggedRankedPost)) {
+			const preferences = await fetchRecommendationPreferences()
+			if (!isRecommendationLearningActive(preferences) || !Number.isInteger(preferences.generation) || preferences.generation < 0) {
+				return
+			}
+			generation = preferences.generation
+		}
+		const event = /** @type {Record<string, unknown>} */ ({ status_id: status.id, kind, context, ...extra })
+		if (Number.isInteger(generation) && generation >= 0) {
+			event.event_id = uuid()
+			event.generation = generation
+		}
+		if (legacyLearning && !untaggedRankedPost) {
+			await send([event], { legacy: true })
+		} else {
+			await send([event], { legacy: false })
+		}
 	} catch (error) {
 		logger.debug('Could not report a reading signal', { error })
 	}

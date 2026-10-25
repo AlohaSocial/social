@@ -26,9 +26,13 @@ vi.mock('../../../src/services/logger.js', () => ({
 }))
 const { feel } = vi.hoisted(() => ({ feel: vi.fn() }))
 vi.mock('../../../src/services/senses.js', () => ({ feel, videoSoundEnabled: () => true }))
-const { sendSignals } = vi.hoisted(() => ({ sendSignals: vi.fn(() => Promise.resolve()) }))
+const { sendSignals, fetchRecommendationPreferences } = vi.hoisted(() => ({
+	sendSignals: vi.fn(() => Promise.resolve()),
+	fetchRecommendationPreferences: vi.fn(() => Promise.resolve({ learning_mode: 'on', generation: 7 })),
+}))
 vi.mock('../../../src/services/interests.js', async (importOriginal) => ({
 	...(await importOriginal()),
+	fetchRecommendationPreferences,
 	sendSignals,
 }))
 
@@ -89,6 +93,7 @@ describe('VideoShorts', () => {
 		// the mute choice is kept for the tab, and a test is a new tab
 		window.sessionStorage.clear()
 		sendSignals.mockClear()
+		fetchRecommendationPreferences.mockClear()
 		vi.stubGlobal('IntersectionObserver', class {
 			constructor(callback) {
 				this.callback = callback
@@ -113,7 +118,13 @@ describe('VideoShorts', () => {
 		wrapper.vm.availableHeight = 800
 		await wrapper.vm.$nextTick()
 
-		wrapper.vm.onVideoMetadata({ target: { videoWidth: 1920, videoHeight: 1080 } })
+		const player = wrapper.find('video').element
+		Object.defineProperties(player, {
+			currentSrc: { configurable: true, value: 'https://cloud.example/v1.mp4' },
+			videoWidth: { configurable: true, value: 1920 },
+			videoHeight: { configurable: true, value: 1080 },
+		})
+		wrapper.vm.onVideoMetadata({ target: player })
 		await wrapper.vm.$nextTick()
 
 		expect(wrapper.find('.shorts__track').attributes('style')).toContain('--short-track-width: 1000px')
@@ -809,14 +820,18 @@ describe('VideoShorts', () => {
 		it('reports what the reader watched when they move on, under shorts', async () => {
 			const tagged = (id) => ({ ...video(id), tags: [{ name: 'skate' }] })
 			// The For you scope preserves the order returned by its ranking.
-			const { wrapper } = await mountShorts([tagged('2'), tagged('1')], { serverData: { public: false, interests: ON } })
+			const { wrapper } = await mountShorts([tagged('2'), tagged('1')], {
+				serverData: { public: false, interests: { ...ON, recommendationsEnabled: true } },
+			})
 			// one player, which follows the slide being watched
 			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.short')[0].element }])
 			await flushPromises()
 			const player = wrapper.find('video')
 			Object.defineProperty(player.element, 'duration', { value: 10, configurable: true })
-			player.element.currentTime = 6
-			await player.trigger('timeupdate')
+			for (const currentTime of [1.5, 3, 4.5, 6]) {
+				player.element.currentTime = currentTime
+				await player.trigger('timeupdate')
+			}
 			await player.trigger('ended')
 			observers[0].callback([{ isIntersecting: true, target: wrapper.findAll('.short')[1].element }])
 			await flushPromises()
@@ -824,10 +839,29 @@ describe('VideoShorts', () => {
 			wrapper.unmount()
 
 			// newest first: the first slide is the second post
-			expect(sendSignals.mock.calls.map(([events]) => events[0])).toEqual([
-				{ status_id: '2', kind: 'dwell', ms: 10000, context: 'shorts' },
-				{ status_id: '1', kind: 'skip', context: 'shorts' },
-			])
+			const sent = sendSignals.mock.calls.map(([events]) => events[0])
+			expect(sent).toHaveLength(3)
+			expect(sent[0]).toMatchObject({
+				event_id: expect.stringMatching(/^[a-f0-9-]{36}$/i),
+				generation: 7,
+				status_id: '2',
+				kind: 'video_watch_ratio',
+				ratio: 0.6,
+				context: 'shorts',
+			})
+			expect(sent[1]).toMatchObject({
+				status_id: '2',
+				kind: 'dwell',
+				ms: 6000,
+				context: 'shorts',
+			})
+			expect(sent[2]).toMatchObject({
+				event_id: expect.stringMatching(/^[a-f0-9-]{36}$/i),
+				generation: 7,
+				status_id: '1',
+				kind: 'skip',
+				context: 'shorts',
+			})
 		})
 
 		it('reports nothing while learning is paused', async () => {
@@ -1065,6 +1099,7 @@ describe('VideoShorts', () => {
 				slide.scrollIntoView = () => scrolled.push(at)
 			})
 
+			await player.trigger('loadedmetadata')
 			await player.trigger('ended')
 
 			expect(scrolled).toEqual([1])

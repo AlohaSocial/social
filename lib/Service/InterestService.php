@@ -167,7 +167,7 @@ class InterestService {
 	 * The reader's own switches, with the administrator's default filled in
 	 * for somebody who never touched theirs.
 	 *
-	 * @return array{enabled: bool, learning: bool, paused: bool, languages: string[], noticeAcknowledged: bool}
+	 * @return array{enabled: bool, learning: bool, paused: bool, instancePaused: bool, languages: string[], noticeAcknowledged: bool}
 	 */
 	public function settingsFor(string $userId): array {
 		$learning = $this->userValue($userId, self::KEY_LEARNING);
@@ -181,6 +181,7 @@ class InterestService {
 			'enabled' => $this->isEnabled(),
 			'learning' => $learning === '1',
 			'paused' => $this->userValue($userId, self::KEY_PAUSED_AT) !== '',
+			'instancePaused' => $this->configService->getAppValueBool(ConfigService::REC_LEARNING_PAUSED),
 			'languages' => is_array($languages) ? array_values(array_filter($languages, 'is_string')) : [],
 			'noticeAcknowledged' => $this->userValue($userId, self::KEY_NOTICE) === '1',
 		];
@@ -208,7 +209,7 @@ class InterestService {
 
 		$settings = $this->settingsFor($userId);
 
-		return $settings['enabled'] && $settings['learning'] && !$settings['paused'];
+		return $settings['enabled'] && $settings['learning'] && !$settings['paused'] && !$settings['instancePaused'];
 	}
 
 	/**
@@ -326,7 +327,7 @@ class InterestService {
 			}
 
 			$videoMs = ($event['kind'] === 'dwell' && in_array($event['context'], self::WATCH_CONTEXTS, true))
-				? $this->videoDurationMs($post)
+				? $this->videoDurationMs($post, $event['context'] === 'shorts')
 				: 0;
 			if ($videoMs > 0) {
 				// a video is watched rather than read: how long it runs is
@@ -656,10 +657,12 @@ class InterestService {
 
 	/**
 	 * How long a post's video runs, in milliseconds; 0 for a post that is not
-	 * one, or whose video never said. The first video with a running time is
-	 * the one a player starts with.
+	 * one, or whose video never said. Shorts reports one duration-weighted
+	 * signal for all of a post's video slides; other contexts use the first
+	 * video, which is the one their player starts with.
 	 */
-	private function videoDurationMs(Stream $post): int {
+	private function videoDurationMs(Stream $post, bool $sumVideos = false): int {
+		$total = 0;
 		foreach ($post->getAttachments() as $attachment) {
 			if (!in_array($attachment->getType(), ['video', 'gifv'], true)) {
 				continue;
@@ -667,11 +670,15 @@ class InterestService {
 			$meta = $attachment->getMeta();
 			$seconds = $meta?->getDuration() ?? $meta?->getOriginal()?->getDuration() ?? 0.0;
 			if ($seconds > 0) {
-				return (int)round($seconds * 1000.0);
+				$duration = (int)round($seconds * 1000.0);
+				if (!$sumVideos) {
+					return $duration;
+				}
+				$total += $duration;
 			}
 		}
 
-		return 0;
+		return $total;
 	}
 
 	/** @return string[] the hashtags the reader follows, normalised */

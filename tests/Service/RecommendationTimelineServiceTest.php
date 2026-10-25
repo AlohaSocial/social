@@ -282,7 +282,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			$this->appleAliases(), $this->isString(), 50, [], ['en'], 2_000_000_000
 		)->willReturn(['123' => $post]);
 		$this->snapshots->expects($this->once())->method('create')->with(
-			'alice', 'for-you-v12-php-security-alias', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
+			'alice', 'for-you-v15-topic-hierarchy-diversity', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
 		)->willReturn(['session_id' => 'session', 'nids' => ['123'], 'exploration_nids' => [], 'next_cursor' => null]);
 		$this->queue->expects($this->exactly(2))->method('fillPosts')->willReturnCallback(
 			static function (string $kind, string $term, Person $viewer): bool {
@@ -315,7 +315,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			->setPublishedTime(1_999_999_900);
 		$this->streams->method('recommendationCandidatesByTerms')->willReturn([]);
 		$this->streams->expects($this->once())->method('recommendationExplorationCandidates')->with(
-			$this->isString(), 10, intdiv(2_000_000_000, 6 * 3600), [], ['en']
+			$this->isString(), 30, intdiv(2_000_000_000, 6 * 3600), [], ['en']
 		)->willReturn(['125' => $post]);
 		$this->snapshots->method('create')->willReturn(null);
 		$this->queue->method('fillPosts')->willReturn(false);
@@ -553,6 +553,54 @@ class RecommendationTimelineServiceTest extends TestCase {
 		$this->assertSame('tech.apple', $page['items'][0]->getInterest()['topics'][0]['id']);
 		$this->assertSame('EXPLORATION', $page['items'][0]->getInterest()['explanation']['primary']);
 		$this->assertSame(2_000_000_000, $page['items'][0]->getInterest()['explanation']['created_at']);
+	}
+
+	public function testContinuationLoadsOnlyTheRemainingSlotsAfterPostsBecomeUnavailable(): void {
+		$this->learnTopics(['tech.apple']);
+		$this->preferences->method('get')->willReturn($this->state([], []));
+		$this->signals->method('exposures')->willReturn([]);
+		$posts = [];
+		foreach ([1, 5, 6, 7] as $nid) {
+			$posts[(string)$nid] = (new Note())
+				->setNid((string)$nid)
+				->setId('https://remote.example/posts/' . $nid)
+				->setAttributedTo('https://remote.example/users/' . $nid)
+				->setContent('<p>Apple announces a new device</p>')
+				->setPublishedTime(1_999_999_900);
+		}
+		$pageCalls = [];
+		$this->snapshots->expects($this->exactly(2))->method('nextPage')
+			->willReturnCallback(static function (...$arguments) use (&$pageCalls): array {
+				$pageCalls[] = $arguments;
+				return count($pageCalls) === 1
+					? [
+						'session_id' => 'session', 'nids' => ['1', '2', '3', '4'],
+						'exploration_nids' => [], 'explanations' => [], 'next_cursor' => 'next-cursor',
+					]
+					: [
+						'session_id' => 'session', 'nids' => ['5', '6', '7'],
+						'exploration_nids' => [], 'explanations' => [], 'next_cursor' => null,
+					];
+			});
+		$this->streams->expects($this->exactly(2))->method('getVisibleByNids')
+			->willReturnOnConsecutiveCalls(['1' => $posts['1']], [
+				'5' => $posts['5'], '6' => $posts['6'], '7' => $posts['7'],
+			]);
+
+		$page = $this->service()->page($this->viewer(), 4, 'signed-cursor');
+
+		$this->assertSame([
+			'https://remote.example/posts/1',
+			'https://remote.example/posts/5',
+			'https://remote.example/posts/6',
+			'https://remote.example/posts/7',
+		], array_map(static fn (Note $post): string => $post->getId(), $page['items']));
+		$this->assertSame(4, $page['coverage']['returned']);
+		$this->assertNull($page['next_cursor']);
+		$this->assertSame([
+			['signed-cursor', 'alice', 'for-you-v15-topic-hierarchy-diversity', '', 3, 2, 2_000_000_000, 4],
+			['next-cursor', 'alice', 'for-you-v15-topic-hierarchy-diversity', '', 3, 2, 2_000_000_000, 3],
+		], $pageCalls);
 	}
 
 	public function testTimelineStoresTheExplanationsFromTheRankedSnapshot(): void {

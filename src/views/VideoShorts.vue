@@ -107,6 +107,43 @@
 						{{ entry.status.favourites_count }}
 					</span>
 				</button>
+				<NcActions
+					v-if="canOfferRecommendationFeedback(entry)"
+					class="short__recommendation-menu"
+					:aria-label="t('social', 'For You recommendations')"
+					:menuName="t('social', 'For You recommendations')"
+					@update:open="onRecommendationMenuToggle(entry.status, $event)">
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_SIMILAR')">
+						<template #icon>
+							<ThumbUpOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more like this post') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'LESS_SIMILAR')">
+						<template #icon>
+							<ThumbDownOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me less like this post') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'HIDE_POST')">
+						<template #icon>
+							<EyeOffOutline :size="20" />
+						</template>
+						{{ t('social', 'Hide this post from For You') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_AUTHOR')">
+						<template #icon>
+							<AccountPlusOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more from this author') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || !recommendationContext(entry.status)?.format" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_FORMAT')">
+						<template #icon>
+							<ShapeOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel(entry.status) }) }}
+					</NcActionButton>
+				</NcActions>
 
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
 				<button
@@ -183,7 +220,7 @@
 				:loop="!current.day"
 				preload="auto"
 				@loadedmetadata="onVideoMetadata"
-				@timeupdate="shortSignals.progress(current.status, $event.target)"
+				@timeupdate="onVideoProgress"
 				@ended="onEnded"
 				@click="onVideoTap(playing, $event)" />
 
@@ -263,6 +300,8 @@ import { generateUrl } from '@nextcloud/router'
 import { mapStores } from 'pinia'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
@@ -270,12 +309,19 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
+import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
+import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
+import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
+import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
-import { hasInterestsFeed, isTracking } from '../services/interests.js'
+import { fetchRecommendationPreferences, hasInterestsFeed, isRecommendationLearningActive, isTracking } from '../services/interests.js'
 import { createShortSignals } from '../services/shortSignals.js'
 import { interestReason } from '../utils/interestReason.js'
+import { fetchRecommendationContext, recordRecommendationFeedback, undoRecommendationFeedback } from '../services/recommendationFeedback.js'
+import { showError, showUndo } from '../services/toast.js'
 
 /**
  * What a clip must have gathered — likes, boosts and views together — before
@@ -320,9 +366,16 @@ export default {
 		IconRefresh,
 		IconVolumeHigh,
 		IconVolumeOff,
+		AccountPlusOutline,
+		EyeOffOutline,
+		NcActions,
+		NcActionButton,
 		NcButton,
 		NcLoadingIcon,
+		ShapeOutline,
 		ShortComposerDialog,
+		ThumbDownOutline,
+		ThumbUpOutline,
 	},
 
 	props: {
@@ -370,6 +423,8 @@ export default {
 			startAt: '',
 			/** the slide on screen, which the player is over */
 			playing: 0,
+			/** slide currently loaded by the single video player */
+			playerSlideKey: '',
 			/** the 24-hour shorts, in the order they are watched */
 			dayShorts: [],
 			/** the 24-hour shorts have been asked for; the stack waits for them */
@@ -380,6 +435,8 @@ export default {
 			/** the last page asked for could not be fetched */
 			failed: false,
 			allLoaded: false,
+			recommendationContexts: {},
+			recommendationContextLoading: {},
 			/**
 			 * Which scope the page in flight belongs to. A page the store
 			 * dropped because the scope changed under it comes back empty,
@@ -398,10 +455,12 @@ export default {
 			tapTimer: null,
 			/** what watching teaches For you (`shortSignals.js`) */
 			shortSignals: createShortSignals({
+				allowUntagged: useSettingsStore().getServerData.interests?.recommendationsEnabled === true,
+				legacyLearning: () => isTracking(useSettingsStore().getServerData.interests),
 				enabled: () => {
 					const serverData = useSettingsStore().getServerData
 
-					return !serverData?.public && isTracking(serverData?.interests)
+					return !serverData?.public && (serverData?.interests?.recommendationsEnabled === true || isTracking(serverData?.interests))
 				},
 			}),
 
@@ -604,6 +663,18 @@ export default {
 	mounted() {
 		this.open()
 		this.loadDay()
+		const serverData = this.settingsStore.getServerData
+		if (!serverData?.public && serverData?.interests?.recommendationsEnabled === true) {
+			const signals = this.shortSignals
+			fetchRecommendationPreferences().then((preferences) => {
+				if (this.shortSignals !== signals) {
+					return
+				}
+				const mayLearn = isRecommendationLearningActive(preferences)
+					&& Number.isInteger(preferences.generation)
+				signals.setLearningGeneration(mayLearn ? preferences.generation : null)
+			}).catch((error) => logger.debug('Could not read For you learning settings for Shorts', { error }))
+		}
 
 		// `threshold: 0.6` rather than a bare intersection: two slides touch
 		// the viewport for most of a scroll, and whichever was observed last
@@ -653,6 +724,106 @@ export default {
 	methods: {
 		t,
 
+		/** @param {object} entry a kept video post @return {boolean} */
+		canOfferRecommendationFeedback(entry) {
+			const status = entry?.status
+
+			return this.watching === 'interests'
+				&& !entry?.day
+				&& !this.settingsStore.getServerData?.public
+				&& this.settingsStore.getServerData?.interests?.recommendationsEnabled === true
+				&& !!status?.nid
+				&& !this.isOwn(status)
+		},
+
+		/** @param {object} status a personalized video status @return {object|null} */
+		recommendationContext(status) {
+			return this.recommendationContexts[String(status?.nid)] ?? null
+		},
+
+		/** @param {object} status a personalized video status @return {boolean} */
+		recommendationActionLoading(status) {
+			return this.recommendationContextLoading[String(status?.nid)] === true
+		},
+
+		/** @param {object} status a personalized video status @return {string} */
+		recommendationFormatLabel(status) {
+			const format = this.recommendationContext(status)?.format
+			return {
+				audio: t('social', 'audio posts'),
+				image: t('social', 'photo posts'),
+				poll: t('social', 'polls'),
+				short: t('social', 'short videos'),
+				text: t('social', 'text posts'),
+				video: t('social', 'video posts'),
+			}[format] || t('social', 'posts like this')
+		},
+
+		/**
+		 * @param {object} status a personalized video status
+		 * @param {boolean} open whether its menu opened
+		 */
+		onRecommendationMenuToggle(status, open) {
+			if (open) {
+				this.loadRecommendationContext(status)
+			}
+		},
+
+		/** @param {object} status a personalized video status */
+		async loadRecommendationContext(status) {
+			const id = String(status?.nid ?? '')
+			if (id === '' || this.recommendationContexts[id] || this.recommendationContextLoading[id]) {
+				return
+			}
+			this.recommendationContextLoading = { ...this.recommendationContextLoading, [id]: true }
+			try {
+				const context = await fetchRecommendationContext(id)
+				this.recommendationContexts = { ...this.recommendationContexts, [id]: context }
+			} catch (error) {
+				logger.warn('Could not load Shorts recommendation feedback context', { error })
+			} finally {
+				const loading = { ...this.recommendationContextLoading }
+				delete loading[id]
+				this.recommendationContextLoading = loading
+			}
+		},
+
+		/**
+		 * @param {object} status the post to rate
+		 * @param {string} kind the feedback operation
+		 */
+		async applyRecommendationFeedback(status, kind) {
+			if (!this.canOfferRecommendationFeedback({ status })) {
+				return
+			}
+			try {
+				const result = await recordRecommendationFeedback(status.nid, kind)
+				const store = this.timelineStore
+				const identity = store.getTimelineIdentity
+				const index = store.timeline.indexOf(status.id)
+				if (kind === 'HIDE_POST' && index !== -1) {
+					store.removeStatus(status, false)
+					store.forgetRemoval(status)
+				}
+				showUndo(kind === 'HIDE_POST'
+					? t('social', 'Post hidden from For You')
+					: t('social', 'Your feedback was saved for future recommendations'), async () => {
+					try {
+						await undoRecommendationFeedback(result.feedback_id)
+						if (kind === 'HIDE_POST' && index !== -1 && store.getTimelineIdentity === identity) {
+							store.restoreStatus(status, index)
+						}
+					} catch (error) {
+						logger.error('Could not undo Shorts recommendation feedback', { error })
+						showError(t('social', 'Could not undo this recommendation feedback'))
+					}
+				})
+			} catch (error) {
+				logger.error('Could not save Shorts recommendation feedback', { error })
+				showError(t('social', 'Could not save your recommendation feedback'))
+			}
+		},
+
 		/** Measures the space the video frame can use after its header. */
 		measureTrackBounds() {
 			const page = /** @type {HTMLElement|undefined} */ (this.$refs.page)
@@ -685,10 +856,40 @@ export default {
 		/** @param {Event} event metadata event from the current video */
 		onVideoMetadata(event) {
 			const video = /** @type {HTMLVideoElement} */ (event.target)
+			if (!this.isCurrentPlayerSource(video)) {
+				return
+			}
+			this.playerSlideKey = this.currentKey
 			if (video.videoWidth > 0 && video.videoHeight > 0) {
 				this.videoAspectRatio = video.videoWidth / video.videoHeight
 				this.$nextTick(this.alignCurrentSlide)
 			}
+		},
+
+		/** @param {HTMLVideoElement} video the player @return {boolean} whether its loaded source belongs to the current slide */
+		isCurrentPlayerSource(video) {
+			const source = this.current?.video?.url
+			if (!this.current?.isVideo || typeof source !== 'string' || source === '') {
+				return false
+			}
+
+			let expected
+			try {
+				expected = new URL(source, document.baseURI).href
+			} catch {
+				return false
+			}
+
+			return video.currentSrc ? video.currentSrc === expected : video.src === expected
+		},
+
+		/** @param {Event} event a player time update */
+		onVideoProgress(event) {
+			const video = /** @type {HTMLVideoElement} */ (event.target)
+			if (this.playerSlideKey !== this.currentKey || !this.isCurrentPlayerSource(video)) {
+				return
+			}
+			this.shortSignals.progress(this.current?.status, video, this.playerSlideKey)
 		},
 
 		/**
@@ -846,6 +1047,10 @@ export default {
 		 * @return {{text: string, label: string}|null} why For you showed it
 		 */
 		reasonOf(status) {
+			if (this.watching !== 'interests') {
+				return null
+			}
+
 			const reason = interestReason(status?.interest)
 			if (reason === null) {
 				return null
@@ -908,7 +1113,8 @@ export default {
 		 */
 		async play(index) {
 			this.held = false
-			this.shortSignals.enter(this.shorts[index]?.status)
+			const slide = this.shorts[index]
+			this.shortSignals.enter(slide?.status, slide?.key)
 			if (index >= this.shorts.length - LOOK_AHEAD) {
 				this.load()
 			}
@@ -921,22 +1127,32 @@ export default {
 			// a picture runs on its own clock; the hidden player must not go
 			// on with the video before it
 			if (!this.shorts[index]?.isVideo) {
+				this.playerSlideKey = ''
 				this.player()?.pause?.()
 
 				return
 			}
 
-			await this.playWithSound(this.player())
+			const player = this.player()
+			if (player && this.isCurrentPlayerSource(player)) {
+				this.playerSlideKey = slide.key
+			}
+			await this.playWithSound(player)
 		},
 
 		/** A kept short loops; a 24-hour one moves on. */
-		onEnded() {
+		/** @param {Event} [event] the video that ended */
+		onEnded(event) {
+			const video = /** @type {HTMLVideoElement} */ (event?.target ?? this.player())
+			if (this.playerSlideKey !== this.currentKey || !this.isCurrentPlayerSource(video)) {
+				return
+			}
 			if (this.current?.day) {
 				this.advance()
 
 				return
 			}
-			this.shortSignals.ended(this.current?.status)
+			this.shortSignals.ended(this.current?.status, this.current?.key)
 		},
 
 		/** On to the next slide, the way the arrow key goes. */
@@ -1493,6 +1709,19 @@ export default {
 		animation: short-hint-in .4s ease-out both;
 	}
 
+	&__recommendation-menu {
+		position: absolute;
+		inset-block-end: 128px;
+		inset-inline-end: 16px;
+		z-index: 3;
+
+		:deep(button) {
+			border-radius: 50%;
+			background: var(--social-on-dark-scrim);
+			color: var(--social-on-dark-text);
+		}
+	}
+
 	/* above the sound button, the column every short-video app keeps its
 	   actions in */
 	&__caption a {
@@ -1683,6 +1912,7 @@ export default {
 	.shorts__scopes,
 	.short__sound,
 	.short__sound-hint,
+	.short__recommendation-menu,
 	.short__like {
 		border: 1px solid ButtonText;
 		background: ButtonFace;

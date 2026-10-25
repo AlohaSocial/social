@@ -248,6 +248,17 @@ describe('Timeline', () => {
 		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
 	})
 
+	it('explains limited availability when For you has no posts yet', async () => {
+		const wrapper = mountTimeline({ params: { type: 'interests' } })
+		timelineStore.recommendationCoverage = {
+			[timelineStore.getTimelineIdentity]: { state: 'UNDERFILLED', known_eligible: 0, returned: 0, remote_refresh_queued: true },
+		}
+		await nextTick()
+
+		expect(timelineStore.getTimeline).toHaveLength(0)
+		expect(wrapper.text()).toContain('Only a few posts are available in this feed right now.')
+	})
+
 	it.each(['timeline', 'federated', 'favourites'])('switches the store to the %s timeline from the route', (type) => {
 		const wrapper = mountTimeline({ params: { type } })
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type, params: {} })

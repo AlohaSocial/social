@@ -48,6 +48,7 @@ class RecommendationTrendCandidatesTest extends TestCase {
 		$trends = $this->createMock(TrendService::class);
 		$trends->expects($this->never())->method('trendingStatuses');
 		$streams = $this->createMock(StreamRequest::class);
+		$streams->expects($this->never())->method('getVisibleByNids');
 
 		$source = new RecommendationTrendCandidates(
 			$trends,

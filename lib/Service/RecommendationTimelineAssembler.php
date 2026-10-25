@@ -148,7 +148,7 @@ class RecommendationTimelineAssembler {
 			'diversity_topics' => $this->diversityTopics($allTopicIds),
 			// Used only by the in-memory re-ranker; snapshots store NIDs and the
 			// bounded explanation, never post-derived text terms.
-			'story_terms' => $features['story_terms'],
+			'story_terms' => $features['story_terms'] ?? [],
 			'matching_topic_ids' => array_keys($selected),
 			'protocol' => RecommendationProtocol::of($post),
 			'published_at' => $published,

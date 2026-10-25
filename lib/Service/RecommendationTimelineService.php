@@ -23,7 +23,7 @@ class RecommendationTimelineService {
 	private const MAX_REFRESH_TOPICS = 2;
 	private const LOOKBACK_DAYS = RecommendationFreshness::LOOKBACK_DAYS;
 	private const MIN_COVERAGE = 15;
-	private const MODE = 'for-you-v12-php-security-alias';
+	private const MODE = 'for-you-v15-topic-hierarchy-diversity';
 
 	public function __construct(
 		private RecommendationPreferenceService $preferences,
@@ -100,6 +100,10 @@ class RecommendationTimelineService {
 		$socialGraphBudget = min($socialGraphBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget);
 		$savedFeedBudget = min(RecommendationSavedFeedCandidates::MAX_CANDIDATES, max(1, intdiv($candidateBudget, 10)));
 		$savedFeedBudget = min($savedFeedBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget);
+		if ($candidateTopics === []) {
+			$unusedTopicBudget = max(0, $candidateBudget - $automaticBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget - $savedFeedBudget);
+			$explorationBudget += $unusedTopicBudget;
+		}
 		$hiddenNids = array_values(array_unique(array_merge(
 			$this->interests->hiddenFor($viewer),
 			$feedback['hidden_nids']
@@ -333,7 +337,8 @@ class RecommendationTimelineService {
 			if (count($items) >= $limit || $nextCursor === null) {
 				break;
 			}
-			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $limit);
+			$remaining = $limit - count($items);
+			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $remaining);
 			if ($page === null) {
 				$nextCursor = null;
 				break;
@@ -342,7 +347,7 @@ class RecommendationTimelineService {
 		}
 
 		return [
-			'items' => array_slice($items, 0, $limit),
+			'items' => $items,
 			'session_id' => $sessionId,
 			'next_cursor' => $nextCursor,
 			'mode' => 'RANKED',

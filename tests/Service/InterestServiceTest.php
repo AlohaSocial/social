@@ -243,6 +243,20 @@ class InterestServiceTest extends TestCase {
 		$this->assertSame('', $this->user['interests_baseline'] ?? '', 'video playback does not change a reading pace');
 	}
 
+	public function testShortsPlaybackUsesTheCombinedDurationOfEveryVideoOnThePost(): void {
+		$post = $this->post('5', ['multi']);
+		$post->setAttachments([
+			(new MediaAttachment())->setType('video')->setMeta((new AttachmentMeta())->setDuration(10.0)),
+			(new MediaAttachment())->setType('video')->setMeta((new AttachmentMeta())->setDuration(20.0)),
+		]);
+
+		$this->service()->recordEvents($this->actor(), [
+			['status_id' => '5', 'kind' => 'dwell', 'ms' => 15000, 'context' => 'shorts'],
+		]);
+
+		$this->assertSame(['multi' => InterestScorer::SIGNAL_DWELL], $this->scores());
+	}
+
 	/** On a timeline the video player's playback time is unavailable, so screen time stays neutral. */
 	public function testVideoScreenTimeOnATimelineDoesNotTeachTheTopic(): void {
 		$this->video('1', ['cats'], 60.0);
@@ -409,6 +423,19 @@ class InterestServiceTest extends TestCase {
 
 		$this->user['interests_learning'] = '1';
 		$this->assertTrue($this->service()->settingsFor('alice')['learning']);
+	}
+
+	public function testInstanceLearningPauseStopsLegacySignalsAndActions(): void {
+		$this->post('1', ['cats']);
+		$this->app[ConfigService::REC_LEARNING_PAUSED] = '1';
+
+		$service = $this->service();
+		self::assertFalse($service->settingsFor('alice')['paused']);
+		self::assertTrue($service->settingsFor('alice')['instancePaused']);
+		$service->recordEvents($this->actor(), [['status_id' => '1', 'kind' => 'open']]);
+		$service->recordAction($this->actor(), $this->post('2', ['dogs']), InterestService::ACTION_FAVOURITE);
+
+		self::assertSame([], $this->rows);
 	}
 
 	public function testAnActionCountsWhereverItHappensAndNeverThrows(): void {

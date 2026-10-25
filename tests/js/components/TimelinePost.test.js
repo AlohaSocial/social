@@ -239,6 +239,30 @@ describe('TimelinePost', () => {
 			expect(wrapper.find('a.post-event__calendar--download').attributes('href'))
 				.toBe('/index.php/apps/social/api/v1/statuses/101/calendar')
 		})
+
+		it('explains when the Nextcloud session is no longer valid', async () => {
+			axios.post.mockRejectedValue({ response: { status: 401, data: { message: 'Current user is not logged in' } } })
+			const { wrapper } = mountPost({
+				item: makeItem({ event: { name: 'Community meetup', start_time: '2026-11-01T18:00:00Z' } }),
+			})
+
+			await wrapper.find('button.post-event__calendar').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Your Nextcloud session is no longer valid. Reload the page and sign in again, then retry the calendar import.')
+		})
+
+		it('does not report an access denial as an expired session', async () => {
+			axios.post.mockRejectedValue({ response: { status: 403, data: { message: 'Forbidden' } } })
+			const { wrapper } = mountPost({
+				item: makeItem({ event: { name: 'Community meetup', start_time: '2026-11-01T18:00:00Z' } }),
+			})
+
+			await wrapper.find('button.post-event__calendar').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Nextcloud refused this request. Reload the page and try again; if it continues, check your calendar permissions.')
+		})
 	})
 
 	describe('header and body', () => {
@@ -1016,11 +1040,22 @@ describe('TimelinePost', () => {
 			const { wrapper } = mountPost({
 				type: 'photos',
 				params: { scope: 'interests' },
-				item: makeItem({ nid: '123' }),
+				item: makeItem({ nid: '123', account: bob }),
 				serverData: { public: false, cloudAddress: 'https://cloud.example.org', interests: { recommendationsEnabled: true } },
 			})
 
 			expect(wrapper.vm.canUseRecommendationFeedback).toBe(true)
+		})
+
+		it('does not load recommendation feedback for the reader\'s own post', () => {
+			const { wrapper } = mountPost({
+				type: 'photos',
+				params: { scope: 'interests' },
+				item: makeItem({ nid: '123' }),
+				serverData: { public: false, cloudAddress: 'https://cloud.example.org', interests: { recommendationsEnabled: true } },
+			})
+
+			expect(wrapper.vm.canUseRecommendationFeedback).toBe(false)
 		})
 
 		it('is shown on a regular timeline for a logged-in user', () => {

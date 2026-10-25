@@ -18,7 +18,7 @@
 
 		<details v-if="recommendationsEnabled" class="for-you-settings__learning">
 			<summary>{{ t('social', 'Behavioral learning and data controls') }}</summary>
-			<p>{{ t('social', 'Likes, saves, qualified views and video watching can refine the same feed. This additional activity profile is off until you turn it on.') }}</p>
+			<p>{{ t('social', 'Likes, boosts, saves, opening a post and measured video playback can refine the same feed. Qualified views help limit repeated stories; they are not treated as proof that you like a post. This additional activity profile is off until you turn it on.') }}</p>
 			<ActivityLearningSettings />
 		</details>
 	</div>

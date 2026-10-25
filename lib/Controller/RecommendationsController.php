@@ -52,7 +52,7 @@ class RecommendationsController extends ClientApiController {
 	#[PublicPage]
 	#[FrontpageRoute(verb: 'GET', url: '/api/v1/recommendations/preferences')]
 	public function preferences(): DataResponse {
-		return $this->answer(['read:accounts'], fn (): array => self::learningState($this->recommendationService->get($this->viewer()->getUserId())));
+		return $this->answer(['read:accounts'], fn (): array => $this->learningState($this->recommendationService->get($this->viewer()->getUserId())));
 	}
 
 	#[NoCSRFRequired]
@@ -65,9 +65,9 @@ class RecommendationsController extends ClientApiController {
 			}
 			$state = $this->recommendationService->setLearningMode($this->viewer()->getUserId(), $if_revision, $mode);
 			if ($state === null) {
-				return new DataResponse(['error' => 'revision-conflict', 'current' => self::learningState($this->recommendationService->get($this->viewer()->getUserId()))], Http::STATUS_CONFLICT);
+				return new DataResponse(['error' => 'revision-conflict', 'current' => $this->learningState($this->recommendationService->get($this->viewer()->getUserId()))], Http::STATUS_CONFLICT);
 			}
-			return self::learningState($state);
+			return $this->learningState($state);
 		});
 	}
 
@@ -97,10 +97,10 @@ class RecommendationsController extends ClientApiController {
 				default => throw new InvalidArgumentException('scope must be learning or all'),
 			};
 			if ($state === null) {
-				return new DataResponse(['error' => 'revision-conflict', 'current' => self::learningState($this->recommendationService->get($this->viewer()->getUserId()))], Http::STATUS_CONFLICT);
+				return new DataResponse(['error' => 'revision-conflict', 'current' => $this->learningState($this->recommendationService->get($this->viewer()->getUserId()))], Http::STATUS_CONFLICT);
 			}
 
-			return self::learningState($state);
+			return $this->learningState($state);
 		});
 	}
 
@@ -111,7 +111,7 @@ class RecommendationsController extends ClientApiController {
 		return $this->answer(['read:accounts'], fn (): array => [
 			'schema_version' => 1,
 			'exported_at' => time(),
-			'preferences' => self::learningState($this->recommendationService->get($this->viewer()->getUserId())),
+			'preferences' => $this->learningState($this->recommendationService->get($this->viewer()->getUserId())),
 			'feedback' => $this->feedbackService->export($this->viewer()->getUserId()),
 		]);
 	}
@@ -201,14 +201,17 @@ class RecommendationsController extends ClientApiController {
 		}
 	}
 
-	/** @param array<string, mixed> $state @return array{revision: int, generation: int, learning_mode: string, learning: bool} */
-	private static function learningState(array $state): array {
+	/** @param array<string, mixed> $state @return array{revision: int, generation: int, learning_mode: string, learning: bool, learning_active: bool} */
+	private function learningState(array $state): array {
 		$mode = (string)($state['learning_mode'] ?? 'off');
 		return [
 			'revision' => (int)($state['revision'] ?? 0),
 			'generation' => (int)($state['generation'] ?? 0),
 			'learning_mode' => $mode,
 			'learning' => array_key_exists('learning', $state) ? (bool)$state['learning'] : $mode === 'on',
+			'learning_active' => $mode === 'on'
+				&& $this->recommendationService->isEnabled()
+				&& !$this->recommendationService->learningPaused(),
 		];
 	}
 }

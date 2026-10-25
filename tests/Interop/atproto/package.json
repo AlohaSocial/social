@@ -28,6 +28,7 @@
     "sharp": "0.35.5",
     "@connectrpc/connect-node": {
       "undici": "6.29.1"
-    }
+    },
+    "zod": "4.6.6"
   }
 }

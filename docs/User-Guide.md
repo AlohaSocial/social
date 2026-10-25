@@ -853,14 +853,15 @@ takes a post out, and nothing of it reaches this app. Off, such a post arrives
 as usual and carries a quiet **AI** mark, so you can tell without being told.
 
 "Says it was made with AI" is meant literally. A post counts when it carries
-one of the hashtags people and tools use for it — `#AIgenerated`, `#aiart`,
-`#midjourney`, `#stablediffusion` and a dozen more, which your administrator
-can add to — when its author marked it in the composer (which adds
+one of the specific hashtags people and tools use for it. Built-in labels include
+`#AIgenerated`, `#midjourney` and `#stablediffusion`; your administrator can add
+others, such as `#aiart`, to the list. It also counts when its author marked it in the composer (which adds
 `#AIgenerated`), or when one of its pictures states in its own metadata that a
 model produced it, as the generators that label their output write. Nothing
 here looks at the picture itself or guesses from the words: a generated post
-that carries no label is not recognised, and a real photograph its author
-tagged `#ai` is. Like your filters, the switch is yours alone — nothing is
+that carries no label is not recognised. The generic topic tag `#AI` by itself
+is never treated as a generated-content label, so a real photograph tagged
+`#ai` is not mistaken for one. Like your filters, the switch is yours alone — nothing is
 sent to another server and nobody is told.
 
 ### What a post used to say

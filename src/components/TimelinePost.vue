@@ -13,130 +13,18 @@
 		<p v-if="item.hidden_by_author === true" class="post-hidden-by-author">
 			{{ t('social', 'Hidden by the author of the conversation') }}
 		</p>
-		<div class="post-header">
-			<div v-if="!hideAuthor" class="post-author-wrapper" :title="item.account.acct">
-				<component
-					:is="isLocalAccount(item.account) ? 'a' : 'router-link'"
-					v-if="item.account"
-					:href="isLocalAccount(item.account) ? localProfileUrl(item.account) : undefined"
-					:to="isLocalAccount(item.account) ? undefined : { name: 'profile', params: { account: item.account.acct } }">
-					<span class="post-author">
-						<DisplayName :text="item.account.display_name" :emojis="item.account.emojis" />
-					</span>
-					<BlueskyBadge v-if="isBlueskyAccount(item.account)" />
-					<VerifiedBadge :account="item.account" />
-					<!-- The handle is what the byline falls back to, not what it
-					     carries: it repeats under the pointer as the wrapper's
-					     own `title`, and again in the card that opens when the
-					     avatar or the name is hovered. An account with no
-					     display name has nothing else to be called, so there it
-					     is the byline. -->
-					<span v-if="!hasDisplayName" class="post-author-id">
-						@{{ item.account.username }}
-					</span>
-				</component>
-			</div>
-			<!-- the reader's own like or boost, for a row whose controls are
-			     out of sight until it is pointed at; the buttons carry the
-			     state for a screen reader -->
-			<span v-if="isBoosted || isLiked" class="post-given" aria-hidden="true">
-				<Repeat v-if="isBoosted" :size="14" fillColor="var(--color-primary-element)" />
-				<Heart v-if="isLiked" :size="14" fillColor="var(--color-element-error)" />
-			</span>
-			<a
-				v-if="postHref"
-				:href="postHref"
-				:data-timestamp="timestamp"
-				class="post-timestamp live-relative-timestamp"
-				:title="formattedDate"
-				:aria-label="t('social', 'Open this post, written {time}', { time: formattedDate })">
-				{{ relativeTimestamp }}
-			</a>
-			<button
-				v-else
-				:data-timestamp="timestamp"
-				type="button"
-				class="post-timestamp live-relative-timestamp"
-				:title="formattedDate"
-				:aria-label="t('social', 'Open this post, written {time}', { time: formattedDate })"
-				@click="getSinglePostTimeline">
-				{{ relativeTimestamp }}
-			</button>
-			<span v-if="item.pinned" class="post-pinned" :title="t('social', 'Pinned post')">
-				<Pin :size="14" />
-				{{ t('social', 'Pinned') }}
-			</span>
-			<!-- the server's word, not the client's: it reads the author's
-			     mark, the tag and the pictures' metadata -->
-			<span v-if="item.ai_generated === true" class="post-ai">
-				<CreationOutline :size="14" />
-				{{ t('social', 'Made with AI') }}
-			</span>
-			<!-- only ever on the author's own copy: the server says `held`
-			     while a video is converted into what other servers take, and
-			     the post is on this one in the meantime -->
-			<span v-if="item.delivery === 'held'" class="post-held">
-				{{ t('social', 'Converting video — reaches other servers when done') }}
-			</span>
-			<!-- the byline is 12px text; a 22px globe beside it read as the
-			     loudest thing in the row, and it is the least important -->
-			<VisibilityIcon
-				v-if="visibility"
-				:title="visibility.text"
-				class="post-visibility"
-				:size="14"
-				:visibility="visibility.id" />
-			<!-- where it was taken, when the poster said: a place is never
-			     inferred, so this is only ever what somebody chose to say -->
-			<router-link
-				v-if="item.place && item.place.id"
-				class="post-place"
-				:to="{ name: 'place', params: { id: item.place.id } }"
-				:title="t('social', 'Posts from {place}', { place: placeLabel })">
-				<MapMarkerOutline :size="14" />
-				<span class="post-place__name">{{ placeLabel }}</span>
-			</router-link>
-		</div>
-		<section
+		<TimelinePostHeader
+			:item="item"
+			:hideAuthor="hideAuthor"
+			:postHref="postHref"
+			:isBoosted="isBoosted"
+			:isLiked="isLiked"
+			@open="getSinglePostTimeline" />
+		<TimelineEventCard
 			v-if="item.event"
-			class="post-event"
-			:aria-label="t('social', 'Event details')">
-			<strong v-if="item.event.name" class="post-event__title">{{ item.event.name }}</strong>
-			<div class="post-event__facts">
-				<span v-if="eventTimeLabel" class="post-event__fact">
-					<CalendarMonthOutline :size="16" />
-					{{ eventTimeLabel }}
-				</span>
-				<span v-if="item.event.location" class="post-event__fact">
-					<MapMarkerOutline :size="16" />
-					{{ item.event.location }}
-				</span>
-			</div>
-			<NcButton
-				v-if="item.event.start_time && !serverData.public"
-				class="post-event__calendar"
-				:disabled="importingEvent"
-				@click="importEventToCalendar">
-				<template #icon>
-					<CalendarMonthOutline :size="16" />
-				</template>
-				{{ importingEvent ? t('social', 'Adding…') : t('social', 'Add to Nextcloud Calendar') }}
-			</NcButton>
-			<a
-				v-if="item.event.start_time && !serverData.public && calendarImportFailed"
-				class="post-event__calendar post-event__calendar--download"
-				:href="eventCalendarUrl">
-				<CalendarMonthOutline :size="16" />
-				{{ t('social', 'Download calendar file') }}
-			</a>
-			<a
-				v-if="item.event.start_time && serverData.public"
-				class="post-event__calendar"
-				:href="eventCalendarUrl">
-				<CalendarMonthOutline :size="16" />
-				{{ t('social', 'Download calendar file') }}
-			</a>
-		</section>
+			:event="item.event"
+			:statusId="item.id"
+			:isPublic="serverData.public" />
 		<!-- who is in the picture, when the poster named anybody. Names rather
 		     than boxes drawn over the image: what is stored is a fact about the
 		     post, and a rectangle is a thing no client of this network draws -->
@@ -371,11 +259,6 @@
 				class="post-actions-reveal"
 				:class="{ 'post-actions-reveal--held': menuOpen }">
 				<div class="post-actions">
-					<!-- first in the row, not last: it reserves its width either way,
-					     and spending that width on the left leaves the counts flush
-					     with the card's right edge. The menu opens in a portal, so the
-					     pointer leaving the card while it is open would take the row it
-					     belongs to away -->
 					<PostMenu
 						:item="item"
 						:currentAccount="currentAccount"
@@ -387,6 +270,7 @@
 						:interests="serverData.interests"
 						:timelineType="type"
 						:recommendationFeedbackEnabled="canUseRecommendationFeedback"
+						:recommendationFeedbackLoading="recommendationContextLoading"
 						:feedbackContext="recommendationContext"
 						@update:open="onMenuToggle"
 						@quote="quote"
@@ -473,19 +357,6 @@
 							</NcButton>
 							<RollingCount v-if="!hidesCounts" :count="item.favourites_count || 0" />
 						</div>
-						<!-- only ever on the author's own copy: the server sends
-						     `view_count` as null on everybody else's, because how
-						     many people read a post is the author's business -->
-						<div
-							v-if="item.view_count !== null && item.view_count !== undefined"
-							class="post-action post-action--views"
-							:title="n('social', '%n account here opened this post', '%n accounts here opened this post', item.view_count)">
-							<IconEyeOutline :size="20" />
-							<RollingCount :count="item.view_count" />
-						</div>
-						<!-- Replies finish the row at its outside edge. In a thread,
-						     this keeps the comment glyph and its count aligned across
-						     nesting levels instead of stepping left with each reply. -->
 						<div class="post-action-group post-action-group--reply" :title="refusedBecause.reply || undefined">
 							<NcButton
 								:title="refusedBecause.reply || t('social', 'Reply')"
@@ -498,6 +369,16 @@
 								</template>
 							</NcButton>
 							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
+						</div>
+						<!-- only ever on the author's own copy: the server sends
+						     `view_count` as null on everybody else's, because how
+						     many people read a post is the author's business -->
+						<div
+							v-if="item.view_count !== null && item.view_count !== undefined"
+							class="post-action post-action--views"
+							:title="n('social', '%n account here opened this post', '%n accounts here opened this post', item.view_count)">
+							<IconEyeOutline :size="20" />
+							<RollingCount :count="item.view_count" />
 						</div>
 					</div>
 				</div>
@@ -586,22 +467,19 @@
 
 <script>
 
-import { shortAgo, fullDateTime } from '../utils/relativeTime.js'
 import IconAccountBoxMultiple from 'vue-material-design-icons/AccountBoxMultiple.vue'
-import CalendarMonthOutline from 'vue-material-design-icons/CalendarMonthOutline.vue'
-import Pin from 'vue-material-design-icons/Pin.vue'
-import CreationOutline from 'vue-material-design-icons/CreationOutline.vue'
 import DeliveryDialog from './DeliveryDialog.vue'
 import PostAttachment from './PostAttachment.vue'
 import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
+import TimelineEventCard from './TimelineEventCard.vue'
+import TimelinePostHeader from './TimelinePostHeader.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import EyeOff from 'vue-material-design-icons/EyeOff.vue'
 import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
-import MapMarkerOutline from 'vue-material-design-icons/MapMarkerOutline.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess, showUndo } from '../services/toast.js'
@@ -612,7 +490,6 @@ import HeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import eventBus from '../services/eventBus.js'
 import { accountStyle } from '../services/accountColour.js'
 import logger from '../services/logger.js'
-import { onTick } from '../services/clock.js'
 import { filterCoverLabel, matchedFilters } from '../utils/filters.js'
 import { localProfileUrl } from '../utils/accountProfileLink.js'
 import { isBlueskyAccount, isLocalAccount } from '../utils/accountLocality.js'
@@ -623,14 +500,10 @@ import MessageContent from './MessageContent.js'
 import Poll from './Poll.vue'
 import QuotedPost from './QuotedPost.vue'
 import RollingCount from './RollingCount.vue'
-import BlueskyBadge from './BlueskyBadge.vue'
-import DisplayName from './DisplayName.js'
-import VerifiedBadge from './VerifiedBadge.vue'
-import visibilitiesInfo from './Visibility/VisibilitiesInfos.js'
-import VisibilityIcon from './Visibility/VisibilityIcon.vue'
 import { mapStores } from 'pinia'
 import { focusedElement, returnFocusTo } from '../utils/focus.js'
 import { defaultLanguage, languageName } from '../utils/postLanguage.js'
+import { isPostControl } from '../utils/postControls.js'
 import { useAccountStore } from '../store/account.js'
 import { feel } from '../services/senses.js'
 import { useInstanceStore } from '../store/instance.js'
@@ -656,23 +529,18 @@ const ReplyControlDialog = defineAsyncComponent(() => import(/* webpackChunkName
 /** How long the heart is held before it offers the reactions. */
 const HOLD_MS = 450
 
-/** what a press inside a post may be meant for instead of opening it */
-const CONTROLS = 'a, button, input, textarea, select, label, video, audio, [role="button"], .post-actions, .v-popper'
-
 export default {
 	name: 'TimelinePost',
 	components: {
 		DeliveryDialog,
 		IconAccountBoxMultiple,
-		CalendarMonthOutline,
-		Pin,
-		CreationOutline,
+		TimelineEventCard,
+		TimelinePostHeader,
 		QuoteControlDialog,
 		ReplyControlDialog,
 		TagPeopleDialog,
 		IconEyeOutline,
 		CollectionPickerDialog,
-		MapMarkerOutline,
 		MuteDialog,
 		ReactionBar,
 		PostAttachment,
@@ -690,10 +558,6 @@ export default {
 		Poll,
 		QuotedPost,
 		RollingCount,
-		BlueskyBadge,
-		DisplayName,
-		VerifiedBadge,
-		VisibilityIcon,
 	},
 
 	props: {
@@ -733,8 +597,6 @@ export default {
 	data() {
 		return {
 			isEditing: false,
-			importingEvent: false,
-			calendarImportFailed: false,
 			/** the petal directions, so the template does not build a list per render */
 			PETALS: [0, 1, 2, 3, 4],
 			/** the press-and-hold timer on the heart, null when nothing is held */
@@ -789,10 +651,6 @@ export default {
 			/** whether a report about a Bluesky account also goes to Bluesky's moderation service */
 			reportForward: true,
 			localPoll: this.item?.poll ?? null,
-			/** re-read from the shared clock, so "5 minutes ago" stays true */
-			now: Date.now(),
-			/** unsubscribe from the shared clock */
-			stopTicking: null,
 		}
 	},
 
@@ -802,6 +660,8 @@ export default {
 			return isPersonalizedFeed({ type: this.type, params: this.timelineStore.params })
 				&& this.serverData?.public !== true
 				&& this.serverData?.interests?.recommendationsEnabled === true
+				&& !!this.currentAccount
+				&& this.item.account?.acct !== this.currentAccount.acct
 				&& !!this.item.nid
 		},
 
@@ -825,19 +685,6 @@ export default {
 		/** @return {number} what the server accepts in one status, as the composer shows it */
 		maxLength() {
 			return this.instanceStore.maxCharacters
-		},
-
-		/**
-		 * Whether the byline has a name of its own to show.
-		 *
-		 * Trimmed rather than tested for truth: a display name of one space is
-		 * a name a remote server will happily federate, and it would draw a
-		 * byline that is blank rather than one that falls back.
-		 *
-		 * @return {boolean}
-		 */
-		hasDisplayName() {
-			return (this.item.account?.display_name ?? '').trim() !== ''
 		},
 
 		/**
@@ -1025,38 +872,6 @@ export default {
 			return Boolean(me) && this.taggedPeople.some((person) => person.acct === me)
 		},
 
-		/** @return {string} the place, with its country where one was given */
-		placeLabel() {
-			const place = this.item.place
-			if (!place) {
-				return ''
-			}
-
-			return place.country ? `${place.name}, ${place.country}` : place.name
-		},
-
-		/** @return {string} the event's dates in the reader's local timezone */
-		eventTimeLabel() {
-			const format = (value) => {
-				const date = new Date(value)
-				return Number.isNaN(date.getTime())
-					? ''
-					: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-			}
-			const start = format(this.item.event?.start_time)
-			if (!start) {
-				return ''
-			}
-			const end = format(this.item.event?.end_time)
-
-			return end ? `${start} – ${end}` : start
-		},
-
-		/** @return {string} same-origin download, protected by the reader's Nextcloud session */
-		eventCalendarUrl() {
-			return generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(this.item.id)}/calendar`)
-		},
-
 		/**
 		 * @return {boolean} whether the author allows replies to this post.
 		 * True unless their server said otherwise: most servers publish no
@@ -1193,27 +1008,6 @@ export default {
 		},
 
 		/**
-		 * @return {string}
-		 */
-		relativeTimestamp() {
-			return shortAgo(this.item.created_at, new Date(this.now))
-		},
-
-		/**
-		 * @return {string}
-		 */
-		formattedDate() {
-			return fullDateTime(this.item.created_at)
-		},
-
-		/**
-		 * @return {number}
-		 */
-		timestamp() {
-			return Date.parse(this.item.created_at)
-		},
-
-		/**
 		 * @return {boolean}
 		 */
 		hasAttachments() {
@@ -1273,21 +1067,6 @@ export default {
 			return this.item.type !== undefined
 		},
 
-		/**
-		 * The audience, when it is not everybody: public is what a post is
-		 * unless it says otherwise, so a globe on most of them was a mark
-		 * nobody needed and the lock among them was harder to see.
-		 *
-		 * @return {object|undefined}
-		 */
-		visibility() {
-			if (this.item.visibility === 'public') {
-				return undefined
-			}
-
-			return visibilitiesInfo.find(({ id }) => this.item.visibility === id)
-		},
-
 		/** @return {{reply: string, boost: string, like: string}} why each of reply, boost and like cannot be used here; empty where it can */
 		refusedBecause() {
 			return {
@@ -1324,9 +1103,6 @@ export default {
 		eventBus.on('shortcut:boost', this.boostIfFocused)
 		eventBus.on('shortcut:reply', this.replyIfFocused)
 		eventBus.on('shortcut:open', this.openIfFocused)
-		this.stopTicking = onTick((now) => {
-			this.now = now
-		})
 	},
 
 	unmounted() {
@@ -1335,41 +1111,11 @@ export default {
 		eventBus.off('shortcut:boost', this.boostIfFocused)
 		eventBus.off('shortcut:reply', this.replyIfFocused)
 		eventBus.off('shortcut:open', this.openIfFocused)
-		this.stopTicking?.()
 	},
 
 	methods: {
 		localProfileUrl,
 		isBlueskyAccount,
-
-		/** Import an ActivityStreams event into this user's Nextcloud Calendar. */
-		async importEventToCalendar() {
-			if (this.importingEvent) {
-				return
-			}
-			this.importingEvent = true
-			this.calendarImportFailed = false
-			try {
-				const { data } = await axios.post(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(this.item.id)}/calendar/import`))
-				showSuccess(data.already_imported
-					? t('social', 'This event is already in your calendar')
-					: t('social', 'Event added to {calendar}', { calendar: data.calendar || t('social', 'your Nextcloud Calendar') }))
-			} catch (error) {
-				logger.error('Could not import the event into Nextcloud Calendar', { error })
-				this.calendarImportFailed = true
-				const reason = error?.response?.data?.error
-				const message = reason === 'No writable calendar is available'
-					? t('social', 'No writable calendar is available. Download the calendar file and add it manually.')
-					: reason === 'Calendar import is unavailable'
-						? t('social', 'Calendar import is unavailable. Download the calendar file instead.')
-						: reason === 'Event not found'
-							? t('social', 'This event could not be found. It may have been removed.')
-							: t('social', 'Could not add this event to your Nextcloud Calendar. You can download the calendar file instead.')
-				showError(message)
-			} finally {
-				this.importingEvent = false
-			}
-		},
 
 		/**
 		 * @param {object} account an Account entity
@@ -1584,9 +1330,7 @@ export default {
 		 * @return {boolean}
 		 */
 		pressedControl(event) {
-			const path = event.composedPath?.() ?? []
-			const nodes = path.length > 0 ? path : [event.target]
-			return nodes.some((node) => node instanceof Element && node.matches(CONTROLS))
+			return isPostControl(event)
 		},
 
 		getSinglePostTimeline() {
@@ -2085,185 +1829,18 @@ export default {
 		font-size: 13px;
 	}
 
-	.post-header {
-		display: flex;
-		gap: 8px;
-		align-items: baseline;
-		margin-bottom: 10px;
-
-		// shown only where the timeline lets the controls float (TimelineEntry)
-		.post-given {
-			display: none;
-			align-self: center;
-			gap: 4px;
-		}
-
-		.post-author-wrapper {
-			flex-grow: 1;
-			min-width: 0;
-			display: flex;
-			align-items: baseline;
-
-			.post-author {
-				font-weight: 650;
-				font-size: 14px;
-				color: var(--color-main-text);
-				letter-spacing: -.01em;
-			}
-
-			.post-author-id {
-				font-size: 13px;
-				color: var(--color-text-lighter);
-				margin-inline-start: 6px;
-				overflow: hidden;
-				text-overflow: ellipsis;
-				white-space: nowrap;
-			}
-		}
-
-		// The row is aligned on the text baseline, which is right for the name
-		// and the handle and wrong for anything that is an icon: an icon has no
-		// text baseline of its own, so flexbox hangs it from its bottom edge and
-		// it sits below the line it belongs on. These two carry icons, so they
-		// are centred on the line instead.
-		.post-place {
-			display: inline-flex;
-			gap: 3px;
-			align-items: center;
-			max-width: 40%;
-			color: var(--color-text-maxcontrast);
-			font-size: 12px;
-
-			&:hover,
-			&:focus-visible {
-				text-decoration: underline;
-			}
-		}
-
-		.post-tagged {
-			display: flex;
-			align-items: center;
-			flex-wrap: wrap;
-			gap: 4px;
-			margin-block: 4px 0;
-			color: var(--color-text-maxcontrast);
-			font-size: 90%;
-		}
-
-		.post-tagged__person {
-			color: var(--color-main-text);
-
-			&:hover,
-			&:focus-visible {
-				text-decoration: underline;
-			}
-		}
-
-		.post-place__name {
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-		}
-
-		.post-visibility {
-			color: var(--color-text-lighter);
-			flex-shrink: 0;
-			align-self: center;
-		}
-
-		.post-pinned,
-		.post-ai,
-		.post-held {
-			display: inline-flex;
-			align-items: center;
-			align-self: center;
-			gap: 4px;
-			flex-shrink: 0;
-			font-size: 12px;
-			// the same weight as the rest of the byline: the pin already says
-			// this is a state, and a bold word beside grey text reads as the
-			// loudest thing in a row that is all supporting detail
-			font-weight: normal;
-			color: var(--color-text-lighter);
-		}
-
-		.post-timestamp {
-			// It opens the thread, so it stays a real button — reachable by
-			// keyboard and announced as one. What it must not keep is the
-			// chrome a bare <button> inherits from the server, which drew a
-			// filled box around four characters of grey byline.
-			background: none;
-			border: none;
-			border-radius: 0;
-			padding: 0;
-			margin: 0;
-			min-height: 0;
-			font-family: inherit;
-			font-weight: normal;
-			font-size: 12px;
-			text-align: end;
-			color: var(--color-text-lighter);
-			white-space: nowrap;
-			cursor: pointer;
-			flex-shrink: 0;
-
-			&:hover {
-				color: var(--color-primary-element);
-				background: none;
-			}
-
-			// the box was also the focus indicator; without one, a keyboard
-			// reader loses the only affordance for opening a thread
-			&:focus-visible {
-				outline: 2px solid var(--color-primary-element);
-				outline-offset: 2px;
-				border-radius: var(--border-radius-small, 4px);
-			}
-		}
-	}
-
-	.post-event {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 8px 16px;
-		margin-block: 0 10px;
-		padding: 10px 12px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-large);
-		background: var(--color-background-dark);
-	}
-
-	.post-event__facts {
+	.post-tagged {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 6px 14px;
-		min-width: 0;
-	}
-
-	.post-event__title {
-		flex-basis: 100%;
-		font-size: 14px;
-	}
-
-	.post-event__fact,
-	.post-event__calendar {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 13px;
-	}
-
-	.post-event__fact {
+		gap: 4px;
+		margin-block: 4px 0;
 		color: var(--color-text-maxcontrast);
+		font-size: 90%;
 	}
 
-	.post-event__calendar {
-		color: var(--color-primary-element);
-		font-weight: 600;
-		white-space: nowrap;
+	.post-tagged__person {
+		color: var(--color-main-text);
 
 		&:hover,
 		&:focus-visible {
@@ -2424,12 +2001,6 @@ export default {
 		gap: 4px;
 		min-inline-size: 0;
 
-		// Reply entries indent from the start while keeping this same outside
-		// edge. The entry's auto width already accounts for that indent, so a
-		// negative end margin would push the icon and count past the edge.
-		.post-action-group--reply {
-			margin-inline-start: auto;
-		}
 	}
 
 	/* it had a top margin from when it was a row of its own */
@@ -2568,6 +2139,10 @@ export default {
 		animation: post-refused .4s ease;
 	}
 }
+
+	.post-action-group--reply {
+		margin-inline-start: auto;
+	}
 
 .post-action--popped :deep(.material-design-icon) {
 	animation: post-pop .45s cubic-bezier(.34, 1.56, .64, 1);

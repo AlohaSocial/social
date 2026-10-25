@@ -383,6 +383,19 @@ describe('Composer', () => {
 		expect(wrapper.vm.tributeTarget).toBe(input(wrapper).element)
 	})
 
+	it('clears video metadata with the rest of the composer', () => {
+		const { wrapper } = mountComposer()
+		wrapper.vm.videoTitle = 'First title'
+		wrapper.vm.videoCategory = 'Education'
+		wrapper.vm.videoLicence = 'CC-BY'
+
+		wrapper.vm.clearComposer()
+
+		expect(wrapper.vm.videoTitle).toBe('')
+		expect(wrapper.vm.videoCategory).toBe('')
+		expect(wrapper.vm.videoLicence).toBe('')
+	})
+
 	beforeEach(() => {
 		get.mockReset().mockResolvedValue({ data: { teams: [] } })
 		localStorage.clear()

@@ -139,6 +139,7 @@ const SWAP_SETTLE = 320
  * practically never empty, so the posts being left are a fair stand-in.
  */
 const HELD_SCOPES = ['home', 'timeline', 'federated']
+const UNTAGGED_RECOMMENDATION_CONTEXTS = ['interests', 'photos', 'videos', 'shorts', 'reels']
 import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import eventBus, { NOTIFICATIONS_READ } from '../services/eventBus.js'
@@ -149,8 +150,10 @@ import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
-import { fetchRecommendationPreferences, isTracking } from '../services/interests.js'
+import { fetchRecommendationPreferences, isRecommendationLearningActive, isTracking } from '../services/interests.js'
 import { contextFor, createInterestTracker } from '../services/interestTracker.js'
+import { accumulateVideoPlayback } from '../services/videoPlayback.js'
+import { isPostControl } from '../utils/postControls.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 
@@ -510,7 +513,7 @@ export default {
 				interests: {
 					illustration: 'quiet-timeline',
 					title: t('social', 'Nothing here for you yet'),
-					description: t('social', 'For you learns which hashtags you care about from how you read: the posts you spend time on, like, boost, reply to or open. Keep reading your other timelines, or tell it about a few hashtags yourself.'),
+					description: t('social', 'For You can learn from actions such as opening, liking, boosting or saving posts. Watching most of a video also counts; simply leaving a post on screen does not. Manage learning and language settings to change how your feed is personalized.'),
 					action: {
 						label: t('social', 'Manage interests'),
 						to: { name: 'settings', hash: '#interests' },
@@ -558,8 +561,7 @@ export default {
 			// the thread's two lists are given whatever type the route
 			// carries, which on a post's page is none
 			const context = contextFor(this.$route?.name === 'single-post' ? 'single-post' : this.type)
-			const v4Context = ['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context)
-			const tracksV4 = v4Context && this.serverData.interests?.recommendationsEnabled === true
+			const tracksV4 = this.serverData.interests?.recommendationsEnabled === true
 			return isTracking(this.serverData.interests) || tracksV4 ? context : null
 		},
 
@@ -1260,24 +1262,28 @@ export default {
 
 			this.tracker = createInterestTracker({
 				context,
+				legacyLearning: isTracking(this.serverData.interests),
 				allowUntagged: this.serverData.interests?.recommendationsEnabled === true
-					&& ['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context),
+					&& UNTAGGED_RECOMMENDATION_CONTEXTS.includes(context),
 				isOwn: (status) => {
 					const me = this.accountStore.currentAccount?.acct
 					return me !== undefined && status.account?.acct === me
 				},
 			})
-			if (['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context)
-				&& this.serverData.interests?.recommendationsEnabled === true) {
+			if (this.serverData.interests?.recommendationsEnabled === true) {
 				const tracker = this.tracker
 				fetchRecommendationPreferences().then((preferences) => {
 					if (this.tracker !== tracker) {
 						return
 					}
-					if (preferences.learning_mode === 'on' && Number.isInteger(preferences.generation)) {
+					if (isRecommendationLearningActive(preferences)
+						&& Number.isInteger(preferences.generation)) {
 						tracker.setLearningGeneration(preferences.generation)
-					} else if (!isTracking(this.serverData.interests)) {
-						this.stopTracking()
+					} else {
+						tracker.setLearningGeneration(null)
+						if (!isTracking(this.serverData.interests)) {
+							this.stopTracking()
+						}
 					}
 				}).catch((error) => logger.debug('Could not read For You learning settings', { error }))
 			}
@@ -1395,14 +1401,33 @@ export default {
 				return
 			}
 
-			if (/** @type {HTMLElement} */ (event.target).closest('.post-attachments, .media-grid__link, .video-card__link')) {
+			const target = /** @type {HTMLElement} */ (event.target)
+			if (target.closest('.post-attachments, .media-grid__link, .video-card__link')) {
 				this.tracker?.record(status, 'media')
 				return
 			}
 
-			const link = /** @type {HTMLAnchorElement|null} */ (/** @type {HTMLElement} */ (event.target).closest('a[href]'))
+			if (target.closest('.post-timestamp')) {
+				this.tracker?.record(status, 'open')
+				return
+			}
+
+			const link = /** @type {HTMLAnchorElement|null} */ (target.closest('a[href]'))
 			if (link && link.closest('.post-message, .post-card') && isLinkOut(link)) {
 				this.tracker?.record(status, 'link')
+				return
+			}
+
+			if (target.closest('.post-content--openable')
+				&& event.button === 0
+				&& !event.defaultPrevented
+				&& !event.metaKey
+				&& !event.ctrlKey
+				&& !event.shiftKey
+				&& !event.altKey
+				&& (window.getSelection?.()?.toString() ?? '') === ''
+				&& !isPostControl(event)) {
+				this.tracker?.record(status, 'open')
 			}
 		},
 
@@ -1418,23 +1443,14 @@ export default {
 			}
 		},
 
-		/**
-		 * Accumulates forward playback time and reports at end or page exit.
-		 *
-		 * @param {Event} event the media event
-		 */
+		/** @param {Event} event the media event */
 		onTrackedVideoProgress(event) {
 			const media = event.target
 			if (!(media instanceof HTMLVideoElement) || !this.videoPlayback?.has(media)) {
 				return
 			}
 			const playback = this.videoPlayback.get(media)
-			const currentTime = Number(media.currentTime)
-			const delta = currentTime - playback.lastTime
-			if (!media.seeking && Number.isFinite(delta) && delta > 0 && delta <= 2) {
-				playback.watchedSeconds += delta
-			}
-			playback.lastTime = currentTime
+			accumulateVideoPlayback(playback, media)
 			if (event.type === 'timeupdate') {
 				return
 			}
@@ -1457,12 +1473,7 @@ export default {
 				return
 			}
 			for (const [media, playback] of this.videoPlayback) {
-				if (!media.paused && !media.seeking) {
-					const delta = Number(media.currentTime) - playback.lastTime
-					if (Number.isFinite(delta) && delta > 0 && delta <= 2) {
-						playback.watchedSeconds += delta
-					}
-				}
+				accumulateVideoPlayback(playback, media)
 				this.reportVideoWatch(media, playback)
 			}
 			this.videoPlayback.clear()

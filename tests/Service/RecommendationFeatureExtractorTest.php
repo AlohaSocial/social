@@ -142,6 +142,7 @@ class RecommendationFeatureExtractorTest extends TestCase {
 		$this->assertNotContains('copied', $features['story_terms']);
 		$this->assertNotContains('secretword', $features['story_terms']);
 		$this->assertLessThanOrEqual(60, count($features['story_terms']));
+		$this->assertSame(array_slice($features['story_terms'], 0, 20), $features['story_headline_terms']);
 	}
 
 	public function testLongPostStoryTermsIncludeInformationFromTheEndOfThePost(): void {
