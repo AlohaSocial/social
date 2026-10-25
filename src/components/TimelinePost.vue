@@ -64,8 +64,12 @@
 			:statusId="String(item.id)"
 			:isTooLong="editIsTooLong"
 			:charactersLeftLabel="editCharactersLeftLabel"
-			:canSave="editCanSave"
+			:canSave="editCanSave && !uploadingEditMedia"
+			:attachments="editAttachments"
+			:uploading="uploadingEditMedia"
 			@update:event="editEvent = $event"
+			@addMedia="addEditMedia"
+			@removeMedia="removeEditMedia"
 			@save="saveEdit"
 			@cancel="cancelEdit" />
 		<!--
@@ -579,6 +583,8 @@ export default {
 			editContent: '',
 			editSpoiler: '',
 			editSensitive: false,
+			editAttachments: [],
+			uploadingEditMedia: false,
 			editEvent: { name: '', start_time: '', end_time: '', location: '' },
 			showReportDialog: false,
 			showMuteDialog: false,
@@ -1425,6 +1431,7 @@ export default {
 			this.editContent = htmlToPlainText(this.item.content || '')
 			this.editSpoiler = this.item.spoiler_text || ''
 			this.editSensitive = this.item.sensitive === true
+			this.editAttachments = [...(this.item.media_attachments || [])]
 			this.editEvent = {
 				name: this.item.event?.name || '',
 				start_time: this.toLocalDateTime(this.item.event?.start_time),
@@ -1438,7 +1445,7 @@ export default {
 		},
 
 		async saveEdit() {
-			if (!this.editCanSave) {
+			if (!this.editCanSave || this.uploadingEditMedia) {
 				return
 			}
 			const event = this.item.event
@@ -1454,6 +1461,7 @@ export default {
 				content: this.editContent.trim(),
 				spoiler_text: this.editSpoiler.trim(),
 				sensitive: this.editSensitive,
+				media_ids: this.editAttachments.map(({ id }) => String(id)),
 				...(event === undefined ? {} : { event }),
 			})
 			if (response === undefined) {
@@ -1462,12 +1470,37 @@ export default {
 			this.isEditing = false
 			this.editContent = ''
 			this.editSpoiler = ''
+			this.editAttachments = []
+		},
+
+		async addEditMedia(files) {
+			const remaining = 4 - this.editAttachments.length
+			if (files.length > remaining) {
+				showError(t('social', 'A post can have up to four attachments'))
+				return
+			}
+			this.uploadingEditMedia = true
+			try {
+				for (const file of files) {
+					const media = await this.timelineStore.createMedia(file)
+					if (media) {
+						this.editAttachments = [...this.editAttachments, media]
+					}
+				}
+			} finally {
+				this.uploadingEditMedia = false
+			}
+		},
+
+		removeEditMedia(id) {
+			this.editAttachments = this.editAttachments.filter((attachment) => String(attachment.id) !== String(id))
 		},
 
 		cancelEdit() {
 			this.isEditing = false
 			this.editContent = ''
 			this.editSpoiler = ''
+			this.editAttachments = []
 		},
 
 		toLocalDateTime(value) {

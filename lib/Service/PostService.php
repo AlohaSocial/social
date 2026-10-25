@@ -384,6 +384,7 @@ class PostService {
 	public function editPost(
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
+		?array $mediaIds = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -419,6 +420,13 @@ class PostService {
 
 		// a new list rather than changed objects: `$original` shares them, and
 		// the revision recorded below is the version with the old words
+		if ($mediaIds !== null) {
+			$stream->setAttachments($this->documentService->replaceMediaAttachments(
+				$mediaIds,
+				$actor->getPreferredUsername(),
+				in_array($stream->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true)
+			));
+		}
 		if ($mediaAttributes !== []) {
 			$stream->setAttachments($this->documentService->applyMediaAttributes(
 				$stream->getAttachments(), $actor->getPreferredUsername(), $mediaAttributes

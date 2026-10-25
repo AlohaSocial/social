@@ -54,6 +54,33 @@
 				@change="$emit('update:sensitive', inputChecked($event))">
 			{{ t('social', 'Mark media as sensitive') }}
 		</label>
+		<div class="post-edit-attachments" :aria-label="t('social', 'Attachments')">
+			<div v-for="attachment in attachments" :key="attachment.id" class="post-edit-attachment">
+				<img
+					v-if="attachment.type === 'image'"
+					:src="attachment.preview_url || attachment.url"
+					:alt="attachment.description || ''">
+				<span>{{ attachment.description || attachment.type }}</span>
+				<NcButton
+					variant="tertiary-no-background"
+					:disabled="uploading"
+					:aria-label="t('social', 'Remove attachment')"
+					@click="$emit('removeMedia', attachment.id)">
+					{{ t('social', 'Remove') }}
+				</NcButton>
+			</div>
+			<label class="post-edit-add-attachment" :class="{ 'post-edit-add-attachment--disabled': uploading || attachments.length >= 4 }">
+				<span aria-hidden="true">＋</span>
+				{{ t('social', 'Add media') }}
+				<input
+					type="file"
+					accept="image/*,video/*"
+					multiple
+					:disabled="uploading || attachments.length >= 4"
+					@change="addMedia">
+			</label>
+			<span v-if="uploading" role="status">{{ t('social', 'Uploading attachments…') }}</span>
+		</div>
 		<textarea
 			ref="editInput"
 			:value="content"
@@ -100,13 +127,27 @@ export default {
 		isEvent: { type: Boolean, default: false },
 		maxLength: { type: Number, required: true },
 		statusId: { type: String, required: true },
+		attachments: {
+			type: /** @type {import('vue').PropType<import('../types/Mastodon.js').MediaAttachment[]>} */ (Array),
+			required: true,
+		},
+
+		uploading: { type: Boolean, default: false },
 		isTooLong: { type: Boolean, required: true },
 		charactersLeftLabel: { type: String, required: true },
 		canSave: { type: Boolean, required: true },
 	},
 
-	emits: ['update:content', 'update:spoiler', 'update:sensitive', 'update:event', 'save', 'cancel'],
+	emits: ['update:content', 'update:spoiler', 'update:sensitive', 'update:event', 'addMedia', 'removeMedia', 'save', 'cancel'],
 	methods: {
+		addMedia(event) {
+			const input = /** @type {HTMLInputElement} */ (event.target)
+			if (input.files) {
+				this.$emit('addMedia', Array.from(input.files))
+			}
+			input.value = ''
+		},
+
 		inputValue(event) {
 			return /** @type {HTMLInputElement | HTMLTextAreaElement} */ (event.target).value
 		},
@@ -165,6 +206,13 @@ export default {
 	}
 
 	.post-edit-sensitive { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+	.post-edit-attachments { display: grid; gap: 8px; margin: 8px 0; }
+	.post-edit-attachment { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px; border: 1px solid var(--color-border); border-radius: 8px; }
+	.post-edit-attachment img { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 4px; object-fit: cover; }
+	.post-edit-attachment > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.post-edit-add-attachment { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 7px 10px; border: 1px dashed var(--color-border); border-radius: 8px; cursor: pointer; }
+	.post-edit-add-attachment input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+	.post-edit-add-attachment--disabled { opacity: .6; cursor: not-allowed; }
 	.post-edit-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 	.post-edit-count { margin-inline-end: auto; color: var(--color-text-lighter); font-size: 12px; }
 	.post-edit-count--over { color: var(--color-error); font-weight: 600; }

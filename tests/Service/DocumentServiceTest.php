@@ -269,6 +269,32 @@ class DocumentServiceTest extends TestCase {
 		$this->assertSame([$doc], $this->service->getMediaFromArray(['1', '2'], 'alice@cloud.example.com'));
 	}
 
+	public function testReplaceMediaAttachmentsKeepsRequestedOrderAndScopesUploadsToAuthor(): void {
+		$first = $this->document();
+		$first->setNid(11);
+		$second = $this->document();
+		$second->setNid(12);
+		$this->cacheDocumentsRequest->expects($this->once())->method('getFromArray')
+			->with([12, 11], 'alice')
+			->willReturn([$first, $second]);
+		$this->cacheDocumentsRequest->expects($this->exactly(2))->method('update');
+
+		$attachments = $this->service->replaceMediaAttachments([12, 11], 'alice', true);
+
+		$this->assertSame(['12', '11'], array_map(
+			static fn (MediaAttachment $attachment): string => $attachment->getId(), $attachments
+		));
+	}
+
+	public function testReplaceMediaAttachmentsRejectsIdsTheAuthorDoesNotOwn(): void {
+		$this->cacheDocumentsRequest->expects($this->once())->method('getFromArray')
+			->with([12], 'alice')
+			->willReturn([]);
+
+		$this->expectException(\OCA\Social\Exceptions\RefusalException::class);
+		$this->service->replaceMediaAttachments([12], 'alice', false);
+	}
+
 	public function testGetFromUuidRejectsMalformedIds(): void {
 		$this->cacheService->expects($this->never())->method('getFromUuid');
 

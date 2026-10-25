@@ -1779,6 +1779,7 @@ describe('TimelinePost', () => {
 				content: 'Edited text',
 				spoiler_text: '',
 				sensitive: false,
+				media_ids: [],
 			})
 			expect(wrapper.find('textarea').exists()).toBe(false)
 			expect(wrapper.find('.post-message').exists()).toBe(true)
@@ -1802,7 +1803,36 @@ describe('TimelinePost', () => {
 				content: 'New text',
 				spoiler_text: 'politics',
 				sensitive: true,
+				media_ids: [],
 			})
+		})
+
+		it('removes selected media from an edited post', async () => {
+			const item = makeItem({ media_attachments: [photo(1)] })
+			const { wrapper, store } = mountPost({ item })
+			await menuItem(wrapper, 'Edit').trigger('click')
+
+			await wrapper.find('button[aria-label="Remove attachment"]').trigger('click')
+			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
+			await flushPromises()
+
+			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ media_ids: [] }))
+		})
+
+		it('uploads and includes newly selected media while editing', async () => {
+			const { wrapper, store } = mountPost()
+			vi.spyOn(store, 'createMedia').mockResolvedValue(photo(2))
+			await menuItem(wrapper, 'Edit').trigger('click')
+
+			const file = new File(['image'], 'picture.png', { type: 'image/png' })
+			const input = wrapper.find('input[type="file"]')
+			Object.defineProperty(input.element, 'files', { value: [file] })
+			await input.trigger('change')
+			await flushPromises()
+			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
+			await flushPromises()
+
+			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ media_ids: ['m2'] }))
 		})
 
 		it('lets the warning be changed and removed from the inline editor', async () => {
