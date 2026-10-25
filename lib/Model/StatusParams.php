@@ -26,6 +26,9 @@ interface StatusParams {
 	public function paramBool(string $key): bool;
 
 	/** @return array<string, mixed>|null */
+	public function paramArray(string $key): ?array;
+
+	/** @return array<string, mixed>|null */
 	public function paramPoll(): ?array;
 
 	/** @return array{name:string,start_time:?string,end_time:?string,location:string}|null */

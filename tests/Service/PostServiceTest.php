@@ -178,6 +178,7 @@ class PostServiceTest extends TestCase {
 			$this->interestService,
 			$this->videoDeliveryHold,
 			$this->documentService,
+			$this->createStub(\OCA\Social\Db\StreamCardsRequest::class),
 			$this->container,
 		);
 	}

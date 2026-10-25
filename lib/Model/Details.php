@@ -54,6 +54,8 @@ final class Details {
 
 	/** a Bluesky account or post read here: its DID or `at://` URI, CID, counts and labels */
 	public const ATPROTO = 'atproto';
+	/** a local post's non-post AT Protocol record embed, as its original strong reference */
+	public const ATPROTO_RECORD_EMBED = 'record_embed';
 
 	/**
 	 * The page a post is at on the server it came from.

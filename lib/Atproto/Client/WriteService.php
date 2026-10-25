@@ -26,6 +26,7 @@ use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
+use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\InvalidSwapException;
 use OCA\Social\Atproto\Repository\RepositoryService;
@@ -580,6 +581,7 @@ class WriteService {
 	private function post(ClientSession $session, Person $actor, array $record): StoredRecord {
 		$text = self::fullText((string)($record['text'] ?? ''), $record['facets'] ?? []);
 		$post = new Post($actor);
+		$card = null;
 		$post->setContent($text);
 		$post->setType(Stream::TYPE_PUBLIC);
 		$langs = $record['langs'] ?? [];
@@ -591,10 +593,28 @@ class WriteService {
 			$post->setReplyTo($this->knownPost($parent));
 		}
 		$embed = is_array($record['embed'] ?? null) ? $record['embed'] : [];
-		$quoted = (string)($embed['record']['uri'] ?? $embed['record']['record']['uri'] ?? '');
-		if ($quoted !== '') {
-			$post->setQuotedId($this->knownPost($quoted));
+		$card = PostMapper::cardOf($embed, $session->identity->did);
+		$reference = is_array($embed['record']['record'] ?? null)
+			? $embed['record']['record']
+			: (is_array($embed['record'] ?? null) ? $embed['record'] : []);
+		$referenceUri = (string)($reference['uri'] ?? '');
+		if ($referenceUri !== '') {
+			$parsed = Syntax::parseAtUri($referenceUri);
+			$referenceCid = $reference['cid'] ?? null;
+			$cid = $referenceCid instanceof Cid
+				? $referenceCid->toString()
+				: (is_string($referenceCid) ? $referenceCid : '');
+			if ($parsed === null || $parsed['rkey'] === '' || !Cid::isValid($cid)) {
+				throw XrpcException::invalidRequest('The embedded record must have a valid AT URI and CID');
+			}
+			if ($parsed['collection'] === RecordMapper::POST) {
+				$post->setQuotedId($this->knownPost($referenceUri));
+			} else {
+				$post->setAtprotoRecordEmbed(['uri' => $referenceUri, 'cid' => $cid]);
+				$card ??= self::recordEmbedCard($parsed);
+			}
 		}
+		$post->setLinkCard($card);
 		$images = $embed['images'] ?? $embed['media']['images'] ?? [];
 		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
 		$video = self::videoEmbedOf($embed);
@@ -625,6 +645,23 @@ class WriteService {
 		$this->publisher->publishPost($note);
 
 		return $this->recordOf($note->getId(), RecordMapper::POST);
+	}
+
+	/** @param array{authority: string, collection: string, rkey: string} $reference @return array{url: string, title: string, description: string, image: string, provider: string}|null */
+	private static function recordEmbedCard(array $reference): ?array {
+		$owner = $reference['authority'];
+		$rkey = rawurlencode($reference['rkey']);
+		[$url, $title] = match ($reference['collection']) {
+			'app.bsky.feed.generator' => ['https://bsky.app/profile/' . $owner . '/feed/' . $rkey, 'Bluesky feed'],
+			'app.bsky.graph.list' => ['https://bsky.app/profile/' . $owner . '/lists/' . $rkey, 'Bluesky list'],
+			'app.bsky.graph.starterpack' => ['https://bsky.app/starter-pack/' . $owner . '/' . $rkey, 'Bluesky starter pack'],
+			default => ['', ''],
+		};
+		if ($url === '') {
+			return null;
+		}
+
+		return ['url' => $url, 'title' => $title, 'description' => '', 'image' => '', 'provider' => 'Bluesky'];
 	}
 
 	/**
@@ -831,6 +868,8 @@ class WriteService {
 				'spoiler_text' => '',
 				'visibility' => $post->getType(),
 				'language' => $post->getLanguage(),
+				'atproto_record_embed' => $post->getAtprotoRecordEmbed(),
+				'atproto_card' => $post->getLinkCard(),
 			], $reason);
 		} catch (Throwable $e) {
 			throw XrpcException::invalidRequest($e->getMessage());

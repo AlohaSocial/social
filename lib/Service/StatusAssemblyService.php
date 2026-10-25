@@ -18,6 +18,8 @@ use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Client\Status;
 use OCA\Social\Model\Post;
 use OCA\Social\Model\StatusParams;
+use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -92,6 +94,31 @@ class StatusAssemblyService {
 		$post->setLanguage($params->paramString('language'));
 		$post->setQuotedId($params->paramString('quoted_status_id'));
 		$post->setReplyRule($params->paramString('reply_policy'));
+
+		$recordEmbed = $params->paramArray('atproto_record_embed');
+		$recordUri = $recordEmbed['uri'] ?? null;
+		$recordCid = $recordEmbed['cid'] ?? null;
+		if (is_string($recordUri) && Syntax::isAtUri($recordUri)
+			&& is_string($recordCid) && Cid::isValid($recordCid)) {
+			$post->setAtprotoRecordEmbed(['uri' => $recordUri, 'cid' => $recordCid]);
+		}
+
+		$card = $params->paramArray('atproto_card');
+		if ($card !== null
+			&& is_string($card['url'] ?? null) && Stream::isExternalLink($card['url'])
+			&& is_string($card['title'] ?? null)
+			&& is_string($card['description'] ?? null)
+			&& is_string($card['image'] ?? null)
+			&& ($card['image'] === '' || Stream::isExternalLink($card['image']))
+			&& is_string($card['provider'] ?? null)) {
+			$post->setLinkCard([
+				'url' => $card['url'],
+				'title' => $card['title'],
+				'description' => $card['description'],
+				'image' => $card['image'],
+				'provider' => $card['provider'],
+			]);
+		}
 
 		$mediaIds = $params->paramMediaIds();
 		if ($mediaIds !== []) {

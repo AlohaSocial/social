@@ -28,6 +28,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\PinService;
 use OCP\IL10N;
@@ -104,6 +105,16 @@ class RecordMapper {
 		$quoted = $quote === '' ? null : $this->refs->strongRef($quote);
 		if ($quote !== '' && $quoted === null) {
 			$extra[] = $quote;
+		}
+		$atproto = $post->getDetails(Details::ATPROTO);
+		$rawRecordEmbed = $atproto[Details::ATPROTO_RECORD_EMBED] ?? null;
+		$recordEmbed = null;
+		if (is_array($rawRecordEmbed)
+			&& is_string($rawRecordEmbed['uri'] ?? null)
+			&& Syntax::isAtUri($rawRecordEmbed['uri'])
+			&& is_string($rawRecordEmbed['cid'] ?? null)
+			&& Cid::isValid($rawRecordEmbed['cid'])) {
+			$recordEmbed = ['uri' => $rawRecordEmbed['uri'], 'cid' => Cid::parse($rawRecordEmbed['cid'])];
 		}
 		$parent = trim($post->getInReplyTo());
 		$reply = $parent === '' ? null : $this->refs->replyRefs($parent);
@@ -196,7 +207,7 @@ class RecordMapper {
 		if ($reply !== null) {
 			$record['reply'] = $reply;
 		}
-		$embed = $this->embed($post, $identity, $author, $images, $quoted, $videoEmbed);
+		$embed = $this->embed($post, $identity, $author, $images, $quoted, $recordEmbed, $videoEmbed);
 		if ($embed !== null) {
 			$record['embed'] = $embed;
 		}
@@ -366,8 +377,9 @@ class RecordMapper {
 	 *
 	 * @param list<array> $images
 	 * @param array{uri: string, cid: string}|null $quoted
+	 * @param array{uri: string, cid: Cid}|null $recordEmbed
 	 */
-	private function embed(Stream $post, Identity $identity, Person $author, array $images, ?array $quoted, ?array $video = null): ?array {
+	private function embed(Stream $post, Identity $identity, Person $author, array $images, ?array $quoted, ?array $recordEmbed, ?array $video = null): ?array {
 		$pictures = $video;
 		if ($pictures === null && $images !== []) {
 			if (count($images) > PictureService::MAX_PER_IMAGES_EMBED) {
@@ -384,10 +396,12 @@ class RecordMapper {
 				$pictures = ['$type' => 'app.bsky.embed.images', 'images' => $images];
 			}
 		}
-		if ($quoted !== null) {
-			$record = ['$type' => 'app.bsky.embed.record', 'record' => $quoted];
+		$recordRef = $quoted ?? $recordEmbed;
+		if ($recordRef !== null) {
+			$record = ['$type' => 'app.bsky.embed.record', 'record' => $recordRef];
+			$media = $pictures ?? $this->linkCard($post, $identity, $author);
 
-			return $pictures === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $pictures];
+			return $media === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $media];
 		}
 		if ($pictures !== null) {
 			return $pictures;

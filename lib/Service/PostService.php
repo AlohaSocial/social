@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Exceptions\FederationDeliveryException;
 use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\InvalidOriginException;
@@ -33,6 +34,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -90,6 +92,7 @@ class PostService {
 		private InterestService $interestService,
 		private VideoDeliveryHold $videoDeliveryHold,
 		private DocumentService $documentService,
+		private StreamCardsRequest $streamCardsRequest,
 		private ?ContainerInterface $container = null,
 	) {
 	}
@@ -189,6 +192,11 @@ class PostService {
 		if ($post->getVideoMeta() !== []) {
 			$note->setVideoMeta($post->getVideoMeta());
 		}
+		if ($post->getAtprotoRecordEmbed() !== null) {
+			$atproto = $note->getDetails(Details::ATPROTO);
+			$atproto[Details::ATPROTO_RECORD_EMBED] = $post->getAtprotoRecordEmbed();
+			$note->setDetailArray(Details::ATPROTO, $atproto);
+		}
 		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId(), $post->getActor());
 		$this->streamService->addRecipients($note, $post->getType(), $post->getTo());
 		$this->streamService->addChannelFollowers($note);
@@ -216,6 +224,21 @@ class PostService {
 		// are never asked again; 0, and nothing waits, for every other post
 		$holdUntil = $this->videoDeliveryHold->holdUntil($note);
 		$token = $this->activityService->createActivity($actor, $note, $activity, $holdUntil);
+		$linkCard = $post->getLinkCard();
+		if ($linkCard !== null) {
+			try {
+				$this->streamCardsRequest->save((new StreamCard($note->getId(), $linkCard['url']))
+					->setTitle($linkCard['title'])
+					->setDescription($linkCard['description'])
+					->setImage($linkCard['image'])
+					->setProviderName($linkCard['provider']));
+			} catch (Throwable $e) {
+				$this->logger->warning('Post link card was not stored', [
+					'post' => $note->getId(),
+					'exception' => $e,
+				]);
+			}
+		}
 		if ($holdUntil > 0) {
 			$this->videoDeliveryHold->convertSoon($note);
 		}
