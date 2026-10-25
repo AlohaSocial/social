@@ -218,7 +218,8 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 		return $this->globalEpoch();
 	}
 
-	private static function effectiveGeneration(int $epoch, int $generation): int {
+	/** Combine the global invalidation epoch with a profile's local generation. */
+	public static function effectiveGeneration(int $epoch, int $generation): int {
 		if ($epoch < 0 || $epoch > self::MAX_GENERATION_PART
 			|| $generation < 0 || $generation > self::MAX_GENERATION_PART) {
 			throw new \OverflowException('Recommendation learning generation is out of range');

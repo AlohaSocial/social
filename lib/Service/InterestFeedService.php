@@ -212,11 +212,9 @@ class InterestFeedService {
 			$popular = $this->popular(
 				$viewer, $media, array_merge($hidden, array_column($ranking, 'nid')), self::POPULAR_FILL - count($ranking)
 			);
-			$related = array_values(array_filter($ranking, static fn (array $entry): bool => $entry['reason'] === 'related'));
-			$ranking = array_values(array_filter($ranking, static fn (array $entry): bool => $entry['reason'] !== 'related'));
-			$ranking = $this->spread(
-				$this->withStoryTerms(array_merge($ranking, $popular), $viewer->getUserId()),
-				$related
+			$ranking = $this->spreadTail(
+				$ranking,
+				$this->withStoryTerms($popular, $viewer->getUserId())
 			);
 		}
 
@@ -318,8 +316,36 @@ class InterestFeedService {
 		}
 		$ranked = array_slice($candidates, 0, count($ranked));
 		$related = array_slice($candidates, count($ranked));
-		$placed = [];
+
+		return $this->spreadFrom([], [], $ranked, $related);
+	}
+
+	/**
+	 * @param list<array<string, mixed>> $head
+	 * @param list<array<string, mixed>> $tail
+	 * @return list<array<string, mixed>>
+	 */
+	private function spreadTail(array $head, array $tail): array {
+		$candidates = array_merge($head, $tail);
+		$storyClusters = RecommendationReRanker::storyClusterIds($candidates);
+		foreach ($storyClusters as $index => $cluster) {
+			$candidates[$index]['_story_cluster'] = $cluster;
+		}
+		$head = array_slice($candidates, 0, count($head));
+		$tail = array_slice($candidates, count($head));
 		$storyCounts = [];
+		foreach ($head as $entry) {
+			$cluster = $entry['_story_cluster'] ?? null;
+			if (is_int($cluster)) {
+				$storyCounts[$cluster] = ($storyCounts[$cluster] ?? 0) + 1;
+			}
+		}
+
+		return $this->spreadFrom($head, $storyCounts, $tail, []);
+	}
+
+	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param list<array<string, mixed>> $ranked @param list<array<string, mixed>> $related */
+	private function spreadFrom(array $placed, array $storyCounts, array $ranked, array $related): array {
 		$tagLimit = (int)floor((float)self::DIVERSITY_WINDOW * self::TAG_SHARE);
 
 		while ($ranked !== [] || $related !== []) {
