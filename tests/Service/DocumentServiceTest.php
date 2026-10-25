@@ -17,6 +17,7 @@ use OCA\Social\Exceptions\CacheContentDecodeException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Exceptions\CacheContentSizeException;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
+use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Interfaces\Object\ImageInterface;
@@ -764,11 +765,43 @@ class DocumentServiceTest extends TestCase {
 	private function upload(int $nid, string $description): Document {
 		$document = new Document();
 		$document->setNid($nid);
+		$document->setAccount('alice');
 		$document->setLocalCopy('copy' . $nid);
 		$document->setMediaType('image/png');
 		$document->setDescription($description);
 
 		return $document;
+	}
+
+	public function testEditMediaIdsReplaceInRequestedOrderAndScopeVisibility(): void {
+		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/media/x');
+		$first = $this->upload(11, 'First');
+		$second = $this->upload(12, 'Second');
+		$this->cacheDocumentsRequest->expects($this->once())->method('getFromArray')
+			->with([12, 11], 'alice')->willReturn([$first, $second]);
+		$this->cacheDocumentsRequest->expects($this->exactly(2))->method('update')
+			->with($this->isInstanceOf(Document::class));
+
+		$result = $this->service->mediaAttachmentsForEdit(['12', '11'], 'alice', Stream::TYPE_UNLISTED);
+
+		$this->assertSame(['12', '11'], array_map(static fn (MediaAttachment $media): string => $media->getId(), $result));
+		$this->assertTrue($first->isPublic());
+		$this->assertTrue($second->isPublic());
+	}
+
+	public function testEditMediaIdsRejectUploadsNotOwnedByTheAuthor(): void {
+		$otherAccountUpload = $this->upload(11, 'Not yours');
+		$otherAccountUpload->setAccount('mallory');
+		$this->cacheDocumentsRequest->method('getFromArray')->willReturn([$otherAccountUpload]);
+
+		$this->expectException(InvalidActionException::class);
+		$this->service->mediaAttachmentsForEdit(['11'], 'alice', Stream::TYPE_PUBLIC);
+	}
+
+	public function testEditMediaIdsCanExplicitlyRemoveAllAttachments(): void {
+		$this->cacheDocumentsRequest->expects($this->never())->method('getFromArray');
+
+		$this->assertSame([], $this->service->mediaAttachmentsForEdit([], 'alice', Stream::TYPE_PUBLIC));
 	}
 
 	/**

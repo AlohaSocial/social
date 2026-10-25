@@ -1824,6 +1824,22 @@ describe('TimelinePost', () => {
 			}))
 		})
 
+		it('removes an attachment by sending the replacement media list', async () => {
+			const item = makeItem({
+				content: '<p>Photo post</p>',
+				media_attachments: [{ id: 'media-12', type: 'image', url: '/media/12', preview_url: '/media/12', description: 'old alt' }],
+			})
+			const { wrapper, store } = mountPost({ item })
+
+			await menuItem(wrapper, 'Edit').trigger('click')
+			await wrapper.find('.post-edit-media__item button').trigger('click')
+			await wrapper.find('textarea.post-edit-textarea').setValue('Photo post updated')
+			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
+			await flushPromises()
+
+			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ media_ids: [] }))
+		})
+
 		it('edits an event title, time and location with the ActivityPub update', async () => {
 			const item = makeItem({
 				nid: '123',
