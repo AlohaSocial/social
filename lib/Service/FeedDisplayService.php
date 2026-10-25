@@ -57,7 +57,8 @@ class FeedDisplayService {
 		}
 
 		foreach ($preferences as $preference) {
-			if (($preference['$type'] ?? '') === 'app.bsky.actor.defs#threadViewPref'
+			if (is_array($preference)
+				&& ($preference['$type'] ?? '') === 'app.bsky.actor.defs#threadViewPref'
 				&& in_array($preference['sort'] ?? null, ['oldest', 'newest', 'most-likes', 'random'], true)) {
 				return $preference['sort'];
 			}
