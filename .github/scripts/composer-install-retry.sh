@@ -4,14 +4,18 @@
 
 set -euo pipefail
 
-for attempt in 1 2 3; do
-	if COMPOSER_MAX_PARALLEL_HTTP="${COMPOSER_MAX_PARALLEL_HTTP:-4}" composer "$@"; then
+max_attempts=5
+for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+	if COMPOSER_MAX_PARALLEL_HTTP="${COMPOSER_MAX_PARALLEL_HTTP:-2}" composer "$@"; then
 		exit 0
 	fi
 
-	if [ "$attempt" -lt 3 ]; then
-		delay=$((attempt * 10))
-		echo "Composer failed; retrying in ${delay}s (attempt $((attempt + 1))/3)." >&2
+	if [ "$attempt" -lt "$max_attempts" ]; then
+		delay=$((10 * (2 ** (attempt - 1))))
+		if [ "$delay" -gt 60 ]; then
+			delay=60
+		fi
+		echo "Composer failed; retrying in ${delay}s (attempt $((attempt + 1))/${max_attempts})." >&2
 		sleep "$delay"
 	fi
 done
