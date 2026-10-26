@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
+use OCA\Social\AP;
 use OCA\Social\Controller\CalendarEventController;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -76,7 +77,7 @@ class CalendarEventControllerTest extends TestCase {
 			'location' => 'Library',
 		]);
 		$this->streams = $this->createStub(StreamService::class);
-		$this->streams->method('getStreamByNid')->willReturn($this->event);
+		$this->streams->method('getStreamByNid')->willReturnCallback(fn (): Note => $this->event);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->logger->method('error')->willReturnCallback(static function (string $message, array $context): void {
 			if (($context['exception'] ?? null) instanceof \Throwable) {
@@ -104,6 +105,35 @@ class CalendarEventControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus(), json_encode($response->getData()) ?: '');
 		self::assertSame(['imported' => true, 'calendar' => 'Personal'], $response->getData(), json_encode($response->getData()) ?: '');
+	}
+
+	public function testImportsAParsedGancioEventIntoNextcloudCalendar(): void {
+		$activityData = json_decode(
+			file_get_contents(__DIR__ . '/../Federation/fixtures/gancio-create-event.json'),
+			true,
+			512,
+			JSON_THROW_ON_ERROR,
+		);
+		$activity = AP::instance()->getItemFromData($activityData);
+		self::assertSame('Create', $activity->getType());
+		$this->event = $activity->getObject();
+
+		$calendar = $this->writableCalendar();
+		$calendar->expects(self::once())->method('search')->with('', [], ['uid' => $this->uid()], 1)->willReturn([]);
+		$calendar->expects(self::once())->method('createFromString')->with(
+			substr(hash('sha256', $this->event->getId()), 0, 32) . '.ics',
+			self::callback(static fn (string $ics): bool
+				=> str_contains($ics, 'UID:' . hash('sha256', 'https://gancio.example/events/42') . '@social')
+					&& str_contains($ics, 'SUMMARY:Community assembly')
+					&& str_contains($ics, 'DTSTART:20261114T170000Z')
+					&& str_contains($ics, 'DTEND:20261114T190000Z')
+					&& str_contains($ics, 'LOCATION:Community Hall\\, Main Street 12\\, Berlin')),
+		);
+
+		$response = $this->controller($this->calendarManager([$calendar]))->importStatusCalendar('123');
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus(), json_encode($response->getData()) ?: '');
+		self::assertSame(['imported' => true, 'calendar' => 'Personal'], $response->getData());
 	}
 
 	public function testAnAlreadyImportedEventIsNotWrittenAgain(): void {
