@@ -21,35 +21,15 @@
 			</template>
 			{{ t('social', 'Upload a video') }}
 		</NcButton>
-
-		<NcModal
-			v-if="files.length > 0"
-			closeOnClickOutside
-			labelId="social-upload-video-title"
-			@close="files = []">
-			<div class="video-upload__composer">
-				<h2 id="social-upload-video-title" class="video-upload__title">
-					{{ t('social', 'Upload a video') }}
-				</h2>
-				<Composer
-					startExpanded
-					compactOptions
-					:initialFiles="files"
-					emojiPickerContainer=".modal-wrapper"
-					@posted="files = []" />
-			</div>
-		</NcModal>
 	</div>
 </template>
 
 <script>
-import { defineAsyncComponent } from 'vue'
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcModal from '@nextcloud/vue/components/NcModal'
 import IconVideoPlusOutline from 'vue-material-design-icons/VideoPlusOutline.vue'
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
+import eventBus from '../services/eventBus.js'
 
 /**
  * The Videos page's way to post one: the file first, then the composer with
@@ -61,17 +41,8 @@ export default {
 	name: 'VideoUploadButton',
 
 	components: {
-		Composer,
 		IconVideoPlusOutline,
 		NcButton,
-		NcModal,
-	},
-
-	data() {
-		return {
-			/** @type {File[]} what was picked; the composer is open while there is any */
-			files: [],
-		}
 	},
 
 	methods: {
@@ -88,7 +59,7 @@ export default {
 			// picking the same file again has to be a change too
 			input.value = ''
 			if (files.length > 0) {
-				this.files = files
+				eventBus.emit('composer-open', { files })
 			}
 		},
 	},
@@ -99,13 +70,5 @@ export default {
 .video-upload {
 	flex: 0 0 auto;
 
-	&__composer {
-		padding: calc(var(--default-grid-baseline) * 4);
-	}
-
-	&__title {
-		margin: 0 0 calc(var(--default-grid-baseline) * 3);
-		font-size: 20px;
-	}
 }
 </style>

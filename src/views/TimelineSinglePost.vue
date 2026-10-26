@@ -39,7 +39,11 @@
 			<div v-if="singlePost" class="main-post__under">
 				<PostDetails :status="singlePost" />
 				<PostReactedBy :status="singlePost" />
-				<Composer v-if="canReply" compactOptions :inReplyTo="singlePost" />
+				<Composer
+					v-if="canReply && !timelineStore.composerDisplayStatus"
+					oneLine
+					:listenForIntents="false"
+					:inReplyTo="singlePost" />
 			</div>
 			<TimelineSkeleton v-else-if="postState === 'loading'" :count="1" />
 			<!-- a server that did not answer has not said the post is gone -->
@@ -108,7 +112,6 @@ import { signalNow } from '../services/interestTracker.js'
 // opened is not a video
 const VideoHeader = defineAsyncComponent(() => import(/* webpackChunkName: "watch" */'../components/VideoHeader.vue'))
 import { loadState } from '@nextcloud/initial-state'
-import eventBus from '../services/eventBus.js'
 import logger from '../services/logger.js'
 import { setPageTitle } from '../services/pageTitle.js'
 import { mapStores } from 'pinia'
@@ -121,8 +124,8 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 export default {
 	name: 'TimelineSinglePost',
 	components: {
-		ArrowLeft,
 		Composer,
+		ArrowLeft,
 		CommentRemoveOutline,
 		NcButton,
 		NcEmptyContent,
@@ -159,7 +162,6 @@ export default {
 			 */
 			postState: '',
 			/** the composer-reply handler, kept so only this one is removed */
-			onComposerReply: null,
 			/** refresh the one post shown outside either timeline list */
 			countRefreshIntervalId: null,
 			countRefreshInProgress: false,
@@ -193,10 +195,6 @@ export default {
 			const media = this.singlePost.media_attachments || []
 
 			return media.length === 1 && media[0].type === 'video'
-		},
-
-		composerDisplayStatus() {
-			return this.timelineStore.getComposerDisplayStatus
 		},
 
 		/**
@@ -316,15 +314,6 @@ export default {
 	},
 
 	async beforeMount() {
-		// Keep the handler so unmounted() removes only this one — a bare
-		// eventBus.off('composer-reply') would also detach the Composer's.
-		this.onComposerReply = (item) => {
-			this.$nextTick(() => {
-				/** @type {HTMLElement|undefined} */ (this.$refs.socialWrapper)?.querySelector(`[data-social-status="${item.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-			})
-		}
-		eventBus.on('composer-reply', this.onComposerReply)
-
 		await this.load()
 	},
 
@@ -337,12 +326,12 @@ export default {
 	},
 
 	unmounted() {
-		eventBus.off('composer-reply', this.onComposerReply)
 		clearInterval(this.countRefreshIntervalId)
 		document.removeEventListener('visibilitychange', this.refreshOpenedPostCounts)
 	},
 
 	methods: {
+
 		t,
 		n,
 

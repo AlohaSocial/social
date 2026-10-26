@@ -3330,6 +3330,12 @@ OC.L10N.register(
     "No writable calendar is available. Download the calendar file and add it manually." : "Es ist kein beschreibbarer Kalender verfügbar. Lade die Kalenderdatei herunter und füge sie manuell hinzu.",
     "Calendar import is unavailable. Download the calendar file instead." : "Der Kalenderimport ist nicht verfügbar. Lade stattdessen die Kalenderdatei herunter.",
     "This event could not be found. It may have been removed." : "Dieses Ereignis wurde nicht gefunden. Möglicherweise wurde es entfernt.",
-    "Could not add this event to your Nextcloud Calendar. You can download the calendar file instead." : "Dieses Ereignis konnte nicht zu deinem Nextcloud-Kalender hinzugefügt werden. Du kannst stattdessen die Kalenderdatei herunterladen."
+    "Could not add this event to your Nextcloud Calendar. You can download the calendar file instead." : "Dieses Ereignis konnte nicht zu deinem Nextcloud-Kalender hinzugefügt werden. Du kannst stattdessen die Kalenderdatei herunterladen.",
+    "Open full composer" : "Vollständigen Editor öffnen",
+    "Continue draft" : "Entwurf fortsetzen",
+    "Discard these changes?" : "Diese Änderungen verwerfen?",
+    "Your unsaved changes and unfinished uploads will be lost. The published post will stay unchanged." : "Nicht gespeicherte Änderungen und noch nicht abgeschlossene Uploads gehen verloren. Der veröffentlichte Beitrag bleibt unverändert.",
+    "Discard changes" : "Änderungen verwerfen",
+    "Edit post" : "Beitrag bearbeiten"
 },
 "nplurals=2; plural=(n != 1);");

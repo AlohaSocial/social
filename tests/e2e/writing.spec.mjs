@@ -123,8 +123,7 @@ test.describe('writing, in a browser', () => {
 		await composer.locator('.message').click()
 		await page.keyboard.type(text)
 
-		// the dialog's own close button: `Escape` is the browser's, and a
-		// composer with a draft in it may well want to keep it
+		// the dialog closes only after its guard allows it
 		await page.locator('.modal-container button.modal-container__close, .modal-header button')
 			.first()
 			.click()

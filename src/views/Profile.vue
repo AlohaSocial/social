@@ -8,7 +8,10 @@
 
 		<!-- your own profile is a page you post from, the way the home
 		     timeline is. Somebody else's is a page you read -->
-		<Composer v-if="isOwnProfile" compactOptions />
+		<Composer
+			v-if="isOwnProfile && !timelineStore.composerDisplayStatus"
+			oneLine
+			:listenForIntents="false" />
 
 		<div class="profile-sections">
 			<router-view v-if="accountLoaded && accountInfo && profileRouteReady" name="details" :profileLayout="accountInfo.profile_layout" />
@@ -63,11 +66,11 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 export default {
 	name: 'Profile',
 	components: {
+		Composer,
 		AlohaScene,
 		NcButton,
 		NcEmptyContent,
 		ProfileInfo,
-		Composer,
 	},
 
 	setup() {
@@ -172,6 +175,7 @@ export default {
 	},
 
 	methods: {
+
 		applyDefaultProfileTab() {
 			if (this.$route.name !== 'profile' || this.$route.query?.media !== undefined) {
 				return

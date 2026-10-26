@@ -3,7 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="post-edit-inline">
+	<fieldset
+		class="post-edit-inline"
+		:disabled="saving"
+		:aria-busy="saving"
+		:aria-label="t('social', 'Edit post')">
 		<div v-if="item.event" class="post-edit-event">
 			<label>
 				{{ t('social', 'Event title') }}
@@ -79,6 +83,7 @@
 			dir="auto"
 			:maxlength="maxLength"
 			:aria-describedby="editIsTooLong ? `post-edit-count-${item.id}` : undefined"
+			:aria-label="t('social', 'Edit your post')"
 			:placeholder="t('social', 'Edit your post')"
 			@keydown.ctrl.enter="save" />
 		<div class="post-edit-actions">
@@ -91,16 +96,16 @@
 			</span>
 			<NcButton
 				variant="primary"
-				:disabled="!editCanSave || editMediaUploading"
+				:disabled="saving || !editCanSave || editMediaUploading"
 				:aria-label="t('social', 'Save')"
 				@click.stop="save">
-				{{ t('social', 'Save') }}
+				{{ saving ? t('social', 'Saving …') : t('social', 'Save') }}
 			</NcButton>
 			<NcButton :aria-label="t('social', 'Cancel')" @click.stop="$emit('cancel')">
 				{{ t('social', 'Cancel') }}
 			</NcButton>
 		</div>
-	</div>
+	</fieldset>
 </template>
 
 <script>
@@ -116,6 +121,7 @@ export default {
 	props: {
 		item: { type: Object, required: true },
 		maxLength: { type: Number, required: true },
+		saving: { type: Boolean, default: false },
 	},
 
 	emits: ['save', 'cancel'],
@@ -126,6 +132,7 @@ export default {
 			previewUrl: attachment.preview_url || (attachment.type === 'image' ? attachment.url : ''),
 		}))
 		return {
+			originalEditSignature: '',
 			editContent: htmlToPlainText(this.item.content || ''),
 			editSpoiler: this.item.spoiler_text || '',
 			editSensitive: this.item.sensitive === true,
@@ -142,6 +149,14 @@ export default {
 	},
 
 	computed: {
+		editSignature() {
+			return JSON.stringify([this.editContent, this.editSpoiler, this.editSensitive, this.editMedia.map(({ id, description }) => [String(id), description]), this.editEvent])
+		},
+
+		isDirty() {
+			return this.editSignature !== this.originalEditSignature
+		},
+
 		...mapStores(useTimelineStore),
 		editCharsLeft() {
 			return this.maxLength - this.editContent.length
@@ -174,6 +189,10 @@ export default {
 				? n('social', '%n character too many', '%n characters too many', -this.editCharsLeft)
 				: n('social', '%n character left', '%n characters left', this.editCharsLeft)
 		},
+	},
+
+	created() {
+		this.originalEditSignature = this.editSignature
 	},
 
 	mounted() {
@@ -235,7 +254,7 @@ export default {
 		},
 
 		save() {
-			if (!this.editCanSave || this.editMediaUploading) {
+			if (this.saving || !this.editCanSave || this.editMediaUploading) {
 				return
 			}
 			const event = this.item.event
@@ -261,6 +280,9 @@ export default {
 
 <style scoped lang="scss">
 .post-edit-inline {
+	border: 0;
+	padding: 0;
+	min-width: 0;
 	margin-bottom: 10px;
 
 	.post-edit-event {
