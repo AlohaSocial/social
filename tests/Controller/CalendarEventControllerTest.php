@@ -19,6 +19,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\AppFramework\Http;
 use OCP\Calendar\ICalendar;
 use OCP\Calendar\ICalendarIsWritable;
@@ -34,8 +35,12 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+require_once __DIR__ . '/../Model/TActivityPubMocks.php';
+
 #[AllowMockObjectsWithoutExpectations]
 class CalendarEventControllerTest extends TestCase {
+	use TActivityPubMocks;
+
 	private IRequest|Stub $request;
 	private IUserSession|Stub $userSession;
 	private StreamService|Stub $streams;
@@ -46,6 +51,7 @@ class CalendarEventControllerTest extends TestCase {
 	private string $authorization = '';
 
 	protected function setUp(): void {
+		$this->installActivityPub();
 		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('calendar-test');
 		$this->request->method('getHeader')->willReturnCallback(fn (string $name): string
@@ -87,6 +93,7 @@ class CalendarEventControllerTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		AP::set(null);
 		\OC::$server->reset();
 	}
 
