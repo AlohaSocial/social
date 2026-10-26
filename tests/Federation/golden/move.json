@@ -83,6 +83,7 @@
     ],
     "id": "https://cloud.example/apps/social/@alice#moves/<stamp:1>",
     "type": "Move",
+    "to": "https://cloud.example/apps/social/@alice/followers",
     "actor": "https://cloud.example/apps/social/@alice",
     "object": "https://cloud.example/apps/social/@alice",
     "signature": {

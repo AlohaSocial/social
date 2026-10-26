@@ -20,12 +20,18 @@
 		<NcButton
 			v-if="event.start_time && !isPublic"
 			class="post-event__calendar"
-			:disabled="importingEvent"
+			:disabled="importingEvent || eventImported"
 			@click="importEventToCalendar">
 			<template #icon>
 				<CalendarMonthOutline :size="16" />
 			</template>
-			{{ importingEvent ? t('social', 'Adding…') : t('social', 'Add to Nextcloud Calendar') }}
+			{{ importingEvent
+				? t('social', 'Adding…')
+				: eventImported
+					? (eventAlreadyImported
+						? t('social', 'This event is already in your calendar')
+						: t('social', 'Event added to {calendar}', { calendar: importedCalendar || t('social', 'your Nextcloud Calendar') }))
+					: t('social', 'Add to Nextcloud Calendar') }}
 		</NcButton>
 		<a
 			v-if="event.start_time && !isPublic && calendarImportFailed"
@@ -68,7 +74,13 @@ export default {
 	},
 
 	data() {
-		return { importingEvent: false, calendarImportFailed: false }
+		return {
+			importingEvent: false,
+			calendarImportFailed: false,
+			eventImported: false,
+			eventAlreadyImported: false,
+			importedCalendar: '',
+		}
 	},
 
 	computed: {
@@ -98,13 +110,16 @@ export default {
 
 	methods: {
 		async importEventToCalendar() {
-			if (this.importingEvent) {
+			if (this.importingEvent || this.eventImported) {
 				return
 			}
 			this.importingEvent = true
 			this.calendarImportFailed = false
 			try {
 				const { data } = await axios.post(generateUrl(`apps/social/api/v1/statuses/${encodeURIComponent(this.statusId)}/calendar/import`))
+				this.eventImported = true
+				this.eventAlreadyImported = Boolean(data.already_imported)
+				this.importedCalendar = data.calendar || t('social', 'your Nextcloud Calendar')
 				showSuccess(data.already_imported
 					? t('social', 'This event is already in your calendar')
 					: t('social', 'Event added to {calendar}', { calendar: data.calendar || t('social', 'your Nextcloud Calendar') }))

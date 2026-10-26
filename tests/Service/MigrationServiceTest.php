@@ -341,6 +341,7 @@ class MigrationServiceTest extends TestCase {
 		$this->assertSame(self::ALICE, $document['actor']);
 		$this->assertSame(self::ALICE, $document['object'], 'the account that moves');
 		$this->assertSame(self::NEW_ALICE, $document['target'], 'where it moved to — without it the Move says nothing');
+		$this->assertSame($alice->getFollowers(), $document['to'], 'addressed to the followers being migrated');
 		$this->assertStringStartsWith(self::ALICE . '#', $document['id']);
 
 		$paths = array_map(

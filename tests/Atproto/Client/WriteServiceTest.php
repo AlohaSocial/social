@@ -552,28 +552,72 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('valid', $answer['validationStatus']);
 	}
 
-	public function testPutRecordCreatesANewPostAtTheRequestedRecordKey(): void {
+	public function testCreateRecordUsesTheRequestedPostRecordKey(): void {
 		$made = new Note();
-		$made->setId('https://social.test/@alice/22');
+		$made->setId('https://social.test/@alice/23');
 		$this->postStore->method('isKnown')->willReturn(true);
 		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
-			$this->records[] = $this->record(RecordMapper::POST, '3krequested', $made->getId());
+			$this->records[] = $this->record(RecordMapper::POST, '3jqfcqzm3fo2j', $made->getId());
 			$activity = new Create();
 			$activity->setObjectId($made->getId());
 
 			return $activity;
 		});
 		$this->streams->method('getStreamById')->willReturn($made);
-		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3krequested');
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3jqfcqzm3fo2j');
+
+		$result = $this->writes->create($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'A post with an explicit record key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3jqfcqzm3fo2j', $result['uri']);
+	}
+
+	public function testCreateRecordRejectsPostRecordKeysThatAreNotTids(): void {
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => 'not-a-tid',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'Invalid key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+	}
+
+	public function testPutRecordCreatesANewPostAtTheRequestedRecordKey(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/22');
+		$this->postStore->method('isKnown')->willReturn(true);
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3jqfcqzm3fo2j', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3jqfcqzm3fo2j');
 
 		$result = $this->writes->put($this->session, [
 			'repo' => self::DID,
 			'collection' => RecordMapper::POST,
-			'rkey' => '3krequested',
+			'rkey' => '3jqfcqzm3fo2j',
 			'record' => ['$type' => RecordMapper::POST, 'text' => 'A new record through putRecord', 'createdAt' => '2026-10-26T10:00:00.000Z'],
 		]);
 
-		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3krequested', $result['uri']);
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3jqfcqzm3fo2j', $result['uri']);
+	}
+
+	public function testPutRecordRejectsPostRecordKeysThatAreNotTids(): void {
+		$this->expectException(XrpcException::class);
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => 'not-a-tid',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'Invalid key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
 	}
 
 	public function testARecordWithMediaExternalCardIsPreservedWhenAnAppCreatesAPost(): void {
@@ -728,7 +772,7 @@ class WriteServiceTest extends TestCase {
 			'embed' => $oldEmbed,
 		];
 		$bytes = DagCbor::encode($old);
-		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kedit', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
 		$this->records[] = $postRecord;
 		$post = new Note();
 		$post->setId($postRecord->localId);
@@ -767,7 +811,7 @@ class WriteServiceTest extends TestCase {
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
 			'collection' => RecordMapper::POST,
-			'rkey' => '3kedit',
+			'rkey' => '3jqfcqzm3fo2j',
 			'record' => $record,
 		]);
 	}
@@ -782,7 +826,7 @@ class WriteServiceTest extends TestCase {
 			]],
 		];
 		$bytes = DagCbor::encode($old);
-		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kcard', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/45', 0);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/45', 0);
 		$this->records[] = $postRecord;
 		$post = new Note();
 		$post->setId($postRecord->localId);
@@ -816,7 +860,7 @@ class WriteServiceTest extends TestCase {
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
 			'collection' => RecordMapper::POST,
-			'rkey' => '3kcard',
+			'rkey' => '3jqfcqzm3fo2j',
 			'record' => $record,
 		]);
 	}
@@ -831,7 +875,7 @@ class WriteServiceTest extends TestCase {
 			'createdAt' => '2026-10-08T10:00:00.000Z',
 			'embed' => $oldEmbed,
 		]);
-		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kquote', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/46', 0);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/46', 0);
 		$this->records[] = $postRecord;
 		$post = new Note();
 		$post->setId($postRecord->localId);
@@ -849,7 +893,7 @@ class WriteServiceTest extends TestCase {
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
 			'collection' => RecordMapper::POST,
-			'rkey' => '3kquote',
+			'rkey' => '3jqfcqzm3fo2j',
 			'record' => [
 				'$type' => RecordMapper::POST,
 				'text' => 'After',
@@ -873,7 +917,7 @@ class WriteServiceTest extends TestCase {
 			'createdAt' => '2026-10-08T10:00:00.000Z',
 			'embed' => ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $oldUri, 'cid' => $oldCid]],
 		]);
-		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3kfeed', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/47', 0);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/47', 0);
 		$this->records[] = $postRecord;
 		$post = new Note();
 		$post->setId($postRecord->localId);
@@ -898,7 +942,7 @@ class WriteServiceTest extends TestCase {
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
 			'collection' => RecordMapper::POST,
-			'rkey' => '3kfeed',
+			'rkey' => '3jqfcqzm3fo2j',
 			'record' => [
 				'$type' => RecordMapper::POST,
 				'text' => 'After',

@@ -23,7 +23,11 @@ scenarios and 33 synthetic posts spanning ActivityPub and ATProto sources,
 languages, formats, follow-graph sizes and sparse provider availability. It
 includes hidden, unlisted, followers-only, deleted and language-ineligible
 records to exercise hard controls. Example post text and people are not copied
-from live accounts.
+from live accounts. The Nextcloud and open-source reader scenario includes a
+four-post release-story cluster alongside separate PHP-security, migration,
+and Linux-desktop stories, so its story metrics measure whether the ranker
+uses available alternatives rather than only measuring repetition within one
+story.
 
 ## Compared variants and metrics
 

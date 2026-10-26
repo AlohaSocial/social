@@ -85,12 +85,13 @@ final class Mst {
 	}
 
 	/**
-	 * `<collection>/<rkey>`: an NSID, a slash, a record key, no more than 256
-	 * bytes. The tree itself takes any bytes (the interop vectors use short
-	 * ones); the repository checks every path it writes against this.
+	 * `<collection>/<rkey>`: an NSID, a slash, and a record key. ATProto allows
+	 * record keys up to 512 ASCII characters. The tree itself takes any bytes
+	 * (the interop vectors use short ones); the repository checks every path it
+	 * writes against this.
 	 */
 	public static function isValidKey(string $key): bool {
-		if (strlen($key) > 256 || substr_count($key, '/') !== 1) {
+		if (substr_count($key, '/') !== 1) {
 			return false;
 		}
 		[$collection, $rkey] = explode('/', $key);

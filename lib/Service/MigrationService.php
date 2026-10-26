@@ -216,6 +216,10 @@ class MigrationService {
 		$move->setActorId($actor->getId());
 		$move->setObjectId($actor->getId());
 		$move->setTarget($target->getId());
+		// A Move is addressed to the account's followers in ActivityPub itself,
+		// as well as being routed to their inboxes below. Some servers validate
+		// the audience before they apply the follow migration.
+		$move->setTo($actor->getFollowers());
 
 		$move->addInstancePath(
 			new InstancePath($actor->getId(), InstancePath::TYPE_FOLLOWERS, InstancePath::PRIORITY_MEDIUM)

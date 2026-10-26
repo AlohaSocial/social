@@ -48,11 +48,11 @@ class ActiveHomeFeedRefresh {
 			return;
 		}
 		$key = hash('sha256', $viewer->getId());
-		if (!$this->cache->addShared('social.atproto.home-refresh', $key, '1', self::COOLDOWN)) {
-			return;
-		}
-
 		try {
+			if (!$this->cache->addShared('social.atproto.home-refresh', $key, '1', self::COOLDOWN)) {
+				return;
+			}
+
 			$offsetKey = 'follow-offset:' . $key;
 			$offset = max(0, (int)($this->cache->getShared('social.atproto.home-refresh', $offsetKey) ?? 0));
 			$follows = $this->follows->getFollowing($viewer, self::FOLLOW_PAGE, $offset);

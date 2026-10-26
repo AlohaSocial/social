@@ -130,6 +130,16 @@ class LinkPreviewService {
 		}
 	}
 
+	/**
+	 * Reads preview cards for stream ids already returned by a query.
+	 *
+	 * @param string[] $streamPrims
+	 * @return array<string, StreamCard> keyed by stream id prim
+	 */
+	public function cardsByStreamPrims(array $streamPrims): array {
+		return $this->streamCardsRequest->getByStreamPrims($streamPrims);
+	}
+
 	public function deleteCard(string $streamId): void {
 		$this->streamCardsRequest->deleteByStreamId($streamId);
 	}
