@@ -22,6 +22,7 @@ use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
+use OCA\Social\Model\ActivityPub\Activity\Update;
 use OCA\Social\Model\ActivityPub\Actor\Group;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -1851,6 +1852,34 @@ class StreamServiceTest extends TestCase {
 			'end_time' => '2026-11-15T19:00:00Z',
 			'location' => 'New venue',
 		], $existing->getDetails(Details::EVENT));
+	}
+
+	public function testSyncRemoteTimelineRoutesRemotePostEditsThroughTheInboxUpdateHandler(): void {
+		$bob = $this->remoteActor();
+		$updateData = [
+			'id' => 'https://remote.example/activities/42-update',
+			'type' => 'Update',
+			'actor' => $bob->getId(),
+			'object' => [
+				'id' => 'https://remote.example/notes/42',
+				'type' => 'Note',
+				'attributedTo' => $bob->getId(),
+				'content' => '<p>Edited post</p>',
+			],
+		];
+		$update = new Update();
+		$update->setId($updateData['id']);
+		$update->setActorId($bob->getId());
+		$handler = $this->createMock(IActivityPubInterface::class);
+		$handler->expects(self::once())->method('processIncomingRequest')->with($update);
+		$activityPub = $this->createMock(AP::class);
+		$activityPub->expects(self::once())->method('getItemFromData')->with($updateData)->willReturn($update);
+		$activityPub->expects(self::once())->method('getInterfaceForItem')->with($update)->willReturn($handler);
+		AP::set($activityPub);
+
+		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [$updateData]]);
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($bob));
 	}
 
 	public function testSyncRemoteTimelineAppliesDeletesFromTheOutboxOwner(): void {

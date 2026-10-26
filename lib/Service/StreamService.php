@@ -1129,6 +1129,23 @@ class StreamService {
 						continue;
 					}
 
+					// A profile read is another delivery path for edits: a client
+					// that has never received the original Create still needs to see
+					// an Update to a stored post. Let the same Note handler used by
+					// inbox deliveries validate authorship, edit ordering, media,
+					// revisions and notifications. Gancio Events keep their scoped
+					// metadata refresh below because their event details are stored
+					// separately from ordinary Note fields.
+					if ($itemType === 'Update' && !$isEvent) {
+						$update = AP::instance()->getItemFromData($itemData);
+						if ($update->getType() !== 'Update' || $update->getActorId() !== $actor->getId()) {
+						continue;
+					}
+					AP::instance()->getInterfaceForItem($update)->processIncomingRequest($update);
+					$synced++;
+					continue;
+				}
+
 					// Gancio edits an event in place and exposes the new object in an
 					// Update activity. Refresh the event facts on that path; otherwise
 					// the profile outbox can discover new events but never reflect a
