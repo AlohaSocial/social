@@ -228,7 +228,7 @@ class InteropRegressionTest extends TestCase {
 			'name' => 'Fediverse meetup',
 			'start_time' => '2026-04-05T16:30:00Z',
 			'end_time' => '2026-04-05T19:00:00Z',
-			'location' => 'Community hall',
+			'location' => 'Community hall, Main Street 12, Berlin, 10115, DE',
 		], $event->exportAsLocal()['event']);
 	}
 
