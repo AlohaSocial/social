@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\AP;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostDeletedEvent;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -1084,6 +1085,20 @@ class StreamService {
 
 					// Extract the status or Event data from the activity item
 					$itemType = $this->get('type', $itemData, '');
+					if ($itemType === 'Delete') {
+						// A fetched outbox is not an inbox delivery, but its Delete
+						// still has to go through the normal ActivityPub handler: that
+						// handler checks the actor against the stored author and cleans
+						// up every row related to the post. Only accept deletes the
+						// outbox owner itself authored.
+						$delete = AP::instance()->getItemFromData($itemData);
+						if ($delete->getType() !== 'Delete' || $delete->getActorId() !== $actor->getId()) {
+							continue;
+						}
+						AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
+						$synced++;
+						continue;
+					}
 					if (in_array($itemType, ['Create', 'Update'], true) && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
 					} elseif (in_array($itemType, ['Note', 'Event'], true)) {
