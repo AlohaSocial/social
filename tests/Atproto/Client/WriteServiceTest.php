@@ -552,6 +552,30 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('valid', $answer['validationStatus']);
 	}
 
+	public function testCreateRecordUsesTheRequestedPostRecordKey(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/23');
+		$this->postStore->method('isKnown')->willReturn(true);
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kcustomkey', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3kcustomkey');
+
+		$result = $this->writes->create($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3kcustomkey',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'A post with an explicit record key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kcustomkey', $result['uri']);
+	}
+
 	public function testPutRecordCreatesANewPostAtTheRequestedRecordKey(): void {
 		$made = new Note();
 		$made->setId('https://social.test/@alice/22');

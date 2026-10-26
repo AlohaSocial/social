@@ -139,12 +139,19 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		$postRkey = null;
+		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
+			if (!is_string($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
+				throw XrpcException::invalidRequest('A post record key is invalid');
+			}
+			$postRkey = $body['rkey'];
+		}
 		if ($collection === ChatDeclaration::COLLECTION) {
 			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), $record));
 		}
 		$actor = $this->actor($session);
 		$written = match ($collection) {
-			RecordMapper::POST => $this->post($session, $actor, $record),
+			RecordMapper::POST => $this->post($session, $actor, $record, $postRkey),
 			RecordMapper::LIKE => $this->like($actor, $record),
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
