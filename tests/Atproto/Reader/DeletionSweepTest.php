@@ -62,4 +62,24 @@ class DeletionSweepTest extends TestCase {
 		$this->assertSame(0, $sweep->run(), 'the end: nothing left this round');
 		$this->assertSame('0', $cursor, 'the next run starts over');
 	}
+
+	public function testAConfirmedPageAdvancesEvenWhenNoPostWasDeleted(): void {
+		$streams = $this->createMock(StreamRequest::class);
+		$store = $this->createMock(PostStore::class);
+		$config = $this->createMock(ConfigService::class);
+		$time = $this->createMock(ITimeFactory::class);
+		$cursor = '0';
+		$config->method('getAppValue')->willReturnCallback(static fn (string $key): string => $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '');
+		$config->expects($this->once())->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor): void {
+			$cursor = $value;
+		});
+		$streams->expects($this->once())->method('getBlueskyPostIds')->with(0, 0, DeletionSweep::PAGE)
+			->willReturn([11 => 'https://bsky.app/profile/did:plc:a/post/1']);
+		$store->expects($this->once())->method('deleteGone')->willReturn(0);
+
+		$sweep = new DeletionSweep($streams, $store, $config, $time);
+
+		$this->assertSame(0, $sweep->run());
+		$this->assertSame('11', $cursor, 'a live or inconclusive individual post does not block later pages');
+	}
 }
