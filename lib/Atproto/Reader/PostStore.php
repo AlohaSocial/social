@@ -96,7 +96,13 @@ class PostStore {
 		if (PostMapper::isHidden($post)) {
 			$known = $id !== '' ? $this->knownPost($id) : null;
 			if ($known !== null && !$known->isLocal()) {
-				$this->delete($id);
+				// Keep the cached post and its local interactions. A moderation label
+				// can later be lifted; refresh the label metadata so the API hides the
+				// post while it is active and can restore it without losing likes.
+				$create = $this->mapper->create($post, includeHidden: true);
+				if ($create !== null) {
+					$this->refreshKnownPostRecord($post, $create, $known);
+				}
 			}
 
 			return false;

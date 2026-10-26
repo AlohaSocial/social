@@ -82,4 +82,29 @@ class DeletionSweepTest extends TestCase {
 		$this->assertSame(0, $sweep->run());
 		$this->assertSame('11', $cursor, 'a live or inconclusive individual post does not block later pages');
 	}
+
+	public function testAnInconclusivePostIsRetriedAfterTheCursorCompletesARound(): void {
+		$streams = $this->createMock(StreamRequest::class);
+		$store = $this->createMock(PostStore::class);
+		$config = $this->createMock(ConfigService::class);
+		$time = $this->createMock(ITimeFactory::class);
+		$cursor = '0';
+		$config->method('getAppValue')->willReturnCallback(static fn (string $key): string => $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '');
+		$config->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor): void {
+			$cursor = $value;
+		});
+		$streams->method('getBlueskyPostIds')->willReturnCallback(static fn (int $since, int $after): array => $after === 0
+			? [11 => 'https://bsky.app/profile/did:plc:a/post/1']
+			: []);
+		$store->expects($this->exactly(2))->method('deleteGone')
+			->with(['https://bsky.app/profile/did:plc:a/post/1'])
+			->willReturnOnConsecutiveCalls(0, 1);
+		$sweep = new DeletionSweep($streams, $store, $config, $time);
+
+		$this->assertSame(0, $sweep->run(), 'an inconclusive PDS lookup does not delete the post');
+		$this->assertSame('11', $cursor);
+		$this->assertSame(0, $sweep->run(), 'the sweep reaches the end and resets its cursor');
+		$this->assertSame('0', $cursor);
+		$this->assertSame(1, $sweep->run(), 'the next round checks the previously inconclusive post again');
+	}
 }

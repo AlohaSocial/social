@@ -17,6 +17,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\Filter;
 use OCA\Social\Model\Client\FilterKeyword;
+use OCA\Social\Model\Details;
 use OCA\Social\Tools\Nid;
 
 /**
@@ -43,6 +44,8 @@ use OCA\Social\Tools\Nid;
  * cleared by it.
  */
 class FilterService {
+	private const HIDDEN_ATPROTO_LABELS = ['!hide', '!takedown'];
+
 	/** @var array<string, Filter[]> actor id => its active filters, for this request */
 	private array $cache = [];
 
@@ -98,6 +101,9 @@ class FilterService {
 		$statuses = [];
 		foreach ($items as $item) {
 			$exported = $this->exportForClient($item);
+			if ($this->hasHiddenAtprotoLabel($exported)) {
+				continue;
+			}
 			if ($hidesAi && $this->aiContentService->isLabelled($exported)) {
 				continue;
 			}
@@ -167,12 +173,18 @@ class FilterService {
 			? [] : $this->activeFilters($viewer->getId(), Filter::CONTEXT_NOTIFICATIONS);
 		$hidesAi = $this->hidesAi($viewer);
 		if ($filters === [] && !$hidesAi) {
-			return array_values($notifications);
+			return array_values(array_filter(
+				$notifications,
+				fn (mixed $notification): bool => !$this->hasHiddenAtprotoLabel($this->matchable($notification))
+			));
 		}
 
 		$kept = [];
 		foreach ($notifications as $notification) {
 			$matchable = $this->matchable($notification);
+			if ($this->hasHiddenAtprotoLabel($matchable)) {
+				continue;
+			}
 			if ($hidesAi && $this->aiContentService->isLabelled($matchable)) {
 				continue;
 			}
@@ -245,6 +257,23 @@ class FilterService {
 		}
 
 		return $results;
+	}
+
+	/** A global Bluesky hide/takedown label applies regardless of subscriptions. */
+	private function hasHiddenAtprotoLabel(array $status): bool {
+		foreach ([$status, $status['reblog'] ?? null] as $entity) {
+			if (!is_array($entity)) {
+				continue;
+			}
+			$bluesky = is_array($entity['bluesky'] ?? null) ? $entity['bluesky'] : [];
+			foreach (is_array($bluesky['labels'] ?? null) ? $bluesky['labels'] : [] as $label) {
+				if (is_array($label) && in_array($label['val'] ?? '', self::HIDDEN_ATPROTO_LABELS, true)) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -405,12 +434,16 @@ class FilterService {
 		if ($item instanceof Stream) {
 			$object = $item->getObject();
 			$subject = ($object instanceof Stream) ? $object : $item;
+			$details = $subject->getDetails(Details::ATPROTO);
 
 			return [
 				'spoiler_text' => $subject->getSpoilerText(),
 				'content' => $subject->getContent(),
 				'media_attachments' => $subject->getAttachments(),
 				'tags' => $subject->getHashtags(),
+				'bluesky' => [
+					'labels' => is_array($details['label_sources'] ?? null) ? $details['label_sources'] : [],
+				],
 			];
 		}
 

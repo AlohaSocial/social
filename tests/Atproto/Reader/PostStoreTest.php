@@ -459,16 +459,25 @@ class PostStoreTest extends TestCase {
 		);
 	}
 
-	public function testNewTakedownLabelDeletesTheCachedRemotePost(): void {
+	public function testTakedownLabelHidesTheCachedRemotePostWithoutDeletingItsInteractions(): void {
 		$id = 'https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22';
 		$this->known[] = $id;
 		$view = $this->postView();
+		$view['cid'] = \OCA\Social\Atproto\Protocol\Cid::forRaw('unchanged post')->toString();
 		$view['labels'] = [['src' => self::OTHER, 'uri' => 'at://' . self::OTHER . '/app.bsky.labeler.service/self', 'val' => '!takedown']];
+		$this->interactions->expects($this->never())->method('removeAllOf');
 
 		$this->assertFalse($this->store->storePost($view));
 		$this->assertCount(1, $this->imported);
-		$this->assertInstanceOf(Delete::class, $this->imported[0]);
-		$this->assertSame($id, $this->imported[0]->getObjectId());
+		$this->assertInstanceOf(Update::class, $this->imported[0]);
+		$this->assertSame(['!takedown'], $this->imported[0]->getObject()->getDetails(PostMapper::DETAIL)['labels']);
+
+		$this->imported = [];
+		$view['labels'] = [];
+		$this->assertFalse($this->store->storePost($view));
+		$this->assertCount(1, $this->imported, 'lifting the label refreshes the cached post instead of recreating it');
+		$this->assertInstanceOf(Update::class, $this->imported[0]);
+		$this->assertSame([], $this->imported[0]->getObject()->getDetails(PostMapper::DETAIL)['labels']);
 	}
 
 	public function testTakedownLabelDoesNotDeleteTheLocalSourcePost(): void {

@@ -76,8 +76,8 @@ class PostMapper {
 	 *
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
-	public function create(array $post, string $pds = ''): ?array {
-		$note = $this->note($post, $pds);
+	public function create(array $post, string $pds = '', bool $includeHidden = false): ?array {
+		$note = $this->note($post, $pds, $includeHidden);
 		if ($note === null) {
 			return null;
 		}
@@ -155,9 +155,9 @@ class PostMapper {
 	}
 
 	/**
-	 * The `Note` for a post view, or null when a label hides it.
+	 * The `Note` for a post view, or null when a label hides a new import.
 	 */
-	public function note(array $post, string $pds = ''): ?array {
+	public function note(array $post, string $pds = '', bool $includeHidden = false): ?array {
 		$uri = (string)($post['uri'] ?? '');
 		$id = BlueskyIds::postIdOfUri($uri);
 		$did = (string)($post['author']['did'] ?? '');
@@ -167,7 +167,7 @@ class PostMapper {
 			return null;
 		}
 		$labels = ActorMapper::labelValues($post['labels'] ?? []);
-		if (self::isHidden($post)) {
+		if (!$includeHidden && self::isHidden($post)) {
 			return null;
 		}
 		$selfLabels = self::selfLabelValues($record);
