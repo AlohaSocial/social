@@ -1667,6 +1667,39 @@ describe('timeline store actions', () => {
 			}
 		})
 
+		it('keeps checking a remote Fediverse profile while its outbox is being imported', async () => {
+			vi.useFakeTimers()
+			try {
+				await store.changeTimelineTypeAccount('bob@pixelfed.social')
+				const filling = {
+					'x-social-filling': '1',
+					'x-social-profile-filling': '1',
+					'x-social-remote-profile-filling': '1',
+				}
+				axios.get
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [makeStatus('1')], headers: {} })
+
+				await store.fetchTimeline()
+				expect(store.remoteProfilePageFilling).toBe(true)
+
+				await vi.advanceTimersByTimeAsync(6000)
+				expect(axios.get).toHaveBeenCalledTimes(4)
+				await vi.advanceTimersByTimeAsync(4999)
+				expect(axios.get).toHaveBeenCalledTimes(4)
+				await vi.advanceTimersByTimeAsync(1)
+
+				expect(axios.get).toHaveBeenCalledTimes(5)
+				expect(store.remoteProfilePageFilling).toBe(false)
+				expect(store.timeline).toEqual(['1'])
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
 		/**
 		 * The profile's Photos and Videos tabs. `only_media` is Mastodon's own
 		 * parameter and says what the two have in common; `media_type` is the

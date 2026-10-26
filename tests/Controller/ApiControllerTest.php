@@ -3670,6 +3670,7 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame(['p'], $response->getData());
 		$this->assertSame('1', $response->getHeaders()['X-Social-Filling'] ?? null);
 		$this->assertSame('1', $response->getHeaders()['X-Social-Profile-Filling'] ?? null);
+		$this->assertSame('1', $response->getHeaders()['X-Social-Remote-Profile-Filling'] ?? null);
 	}
 
 	public function testBlueskyProfileStatusesFetchEveryPageThroughTheAuthorFeed(): void {
