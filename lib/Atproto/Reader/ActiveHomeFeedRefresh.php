@@ -13,6 +13,7 @@ use OCA\Social\Atproto\Model\Watch;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FollowService;
@@ -53,17 +54,19 @@ class ActiveHomeFeedRefresh {
 				return;
 			}
 
-			$offsetKey = 'follow-offset:' . $key;
-			$offset = max(0, (int)($this->cache->getShared('social.atproto.home-refresh', $offsetKey) ?? 0));
-			$follows = $this->follows->getFollowing($viewer, self::FOLLOW_PAGE, $offset);
-			if ($follows === [] && $offset > 0) {
-				$offset = 0;
-				$follows = $this->follows->getFollowing($viewer, self::FOLLOW_PAGE);
+			$cursorKey = 'follow-cursor:' . $key;
+			$cursor = (string)($this->cache->getShared('social.atproto.home-refresh', $cursorKey) ?? '');
+			$follows = $this->follows->getFollowingAfter($viewer, self::FOLLOW_PAGE, $cursor);
+			if ($follows === [] && $cursor !== '') {
+				$cursor = '';
+				$follows = $this->follows->getFollowingAfter($viewer, self::FOLLOW_PAGE);
 			}
+			$lastFollow = end($follows);
+			$nextCursor = $lastFollow === false ? '' : FollowsRequest::cursorAfter($lastFollow);
 			$this->cache->setShared(
 				'social.atproto.home-refresh',
-				$offsetKey,
-				count($follows) < self::FOLLOW_PAGE ? 0 : $offset + self::FOLLOW_PAGE,
+				$cursorKey,
+				count($follows) < self::FOLLOW_PAGE ? '' : $nextCursor,
 				30 * 86400
 			);
 
