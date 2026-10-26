@@ -227,7 +227,7 @@ export function loadDraft(context = '') {
 			? { title: stringOr(draft.video.title), category: stringOr(draft.video.category), licence: stringOr(draft.video.licence) }
 			: null,
 		card: stringOr(draft.card),
-		savedAt: typeof draft.savedAt === 'number' ? draft.savedAt : 0,
+		savedAt: typeof draft.savedAt === 'number' && Number.isFinite(draft.savedAt) && !Number.isNaN(new Date(draft.savedAt).getTime()) ? draft.savedAt : 0,
 	}
 }
 
@@ -287,6 +287,45 @@ function pollOf(poll) {
 		multiple: poll.multiple === true,
 		expiresIn,
 	}
+}
+
+/**
+ * Lists this reader's existing composer slots. Snapshot keys first because
+ * loadDraft can prune expired/corrupt entries while validating them.
+ *
+ * @return {Array<{context: string, draft: ComposerDraft}>} newest first
+ */
+export function listDrafts() {
+	const scoped = key('')
+	if (scoped === NAME) {
+		return []
+	}
+	const suffix = scoped.slice(NAME.length)
+	let keys
+	try {
+		keys = Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index))
+	} catch {
+		return []
+	}
+	const drafts = []
+	for (const stored of keys) {
+		if (typeof stored !== 'string' || !stored.endsWith(suffix)) {
+			continue
+		}
+		const name = stored.slice(0, -suffix.length)
+		const context = name === NAME ? '' : name.startsWith(NAME + '.') ? name.slice(NAME.length + 1) : null
+		if (context === null || (context !== '' && !/^(reply|quote|redraft)\.[0-9]+$/.test(context))) {
+			continue
+		}
+		if (key(context) !== stored) {
+			continue
+		}
+		const draft = loadDraft(context)
+		if (draft !== null && (draft.text.trim() !== '' || draft.spoilerText.trim() !== '' || draft.media.length > 0 || draft.poll?.options.some((option) => option.trim() !== '') || draft.event !== null)) {
+			drafts.push({ context, draft })
+		}
+	}
+	return drafts.sort((a, b) => b.draft.savedAt - a.draft.savedAt || a.context.localeCompare(b.context))
 }
 
 /**

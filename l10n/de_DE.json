@@ -3383,6 +3383,17 @@
     "About this feed" : "Über diesen Feed",
     "Available recommendations" : "Verfügbare Empfehlungen",
     "Posting activity" : "Beitragsaktivität",
-    "Hide {title}" : "{title} ausblenden"
+    "Hide {title}" : "{title} ausblenden",
+    "Drafts ({count})" : "Entwürfe ({count})",
+    "Drafts" : "Entwürfe",
+    "Drafts are saved in this browser for your account." : "Entwürfe werden in diesem Browser für dein Konto gespeichert.",
+    "No drafts are available." : "Es sind keine Entwürfe vorhanden.",
+    "Opening draft…" : "Entwurf wird geöffnet…",
+    "Reply draft" : "Antwortentwurf",
+    "Quote draft" : "Zitatentwurf",
+    "Re-draft" : "Erneuter Entwurf",
+    "Media draft" : "Medienentwurf",
+    "This draft is no longer available." : "Dieser Entwurf ist nicht mehr verfügbar.",
+    "The original post could not be loaded. Your draft has been kept. Try again later." : "Der ursprüngliche Beitrag konnte nicht geladen werden. Dein Entwurf bleibt erhalten. Versuche es später erneut."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

@@ -25,7 +25,7 @@ vi.mock('../../../src/components/Composer/Composer.vue', () => ({
 	__isKeepAlive: false,
 	default: {
 		name: 'Composer',
-		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'listenForIntents'],
+		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'],
 		emits: ['posted'],
 		template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />',
 	},
@@ -63,7 +63,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean, show: Boolean }, emits: ['close', 'update:show'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { name: 'Composer', data: () => ({ loading: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { name: 'Composer', data: () => ({ loading: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -1468,6 +1468,16 @@ describe('Navigation', () => {
 			expect(composer.props(prop)).toEqual(post)
 			expect(composer.props('listenForIntents')).toBe(false)
 			expect(wrapper.findAll('.composer-stub')).toHaveLength(1)
+		})
+
+		it('forwards a saved draft and its storage context to the common editor', async () => {
+			const wrapper = mountNavigation()
+			const draft = { text: 'Resume the revised post', media: [], poll: null, event: null }
+			eventBus.emit('composer-open', { draft, context: 'redraft.42' })
+			await flushPromises()
+			const composer = wrapper.findComponent({ name: 'Composer' })
+			expect(composer.props('initialDraft')).toEqual(draft)
+			expect(composer.props('initialDraftContext')).toBe('redraft.42')
 		})
 
 		it('passes picked files to the same editor', async () => {

@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getCurrentUser } from '@nextcloud/auth'
-import { clearDraft, loadDraft, saveDraft } from '../../../src/services/draft.js'
+import { clearDraft, listDrafts, loadDraft, saveDraft } from '../../../src/services/draft.js'
 
 vi.mock('@nextcloud/auth', () => ({ getCurrentUser: vi.fn(() => null) }))
 
@@ -306,6 +306,41 @@ describe('the composer draft', () => {
 			saveDraft({ text: 'no session here' })
 
 			expect(loadDraft()).toMatchObject({ text: 'no session here' })
+		})
+	})
+	describe('listing existing drafts', () => {
+		it('lists only this reader’s valid slots, newest first', () => {
+			signedInAs('alice')
+			saveDraft({ text: 'New post' })
+			saveDraft({ text: 'Answer' }, 'reply.42')
+			saveDraft({ text: 'Quoted post' }, 'quote.43')
+			saveDraft({ text: 'Deleted post draft' }, 'redraft.44')
+			signedInAs('bob')
+			saveDraft({ text: 'Other reader' })
+			signedInAs('alice')
+			expect(listDrafts().map(({ context }) => context).sort()).toEqual(['', 'quote.43', 'redraft.44', 'reply.42'])
+			expect(listDrafts().map(({ draft }) => draft.text)).not.toContain('Other reader')
+		})
+
+		it('prunes stale and malformed entries without skipping the next draft', () => {
+			signedInAs('alice')
+			localStorage.setItem('social.composer.draft.reply.1::alice', '{bad')
+			localStorage.setItem('social.composer.draft.quote.2::alice', JSON.stringify({ text: 'Expired', savedAt: Date.now() - 8 * 86400000 }))
+			saveDraft({ text: 'Current' }, 'reply.3')
+			expect(listDrafts().map(({ context }) => context)).toEqual(['reply.3'])
+		})
+
+		it('does not enumerate unowned legacy drafts while signed out', () => {
+			saveDraft({ text: 'Unscoped old draft' })
+			expect(listDrafts()).toEqual([])
+		})
+
+		it('rejects unsafe timestamps and ignores unknown contexts', () => {
+			signedInAs('alice')
+			localStorage.setItem('social.composer.draft::alice', '{"text":"Legacy","savedAt":1e999}')
+			saveDraft({ text: 'Unknown' }, 'reply.https://example.org')
+			expect(listDrafts()).toHaveLength(1)
+			expect(listDrafts()[0].draft.savedAt).toBe(0)
 		})
 	})
 })
