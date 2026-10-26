@@ -433,8 +433,9 @@ class PostStore {
 			$exists = $parsed === null ? null : $this->postExistsAtPds($parsed);
 			if ($exists === null) {
 				$this->logger->notice('Bluesky post absence could not be confirmed at its PDS', ['post' => $id]);
-
-				return null;
+				// Keep this one for the next sweep cycle, but do not let an
+				// unavailable PDS stall every later page of the deletion cursor.
+				continue;
 			}
 			if (!$exists && $this->delete($id)) {
 				$deleted++;

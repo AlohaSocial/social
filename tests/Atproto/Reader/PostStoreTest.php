@@ -571,6 +571,22 @@ class PostStoreTest extends TestCase {
 		$this->assertSame($id, $this->imported[0]->getObjectId());
 	}
 
+	public function testAnUnavailablePdsDoesNotHoldTheDeletionSweepOnOneOmittedPost(): void {
+		$uncertain = 'https://bsky.app/profile/' . self::DID . '/post/3kuncertain';
+		$present = 'https://bsky.app/profile/' . self::DID . '/post/3kpresent';
+		$this->known = [$uncertain, $present];
+		$this->actors->method('pdsEndpoint')->willReturn('https://pds.example');
+		$this->pds->expects($this->once())->method('call')->willThrowException(new AtprotoException('PDS unavailable'));
+		$presentView = ['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kpresent', 'likeCount' => 2];
+		$this->appView->method('query')->willReturn(['posts' => [$presentView]]);
+
+		$this->assertSame([
+			'posts' => [$present => $presentView],
+			'deleted' => 0,
+		], $this->store->postViews([$uncertain, $present], confirmMissing: true));
+		$this->assertSame([], $this->imported, 'an unconfirmed absence is retained');
+	}
+
 	public function testAnInteractiveCountReadDoesNotWaitForThePdsWhenAppViewOmitsAPost(): void {
 		$id = 'https://bsky.app/profile/' . self::DID . '/post/3kdelayed';
 		$this->known = [$id];
