@@ -94,6 +94,16 @@ class StreamCardsTest extends TestCase {
 		$this->assertSame('Two', $cards[md5(self::OTHER)]->getTitle());
 	}
 
+	public function testCardsCanBeReadByPreviouslyHashedStreamIds(): void {
+		$this->streamCardsRequest->save($this->card(self::POST, 'One'));
+		$this->streamCardsRequest->save($this->card(self::OTHER, 'Two'));
+
+		$cards = $this->streamCardsRequest->getByStreamPrims([md5(self::POST), md5(self::OTHER)]);
+
+		$this->assertSame('One', $cards[md5(self::POST)]->getTitle());
+		$this->assertSame('Two', $cards[md5(self::OTHER)]->getTitle());
+	}
+
 	public function testReadingNoPostsAsksNothing(): void {
 		$this->assertSame([], $this->streamCardsRequest->getByStreamIds([]));
 	}

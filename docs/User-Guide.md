@@ -342,9 +342,12 @@ Gancio administrator can customize this name, so use the federation address
 shown on that Gancio site's follow link when it differs. The Gancio instance
 must have federation enabled. Once the follow is accepted, new public events
 that Gancio delivers appear in Social like other followed ActivityPub posts,
-with a card for the event title, time and venue. Following does not backfill
-the instance's existing event catalogue; Social currently has no Gancio API
-sync for older events.
+with a card for the event title, time and venue. Following alone does not
+backfill the instance's existing event catalogue. To look for older events,
+open the followed Gancio account's profile in Social; Social reads its public
+ActivityPub outbox in bounded pages, including Gancio `Event` objects, as you
+open and page through that profile. This uses ActivityPub rather than Gancio's
+instance-specific API, and only imports entries the Gancio outbox exposes.
 
 On a signed-in Social timeline, choose **Add to Nextcloud Calendar** on an
 event card to import it directly into your first writable Nextcloud calendar.
@@ -354,9 +357,12 @@ the Calendar app is unavailable or no writable calendar exists, the card offers
 an `.ics` download instead. Public status pages offer the `.ics` download;
 direct import requires a signed-in Nextcloud session and a writable calendar.
 The calendar entry is a copy, not a live subscription. If Gancio later changes
-an event, Social updates the event in its timeline, but an entry already
-imported into Calendar stays as it was. To import the changed details, delete
-the old entry in Calendar first and then import the event again from Social.
+an event, Social updates the event in its timeline when it receives the
+ActivityPub update or reads the changed event from the followed account's
+outbox. Social also applies a Gancio `Delete` found in that outbox to the
+timeline copy. An entry already imported into Calendar stays as it was, even
+if the event is changed or deleted. To import changed details, delete the old
+entry in Calendar first and then import the event again from Social.
 
 ## Reading
 
