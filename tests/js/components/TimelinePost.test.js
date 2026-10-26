@@ -206,6 +206,28 @@ describe('TimelinePost', () => {
 	})
 
 	describe('event calendar import', () => {
+		it('keeps event details and calendar actions behind the content warning', async () => {
+			const { wrapper } = mountPost({ item: makeItem({
+				spoiler_text: 'Event warning',
+				event: { name: 'Hidden event title', location: 'Private event location', start_time: '2026-11-01T18:00:00Z' },
+			}) })
+			expect(wrapper.find('.post-event').exists()).toBe(false)
+			expect(wrapper.text()).not.toContain('Private event location')
+			await wrapper.findAll('button').find((button) => button.text() === 'Show more').trigger('click')
+			expect(wrapper.find('.post-event').exists()).toBe(true)
+			await wrapper.findAll('button').find((button) => button.text() === 'Show less').trigger('click')
+			expect(wrapper.find('.post-event').exists()).toBe(false)
+		})
+
+		it('does not leak event metadata through a keyword-filter cover', () => {
+			const { wrapper } = mountPost({ item: makeItem({
+				event: { name: 'Filtered event', start_time: '2026-11-01T18:00:00Z' },
+				filtered: [{ filter: { id: '12', title: 'Filter', context: ['home'], filter_action: 'warn' }, keyword_matches: ['event'], status_matches: [] }],
+			}) })
+			expect(wrapper.find('.post-event').exists()).toBe(false)
+			expect(wrapper.text()).not.toContain('Filtered event')
+		})
+
 		it('adds a Fediverse event to Nextcloud Calendar with one click', async () => {
 			axios.post.mockClear().mockResolvedValue({ data: { imported: true, calendar: 'Personal' } })
 			const { wrapper } = mountPost({

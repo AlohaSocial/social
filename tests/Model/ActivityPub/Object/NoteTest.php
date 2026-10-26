@@ -526,6 +526,7 @@ class NoteTest extends TestCase {
 		$source = $this->mastodonNote();
 		$source['type'] = 'Event';
 		$source['name'] = 'Community meetup';
+		$source['ical:status'] = 'CANCELLED';
 		$source['startTime'] = '2026-04-05T18:30:00+02:00';
 		$source['endTime'] = '2026-04-05T20:00:00+02:00';
 		$source['location'] = ['type' => 'Place', 'name' => 'Community hall'];
@@ -539,6 +540,7 @@ class NoteTest extends TestCase {
 			'start_time' => '2026-04-05T16:30:00Z',
 			'end_time' => '2026-04-05T18:00:00Z',
 			'location' => 'Community hall',
+			'status' => 'cancelled',
 		], $note->getDetails(Details::EVENT));
 		$this->assertStringContainsString('SUMMARY:Community meetup', ActivityPubEvent::calendar($note, 1_800_000_000) ?? '');
 	}
@@ -589,6 +591,7 @@ class NoteTest extends TestCase {
 		$note->setSubType('Event');
 		$note->setDetailArray(Details::EVENT, [
 			'name' => 'Community & meetup',
+			'status' => 'tentative',
 			'start_time' => '2026-04-05T18:30:00+02:00',
 			'end_time' => '2026-04-05T20:00:00+02:00',
 			'location' => 'Community & hall',
@@ -598,6 +601,7 @@ class NoteTest extends TestCase {
 		$published = $note->jsonSerialize();
 
 		$this->assertSame('Event', $published['type']);
+		$this->assertSame('TENTATIVE', $published['ical:status']);
 		$this->assertSame('Community & meetup', $published['name']);
 		$this->assertStringContainsString('<p>Join the neighborhood meetup</p>', $published['content']);
 		$this->assertStringContainsString('<strong>Community &amp; meetup</strong>', $published['content']);

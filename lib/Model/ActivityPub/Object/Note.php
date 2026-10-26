@@ -233,6 +233,9 @@ class Note extends Stream implements JsonSerializable {
 		}
 		$result['name'] = $event['name'];
 		$result['startTime'] = $event['start_time'];
+		if (isset($event['status'])) {
+			$result['ical:status'] = strtoupper($event['status']);
+		}
 		if ($event['end_time'] !== null) {
 			$result['endTime'] = $event['end_time'];
 		}

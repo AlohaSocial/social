@@ -59,7 +59,7 @@ trait TStatusParams {
 		return (is_array($poll) && $poll !== []) ? $poll : null;
 	}
 
-	/** @return array{name:string,start_time:?string,end_time:?string,location:string}|null */
+	/** @return array{name:string,start_time:?string,end_time:?string,location:string,status?:string}|null */
 	public function paramEvent(): ?array {
 		$event = $this->params['event'] ?? null;
 		if (!is_array($event)) {
@@ -71,6 +71,7 @@ trait TStatusParams {
 			'startTime' => $event['start_time'] ?? null,
 			'endTime' => $event['end_time'] ?? null,
 			'location' => $event['location'] ?? '',
+			'ical:status' => $event['status'] ?? null,
 		]);
 	}
 

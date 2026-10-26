@@ -21,7 +21,7 @@ class Status implements \JsonSerializable {
 	private string $spoilerText = '';
 	private array $mediaIds = [];
 	private ?array $poll = null;
-	/** @var array{name:string,start_time:?string,end_time:?string,location:string}|null */
+	/** @var array{name:string,start_time:?string,end_time:?string,location:string,status?:string}|null */
 	private ?array $event = null;
 	private int $inReplyToId = 0;
 	/**
@@ -256,6 +256,7 @@ class Status implements \JsonSerializable {
 		$this->setEvent($event === [] ? null : ActivityPubEvent::metadata([
 			'name' => $event['name'] ?? '',
 			'startTime' => $event['start_time'] ?? null,
+			'ical:status' => $event['status'] ?? null,
 			'endTime' => $event['end_time'] ?? null,
 			'location' => $event['location'] ?? '',
 		]));
@@ -283,14 +284,14 @@ class Status implements \JsonSerializable {
 		return $this->poll;
 	}
 
-	/** @param array{name:string,start_time:?string,end_time:?string,location:string}|null $event */
+	/** @param array{name:string,start_time:?string,end_time:?string,location:string,status?:string}|null $event */
 	public function setEvent(?array $event): self {
 		$this->event = $event;
 
 		return $this;
 	}
 
-	/** @return array{name:string,start_time:?string,end_time:?string,location:string}|null */
+	/** @return array{name:string,start_time:?string,end_time:?string,location:string,status?:string}|null */
 	public function getEvent(): ?array {
 		return $this->event;
 	}

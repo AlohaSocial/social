@@ -166,6 +166,7 @@ class NavigationController extends Controller {
 
 		$serverData = [
 			'public' => false,
+			'timeZone' => $this->config->getUserValue($this->userId, 'core', 'timezone', $this->config->getSystemValueString('default_timezone', 'UTC')),
 			'firstrun' => false,
 			'introductionDismissed' => $this->config->getUserValue(
 				$this->userId, Application::APP_ID, 'introduction_dismissed', '0'
