@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Reader;
 
 use OCA\Social\AP;
+use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\Details;
 
@@ -99,6 +100,7 @@ class ActorMapper {
 			'indexed_at' => (string)($profile['indexedAt'] ?? ''),
 		]);
 		$person->setDetailArray(Details::BLUESKY, [
+			'links' => ProfileLinks::views($profile['links'] ?? []),
 			'handle' => $handle,
 			'did' => $did,
 			'url' => BlueskyIds::profileUrl($handle !== '' ? $handle : $did),

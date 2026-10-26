@@ -601,8 +601,41 @@ class FollowService {
 	 *
 	 * @psalm-return array<Follow>
 	 */
-	public function getFollowing(Person $actor): array {
-		return $this->followsRequest->getFollowingByActorId($actor->getId());
+	public function getFollowing(Person $actor, int $limit = 0, int $offset = 0): array {
+		return $this->followsRequest->getFollowingByActorId($actor->getId(), $limit, $offset);
+	}
+
+	/**
+	 * Read one keyset-paginated page of the accounts an actor follows.
+	 *
+	 * @return Follow[]
+	 */
+	public function getFollowingAfter(Person $actor, int $limit, string $cursor = ''): array {
+		return $this->followsRequest->getFollowingByActorId($actor->getId(), $limit, 0, $cursor);
+	}
+
+	/**
+	 * Which authors from one page the reader follows, in one bounded query.
+	 *
+	 * @param string[] $actorIds
+	 * @return string[]
+	 */
+	public function followingAmong(Person $actor, array $actorIds): array {
+		$actorIds = array_values(array_unique(array_filter($actorIds, static fn (string $id): bool => $id !== '' && $id !== $actor->getId())));
+		if ($actorIds === []) {
+			return [];
+		}
+
+		$targets = array_fill_keys($actorIds, true);
+		$following = [];
+		foreach ($this->followsRequest->getFollows(array_merge([$actor->getId()], $actorIds)) as $follow) {
+			$target = $follow->getObjectId();
+			if ($follow->getActorId() === $actor->getId() && $follow->isAccepted() && isset($targets[$target])) {
+				$following[$target] = true;
+			}
+		}
+
+		return array_keys($following);
 	}
 
 	/**

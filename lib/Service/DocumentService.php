@@ -20,11 +20,14 @@ use OCA\Social\Exceptions\CacheContentException;
 use OCA\Social\Exceptions\CacheContentMimeTypeException;
 use OCA\Social\Exceptions\CacheContentSizeException;
 use OCA\Social\Exceptions\CacheDocumentDoesNotExistException;
+use OCA\Social\Exceptions\InvalidActionException;
 use OCA\Social\Exceptions\ItemAlreadyExistsException;
 use OCA\Social\Exceptions\ItemUnknownException;
+use OCA\Social\Exceptions\RefusalException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Exceptions\UrlCloudException;
+use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
@@ -750,6 +753,43 @@ class DocumentService {
 	}
 
 	/**
+	 * Resolves an edited post's complete attachment list from the author's own uploads.
+	 * The requested order is preserved; an unknown or other account's id is refused
+	 * rather than silently publishing a different list from the one the client chose.
+	 *
+	 * @param list<int> $mediaIds
+	 * @return MediaAttachment[]
+	 * @throws RefusalException
+	 */
+	public function replaceMediaAttachments(array $mediaIds, string $account, bool $public): array {
+		$mediaIds = array_values(array_unique(array_filter(array_map('intval', $mediaIds), static fn (int $id): bool => $id > 0)));
+		if ($mediaIds === []) {
+			return [];
+		}
+
+		$documents = $this->getMediaFromArray($mediaIds, $account);
+		$byId = [];
+		foreach ($documents as $document) {
+			$byId[(int)$document->getNid()] = $document;
+		}
+		if (count($byId) !== count($mediaIds)) {
+			throw new RefusalException('One or more media attachments are unavailable', 'media-ids-invalid');
+		}
+
+		$attachments = [];
+		foreach ($mediaIds as $id) {
+			$document = $byId[$id];
+			if ($document->isPublic() !== $public) {
+				$document->setPublic($public);
+				$this->cacheDocumentsRequest->update($document);
+			}
+			$attachments[] = $document->convertToMediaAttachment($this->urlGenerator);
+		}
+
+		return $attachments;
+	}
+
+	/**
 	 * One cached document by its ActivityPub id.
 	 *
 	 * @throws CacheDocumentDoesNotExistException
@@ -817,6 +857,64 @@ class DocumentService {
 			static fn (MediaAttachment $attachment): MediaAttachment => $rebuilt[$attachment->getId()] ?? $attachment,
 			$attachments
 		);
+	}
+
+	/**
+	 * Resolve an explicitly supplied attachment list for a post edit.
+	 *
+	 * Unlike `media_attributes`, which can only update attachments already on
+	 * the post, `media_ids` replaces the full list. Only uploads owned by the
+	 * author can be attached, and their order follows the request.
+	 *
+	 * @param list<int|string> $mediaIds
+	 * @return MediaAttachment[]
+	 * @throws InvalidActionException
+	 */
+	public function mediaAttachmentsForEdit(array $mediaIds, string $account, string $visibility): array {
+		if (count($mediaIds) > Stream::MAX_ATTACHMENTS) {
+			throw new InvalidActionException('Too many media attachments');
+		}
+
+		$ids = [];
+		foreach ($mediaIds as $id) {
+			$id = (string)$id;
+			if (!ctype_digit($id) || Nid::compare($id, '0') < 1) {
+				throw new InvalidActionException('Invalid media attachment');
+			}
+			$id = Nid::normalize($id);
+			if (isset($ids[$id])) {
+				throw new InvalidActionException('Invalid media attachment');
+			}
+			$ids[$id] = true;
+		}
+		if ($ids === []) {
+			return [];
+		}
+
+		$documents = $this->getMediaFromArray(array_keys($ids), $account);
+		$byId = [];
+		foreach ($documents as $document) {
+			$id = (string)$document->getNid();
+			if ($document->isLocalUpload() && $document->getAccount() === $account && isset($ids[$id])) {
+				$byId[$id] = $document;
+			}
+		}
+		if (count($byId) !== count($ids)) {
+			throw new InvalidActionException('One or more media attachments are unavailable');
+		}
+
+		$public = in_array($visibility, [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true);
+		$attachments = [];
+		foreach (array_keys($ids) as $id) {
+			$document = $byId[$id];
+			if ($document->isPublic() !== $public) {
+				$document->setPublic($public);
+				$this->cacheDocumentsRequest->update($document);
+			}
+			$attachments[] = $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB);
+		}
+
+		return $attachments;
 	}
 
 	/**

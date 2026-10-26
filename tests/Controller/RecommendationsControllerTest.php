@@ -86,7 +86,18 @@ class RecommendationsControllerTest extends TestCase {
 		$response = $this->controller()->preferences();
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
-		$this->assertSame(['revision' => 2, 'generation' => 1, 'learning_mode' => 'off', 'learning' => false], $response->getData());
+		$this->assertSame(['revision' => 2, 'generation' => 1, 'learning_mode' => 'off', 'learning' => false, 'learning_active' => false], $response->getData());
+	}
+
+	public function testGlobalLearningPauseIsReflectedInClientLearningAvailability(): void {
+		$this->service->method('learningPaused')->willReturn(true);
+		$this->service->method('get')->willReturn(['revision' => 2, 'generation' => 1, 'learning_mode' => 'on', 'learning' => true]);
+
+		$response = $this->controller()->preferences();
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertTrue($response->getData()['learning']);
+		$this->assertFalse($response->getData()['learning_active']);
 	}
 
 	public function testReaderCannotSetOrRequestAnIndividualTopic(): void {
@@ -104,6 +115,7 @@ class RecommendationsControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('on', $response->getData()['learning_mode']);
+		$this->assertTrue($response->getData()['learning_active']);
 	}
 
 	public function testSignalEventsAreBoundToTheAuthenticatedViewer(): void {
@@ -209,6 +221,6 @@ class RecommendationsControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame([], $response->getData()['feedback']);
-		$this->assertSame(['revision' => 1, 'generation' => 0, 'learning_mode' => 'off', 'learning' => false], $response->getData()['preferences']);
+		$this->assertSame(['revision' => 1, 'generation' => 0, 'learning_mode' => 'off', 'learning' => false, 'learning_active' => false], $response->getData()['preferences']);
 	}
 }

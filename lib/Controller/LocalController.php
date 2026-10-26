@@ -104,6 +104,7 @@ class LocalController extends Controller {
 		private IUserSession $userSession,
 		private IdentityService $atprotoIdentities,
 		private ?BlueskySearch $blueskySearch = null,
+		private ?\OCA\Social\Atproto\Profile\ProfileLinks $profileLinks = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->userId = $userId;
@@ -986,7 +987,12 @@ class LocalController extends Controller {
 		try {
 			$identity = $this->atprotoIdentities->getByActorId($actor->getId());
 			if ($identity->state !== Identity::STATE_TOMBSTONED) {
-				$actor->setDetailArray(Details::BLUESKY, ['handle' => $identity->handle, 'did' => $identity->did, 'url' => 'https://bsky.app/profile/' . $identity->handle, 'native' => false, 'active' => $identity->isActive()]);
+				$actor->setDetailArray(Details::BLUESKY, [
+					'handle' => $identity->handle, 'did' => $identity->did,
+					'url' => 'https://bsky.app/profile/' . $identity->handle,
+					'native' => false, 'active' => $identity->isActive(),
+					'links' => $this->profileLinks?->forIdentity($identity) ?? [],
+				]);
 			}
 		} catch (AtprotoIdentityNotFoundException) {
 		} catch (Throwable $e) {

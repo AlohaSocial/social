@@ -66,6 +66,24 @@ class DocumentInterfaceTest extends ActivityPubTestCase {
 		$this->cacheDocumentsRequest->method('getByUrlAndParent')->willThrowException(new CacheDocumentDoesNotExistException());
 	}
 
+	public function testOutboxImportStoresMediaForTheWorkerWithoutDownloadingIt(): void {
+		$this->nothingCached();
+		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');
+		$document = new Document($note);
+		$document->setId(self::DOCUMENT);
+		$document->setUrl(self::REMOTE_URL . '/media/1.png');
+		$document->setMediaType('image/png');
+		$document->setDescription('A photograph');
+		$this->cacheDocumentService->expects($this->never())->method('saveRemoteFileToCache');
+		$this->cacheDocumentsRequest->expects($this->once())->method('save')->with($document);
+
+		$this->handler->save($document, true);
+
+		$this->assertSame($note->getId(), $document->getParentId());
+		$this->assertSame('', $document->getLocalCopy());
+		$this->assertFalse($document->isStreamed());
+	}
+
 	public function testGeneratedAttachmentIdReusesTheCachedRowForTheSamePost(): void {
 		$this->cacheDocumentsRequest->method('getById')->willThrowException(new CacheDocumentDoesNotExistException());
 		$note = $this->note(self::REMOTE_URL . '/notes/1', self::REMOTE_URL . '/users/bob');

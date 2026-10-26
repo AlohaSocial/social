@@ -57,8 +57,6 @@ class PostMapper {
 	private const STARTER_PACK_VIEW = 'app.bsky.graph.defs#starterPackViewBasic';
 	private const REPOST = 'app.bsky.feed.defs#reasonRepost';
 
-	/** labels that make the pictures sensitive and warn when the post did not */
-	private const ADULT = ['porn', 'sexual', 'nudity', 'graphic-media', 'nsfl', 'gore'];
 	/** labels that hide the post altogether */
 	private const HIDE = ['!hide', '!takedown'];
 	/**
@@ -76,8 +74,8 @@ class PostMapper {
 	 *
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
-	public function create(array $post, string $pds = ''): ?array {
-		$note = $this->note($post, $pds);
+	public function create(array $post, string $pds = '', bool $includeHidden = false): ?array {
+		$note = $this->note($post, $pds, $includeHidden);
 		if ($note === null) {
 			return null;
 		}
@@ -129,8 +127,16 @@ class PostMapper {
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
 	public static function isLoggedInOnly(array $post): bool {
-		return in_array(self::NO_UNAUTHENTICATED, ActorMapper::labelValues($post['labels'] ?? []), true)
+		return in_array(self::NO_UNAUTHENTICATED, [
+			...ActorMapper::labelValues($post['labels'] ?? []),
+			...self::selfLabelValues(is_array($post['record'] ?? null) ? $post['record'] : []),
+		], true)
 			|| in_array(self::NO_UNAUTHENTICATED, ActorMapper::labelValues($post['author']['labels'] ?? []), true);
+	}
+
+	/** Whether an AppView label currently hides this post. */
+	public static function isHidden(array $post): bool {
+		return array_intersect(self::HIDE, ActorMapper::labelValues($post['labels'] ?? [])) !== [];
 	}
 
 	/**
@@ -147,9 +153,9 @@ class PostMapper {
 	}
 
 	/**
-	 * The `Note` for a post view, or null when a label hides it.
+	 * The `Note` for a post view, or null when a label hides a new import.
 	 */
-	public function note(array $post, string $pds = ''): ?array {
+	public function note(array $post, string $pds = '', bool $includeHidden = false): ?array {
 		$uri = (string)($post['uri'] ?? '');
 		$id = BlueskyIds::postIdOfUri($uri);
 		$did = (string)($post['author']['did'] ?? '');
@@ -159,12 +165,16 @@ class PostMapper {
 			return null;
 		}
 		$labels = ActorMapper::labelValues($post['labels'] ?? []);
-		if (array_intersect($labels, self::HIDE) !== []) {
+		if (!$includeHidden && self::isHidden($post)) {
 			return null;
 		}
+		$selfLabels = self::selfLabelValues($record);
+		$contentLabels = array_values(array_unique([...$labels, ...$selfLabels]));
 		$rkey = BlueskyIds::parsePostId($id)['rkey'] ?? '';
 		$text = (string)($record['text'] ?? '');
-		$content = FacetRenderer::html($text, $record['facets'] ?? []);
+		$facets = $record['facets'] ?? [];
+		[$text, $facets, $inlineWarning] = self::removeInlineWarning($text, $facets, in_array('!warn', $contentLabels, true));
+		$content = FacetRenderer::html($text, $facets);
 		$viewEmbed = is_array($post['embed'] ?? null) ? $post['embed'] : [];
 		$embed = self::hasUsableEmbedView($viewEmbed, $did)
 			? $viewEmbed
@@ -179,8 +189,7 @@ class PostMapper {
 			$content .= '<p><a href="' . self::escape($card['url']) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($card['title']) . '</a></p>';
 		}
 
-		$warning = $this->warning($labels);
-		$adult = array_intersect($labels, self::ADULT) !== [];
+		$warning = self::warning($contentLabels, $inlineWarning);
 		$published = self::datetime((string)($record['createdAt'] ?? ''), (string)($post['indexedAt'] ?? ''));
 		$streamedBlobs = [];
 		foreach ($attachments as $attachment) {
@@ -188,6 +197,7 @@ class PostMapper {
 				$streamedBlobs[] = $attachment['url'];
 			}
 		}
+		$recordEmbed = self::nonPostRecordEmbed($embed);
 
 		$note = [
 			'id' => $id,
@@ -198,8 +208,8 @@ class PostMapper {
 		] + self::audience(BlueskyIds::followersId($did), self::isLoggedInOnly($post)) + [
 			'content' => $content,
 			'summary' => $warning,
-			'sensitive' => $adult || $warning !== '',
-			'tag' => $this->tags($text, $record['facets'] ?? [], (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
+			'sensitive' => $warning !== '',
+			'tag' => $this->tags($text, $facets, (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
 			'attachment' => $attachments,
 			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
 			'_atproto' => [
@@ -216,7 +226,13 @@ class PostMapper {
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
-			] + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
+			] + ($selfLabels === [] ? [] : [Details::ATPROTO_SELF_LABELS => $selfLabels]) + ($recordEmbed === null ? [] : [
+				// recordWithMedia can embed a feed, list or starter pack beside a
+				// link card. The social stream stores the card separately, so keep
+				// the original StrongRef alongside it for the publisher to rebuild
+				// the same combined embed instead of silently dropping the record.
+				Details::ATPROTO_RECORD_EMBED => $recordEmbed,
+			]) + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
 				// the quoted author detached this quote, so it is withdrawn
 				// here too (PostStore)
 				'quote_detached' => true,
@@ -690,7 +706,11 @@ class PostMapper {
 				'provider' => parse_url($url, PHP_URL_HOST) ?: '',
 			];
 		}
-		if (($embed['$type'] ?? '') === self::RECORD_WITH_MEDIA) {
+		if (in_array(($embed['$type'] ?? ''), [self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
+			$media = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+			if (in_array(($media['$type'] ?? ''), [self::EXTERNAL, self::RECORD_EXTERNAL], true)) {
+				return self::cardOf($media, $authorDid);
+			}
 			$embed = ['$type' => self::RECORD, 'record' => $embed['record']['record'] ?? null];
 		}
 		$view = ($embed['$type'] ?? '') === self::RECORD && is_array($embed['record'] ?? null) ? $embed['record'] : [];
@@ -848,17 +868,83 @@ class PostMapper {
 	 * The content warning the labels ask for: the post's own `!warn` with
 	 * no text of its own, or the service's label named.
 	 */
-	private function warning(array $labels): string {
+	public static function warning(array $labels, string $inlineWarning = ''): string {
 		$named = [];
 		foreach ($labels as $label) {
 			if ($label === '!warn') {
-				$named[] = 'Content warning';
+				$named[] = $inlineWarning !== '' ? $inlineWarning : 'Content warning';
 			} elseif (!str_starts_with($label, '!')) {
-				$named[] = ucfirst(str_replace('-', ' ', $label));
+				$named[] = match ($label) {
+					'porn' => 'Pornography',
+					'sexual' => 'Sexual content',
+					'nudity' => 'Nudity',
+					'graphic-media' => 'Graphic media',
+					'nsfl' => 'NSFL',
+					default => ucfirst(str_replace('-', ' ', $label)),
+				};
 			}
 		}
 
 		return implode(', ', array_unique($named));
+	}
+
+	/** @return list<string> self-label values carried by the source post record */
+	private static function selfLabelValues(array $record): array {
+		$container = $record['labels'] ?? null;
+		if (!is_array($container)
+			|| ($container['$type'] ?? '') !== 'com.atproto.label.defs#selfLabels'
+			|| !is_array($container['values'] ?? null)
+			|| !array_is_list($container['values'])) {
+			return [];
+		}
+
+		$labels = [];
+		foreach (array_slice($container['values'], 0, 10) as $label) {
+			$value = is_array($label) && is_string($label['val'] ?? null) ? trim($label['val']) : '';
+			if ($value !== '' && mb_strlen($value) <= 128) {
+				$labels[] = $value;
+			}
+		}
+
+		return array_values(array_unique($labels));
+	}
+
+	/**
+	 * Social writes the warning alongside `!warn` in the post text, because
+	 * ATProto labels carry no warning text of their own. Restore that warning
+	 * as the ActivityPub summary and keep the prefix out of the visible body.
+	 * Facets use UTF-8 byte offsets, so shift the remaining ones with the text.
+	 *
+	 * @return array{string, mixed, string}
+	 */
+	private static function removeInlineWarning(string $text, mixed $facets, bool $warned): array {
+		if (!$warned || preg_match('/^(?:content warning|inhaltswarnung|inhaltshinweis|cw):[ \t]*([^\r\n]+)\R\R/iu', $text, $match) !== 1) {
+			return [$text, $facets, ''];
+		}
+		$warning = trim($match[1]);
+		if ($warning === '') {
+			return [$text, $facets, ''];
+		}
+
+		$prefixLength = strlen($match[0]);
+		$body = substr($text, $prefixLength);
+		$adjustedFacets = [];
+		foreach (is_array($facets) ? $facets : [] as $facet) {
+			if (!is_array($facet) || !is_array($facet['index'] ?? null)) {
+				$adjustedFacets[] = $facet;
+				continue;
+			}
+			$start = $facet['index']['byteStart'] ?? null;
+			$end = $facet['index']['byteEnd'] ?? null;
+			if (!is_int($start) || !is_int($end) || $start < $prefixLength) {
+				continue;
+			}
+			$facet['index']['byteStart'] = $start - $prefixLength;
+			$facet['index']['byteEnd'] = $end - $prefixLength;
+			$adjustedFacets[] = $facet;
+		}
+
+		return [$body, $adjustedFacets, $warning];
 	}
 
 	/**
@@ -884,6 +970,38 @@ class PostMapper {
 		}
 
 		return ['uri' => $value['uri'], 'cid' => $value['cid']];
+	}
+
+	/**
+	 * A feed, list or starter-pack StrongRef the post embeds, kept for a
+	 * lossless publish roundtrip. Ordinary post quotes use the quote relation.
+	 * AppView wraps the reference in one or two `record` view objects; the raw
+	 * record has the StrongRef directly on the first nested record.
+	 *
+	 * @return array{uri: string, cid: string}|null
+	 */
+	private static function nonPostRecordEmbed(array $embed): ?array {
+		if (!in_array($embed['$type'] ?? '', [self::RECORD, self::RECORD_RECORD, self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
+			return null;
+		}
+
+		$record = $embed['record'] ?? null;
+		for ($depth = 0; $depth < 3 && is_array($record); $depth++) {
+			$reference = self::strongRef($record);
+			if ($reference !== null) {
+				$parsed = Syntax::parseAtUri($reference['uri']);
+				if (($parsed['collection'] ?? '') !== ''
+					&& ($parsed['rkey'] ?? '') !== ''
+					&& $parsed['collection'] !== 'app.bsky.feed.post'
+					&& Cid::isValid($reference['cid'])) {
+					return $reference;
+				}
+				return null;
+			}
+			$record = $record['record'] ?? null;
+		}
+
+		return null;
 	}
 
 	/** An ISO instant for the import, from the record's time or the index time. */

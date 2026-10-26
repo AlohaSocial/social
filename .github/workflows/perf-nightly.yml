@@ -99,7 +99,7 @@ jobs:
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/${{ env.APP_NAME }}
-        run: composer i --no-dev
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Set up Nextcloud
         run: |

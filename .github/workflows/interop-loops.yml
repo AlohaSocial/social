@@ -141,7 +141,9 @@ jobs:
         # without the dev ones, as the app store ships it: the app's autoloader
         # is prepended to the server's, so a dev-only package the server also
         # carries (symfony/console) is served in place of the server's own
-        run: composer i --no-dev
+        # GitHub archive downloads can fail during Composer installs; use the
+        # shared bounded retry and VCS-source fallback.
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Give both servers a name, an address and a certificate
         # Loops fetches another server's webfinger, actor and media over https
@@ -239,7 +241,7 @@ jobs:
           LOOPS_API_RATE_LIMITS_ENABLED=false
           ENV
           if [ ! -f vendor/autoload.php ]; then
-            composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
+            bash ../apps/social/.github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist --optimize-autoloader
           else
             composer dump-autoload --optimize --no-interaction
           fi
@@ -393,7 +395,7 @@ jobs:
         # the suite needs phpunit; installed only now, once the server is up
         # and the app enabled with what ships
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
           status=0
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter LoopsDeliveryTest || status=1
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter LoopsInboundTest || status=1

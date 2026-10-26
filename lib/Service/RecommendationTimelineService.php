@@ -23,7 +23,7 @@ class RecommendationTimelineService {
 	private const MAX_REFRESH_TOPICS = 2;
 	private const LOOKBACK_DAYS = RecommendationFreshness::LOOKBACK_DAYS;
 	private const MIN_COVERAGE = 15;
-	private const MODE = 'for-you-v12-php-security-alias';
+	private const MODE = 'for-you-v18-story-concentration';
 
 	public function __construct(
 		private RecommendationPreferenceService $preferences,
@@ -41,6 +41,7 @@ class RecommendationTimelineService {
 		private RecommendationSocialGraphCandidates $socialGraphCandidates,
 		private RecommendationSavedFeedCandidates $savedFeedCandidates,
 		private RemoteFetchQueue $remoteFetchQueue,
+		private LinkPreviewService $linkPreviews,
 		private ITimeFactory $timeFactory,
 	) {
 	}
@@ -100,6 +101,10 @@ class RecommendationTimelineService {
 		$socialGraphBudget = min($socialGraphBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget);
 		$savedFeedBudget = min(RecommendationSavedFeedCandidates::MAX_CANDIDATES, max(1, intdiv($candidateBudget, 10)));
 		$savedFeedBudget = min($savedFeedBudget, $candidateBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget);
+		if ($candidateTopics === []) {
+			$unusedTopicBudget = max(0, $candidateBudget - $automaticBudget - $followBudget - $explorationBudget - $trendBudget - $socialGraphBudget - $savedFeedBudget);
+			$explorationBudget += $unusedTopicBudget;
+		}
 		$hiddenNids = array_values(array_unique(array_merge(
 			$this->interests->hiddenFor($viewer),
 			$feedback['hidden_nids']
@@ -162,6 +167,10 @@ class RecommendationTimelineService {
 				$posts[$nid] = $automaticPost;
 			}
 		}
+		// Story fingerprints need the article title too: many link posts have
+		// only a generic caption, while their locally fetched card names the
+		// incident. Attach cards in one query before extracting any features.
+		$this->linkPreviews->attachCards(array_values($posts));
 		$automaticSignals = $this->interests->isEnabled()
 			? $this->legacyFeed->recommendationSignals($viewer, array_values($posts))
 			: [];
@@ -310,6 +319,7 @@ class RecommendationTimelineService {
 		$sessionId = $page['session_id'];
 		for ($scan = 0; $scan < 5; $scan++) {
 			$posts = $this->streams->getVisibleByNids($page['nids']);
+			$this->linkPreviews->attachCards(array_values($posts));
 			$followedAuthors = $this->followFeatures->followedAuthors($viewer, array_values($posts));
 			$exposurePenalties = $this->behavioralProfile->exposurePenalties($viewer, array_values($posts));
 			$automaticSignals = $this->interests->isEnabled()
@@ -333,7 +343,8 @@ class RecommendationTimelineService {
 			if (count($items) >= $limit || $nextCursor === null) {
 				break;
 			}
-			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $limit);
+			$remaining = $limit - count($items);
+			$page = $this->snapshots->nextPage($nextCursor, $viewer->getUserId(), self::MODE, $media, $state['revision'], $state['generation'], $now, $remaining);
 			if ($page === null) {
 				$nextCursor = null;
 				break;
@@ -342,7 +353,7 @@ class RecommendationTimelineService {
 		}
 
 		return [
-			'items' => array_slice($items, 0, $limit),
+			'items' => $items,
 			'session_id' => $sessionId,
 			'next_cursor' => $nextCursor,
 			'mode' => 'RANKED',

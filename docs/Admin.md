@@ -1099,7 +1099,8 @@ the moderation routes accept.
 | `atproto_crawl_accepted` | `0` | Unix time of the latest relay crawl request accepted for this PDS. Bookkeeping used by the automatic retry schedule; do not edit it by hand. |
 | `atproto_crawl_attempted` | `0` | Unix time of the latest automatic relay crawl attempt, including attempts no relay accepted. Bookkeeping used to avoid requesting crawls too often; do not edit it by hand. |
 | `atproto_crawl_results` | `[]` | JSON result of the latest automatic relay crawl request, keyed by relay, or an error when the request failed. Shown in the Bluesky status diagnostics; do not edit it by hand. |
-| `atproto_delete_cursor` | `0` | Where the Bluesky deletion sweep got to: the newest post id it has checked against the AppView in its pass over the last week's Bluesky posts, 25 at a time; `0` again when it reaches the end and starts over. Bookkeeping, not a setting. |
+| `atproto_delete_cursor` | `0` | Where the Bluesky deletion sweep got to in its bounded pass over stored Bluesky posts, 25 at a time. The pass restarts at the end so posts with temporarily unavailable PDSes are retried. Bookkeeping, not a setting. |
+| `atproto_delete_max_nid` | `0` | Highest post id captured at the start of the current deletion-sweep pass. New posts wait for the next pass, so a growing timeline cannot keep the sweep's end moving forward. Bookkeeping, not a setting. |
 | `atproto_detach_cursor` | `0` | The same for the sweep over the last month's local quotes of Bluesky posts, which marks a quote the quoted author detached as revoked here too. |
 | `stream_archived_filled` | `0` | Set to `1` by `Version1000Date20261013100500` once every post carries a value in `social_stream.archived`. Until then every list of posts also admits a post whose column is still empty, an `OR` the database plans badly. |
 | `stream_media_kind_filled` | `0` | Set to `1` by `Version1000Date20261013100500` once no post is left without a `media_kind`. Until then the Photos, Videos and media filters also judge a post by its attachments, and the narrowed timelines use the slower joined query. |
@@ -1128,7 +1129,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `video_ladder` | `0` | Whether each stored MP4 is **also** written at a ladder of smaller sizes, as HLS, so a player can pick the one that fits the connection. A different question from `video_transcode`, which is about a video being playable at all elsewhere; this is about it being watchable on a phone on a train. Off by default, because it is several ffmpeg encodes per video on this server. Each rung is one file — `-hls_flags single_file` writes the rendition as a fragmented MP4 and the playlist addresses its segments as byte ranges — so a forty-minute video is three files rather than a thousand, which is also the shape PeerTube publishes. The original is kept and is what a player without HLS falls back to. Needs ffmpeg **and** ffprobe. One video every half-hour, or `occ social:media:ladder` to work through a backlog now. Built from `video/mp4` only: a `.mov` goes through the transcoder first. |
 | `video_ladder_heights` | `360,720,1080` | Which heights, comma-separated, 144–2160. Heights at or above a video's own are skipped rather than upscaled, and the video's own height is always a rung, so the best rung is never worse than the file beside it. A list with nothing usable in it is refused by the admin card rather than silently replaced with the default. Only consulted when `video_ladder` is on. |
 | `search_window_days` | `365` | How far back a content search scans while it cannot use its word index: before `Cron\SearchIndex` has indexed the posts stored before the upgrade (until `search_index_ready` is `1`), for a query that is only the beginning of a word, and for one made only of the English and German function words the index leaves out (`the`, `and`, `der`, `und` …). Such a search is a range rather than one indexed word, and unbounded it reads every post the instance has ever stored; a year covers what anybody is looking for. `0` searches everything, which an instance small enough can afford to say. A search for whole words reads the index and is not bounded by this. |
-| `rec_v4_enabled` | `0` | Whether the automatically ranked For You timeline and its separate activity-learning controls are available. Off by default; the administrator can change it in Social settings. |
+| `rec_v4_enabled` | `0` | Whether the automatically ranked For You timeline and its separate activity-learning controls are available. Off by default; the administrator can change it in Social settings. Changing this switch invalidates pending learning events from open pages. |
 | `rec_remote_discovery_paused` | `0` | Stops recommendation-driven remote Fediverse and Bluesky discovery requests while preserving already cached candidates. |
 | `rec_learning_paused` | `0` | Stops instance-wide recommendation behavior learning, including signals from accounts that opted in. |
 | `rec_force_legacy_feed` | `0` | Temporarily serves the established hashtag-interest feed instead of the ranked For You feed. |
@@ -1180,7 +1181,7 @@ settings page, which validates the ranges given here; every one can be set with
 | `review_first_post` | `0` | Hold the first post of an account that has published nothing here yet, for a moderator to see before it goes out. Off by default; turn it on where accounts are handed to strangers. An administrator's own posts are never held — a moderator waiting on themselves is a circle, and on a new instance the first post is theirs. |
 | `review_posts` | `1` | How many posts an account must have had published before its posts stop being held. `1` is first-post review as it has always meant. An account graduates by having that many posts approved — a person having looked at it that many times, which is the only measure of trust here that is not a guess. Capped at 20. |
 | `autospam` | `1` | Hold a post that trips one of the spam rules — more than five links in a short post, or more than five mentions from an account nobody follows and that follows nobody. Nothing is ever refused by the rules, only shown to a person. |
-| `ai_tags` | *(empty)* | Hashtags that label a post as **made with AI**, comma-separated, added to the built-in list (`#ai`, `#aiart`, `#aigenerated`, `#aigeneratedart`, `#aiimage`, `#aiphoto`, `#aivideo`, `#genai`, `#generativeai`, `#madewithai`, `#midjourney`, `#stablediffusion`, `#dalle`, `#dalle3`, `#sora`, `#fluxai`, `#comfyui`). Compared without the `#` and without regard to case; a built-in tag cannot be removed. A reader who turns on **Hide posts made with AI** under Settings → Blocking is shown no post carrying one of these tags, and no post whose picture states machine-generation provenance in its metadata (IPTC `DigitalSourceType` of `trainedAlgorithmicMedia` or `compositeWithTrainedAlgorithmicMedia`, in XMP or inside a C2PA manifest — read when the picture is stored, before the metadata is stripped). **What this can and cannot do:** it recognises *labels* — a hashtag the author or their tool added, a provenance mark a generator wrote into the file — and nothing else. A generated post that carries neither is not recognised; a real photograph tagged `#ai` by its author is. There is no classifier here and there should not be one. |
+| `ai_tags` | *(empty)* | Hashtags that label a post as **made with AI**, comma-separated, added to the built-in list (`#aigenerated`, `#aigeneratedart`, `#generatedbyai`, `#genai`, `#generativeai`, `#madewithai`, `#midjourney`, `#stablediffusion`, `#dalle`, `#dalle3`, `#sora`, `#fluxai`, `#comfyui`). Compared without the `#` and without regard to case; a built-in tag cannot be removed. The generic topic tag `#AI` is always ignored, even if listed here; tags such as `#aiart`, `#aiimage`, `#aiphoto` and `#aivideo` are not built in but an administrator can add them. A reader who turns on **Hide posts made with AI** under Settings → Blocking is shown no post carrying one of these tags, and no post whose picture states machine-generation provenance in its metadata (IPTC `DigitalSourceType` of `trainedAlgorithmicMedia` or `compositeWithTrainedAlgorithmicMedia`, in XMP or inside a C2PA manifest — read when the picture is stored, before the metadata is stripped). **What this can and cannot do:** it recognises *labels* — a hashtag the author or their tool added, a provenance mark a generator wrote into the file — and nothing else. A generated post that carries neither is not recognised; a real photograph tagged `#ai` by its author is not mistaken for generated. There is no classifier here and there should not be one. |
 | `blocklist_sources` | `[]` | The published block lists this instance follows, as JSON: one object per source with its id, where it is fetched from, which format it is in, whether it is on, and what the last run did. Empty until an administrator turns one on under **Block lists**; `Cron\BlocklistSync` re-reads the sources that are on daily. See [following a published list](#commands-by-task). |
 
 ### External users
@@ -1460,3 +1461,36 @@ of this costs on the hardware in front of you.
 # Ranked For You recommendations switch
 
 Administration → Social → For you includes an independent **Ranked For You recommendations** switch. It is off by default and is separate from the legacy hashtag For You setting below it. Enabling it makes the automatically ranked timeline available; readers cannot select topics or request topic-specific feeds. It does not enable any discovery, behavioral learning, analytics or experiments. Turn it off to immediately disable the ranked timeline and learning controls. Legacy preference storage remains only for migration compatibility and is not exposed by the API.
+
+## Empty application after installing development dependencies
+
+A running Nextcloud should use Social's production Composer autoloader. Development
+packages such as Psalm pull in Amp versions that may collide with the Mail app's
+Amp functions during Nextcloud startup. A typical fatal error is
+`Cannot redeclare function Amp\delay()`. This can affect even `status.php`.
+
+From the Social app directory, regenerate the runtime autoloader without
+development packages:
+
+```sh
+composer dump-autoload --no-dev --no-scripts
+```
+
+For a production installation, install the production dependencies directly with
+`composer install --no-dev --prefer-dist --no-interaction`. The dump command repairs
+the local autoloader when the packages are already installed; it does not update
+the lock file or remove packages. Run development checks in a development checkout
+or restore the development autoloader there with `composer dump-autoload --dev`.
+Do not leave that development autoloader active in a shared running Nextcloud.
+
+Afterward verify `/status.php`, `occ status`, and the Social page in a browser.
+A successful Webpack build alone does not exercise Nextcloud bootstrap.
+
+### Local verification on 26 October 2026
+
+The installed checkout was verified on Nextcloud 35.0.0 RC3 with Social and
+Calendar enabled, maintenance off and no pending database upgrade. After the
+production autoloader repair, `status.php` returned 200 and the public Social
+timeline rendered posts in Chromium without JavaScript errors or failed network
+responses. The user also confirmed their frontend was working again. This does
+not verify public Bluesky indexing or all remote servers.

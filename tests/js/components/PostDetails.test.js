@@ -36,6 +36,15 @@ const HistoryDialogStub = {
 }
 
 describe('PostDetails', () => {
+	it('keeps author-only view counts in the detail metadata without an eye icon', () => {
+		expect(details({ view_count: 12 }).get('.post-details__views').text()).toContain('12 accounts')
+		expect(details({ view_count: 0 }).get('.post-details__views').text()).toContain('0 accounts')
+		for (const viewCount of [null, undefined, -1, '12']) {
+			expect(details({ view_count: viewCount }).find('.post-details__views').exists()).toBe(false)
+		}
+		expect(details({ view_count: 12 }).find('.eye-outline-icon').exists()).toBe(false)
+	})
+
 	it('says when, in full, where the card said "14 hours ago"', () => {
 		const wrapper = details()
 

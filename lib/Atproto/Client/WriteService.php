@@ -12,8 +12,10 @@ namespace OCA\Social\Atproto\Client;
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\StoredRecord;
+use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Protocol\Mst;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Publisher\BlueskyBlocks;
@@ -26,6 +28,7 @@ use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
+use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
 use OCA\Social\Atproto\Repository\InvalidSwapException;
 use OCA\Social\Atproto\Repository\RepositoryService;
@@ -87,6 +90,7 @@ class WriteService {
 	 * refused (D16).
 	 */
 	public const KEPT_AS_WRITTEN = [
+		ProfileLinks::COLLECTION,
 		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
 		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
 	];
@@ -137,12 +141,19 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		$postRkey = null;
+		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
+			if (!is_string($body['rkey']) || !Tid::isValid($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
+				throw XrpcException::invalidRequest('A post record key must be a valid TID');
+			}
+			$postRkey = $body['rkey'];
+		}
 		if ($collection === ChatDeclaration::COLLECTION) {
 			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), $record));
 		}
 		$actor = $this->actor($session);
 		$written = match ($collection) {
-			RecordMapper::POST => $this->post($session, $actor, $record),
+			RecordMapper::POST => $this->post($session, $actor, $record, $postRkey),
 			RecordMapper::LIKE => $this->like($actor, $record),
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
@@ -156,14 +167,95 @@ class WriteService {
 	}
 
 	/**
-	 * `com.atproto.repo.putRecord`: the profile and who may send direct
-	 * messages, which are the records an app replaces.
+	 * `com.atproto.repo.putRecord`: replace supported records, including the
+	 * text and labels of an existing post under its original AT URI.
 	 *
 	 * @throws XrpcException
 	 */
 	public function put(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
+		$collection = $body['collection'] ?? null;
+		$rkey = $body['rkey'] ?? null;
+		if (!is_string($collection) || !is_string($rkey) || !Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('putRecord needs a valid collection and record key');
+		}
+		if ($collection === RecordMapper::POST && !Tid::isValid($rkey)) {
+			throw XrpcException::invalidRequest('A post record key must be a valid TID');
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$swapRecords = [];
+		if (array_key_exists('swapRecord', $body)) {
+			$swapRecord = $body['swapRecord'];
+			if ($swapRecord !== null && (!is_string($swapRecord) || !Cid::isValid($swapRecord))) {
+				throw XrpcException::invalidRequest('swapRecord must be null or a valid record CID');
+			}
+			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
+		}
+		$hasConditionalWrite = $swapCommit !== null || array_key_exists('swapRecord', $body);
+		// A put can change both Social-side state (posts, profile rows, queued
+		// federation work) and the ATProto repository. Keep both in one database
+		// transaction even when the client did not request compare-and-swap.
+		// The CAS fields are optional in the Lexicon; atomicity is not.
+		$ownsBatch = !$this->repositories->batchActive();
+		if ($this->repositories->batchActive() && $hasConditionalWrite) {
+			throw XrpcException::invalidRequest('Conditional putRecord checks cannot be nested inside another repository batch');
+		}
+		if ($ownsBatch) {
+			try {
+				$this->repositories->beginBatch(
+					$session->identity->did,
+					$this->identities->signingKey($session->identity),
+					$swapCommit,
+					$swapRecords,
+				);
+			} catch (InvalidSwapException $e) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+		}
+		try {
+			$current = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
+			$action = $current === null ? 'create' : 'update';
+			if (!$session->permissions()->mayWrite($collection, $action)) {
+				throw new XrpcException(403, 'InsufficientScope', 'This app was not allowed to ' . $action . ' records of ' . $collection);
+			}
+			$result = $this->putInBatch($session, $body);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+			}
+
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				// A reviewed post is intentionally kept in the moderation queue
+				// before XRPC returns an error. Commit that queue entry even though
+				// no repository record is written.
+				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+					$this->repositories->commitBatch();
+				} else {
+					$this->repositories->rollbackBatch();
+				}
+			}
+			if ($e instanceof XrpcException) {
+				throw $e;
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** The operation after putRecord's CAS guards have been checked under the repository lock. */
+	private function putInBatch(ClientSession $session, array $body): array {
+		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
+		if ($collection === RecordMapper::POST) {
+			return $this->updatePostRecord($session, $body);
+		}
 		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
@@ -177,6 +269,7 @@ class WriteService {
 		}
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 		$this->assertProfileWebsite($record);
+		$profileLinks = ProfileLinks::references($session->identity->did, $record['links'] ?? []);
 		$actor = $this->actor($session);
 		$current = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
 		$was = $current === null ? [] : DagCbor::decode($current->bytes);
@@ -203,8 +296,238 @@ class WriteService {
 		if ($stored === null) {
 			throw new XrpcException(500, 'InternalServerError', 'The profile was not written');
 		}
+		$replacement = $stored->value();
+		unset($replacement['links']);
+		if ($profileLinks !== []) {
+			$replacement['links'] = $profileLinks;
+		}
+		if (DagCbor::encode($replacement) !== $stored->bytes) {
+			$this->writeRaw($session, RepoWrite::update(RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY, $replacement, $stored->localId));
+			$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY)
+				?? throw new XrpcException(500, 'InternalServerError', 'The profile links were not written');
+		}
 
 		return $this->created($session, $stored);
+	}
+
+	/**
+	 * Replace the text, labels and supported picture/video embeds of a post
+	 * without changing its AT URI, including replacing or removing its reply target.
+	 *
+	 * @throws XrpcException
+	 */
+	private function updatePostRecord(ClientSession $session, array $body): array {
+		$rkey = (string)($body['rkey'] ?? '');
+		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		if ($rkey === '' || ($record['$type'] ?? '') !== RecordMapper::POST || !is_string($record['text'] ?? null)) {
+			throw XrpcException::invalidRequest('A post update needs its record key, type and text');
+		}
+		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::POST, $rkey);
+		if ($stored === null) {
+			$created = $this->post($session, $this->actor($session), $record, $rkey);
+
+			return $this->created($session, $created);
+		}
+		$currentRecord = $stored->value();
+		try {
+			$currentReply = DagCbor::encode($currentRecord['reply'] ?? null);
+			$replacementReply = DagCbor::encode(DagCbor::fromLexJson($record['reply'] ?? null));
+		} catch (Throwable) {
+			throw XrpcException::invalidRequest('The post update contains an invalid reply');
+		}
+		$replyTo = null;
+		if ($currentReply !== $replacementReply) {
+			$replyTo = '';
+			if (isset($record['reply'])) {
+				foreach (['root', 'parent'] as $part) {
+					$reference = $record['reply'][$part] ?? null;
+					$parsed = is_array($reference) && is_string($reference['uri'] ?? null)
+						? Syntax::parseAtUri($reference['uri']) : null;
+					if ($parsed === null || $parsed['collection'] !== RecordMapper::POST || $parsed['rkey'] === ''
+						|| !is_string($reference['cid'] ?? null) || !Cid::isValid($reference['cid'])) {
+						throw XrpcException::invalidRequest('Reply root and parent must be valid post references');
+					}
+				}
+				$replyTo = $this->knownPost($record['reply']['parent']['uri']);
+			}
+		}
+
+		$currentEmbed = is_array($currentRecord['embed'] ?? null) ? $currentRecord['embed'] : [];
+		if (array_key_exists('embed', $record) && $record['embed'] !== null
+			&& (!is_array($record['embed']) || !is_string($record['embed']['$type'] ?? null))) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		try {
+			$replacementEmbed = is_array($record['embed'] ?? null) ? DagCbor::fromLexJson($record['embed']) : [];
+			$embedChanged = DagCbor::encode($currentEmbed) !== DagCbor::encode($replacementEmbed);
+		} catch (Throwable) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		if (!is_array($replacementEmbed)) {
+			throw XrpcException::invalidRequest('The post update contains an invalid embed');
+		}
+		$mediaIds = null;
+		$linkCard = null;
+		$linkCardProvided = false;
+		$atprotoEmbedProvided = false;
+		$quotedId = '';
+		$atprotoRecordEmbed = null;
+		if ($embedChanged) {
+			$currentReference = self::recordReference($currentEmbed);
+			$replacementReference = self::recordReference($replacementEmbed);
+			if ($currentReference !== $replacementReference) {
+				$atprotoEmbedProvided = true;
+				$linkCardProvided = true;
+				if ($replacementReference !== null) {
+					$parsedReference = Syntax::parseAtUri($replacementReference['uri']);
+					if ($parsedReference === null || $parsedReference['rkey'] === '' || !Cid::isValid($replacementReference['cid'])) {
+						throw XrpcException::invalidRequest('The embedded record must have a valid AT URI and CID');
+					}
+					if ($parsedReference['collection'] === RecordMapper::POST) {
+						$quotedId = $this->knownPost($replacementReference['uri']);
+					} else {
+						$atprotoRecordEmbed = $replacementReference;
+						$linkCard = self::recordEmbedCard($parsedReference);
+					}
+				}
+			}
+			if (self::hasExternalCard($currentEmbed) || self::hasExternalCard($replacementEmbed)) {
+				$linkCardProvided = true;
+				$linkCard = PostMapper::cardOf($replacementEmbed, $session->identity->did);
+			}
+			$mediaIds = $this->mediaIdsFromEmbed($session, $replacementEmbed);
+		}
+
+		try {
+			$post = $this->streams->getStreamById($stored->localId);
+		} catch (Throwable) {
+			throw new XrpcException(404, 'RecordNotFound', 'The post for that record key is no longer available');
+		}
+		$actor = $this->actor($session);
+		if ($post->getAttributedTo() !== $actor->getId()) {
+			throw new XrpcException(403, 'InvalidRequest', 'You cannot update another account post');
+		}
+
+		$langs = $record['langs'] ?? [];
+		if (!is_array($langs) || !array_is_list($langs)) {
+			throw XrpcException::invalidRequest('Post languages must be a list');
+		}
+		$language = '';
+		foreach ($langs as $candidate) {
+			if (!is_string($candidate) || !Syntax::isLanguage($candidate)) {
+				throw XrpcException::invalidRequest('Post language is invalid');
+			}
+		}
+		if (is_string($langs[0] ?? null)) {
+			$language = $langs[0];
+		}
+
+		$selfLabels = self::selfLabels($record);
+		$warning = in_array('!warn', $selfLabels, true);
+		$text = self::fullText($record['text'], $record['facets'] ?? []);
+		$spoilerText = '';
+		if ($warning) {
+			$parts = preg_split('/\R\R/', $text, 2);
+			if (is_array($parts) && count($parts) === 2
+				&& preg_match('/^(?:content warning|inhaltswarnung|inhaltshinweis|cw):\s*(.*)$/iu', $parts[0], $match) === 1) {
+				$spoilerText = trim($match[1]);
+				$text = $parts[1];
+			} else {
+				$spoilerText = $post->getSpoilerText();
+			}
+		}
+		$spoilerText = PostMapper::warning(
+			$selfLabels,
+			$warning ? ($spoilerText !== '' ? $spoilerText : $post->getSpoilerText()) : ''
+		);
+		$sensitive = $spoilerText !== '';
+
+		try {
+			$updated = $this->posts->editPost(
+				$post->getNid(), $actor, $text, $spoilerText, $sensitive, $language,
+				[], null, false, $mediaIds, $linkCard, $linkCardProvided,
+				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed, $selfLabels, $replyTo
+			);
+			$this->publisher->editPost($updated);
+		} catch (\OCA\Social\Exceptions\InvalidActionException|\OCA\Social\Exceptions\StreamNotFoundException $e) {
+			throw XrpcException::invalidRequest($e->getMessage());
+		} catch (Throwable $e) {
+			$this->logger->warning('AT Protocol post replacement failed', ['rkey' => $rkey, 'exception' => $e]);
+			throw new XrpcException(500, 'InternalServerError', 'The post update could not be committed');
+		}
+		$replacement = $this->repositories->getRecord($session->identity->did, RecordMapper::POST, $rkey);
+		if ($replacement === null) {
+			throw new XrpcException(500, 'InternalServerError', 'The updated post record is unavailable');
+		}
+
+		return $this->created($session, $replacement);
+	}
+
+	/**
+	 * Resolve picture or video blobs in an edited post to this author's uploads.
+	 *
+	 * @return list<int>
+	 * @throws XrpcException
+	 */
+	private function mediaIdsFromEmbed(ClientSession $session, array $embed): array {
+		$type = (string)($embed['$type'] ?? '');
+		$media = $type === 'app.bsky.embed.recordWithMedia'
+			? (is_array($embed['media'] ?? null) ? $embed['media'] : [])
+			: $embed;
+		$mediaType = (string)($media['$type'] ?? '');
+		if ($mediaType === '' || $mediaType === 'app.bsky.embed.record') {
+			return [];
+		}
+		if ($mediaType === 'app.bsky.embed.external') {
+			return [];
+		}
+
+		if (in_array($mediaType, ['app.bsky.embed.images', 'app.bsky.embed.gallery'], true)) {
+			$images = self::imagesFromEmbed($embed);
+		} else {
+			$video = self::videoEmbedOf($embed);
+			if ($video === null) {
+				throw XrpcException::invalidRequest('This post embed cannot be edited yet');
+			}
+			$document = $this->uploaded($session, self::blobCid($video['video'] ?? []), (string)($video['alt'] ?? ''));
+
+			return [(int)$document->getNid()];
+		}
+
+		$documents = $images === [] ? [] : $this->pictures($session, $images);
+
+		return array_map(static fn (Document $document): int => (int)$document->getNid(), $documents);
+	}
+
+	/** The strong reference is separate from media in `recordWithMedia`. */
+	private static function recordReference(array $embed): ?array {
+		$record = is_array($embed['record'] ?? null) ? $embed['record'] : [];
+		$reference = is_array($record['record'] ?? null) ? $record['record'] : $record;
+		$uri = $reference['uri'] ?? null;
+		$cid = $reference['cid'] ?? null;
+		if (!is_string($uri) || $uri === '') {
+			return null;
+		}
+		if ($cid instanceof Cid) {
+			$cid = $cid->toString();
+		} elseif (is_array($cid) && is_string($cid['$link'] ?? null)) {
+			$cid = $cid['$link'];
+		}
+
+		return is_string($cid) ? ['uri' => $uri, 'cid' => $cid] : ['uri' => $uri];
+	}
+
+	private static function hasExternalCard(array $embed): bool {
+		if (($embed['$type'] ?? '') === 'app.bsky.embed.external') {
+			return true;
+		}
+		if (($embed['$type'] ?? '') !== 'app.bsky.embed.recordWithMedia') {
+			return false;
+		}
+
+		$media = is_array($embed['media'] ?? null) ? $embed['media'] : [];
+
+		return ($media['$type'] ?? '') === 'app.bsky.embed.external';
 	}
 
 	/**
@@ -313,6 +636,65 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$rkey = (string)($body['rkey'] ?? '');
+		if (!Syntax::isNsid($collection) || !Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('deleteRecord needs a valid collection and record key');
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$swapRecords = [];
+		if (array_key_exists('swapRecord', $body)) {
+			$swapRecord = $body['swapRecord'];
+			if (!is_string($swapRecord) || !Cid::isValid($swapRecord)) {
+				throw XrpcException::invalidRequest('swapRecord must be a valid record CID');
+			}
+			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
+		}
+		$hasConditionalWrite = $swapCommit !== null || $swapRecords !== [];
+		$ownsBatch = !$this->repositories->batchActive();
+		if (!$ownsBatch && $hasConditionalWrite) {
+			throw XrpcException::invalidRequest('Conditional deleteRecord checks cannot be nested inside another repository batch');
+		}
+		if ($ownsBatch) {
+			try {
+				$this->repositories->beginBatch(
+					$session->identity->did,
+					$this->identities->signingKey($session->identity),
+					$swapCommit,
+					$swapRecords,
+				);
+			} catch (InvalidSwapException $e) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			$this->activities->beginDeferredDeliveries();
+		}
+		try {
+			$result = $this->deleteInBatch($session, $collection, $rkey);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
+			}
+
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
+				$this->repositories->rollbackBatch();
+			}
+			if ($e instanceof XrpcException) {
+				throw $e;
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** @return array{commit: array} */
+	private function deleteInBatch(ClientSession $session, string $collection, string $rkey): array {
 		$record = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
 		if ($record === null) {
 			// already gone: what the app asked for is the case
@@ -346,8 +728,8 @@ class WriteService {
 	public function apply(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$writes = $body['writes'] ?? null;
-		if (!is_array($writes) || !array_is_list($writes) || count($writes) > 10) {
-			throw XrpcException::invalidRequest('writes must be a list of at most 10');
+		if (!is_array($writes) || !array_is_list($writes) || count($writes) > RepositoryService::MAX_WRITES) {
+			throw XrpcException::invalidRequest('writes must be a list of at most ' . RepositoryService::MAX_WRITES);
 		}
 		$swapCommit = $body['swapCommit'] ?? null;
 		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
@@ -436,6 +818,9 @@ class WriteService {
 				$rkey = $gated['rkey'];
 			}
 			$rkey = $rkey !== '' ? $rkey : Tid::next();
+			if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
+				throw XrpcException::invalidRequest('A profile link record key must be a TID');
+			}
 			$path = $collection . '/' . $rkey;
 			if (isset($paths[$path])) {
 				throw XrpcException::invalidRequest('A batch may change a record only once');
@@ -577,9 +962,11 @@ class WriteService {
 	/**
 	 * @throws XrpcException
 	 */
-	private function post(ClientSession $session, Person $actor, array $record): StoredRecord {
+	private function post(ClientSession $session, Person $actor, array $record, ?string $rkey = null): StoredRecord {
 		$text = self::fullText((string)($record['text'] ?? ''), $record['facets'] ?? []);
 		$post = new Post($actor);
+		$card = null;
+		$post->setAtprotoSelfLabels(self::selfLabels($record));
 		$post->setContent($text);
 		$post->setType(Stream::TYPE_PUBLIC);
 		$langs = $record['langs'] ?? [];
@@ -591,24 +978,42 @@ class WriteService {
 			$post->setReplyTo($this->knownPost($parent));
 		}
 		$embed = is_array($record['embed'] ?? null) ? $record['embed'] : [];
-		$quoted = (string)($embed['record']['uri'] ?? $embed['record']['record']['uri'] ?? '');
-		if ($quoted !== '') {
-			$post->setQuotedId($this->knownPost($quoted));
+		$card = PostMapper::cardOf($embed, $session->identity->did);
+		$reference = is_array($embed['record']['record'] ?? null)
+			? $embed['record']['record']
+			: (is_array($embed['record'] ?? null) ? $embed['record'] : []);
+		$referenceUri = (string)($reference['uri'] ?? '');
+		if ($referenceUri !== '') {
+			$parsed = Syntax::parseAtUri($referenceUri);
+			$referenceCid = $reference['cid'] ?? null;
+			$cid = $referenceCid instanceof Cid
+				? $referenceCid->toString()
+				: (is_string($referenceCid) ? $referenceCid : '');
+			if ($parsed === null || $parsed['rkey'] === '' || !Cid::isValid($cid)) {
+				throw XrpcException::invalidRequest('The embedded record must have a valid AT URI and CID');
+			}
+			if ($parsed['collection'] === RecordMapper::POST) {
+				$post->setQuotedId($this->knownPost($referenceUri));
+			} else {
+				$post->setAtprotoRecordEmbed(['uri' => $referenceUri, 'cid' => $cid]);
+				$card ??= self::recordEmbedCard($parsed);
+			}
 		}
-		$images = $embed['images'] ?? $embed['media']['images'] ?? [];
-		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
+		$post->setLinkCard($card);
+		$images = self::imagesFromEmbed($embed);
+		$documents = $images !== [] ? $this->pictures($session, $images) : [];
 		$video = self::videoEmbedOf($embed);
 		if ($video !== null && $documents === []) {
-			$documents = [$this->uploaded($session, (string)($video['video']['ref']['$link'] ?? ''), (string)($video['alt'] ?? ''))];
+			$documents = [$this->uploaded($session, self::blobCid($video['video'] ?? []), (string)($video['alt'] ?? ''))];
 		}
 		$post->setMedias(array_map(
 			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
 			$documents
 		));
-		foreach (is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [] as $label) {
-			if (in_array($label['val'] ?? '', ['porn', 'sexual', 'nudity', 'graphic-media'], true)) {
-				$post->setSensitive(true);
-			}
+		$spoilerText = PostMapper::warning(self::selfLabels($record));
+		if ($spoilerText !== '') {
+			$post->setSpoilerText($spoilerText);
+			$post->setSensitive(true);
 		}
 		$this->holdForReview($actor, $post, $documents);
 		try {
@@ -622,9 +1027,30 @@ class WriteService {
 		if (!$note instanceof Stream) {
 			throw new XrpcException(500, 'InternalServerError', 'The post was not made');
 		}
-		$this->publisher->publishPost($note);
+		if ($rkey === null) {
+			$this->publisher->publishPost($note);
+		} else {
+			$this->publisher->publishPost($note, $rkey);
+		}
 
 		return $this->recordOf($note->getId(), RecordMapper::POST);
+	}
+
+	/** @param array{authority: string, collection: string, rkey: string} $reference @return array{url: string, title: string, description: string, image: string, provider: string}|null */
+	private static function recordEmbedCard(array $reference): ?array {
+		$owner = $reference['authority'];
+		$rkey = rawurlencode($reference['rkey']);
+		[$url, $title] = match ($reference['collection']) {
+			'app.bsky.feed.generator' => ['https://bsky.app/profile/' . $owner . '/feed/' . $rkey, 'Bluesky feed'],
+			'app.bsky.graph.list' => ['https://bsky.app/profile/' . $owner . '/lists/' . $rkey, 'Bluesky list'],
+			'app.bsky.graph.starterpack' => ['https://bsky.app/starter-pack/' . $owner . '/' . $rkey, 'Bluesky starter pack'],
+			default => ['', ''],
+		};
+		if ($url === '') {
+			return null;
+		}
+
+		return ['url' => $url, 'title' => $title, 'description' => '', 'image' => '', 'provider' => 'Bluesky'];
 	}
 
 	/**
@@ -831,12 +1257,76 @@ class WriteService {
 				'spoiler_text' => '',
 				'visibility' => $post->getType(),
 				'language' => $post->getLanguage(),
+				'atproto_record_embed' => $post->getAtprotoRecordEmbed(),
+				'atproto_self_labels' => $post->getAtprotoSelfLabels(),
+				'atproto_card' => $post->getLinkCard(),
 			], $reason);
 		} catch (Throwable $e) {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
 
 		throw XrpcException::invalidRequest('This post is waiting for a moderator to look at it. It has been kept, there is no need to write it again.');
+	}
+
+	/** @return list<string> */
+	private static function selfLabels(array $record): array {
+		$container = $record['labels'] ?? null;
+		if ($container === null) {
+			return [];
+		}
+		if (!is_array($container)
+			|| ($container['$type'] ?? '') !== 'com.atproto.label.defs#selfLabels'
+			|| !is_array($container['values'] ?? null)
+			|| !array_is_list($container['values'])) {
+			throw XrpcException::invalidRequest('Post labels must be a list');
+		}
+		$result = [];
+		foreach ($container['values'] as $label) {
+			if (!is_array($label) || !is_string($label['val'] ?? null)) {
+				throw XrpcException::invalidRequest('A post self-label must have a string value');
+			}
+			$value = trim($label['val']);
+			if ($value === '' || mb_strlen($value) > 128) {
+				throw XrpcException::invalidRequest('A post self-label must contain 1 to 128 characters');
+			}
+			$result[] = $value;
+		}
+
+		return array_values(array_unique($result));
+	}
+
+	/** Images and galleries share the same owned-blob import for creates and edits. */
+	private static function imagesFromEmbed(array $embed): array {
+		$media = ($embed['$type'] ?? '') === 'app.bsky.embed.recordWithMedia'
+			? (is_array($embed['media'] ?? null) ? $embed['media'] : [])
+			: $embed;
+		$type = $media['$type'] ?? '';
+		if (!in_array($type, ['app.bsky.embed.images', 'app.bsky.embed.gallery'], true)) {
+			return [];
+		}
+		$gallery = $type === 'app.bsky.embed.gallery';
+		$images = $media[$gallery ? 'items' : 'images'] ?? null;
+		$limit = $gallery ? PictureService::MAX_PER_POST : PictureService::MAX_PER_IMAGES_EMBED;
+		if (!is_array($images) || !array_is_list($images) || count($images) > $limit) {
+			throw XrpcException::invalidRequest('This image embed must be a list of at most ' . $limit . ' images');
+		}
+		foreach ($images as $image) {
+			if (!is_array($image) || !is_array($image['image'] ?? null) || !is_string($image['alt'] ?? null)) {
+				throw XrpcException::invalidRequest('Each image must name an uploaded blob and its alt text');
+			}
+			if ($gallery && ($image['$type'] ?? 'app.bsky.embed.gallery#image') !== 'app.bsky.embed.gallery#image') {
+				throw XrpcException::invalidRequest('Unsupported gallery item');
+			}
+			if ($gallery) {
+				$ratio = $image['aspectRatio'] ?? null;
+				if (!is_array($ratio) || !is_int($ratio['width'] ?? null) || !is_int($ratio['height'] ?? null)
+					|| $ratio['width'] < 1 || $ratio['height'] < 1) {
+					throw XrpcException::invalidRequest('A gallery image must have a positive aspect ratio');
+				}
+			}
+		}
+
+		return $images;
 	}
 
 	/**
@@ -847,8 +1337,8 @@ class WriteService {
 	 */
 	private function pictures(ClientSession $session, array $images): array {
 		$documents = [];
-		foreach (array_slice($images, 0, 4) as $image) {
-			$documents[] = $this->uploaded($session, (string)($image['image']['ref']['$link'] ?? ''), (string)($image['alt'] ?? ''));
+		foreach ($images as $image) {
+			$documents[] = $this->uploaded($session, self::blobCid(is_array($image['image'] ?? null) ? $image['image'] : []), (string)($image['alt'] ?? ''));
 		}
 
 		return $documents;
@@ -869,9 +1359,12 @@ class WriteService {
 		} catch (Throwable) {
 			throw XrpcException::invalidRequest('A file is gone: ' . $cid);
 		}
-		$alt = trim($alt);
-		if ($alt !== '') {
-			$document->setDescription(mb_substr($alt, 0, 1500));
+		if ($document->getAccount() !== $this->actor($session)->getPreferredUsername()) {
+			throw XrpcException::invalidRequest('A post can only use the signed-in account\'s own uploads');
+		}
+		$alt = mb_substr(trim($alt), 0, 1500);
+		if ($document->getDescription() !== $alt) {
+			$document->setDescription($alt);
 			$this->documents->updateDescription($document);
 		}
 
@@ -952,6 +1445,9 @@ class WriteService {
 			$rkey = $gated['rkey'];
 		}
 		$rkey = $rkey !== '' ? $rkey : Tid::next();
+		if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
+			throw XrpcException::invalidRequest('A profile link record key must be a TID');
+		}
 		if (($record['$type'] ?? $collection) !== $collection) {
 			throw XrpcException::invalidRequest('The record is not of its collection');
 		}

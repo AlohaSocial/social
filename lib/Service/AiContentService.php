@@ -38,6 +38,8 @@ use OCA\Social\Model\Client\MediaAttachment;
 class AiContentService {
 	/** The per-user switch: `'1'` hides, anything else shows. */
 	public const USER_KEY = 'hide_ai_content';
+	/** A generic subject tag does not establish that a post was generated. */
+	private const AMBIGUOUS_TAGS = ['ai'];
 
 	/**
 	 * The hashtags that label a post, lower-case and without their `#`.
@@ -109,7 +111,9 @@ class AiContentService {
 		$tags = self::DEFAULT_TAGS;
 		foreach (explode(',', (string)$this->configService->getAppValue(ConfigService::SOCIAL_AI_TAGS)) as $tag) {
 			$tag = self::normalise($tag);
-			if ($tag !== '' && !in_array($tag, $tags, true)) {
+			if ($tag !== ''
+				&& !in_array($tag, self::AMBIGUOUS_TAGS, true)
+				&& !in_array($tag, $tags, true)) {
 				$tags[] = $tag;
 			}
 		}

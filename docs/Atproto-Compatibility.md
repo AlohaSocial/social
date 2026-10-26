@@ -4,6 +4,9 @@
 -->
 # Bluesky and AT Protocol compatibility
 
+For the current remote-profile import paths and confirmed interoperability gaps,
+see [Remote profiles and content compatibility](Federation-Compatibility.md).
+
 **Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented, as are custom feeds and lists (§9.6).**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)
@@ -807,7 +810,10 @@ go there).
 - **Content warning** (`spoiler_text`): self-label `!warn` plus the warning
   as the first line, `Content warning: <warning>` then a blank line, counted
   against the 300. A Social post marked sensitive also gets `graphic-media` on its
-  pictures as a self-label when it carries pictures. *verify label set*
+  pictures as a self-label when it carries pictures. Self-labels received
+  from a Bluesky post are retained when the post is mirrored back to Bluesky;
+  a `putRecord` replaces that set, and editing the warning from a Fediverse
+  client adds or removes `!warn` without discarding the other self-labels.
 - **Poll**: the question and options as text (`Poll: A / B / C`), then
   the link; results are not synchronised.
 - The words these add ("Content warning", "Poll", "+N more pictures" in
@@ -2694,12 +2700,21 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   shortened is its whole address again), a like a like, a repost a boost,
   a follow a follow — the record the publisher writes for it is the answer,
   so the app sees what Social published, which may differ (a long post cut
-  with a link). `putRecord` of the profile sets the display name and bio;
-  of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
+  with a link). `putRecord` of the profile sets the display name and bio; of an existing
+  post it replaces the text, language, media and self-labels under the same
+  record key, so its AT URI stays stable. Supported quoted-post and non-post
+  record embeds and reply targets can be replaced or removed. Reply edits
+  check parent access, blocking, reply gates, audience and cycles, and update
+  both parent counts in the existing repository transaction. An embed Social
+  cannot represent without loss is refused. OAuth `create` or
+  `update` permission is checked against whether the target record exists
+  while the repository write lock is held.
+  `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
   send direct messages here, which writes the record (§10.1).
-  `deleteRecord` undoes the action. `applyWrites` keeps a batch of
-  repository-native records (lists and their members, starter packs, feed
-  generators, thread gates and post gates) in one repository commit, and
+  `deleteRecord` undoes the action. `applyWrites` keeps a batch of up to 200
+  operations—the repository commit limit—of repository-native records (lists
+  and their members, starter packs, feed generators, thread gates and post
+  gates) in one repository commit, and
   rejects an invalid batch before writing any of it. For these batches,
   `swapCommit` is compared with the locked repository head inside the write
   transaction; a stale CID returns `InvalidSwap` without changing the repo.

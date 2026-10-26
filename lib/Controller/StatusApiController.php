@@ -34,6 +34,7 @@ use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\DurableCache;
+use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\FilterService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\Interaction\InteractionService;
@@ -125,6 +126,7 @@ class StatusApiController extends MastodonApiController {
 		private InteractionService $interactions,
 		private CountService $counts,
 		private ?BlockedByService $blockedBy = null,
+		private ?FeedDisplayService $feedDisplayService = null,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -450,6 +452,9 @@ class StatusApiController extends MastodonApiController {
 			}
 
 			$actor = $this->accountService->getActorFromUserId($this->currentSession());
+			$mediaIds = array_key_exists('media_ids', $fields)
+				? $this->editMediaIds($fields['media_ids'])
+				: null;
 
 			$item = $this->postService->editPost(
 				$nid,
@@ -460,13 +465,38 @@ class StatusApiController extends MastodonApiController {
 				$status->getLanguage() !== '' ? $status->getLanguage() : null,
 				$this->mediaAttributes($fields['media_attributes'] ?? []),
 				$event,
-				array_key_exists('event', $fields)
+				array_key_exists('event', $fields),
+				$mediaIds
 			);
 
 			return new DataResponse($this->served($item), Http::STATUS_OK);
+		} catch (InvalidActionException $e) {
+			return new DataResponse(['error' => $e->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
+	}
+
+	/** @return list<int|string> */
+	private function editMediaIds(mixed $raw): array {
+		if (!is_array($raw) || !array_is_list($raw) || count($raw) > Stream::MAX_ATTACHMENTS) {
+			throw new InvalidActionException('Invalid media attachment list');
+		}
+
+		$ids = [];
+		foreach ($raw as $id) {
+			if ((!is_int($id) && !is_string($id)) || !ctype_digit((string)$id)
+				|| \OCA\Social\Tools\Nid::compare((string)$id, '0') < 1) {
+				throw new InvalidActionException('Invalid media attachment list');
+			}
+			$normalizedId = \OCA\Social\Tools\Nid::normalize((string)$id);
+			if (isset($ids[$normalizedId])) {
+				throw new InvalidActionException('Invalid media attachment list');
+			}
+			$ids[$normalizedId] = $normalizedId;
+		}
+
+		return array_values($ids);
 	}
 
 	/**
@@ -607,7 +637,10 @@ class StatusApiController extends MastodonApiController {
 	public function statusContext(int|string $nid, bool $with_hidden = false): DataResponse {
 		try {
 			$this->initViewer(false);
-			$context = $this->streamService->getContextByNid($nid, $with_hidden);
+			$threadSort = $this->viewer === null || $this->feedDisplayService === null
+				? 'oldest'
+				: $this->feedDisplayService->threadSort($this->viewer->getUserId());
+			$context = $this->streamService->getContextByNid($nid, $with_hidden, $threadSort);
 
 			$response = new DataResponse(
 				[

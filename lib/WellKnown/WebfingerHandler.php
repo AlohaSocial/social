@@ -187,8 +187,16 @@ class WebfingerHandler implements IHandler {
 			null,
 			['template' => $subscribe]
 		);
+		$this->addFollowIntent($response);
 
 		return $response;
+	}
+
+	/** FEP-3b86 advertises the existing confirmation flow to other services. */
+	private function addFollowIntent(JrdResponse $response): void {
+		$response->addLink('https://w3id.org/fep/3b86/Follow', '', '', null, null, [
+			'template' => $this->configService->getSocialUrl() . 'ostatus/follow/?uri={object}',
+		]);
 	}
 
 	/**
@@ -218,6 +226,7 @@ class WebfingerHandler implements IHandler {
 		$response = new JrdResponse('acct:' . $address . '@' . $address);
 		$response->addAlias($id);
 		$response->addLink('self', 'application/activity+json', $id);
+		$this->addFollowIntent($response);
 
 		return $response;
 	}

@@ -22,9 +22,12 @@ use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\PostRefs;
 use OCA\Social\Atproto\Publisher\RecordMapper;
 use OCA\Social\Atproto\Publisher\TextMapper;
+use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Db\ActorsRequest;
+use OCA\Social\Db\AtprotoIdentityRequest;
+use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
@@ -37,6 +40,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\PinService;
@@ -420,6 +424,95 @@ class RecordMapperTest extends TestCase {
 		$this->assertSame(['$type' => 'app.bsky.embed.record', 'record' => $ref], $withMedia['embed']['record']);
 		$this->assertSame('app.bsky.embed.images', $withMedia['embed']['media']['$type']);
 		$this->lexicon->validateRecord($withMedia);
+	}
+
+	public function testAQuoteKeepsItsExternalCardAsTheRecordWithMediaEmbed(): void {
+		$quoted = $this->blueskyPost('3kquoted');
+		$this->streams = $this->createMock(StreamRequest::class);
+		$this->streams->method('getStreamById')->willReturn($quoted);
+		$card = new StreamCard(self::POST_ID, 'https://example.com/story');
+		$card->setTitle('A story');
+		$card->setDescription('Details');
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->method('getByStreamId')->with(self::POST_ID)->willReturn($card);
+		$this->mapper = $this->mapper();
+		$post = $this->post('<p>look at this</p>');
+		$post->setQuote($quoted->getId());
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$this->assertSame('app.bsky.embed.recordWithMedia', $record['embed']['$type']);
+		$this->assertSame('app.bsky.embed.external', $record['embed']['media']['$type']);
+		$this->assertSame('https://example.com/story', $record['embed']['media']['external']['uri']);
+		$this->lexicon->validateRecord($record);
+	}
+
+	public function testARecordWithExternalMediaSurvivesTheReaderPublisherRoundtrip(): void {
+		$generatorUri = 'at://' . self::OTHER . '/app.bsky.feed.generator/3kgenerator';
+		$generatorCid = Cid::forRaw('generator record')->toString();
+		$identities = $this->createMock(AtprotoIdentityRequest::class);
+		$identities->method('getByDid')->willThrowException(new AtprotoIdentityNotFoundException());
+		$reader = new PostMapper(new LocalRecordResolver($identities, $this->createMock(AtprotoRepoRequest::class)));
+		$view = [
+			'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kimported',
+			'cid' => Cid::forRaw('imported post')->toString(),
+			'author' => ['did' => self::OTHER, 'handle' => 'bob.test'],
+			'record' => [
+				'$type' => 'app.bsky.feed.post',
+				'text' => 'A story',
+				'createdAt' => '2026-10-08T10:00:00.000Z',
+			],
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia#view',
+				'record' => ['record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => $generatorUri, 'cid' => $generatorCid]],
+				'media' => ['$type' => 'app.bsky.embed.external#view', 'external' => [
+					'uri' => 'https://example.com/story',
+					'title' => 'A story card',
+					'description' => 'The original description',
+				]],
+			],
+		];
+		$imported = $reader->note($view);
+		self::assertNotNull($imported);
+		$cardDetails = $imported['_atproto']['card'];
+		$atprotoDetails = $imported['_atproto'];
+		unset($atprotoDetails['card']); // PostStore persists the card in StreamCard.
+		$post = $this->post($imported['content']);
+		$post->setDetailArray(Details::ATPROTO, $atprotoDetails);
+		$card = (new StreamCard(self::POST_ID, $cardDetails['url']))
+			->setTitle($cardDetails['title'])
+			->setDescription($cardDetails['description'])
+			->setProviderName($cardDetails['provider']);
+		$this->cards = $this->createMock(StreamCardsRequest::class);
+		$this->cards->expects(self::once())->method('getByStreamId')->with(self::POST_ID)->willReturn($card);
+		$this->mapper = $this->mapper();
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		self::assertSame('app.bsky.embed.recordWithMedia', $record['embed']['$type']);
+		self::assertSame($generatorUri, $record['embed']['record']['record']['uri']);
+		self::assertSame($generatorCid, $record['embed']['record']['record']['cid']->toString());
+		self::assertSame('app.bsky.embed.external', $record['embed']['media']['$type']);
+		self::assertSame('https://example.com/story', $record['embed']['media']['external']['uri']);
+		self::assertSame('A story card', $record['embed']['media']['external']['title']);
+		self::assertSame('The original description', $record['embed']['media']['external']['description']);
+		$lexiconRecord = $record;
+		$lexiconRecord['embed']['record']['record']['cid'] = $generatorCid;
+		$this->lexicon->validateRecord($lexiconRecord);
+	}
+
+	public function testSelfLabelsFromAnImportedPostSurviveRepublishing(): void {
+		$post = $this->post('Sensitive announcement');
+		$post->setSpoilerText('Content warning');
+		$post->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['!warn', 'custom-label']]);
+
+		$record = $this->mapper->post($post, $this->identity, $this->author)['record'];
+
+		$this->assertSame([
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => '!warn'], ['val' => 'custom-label']],
+		], $record['labels']);
+		$this->lexicon->validateRecord($record);
 	}
 
 	public function testAVideoTheVideoServiceMadeIsAVideoEmbed(): void {

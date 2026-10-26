@@ -1,6 +1,6 @@
 
 * Resolves: # <!-- related github issue -->
-* Target version: main 
+* Target version: main
 
 ### Summary
 

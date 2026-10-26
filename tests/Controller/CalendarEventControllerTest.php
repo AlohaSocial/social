@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Controller;
 
+use OCA\Social\AP;
 use OCA\Social\Controller\CalendarEventController;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -18,6 +19,7 @@ use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\FollowService;
 use OCA\Social\Service\StreamService;
+use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCP\AppFramework\Http;
 use OCP\Calendar\ICalendar;
 use OCP\Calendar\ICalendarIsWritable;
@@ -33,8 +35,12 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+require_once __DIR__ . '/../Model/TActivityPubMocks.php';
+
 #[AllowMockObjectsWithoutExpectations]
 class CalendarEventControllerTest extends TestCase {
+	use TActivityPubMocks;
+
 	private IRequest|Stub $request;
 	private IUserSession|Stub $userSession;
 	private StreamService|Stub $streams;
@@ -45,6 +51,7 @@ class CalendarEventControllerTest extends TestCase {
 	private string $authorization = '';
 
 	protected function setUp(): void {
+		$this->installActivityPub();
 		$this->request = $this->createStub(IRequest::class);
 		$this->request->method('getId')->willReturn('calendar-test');
 		$this->request->method('getHeader')->willReturnCallback(fn (string $name): string
@@ -76,7 +83,7 @@ class CalendarEventControllerTest extends TestCase {
 			'location' => 'Library',
 		]);
 		$this->streams = $this->createStub(StreamService::class);
-		$this->streams->method('getStreamByNid')->willReturn($this->event);
+		$this->streams->method('getStreamByNid')->willReturnCallback(fn (): Note => $this->event);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->logger->method('error')->willReturnCallback(static function (string $message, array $context): void {
 			if (($context['exception'] ?? null) instanceof \Throwable) {
@@ -86,6 +93,7 @@ class CalendarEventControllerTest extends TestCase {
 	}
 
 	protected function tearDown(): void {
+		AP::set(null);
 		\OC::$server->reset();
 	}
 
@@ -104,6 +112,35 @@ class CalendarEventControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus(), json_encode($response->getData()) ?: '');
 		self::assertSame(['imported' => true, 'calendar' => 'Personal'], $response->getData(), json_encode($response->getData()) ?: '');
+	}
+
+	public function testImportsAParsedGancioEventIntoNextcloudCalendar(): void {
+		$activityData = json_decode(
+			file_get_contents(__DIR__ . '/../Federation/fixtures/gancio-create-event.json'),
+			true,
+			512,
+			JSON_THROW_ON_ERROR,
+		);
+		$activity = AP::instance()->getItemFromData($activityData);
+		self::assertSame('Create', $activity->getType());
+		$this->event = $activity->getObject();
+
+		$calendar = $this->writableCalendar();
+		$calendar->expects(self::once())->method('search')->with('', [], ['uid' => $this->uid()], 1)->willReturn([]);
+		$calendar->expects(self::once())->method('createFromString')->with(
+			substr(hash('sha256', $this->event->getId()), 0, 32) . '.ics',
+			self::callback(static fn (string $ics): bool
+				=> str_contains($ics, 'UID:' . hash('sha256', 'https://gancio.example/federation/events/42') . '@social')
+					&& str_contains($ics, 'SUMMARY:Community assembly')
+					&& str_contains($ics, 'DTSTART:20261114T170000Z')
+					&& str_contains($ics, 'DTEND:20261114T190000Z')
+					&& str_contains($ics, 'LOCATION:Community Hall\\, Main Street 12\\, Berlin')),
+		);
+
+		$response = $this->controller($this->calendarManager([$calendar]))->importStatusCalendar('123');
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus(), json_encode($response->getData()) ?: '');
+		self::assertSame(['imported' => true, 'calendar' => 'Personal'], $response->getData());
 	}
 
 	public function testAnAlreadyImportedEventIsNotWrittenAgain(): void {
@@ -155,6 +192,10 @@ class CalendarEventControllerTest extends TestCase {
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		self::assertStringStartsWith('BEGIN:VCALENDAR', $response->getData());
 		self::assertSame('text/calendar; charset=utf-8', $response->getHeaders()['Content-Type']);
+		self::assertSame(
+			'attachment; filename="fediverse-event-' . substr(hash('sha256', $this->event->getId()), 0, 16) . '.ics"',
+			$response->getHeaders()['Content-Disposition'],
+		);
 	}
 
 	private function controller(?CalendarManager $calendarManager = null): CalendarEventController {

@@ -333,6 +333,37 @@ place shows as a small marker under the post, and tapping it opens the page
 of everything public that was taken there. Release the pin and the post has
 no place.
 
+## Following events from Gancio
+
+Gancio publishes events over ActivityPub from one instance-wide account. Search
+for and follow that account from Social: it is usually `@events@gancio.example`
+on Gancio 1.24 and newer, or `@relay@gancio.example` on older instances. The
+Gancio administrator can customize this name, so use the federation address
+shown on that Gancio site's follow link when it differs. The Gancio instance
+must have federation enabled. Once the follow is accepted, new public events
+that Gancio delivers appear in Social like other followed ActivityPub posts,
+with a card for the event title, time and venue. Following alone does not
+backfill the instance's existing event catalogue. To look for older events,
+open the followed Gancio account's profile in Social; Social reads its public
+ActivityPub outbox in bounded pages, including Gancio `Event` objects, as you
+open and page through that profile. This uses ActivityPub rather than Gancio's
+instance-specific API, and only imports entries the Gancio outbox exposes.
+
+On a signed-in Social timeline, choose **Add to Nextcloud Calendar** on an
+event card to import it directly into your first writable Nextcloud calendar.
+The event keeps its title, start and end time, venue and source link. Social
+detects an event that is already in a calendar and avoids adding it twice. If
+the Calendar app is unavailable or no writable calendar exists, the card offers
+an `.ics` download instead. Public status pages offer the `.ics` download;
+direct import requires a signed-in Nextcloud session and a writable calendar.
+The calendar entry is a copy, not a live subscription. If Gancio later changes
+an event, Social updates the event in its timeline when it receives the
+ActivityPub update or reads the changed event from the followed account's
+outbox. Social also applies a Gancio `Delete` found in that outbox to the
+timeline copy. An entry already imported into Calendar stays as it was, even
+if the event is changed or deleted. To import changed details, delete the old
+entry in Calendar first and then import the event again from Social.
+
 ## Reading
 
 The browser tab names the page you are on — the feed, the account, the author
@@ -853,14 +884,15 @@ takes a post out, and nothing of it reaches this app. Off, such a post arrives
 as usual and carries a quiet **AI** mark, so you can tell without being told.
 
 "Says it was made with AI" is meant literally. A post counts when it carries
-one of the hashtags people and tools use for it — `#AIgenerated`, `#aiart`,
-`#midjourney`, `#stablediffusion` and a dozen more, which your administrator
-can add to — when its author marked it in the composer (which adds
+one of the specific hashtags people and tools use for it. Built-in labels include
+`#AIgenerated`, `#midjourney` and `#stablediffusion`; your administrator can add
+others, such as `#aiart`, to the list. It also counts when its author marked it in the composer (which adds
 `#AIgenerated`), or when one of its pictures states in its own metadata that a
 model produced it, as the generators that label their output write. Nothing
 here looks at the picture itself or guesses from the words: a generated post
-that carries no label is not recognised, and a real photograph its author
-tagged `#ai` is. Like your filters, the switch is yours alone — nothing is
+that carries no label is not recognised. The generic topic tag `#AI` by itself
+is never treated as a generated-content label, so a real photograph tagged
+`#ai` is not mistaken for one. Like your filters, the switch is yours alone — nothing is
 sent to another server and nobody is told.
 
 ### What a post used to say

@@ -50,7 +50,7 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 	}
 
 	#[\Override]
-	public function save(ACore $item): void {
+	public function save(ACore $item, bool $deferDownload = false): void {
 		/** @var Document $item */
 		if (!$item->isRoot()) {
 			$item->setParentId(
@@ -107,7 +107,7 @@ class DocumentInterface extends AbstractActivityPubInterface implements IActivit
 		// a streamed document is a pointer at somebody else's file and
 		// stays one -- see Document::COPY_STREAMED. Fetching it is the one
 		// thing that must not happen here.
-		if (!$item->isLocal() && !$item->isStreamed()) {
+		if (!$deferDownload && !$item->isLocal() && !$item->isStreamed()) {
 			$this->fetch($item);
 		}
 

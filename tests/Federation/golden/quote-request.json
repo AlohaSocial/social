@@ -80,7 +80,7 @@
             }
         }
     ],
-    "id": "https://cloud.example/apps/social/@alice/<stamp:1>#quote-request",
+    "id": "https://cloud.example/apps/social/@alice/<stamp:1>#quote-request-<hex:1>",
     "type": "QuoteRequest",
     "to": [
         "https://remote.example/users/bob"

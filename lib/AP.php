@@ -194,22 +194,22 @@ class AP {
 	 * names, none of it fetched and none of it checked. Who acted is the
 	 * `actor` id and what the actor cache says about it.
 	 */
-	public function getItemFromData(array $data, ?ACore $parent = null, int $level = 0, array $atprotoStreamedBlobs = []): ACore {
+	public function getItemFromData(array $data, ?ACore $parent = null, int $level = 0, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): ACore {
 		if (++$level > self::REDUNDANCY_LIMIT) {
 			throw new RedundancyLimitException((string)$level);
 		}
 
-		$item = $this->getSimpleItemFromData($data, $atprotoStreamedBlobs);
+		$item = $this->getSimpleItemFromData($data, $atprotoStreamedBlobs, $deferAttachmentDownloads);
 		if ($parent !== null) {
 			$item->setParent($parent);
 		}
 
-		$this->getObjectFromData($data, $item, $level, $atprotoStreamedBlobs);
+		$this->getObjectFromData($data, $item, $level, $atprotoStreamedBlobs, $deferAttachmentDownloads);
 
 		return $item;
 	}
 
-	public function getObjectFromData(array $data, ACore &$item, int $level, array $atprotoStreamedBlobs = []) {
+	public function getObjectFromData(array $data, ACore &$item, int $level, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false) {
 		$objectData = $this->getArray('object', $data, []);
 		if ($objectData === []) {
 			$objectId = $this->get('object', $data, '');
@@ -221,7 +221,7 @@ class AP {
 		}
 
 		try {
-			$item->setObject($this->getItemFromData($objectData, $item, $level, $atprotoStreamedBlobs));
+			$item->setObject($this->getItemFromData($objectData, $item, $level, $atprotoStreamedBlobs, $deferAttachmentDownloads));
 		} catch (ItemUnknownException $e) {
 			// A type this app has no model for. The activity used to be left
 			// referring to nothing at all — neither `object` nor `objectId` —
@@ -235,9 +235,12 @@ class AP {
 		}
 	}
 
-	public function getSimpleItemFromData(array $data, array $atprotoStreamedBlobs = []): Acore {
+	public function getSimpleItemFromData(array $data, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): Acore {
 		$type = $this->get('type', $data, '');
 		$item = $this->getItemFromType($type);
+		if ($item instanceof Stream) {
+			$item->setDeferAttachmentDownloads($deferAttachmentDownloads);
+		}
 		if ($item instanceof Stream && $atprotoStreamedBlobs !== []) {
 			// This allowlist comes from PostMapper, not the incoming ActivityPub
 			// document. Set it before import(): attachments are saved during import.

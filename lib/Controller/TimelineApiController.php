@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Controller;
 
+use OCA\Social\Atproto\Reader\ActiveHomeFeedRefresh;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
 use OCA\Social\Exceptions\UnknownProbeException;
@@ -72,6 +73,7 @@ class TimelineApiController extends MastodonApiController {
 		private TimelineRevisionService $timelineRevisionService,
 		private NotificationInboxService $notificationInboxService,
 		private RemoteFetchQueue $remoteFetchQueue,
+		private ActiveHomeFeedRefresh $activeHomeFeedRefresh,
 	) {
 		parent::__construct($request, $urlGenerator, $userSession, $logger, $clientService, $accountService, $cacheActorService, $streamService, $followService);
 	}
@@ -148,6 +150,9 @@ class TimelineApiController extends MastodonApiController {
 			// timeline is worth tagging: a page reached with `max_id` is
 			// historical and a client asks for it once.
 			if ($timeline === ProbeOptions::HOME && (string)$max_id === '0' && (string)$min_id === '0') {
+				if ($this->viewer !== null) {
+					$this->activeHomeFeedRefresh->wakeFollowedFeeds($this->viewer);
+				}
 				// the newest id says whether anything arrived; the revision
 				// says whether the reader has changed what they are shown —
 				// a follow, a block, a mute, a filter, a followed hashtag —
@@ -155,6 +160,7 @@ class TimelineApiController extends MastodonApiController {
 				$notModified = $this->notModified(
 					'h' . (($this->viewer === null) ? '0' : $this->streamRequest->newestHomeNid($this->viewer))
 					. '-' . $limit
+					. '-' . hash('sha256', (string)json_encode($this->feedDisplayService->blueskyHomePreferences($this->viewer?->getUserId() ?? '')))
 					. '-' . $this->timelineRevisionService->of($this->currentSession())
 				);
 				if ($notModified !== null) {
@@ -177,9 +183,14 @@ class TimelineApiController extends MastodonApiController {
 
 			$posts = $this->streamService->getTimeline($options);
 			$pagePosts = $posts;
+			if (strtolower($timeline) === ProbeOptions::HOME && $this->viewer !== null) {
+				$pagePosts = $this->feedDisplayService->filterBlueskyHomePosts(
+					$pagePosts, $this->viewer->getUserId(), $this->viewer, $this->followService
+				);
+			}
 			if ($this->feedDisplayService->hidesReplies($this->viewer?->getUserId() ?? '')
 				&& in_array(strtolower($timeline), [ProbeOptions::HOME, ProbeOptions::PUBLIC], true)) {
-				$pagePosts = array_values(array_filter($posts, static fn ($post): bool => $post->getInReplyTo() === ''));
+				$pagePosts = array_values(array_filter($pagePosts, static fn ($post): bool => $post->getInReplyTo() === ''));
 			}
 			$this->logger->debug('[' . static::class . '] Timeline retrieved', [
 				'timeline' => $timeline,

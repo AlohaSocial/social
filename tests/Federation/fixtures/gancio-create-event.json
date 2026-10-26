@@ -1,0 +1,24 @@
+{
+  "@context": ["https://www.w3.org/ns/activitystreams"],
+  "id": "https://gancio.example/federation/events/42/activity",
+  "type": "Create",
+  "actor": "https://gancio.example/@events",
+  "to": ["https://www.w3.org/ns/activitystreams#Public"],
+  "object": {
+    "id": "https://gancio.example/federation/events/42",
+    "type": "Event",
+    "name": "Community assembly",
+    "url": "https://gancio.example/events/42",
+    "attributedTo": "https://gancio.example/@events",
+    "content": "<p>Open discussion for the neighborhood.</p>",
+    "startTime": "2026-11-14T18:00:00+01:00",
+    "endTime": "2026-11-14T20:00:00+01:00",
+    "location": {
+      "type": "Place",
+      "name": "Community Hall",
+      "address": "Main Street 12, Berlin"
+    },
+    "published": "2026-10-26T08:00:00Z",
+    "to": ["https://www.w3.org/ns/activitystreams#Public"]
+  }
+}

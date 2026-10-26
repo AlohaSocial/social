@@ -12,15 +12,20 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\LinkPreviewService;
+use OCA\Social\Service\RecommendationFeatureExtractor;
+use OCA\Social\Service\RecommendationTopicCatalog;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\TrendService;
 use OCA\Social\Tools\Nid;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 
 /** How the For you feed ranks, spreads and pages. */
@@ -42,8 +47,11 @@ class InterestFeedServiceTest extends TestCase {
 	private array $gone = [];
 	private array $cache = [];
 	private bool $memory = true;
+	private int $storyLookups = 0;
 	/** @var array[] the arguments of every candidate query */
 	private array $queries = [];
+	/** @var array<string, string> link preview titles that have finished loading */
+	private array $previewTitles = [];
 
 	private function nid(int $ageSeconds, int $n): string {
 		return Nid::fromPublishedTime(self::NOW - $ageSeconds, $n, StreamRequest::NID_LIMIT);
@@ -51,7 +59,7 @@ class InterestFeedServiceTest extends TestCase {
 
 	private function given(int $ageSeconds, array $tags, string $author = 'a', int $n = 1, string $media = ''): string {
 		$nid = $this->nid($ageSeconds, $n);
-		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags, 'media' => $media];
+		$this->posts[] = ['nid' => $nid, 'author' => $author, 'tags' => $tags, 'media' => $media, 'content' => implode(' ', $tags)];
 
 		return $nid;
 	}
@@ -80,7 +88,7 @@ class InterestFeedServiceTest extends TestCase {
 						continue;
 					}
 					foreach (array_intersect($post['tags'], $tags) as $tag) {
-						$rows[] = ['nid' => $post['nid'], 'idPrim' => 'p' . $post['nid'], 'tag' => $tag, 'author' => $post['author']];
+						$rows[] = ['nid' => $post['nid'], 'idPrim' => 'p' . $post['nid'], 'tag' => $tag, 'author' => $post['author'], 'updated' => ''];
 					}
 				}
 
@@ -96,6 +104,44 @@ class InterestFeedServiceTest extends TestCase {
 			}
 
 			return $tags;
+		});
+		$streamRequest->method('getVisibleByNids')->willReturnCallback(function (array $nids): array {
+			$this->storyLookups++;
+			$nids = array_map('strval', $nids);
+			$statuses = [];
+			foreach ($this->posts as $post) {
+				if (!in_array($post['nid'], $nids, true)) {
+					continue;
+				}
+				$status = (new Note())
+					->setNid($post['nid'])
+					->setAttributedTo($post['author'])
+					->setHashtags($post['tags'])
+					->setContent($post['content']);
+				$statuses[$post['nid']] = $status;
+			}
+
+			return $statuses;
+		});
+		$linkPreviews = $this->createStub(LinkPreviewService::class);
+		$linkPreviews->method('cardsByStreamPrims')->willReturnCallback(function (array $prims): array {
+			$cards = [];
+			foreach ($this->previewTitles as $nid => $title) {
+				$prim = 'p' . $nid;
+				if (in_array($prim, $prims, true)) {
+					$cards[$prim] = (new StreamCard($prim))->setTitle($title);
+				}
+			}
+
+			return $cards;
+		});
+		$linkPreviews->method('attachCards')->willReturnCallback(function (array $statuses): void {
+			foreach ($statuses as $status) {
+				$nid = (string)$status->getNid();
+				if (isset($this->previewTitles[$nid])) {
+					$status->setCard((new StreamCard('p' . $nid))->setTitle($this->previewTitles[$nid]));
+				}
+			}
 		});
 
 		$streamService = $this->createStub(StreamService::class);
@@ -124,6 +170,8 @@ class InterestFeedServiceTest extends TestCase {
 
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(self::NOW);
+		$config = $this->createStub(IConfig::class);
+		$config->method('getSystemValueString')->willReturn('test-secret');
 
 		$trends = $this->createStub(TrendService::class);
 		$trends->method('trendingStatuses')->willReturnCallback(
@@ -153,7 +201,17 @@ class InterestFeedServiceTest extends TestCase {
 			}
 		);
 
-		return new InterestFeedService($interests, $streamRequest, $streamService, $trends, $cacheFactory, $time);
+		return new InterestFeedService(
+			$interests,
+			$streamRequest,
+			$streamService,
+			$trends,
+			$cacheFactory,
+			$time,
+			new RecommendationFeatureExtractor(new RecommendationTopicCatalog()),
+			$config,
+			$linkPreviews,
+		);
 	}
 
 	private function viewer(): Person {
@@ -226,6 +284,89 @@ class InterestFeedServiceTest extends TestCase {
 		$this->assertSame(8, $tags['cats']);
 	}
 
+	public function testLegacySpreadCapsOneStoryAtThreePlusOneSparseFeedOverflow(): void {
+		$ranked = [];
+		$incidentTerms = ['php', 'security', 'release', 'maintainer', 'vulnerability', 'patch', 'disclosure', 'exploit'];
+		for ($i = 1; $i <= 8; $i++) {
+			$ranked[] = [
+				'nid' => 'incident-' . $i,
+				'author' => 'incident-author-' . $i,
+				'tags' => ['incident-' . $i],
+				'story_terms' => [...$incidentTerms, 'detail' . $i],
+			];
+		}
+		$ranked[] = [
+			'nid' => 'garden-story',
+			'author' => 'garden-author',
+			'tags' => ['garden'],
+			'story_terms' => ['garden', 'community', 'flowers', 'local', 'weekend', 'people'],
+		];
+		$ranked[] = [
+			'nid' => 'music-story',
+			'author' => 'music-author',
+			'tags' => ['music'],
+			'story_terms' => ['music', 'concert', 'guitar', 'album', 'local', 'weekend'],
+		];
+
+		$spread = $this->service()->spread($ranked, []);
+		$incidentPosts = array_filter($spread, static fn (array $post): bool => str_starts_with($post['nid'], 'incident-'));
+
+		$this->assertCount(5, $spread, 'the legacy feed should stop after distinct stories and one sparse-feed overflow are exhausted');
+		$this->assertCount(3, $incidentPosts, 'the legacy feed may show one extra post from a story cluster');
+		$this->assertContains('garden-story', array_column($spread, 'nid'));
+		$this->assertContains('music-story', array_column($spread, 'nid'));
+	}
+
+	public function testLegacySpreadIntroducesOtherTopicsAcrossDifferentHashtags(): void {
+		$ranked = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$ranked[] = [
+				'nid' => 'security-' . $i,
+				'author' => 'security-author-' . $i,
+				'tags' => ['security-report-' . $i],
+				'diversity_topics' => ['tech.security', 'software.backend'],
+			];
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$ranked[] = [
+				'nid' => 'garden-' . $i,
+				'author' => 'garden-author-' . $i,
+				'tags' => ['garden-' . $i],
+				'diversity_topics' => ['home.gardening'],
+			];
+		}
+
+		$spread = $this->service()->spread($ranked, []);
+
+		self::assertSame('garden-1', $spread[6]['nid'], 'six security posts are followed by a different topic, even when every post has a different hashtag');
+	}
+
+	public function testLegacyRankingDerivesTopicDiversityFromPostContent(): void {
+		$this->weights(['updates' => 3.0]);
+		$communityNids = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$this->given($i * 60, ['updates'], 'security-author-' . $i, $i);
+			$uniqueTerms = implode(' ', array_map(static fn (int $term): string => 'case' . $i . 'token' . $term, range(1, 24)));
+			$this->posts[array_key_last($this->posts)]['content'] = 'PHP maintainers disclose a security vulnerability. ' . $uniqueTerms;
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$communityNids[] = $this->given(self::HOUR + $i * 60, ['updates'], 'garden-author-' . $i, 100 + $i);
+			$this->posts[array_key_last($this->posts)]['content'] = 'Community gardens welcome volunteers for a neighborhood planting day.';
+		}
+
+		$ranked = $this->service()->rank($this->viewer());
+		$firstOtherTopic = null;
+		foreach ($ranked as $index => $entry) {
+			if (in_array($entry['nid'], $communityNids, true)) {
+				$firstOtherTopic = $index;
+				break;
+			}
+		}
+
+		self::assertGreaterThan(0, $this->storyLookups);
+		self::assertSame(6, $firstOtherTopic, 'classified security posts with varied text and hashtag arrive in a bounded run before another topic');
+	}
+
 	public function testOneSlotInTenIsATagThatKeepsCompanyWithTheReadersOwn(): void {
 		$this->weights(['cats' => 1.0]);
 		foreach (range(1, 12) as $i) {
@@ -234,7 +375,6 @@ class InterestFeedServiceTest extends TestCase {
 		$related = $this->given(2 * self::HOUR, ['kittens'], 'someone', 99);
 
 		$ranked = $this->service()->rank($this->viewer());
-
 		$this->assertSame($related, $ranked[9]['nid']);
 		$this->assertSame(['tags' => ['kittens'], 'reason' => 'related'], ['tags' => $ranked[9]['tags'], 'reason' => $ranked[9]['reason']]);
 	}
@@ -263,6 +403,41 @@ class InterestFeedServiceTest extends TestCase {
 		$this->given(8 * 86400, ['cats'], 'b', 2);
 
 		$this->assertCount(1, $this->service()->rank($this->viewer()));
+	}
+
+	public function testStoryTermCacheAvoidsRehydratingUnchangedCandidates(): void {
+		$this->weights(['php' => 3.0]);
+		$this->given(60, ['php'], 'a', 1);
+		$this->given(120, ['php'], 'b', 2);
+		$this->given(180, ['php'], 'c', 3);
+
+		$this->service()->rank($this->viewer());
+		$lookupsAfterFirstRank = $this->storyLookups;
+		self::assertGreaterThan(0, $lookupsAfterFirstRank);
+
+		$this->service()->rank($this->viewer());
+
+		self::assertSame($lookupsAfterFirstRank, $this->storyLookups);
+	}
+
+	public function testStoryTermCacheIsInvalidatedWhenALinkPreviewArrives(): void {
+		$this->weights(['php' => 3.0]);
+		$nid = $this->given(60, ['php'], 'a', 1);
+		$service = $this->service();
+
+		$service->rank($this->viewer());
+		$lookupsWithoutPreview = $this->storyLookups;
+		self::assertGreaterThan(0, $lookupsWithoutPreview);
+
+		// LinkPreviewGenerate runs after the first rank and does not change the
+		// stream's `updated` value. The preview must still invalidate its story terms.
+		$this->previewTitles[$nid] = 'A newly available headline about city gardens';
+		$service->rank($this->viewer());
+		$lookupsWithPreview = $this->storyLookups;
+		self::assertGreaterThan($lookupsWithoutPreview, $lookupsWithPreview);
+
+		$service->rank($this->viewer());
+		self::assertSame($lookupsWithPreview, $this->storyLookups, 'the refreshed card terms are cached for later rankings');
 	}
 
 	public function testPagingByTheLastPostContinuesTheSameRanking(): void {

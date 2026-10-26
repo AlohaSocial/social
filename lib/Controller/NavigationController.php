@@ -27,6 +27,7 @@ use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\ExternalMediaQuota;
 use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\FilterService;
+use OCA\Social\Service\FollowService;
 use OCA\Social\Service\InterestService;
 use OCA\Social\Service\ModeratorService;
 use OCA\Social\Service\SectionsService;
@@ -93,6 +94,7 @@ class NavigationController extends Controller {
 		private FilterService $filterService,
 		private ExternalMediaQuota $externalMediaQuota,
 		private LoggerInterface $logger,
+		private FollowService $followService,
 		private ?ModeratorService $moderatorService = null,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -417,6 +419,7 @@ class NavigationController extends Controller {
 				->setLimit(self::FIRST_PAGE);
 
 			$posts = $this->streamService->getTimeline($options);
+			$posts = $this->feedDisplayService->filterBlueskyHomePosts($posts, $this->userId, $viewer, $this->followService);
 			if ($this->feedDisplayService->hidesReplies($this->userId)) {
 				$posts = array_values(array_filter($posts, static fn ($post): bool => $post->getInReplyTo() === ''));
 			}

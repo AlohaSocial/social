@@ -17,13 +17,16 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 class RecommendationPreferenceRequest extends CoreRequestBuilder {
 	public const TABLE_PROFILE = 'social_rec_profile';
 	public const TABLE_PREFERENCE = 'social_rec_pref';
+	public const TABLE_EPOCH = 'social_rec_epoch';
+	public const GENERATION_EPOCH_STRIDE = 67_108_864;
+	private const MAX_GENERATION_PART = self::GENERATION_EPOCH_STRIDE - 1;
 
 	/** @return array{revision: int, generation: int, learning_mode: string} */
 	public function get(string $actorKey): array {
 		$profile = $this->profile($actorKey);
 		return [
 			'revision' => $profile['profile_ver'],
-			'generation' => $profile['generation'],
+			'generation' => self::effectiveGeneration($this->globalEpoch(), $profile['generation']),
 			'learning_mode' => $profile['learning_mode'],
 		];
 	}
@@ -51,6 +54,17 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 		return $this->get($actorKey);
 	}
 
+	/** Invalidate every open client buffer when the instance learning switch changes. */
+	public function invalidateAllLearningGenerations(): void {
+		$this->globalEpoch();
+		$qb = $this->getQueryBuilder();
+		$one = $qb->expr()->literal(1);
+		$qb->update(self::TABLE_EPOCH)
+			->set('epoch', $qb->func()->add('epoch', $one))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
 	/** @return array{revision: int, generation: int, learning_mode: string}|null */
 	public function reset(string $actorKey, int $expectedRevision): ?array {
 		$this->ensureProfile($actorKey);
@@ -66,10 +80,10 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 				->andWhere($qb->expr()->eq('profile_ver', $qb->createNamedParameter($expectedRevision, IQueryBuilder::PARAM_INT)));
 			if ($qb->executeStatement() !== 1) {
 				$connection->rollBack();
-				$current = $this->get($actorKey);
-				if ($current['revision'] === $expectedRevision + 1
+				$current = $this->profile($actorKey);
+				if ($current['profile_ver'] === $expectedRevision + 1
 					&& $current['generation'] === $expectedRevision + 1) {
-					return $current;
+					return $this->get($actorKey);
 				}
 				return null;
 			}
@@ -175,5 +189,42 @@ class RecommendationPreferenceRequest extends CoreRequestBuilder {
 				throw $e;
 			}
 		}
+	}
+
+	private function globalEpoch(): int {
+		$qb = $this->getQueryBuilder();
+		$qb->select('epoch')->from(self::TABLE_EPOCH)
+			->where($qb->expr()->eq('id', $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT)))
+			->setMaxResults(1);
+		$result = $qb->executeQuery();
+		$row = $result->fetch();
+		$result->closeCursor();
+		if ($row !== false) {
+			return (int)$row['epoch'];
+		}
+
+		$insert = $this->getQueryBuilder();
+		try {
+			$insert->insert(self::TABLE_EPOCH)
+				->setValue('id', $insert->createNamedParameter(1, IQueryBuilder::PARAM_INT))
+				->setValue('epoch', $insert->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+				->executeStatement();
+		} catch (DBException $e) {
+			if ($e->getReason() !== DBException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				throw $e;
+			}
+		}
+
+		return $this->globalEpoch();
+	}
+
+	/** Combine the global invalidation epoch with a profile's local generation. */
+	public static function effectiveGeneration(int $epoch, int $generation): int {
+		if ($epoch < 0 || $epoch > self::MAX_GENERATION_PART
+			|| $generation < 0 || $generation > self::MAX_GENERATION_PART) {
+			throw new \OverflowException('Recommendation learning generation is out of range');
+		}
+
+		return $epoch * self::GENERATION_EPOCH_STRIDE + $generation;
 	}
 }

@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Service;
 
 use Exception;
+use OCA\Social\AP;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostDeletedEvent;
 use OCA\Social\Exceptions\InvalidActionException;
@@ -46,6 +47,7 @@ use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\IURLGenerator;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 class StreamService {
 	use TArrayTools;
@@ -651,7 +653,7 @@ class StreamService {
 	 *
 	 * @return array
 	 */
-	public function getContextByNid(int|string $nid, bool $withHidden = false): array {
+	public function getContextByNid(int|string $nid, bool $withHidden = false, string $threadSort = 'oldest'): array {
 		// Router path parameters arrive as decimal strings. Normalize the id at
 		// the service boundary before it reaches the query builder, whose
 		// integer predicate cannot accept even an in-range numeric string.
@@ -713,18 +715,22 @@ class StreamService {
 		$readerIsAuthor = $this->viewer !== null && $this->viewer->getId() === $root->getAttributedTo();
 		$descendants = [];
 		$hiddenCount = 0;
-		foreach ($this->streamRequest->getDescendants($post->getId()) as $reply) {
+		$descendants = $threadSort === 'oldest'
+			? $this->streamRequest->getDescendants($post->getId())
+			: $this->streamRequest->getDescendants($post->getId(), $threadSort);
+		$visibleDescendants = [];
+		foreach ($descendants as $reply) {
 			$isHidden = isset($hidden[$reply->getId()]);
 			$hiddenCount += $isHidden ? 1 : 0;
 			if ($isHidden && !$withHidden) {
 				continue;
 			}
-			$descendants[] = $reply->setThreadVisibility($isHidden, $readerIsAuthor);
+			$visibleDescendants[] = $reply->setThreadVisibility($isHidden, $readerIsAuthor);
 		}
 
 		$context = [
 			'ancestors' => array_reverse($ancestors),
-			'descendants' => $descendants,
+			'descendants' => $visibleDescendants,
 			'filling' => $filling,
 			'hidden' => $hiddenCount,
 		];
@@ -751,6 +757,16 @@ class StreamService {
 
 	public function updateStream(Stream $stream, bool $generateDest = false): void {
 		$this->streamRequest->update($stream, $generateDest);
+	}
+
+	/** Refresh both parents after moving or removing a local reply. */
+	public function recountReplies(string $parentId): void {
+		$this->streamRequest->recountReplies($parentId);
+	}
+
+	/** Refresh the cached count on a post after a local quote was moved. */
+	public function recountQuotes(string $quotedId): void {
+		$this->streamRequest->recountQuotes($quotedId);
 	}
 
 	/**
@@ -1064,26 +1080,79 @@ class StreamService {
 
 			$offset = max(0, $offset);
 			$batch = array_slice($items, $offset, self::SYNC_ITEM_LIMIT);
+			$remainingFetches = 6;
+			$consumed = 0;
 			foreach ($batch as $itemData) {
+				$resolved = null;
 				try {
-					// An OrderedCollection may list bare ids as well as objects,
-					// and everything below reads the entry as an array.
-					if (!is_array($itemData)) {
+					$resolved = $this->remoteOutboxPageReader->resolveEntry($actor, $itemData, $remainingFetches);
+					if ($resolved['deferred']) {
+						break;
+					}
+					$consumed++;
+					$itemData = $resolved['item'];
+					if ($itemData === null) {
 						continue;
 					}
 
-					// Extract the Note data from the activity item
+					// Extract the status or Event data from the activity item
 					$itemType = $this->get('type', $itemData, '');
-					if ($itemType === 'Create' && isset($itemData['object']) && is_array($itemData['object'])) {
+					if ($itemType === 'Update') {
+						$activityActor = $itemData['actor'] ?? '';
+						$activityActor = is_array($activityActor) ? ($activityActor['id'] ?? '') : $activityActor;
+						if ($activityActor !== $actor->getId()) {
+							continue;
+						}
+					}
+					if ($itemType === 'Announce') {
+						$activityActor = $itemData['actor'] ?? '';
+						$activityActor = is_array($activityActor) ? ($activityActor['id'] ?? '') : $activityActor;
+						if ($activityActor !== $actor->getId()) {
+							continue;
+						}
+						// Never trust foreign post content embedded by the booster.
+						// The Announce handler queues its object for origin verification.
+						$object = $itemData['object'] ?? '';
+						$itemData['object'] = is_array($object) ? ($object['id'] ?? '') : $object;
+						if (!is_string($itemData['object']) || $itemData['object'] === '') {
+							continue;
+						}
+						$announce = AP::instance()->getItemFromData($itemData, deferAttachmentDownloads: true);
+						$announce->setOrigin((string)parse_url($actor->getId(), PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+						$announce->setActor($actor);
+						AP::instance()->getInterfaceForItem($announce)->processIncomingRequest($announce);
+						$synced++;
+						continue;
+					}
+					if ($itemType === 'Delete') {
+						// A fetched outbox is not an inbox delivery, but its Delete
+						// still has to go through the normal ActivityPub handler: that
+						// handler checks the actor against the stored author and cleans
+						// up every row related to the post. Only accept deletes the
+						// outbox owner itself authored.
+						$delete = AP::instance()->getItemFromData($itemData);
+						if ($delete->getType() !== 'Delete' || $delete->getActorId() !== $actor->getId()) {
+							continue;
+						}
+						$delete->setOrigin((string)parse_url($actor->getId(), PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+						AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
+						$synced++;
+						continue;
+					}
+					if (in_array($itemType, ['Create', 'Update'], true) && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
-					} elseif ($itemType === 'Note') {
+					} elseif (in_array($itemType, array_merge(['Note', 'Question'], AP::NOTE_LIKE_TYPES), true)) {
 						$noteData = $itemData;
 					} else {
 						continue;
 					}
+					$objectType = $noteData['type'] ?? '';
+					if (!in_array($objectType, array_merge(['Note', 'Question'], AP::NOTE_LIKE_TYPES), true)) {
+						continue;
+					}
 
-					$noteId = $this->get('id', $noteData, '');
-					if ($noteId === '') {
+					$noteId = $noteData['id'] ?? '';
+					if (!is_string($noteId) || $noteId === '') {
 						continue;
 					}
 
@@ -1091,7 +1160,15 @@ class StreamService {
 					// only yield notes that live on that server and belong to the actor
 					// whose outbox is being read. Anything else is that server speaking
 					// for someone it does not host.
-					$attributedTo = $this->get('attributedTo', $noteData, $actor->getId());
+					$attributedTo = $noteData['attributedTo'] ?? $actor->getId();
+					if (is_array($attributedTo)) {
+						$values = array_is_list($attributedTo) ? $attributedTo : [$attributedTo];
+						$first = $values[0] ?? '';
+						$attributedTo = is_array($first) ? ($first['id'] ?? '') : $first;
+					}
+					if (!is_string($attributedTo) || $attributedTo === '') {
+						continue;
+					}
 					$actorHost = strtolower((string)parse_url($actor->getId(), PHP_URL_HOST));
 					$noteHost = strtolower((string)parse_url($noteId, PHP_URL_HOST));
 					$authorHost = strtolower((string)parse_url($attributedTo, PHP_URL_HOST));
@@ -1103,56 +1180,41 @@ class StreamService {
 						continue;
 					}
 
-					// Check if we already have it
 					try {
 						$this->streamRequest->getStreamById($noteId);
+						if ($itemType === 'Update') {
+							$update = AP::instance()->getItemFromData($itemData, deferAttachmentDownloads: true);
+							if ($update->getType() !== 'Update' || $update->getActorId() !== $actor->getId()) {
+								continue;
+							}
+							// The document was fetched from this actor's own outbox.
+							// The inbox handler still checks the stored author and edit time.
+							$update->setOrigin($actorHost, SignatureService::ORIGIN_REQUEST, time());
+							AP::instance()->getInterfaceForItem($update)->processIncomingRequest($update);
+							$synced++;
+						}
 						continue;
-					} catch (StreamNotFoundException $e) {
+					} catch (StreamNotFoundException) {
 					}
 
-					// Manually create a Note with only the fields we need (no attachment
-					// processing). Storing without NoteInterface::save() also means
-					// storing without the validation ACore::import() does on the inbox
-					// path, so every field a remote server controls is put through the
-					// same helpers here.
-					$note = new Note();
-					$note->setId($noteId);
-					$note->setType('Note');
-					$note->setUrl($note->validate(ACore::AS_URL, 'url', $noteData, ''));
-					$note->setAttributedTo($attributedTo);
-					$note->setPublished($this->get('published', $noteData, date('c')));
-					$note->setContent($note->validate(ACore::AS_CONTENT, 'content', $noteData, ''));
+					// Reuse the inbox's object parser: it understands polls, article
+					// titles, Lemmy links, PeerTube videos, event facts, quotes and
+					// media. Store media metadata now, then let the media worker
+					// download the files; one slow CDN must not hold this whole page.
+					$source = $noteData;
+					$noteData['attributedTo'] ??= $actor->getId();
+					if ($objectType !== 'Video') {
+						$noteData['attributedTo'] = $attributedTo;
+					}
+					$noteData['published'] ??= date('c');
+					$note = AP::instance()->getItemFromData($noteData, deferAttachmentDownloads: true);
+					if (!$note instanceof Note
+						|| strtolower((string)parse_url($note->getAttributedTo(), PHP_URL_HOST)) !== $actorHost) {
+						continue;
+					}
+					$note->setSource(json_encode($source, JSON_UNESCAPED_SLASHES));
 					$note->setSummary($note->validate(ACore::AS_STRING, 'summary', $noteData, ''));
-					$note->setSensitive(!empty($noteData['sensitive']));
-					$note->setSource(json_encode($noteData, JSON_UNESCAPED_SLASHES));
 					$note->setLocal(false);
-
-					// Set conversation / context
-					$conversation = $note->validate(ACore::AS_ID, 'conversation', $noteData, '');
-					$context = $note->validate(ACore::AS_ID, 'context', $noteData, '');
-					if ($context !== '') {
-						$conversation = $context;
-					}
-					if ($conversation !== '') {
-						$note->setConversation($conversation);
-					}
-					$note->setInReplyTo($note->validate(ACore::AS_ID, 'inReplyTo', $noteData, ''));
-
-					// Set to/cc arrays
-					$note->setToArray($this->recipientList($noteData['to'] ?? []));
-					$note->setCcArray($this->recipientList($noteData['cc'] ?? []));
-
-					// Process tags (hashtags, mentions) without triggering downloads.
-					// A hashtag is the one stored string with no read-time filter behind
-					// it — it reaches the composer's autocomplete as it was stored — so
-					// the tag names are sanitised here, exactly as `ACore::import()` and
-					// `Note::fillHashtags()` do for anything arriving over the inbox.
-					$note->setTags($note->validateArray(ACore::AS_TAGS, 'tag', $noteData, []));
-					$note->fillHashtags();
-					// the people the post names, resolved to the accounts a
-					// client reads out of `mentions`; without it every post
-					// reached this way mentioned nobody
-					$note->fillMentions();
 
 					// what a peer's `to`/`cc` say the audience is. Stored
 					// blank, the row exported as public to every client — so a
@@ -1161,35 +1223,7 @@ class StreamService {
 					// left it out.
 					$note->setVisibility($this->visibilityOf($note) ?: Stream::TYPE_DIRECT);
 
-					// Attachments are not processed during sync to avoid
-					// memory-exhausting remote file downloads. They will be
-					// fetched lazily from the source JSON when needed.
-
-					// Convert published time
-					try {
-						$note->convertPublished();
-					} catch (Exception $e) {
-					}
-
-					// what the origin says about its own post, where what it
-					// says is a believable count; see Stream::statedCount()
-					$remoteLikes = Stream::statedCount($noteData, 'likes');
-					if ($remoteLikes !== null) {
-						$note->setDetailInt(Details::LIKES, $remoteLikes);
-						$note->setDetailInt(Details::REMOTE_LIKES, $remoteLikes);
-					}
-					$remoteBoosts = Stream::statedCount($noteData, 'shares');
-					if ($remoteBoosts !== null) {
-						$note->setDetailInt(Details::BOOSTS, $remoteBoosts);
-						$note->setDetailInt(Details::REMOTE_BOOSTS, $remoteBoosts);
-					}
-					$remoteReplies = Stream::statedCount($noteData, 'replies');
-					if ($remoteReplies !== null) {
-						$note->setDetailInt(Details::REPLIES, $remoteReplies);
-					}
-
-					// Save the Note directly without going through NoteInterface
-					// (which would trigger attachment downloads)
+					// Save without generating a new inbox delivery or forwarding it.
 					$this->streamRequest->save($note);
 					// and so without NoteInterface::updateDetails(), which is the
 					// only thing that tells the post this one answered that it has
@@ -1200,14 +1234,19 @@ class StreamService {
 					$this->streamRequest->recountQuotes($note->getQuote());
 					$synced++;
 					$this->logger->debug('[syncRemoteTimeline] Saved post', ['id' => $note->getId()]);
-				} catch (Exception $e) {
+				} catch (Throwable $e) {
+					// A failed reference still consumes this entry; the next profile
+					// refresh retries the first page without blocking other posts.
+					if (!isset($resolved)) {
+						$consumed++;
+					}
 					$this->logger->warning('[syncRemoteTimeline] Failed to process item', [
 						'error' => $e->getMessage(),
 					]);
 				}
 			}
 
-			$nextOffset = $offset + count($batch);
+			$nextOffset = $offset + $consumed;
 			if ($nextOffset < count($items)) {
 				$result['next'] = ['url' => $pageUrl, 'offset' => $nextOffset];
 			} elseif ($page['nextUrl'] !== '') {
@@ -1229,12 +1268,4 @@ class StreamService {
 		return $result;
 	}
 
-	/**
-	 * The `to`/`cc` of a remote object: a single recipient may be sent as a bare
-	 * string instead of a list, and anything in the list that is not a string is
-	 * not an address this app can store.
-	 */
-	private function recipientList(mixed $value): array {
-		return array_values(array_filter(is_array($value) ? $value : [$value], 'is_string'));
-	}
 }

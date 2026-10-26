@@ -52,11 +52,21 @@ class CustomHandleService {
 			throw new MoveErrorException('The Bluesky account is not active', 'identity-inactive');
 		}
 		$handle = HandleVerifier::normal($typed);
+		// A client may repeat the current handle as an idempotent update. Keep
+		// it unchanged before asking whether the handle is reserved or taken.
+		if ($handle === $identity->handle) {
+			return $identity;
+		}
+		// The assigned handle belongs to this identity too; switching back to
+		// it must clear the custom handle rather than fail the uniqueness check.
+		if ($identity->customHandle !== '' && $handle === $identity->assignedHandle()) {
+			return $this->identities->useCustomHandle($identity, '');
+		}
 		$refusal = $this->verifier->refusal($handle);
 		if ($refusal !== '') {
 			throw new MoveErrorException($refusal, Syntax::isResolvableHandle($handle) ? 'handle-reserved' : 'handle-domain-invalid');
 		}
-		if ($handle === $identity->handle) {
+		if ($handle === $identity->customHandle) {
 			return $identity;
 		}
 		if ($this->identityRequest->handleExists($handle)) {

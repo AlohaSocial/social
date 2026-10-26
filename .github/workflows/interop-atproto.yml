@@ -103,16 +103,20 @@ jobs:
           node-version: '22'
 
       - name: Make a test video
-        # two seconds of H.264 in an MP4, the kind Bluesky's video service takes
+        timeout-minutes: 5
+        # Use the runner's existing encoder. Mirror outages must not hang a
+        # federation test before it has even generated its two-second fixture.
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends ffmpeg
-          ffmpeg -loglevel error -y -f lavfi -i testsrc=duration=2:size=320x240:rate=15 \
-            -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$ATPROTO_VIDEO"
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            timeout 120s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update -q
+            timeout 120s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y -q --no-install-recommends ffmpeg
+          fi
+          timeout 30s ffmpeg -nostdin -loglevel error -y -f lavfi -i testsrc=duration=2:size=320x240:rate=15 \
+            -filter_threads 1 -threads 2 -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$ATPROTO_VIDEO"
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/social
-        run: composer i --no-dev
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Give the server a name, an address and a certificate
         # The handle hosts are *.nextcloud.test; the certificate covers them,
@@ -244,6 +248,15 @@ jobs:
           NETWORK_FILE: /tmp/atproto-network.json
         run: |
           npm ci --no-audit --no-fund
+          patch --batch --forward --fuzz=0 -p1 < patches/@atproto+oauth-provider+0.24.3.patch
+          node --input-type=module <<'NODE'
+          import { htuSchema } from '@atproto/jwk'
+
+          const result = htuSchema.safeParse('not a URL')
+          if (result.success || result.error.issues[0]?.code !== 'custom') {
+            throw new Error('Zod 4 must return a valid issue for malformed HTTP target URLs')
+          }
+          NODE
           nohup node network.mjs > /tmp/network.log 2>&1 &
           for attempt in $(seq 1 60); do
             if [ -f "$NETWORK_FILE" ]; then
@@ -296,7 +309,7 @@ jobs:
       - name: Interop tests
         working-directory: apps/social
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
           timeout 1200 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter 'AtprotoVisibleTest|AtprotoReadingTest|AtprotoThreadsTest|AtprotoModerationTest|AtprotoAppsTest|AtprotoVideoTest|AtprotoOAuthTest|AtprotoHandleTest|AtprotoMoveAwayTest|AtprotoMoveInTest|AtprotoMoveByToolTest|AtprotoLinkCardTest|AtprotoThreadgateTest|AtprotoFeedsTest|AtprotoPostgateTest|AtprotoStarterPackTest|AtprotoBellTest|AtprotoChatTest|AtprotoBlocksTest|AtprotoBlockedByTest|AtprotoReplyRuleTest|AtprotoDetachQuoteTest|AtprotoProfileRowsTest|AtprotoMutesTest|AtprotoReactionsTest|AtprotoSearchTest|AtprotoBookmarksTest|AtprotoNotificationSettingsTest|AtprotoHiddenRepliesTest|AtprotoModerationListsTest|AtprotoFollowListsTest|AtprotoFollowedTagsTest|AtprotoChatDeclarationTest|AtprotoCountsTest|AtprotoListsSyncTest|AtprotoOptOutTest|AtprotoVerificationTest'
 
       - name: What each side saw, when it went wrong

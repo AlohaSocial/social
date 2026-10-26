@@ -42,7 +42,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        run: composer i
+        run: bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
 
       # No friendica/json-ld patch here: since 1.1.5 jsonld.php guards
       # $http_response_header behind function_exists('http_get_last_response_headers'),

@@ -10,7 +10,10 @@ declare(strict_types=1);
 namespace OCA\Social\Atproto\Xrpc;
 
 use OCA\Social\Atproto\Client\ClientXrpc;
+use OCA\Social\Atproto\Identity\DidWebResolver;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Car;
@@ -28,6 +31,7 @@ use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 
 /**
@@ -49,6 +53,9 @@ class XrpcService {
 		private ConfigService $configService,
 		private ModerationService $moderation,
 		private AtprotoIdentityRequest $identityRequest,
+		private HandleVerifier $handles,
+		private PlcClient $plc,
+		private CurlService $curl,
 	) {
 	}
 
@@ -66,6 +73,8 @@ class XrpcService {
 			'_health' => ['version' => 'aloha-social/' . $this->configService->getAppValue('installed_version')],
 			'com.atproto.server.describeServer' => $this->describeServer(),
 			'com.atproto.identity.resolveHandle' => $this->resolveHandle(self::string($params, 'handle')),
+			'com.atproto.identity.resolveDid' => $this->resolveDid(self::string($params, 'did')),
+			'com.atproto.identity.resolveIdentity' => $this->resolveIdentity(self::string($params, 'identifier')),
 			'com.atproto.sync.getRepo' => $this->getRepo(self::string($params, 'did')),
 			'com.atproto.sync.getLatestCommit' => $this->getLatestCommit(self::string($params, 'did')),
 			'com.atproto.sync.getRepoStatus' => $this->getRepoStatus(self::string($params, 'did')),
@@ -96,6 +105,7 @@ class XrpcService {
 		}
 
 		return match ($method) {
+			'com.atproto.identity.refreshIdentity' => $this->resolveIdentity(self::bodyString($body, 'identifier')),
 			'com.atproto.server.createSession', 'com.atproto.server.refreshSession', 'com.atproto.server.deleteSession',
 			'com.atproto.repo.createRecord', 'com.atproto.repo.putRecord', 'com.atproto.repo.deleteRecord',
 			'com.atproto.repo.applyWrites', 'com.atproto.repo.uploadBlob', 'com.atproto.repo.importRepo' => throw XrpcException::authenticationRequired(),
@@ -112,6 +122,16 @@ class XrpcService {
 		];
 	}
 
+	/** @param array<string, mixed> $body */
+	private static function bodyString(array $body, string $name): string {
+		$value = $body[$name] ?? null;
+		if (!is_string($value) || trim($value) === '') {
+			throw XrpcException::invalidRequest('Input must have the property "' . $name . '"');
+		}
+
+		return trim($value);
+	}
+
 	private function resolveHandle(string $handle): array {
 		$handle = Syntax::normalizeHandle($handle);
 		if (!Syntax::isHandle($handle)) {
@@ -120,13 +140,122 @@ class XrpcService {
 		try {
 			$identity = $this->identities->getByHandle($handle);
 		} catch (AtprotoIdentityNotFoundException) {
-			throw XrpcException::invalidRequest('Unable to resolve handle');
+			$did = $this->handles->resolve($handle);
+			if ($did === null) {
+				throw new XrpcException(404, 'HandleNotFound', 'Unable to resolve handle');
+			}
+
+			return ['did' => $did];
 		}
 		if (!$identity->isActive()) {
 			throw XrpcException::invalidRequest('Unable to resolve handle');
 		}
 
 		return ['did' => $identity->did];
+	}
+
+	/** Resolve a managed identity or a PLC DID without trusting its handle claim. */
+	private function resolveDid(string $did): array {
+		if (!Syntax::isDid($did)) {
+			throw XrpcException::invalidRequest('Not a DID');
+		}
+		if ($did === $this->config->serviceDid()) {
+			return ['didDoc' => $this->identities->instanceDocument()];
+		}
+		try {
+			$identity = $this->identities->getByDid($did);
+		} catch (AtprotoIdentityNotFoundException) {
+			try {
+				$document = match (true) {
+					Syntax::isDidPlc($did) => $this->plc->document($did),
+					str_starts_with($did, 'did:web:') => DidWebResolver::document($did, $this->curl),
+					default => null,
+				};
+			} catch (AtprotoException $e) {
+				throw new XrpcException(502, 'DidResolutionFailed', 'The DID resolution service could not be reached');
+			}
+			if ($document === null || ($document['id'] ?? '') !== $did) {
+				throw new XrpcException(404, 'DidNotFound', 'Could not resolve DID');
+			}
+
+			return ['didDoc' => $document];
+		}
+		if ($identity->state === Identity::STATE_TOMBSTONED) {
+			throw new XrpcException(404, 'DidNotFound', 'Could not resolve DID');
+		}
+		if (!$identity->isActive()) {
+			throw new XrpcException(400, 'DidDeactivated', 'DID is deactivated');
+		}
+
+		return ['didDoc' => $this->identities->document($identity)];
+	}
+
+	/** Resolve handles and DIDs into identityInfo; never advertise an unverified handle. */
+	private function resolveIdentity(string $identifier): array {
+		$identity = null;
+		$handle = '';
+		if (Syntax::isDid($identifier)) {
+			try {
+				$identity = $this->identities->getByDid($identifier);
+			} catch (AtprotoIdentityNotFoundException) {
+			}
+		} elseif (Syntax::isResolvableHandle($identifier)) {
+			$handle = Syntax::normalizeHandle($identifier);
+			try {
+				$identity = $this->identities->getByHandle($handle);
+			} catch (AtprotoIdentityNotFoundException) {
+				$did = $this->handles->resolve($handle);
+				if ($did === null) {
+					throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+				}
+				try {
+					$identity = $this->identities->getByDid($did);
+				} catch (AtprotoIdentityNotFoundException) {
+					$identity = null;
+				}
+				$identifier = $did;
+			}
+		} else {
+			throw XrpcException::invalidRequest('Not an atproto identifier');
+		}
+
+		if ($identity !== null) {
+			if (!$identity->isActive()) {
+				throw new XrpcException(400, 'DidDeactivated', 'DID is deactivated');
+			}
+			$document = $this->identities->document($identity);
+			$handleIsAssigned = $identity->handle === $identity->assignedHandle();
+			$handleIsVerified = $handleIsAssigned || (!$identity->customHandleBroken()
+				&& in_array('at://' . $identity->handle, $document['alsoKnownAs'] ?? [], true)
+				&& $this->handles->verify($identity->handle, $identity->did) !== '');
+			$resolvedHandle = $handleIsVerified ? $identity->handle : 'handle.invalid';
+			if ($handle === '') {
+				$handle = $resolvedHandle;
+			}
+
+			return ['did' => $identity->did, 'handle' => $resolvedHandle, 'didDoc' => $document];
+		}
+
+		if (!Syntax::isDid($identifier)) {
+			throw new XrpcException(404, 'HandleNotFound', 'Could not resolve handle');
+		}
+		$document = $this->resolveDid($identifier)['didDoc'];
+		if ($handle === '') {
+			foreach (($document['alsoKnownAs'] ?? []) as $alias) {
+				if (is_string($alias) && str_starts_with($alias, 'at://')) {
+					$candidate = substr($alias, 5);
+					if (Syntax::isResolvableHandle($candidate)) {
+						$handle = $candidate;
+						break;
+					}
+				}
+			}
+		}
+		$verified = $handle !== ''
+			&& in_array('at://' . $handle, $document['alsoKnownAs'] ?? [], true)
+			&& $this->handles->verify($handle, $identifier) !== '';
+
+		return ['did' => $identifier, 'handle' => $verified ? $handle : 'handle.invalid', 'didDoc' => $document];
 	}
 
 	/**

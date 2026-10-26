@@ -18,6 +18,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Details;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -53,11 +54,35 @@ class PostMapperTest extends TestCase {
 		$this->assertSame(['url' => 'https://bsky.app/profile/bob.test/lists/3kl', 'title' => 'Friends', 'description' => '', 'image' => '', 'provider' => 'List by @bob.test'], PostMapper::cardOf($record($list)));
 		$this->assertSame(['url' => 'https://bsky.app/starter-pack/bob.test/3ks', 'title' => 'Start here', 'description' => 'Good people', 'image' => 'https://cdn.bsky.app/img/avatar/plain/bob@jpeg', 'provider' => 'Starter pack by @bob.test'],
 			PostMapper::cardOf(['$type' => 'app.bsky.embed.recordWithMedia#view', 'record' => $record($pack), 'media' => ['$type' => 'app.bsky.embed.images#view', 'images' => []]]), 'beside pictures');
+		$external = ['$type' => 'app.bsky.embed.external', 'external' => ['uri' => 'https://example.com/story', 'title' => 'A story', 'description' => 'Details']];
+		$this->assertSame(['url' => 'https://example.com/story', 'title' => 'A story', 'description' => 'Details', 'image' => '', 'provider' => 'example.com'],
+			PostMapper::cardOf(['$type' => 'app.bsky.embed.recordWithMedia', 'record' => ['record' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kp']], 'media' => $external]), 'an external card beside a quoted record');
 		$this->assertNull(PostMapper::cardOf($record(['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kp'])), 'a quoted post is a quote');
 
 		$note = (new PostMapper($this->resolver()))->note($this->postView(['embed' => $record($list)]));
 		$this->assertStringContainsString('<a href="https://bsky.app/profile/bob.test/lists/3kl"', $note['content']);
 		$this->assertSame('Friends', $note['_atproto']['card']['title']);
+	}
+
+	public function testARecordWithExternalMediaKeepsItsNonPostStrongRefForRepublishing(): void {
+		$uri = 'at://' . self::OTHER . '/app.bsky.feed.generator/3kgenerator';
+		$cid = Cid::forRaw('generator record')->toString();
+		$view = $this->postView([
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia#view',
+				'record' => ['record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => $uri, 'cid' => $cid]],
+				'media' => ['$type' => 'app.bsky.embed.external#view', 'external' => [
+					'uri' => 'https://example.com/story',
+					'title' => 'A story',
+					'description' => 'Details',
+				]],
+			],
+		]);
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['uri' => $uri, 'cid' => $cid], $note['_atproto'][Details::ATPROTO_RECORD_EMBED]);
+		$this->assertSame('https://example.com/story', $note['_atproto']['card']['url']);
 	}
 
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
@@ -83,6 +108,23 @@ class PostMapperTest extends TestCase {
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kparent', $note['inReplyTo']);
 		$this->assertSame(['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', 'cid' => 'bafyreipost', 'likes' => 3, 'reposts' => 1, 'replies' => 2, 'quotes' => 0, 'labels' => [], 'label_sources' => [], 'indexed_at' => '2026-10-08T10:00:01.000Z', 'reply_root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent', 'cid' => 'bafyr']], $note['_atproto']);
 		$this->assertArrayNotHasKey('quote', $note);
+	}
+
+	public function testPostRecordSelfLabelsAreRetainedAndAffectVisibilityAndWarnings(): void {
+		$view = $this->postView();
+		$view['record']['labels'] = [
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => '!no-unauthenticated'], ['val' => 'porn'], ['val' => 'custom-label']],
+		];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['https://bsky.app/profile/' . self::DID . '/followers'], $note['to'], 'the privacy self-label keeps the post out of public timelines');
+		$this->assertSame([], $note['cc']);
+		$this->assertTrue($note['sensitive']);
+		$this->assertSame('Pornography, Custom label', $note['summary']);
+		$this->assertSame(['!no-unauthenticated', 'porn', 'custom-label'], $note['_atproto'][Details::ATPROTO_SELF_LABELS]);
+		$this->assertSame([], $note['_atproto']['label_sources'], 'self-labels are not attributed to a moderation labeler');
 	}
 
 	/**
@@ -130,7 +172,7 @@ class PostMapperTest extends TestCase {
 		$adult = $this->postView(['labels' => [['src' => self::DID, 'uri' => 'at://x', 'val' => 'porn']]]);
 		$note = $mapper->note($adult);
 		$this->assertTrue($note['sensitive']);
-		$this->assertSame('Porn', $note['summary'], 'a warning naming the label when the post had none');
+		$this->assertSame('Pornography', $note['summary'], 'a warning naming the label when the post had none');
 
 		$spam = $mapper->note($this->postView(['labels' => [['src' => 'did:plc:ar7c4by46qjdydhdevvrndac', 'uri' => 'at://x', 'val' => 'spam'], ['src' => self::DID, 'uri' => 'at://x', 'val' => '!warn']]]));
 		$this->assertSame('Spam, Content warning', $spam['summary']);
@@ -138,6 +180,24 @@ class PostMapperTest extends TestCase {
 
 		$this->assertNull($mapper->note($this->postView(['labels' => [['src' => 'did:plc:ar7c4by46qjdydhdevvrndac', 'uri' => 'at://x', 'val' => '!hide']]])), 'a hidden post is not stored');
 		$this->assertNull($mapper->create($this->postView(['uri' => 'at://alice.bsky.social/app.bsky.feed.post/3k'])), 'a handle authority is not an id');
+	}
+
+	public function testSelfWarningTextBecomesTheSummaryAndItsFacetsKeepTheirOffsets(): void {
+		$view = $this->postView(['labels' => [['src' => self::DID, 'uri' => 'at://x', 'val' => '!warn']]]);
+		$view['record']['text'] = "Content warning: family emergency\n\nHello @bob.bsky.social";
+		$mention = '@bob.bsky.social';
+		$start = strlen("Content warning: family emergency\n\nHello ");
+		$view['record']['facets'] = [[
+			'index' => ['byteStart' => $start, 'byteEnd' => $start + strlen($mention)],
+			'features' => [['$type' => 'app.bsky.richtext.facet#mention', 'did' => self::OTHER]],
+		]];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame('family emergency', $note['summary']);
+		$this->assertTrue($note['sensitive']);
+		$this->assertSame('<p>Hello <span class="h-card"><a href="https://bsky.app/profile/' . self::OTHER . '" class="u-url mention">@bob.bsky.social</a></span></p>', $note['content']);
+		$this->assertContains(['type' => 'Mention', 'href' => 'https://bsky.app/profile/' . self::OTHER, 'name' => '@bob.bsky.social'], $note['tag']);
 	}
 
 	public function testQuotesExternalLinksAndVideoAreAppendedOrLinked(): void {

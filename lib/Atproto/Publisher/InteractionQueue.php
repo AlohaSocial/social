@@ -41,6 +41,10 @@ class InteractionQueue {
 		$this->queue('unrepost', $announceId);
 	}
 
+	public function bookmarked(string $actorId, string $postId, bool $on): void {
+		$this->queue($on ? 'bookmark' : 'unbookmark', $postId, $postId, $actorId);
+	}
+
 	private function queue(string $action, string $id, string $post = '', string $actor = ''): void {
 		if (!$this->config->isEnabled() || $id === '') {
 			return;

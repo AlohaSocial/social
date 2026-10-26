@@ -826,6 +826,7 @@ class AccountApiController extends MastodonApiController {
 			}
 
 			$profileFilling = false;
+			$remoteProfileFilling = false;
 			$remoteProfile = !$local->isLocal() && !BlueskyActorService::isBluesky($local);
 			// Bluesky profiles have no ActivityPub outbox. Read their public
 			// author feed into the shared stream before the ordinary profile
@@ -842,7 +843,8 @@ class AccountApiController extends MastodonApiController {
 				// once a quarter-hour per account: this page answers with what is
 				// stored, and the next look has what the sync found.
 				$this->remoteFetchQueue->syncTimeline($local);
-				$profileFilling = $this->remoteFetchQueue->isTimelinePending($local->getId());
+				$remoteProfileFilling = $this->remoteFetchQueue->isTimelinePending($local->getId());
+				$profileFilling = $remoteProfileFilling;
 			}
 
 			$options = new ProbeOptions($this->request);
@@ -873,9 +875,27 @@ class AccountApiController extends MastodonApiController {
 			));
 			if ($remoteProfile && $this->viewer !== null && $max_id && !$min_id && !$since_id
 				&& count($shown) < $options->getLimit()) {
-				$profileFilling = $this->remoteFetchQueue->fillTimeline($local)
+				$remoteProfileFilling = $this->remoteFetchQueue->fillTimeline($local)
 					|| $this->remoteFetchQueue->isTimelinePending($local->getId())
-					|| $profileFilling;
+					|| $remoteProfileFilling;
+				$profileFilling = $remoteProfileFilling || $profileFilling;
+			}
+			// The outbox job can finish before its media files have been cached.
+			// Keep the visible profile refreshing until those stored copies gain
+			// their local URLs, or the media worker records a permanent refusal.
+			if ($remoteProfile) {
+				foreach ($shown as $post) {
+					if (!$post instanceof Stream) {
+						continue;
+					}
+					foreach ($post->getAttachments() as $media) {
+						if ($media->getCacheError() === 0 && (string)$media->getUrl() === '' && (string)$media->getRemoteUrl() !== '') {
+							$remoteProfileFilling = true;
+							$profileFilling = true;
+							break 2;
+						}
+					}
+				}
 			}
 
 			$response = $this->paged(
@@ -890,6 +910,9 @@ class AccountApiController extends MastodonApiController {
 			if ($profileFilling) {
 				$response->addHeader('X-Social-Filling', '1');
 				$response->addHeader('X-Social-Profile-Filling', '1');
+			}
+			if ($remoteProfileFilling) {
+				$response->addHeader('X-Social-Remote-Profile-Filling', '1');
 			}
 
 			return $response;

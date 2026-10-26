@@ -12,7 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Stream;
 
-/** Projects the reader's opted-in hashtag learning onto the reviewed topic catalog. */
+/** Filters a reader's accepted topic, author and format signals for ranking. */
 final class RecommendationBehavioralProfile {
 	/**
 	 * Bounded unfamiliarity used for exploration, never a reward for popularity.

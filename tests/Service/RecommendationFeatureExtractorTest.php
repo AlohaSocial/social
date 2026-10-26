@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\RecommendationFeatureExtractor;
 use OCA\Social\Service\RecommendationTopicCatalog;
 use PHPUnit\Framework\TestCase;
@@ -27,7 +28,7 @@ class RecommendationFeatureExtractorTest extends TestCase {
 
 		$features = $this->extractor()->extract($post);
 
-		$this->assertSame(8, $features['version']);
+		$this->assertSame(9, $features['version']);
 		$this->assertSame('de', $features['language']);
 		$this->assertSame(0.72, $features['topics']['oss.nextcloud']['score']);
 		$this->assertSame('text', $features['topics']['oss.nextcloud']['evidence']);
@@ -97,7 +98,7 @@ class RecommendationFeatureExtractorTest extends TestCase {
 		$this->assertArrayHasKey('photography', $germanPhotography['topics']);
 		$this->assertArrayHasKey('education', $englishEducation['topics']);
 		$this->assertArrayHasKey('software', $englishSoftware['topics']);
-		$this->assertSame(8, $englishAi['version']);
+		$this->assertSame(9, $englishAi['version']);
 
 		$science = $extractor->extract((new Note())->setContent('<p>Climate science and marine biology findings.</p>'));
 		$softwareTesting = $extractor->extract((new Note())->setContent('<p>Software testing and web accessibility matter.</p>'));
@@ -142,6 +143,7 @@ class RecommendationFeatureExtractorTest extends TestCase {
 		$this->assertNotContains('copied', $features['story_terms']);
 		$this->assertNotContains('secretword', $features['story_terms']);
 		$this->assertLessThanOrEqual(60, count($features['story_terms']));
+		$this->assertSame(array_slice($features['story_terms'], 0, 20), $features['story_headline_terms']);
 	}
 
 	public function testLongPostStoryTermsIncludeInformationFromTheEndOfThePost(): void {
@@ -174,5 +176,26 @@ class RecommendationFeatureExtractorTest extends TestCase {
 		$this->assertArrayHasKey('tech.security', $german['topics']);
 		$this->assertArrayHasKey('software.backend', $english['topics']);
 		$this->assertArrayHasKey('software.backend', $german['topics']);
+	}
+
+	public function testLinkCardHeadlineJoinsGenericLinkPostsIntoTheSameStory(): void {
+		$extractor = $this->extractor();
+		$first = (new Note())->setContent('<p>Read this report: https://first.example/report</p>')
+			->setCard((new StreamCard())->setTitle('PHP maintainers disclose the PHP2Shell vulnerability')
+				->setDescription('A critical remote code execution flaw affects PHP servers.'));
+		$second = (new Note())->setContent('<p>More details here: https://second.example/security</p>')
+			->setCard((new StreamCard())->setTitle('PHP2Shell vulnerability disclosed by PHP maintainers')
+				->setDescription('Critical remote code execution flaw affects PHP servers.'));
+
+		$firstTerms = $extractor->extract($first, true)['story_terms'];
+		$secondTerms = $extractor->extract($second, true)['story_terms'];
+
+		self::assertNotEmpty(array_intersect($firstTerms, $secondTerms));
+		self::assertContains('php2shell', $firstTerms);
+		self::assertSame([], $extractor->extract(
+			(new Note())->setContent('<p>Community update</p>')
+				->setCard((new StreamCard())->setTitle('Personal mental health treatment details')),
+			true
+		)['story_terms'], 'sensitive evidence in card metadata suppresses the complete story fingerprint');
 	}
 }

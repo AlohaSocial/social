@@ -133,6 +133,7 @@ class WriteServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->alice = new Person();
 		$this->alice->setId('https://social.test/@alice');
+		$this->alice->setPreferredUsername('alice');
 		$this->alice->setLocal(true);
 		$accounts = $this->createMock(AccountService::class);
 		$accounts->method('getActorFromUserId')->willReturn($this->alice);
@@ -163,6 +164,7 @@ class WriteServiceTest extends TestCase {
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
 			'at://' . self::DID . '/app.bsky.feed.post/3kmine' => 'https://social.test/@alice/1',
 			'at://' . self::BOB . '/app.bsky.feed.post/3kbob' => 'https://bsky.app/profile/' . self::BOB . '/post/3kbob',
+			'at://' . self::BOB . '/app.bsky.feed.post/3knew' => 'https://bsky.app/profile/' . self::BOB . '/post/3knew',
 			default => '',
 		});
 		$this->relationships = $this->createMock(RelationshipService::class);
@@ -298,6 +300,8 @@ class WriteServiceTest extends TestCase {
 
 	public function testAListAndItsMembersAreKeptAsTheAppWroteThem(): void {
 		$this->keepWrites();
+		$this->repositories->expects($this->exactly(2))->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->exactly(2))->method('commitBatch');
 		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
 
 		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => $list]);
@@ -311,8 +315,75 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame([], $this->records);
 	}
 
+	public function testAnAppCanCreateAProfileLinkAndSelectItInTheProfile(): void {
+		$this->keepWrites();
+		$link = ['$type' => 'app.bsky.actor.link', 'url' => 'https://alice.example', 'title' => 'My website', 'createdAt' => '2026-10-26T10:00:00Z'];
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.actor.link', 'record' => $link]);
+		$this->records[] = $this->record(RecordMapper::PROFILE, 'self', $this->alice->getId());
+		$refs = [['uri' => $made['uri'], 'cid' => $made['cid']]];
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => 'self',
+			'record' => ['$type' => RecordMapper::PROFILE, 'links' => $refs]]);
+
+		$profile = array_values(array_filter($this->records, static fn (StoredRecord $record): bool => $record->collection === RecordMapper::PROFILE))[0];
+		$this->assertEquals($refs, $profile->value()['links']);
+		$views = (new \OCA\Social\Atproto\Profile\ProfileLinks($this->repositories))->forIdentity($this->session->identity);
+		$this->assertSame([['url' => 'https://alice.example', 'title' => 'My website']], $views);
+	}
+
+	public function testPutRecordWithoutCompareAndSwapRollsBackWhenTheRepositoryWriteFails(): void {
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->never())->method('commitBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->once())->method('write')->willThrowException(new \RuntimeException('repository unavailable'));
+
+		$this->expectException(\RuntimeException::class);
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => 'app.bsky.graph.list',
+			'rkey' => '3kznmn7xqxl22',
+			'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'],
+		]);
+	}
+
+	public function testCreateOnlyPermissionCannotReplaceAnExistingRecordWithPutRecord(): void {
+		$rkey = Tid::next();
+		$record = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
+		$bytes = DagCbor::encode($record);
+		$this->records[] = new StoredRecord(self::DID, 'app.bsky.graph.list', $rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$createOnly = new ClientSession('alice', $this->session->identity, 'oauth', ['atproto', 'repo:app.bsky.graph.list?action=create']);
+
+		try {
+			$this->writes->put($createOnly, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey, 'record' => $record]);
+			$this->fail('create permission must not authorize replacement of an existing record');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+			$this->assertSame('InsufficientScope', $e->error);
+		}
+	}
+
+	public function testUpdateOnlyPermissionCannotCreateAMissingRecordWithPutRecord(): void {
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$updateOnly = new ClientSession('alice', $this->session->identity, 'oauth', ['atproto', 'repo:app.bsky.graph.list?action=update']);
+
+		try {
+			$this->writes->put($updateOnly, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => Tid::next(), 'record' => [
+				'$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z',
+			]]);
+			$this->fail('update permission must not authorize creation of a missing record');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+			$this->assertSame('InsufficientScope', $e->error);
+		}
+	}
+
 	public function testApplyWritesStoresKeptRecordsInOneCommit(): void {
-		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => count($writes) === 2))->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => count($writes) === 11))->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
 			foreach ($writes as $write) {
 				$bytes = DagCbor::encode($write->record);
 				$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
@@ -322,16 +393,21 @@ class WriteServiceTest extends TestCase {
 		});
 		$list = static fn (string $name): array => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => $name, 'createdAt' => '2026-10-09T10:00:00.000Z'];
 		$firstRkey = Tid::next();
-		$secondRkey = Tid::next();
+		$writes = [];
+		for ($i = 0; $i < 11; $i++) {
+			$writes[] = [
+				'$type' => 'com.atproto.repo.applyWrites#create',
+				'collection' => 'app.bsky.graph.list',
+				'rkey' => $i === 0 ? $firstRkey : Tid::next(),
+				'value' => $list('List ' . $i),
+			];
+		}
 
-		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
-			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'app.bsky.graph.list', 'rkey' => $firstRkey, 'value' => $list('Friends')],
-			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'app.bsky.graph.list', 'rkey' => $secondRkey, 'value' => $list('Family')],
-		]]);
+		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => $writes]);
 
-		$this->assertCount(2, $answer['results']);
+		$this->assertCount(11, $answer['results'], 'valid batches larger than the former arbitrary limit are accepted');
 		$this->assertSame('at://' . self::DID . '/app.bsky.graph.list/' . $firstRkey, $answer['results'][0]['uri']);
-		$this->assertSame('valid', $answer['results'][1]['validationStatus']);
+		$this->assertSame('valid', $answer['results'][10]['validationStatus']);
 		$this->assertSame(['cid' => Cid::forRaw('batch commit')->toString(), 'rev' => '3kbatch'], $answer['commit']);
 	}
 
@@ -518,6 +594,9 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame('public', $post->getType());
 			$this->assertSame('de', $post->getLanguage());
 			$this->assertSame('https://bsky.app/profile/' . self::BOB . '/post/3kbob', $post->getReplyTo());
+			$this->assertSame(['custom-label', 'porn'], $post->getAtprotoSelfLabels());
+			$this->assertTrue($post->isSensitive());
+			$this->assertSame('Custom label, Pornography', $post->getSpoilerText());
 
 			return true;
 		}))->willReturnCallback(function () use ($made): Create {
@@ -539,12 +618,127 @@ class WriteServiceTest extends TestCase {
 			'facets' => [['index' => ['byteStart' => $start, 'byteEnd' => $end], 'features' => [['$type' => 'app.bsky.richtext.facet#link', 'uri' => 'https://example.com/a/very/long/path?x=1']]]],
 			'langs' => ['de'],
 			'reply' => ['root' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => 'x'], 'parent' => ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => 'x']],
+			'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'custom-label'], ['val' => 'porn']]],
 			'createdAt' => '2026-10-08T10:00:00.000Z',
 		]]);
 
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3knew', $answer['uri']);
 		$this->assertSame(['cid' => 'bafyreicommit', 'rev' => '3kzrev'], $answer['commit']);
 		$this->assertSame('valid', $answer['validationStatus']);
+	}
+
+	public function testCreateRecordUsesTheRequestedPostRecordKey(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/23');
+		$this->postStore->method('isKnown')->willReturn(true);
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3jqfcqzm3fo2j', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3jqfcqzm3fo2j');
+
+		$result = $this->writes->create($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'A post with an explicit record key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3jqfcqzm3fo2j', $result['uri']);
+	}
+
+	public function testCreateRecordRejectsPostRecordKeysThatAreNotTids(): void {
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => 'not-a-tid',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'Invalid key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+	}
+
+	public function testPutRecordCreatesANewPostAtTheRequestedRecordKey(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/22');
+		$this->postStore->method('isKnown')->willReturn(true);
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3jqfcqzm3fo2j', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3jqfcqzm3fo2j');
+
+		$result = $this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'A new record through putRecord', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3jqfcqzm3fo2j', $result['uri']);
+	}
+
+	public function testPutRecordRejectsPostRecordKeysThatAreNotTids(): void {
+		$this->expectException(XrpcException::class);
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => 'not-a-tid',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'Invalid key', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+	}
+
+	public function testARecordWithMediaExternalCardIsPreservedWhenAnAppCreatesAPost(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/4');
+		$feedUri = 'at://' . self::BOB . '/app.bsky.feed.generator/3kfeed';
+		$feedCid = Cid::forRaw('the quoted feed')->toString();
+		$this->posts->expects($this->once())->method('createPost')->with($this->callback(function (Post $post) use ($feedUri, $feedCid): bool {
+			$this->assertSame(['uri' => $feedUri, 'cid' => $feedCid], $post->getAtprotoRecordEmbed());
+			$this->assertSame([
+				'url' => 'https://example.com/guide',
+				'title' => 'A useful guide',
+				'description' => 'Details from the author',
+				'image' => 'https://cdn.bsky.app/card.jpg',
+				'provider' => 'example.com',
+			], $post->getLinkCard());
+
+			return true;
+		}))->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3kcard', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made);
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+			'$type' => RecordMapper::POST,
+			'text' => 'A feed and its guide',
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia',
+				'record' => ['record' => ['uri' => $feedUri, 'cid' => $feedCid]],
+				'media' => [
+					'$type' => 'app.bsky.embed.external',
+					'external' => [
+						'uri' => 'https://example.com/guide',
+						'title' => 'A useful guide',
+						'description' => 'Details from the author',
+						'thumb' => 'https://cdn.bsky.app/card.jpg',
+					],
+				],
+			],
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+		]]);
 	}
 
 	public function testAPostTheReviewRulesHoldIsKeptAndNotPublished(): void {
@@ -614,6 +808,7 @@ class WriteServiceTest extends TestCase {
 		$video = new Document();
 		$video->setNid(9);
 		$video->setId('https://social.test/documents/local/2');
+		$video->setAccount('alice');
 		$video->setMimeType('video/mp4');
 		$video->setMediaType('video/mp4');
 		$this->blobs->method('get')->with(self::DID, $cid->toString())->willReturn(new BlobRef(self::DID, $cid, $video->getId(), 'video/mp4', 7));
@@ -641,6 +836,314 @@ class WriteServiceTest extends TestCase {
 		]]);
 
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kvid', $answer['uri']);
+	}
+
+	public function testPutRecordCanChangeAndRemoveAReplyTarget(): void {
+		$old = ['$type' => RecordMapper::POST, 'text' => 'Before', 'createdAt' => '2026-10-08T10:00:00.000Z'];
+		$bytes = DagCbor::encode($old);
+		$stored = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
+		$this->records[] = $stored;
+		$post = new Note();
+		$post->setId($stored->localId)->setNid(44)->setAttributedTo($this->alice->getId());
+		$this->streams->method('getStreamById')->with($stored->localId)->willReturn($post);
+		$this->postStore->method('isKnown')->willReturn(true);
+		$parent = ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => Cid::forRaw('parent')->toString()];
+		$reply = ['root' => $parent, 'parent' => $parent];
+		$targets = [];
+		$this->posts->expects(self::exactly(2))->method('editPost')->willReturnCallback(
+			function (...$args) use (&$targets, $post): Note {
+				$targets[] = $args[16];
+				return $post;
+			}
+		);
+		$this->publisher->method('editPost')->willReturnCallback(function () use ($old, $reply, $stored, &$targets): string {
+			$updated = $old;
+			if (count($targets) === 1) {
+				$updated['reply'] = $reply;
+			}
+			$bytes = DagCbor::encode($updated);
+			$this->records = [new StoredRecord(self::DID, RecordMapper::POST, $stored->rkey, Cid::forDagCbor($bytes), $bytes, $stored->localId, 0)];
+
+			return 'published';
+		});
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'rkey' => $stored->rkey, 'record' => $old + ['reply' => $reply]]);
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'rkey' => $stored->rkey, 'record' => $old]);
+
+		self::assertSame(['https://bsky.app/profile/' . self::BOB . '/post/3kbob', ''], $targets);
+	}
+
+	public function testUpdatingPostImagesReplacesTheSocialAttachmentsFromOwnedBlobs(): void {
+		$oldEmbed = ['$type' => 'app.bsky.embed.images', 'images' => []];
+		$old = [
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => $oldEmbed,
+		];
+		$bytes = DagCbor::encode($old);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(44);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+
+		$cid = Cid::forRaw('edited picture');
+		$image = new Document();
+		$image->setNid(22);
+		$image->setId('https://social.test/documents/local/22');
+		$image->setAccount('alice');
+		$image->setMimeType('image/jpeg');
+		$image->setMediaType('image/jpeg');
+		$this->blobs->expects($this->once())->method('get')->with(self::DID, $cid->toString())
+			->willReturn(new BlobRef(self::DID, $cid, $image->getId(), 'image/jpeg', 20));
+		$this->documents->expects($this->once())->method('getDocumentById')->with($image->getId())->willReturn($image);
+		$this->documents->expects($this->once())->method('updateDescription')
+			->with($this->callback(static fn (Document $document): bool => $document->getDescription() === 'New alt text'));
+		$this->posts->expects($this->once())->method('editPost')
+			->with(44, $this->alice, 'After', '', false, '', [], null, false, [22], null, false, false, '', null, [])
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$record = [
+			'$type' => RecordMapper::POST,
+			'text' => 'After',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.images', 'images' => [[
+				'image' => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 20],
+				'alt' => 'New alt text',
+			]]],
+		];
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => $record,
+		]);
+	}
+
+	public static function galleryWrites(): iterable {
+		yield 'create gallery' => [false, false];
+		yield 'edit gallery' => [true, false];
+		yield 'create gallery beside a record' => [false, true];
+		yield 'edit gallery beside a record' => [true, true];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('galleryWrites')]
+	public function testClientGalleriesKeepAllImagesAndCanClearAltText(bool $editing, bool $withRecord): void {
+		$items = [];
+		$blobs = [];
+		$documents = [];
+		for ($i = 0; $i < 6; $i++) {
+			$cid = Cid::forRaw('gallery image ' . $i);
+			$document = new Document();
+			$document->setNid(22 + $i);
+			$document->setId('https://social.test/documents/' . $i);
+			$document->setAccount('alice');
+			$document->setMediaType('image/jpeg');
+			$document->setDescription('Previous alt text');
+			$documents[$document->getId()] = $document;
+			$blobs[$cid->toString()] = new BlobRef(self::DID, $cid, $document->getId(), 'image/jpeg', 20);
+			$items[] = [
+				'$type' => 'app.bsky.embed.gallery#image',
+				'image' => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 20],
+				'alt' => '', 'aspectRatio' => ['width' => 640, 'height' => 480],
+			];
+		}
+		$this->blobs->expects(self::exactly(6))->method('get')->willReturnCallback(static fn (string $did, string $cid): ?BlobRef => $blobs[$cid] ?? null);
+		$this->documents->method('getDocumentById')->willReturnCallback(static fn (string $id): Document => $documents[$id]);
+		$this->documents->expects(self::exactly(6))->method('updateDescription')->with(self::callback(
+			static fn (Document $document): bool => $document->getDescription() === ''
+		));
+		$embed = ['$type' => 'app.bsky.embed.gallery', 'items' => $items];
+		if ($withRecord) {
+			$embed = ['$type' => 'app.bsky.embed.recordWithMedia',
+				'record' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => 'at://' . self::DID . '/app.bsky.feed.generator/test',
+					'cid' => Cid::forDagCbor('feed')->toString(),
+				]], 'media' => $embed];
+		}
+		$post = new Note();
+		$post->setId('https://social.test/@alice/44')->setNid(44)->setAttributedTo($this->alice->getId());
+		$this->streams->method('getStreamById')->willReturn($post);
+		$rkey = '3jqfcqzm3fo2j';
+		$record = ['$type' => RecordMapper::POST, 'text' => 'Six photographs', 'createdAt' => '2026-10-08T10:00:00Z', 'embed' => $embed];
+		$body = ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => $rkey, 'record' => $record];
+		if ($editing) {
+			$this->records[] = $this->record(RecordMapper::POST, $rkey, $post->getId());
+			$this->posts->expects(self::once())->method('editPost')->with(
+				44, $this->alice, 'Six photographs', '', false, '', [], null, false, [22, 23, 24, 25, 26, 27],
+			)->willReturn($post);
+			$this->writes->put($this->session, $body);
+		} else {
+			$this->posts->expects(self::once())->method('createPost')->with(self::callback(static function (Post $post): bool {
+				self::assertCount(6, $post->getMedias());
+				self::assertSame(['22', '23', '24', '25', '26', '27'], array_map(static fn ($media): string => $media->getId(), $post->getMedias()));
+
+				return true;
+			}))->willReturnCallback(function () use ($post, $rkey): Create {
+				$this->records[] = $this->record(RecordMapper::POST, $rkey, $post->getId());
+
+				return (new Create())->setObjectId($post->getId());
+			});
+			$this->writes->create($this->session, $body);
+		}
+	}
+
+	public function testOversizedImageEmbedsAreRejectedBeforeAnyUploadIsChanged(): void {
+		$this->blobs->expects(self::never())->method('get');
+		$this->posts->expects(self::never())->method('createPost');
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('at most 4 images');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+			'$type' => RecordMapper::POST, 'text' => 'Too many pictures',
+			'embed' => ['$type' => 'app.bsky.embed.images', 'images' => array_fill(0, 5, ['alt' => '', 'image' => []])],
+		]]);
+	}
+
+	public function testUpdatingExternalEmbedReplacesThePostLinkCard(): void {
+		$old = [
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/old', 'title' => 'Old title', 'description' => '',
+			]],
+		];
+		$bytes = DagCbor::encode($old);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/45', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(45);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$card = [
+			'url' => 'https://example.com/new',
+			'title' => 'New title',
+			'description' => 'Card details',
+			'image' => '',
+			'provider' => 'example.com',
+		];
+		$this->posts->expects($this->once())->method('editPost')
+			->with(45, $this->alice, 'After', '', false, '', [], null, false, [], $card, true, false, '', null, [])
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$record = [
+			'$type' => RecordMapper::POST,
+			'text' => 'After',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.external', 'external' => [
+				'uri' => 'https://example.com/new',
+				'title' => 'New title',
+				'description' => 'Card details',
+			]],
+		];
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => $record,
+		]);
+	}
+
+	public function testUpdatingAQuoteChangesTheLocalPostReference(): void {
+		$oldUri = 'at://' . self::BOB . '/app.bsky.feed.post/3kbob';
+		$newUri = 'at://' . self::BOB . '/app.bsky.feed.post/3knew';
+		$oldEmbed = ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $oldUri, 'cid' => Cid::forRaw('old quote')->toString()]];
+		$bytes = DagCbor::encode([
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => $oldEmbed,
+		]);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/46', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(46);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$this->postStore->method('isKnown')->willReturn(true);
+		$newCid = Cid::forRaw('new quote');
+		$this->posts->expects($this->once())->method('editPost')
+			->with(46, $this->alice, 'After', 'NSFL, Gore', true, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null, ['nsfl', 'gore'])
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => [
+				'$type' => RecordMapper::POST,
+				'text' => 'After',
+				'createdAt' => '2026-10-08T10:00:00.000Z',
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => $newUri,
+					'cid' => ['$link' => $newCid->toString()],
+				]],
+				'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'nsfl'], ['val' => 'gore']]],
+			],
+		]);
+	}
+
+	public function testUpdatingAFeedRecordEmbedReplacesItsAtProtoReferenceAndCard(): void {
+		$oldUri = 'at://' . self::BOB . '/app.bsky.feed.generator/old';
+		$newUri = 'at://' . self::BOB . '/app.bsky.feed.generator/new';
+		$oldCid = Cid::forRaw('old feed');
+		$bytes = DagCbor::encode([
+			'$type' => RecordMapper::POST,
+			'text' => 'Before',
+			'createdAt' => '2026-10-08T10:00:00.000Z',
+			'embed' => ['$type' => 'app.bsky.embed.record', 'record' => ['uri' => $oldUri, 'cid' => $oldCid]],
+		]);
+		$postRecord = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/47', 0);
+		$this->records[] = $postRecord;
+		$post = new Note();
+		$post->setId($postRecord->localId);
+		$post->setNid(47);
+		$post->setAttributedTo($this->alice->getId());
+		$post->setVisibility('public');
+		$this->streams->expects($this->once())->method('getStreamById')->with($postRecord->localId)->willReturn($post);
+		$newCid = Cid::forRaw('new feed');
+		$recordEmbed = ['uri' => $newUri, 'cid' => $newCid->toString()];
+		$linkCard = [
+			'url' => 'https://bsky.app/profile/' . self::BOB . '/feed/new',
+			'title' => 'Bluesky feed',
+			'description' => '',
+			'image' => '',
+			'provider' => 'Bluesky',
+		];
+		$this->posts->expects($this->once())->method('editPost')
+			->with(47, $this->alice, 'After', '', false, '', [], null, false, [], $linkCard, true, true, '', $recordEmbed, [])
+			->willReturn($post);
+		$this->publisher->expects($this->once())->method('editPost')->with($post);
+
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3jqfcqzm3fo2j',
+			'record' => [
+				'$type' => RecordMapper::POST,
+				'text' => 'After',
+				'createdAt' => '2026-10-08T10:00:00.000Z',
+				'embed' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => $newUri,
+					'cid' => ['$link' => $newCid->toString()],
+				]],
+			],
+		]);
 	}
 
 	private function file(string $bytes): string {
@@ -751,12 +1254,58 @@ class WriteServiceTest extends TestCase {
 		$post->setId('https://social.test/@alice/1');
 		$post->setAttributedTo($this->alice->getId());
 		$this->records[] = $this->record(RecordMapper::POST, '3kmine', $post->getId());
+		$this->repositories->expects($this->exactly(2))->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->exactly(2))->method('commitBatch');
 		$this->streams->method('getStreamById')->with($post->getId())->willReturn($post);
 		$this->streams->expects($this->once())->method('deleteLocalItem')->with($post);
 		$this->publisher->expects($this->once())->method('deletePost')->with($post->getId());
 
 		$this->assertSame(['commit' => ['cid' => 'bafyreicommit', 'rev' => '3kzrev']], $this->writes->delete($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => '3kmine']));
 		$this->assertSame(['cid' => 'bafyreicommit', 'rev' => '3kzrev'], $this->writes->delete($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => '3kgone'])['commit'], 'already gone is done');
+	}
+
+	public function testDeleteRecordRejectsAStaleRecordCidBeforeDeletingTheSocialPost(): void {
+		$expected = Cid::forRaw('the record the client read')->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(
+			self::DID,
+			$this->anything(),
+			null,
+			[RecordMapper::POST . '/3kmine' => $expected],
+		)->willThrowException(new InvalidSwapException('The record changed'));
+		$this->streams->expects($this->never())->method('deleteLocalItem');
+		$this->publisher->expects($this->never())->method('deletePost');
+
+		try {
+			$this->writes->delete($this->session, [
+				'repo' => self::DID,
+				'collection' => RecordMapper::POST,
+				'rkey' => '3kmine',
+				'swapRecord' => $expected,
+			]);
+			$this->fail('a stale swapRecord must reject the delete');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
+	}
+
+	public function testDeleteRecordRejectsAStaleCommitCidBeforeDeletingTheSocialPost(): void {
+		$expected = Cid::forRaw('the commit the client read')->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), $expected, [])
+			->willThrowException(new InvalidSwapException('The repository changed'));
+		$this->streams->expects($this->never())->method('deleteLocalItem');
+		$this->publisher->expects($this->never())->method('deletePost');
+
+		try {
+			$this->writes->delete($this->session, [
+				'repo' => self::DID,
+				'collection' => RecordMapper::POST,
+				'rkey' => '3kmine',
+				'swapCommit' => $expected,
+			]);
+			$this->fail('a stale swapCommit must reject the delete');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
 	}
 
 	public function testLinksTheAppShortenedAreWholeAgainAndBrokenFacetsAreIgnored(): void {

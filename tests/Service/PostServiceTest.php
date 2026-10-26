@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use DateTime;
 use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Exceptions\AccountMovedException;
@@ -75,6 +76,7 @@ class PostServiceTest extends TestCase {
 	private const CAROL_INBOX = 'https://third.example/users/carol/inbox';
 
 	private StreamRequest|MockObject $streamRequest;
+	private StreamCardsRequest|MockObject $streamCardsRequest;
 	private AccountService|MockObject $accountService;
 	private ActivityService|MockObject $activityService;
 	private CacheActorService|MockObject $cacheActorService;
@@ -108,6 +110,7 @@ class PostServiceTest extends TestCase {
 		$this->documentService = $this->createMock(DocumentService::class);
 		$this->revisionService = $this->createStub(StatusRevisionService::class);
 		$this->streamRequest = $this->createMock(StreamRequest::class);
+		$this->streamCardsRequest = $this->createMock(StreamCardsRequest::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		$this->activityService = $this->createMock(ActivityService::class);
 		$this->cacheActorService = $this->createMock(CacheActorService::class);
@@ -178,6 +181,7 @@ class PostServiceTest extends TestCase {
 			$this->interestService,
 			$this->videoDeliveryHold,
 			$this->documentService,
+			$this->streamCardsRequest,
 			$this->container,
 		);
 	}
@@ -1090,6 +1094,59 @@ class PostServiceTest extends TestCase {
 	}
 
 	/** Whatever copied the post somewhere else has to show the new text. */
+	public function testMovingAReplyUpdatesItsParentAndRecountsBothThreads(): void {
+		$post = $this->storedNote();
+		$post->setInReplyTo('https://remote.example/posts/old');
+		$parent = $this->storedNote();
+		$parent->setId('https://remote.example/posts/new');
+		$parent->setAttributedTo('https://remote.example/@bob');
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->with($parent->getId(), true)->willReturn($parent);
+		$bob = new Person();
+		$bob->setId($parent->getAttributedTo());
+		$bob->setInbox('https://remote.example/inbox');
+		$this->cacheActorService->method('getFromId')->willReturn($bob);
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamRequest->expects(self::once())->method('update')->with(self::callback(
+			static fn (Stream $edited): bool => $edited->getInReplyTo() === $parent->getId()
+				&& $edited->getConversation() === $parent->getId()
+		), true);
+		$counts = [];
+		$this->streamRequest->expects(self::exactly(2))->method('recountReplies')
+			->willReturnCallback(static function (string $id) use (&$counts): void {
+				$counts[] = $id;
+			});
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: $parent->getId());
+
+		self::assertSame(['https://remote.example/posts/old', $parent->getId()], $counts);
+	}
+
+	public function testRemovingAReplyTargetClearsConversationAndApprovalState(): void {
+		$post = $this->storedNote();
+		$post->setInReplyTo('https://remote.example/posts/old');
+		$post->setConversation('old thread');
+		$post->setReplyState(Stream::REPLY_PENDING);
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamRequest->expects(self::once())->method('update')->with(self::callback(
+			static fn (Stream $edited): bool => $edited->getInReplyTo() === ''
+				&& $edited->getConversation() === '' && $edited->getReplyState() === ''
+		), true);
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: '');
+	}
+
+	public function testMovingAReplyBelowItselfIsRejectedBeforeWriting(): void {
+		$post = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->willReturn($post);
+		$this->streamRequest->expects(self::never())->method('update');
+		$this->expectException(InvalidActionException::class);
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: $post->getId());
+	}
+
 	public function testAnEditIsAnnouncedWithThePostAsEdited(): void {
 		$reloaded = $this->storedNote();
 		$reloaded->setContent('new');
@@ -1150,12 +1207,44 @@ class PostServiceTest extends TestCase {
 		$this->assertSame(InstancePath::PRIORITY_LOW, $paths[0]->getPriority());
 	}
 
+	public function testAnEditReplacesAttachmentsOnlyWhenMediaIdsWereProvided(): void {
+		$stored = $this->storedNote();
+		$reloaded = $this->storedNote();
+		$attachment = (new MediaAttachment())->setId('12');
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $reloaded);
+		$this->documentService->expects($this->once())
+			->method('mediaAttachmentsForEdit')
+			->with(['12'], 'alice', Stream::TYPE_PUBLIC)
+			->willReturn([$attachment]);
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$this->service->editPost(7, $this->actor(), 'edited', mediaIds: ['12']);
+
+		$this->assertSame([$attachment], $stored->getAttachments());
+	}
+
+	public function testASecondEditGetsANewerActivityPubTimestampEvenWithinTheSameSecond(): void {
+		$stored = $this->storedNote();
+		$previousTimestamp = time() + 60;
+		$stored->setUpdated(gmdate('Y-m-d\\TH:i:s\\Z', $previousTimestamp));
+		$this->streamRequest->method('getStreamByNid')->with(7)
+			->willReturnOnConsecutiveCalls($stored, $stored);
+		$this->activityService->method('updateActivity')->willReturn('token');
+
+		$this->service->editPost(7, $this->actor(), 'new');
+
+		$this->assertSame($previousTimestamp + 1, strtotime($stored->getUpdated()));
+	}
+
 	public function testAnEditCanRemoveItsContentWarningAndExplicitlyClearSensitive(): void {
 		$stored = $this->storedNote();
 		$stored->setSensitive(true);
+		$stored->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['!warn', 'custom-label']]);
 		$reloaded = clone $stored;
 		$reloaded->setSpoilerText('');
 		$reloaded->setSensitive(false);
+		$reloaded->setDetailArray(Details::ATPROTO, [Details::ATPROTO_SELF_LABELS => ['custom-label']]);
 		$this->streamRequest->method('getStreamByNid')->with(7)
 			->willReturnOnConsecutiveCalls($stored, $reloaded);
 		$this->activityService->method('updateActivity')->willReturn('token');
@@ -1164,6 +1253,7 @@ class PostServiceTest extends TestCase {
 
 		$this->assertSame('', $stored->getSpoilerText());
 		$this->assertFalse($stored->isSensitive());
+		$this->assertSame(['custom-label'], $stored->getDetails(Details::ATPROTO)[Details::ATPROTO_SELF_LABELS]);
 	}
 
 	public function testAnEditWithoutSensitiveFieldPreservesSensitiveStatus(): void {
@@ -1241,6 +1331,131 @@ class PostServiceTest extends TestCase {
 
 		$this->assertSame([$new], $stored->getAttachments());
 		$this->assertSame(['Old words'], $revisions, 'the revision is the version the edit replaced');
+	}
+
+	public function testAnEditCanReplaceItsMediaWithTheAuthorsSelectedUploads(): void {
+		$stored = $this->storedNote();
+		$stored->setAttachments([(new MediaAttachment())->setId('11')]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$replacement = [(new MediaAttachment())->setId('12')];
+		$this->documentService->expects($this->once())->method('mediaAttachmentsForEdit')
+			->with([12], 'alice', Stream::TYPE_PUBLIC)
+			->willReturn($replacement);
+
+		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, [12]);
+
+		$this->assertSame($replacement, $stored->getAttachments());
+	}
+
+	public function testAnEditCanRemoveEveryAttachmentWithAnExplicitEmptyMediaList(): void {
+		$stored = $this->storedNote();
+		$stored->setAttachments([(new MediaAttachment())->setId('11')]);
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->documentService->expects($this->once())->method('mediaAttachmentsForEdit')
+			->with([], 'alice', Stream::TYPE_PUBLIC)
+			->willReturn([]);
+
+		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], null, false, []);
+
+		$this->assertSame([], $stored->getAttachments());
+	}
+
+	public function testAnEditCanReplaceTheExternalLinkCardForTheSamePost(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamCardsRequest->expects($this->once())->method('save')
+			->with($this->callback(static fn (\OCA\Social\Model\StreamCard $card): bool
+				=> $card->getStreamId() === 'https://social.example/@alice/7'
+				&& $card->getUrl() === 'https://example.com/new'
+				&& $card->getTitle() === 'New title'
+			));
+
+		$this->service->editPost(
+			7,
+			$this->actor(),
+			'new words',
+			null,
+			null,
+			null,
+			[],
+			null,
+			false,
+			null,
+			[
+				'url' => 'https://example.com/new',
+				'title' => 'New title',
+				'description' => 'Details',
+				'image' => 'https://example.com/image.jpg',
+				'provider' => 'example.com',
+			],
+			true
+		);
+	}
+
+	public function testAnEditCanRemoveAnExternalLinkCard(): void {
+		$stored = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')
+			->willReturnOnConsecutiveCalls($stored, $this->storedNote());
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamCardsRequest->expects($this->once())->method('deleteByStreamId')
+			->with($stored->getId());
+
+		$this->service->editPost(7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, true);
+	}
+
+	public function testAnAtProtoEditCanReplaceItsQuoteAndGeneralRecordEmbed(): void {
+		$oldQuote = 'https://bsky.app/profile/did:plc:old/post/3kold';
+		$newQuote = 'https://bsky.app/profile/did:plc:new/post/3knew';
+		$stored = $this->storedNote();
+		$stored->setQuote($oldQuote);
+		$stored->setQuoteAuthorization('https://remote.example/old-authorization');
+		$stored->setDetailArray(Details::ATPROTO, [
+			Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:old/app.bsky.feed.generator/old', 'cid' => 'bafyreia'],
+			Details::ATPROTO_SELF_LABELS => ['old-label'],
+		]);
+		$quoted = new Note();
+		$quoted->setId($newQuote);
+		$quoted->setAttributedTo('https://bsky.app/profile/did:plc:new');
+		$quoted->setTo(ACore::CONTEXT_PUBLIC);
+		$this->streamRequest->method('getStreamById')->with($newQuote)->willReturn($quoted);
+		$reloaded = clone $stored;
+		$reloaded->setQuote($newQuote);
+		$reloaded->setQuoteAuthorization('');
+		$reloaded->setQuoteState(Stream::QUOTE_ACCEPTED);
+		$reloaded->setDetailArray(Details::ATPROTO, [
+			Details::ATPROTO_RECORD_EMBED => ['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'],
+			Details::ATPROTO_SELF_LABELS => ['new-label'],
+		]);
+		$this->streamRequest->method('getStreamByNid')->with(7)->willReturnOnConsecutiveCalls($stored, $reloaded);
+		$this->streamRequest->expects($this->once())->method('update')->with($stored, true);
+		$recountedQuotes = [];
+		$this->streamRequest->expects($this->exactly(2))->method('recountQuotes')
+			->willReturnCallback(static function (string $quote) use (&$recountedQuotes): void {
+				$recountedQuotes[] = $quote;
+			});
+		$this->activityService->expects($this->once())->method('updateActivity')->willReturn('token');
+
+		$result = $this->service->editPost(
+			7, $this->actor(), 'new words', null, null, null, [], null, false, null, null, false,
+			true, $newQuote,
+			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'], ['new-label']
+		);
+
+		$this->assertSame($reloaded, $result);
+		$this->assertSame([$oldQuote, $newQuote], $recountedQuotes);
+		$this->assertSame($newQuote, $stored->getQuote());
+		$this->assertSame(Stream::QUOTE_ACCEPTED, $stored->getQuoteState());
+		$this->assertSame(
+			['uri' => 'at://did:plc:new/app.bsky.feed.generator/new', 'cid' => 'bafyreinew'],
+			$stored->getDetails(Details::ATPROTO)[Details::ATPROTO_RECORD_EMBED]
+		);
+		$this->assertSame(['new-label'], $stored->getDetails(Details::ATPROTO)[Details::ATPROTO_SELF_LABELS]);
 	}
 
 	public function testAnEditWithoutMediaAttributesLeavesTheMediaAlone(): void {

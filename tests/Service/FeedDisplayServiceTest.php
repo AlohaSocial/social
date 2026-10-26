@@ -29,7 +29,7 @@ class FeedDisplayServiceTest extends TestCase {
 
 	public function testRepliesAreShownUntilTheReaderHidesThem(): void {
 		$this->assertFalse($this->service->hidesReplies('alice'));
-		$this->assertSame(['hide_replies' => false], $this->service->export('alice'));
+		$this->assertSame(['hide_replies' => false, 'thread_sort' => 'oldest'], $this->service->export('alice'));
 
 		$this->service->setHidesReplies('alice', true);
 		$this->assertSame('1', $this->stored['alice']);
@@ -42,5 +42,13 @@ class FeedDisplayServiceTest extends TestCase {
 
 	public function testNobodyInParticularHasNoFeedPreference(): void {
 		$this->assertFalse($this->service->hidesReplies(''));
+	}
+
+	public function testThreadOrderComesFromTheSavedBlueskyPreference(): void {
+		$this->stored['alice'] = json_encode([
+			['$type' => 'app.bsky.actor.defs#threadViewPref', 'sort' => 'most-likes'],
+		]);
+
+		$this->assertSame('most-likes', $this->service->threadSort('alice'));
 	}
 }

@@ -137,7 +137,7 @@ jobs:
 
       - name: Install PHP development dependencies for tests
         working-directory: ${{ env.APP_NAME }}
-        run: composer install --prefer-dist --no-interaction --no-progress
+        run: bash .github/scripts/composer-install-retry.sh install --prefer-dist --no-interaction --no-progress
 
       - name: Run PHP unit tests and syntax checks
         working-directory: ${{ env.APP_NAME }}

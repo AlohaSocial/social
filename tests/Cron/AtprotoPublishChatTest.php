@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Cron;
 
 use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Atproto\Chat\ChatState;
+use OCA\Social\Atproto\Publisher\BlueskyBookmarks;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Cron\AtprotoPublish;
@@ -53,7 +54,7 @@ class AtprotoPublishChatTest extends TestCase {
 			$this->createMock(ITimeFactory::class), $publisher, $this->createMock(InteractionPublisher::class),
 			$this->createMock(StreamService::class), $this->createMock(CacheActorService::class), new NullLogger(),
 			$this->createMock(ChatSender::class), $state, $this->createMock(VerificationService::class),
-			$this->createMock(ActionsRequest::class), $this->createMock(IJobList::class),
+			$this->createMock(ActionsRequest::class), $this->createMock(IJobList::class), $this->createMock(BlueskyBookmarks::class),
 		);
 		(new ReflectionMethod($job, 'run'))->invoke($job, $argument);
 	}

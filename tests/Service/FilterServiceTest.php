@@ -154,6 +154,27 @@ class FilterServiceTest extends TestCase {
 		$this->assertStringContainsString('apple', $page[0]['content']);
 	}
 
+	public function testBlueskyTakedownLabelsHideCachedStatusesWithoutViewerPreferences(): void {
+		$status = $this->aStatus('<p>cached text</p>', [
+			'bluesky' => [
+				'uri' => 'at://did:plc:alice/app.bsky.feed.post/3kpost',
+				'labels' => [['src' => 'did:plc:moderator', 'val' => '!takedown']],
+			],
+		]);
+
+		$this->assertSame([], $this->service->apply([$status], Filter::CONTEXT_HOME, null));
+	}
+
+	public function testBlueskyTakedownLabelsAlsoHideNotificationsWithoutViewerPreferences(): void {
+		$notification = [
+			'bluesky' => [
+				'labels' => [['src' => 'did:plc:moderator', 'val' => '!hide']],
+			],
+		];
+
+		$this->assertSame([], $this->service->applyToNotifications([$notification], null));
+	}
+
 	public function testWholeWordMatchesAWordAndNotAWordItStartsWith(): void {
 		$this->stored[self::ALICE] = [$this->filter('pets', [['cat', true]])];
 

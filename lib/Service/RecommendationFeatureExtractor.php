@@ -17,7 +17,7 @@ use OCA\Social\Tools\SearchTerms;
 
 /** Deterministic, local-only features used to retrieve recommendation candidates. */
 final class RecommendationFeatureExtractor {
-	public const VERSION = 8;
+	public const VERSION = 9;
 	private const MAX_CONTENT_CHARS = 20000;
 	// A 20,000-character body cannot contain more than 10,000 two-character
 	// words separated by at least one character; cover it fully for both
@@ -57,7 +57,7 @@ final class RecommendationFeatureExtractor {
 	 * Topics marked sensitive are deliberately omitted until a separate reviewed
 	 * policy allows their use in recommendation ranking.
 	 *
-	 * @return array{version: int, topics: array<string, array{score: float, evidence: string}>, format: string, language: string, story_terms?: list<string>}
+	 * @return array{version: int, topics: array<string, array{score: float, evidence: string}>, format: string, language: string, story_terms?: list<string>, story_headline_terms?: list<string>}
 	 */
 	public function extract(Stream $post, bool $includeStoryTerms = false): array {
 		$content = $post->getContent();
@@ -66,21 +66,12 @@ final class RecommendationFeatureExtractor {
 		$hashtagTerms = array_map(self::normaliseHashtag(...), $post->getHashtags());
 		// If the body was clipped, a sensitive marker might be in the unseen
 		// tail. Do not create any story fingerprints from a partial view.
+		$storySegments = $includeStoryTerms ? self::storySegments($post, $bodySegments) : [];
 		$hasSensitiveEvidence = $includeStoryTerms && ($contentExceedsBound
-			|| self::hasSensitiveEvidence($bodySegments, $hashtagTerms, $this->compiledSensitiveAliases));
-		$storyTerms = [];
-		$seenStoryTerms = [];
-		if ($includeStoryTerms && !$hasSensitiveEvidence) {
-			foreach ($bodySegments as $segment) {
-				foreach ($segment as $term) {
-					if (!SearchTerms::isStopWord($term) && !isset($seenStoryTerms[$term])) {
-						$seenStoryTerms[$term] = true;
-						$storyTerms[] = $term;
-					}
-				}
-			}
-			$storyTerms = self::boundedStoryTerms($storyTerms);
-		}
+			|| self::hasSensitiveEvidence($storySegments, $hashtagTerms, $this->compiledSensitiveAliases));
+		$storyTerms = $includeStoryTerms && !$hasSensitiveEvidence
+			? self::storyTermsFromSegments($storySegments)
+			: [];
 		$matches = [];
 
 		foreach ($this->compiledAliases as $topicId => $aliases) {
@@ -124,9 +115,97 @@ final class RecommendationFeatureExtractor {
 		];
 		if ($includeStoryTerms) {
 			$features['story_terms'] = $storyTerms;
+			$features['story_headline_terms'] = array_slice($storyTerms, 0, 20);
 		}
 
 		return $features;
+	}
+
+	/**
+	 * Extract only the bounded, sensitive-aware story fingerprint terms.
+	 * Legacy feed diversity does not need topic classification or media metadata.
+	 *
+	 * @return list<string>
+	 */
+	public function extractStoryTerms(Stream $post): array {
+		$content = $post->getContent();
+		if (mb_strlen($content, 'UTF-8') > self::MAX_CONTENT_CHARS) {
+			return [];
+		}
+
+		$segments = self::storySegments($post, self::contentSegments($content));
+		$hashtags = array_map(self::normaliseHashtag(...), $post->getHashtags());
+		if (self::hasSensitiveEvidence($segments, $hashtags, $this->compiledSensitiveAliases)) {
+			return [];
+		}
+
+		return self::storyTermsFromSegments($segments);
+	}
+
+	/**
+	 * Link-card metadata often carries the actual headline while the post body
+	 * says only "read this" and a URL. Cards are attached in one batch by the
+	 * feed services before extraction; keep their title first so the headline
+	 * fingerprint represents the linked story, then include body and summary.
+	 *
+	 * @param list<list<string>> $bodySegments
+	 * @return list<list<string>>
+	 */
+	private static function storySegments(Stream $post, array $bodySegments): array {
+		$card = $post->getCard();
+		if ($card === null) {
+			return $bodySegments;
+		}
+
+		$title = self::contentSegments($card->getTitle());
+		$description = self::contentSegments($card->getDescription());
+
+		return [...$title, ...$bodySegments, ...$description];
+	}
+
+	/** @param list<string> $topicIds @return list<string> the most specific classified topics */
+	public function diversityTopics(array $topicIds): array {
+		$parents = [];
+		foreach ($topicIds as $topicId) {
+			$parent = $this->catalog->parentOf($topicId);
+			while ($parent !== null) {
+				$parents[$parent] = true;
+				$parent = $this->catalog->parentOf($parent);
+			}
+		}
+
+		$leaves = array_values(array_filter($topicIds, static fn (string $topicId): bool => !isset($parents[$topicId])));
+
+		return $leaves !== [] ? $leaves : $topicIds;
+	}
+
+	/** @param list<string> $topicIds @return list<string> safe, most-specific topics for consented exposure history */
+	public function exposureTopics(array $topicIds): array {
+		$topicIds = array_values(array_unique(array_filter(
+			$topicIds,
+			fn (string $topicId): bool => ($topic = $this->catalog->find($topicId)) !== null
+				&& $topic['enabled'] && !in_array('sensitive-topic', $topic['policyTags'], true),
+		)));
+		$topics = $this->diversityTopics($topicIds);
+		sort($topics, SORT_STRING);
+
+		return $topics;
+	}
+
+	/** @param list<list<string>> $segments @return list<string> */
+	private static function storyTermsFromSegments(array $segments): array {
+		$terms = [];
+		$seen = [];
+		foreach ($segments as $segment) {
+			foreach ($segment as $term) {
+				if (!SearchTerms::isStopWord($term) && !isset($seen[$term])) {
+					$seen[$term] = true;
+					$terms[] = $term;
+				}
+			}
+		}
+
+		return self::boundedStoryTerms($terms);
 	}
 
 	/**

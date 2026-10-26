@@ -6,6 +6,20 @@
 import axios from '@nextcloud/axios'
 import { getRequestToken } from '@nextcloud/auth'
 import { generateUrl } from '@nextcloud/router'
+import { uuid } from '../utils/uuid.js'
+
+const LEGACY_SIGNAL_KINDS = new Set(['dwell', 'skip', 'open', 'media', 'link', 'mute'])
+const signalDelivery = new WeakMap()
+
+/** @param {object} event a buffered observation @return {{legacy: boolean, learning: boolean}} */
+function deliveryState(event) {
+	let state = signalDelivery.get(event)
+	if (!state) {
+		state = { legacy: false, learning: false }
+		signalDelivery.set(event, state)
+	}
+	return state
+}
 
 /**
  * The server's side of For you: the reader's list, the settings that go
@@ -36,11 +50,26 @@ function recommendationsUrl(path = '') {
  * has not opted out, and learning is not paused. Absent — an older server, or
  * a page with nobody signed in — is off.
  *
- * @param {{enabled?: boolean, learning?: boolean, paused?: boolean}|null|undefined} interests `serverData.interests`
+ * @param {{enabled?: boolean, learning?: boolean, paused?: boolean, instancePaused?: boolean}|null|undefined} interests `serverData.interests`
  * @return {boolean}
  */
 export function isTracking(interests) {
-	return interests?.enabled === true && interests?.learning === true && interests?.paused !== true
+	return interests?.enabled === true && interests?.learning === true && interests?.paused !== true && interests?.instancePaused !== true
+}
+
+/**
+ * Whether the server currently permits activity-learning signals.
+ * Older servers expose only the reader's learning mode.
+ *
+ * @param {object|null|undefined} preferences the versioned recommendation preferences
+ * @return {boolean}
+ */
+export function isRecommendationLearningActive(preferences) {
+	if (typeof preferences?.learning_active === 'boolean') {
+		return preferences.learning_active
+	}
+
+	return preferences?.learning_mode === 'on'
 }
 
 /**
@@ -82,16 +111,11 @@ export async function recordRecommendationProfileVisit(profileId) {
 		return
 	}
 	const preferences = await fetchRecommendationPreferences()
-	if (preferences.learning_mode !== 'on' || !Number.isInteger(preferences.generation)) {
+	if (!isRecommendationLearningActive(preferences) || !Number.isInteger(preferences.generation)) {
 		return
 	}
-	const random = globalThis.crypto?.randomUUID?.()
-	const eventId = random ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
-		const value = Math.floor(Math.random() * 16)
-		return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16)
-	})
 	await axios.post(recommendationsUrl('/signals'), { events: [{
-		event_id: eventId,
+		event_id: uuid(),
 		generation: preferences.generation,
 		kind: 'profile_visit',
 		context: 'profile',
@@ -110,33 +134,94 @@ export async function recordRecommendationProfileVisit(profileId) {
  * @param {object[]} events at most 100, as the contract describes them
  * @param {object} [options] how to send it
  * @param {boolean} [options.beacon] the page is going away
+ * @param {boolean} [options.legacy] whether to send events to legacy hashtag learning
  * @return {Promise<void>}
  */
-export async function sendSignals(events, { beacon = false } = {}) {
+export async function sendSignals(events, { beacon = false, legacy = true } = {}) {
 	if (events.length === 0) {
 		return
 	}
+	const canBeacon = beacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function'
+	const legacyCandidates = legacy
+		? events.filter((event) => !deliveryState(event).legacy
+			&& LEGACY_SIGNAL_KINDS.has(event.kind)
+			&& event.legacy_eligible !== false)
+		: []
+	const legacyEvents = legacyCandidates.map((event) => {
+		const legacyEvent = /** @type {Record<string, unknown>} */ ({ status_id: event.status_id, kind: event.kind, context: event.context })
+		if (event.kind === 'dwell' && Number.isFinite(event.ms)) {
+			legacyEvent.ms = event.ms
+		}
+		return legacyEvent
+	})
 
-	const learningEvents = events.filter((event) => typeof event.event_id === 'string' && Number.isInteger(event.generation))
-	let legacyQueued = false
-	let learningQueued = false
-	if (beacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-		const target = url('/signals') + '?requesttoken=' + encodeURIComponent(getRequestToken() ?? '')
-		legacyQueued = navigator.sendBeacon(target, new Blob([JSON.stringify({ events })], { type: 'application/json' }))
-		if (learningEvents.length > 0) {
-			const learningTarget = recommendationsUrl('/signals') + '?requesttoken=' + encodeURIComponent(getRequestToken() ?? '')
-			learningQueued = navigator.sendBeacon(learningTarget, new Blob([JSON.stringify({ events: learningEvents })], { type: 'application/json' }))
+	let learningCandidates = events
+		.filter((event) => !deliveryState(event).learning
+			&& typeof event.event_id === 'string'
+			&& Number.isInteger(event.generation))
+	let preferenceError = null
+	if (!beacon && learningCandidates.length > 0) {
+		try {
+			const preferences = await fetchRecommendationPreferences()
+			if (!isRecommendationLearningActive(preferences) || !Number.isInteger(preferences.generation)) {
+				for (const event of learningCandidates) {
+					deliveryState(event).learning = true
+				}
+				learningCandidates = []
+			} else {
+				learningCandidates = learningCandidates.filter((event) => {
+					if (event.generation !== preferences.generation) {
+						deliveryState(event).learning = true
+						return false
+					}
+					return true
+				})
+			}
+		} catch (error) {
+			preferenceError = error
+			learningCandidates = []
 		}
 	}
-
+	const learningEvents = learningCandidates.map((event) => {
+		const learningEvent = { ...event }
+		delete learningEvent.legacy_eligible
+		return learningEvent
+	})
 	const requests = []
-	if (!legacyQueued) {
-		requests.push(axios.post(url('/signals'), { events }))
+	const queue = (channel, target, body, sourceEvents) => {
+		if (sourceEvents.length === 0) {
+			return
+		}
+		const markDelivered = () => {
+			for (const event of sourceEvents) {
+				deliveryState(event)[channel] = true
+			}
+		}
+		if (canBeacon) {
+			try {
+				if (navigator.sendBeacon(target, new Blob([JSON.stringify(body)], { type: 'application/json' }))) {
+					markDelivered()
+					return
+				}
+			} catch {
+				// Fall back to a normal request when the browser cannot queue a beacon.
+			}
+		}
+		requests.push(axios.post(target, body).then(markDelivered))
 	}
-	if (learningEvents.length > 0 && !learningQueued) {
-		requests.push(axios.post(recommendationsUrl('/signals'), { events: learningEvents }))
+
+	const token = canBeacon ? '?requesttoken=' + encodeURIComponent(getRequestToken() ?? '') : ''
+	queue('legacy', url('/signals') + token, { events: legacyEvents }, legacyCandidates)
+	queue('learning', recommendationsUrl('/signals') + token, { events: learningEvents }, learningCandidates)
+
+	const results = await Promise.allSettled(requests)
+	const failed = results.find((result) => result.status === 'rejected')
+	if (failed?.status === 'rejected') {
+		throw failed.reason
 	}
-	await Promise.all(requests)
+	if (preferenceError !== null) {
+		throw preferenceError
+	}
 }
 
 /**

@@ -107,6 +107,43 @@
 						{{ entry.status.favourites_count }}
 					</span>
 				</button>
+				<NcActions
+					v-if="canOfferRecommendationFeedback(entry)"
+					class="short__recommendation-menu"
+					:aria-label="t('social', 'For You recommendations')"
+					:menuName="t('social', 'For You recommendations')"
+					@update:open="onRecommendationMenuToggle(entry.status, $event)">
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_SIMILAR')">
+						<template #icon>
+							<ThumbUpOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more like this post') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'LESS_SIMILAR')">
+						<template #icon>
+							<ThumbDownOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me less like this post') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'HIDE_POST')">
+						<template #icon>
+							<EyeOffOutline :size="20" />
+						</template>
+						{{ t('social', 'Hide this post from For You') }}
+					</NcActionButton>
+					<NcActionButton closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_AUTHOR')">
+						<template #icon>
+							<AccountPlusOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more from this author') }}
+					</NcActionButton>
+					<NcActionButton :disabled="recommendationActionLoading(entry.status) || !recommendationContext(entry.status)?.format" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_FORMAT')">
+						<template #icon>
+							<ShapeOutline :size="20" />
+						</template>
+						{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel(entry.status) }) }}
+					</NcActionButton>
+				</NcActions>
 
 				<!-- the one control that is not a gesture: a pointer has no swipe -->
 				<button
@@ -183,7 +220,7 @@
 				:loop="!current.day"
 				preload="auto"
 				@loadedmetadata="onVideoMetadata"
-				@timeupdate="shortSignals.progress(current.status, $event.target)"
+				@timeupdate="onVideoProgress"
 				@ended="onEnded"
 				@click="onVideoTap(playing, $event)" />
 
@@ -263,6 +300,8 @@ import { generateUrl } from '@nextcloud/router'
 import { mapStores } from 'pinia'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
@@ -270,12 +309,19 @@ import IconPlus from 'vue-material-design-icons/Plus.vue'
 import IconRefresh from 'vue-material-design-icons/Refresh.vue'
 import IconVolumeHigh from 'vue-material-design-icons/VolumeHigh.vue'
 import IconVolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
+import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
+import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
+import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
+import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
 import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
-import { hasInterestsFeed, isTracking } from '../services/interests.js'
+import { fetchRecommendationPreferences, hasInterestsFeed, isRecommendationLearningActive, isTracking } from '../services/interests.js'
 import { createShortSignals } from '../services/shortSignals.js'
 import { interestReason } from '../utils/interestReason.js'
+import { fetchRecommendationContext, recordRecommendationFeedback, undoRecommendationFeedback } from '../services/recommendationFeedback.js'
+import { showError, showUndo } from '../services/toast.js'
 
 /**
  * What a clip must have gathered — likes, boosts and views together — before
@@ -320,9 +366,16 @@ export default {
 		IconRefresh,
 		IconVolumeHigh,
 		IconVolumeOff,
+		AccountPlusOutline,
+		EyeOffOutline,
+		NcActions,
+		NcActionButton,
 		NcButton,
 		NcLoadingIcon,
+		ShapeOutline,
 		ShortComposerDialog,
+		ThumbDownOutline,
+		ThumbUpOutline,
 	},
 
 	props: {
@@ -370,6 +423,8 @@ export default {
 			startAt: '',
 			/** the slide on screen, which the player is over */
 			playing: 0,
+			/** slide currently loaded by the single video player */
+			playerSlideKey: '',
 			/** the 24-hour shorts, in the order they are watched */
 			dayShorts: [],
 			/** the 24-hour shorts have been asked for; the stack waits for them */
@@ -380,6 +435,8 @@ export default {
 			/** the last page asked for could not be fetched */
 			failed: false,
 			allLoaded: false,
+			recommendationContexts: {},
+			recommendationContextLoading: {},
 			/**
 			 * Which scope the page in flight belongs to. A page the store
 			 * dropped because the scope changed under it comes back empty,
@@ -398,10 +455,12 @@ export default {
 			tapTimer: null,
 			/** what watching teaches For you (`shortSignals.js`) */
 			shortSignals: createShortSignals({
+				allowUntagged: useSettingsStore().getServerData.interests?.recommendationsEnabled === true,
+				legacyLearning: () => isTracking(useSettingsStore().getServerData.interests),
 				enabled: () => {
 					const serverData = useSettingsStore().getServerData
 
-					return !serverData?.public && isTracking(serverData?.interests)
+					return !serverData?.public && (serverData?.interests?.recommendationsEnabled === true || isTracking(serverData?.interests))
 				},
 			}),
 
@@ -604,6 +663,18 @@ export default {
 	mounted() {
 		this.open()
 		this.loadDay()
+		const serverData = this.settingsStore.getServerData
+		if (!serverData?.public && serverData?.interests?.recommendationsEnabled === true) {
+			const signals = this.shortSignals
+			fetchRecommendationPreferences().then((preferences) => {
+				if (this.shortSignals !== signals) {
+					return
+				}
+				const mayLearn = isRecommendationLearningActive(preferences)
+					&& Number.isInteger(preferences.generation)
+				signals.setLearningGeneration(mayLearn ? preferences.generation : null)
+			}).catch((error) => logger.debug('Could not read For you learning settings for Shorts', { error }))
+		}
 
 		// `threshold: 0.6` rather than a bare intersection: two slides touch
 		// the viewport for most of a scroll, and whichever was observed last
@@ -653,6 +724,106 @@ export default {
 	methods: {
 		t,
 
+		/** @param {object} entry a kept video post @return {boolean} */
+		canOfferRecommendationFeedback(entry) {
+			const status = entry?.status
+
+			return this.watching === 'interests'
+				&& !entry?.day
+				&& !this.settingsStore.getServerData?.public
+				&& this.settingsStore.getServerData?.interests?.recommendationsEnabled === true
+				&& !!status?.nid
+				&& !this.isOwn(status)
+		},
+
+		/** @param {object} status a personalized video status @return {object|null} */
+		recommendationContext(status) {
+			return this.recommendationContexts[String(status?.nid)] ?? null
+		},
+
+		/** @param {object} status a personalized video status @return {boolean} */
+		recommendationActionLoading(status) {
+			return this.recommendationContextLoading[String(status?.nid)] === true
+		},
+
+		/** @param {object} status a personalized video status @return {string} */
+		recommendationFormatLabel(status) {
+			const format = this.recommendationContext(status)?.format
+			return {
+				audio: t('social', 'audio posts'),
+				image: t('social', 'photo posts'),
+				poll: t('social', 'polls'),
+				short: t('social', 'short videos'),
+				text: t('social', 'text posts'),
+				video: t('social', 'video posts'),
+			}[format] || t('social', 'posts like this')
+		},
+
+		/**
+		 * @param {object} status a personalized video status
+		 * @param {boolean} open whether its menu opened
+		 */
+		onRecommendationMenuToggle(status, open) {
+			if (open) {
+				this.loadRecommendationContext(status)
+			}
+		},
+
+		/** @param {object} status a personalized video status */
+		async loadRecommendationContext(status) {
+			const id = String(status?.nid ?? '')
+			if (id === '' || this.recommendationContexts[id] || this.recommendationContextLoading[id]) {
+				return
+			}
+			this.recommendationContextLoading = { ...this.recommendationContextLoading, [id]: true }
+			try {
+				const context = await fetchRecommendationContext(id)
+				this.recommendationContexts = { ...this.recommendationContexts, [id]: context }
+			} catch (error) {
+				logger.warn('Could not load Shorts recommendation feedback context', { error })
+			} finally {
+				const loading = { ...this.recommendationContextLoading }
+				delete loading[id]
+				this.recommendationContextLoading = loading
+			}
+		},
+
+		/**
+		 * @param {object} status the post to rate
+		 * @param {string} kind the feedback operation
+		 */
+		async applyRecommendationFeedback(status, kind) {
+			if (!this.canOfferRecommendationFeedback({ status })) {
+				return
+			}
+			try {
+				const result = await recordRecommendationFeedback(status.nid, kind)
+				const store = this.timelineStore
+				const identity = store.getTimelineIdentity
+				const index = store.timeline.indexOf(status.id)
+				if (kind === 'HIDE_POST' && index !== -1) {
+					store.removeStatus(status, false)
+					store.forgetRemoval(status)
+				}
+				showUndo(kind === 'HIDE_POST'
+					? t('social', 'Post hidden from For You')
+					: t('social', 'Your feedback was saved for future recommendations'), async () => {
+					try {
+						await undoRecommendationFeedback(result.feedback_id)
+						if (kind === 'HIDE_POST' && index !== -1 && store.getTimelineIdentity === identity) {
+							store.restoreStatus(status, index)
+						}
+					} catch (error) {
+						logger.error('Could not undo Shorts recommendation feedback', { error })
+						showError(t('social', 'Could not undo this recommendation feedback'))
+					}
+				})
+			} catch (error) {
+				logger.error('Could not save Shorts recommendation feedback', { error })
+				showError(t('social', 'Could not save your recommendation feedback'))
+			}
+		},
+
 		/** Measures the space the video frame can use after its header. */
 		measureTrackBounds() {
 			const page = /** @type {HTMLElement|undefined} */ (this.$refs.page)
@@ -685,10 +856,40 @@ export default {
 		/** @param {Event} event metadata event from the current video */
 		onVideoMetadata(event) {
 			const video = /** @type {HTMLVideoElement} */ (event.target)
+			if (!this.isCurrentPlayerSource(video)) {
+				return
+			}
+			this.playerSlideKey = this.currentKey
 			if (video.videoWidth > 0 && video.videoHeight > 0) {
 				this.videoAspectRatio = video.videoWidth / video.videoHeight
 				this.$nextTick(this.alignCurrentSlide)
 			}
+		},
+
+		/** @param {HTMLVideoElement} video the player @return {boolean} whether its loaded source belongs to the current slide */
+		isCurrentPlayerSource(video) {
+			const source = this.current?.video?.url
+			if (!this.current?.isVideo || typeof source !== 'string' || source === '') {
+				return false
+			}
+
+			let expected
+			try {
+				expected = new URL(source, document.baseURI).href
+			} catch {
+				return false
+			}
+
+			return video.currentSrc ? video.currentSrc === expected : video.src === expected
+		},
+
+		/** @param {Event} event a player time update */
+		onVideoProgress(event) {
+			const video = /** @type {HTMLVideoElement} */ (event.target)
+			if (this.playerSlideKey !== this.currentKey || !this.isCurrentPlayerSource(video)) {
+				return
+			}
+			this.shortSignals.progress(this.current?.status, video, this.playerSlideKey)
 		},
 
 		/**
@@ -846,6 +1047,10 @@ export default {
 		 * @return {{text: string, label: string}|null} why For you showed it
 		 */
 		reasonOf(status) {
+			if (this.watching !== 'interests') {
+				return null
+			}
+
 			const reason = interestReason(status?.interest)
 			if (reason === null) {
 				return null
@@ -908,7 +1113,8 @@ export default {
 		 */
 		async play(index) {
 			this.held = false
-			this.shortSignals.enter(this.shorts[index]?.status)
+			const slide = this.shorts[index]
+			this.shortSignals.enter(slide?.status, slide?.key)
 			if (index >= this.shorts.length - LOOK_AHEAD) {
 				this.load()
 			}
@@ -921,22 +1127,32 @@ export default {
 			// a picture runs on its own clock; the hidden player must not go
 			// on with the video before it
 			if (!this.shorts[index]?.isVideo) {
+				this.playerSlideKey = ''
 				this.player()?.pause?.()
 
 				return
 			}
 
-			await this.playWithSound(this.player())
+			const player = this.player()
+			if (player && this.isCurrentPlayerSource(player)) {
+				this.playerSlideKey = slide.key
+			}
+			await this.playWithSound(player)
 		},
 
 		/** A kept short loops; a 24-hour one moves on. */
-		onEnded() {
+		/** @param {Event} [event] the video that ended */
+		onEnded(event) {
+			const video = /** @type {HTMLVideoElement} */ (event?.target ?? this.player())
+			if (this.playerSlideKey !== this.currentKey || !this.isCurrentPlayerSource(video)) {
+				return
+			}
 			if (this.current?.day) {
 				this.advance()
 
 				return
 			}
-			this.shortSignals.ended(this.current?.status)
+			this.shortSignals.ended(this.current?.status, this.current?.key)
 		},
 
 		/** On to the next slide, the way the arrow key goes. */
@@ -1282,450 +1498,4 @@ export default {
 }
 </script>
 
-<style scoped lang="scss">
-.shorts {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	block-size: calc(
-		100vh - var(--header-height, 50px) - var(--body-container-margin, 8px)
-	);
-	inline-size: 100%;
-	min-block-size: 0;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-
-	&__header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
-		gap: 8px 16px;
-		padding: 8px 16px 0;
-	}
-
-	&__heading {
-		margin: 0;
-		color: var(--color-text-lighter);
-		font-size: 20px;
-		font-weight: 700;
-	}
-
-	&__header-actions {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-		gap: 8px 12px;
-		margin-inline-start: auto;
-	}
-
-	&__track {
-		position: relative;
-		flex: 0 0 auto;
-		inline-size: min(100%, var(--short-track-width, 440px));
-		block-size: min(100%, var(--short-track-height, 780px));
-		max-inline-size: 100%;
-		max-block-size: 100%;
-		min-block-size: 0;
-		margin: auto;
-		overflow-y: auto;
-		border: 1px solid var(--color-border);
-		border-radius: var(--border-radius-large, 12px);
-		background: var(--social-on-dark-ground);
-		scroll-snap-type: y mandatory;
-		/* the one gesture this page has, and it must not also pull the page
-		   behind it down to refresh */
-		overscroll-behavior-y: contain;
-
-		&:focus-visible {
-			outline: 2px solid var(--color-primary-element);
-			outline-offset: -2px;
-		}
-	}
-
-	&__empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		block-size: 100%;
-		color: var(--social-on-dark-text);
-	}
-
-	&__rule {
-		max-inline-size: 32ch;
-		margin: 0;
-		text-align: center;
-		opacity: 0.8;
-	}
-
-	/* Choose which videos fill the player. */
-	&__scopes {
-		display: flex;
-		gap: 4px;
-		padding: 3px;
-		border-radius: var(--border-radius-pill, 999px);
-		background: var(--color-background-dark);
-	}
-
-	&__videos-link {
-		color: var(--color-primary-element);
-		font-size: 13px;
-		font-weight: 600;
-		text-decoration: none;
-
-		&:hover {
-			text-decoration: underline;
-		}
-
-		&:focus-visible {
-			outline: 2px solid var(--color-primary-element);
-			outline-offset: 3px;
-		}
-	}
-
-	&__scope {
-		padding: 5px 10px;
-		border-radius: var(--border-radius-pill, 999px);
-		color: var(--color-text-lighter);
-		font-size: 13px;
-		font-weight: 600;
-		text-decoration: none;
-
-		&--current {
-			background: var(--color-main-background);
-			color: var(--color-main-text);
-			box-shadow: var(--social-elevation-resting);
-		}
-
-		&:focus-visible {
-			outline: 2px solid var(--color-primary-element);
-			outline-offset: 2px;
-		}
-	}
-}
-
-.short {
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	block-size: 100%;
-	scroll-snap-align: start;
-	scroll-snap-stop: always;
-
-	&__video,
-	&__poster {
-		position: absolute;
-		inset-inline: 0;
-		inline-size: 100%;
-		block-size: 100%;
-		/* contain rather than cover: a video shot wide is not improved by
-		   having its sides cut off to fill a tall window */
-		object-fit: contain;
-		background: var(--social-on-dark-ground);
-	}
-
-	&__poster {
-		inset-block-start: 0;
-	}
-
-	&__picture-hold {
-		position: absolute;
-		inset: 0;
-		padding: 0;
-		border: none;
-		background: none;
-		cursor: pointer;
-
-		&:focus-visible {
-			outline: 2px solid var(--social-on-dark-text);
-			outline-offset: -4px;
-		}
-	}
-
-	&__gone {
-		color: var(--social-on-dark-text-muted);
-	}
-
-	/* over the slide being watched: every slide is exactly the track's
-	   height, so the n-th starts n track-heights down */
-	&__video {
-		inset-block-start: calc(var(--at) * 100%);
-	}
-
-	&__sound {
-		position: absolute;
-		/* bottom right, clear of both the app's own sidebar toggle in the top
-		   left and the way out in the top right */
-		inset-block-end: 16px;
-		inset-inline-end: 16px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		inline-size: 40px;
-		block-size: 40px;
-		border: none;
-		border-radius: 50%;
-		background: var(--social-on-dark-scrim);
-		color: var(--social-on-dark-text);
-		cursor: pointer;
-		/* over the caption, which runs the width of the slide underneath it
-		   and used to swallow every press meant for this button */
-		z-index: 2;
-	}
-
-	&__sound-hint {
-		position: absolute;
-		inset-block-end: 24px;
-		inset-inline-end: 64px;
-		z-index: 2;
-		padding: 3px 10px;
-		border-radius: 999px;
-		background: var(--social-on-dark-scrim-heavy);
-		color: var(--social-on-dark-text);
-		font-size: 12px;
-		font-weight: 600;
-		pointer-events: none;
-		animation: short-hint-in .4s ease-out both;
-	}
-
-	/* above the sound button, the column every short-video app keeps its
-	   actions in */
-	&__caption a {
-		pointer-events: auto;
-	}
-
-	&__like {
-		position: absolute;
-		z-index: 2;
-		inset-block-end: 68px;
-		inset-inline-end: 16px;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
-		min-inline-size: 40px;
-		padding: 8px 0 6px;
-		border: none;
-		border-radius: 20px;
-		background: var(--social-on-dark-scrim);
-		color: var(--social-on-dark-text);
-		cursor: pointer;
-		transition: transform .15s ease;
-
-		&:active {
-			transform: scale(.9);
-		}
-
-		&--on {
-			color: var(--social-on-dark-accent);
-		}
-
-		&:focus-visible {
-			outline: 2px solid var(--social-on-dark-text);
-			outline-offset: 2px;
-		}
-	}
-
-	&__like-count {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--social-on-dark-text);
-		font-variant-numeric: tabular-nums;
-	}
-
-	&__hearts {
-		position: absolute;
-		/* over the player, which comes after the slides */
-		z-index: 1;
-		inset: 0;
-		overflow: hidden;
-		pointer-events: none;
-	}
-
-	&__heart {
-		position: absolute;
-		inline-size: var(--size);
-		block-size: var(--size);
-		color: var(--social-on-dark-accent);
-		filter: drop-shadow(0 2px 6px var(--social-on-dark-shadow));
-
-		/* where a double tap landed: it swells, holds, and lifts away */
-		&--burst {
-			/* stylelint-disable-next-line csstools/use-logical -- a point on the screen, not a side: where the finger landed is set inline as `left`, and the heart is centred on it with translate() */
-			left: 50%;
-			top: 45%;
-			animation: short-heart-burst .9s cubic-bezier(.2, 1.4, .4, 1) both;
-		}
-
-		/* up the edge from the heart button, drifting as it goes */
-		&--float {
-			inset-inline-end: 24px;
-			inset-block-end: 120px;
-			animation: short-heart-float 1.6s ease-out both;
-		}
-	}
-
-	&__caption {
-		position: absolute;
-		z-index: 1;
-		/* the caption's own links take presses; the rest of it lets them
-		   through to the video (tap to pause) and to the buttons */
-		pointer-events: none;
-		inset-block-end: 0;
-		inset-inline: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		/* room on the end for the sound button, which sits over this */
-		padding: 16px 72px 16px 16px;
-		color: var(--social-on-dark-text);
-		/* the words sit on whatever the video happens to be showing, so they
-		   carry their own ground rather than hoping it is dark there */
-		background: linear-gradient(to top, var(--social-on-dark-scrim-heavy), transparent);
-	}
-
-	&__author {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		color: inherit;
-		text-decoration: none;
-	}
-
-	&__avatar {
-		inline-size: 36px;
-		block-size: 36px;
-		border-radius: 50%;
-	}
-
-	&__names {
-		display: flex;
-		flex-direction: column;
-	}
-
-	&__name {
-		font-weight: bold;
-	}
-
-	&__handle {
-		font-size: 90%;
-		opacity: 0.8;
-	}
-
-	&__text {
-		margin: 0;
-		/* a caption is a caption, not the post: three lines and the rest is
-		   behind Open the post */
-		display: -webkit-box;
-		-webkit-line-clamp: 3;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-	}
-
-	&__reason {
-		margin: 0;
-		font-size: 90%;
-		opacity: 0.8;
-	}
-
-	&__open {
-		color: var(--social-on-dark-text);
-		text-decoration: underline;
-	}
-}
-
-@keyframes short-heart-burst {
-	0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(var(--tilt)); }
-	25% { opacity: 1; transform: translate(-50%, -50%) scale(1.15) rotate(var(--tilt)); }
-	45% { transform: translate(-50%, -50%) scale(.95) rotate(var(--tilt)); }
-	70% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(var(--tilt)); }
-	100% { opacity: 0; transform: translate(-50%, -140%) scale(.8) rotate(var(--tilt)); }
-}
-
-@keyframes short-heart-float {
-	0% { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0); }
-	15% { opacity: 1; transform: translate(calc(var(--drift) * .2), -20px) scale(1) rotate(var(--tilt)); }
-	100% { opacity: 0; transform: translate(var(--drift), -45vh) scale(.8) rotate(calc(var(--tilt) * -1)); }
-}
-
-@keyframes short-hint-in {
-	from { opacity: 0; transform: translateX(8px); }
-	to { opacity: 1; transform: none; }
-}
-
-/* the like still lands; only the flight is taken away */
-@media (prefers-reduced-motion: reduce) {
-	.short__sound-hint {
-		animation: none;
-	}
-
-	.short__heart {
-		animation: none;
-		display: none;
-	}
-
-	.short__like {
-		transition: none;
-	}
-}
-
-/* Windows high contrast and the like replace every colour with the system's
-   and take the scrims away, leaving words on bare video. The controls take
-   the system's button colours with a border, the caption a solid canvas, so
-   each stays readable on whatever frame is under it. */
-@media (forced-colors: active) {
-	.shorts__create,
-	.shorts__scopes,
-	.short__sound,
-	.short__sound-hint,
-	.short__like {
-		border: 1px solid ButtonText;
-		background: ButtonFace;
-		color: ButtonText;
-	}
-
-	.shorts__scope--current {
-		background: Highlight;
-		color: HighlightText;
-	}
-
-	.short__like--on,
-	.short__heart {
-		color: Highlight;
-	}
-
-	.short__caption,
-	.shorts__empty {
-		border-block-start: 1px solid CanvasText;
-		background: Canvas;
-		color: CanvasText;
-	}
-}
-
-@media (max-width: 600px) {
-	.shorts__header {
-		align-items: flex-start;
-		padding-inline: 12px;
-	}
-
-	.shorts__header-actions {
-		justify-content: flex-start;
-		gap: 8px;
-		margin-inline-start: 0;
-	}
-
-	.shorts__track {
-		border-radius: var(--border-radius-large, 12px) var(--border-radius-large, 12px) 0 0;
-	}
-
-	.shorts__scope {
-		padding-inline: 8px;
-		font-size: 12px;
-	}
-}
-</style>
+<style scoped lang="scss" src="./VideoShorts.scss"></style>

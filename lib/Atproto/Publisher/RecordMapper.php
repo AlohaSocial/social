@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
+use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Reader\BlueskyIds;
@@ -28,6 +29,7 @@ use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Question;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\PinService;
 use OCP\IL10N;
@@ -105,6 +107,16 @@ class RecordMapper {
 		if ($quote !== '' && $quoted === null) {
 			$extra[] = $quote;
 		}
+		$atproto = $post->getDetails(Details::ATPROTO);
+		$rawRecordEmbed = $atproto[Details::ATPROTO_RECORD_EMBED] ?? null;
+		$recordEmbed = null;
+		if (is_array($rawRecordEmbed)
+			&& is_string($rawRecordEmbed['uri'] ?? null)
+			&& Syntax::isAtUri($rawRecordEmbed['uri'])
+			&& is_string($rawRecordEmbed['cid'] ?? null)
+			&& Cid::isValid($rawRecordEmbed['cid'])) {
+			$recordEmbed = ['uri' => $rawRecordEmbed['uri'], 'cid' => Cid::parse($rawRecordEmbed['cid'])];
+		}
 		$parent = trim($post->getInReplyTo());
 		$reply = $parent === '' ? null : $this->refs->replyRefs($parent);
 		if ($parent !== '' && $reply === null) {
@@ -157,8 +169,14 @@ class RecordMapper {
 		if ($dropped > 0) {
 			$extra[] = $l10n->n('+%n more picture', '+%n more pictures', $dropped);
 		}
-		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive() && $warning === '') {
+		if (($images !== [] || $videoEmbed !== null) && $post->isSensitive()) {
 			$labels[] = ['val' => 'graphic-media'];
+		}
+		foreach (is_array($atproto[Details::ATPROTO_SELF_LABELS] ?? null) ? $atproto[Details::ATPROTO_SELF_LABELS] : [] as $value) {
+			if (is_string($value) && $value !== '' && mb_strlen($value) <= 128
+				&& !in_array($value, array_column($labels, 'val'), true)) {
+				$labels[] = ['val' => $value];
+			}
 		}
 
 		$extra = array_values(array_filter($extra, static fn (string $line): bool => $line !== ''));
@@ -196,7 +214,7 @@ class RecordMapper {
 		if ($reply !== null) {
 			$record['reply'] = $reply;
 		}
-		$embed = $this->embed($post, $identity, $author, $images, $quoted, $videoEmbed);
+		$embed = $this->embed($post, $identity, $author, $images, $quoted, $recordEmbed, $videoEmbed);
 		if ($embed !== null) {
 			$record['embed'] = $embed;
 		}
@@ -324,6 +342,11 @@ class RecordMapper {
 	 */
 	public function profile(Person $actor, Identity $identity): array {
 		$record = ['$type' => self::PROFILE];
+		$stored = $this->repositories->getRecord($identity->did, self::PROFILE, self::PROFILE_RKEY);
+		$links = ProfileLinks::references($identity->did, $stored?->value()['links'] ?? []);
+		if ($links !== []) {
+			$record['links'] = $links;
+		}
 		$name = self::displayNameOf($actor);
 		if ($name !== '') {
 			$record['displayName'] = $name;
@@ -366,8 +389,9 @@ class RecordMapper {
 	 *
 	 * @param list<array> $images
 	 * @param array{uri: string, cid: string}|null $quoted
+	 * @param array{uri: string, cid: Cid}|null $recordEmbed
 	 */
-	private function embed(Stream $post, Identity $identity, Person $author, array $images, ?array $quoted, ?array $video = null): ?array {
+	private function embed(Stream $post, Identity $identity, Person $author, array $images, ?array $quoted, ?array $recordEmbed, ?array $video = null): ?array {
 		$pictures = $video;
 		if ($pictures === null && $images !== []) {
 			if (count($images) > PictureService::MAX_PER_IMAGES_EMBED) {
@@ -384,10 +408,12 @@ class RecordMapper {
 				$pictures = ['$type' => 'app.bsky.embed.images', 'images' => $images];
 			}
 		}
-		if ($quoted !== null) {
-			$record = ['$type' => 'app.bsky.embed.record', 'record' => $quoted];
+		$recordRef = $quoted ?? $recordEmbed;
+		if ($recordRef !== null) {
+			$record = ['$type' => 'app.bsky.embed.record', 'record' => $recordRef];
+			$media = $pictures ?? $this->linkCard($post, $identity, $author);
 
-			return $pictures === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $pictures];
+			return $media === null ? $record : ['$type' => 'app.bsky.embed.recordWithMedia', 'record' => $record, 'media' => $media];
 		}
 		if ($pictures !== null) {
 			return $pictures;

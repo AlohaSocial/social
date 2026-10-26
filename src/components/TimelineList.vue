@@ -139,6 +139,7 @@ const SWAP_SETTLE = 320
  * practically never empty, so the posts being left are a fair stand-in.
  */
 const HELD_SCOPES = ['home', 'timeline', 'federated']
+const UNTAGGED_RECOMMENDATION_CONTEXTS = ['interests', 'photos', 'videos', 'shorts', 'reels']
 import EmptyContent from './EmptyContent.vue'
 import logger from '../services/logger.js'
 import eventBus, { NOTIFICATIONS_READ } from '../services/eventBus.js'
@@ -149,8 +150,10 @@ import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { isRanked, useTimelineStore } from '../store/timeline.js'
-import { fetchRecommendationPreferences, isTracking } from '../services/interests.js'
+import { fetchRecommendationPreferences, isRecommendationLearningActive, isTracking } from '../services/interests.js'
 import { contextFor, createInterestTracker } from '../services/interestTracker.js'
+import { accumulateVideoPlayback } from '../services/videoPlayback.js'
+import { isPostControl } from '../utils/postControls.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { useServerData } from '../composables/useServerData.js'
 
@@ -510,7 +513,7 @@ export default {
 				interests: {
 					illustration: 'quiet-timeline',
 					title: t('social', 'Nothing here for you yet'),
-					description: t('social', 'For you learns which hashtags you care about from how you read: the posts you spend time on, like, boost, reply to or open. Keep reading your other timelines, or tell it about a few hashtags yourself.'),
+					description: t('social', 'For You can learn from actions such as opening, liking, boosting or saving posts. Watching most of a video also counts; simply leaving a post on screen does not. Manage learning and language settings to change how your feed is personalized.'),
 					action: {
 						label: t('social', 'Manage interests'),
 						to: { name: 'settings', hash: '#interests' },
@@ -558,8 +561,7 @@ export default {
 			// the thread's two lists are given whatever type the route
 			// carries, which on a post's page is none
 			const context = contextFor(this.$route?.name === 'single-post' ? 'single-post' : this.type)
-			const v4Context = ['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context)
-			const tracksV4 = v4Context && this.serverData.interests?.recommendationsEnabled === true
+			const tracksV4 = this.serverData.interests?.recommendationsEnabled === true
 			return isTracking(this.serverData.interests) || tracksV4 ? context : null
 		},
 
@@ -1260,24 +1262,28 @@ export default {
 
 			this.tracker = createInterestTracker({
 				context,
+				legacyLearning: isTracking(this.serverData.interests),
 				allowUntagged: this.serverData.interests?.recommendationsEnabled === true
-					&& ['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context),
+					&& UNTAGGED_RECOMMENDATION_CONTEXTS.includes(context),
 				isOwn: (status) => {
 					const me = this.accountStore.currentAccount?.acct
 					return me !== undefined && status.account?.acct === me
 				},
 			})
-			if (['interests', 'photos', 'videos', 'shorts', 'reels'].includes(context)
-				&& this.serverData.interests?.recommendationsEnabled === true) {
+			if (this.serverData.interests?.recommendationsEnabled === true) {
 				const tracker = this.tracker
 				fetchRecommendationPreferences().then((preferences) => {
 					if (this.tracker !== tracker) {
 						return
 					}
-					if (preferences.learning_mode === 'on' && Number.isInteger(preferences.generation)) {
+					if (isRecommendationLearningActive(preferences)
+						&& Number.isInteger(preferences.generation)) {
 						tracker.setLearningGeneration(preferences.generation)
-					} else if (!isTracking(this.serverData.interests)) {
-						this.stopTracking()
+					} else {
+						tracker.setLearningGeneration(null)
+						if (!isTracking(this.serverData.interests)) {
+							this.stopTracking()
+						}
 					}
 				}).catch((error) => logger.debug('Could not read For You learning settings', { error }))
 			}
@@ -1395,14 +1401,33 @@ export default {
 				return
 			}
 
-			if (/** @type {HTMLElement} */ (event.target).closest('.post-attachments, .media-grid__link, .video-card__link')) {
+			const target = /** @type {HTMLElement} */ (event.target)
+			if (target.closest('.post-attachments, .media-grid__link, .video-card__link')) {
 				this.tracker?.record(status, 'media')
 				return
 			}
 
-			const link = /** @type {HTMLAnchorElement|null} */ (/** @type {HTMLElement} */ (event.target).closest('a[href]'))
+			if (target.closest('.post-timestamp')) {
+				this.tracker?.record(status, 'open')
+				return
+			}
+
+			const link = /** @type {HTMLAnchorElement|null} */ (target.closest('a[href]'))
 			if (link && link.closest('.post-message, .post-card') && isLinkOut(link)) {
 				this.tracker?.record(status, 'link')
+				return
+			}
+
+			if (target.closest('.post-content--openable')
+				&& event.button === 0
+				&& !event.defaultPrevented
+				&& !event.metaKey
+				&& !event.ctrlKey
+				&& !event.shiftKey
+				&& !event.altKey
+				&& (window.getSelection?.()?.toString() ?? '') === ''
+				&& !isPostControl(event)) {
+				this.tracker?.record(status, 'open')
 			}
 		},
 
@@ -1418,23 +1443,14 @@ export default {
 			}
 		},
 
-		/**
-		 * Accumulates forward playback time and reports at end or page exit.
-		 *
-		 * @param {Event} event the media event
-		 */
+		/** @param {Event} event the media event */
 		onTrackedVideoProgress(event) {
 			const media = event.target
 			if (!(media instanceof HTMLVideoElement) || !this.videoPlayback?.has(media)) {
 				return
 			}
 			const playback = this.videoPlayback.get(media)
-			const currentTime = Number(media.currentTime)
-			const delta = currentTime - playback.lastTime
-			if (!media.seeking && Number.isFinite(delta) && delta > 0 && delta <= 2) {
-				playback.watchedSeconds += delta
-			}
-			playback.lastTime = currentTime
+			accumulateVideoPlayback(playback, media)
 			if (event.type === 'timeupdate') {
 				return
 			}
@@ -1457,12 +1473,7 @@ export default {
 				return
 			}
 			for (const [media, playback] of this.videoPlayback) {
-				if (!media.paused && !media.seeking) {
-					const delta = Number(media.currentTime) - playback.lastTime
-					if (Number.isFinite(delta) && delta > 0 && delta <= 2) {
-						playback.watchedSeconds += delta
-					}
-				}
+				accumulateVideoPlayback(playback, media)
 				this.reportVideoWatch(media, playback)
 			}
 			this.videoPlayback.clear()
@@ -1981,221 +1992,4 @@ export default {
 }
 </script>
 
-<style scoped lang="scss">
-// the list being left, while the next one loads: visibly not current, and not
-// clickable — acting on a post that belongs to the timeline you just left is
-// worse than waiting 150 ms for the one you asked for
-.timeline-list--settling {
-	opacity: .55;
-	pointer-events: none;
-	transition: opacity .15s ease-out;
-}
-
-.social__timeline {
-	max-width: var(--social-column);
-	margin: 0 auto;
-	padding: 0 var(--social-column-gutter);
-
-	ul {
-		margin: 0;
-		padding: 0;
-		/* a leaving entry is taken out of the flow and sized to its nearest
-		   positioned ancestor; without this that is the whole content area,
-		   and the entry is drawn at the width of the page while it fades */
-		position: relative;
-	}
-
-	.list-end {
-		height: 1px;
-	}
-
-	.list-sentinel {
-		min-height: 1px;
-	}
-}
-
-.timeline-error {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 12px;
-	margin: 20px 0;
-	padding: 24px 20px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	text-align: center;
-
-	&__message {
-		margin: 0;
-		color: var(--color-text-lighter);
-		line-height: 1.5;
-	}
-}
-
-.new-posts-pill {
-	position: sticky;
-	// the fallback for a page with no composer above the list; where there is
-	// one, the component sets `top` to just below it
-	top: 8px;
-	// above the composer rather than below it: the offset keeps the two apart,
-	// and if the composer grows between two measurements the pill is still the
-	// one you can see
-	z-index: 101;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	margin: 0 auto 8px;
-	padding: 6px 16px;
-	border: none;
-	border-radius: var(--border-radius-pill, 16px);
-	background: var(--color-primary-element);
-	color: var(--color-primary-element-text);
-	font-weight: bold;
-	cursor: pointer;
-	box-shadow: var(--social-elevation-raised);
-
-	&:hover,
-	&:focus-visible {
-		background: var(--color-primary-element-hover);
-	}
-}
-
-.pill-enter-active,
-.pill-leave-active {
-	transition: opacity .2s ease, transform .2s ease;
-}
-
-.pill-enter-from,
-.pill-leave-to {
-	opacity: 0;
-	transform: translateY(-8px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.pill-enter-active,
-	.pill-leave-active {
-		transition: none;
-	}
-}
-/* The line between what arrived since the reader last looked and what was
-   already there. A heading rather than a rule: "New" and "Earlier" say what
-   the two runs are, where a bare line only says that there are two of them. */
-/**
- * The line that says where the reader had got to.
- *
- * A hairline either side of a few quiet words, and everything below it drawn
- * a shade back. What it does is make the timeline finite: a scroll with no
- * bottom and no marks in it is the same screen for ever.
- */
-.timeline-caughtup {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin: 18px 0 14px;
-	list-style: none;
-
-	&__line {
-		flex: 1 1 auto;
-		block-size: 1px;
-		background: var(--color-border);
-	}
-
-	&__label {
-		flex: 0 0 auto;
-		font-size: 12px;
-		color: var(--color-text-maxcontrast);
-		white-space: nowrap;
-	}
-}
-
-.timeline-entry--seen {
-	opacity: .72;
-	transition: opacity .2s ease;
-
-	&:hover,
-	&:focus-within {
-		opacity: 1;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.timeline-entry--seen {
-		transition: none;
-	}
-}
-
-.timeline-divider {
-	margin: 4px 0 10px;
-	padding: 0 2px;
-	color: var(--color-text-maxcontrast);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: .04em;
-	text-transform: uppercase;
-	list-style: none;
-}
-
-/* "New" is the boundary the sidebar badge was pointing at, so it is drawn in
-   the accent and carries a rule across the rest of the row: at 12px uppercase,
-   maxcontrast grey is exactly as quiet as the timestamps it has to stand out
-   from, and the heading read as the first line of the card beneath it.
-   "Earlier" stays grey -- it labels what has already been read. */
-.timeline-divider--new {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	color: var(--color-primary-element);
-
-	&::after {
-		content: '';
-		flex: 1;
-		height: 1px;
-		background: var(--color-primary-element);
-		opacity: .35;
-	}
-}
-
-/* where the keyboard is, for j/k readers */
-.timeline-entry--focused :deep(.post-content),
-.timeline-entry--focused :deep(.main-post) {
-	border-color: var(--color-primary-element);
-	box-shadow: 0 0 0 2px var(--color-primary-element-light);
-}
-
-/*
- * The list has been a <transition-group name="list"> for as long as it has
- * existed, with no rules to go with the name: deleting a post made it vanish
- * and everything under it jump. Entering is the entry's own business — it
- * staggers itself, see TimelineEntry — so only leaving and moving are here.
- */
-.list-leave-active {
-	transition: opacity .2s ease, transform .2s ease;
-	/* taken out of the flow, or the gap it leaves closes in one step while it
-	   is still fading in place */
-	position: absolute;
-	width: 100%;
-}
-
-.list-leave-to {
-	opacity: 0;
-	transform: translateY(-4px);
-}
-
-/* a swap replaces every entry at once: the old ones are not worth a fade
-   each, and twenty of them fading on top of twenty rising is a slow page */
-.timeline-list--swapping .list-leave-active {
-	display: none;
-}
-
-.list-move {
-	transition: transform .24s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.list-leave-active,
-	.list-move {
-		transition: none;
-	}
-}
-</style>
+<style scoped lang="scss" src="./TimelineList.scss"></style>

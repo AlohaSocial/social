@@ -1,0 +1,26 @@
+{
+  "lexicon": 1,
+  "id": "com.atproto.identity.resolveDid",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "required": ["did"],
+        "properties": { "did": { "type": "string", "format": "did" } }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["didDoc"],
+          "properties": { "didDoc": { "type": "unknown" } }
+        }
+      },
+      "errors": [
+        { "name": "DidNotFound" },
+        { "name": "DidDeactivated" }
+      ]
+    }
+  }
+}

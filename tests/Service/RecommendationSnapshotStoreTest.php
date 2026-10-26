@@ -22,11 +22,11 @@ class RecommendationSnapshotStoreTest extends TestCase {
 	public function testPagesUseTheSameSnapshotAndRejectOtherViewerOrChangedProfile(): void {
 		$values = [];
 		$cache = $this->createMock(ICache::class);
-		$cache->method('set')->willReturnCallback(static function (string $key, mixed $value, int $ttl) use (&$values): bool {
+		$cache->expects($this->once())->method('set')->willReturnCallback(static function (string $key, mixed $value, int $ttl) use (&$values): bool {
 			$values[$key] = $value;
 			return $ttl === 3600;
 		});
-		$cache->method('get')->willReturnCallback(static function (string $key) use (&$values): mixed {
+		$cache->expects($this->exactly(2))->method('get')->willReturnCallback(static function (string $key) use (&$values): mixed {
 			return $values[$key] ?? null;
 		});
 		$store = $this->store($cache);
@@ -62,8 +62,8 @@ class RecommendationSnapshotStoreTest extends TestCase {
 
 	public function testMissingSnapshotAndInvalidCursorFailClosed(): void {
 		$cache = $this->createMock(ICache::class);
-		$cache->method('set')->willReturn(true);
-		$cache->method('get')->willReturn(null);
+		$cache->expects($this->once())->method('set')->willReturn(true);
+		$cache->expects($this->once())->method('get')->willReturn(null);
 		$store = $this->store($cache);
 		$first = $store->create('alice', 'for-you', 'all', 0, 0, self::NOW, ['1', '2'], 1);
 

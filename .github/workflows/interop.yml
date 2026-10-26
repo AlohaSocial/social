@@ -126,14 +126,16 @@ jobs:
         # without the dev ones, as the app store ships it: the app's autoloader
         # is prepended to the server's, so a dev-only package the server also
         # carries (symfony/console) is served in place of the server's own
-        run: composer i --no-dev
+        # GitHub archive downloads can fail transiently; retry with bounded
+        # concurrency and backoff, as in the other interoperability suites.
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Set up the notifications app's PHP dependencies
         # before the install: maintenance:install enables shipped apps, this
         # one among them, and loads its vendor/autoload.php right away
         run: |
           if [ -f apps/notifications/composer.json ]; then
-            composer i --no-dev --no-interaction --working-dir=apps/notifications
+            bash apps/social/.github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist --working-dir=apps/notifications
           fi
 
       - name: Give Nextcloud a name and a certificate
@@ -371,9 +373,27 @@ jobs:
           NODE_EXTRA_CA_CERTS=/tls/ca.crt
           ENV
 
+          peertube_image=chocobozzz/peertube:v8.3.1
+          pulled=false
+          for attempt in 1 2 3; do
+            if docker pull "$peertube_image"; then
+              pulled=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 10))
+              echo "PeerTube image pull failed (attempt $attempt/3); retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          if [ "$pulled" != true ]; then
+            echo "Could not pull $peertube_image after 3 attempts" >&2
+            exit 1
+          fi
+
           docker run -d --name peertube --network host --env-file /tmp/peertube.env \
             -v /tmp/tls:/tls:ro \
-            chocobozzz/peertube:v8.3.1
+            "$peertube_image"
 
       - name: Wait for PeerTube
         run: |
@@ -429,7 +449,7 @@ jobs:
         # one suite at a time, so each prints its own failures even if the
         # other hangs or the runner is lost
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
           # memory and the biggest processes every five seconds, so a runner
           # that is lost mid-test leaves a trail; and a PHP limit, so a runaway
           # test dies with a stack trace instead of taking the runner with it

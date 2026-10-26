@@ -8,13 +8,9 @@ declare(strict_types=1);
  */
 
 namespace OCP\AppFramework\Http\Attribute {
-	/**
-	 * Psalm's constant resolver currently drops the repeatable bit from the
-	 * OCP attribute's `Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE`
-	 * expression. Keep the literal runtime flags from OCP's declaration so
-	 * Psalm accepts the framework's documented multiple-route methods.
-	 */
-	#[\Attribute(132)]
+	// IS_REPEATABLE is 64 on PHP 8.3 and 128 on PHP 8.5. Setting both bits
+	// keeps this Psalm-only stub repeatable on every supported analysis runtime.
+	#[\Attribute(196)]
 	class FrontpageRoute extends Route {
 		public function __construct(
 			protected string $verb,

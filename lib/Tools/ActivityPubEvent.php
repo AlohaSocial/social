@@ -122,15 +122,13 @@ final class ActivityPubEvent {
 			return '';
 		}
 		$name = self::plainText($value['name'] ?? '', self::MAX_TEXT);
-		if ($name !== '') {
-			return $name;
-		}
 		$address = $value['address'] ?? null;
 		if (is_string($address)) {
-			return self::plainText($address, self::MAX_TEXT);
+			$address = self::plainText($address, self::MAX_TEXT);
+			return self::joinLocation($name, $address);
 		}
 		if (!is_array($address)) {
-			return '';
+			return $name;
 		}
 		$parts = [];
 		foreach (['streetAddress', 'addressLocality', 'addressRegion', 'postalCode', 'addressCountry'] as $field) {
@@ -140,7 +138,18 @@ final class ActivityPubEvent {
 			}
 		}
 
-		return self::plainText(implode(', ', $parts), self::MAX_TEXT);
+		return self::joinLocation($name, self::plainText(implode(', ', $parts), self::MAX_TEXT));
+	}
+
+	private static function joinLocation(string $name, string $address): string {
+		if ($name === '') {
+			return $address;
+		}
+		if ($address === '' || mb_strtolower($name, 'UTF-8') === mb_strtolower($address, 'UTF-8')) {
+			return $name;
+		}
+
+		return self::plainText($name . ', ' . $address, self::MAX_TEXT);
 	}
 
 	private static function plainText(mixed $value, int $limit): string {
@@ -148,7 +157,11 @@ final class ActivityPubEvent {
 			return '';
 		}
 		$value = html_entity_decode(strip_tags($value), ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE, 'UTF-8');
-		$value = preg_replace('/[\p{Cc}\p{Cf}]+/u', ' ', $value) ?? '';
+		// Keep the joiners used by emoji and scripts such as Persian and Hindi;
+		// removing every Unicode format character breaks otherwise valid names.
+		$value = preg_replace_callback('/[\p{Cc}\p{Cf}]/u', static function (array $match): string {
+			return in_array($match[0], ["\u{200C}", "\u{200D}"], true) ? $match[0] : ' ';
+		}, $value) ?? '';
 		$value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
 
 		return mb_substr($value, 0, $limit, 'UTF-8');

@@ -110,7 +110,7 @@
  * @property {CustomEmoji[]} emojis - Ex: []
  * @property {Field[]} fields - Ex: []
  * @property {Account} [moved] - the account this one moved to, when it has
- * @property {{handle: string, did: string, url: string, native: boolean, active?: boolean, verified?: boolean, verified_by?: string[], verified_by_bluesky?: boolean}|null} [bluesky] - the account as Bluesky knows it: `native` for a Bluesky account seen from here, otherwise a local account's identity there and whether it is `active`; for a Bluesky account, whether the verifiers Bluesky trusts verified it, and which
+ * @property {{handle: string, did: string, url: string, native: boolean, active?: boolean, links?: Array<{url: string, title: string}>, verified?: boolean, verified_by?: string[], verified_by_bluesky?: boolean}|null} [bluesky] - the account as Bluesky knows it: `native` for a Bluesky account seen from here, otherwise a local account's identity there and whether it is `active`; for a Bluesky account, whether the verifiers Bluesky trusts verified it, and which
  * @property {string|null} [nextcloud_user] - this app's own: the Nextcloud user a local account belongs to, which its username need not be; null for anybody else, and where the reader is not told it
  * @property {{by: string, issuer: string, created_at: string}|null} [verification] - this instance's verification of the account: in whose name, the DID that issued its published record ('' for none), and when; null when the instance did not verify it
  */

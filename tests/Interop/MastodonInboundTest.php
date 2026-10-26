@@ -407,6 +407,10 @@ class MastodonInboundTest extends TestCase {
 
 		try {
 			$this->mastodon->post('/api/v1/accounts/' . $this->adminThere . '/block');
+			$this->assertTrue(
+				$this->here->awaitRelationship($this->interopHere, 'blocked_by', true),
+				'Mastodon Block did not arrive before testing its effects'
+			);
 
 			$this->assertTrue(
 				$this->here->awaitRelationship($this->interopHere, 'following', false),
@@ -418,6 +422,12 @@ class MastodonInboundTest extends TestCase {
 			);
 		} finally {
 			$this->mastodon->post('/api/v1/accounts/' . $this->adminThere . '/unblock');
+			// Unfollow can arrive before Block. Waiting only for follows to
+			// disappear let the later Block contaminate the outbound suite.
+			$this->assertTrue(
+				$this->here->awaitRelationship($this->interopHere, 'blocked_by', false),
+				'Mastodon Undo{Block} did not restore the relationship'
+			);
 			$this->mastodon->follow($this->adminThere);
 			$this->drainQueue();
 		}

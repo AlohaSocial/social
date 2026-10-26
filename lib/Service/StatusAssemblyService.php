@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\Social\Service;
 
+use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Db\CacheDocumentsRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -92,6 +94,37 @@ class StatusAssemblyService {
 		$post->setLanguage($params->paramString('language'));
 		$post->setQuotedId($params->paramString('quoted_status_id'));
 		$post->setReplyRule($params->paramString('reply_policy'));
+
+		$recordEmbed = $params->paramArray('atproto_record_embed');
+		$recordUri = $recordEmbed['uri'] ?? null;
+		$recordCid = $recordEmbed['cid'] ?? null;
+		if (is_string($recordUri) && Syntax::isAtUri($recordUri)
+			&& is_string($recordCid) && Cid::isValid($recordCid)) {
+			$post->setAtprotoRecordEmbed(['uri' => $recordUri, 'cid' => $recordCid]);
+		}
+		$labels = $params->paramArray('atproto_self_labels');
+		if ($labels !== null) {
+			$post->setAtprotoSelfLabels(array_values(array_filter(
+				$labels, static fn (mixed $value): bool => is_string($value) && $value !== '' && mb_strlen($value) <= 128
+			)));
+		}
+
+		$card = $params->paramArray('atproto_card');
+		if ($card !== null
+			&& is_string($card['url'] ?? null) && Stream::isExternalLink($card['url'])
+			&& is_string($card['title'] ?? null)
+			&& is_string($card['description'] ?? null)
+			&& is_string($card['image'] ?? null)
+			&& ($card['image'] === '' || Stream::isExternalLink($card['image']))
+			&& is_string($card['provider'] ?? null)) {
+			$post->setLinkCard([
+				'url' => $card['url'],
+				'title' => $card['title'],
+				'description' => $card['description'],
+				'image' => $card['image'],
+				'provider' => $card['provider'],
+			]);
+		}
 
 		$mediaIds = $params->paramMediaIds();
 		if ($mediaIds !== []) {

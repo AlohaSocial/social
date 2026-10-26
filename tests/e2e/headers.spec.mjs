@@ -159,12 +159,19 @@ test.describe('response headers', () => {
 		for (const requestOrigin of ['https://bsky.app', 'https://other-bluesky-client.example']) {
 			const preflight = await anonymous.fetch(`${APP}/xrpc/com.atproto.repo.createRecord`, {
 				method: 'OPTIONS',
-				headers: { Origin: requestOrigin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, dpop, x-atproto-session-id' },
+				headers: {
+					Origin: requestOrigin,
+					'Access-Control-Request-Method': 'POST',
+					'Access-Control-Request-Headers': 'authorization, content-type, dpop, x-atproto-session-id, x-atproto-device-id, x-atproto-bsky-topics, x-bsky-topics, atproto-accept-labelers, atproto-proxy',
+				},
 			})
 			expect(preflight.status(), `the preflight is answered for ${requestOrigin}`).toBeLessThan(300)
 			expect(preflight.headers()['access-control-allow-origin'], `the origin ${requestOrigin} is allowed`).toBe('*')
 			expect(preflight.headers()['access-control-allow-headers'] ?? '').toMatch(/DPoP/)
 			expect(preflight.headers()['access-control-allow-headers'] ?? '').toMatch(/X-Atproto-Session-Id/i)
+			for (const header of ['Content-Type', 'X-Atproto-Device-Id', 'X-Atproto-Bsky-Topics', 'X-Bsky-Topics', 'atproto-accept-labelers', 'atproto-proxy']) {
+				expect(preflight.headers()['access-control-allow-headers'] ?? '').toMatch(new RegExp(header, 'i'))
+			}
 			preflights.push(preflight)
 		}
 

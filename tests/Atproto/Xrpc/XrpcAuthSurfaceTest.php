@@ -17,7 +17,9 @@ use OCA\Social\Atproto\Client\Preferences;
 use OCA\Social\Atproto\Client\ServiceAuthGrant;
 use OCA\Social\Atproto\Client\SessionService;
 use OCA\Social\Atproto\Client\WriteService;
+use OCA\Social\Atproto\Identity\HandleVerifier;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Identity\PlcClient;
 use OCA\Social\Atproto\Move\InboundMoveService;
 use OCA\Social\Atproto\OAuth\AuthorizationServer;
 use OCA\Social\Atproto\OAuth\DpopNonce;
@@ -36,6 +38,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\CurlService;
 use OCA\Social\Service\ModerationService;
 use OCP\AppFramework\Http\Response;
 use OCP\IRequest;
@@ -68,6 +71,9 @@ class XrpcAuthSurfaceTest extends TestCase {
 		'_health' => 'the liveness probe, naming the version only',
 		'com.atproto.server.describeServer' => 'the server description every client reads before signing in',
 		'com.atproto.identity.resolveHandle' => 'handle resolution is public by design',
+		'com.atproto.identity.resolveDid' => 'DID documents are public identity data',
+		'com.atproto.identity.resolveIdentity' => 'identity information is public and handles are validated before being returned',
+		'com.atproto.identity.refreshIdentity' => 're-resolves the supplied public identity without changing account state',
 		'com.atproto.repo.describeRepo' => 'repository reads are public: the repository holds public posts only (§16.5)',
 		'com.atproto.repo.getRecord' => 'as describeRepo',
 		'com.atproto.repo.listRecords' => 'as describeRepo',
@@ -96,6 +102,7 @@ class XrpcAuthSurfaceTest extends TestCase {
 		'app.bsky.graph.muteThread', 'app.bsky.graph.unmuteThread',
 		'chat.bsky.convo.listConvos', 'chat.bsky.convo.sendMessage',
 		'com.atproto.identity.requestPlcOperationSignature', 'com.atproto.identity.signPlcOperation',
+		'com.atproto.identity.updateHandle',
 	];
 
 	private bool $enabled = true;
@@ -123,7 +130,7 @@ class XrpcAuthSurfaceTest extends TestCase {
 			$config, $sessions, $this->createMock(AppViewProxy::class), $this->createMock(Preferences::class),
 			$this->createMock(WriteService::class), $grants, $oauth, $this->createMock(ModerationService::class),
 			$inbound, $this->createMock(BlueskyMutes::class), $this->createMock(BlueskyThreadMutes::class), $this->createMock(BlueskyBookmarks::class),
-			$this->createMock(NotificationSettings::class), $this->createMock(PlcSignatureService::class),
+			$this->createMock(NotificationSettings::class), $this->createMock(PlcSignatureService::class), $this->createMock(\OCA\Social\Atproto\Identity\CustomHandleService::class),
 		);
 
 		$identities = $this->createMock(IdentityService::class);
@@ -132,7 +139,7 @@ class XrpcAuthSurfaceTest extends TestCase {
 		$xrpc = new XrpcService(
 			$config, $identities, $this->createMock(RepositoryService::class), $this->createMock(AtprotoRepoRequest::class),
 			$this->createMock(AtprotoBlobRequest::class), $this->createMock(PictureService::class), $this->createMock(VideoBlobService::class),
-			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class),
+			$this->createMock(ConfigService::class), $this->createMock(ModerationService::class), $this->createMock(AtprotoIdentityRequest::class), $this->createMock(HandleVerifier::class), $this->createMock(PlcClient::class), $this->createMock(CurlService::class),
 		);
 
 		$request = $this->createMock(IRequest::class);
@@ -230,11 +237,17 @@ class XrpcAuthSurfaceTest extends TestCase {
 			$this->assertSame('*', $headers['Access-Control-Allow-Origin'] ?? null, $method);
 			$this->assertStringContainsString('DPoP', $headers['Access-Control-Allow-Headers'] ?? '');
 			$this->assertStringContainsString('X-Atproto-Session-Id', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Atproto-Device-Id', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Atproto-Bsky-Topics', $headers['Access-Control-Allow-Headers'] ?? '');
+			$this->assertStringContainsString('X-Bsky-Topics', $headers['Access-Control-Allow-Headers'] ?? '');
 			$this->assertStringContainsString('DPoP-Nonce', $headers['Access-Control-Expose-Headers'] ?? '');
 		}
 		$preflight = $this->controller->preflight('com.atproto.repo.createRecord');
 		$this->assertSame(204, $preflight->getStatus());
 		$this->assertStringContainsString('X-Atproto-Session-Id', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Atproto-Device-Id', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Atproto-Bsky-Topics', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
+		$this->assertStringContainsString('X-Bsky-Topics', $preflight->getHeaders()['Access-Control-Allow-Headers'] ?? '');
 	}
 
 	private function call(string $method, string $kind): Response {

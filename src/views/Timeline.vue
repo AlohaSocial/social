@@ -203,7 +203,7 @@ import { mapStores } from 'pinia'
 import { useAccountStore } from '../store/account.js'
 import { useNotificationsStore } from '../store/notifications.js'
 import { useSettingsStore } from '../store/settings.js'
-import { useTimelineStore } from '../store/timeline.js'
+import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 
 /** How long after a feed is on screen its other scopes are fetched ahead, in milliseconds. */
 const PREFETCH_AFTER = 1500
@@ -530,12 +530,11 @@ export default {
 
 		/** Whether this ranked feed has fewer eligible posts than the requested page. */
 		showRecommendationCoverageNote() {
-			const isForYou = this.type === 'interests'
-				|| (this.isScopedPage && this.scope === 'interests')
-				|| (this.type === 'shorts' && this.timelineStore.params?.scope === 'interests')
 			const coverage = this.timelineStore.recommendationCoverage[this.timelineStore.getTimelineIdentity]
+			const scope = this.isScopedPage ? this.scope : this.timelineStore.params?.scope
 
-			return isForYou && coverage?.state === 'UNDERFILLED' && this.timelineStore.getTimeline.length > 0
+			return isPersonalizedFeed({ type: this.type, params: { scope } })
+				&& coverage?.state === 'UNDERFILLED'
 		},
 
 		/**

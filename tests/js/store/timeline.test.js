@@ -1088,6 +1088,21 @@ describe('timeline store actions', () => {
 			})
 		})
 
+		it('sends an explicit replacement attachment list, including an empty list', async () => {
+			const status = makeStatus('1')
+			store.addToTimeline([status])
+			axios.put.mockResolvedValue({ data: makeStatus('1') })
+
+			await store.postEdit({ status, content: 'edited', spoiler_text: '', sensitive: false, media_ids: [] })
+
+			expect(axios.put).toHaveBeenCalledWith(`${API}/statuses/1`, {
+				status: 'edited',
+				spoiler_text: '',
+				sensitive: false,
+				media_ids: [],
+			})
+		})
+
 		it('leaves the status untouched and shows an error when editing fails', async () => {
 			const status = makeStatus('1')
 			store.addToTimeline([status])
@@ -1646,6 +1661,39 @@ describe('timeline store actions', () => {
 				await vi.advanceTimersByTimeAsync(1)
 				expect(axios.get).toHaveBeenCalledTimes(3)
 				expect(store.profilePageFilling).toBe(false)
+				expect(store.timeline).toEqual(['1'])
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('keeps checking a remote Fediverse profile while its outbox is being imported', async () => {
+			vi.useFakeTimers()
+			try {
+				await store.changeTimelineTypeAccount('bob@pixelfed.social')
+				const filling = {
+					'x-social-filling': '1',
+					'x-social-profile-filling': '1',
+					'x-social-remote-profile-filling': '1',
+				}
+				axios.get
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [], headers: filling })
+					.mockResolvedValueOnce({ data: [makeStatus('1')], headers: {} })
+
+				await store.fetchTimeline()
+				expect(store.remoteProfilePageFilling).toBe(true)
+
+				await vi.advanceTimersByTimeAsync(6000)
+				expect(axios.get).toHaveBeenCalledTimes(4)
+				await vi.advanceTimersByTimeAsync(4999)
+				expect(axios.get).toHaveBeenCalledTimes(4)
+				await vi.advanceTimersByTimeAsync(1)
+
+				expect(axios.get).toHaveBeenCalledTimes(5)
+				expect(store.remoteProfilePageFilling).toBe(false)
 				expect(store.timeline).toEqual(['1'])
 			} finally {
 				vi.useRealTimers()

@@ -17,6 +17,8 @@ import { useInstanceStore } from '../../../src/store/instance.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import axios from '@nextcloud/axios'
 
+const timelinePostStyles = () => readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.scss'), 'utf8')
+
 // the toast service fetches `@nextcloud/dialogs` when it is first used, and
 // this file now has tests that reach it (mute and block from the post menu).
 // That import resolves after the test has ended, so vitest tears the
@@ -184,6 +186,14 @@ const actionButton = (wrapper, label) => wrapper.find(`.post-actions button[aria
 const menuItem = (wrapper, label) => wrapper.findAll('.post-menu__item').find((button) => button.text() === label)
 
 describe('TimelinePost', () => {
+	it('keeps view counts out of the floating action menu and timestamp area', () => {
+		const { wrapper } = mountPost({ item: makeItem({ view_count: 12 }) })
+		expect(wrapper.find('.post-action--views').exists()).toBe(false)
+		expect(wrapper.find('.eye-outline-icon').exists()).toBe(false)
+		expect(wrapper.find('.post-timestamp').exists()).toBe(true)
+		expect(wrapper.findAll('.post-action-group').length).toBe(3)
+	})
+
 	it('lets the author\'s name set its own direction', () => {
 		const { wrapper } = mountPost({ item: makeItem({ account: { ...alice, display_name: 'أليس' } }) })
 
@@ -238,6 +248,30 @@ describe('TimelinePost', () => {
 			expect(showError).toHaveBeenCalledWith('No writable calendar is available. Download the calendar file and add it manually.')
 			expect(wrapper.find('a.post-event__calendar--download').attributes('href'))
 				.toBe('/index.php/apps/social/api/v1/statuses/101/calendar')
+		})
+
+		it('explains when the Nextcloud session is no longer valid', async () => {
+			axios.post.mockRejectedValue({ response: { status: 401, data: { message: 'Current user is not logged in' } } })
+			const { wrapper } = mountPost({
+				item: makeItem({ event: { name: 'Community meetup', start_time: '2026-11-01T18:00:00Z' } }),
+			})
+
+			await wrapper.find('button.post-event__calendar').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Your Nextcloud session is no longer valid. Reload the page and sign in again, then retry the calendar import.')
+		})
+
+		it('does not report an access denial as an expired session', async () => {
+			axios.post.mockRejectedValue({ response: { status: 403, data: { message: 'Forbidden' } } })
+			const { wrapper } = mountPost({
+				item: makeItem({ event: { name: 'Community meetup', start_time: '2026-11-01T18:00:00Z' } }),
+			})
+
+			await wrapper.find('button.post-event__calendar').trigger('click')
+			await flushPromises()
+
+			expect(showError).toHaveBeenCalledWith('Nextcloud refused this request. Reload the page and try again; if it continues, check your calendar permissions.')
 		})
 	})
 
@@ -1016,11 +1050,22 @@ describe('TimelinePost', () => {
 			const { wrapper } = mountPost({
 				type: 'photos',
 				params: { scope: 'interests' },
-				item: makeItem({ nid: '123' }),
+				item: makeItem({ nid: '123', account: bob }),
 				serverData: { public: false, cloudAddress: 'https://cloud.example.org', interests: { recommendationsEnabled: true } },
 			})
 
 			expect(wrapper.vm.canUseRecommendationFeedback).toBe(true)
+		})
+
+		it('does not load recommendation feedback for the reader\'s own post', () => {
+			const { wrapper } = mountPost({
+				type: 'photos',
+				params: { scope: 'interests' },
+				item: makeItem({ nid: '123' }),
+				serverData: { public: false, cloudAddress: 'https://cloud.example.org', interests: { recommendationsEnabled: true } },
+			})
+
+			expect(wrapper.vm.canUseRecommendationFeedback).toBe(false)
 		})
 
 		it('is shown on a regular timeline for a logged-in user', () => {
@@ -1090,7 +1135,7 @@ describe('TimelinePost', () => {
 		})
 
 		it('keeps the reply action at the outside edge without overhanging nested entries', () => {
-			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+			const source = timelinePostStyles()
 
 			expect(source).toMatch(/\.post-action-group--reply\s*\{\s*margin-inline-start: auto;/)
 			expect(source).not.toContain('margin-inline-end: calc(var(--thread-depth')
@@ -1112,7 +1157,7 @@ describe('TimelinePost', () => {
 	 * counts: a control with a count beside it keeps a faint glyph.
 	 */
 	it('keeps a faint glyph at rest beside a count', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+		const source = timelinePostStyles()
 
 		expect(source).toMatch(/:deep\(\.button-vue__icon\) \{\s*opacity: var\(--post-action-rest, 0\);/)
 		expect(source).toMatch(/\.post-action-group:has\(\.post-action-count\) \{\s*--post-action-rest: \.38;/)
@@ -1120,7 +1165,7 @@ describe('TimelinePost', () => {
 
 	/** The button's padding stood between a glyph and its number, so the number read as the next control's. */
 	it('sets each count against its own glyph', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+		const source = timelinePostStyles()
 
 		expect(source).toMatch(/\.post-action-group \{[^}]*\.post-action-count \{\s*margin-inline-start: -4px;\s*text-align: start;/)
 	})
@@ -1744,6 +1789,7 @@ describe('TimelinePost', () => {
 				content: 'Edited text',
 				spoiler_text: '',
 				sensitive: false,
+				media_attributes: [],
 			})
 			expect(wrapper.find('textarea').exists()).toBe(false)
 			expect(wrapper.find('.post-message').exists()).toBe(true)
@@ -1767,6 +1813,7 @@ describe('TimelinePost', () => {
 				content: 'New text',
 				spoiler_text: 'politics',
 				sensitive: true,
+				media_attributes: [],
 			})
 		})
 
@@ -1789,6 +1836,22 @@ describe('TimelinePost', () => {
 			}))
 		})
 
+		it('removes an attachment by sending the replacement media list', async () => {
+			const item = makeItem({
+				content: '<p>Photo post</p>',
+				media_attachments: [{ id: 'media-12', type: 'image', url: '/media/12', preview_url: '/media/12', description: 'old alt' }],
+			})
+			const { wrapper, store } = mountPost({ item })
+
+			await menuItem(wrapper, 'Edit').trigger('click')
+			await wrapper.find('.post-edit-media__item button').trigger('click')
+			await wrapper.find('textarea.post-edit-textarea').setValue('Photo post updated')
+			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
+			await flushPromises()
+
+			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ media_ids: [] }))
+		})
+
 		it('edits an event title, time and location with the ActivityPub update', async () => {
 			const item = makeItem({
 				nid: '123',
@@ -1805,7 +1868,7 @@ describe('TimelinePost', () => {
 
 			const edit = store.postEdit.mock.calls[0][0]
 			expect(edit.event).toMatchObject({ name: 'New meetup', location: 'New hall' })
-			expect(edit.event.start_time).toBe(wrapper.vm.fromLocalDateTime('2026-10-26T11:30'))
+			expect(edit.event.start_time).toBe(new Date('2026-10-26T11:30').toISOString())
 		})
 
 		it('never seeds the editor from the author bio, and refuses an over-long edit', async () => {

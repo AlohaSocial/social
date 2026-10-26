@@ -109,6 +109,12 @@ class StatusAssemblyServiceTest extends TestCase {
 				return (bool)($this->params[$key] ?? false);
 			}
 
+			public function paramArray(string $key): ?array {
+				$value = $this->params[$key] ?? null;
+
+				return is_array($value) ? $value : null;
+			}
+
 			public function paramPoll(): ?array {
 				return $this->params['poll'] ?? null;
 			}
@@ -184,6 +190,15 @@ class StatusAssemblyServiceTest extends TestCase {
 		$this->assertSame('pt', $post->getLanguage());
 		$this->assertSame('112233', $post->getQuotedId());
 		$this->assertSame(['options' => ['yes', 'no']], $post->getPoll());
+	}
+
+	public function testAHeldAtProtoPostKeepsItsSelfLabelsWhenItIsApproved(): void {
+		$post = $this->service->fromParams($this->actor(), $this->params([
+			'text' => 'A labeled post',
+			'atproto_self_labels' => ['!warn', 'custom-label'],
+		]));
+
+		$this->assertSame(['!warn', 'custom-label'], $post->getAtprotoSelfLabels());
 	}
 
 	public function testWhoMayReplyWaitsWithTheScheduledPost(): void {

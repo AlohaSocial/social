@@ -187,7 +187,10 @@ class AtprotoXrpcController extends Controller {
 	 */
 	private function headers(): array {
 		$headers = [];
-		foreach (['authorization', 'dpop', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type'] as $name) {
+		foreach ([
+			'authorization', 'dpop', 'atproto-proxy', 'atproto-accept-labelers', 'accept-language', 'content-type',
+			'x-atproto-session-id', 'x-atproto-device-id', 'x-atproto-bsky-topics', 'x-bsky-topics',
+		] as $name) {
 			$value = $this->request->getHeader($name);
 			if ($value !== '') {
 				$headers[$name] = $value;
@@ -270,7 +273,7 @@ class AtprotoXrpcController extends Controller {
 	private function cors(Response $response): Response {
 		$response->addHeader('Access-Control-Allow-Origin', '*');
 		$response->addHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, DPoP, X-Atproto-Session-Id, atproto-accept-labelers, atproto-proxy');
+		$response->addHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, DPoP, X-Atproto-Session-Id, X-Atproto-Device-Id, X-Atproto-Bsky-Topics, X-Bsky-Topics, atproto-accept-labelers, atproto-proxy');
 		$response->addHeader('Access-Control-Expose-Headers', 'DPoP-Nonce, WWW-Authenticate');
 		$response->addHeader('Access-Control-Max-Age', '600');
 		if ($this->request->getHeader('DPoP') !== '' && !isset($response->getHeaders()['DPoP-Nonce'])) {

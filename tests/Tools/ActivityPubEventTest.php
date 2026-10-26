@@ -47,6 +47,21 @@ class ActivityPubEventTest extends TestCase {
 		self::assertNull($metadata['end_time'], 'an impossible end date must not silently move into May');
 	}
 
+	public function testPlainEventTextPreservesEmojiAndScriptJoiners(): void {
+		$family = '👨‍👩‍👧‍👦';
+		$name = "{$family} Community meetup";
+		$location = 'می‌خواهم بیایم';
+
+		$metadata = ActivityPubEvent::metadata([
+			'name' => $name,
+			'location' => $location,
+			'startTime' => '2026-04-05T18:30:00Z',
+		]);
+
+		self::assertSame($name, $metadata['name'], 'the zero-width joiners that compose the family emoji remain intact');
+		self::assertSame($location, $metadata['location'], 'the Persian zero-width non-joiner remains intact');
+	}
+
 	public function testCalendarEscapesTextUsesUtcAndFoldsLongLines(): void {
 		$event = (new Note())
 			->setId('https://mobilizon.example/events/9f')

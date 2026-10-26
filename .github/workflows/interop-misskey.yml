@@ -94,7 +94,7 @@ jobs:
         # without the dev ones, as the app store ships it: the app's autoloader
         # is prepended to the server's, so a dev-only package the server also
         # carries (symfony/console) is served in place of the server's own
-        run: composer i --no-dev
+        run: bash .github/scripts/composer-install-retry.sh install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Give both servers a name and a certificate
         # Misskey fetches and delivers over https only: a CA made here, trusted
@@ -241,7 +241,7 @@ jobs:
       - name: Interop tests
         working-directory: apps/social
         run: |
-          composer i
+          bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
           timeout 1500 php -d memory_limit=1G vendor/bin/phpunit -c tests/Interop/phpunit.xml --filter MisskeyTest
 
       - name: What each side saw, when it went wrong

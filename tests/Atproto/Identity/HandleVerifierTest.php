@@ -69,6 +69,25 @@ class HandleVerifierTest extends TestCase {
 		$this->assertSame('', $this->verifier->verify('nothing.example.org', self::DID), 'unreachable');
 	}
 
+	public function testResolvesATxtPublishedHandle(): void {
+		$this->txt['_atproto.alice.example.org'] = ['did=' . self::DID];
+
+		$this->assertSame(self::DID, $this->verifier->resolve('Alice.Example.ORG'));
+		$this->assertSame([], $this->fetched);
+	}
+
+	public function testResolvesAWellKnownPublishedHandle(): void {
+		$this->https['https://alice.example.org/.well-known/atproto-did'] = [200, self::DID . "\n"];
+
+		$this->assertSame(self::DID, $this->verifier->resolve('alice.example.org'));
+	}
+
+	public function testDoesNotResolveMalformedOrLocallyAssignedHandles(): void {
+		$this->assertNull($this->verifier->resolve('not a handle'));
+		$this->assertNull($this->verifier->resolve('alice.social.test'));
+		$this->assertNull($this->verifier->resolve('bad.example.org'));
+	}
+
 	public function testWhatCannotBeACustomHandle(): void {
 		$this->assertSame('', $this->verifier->refusal('alice.example.org'));
 		$this->assertNotSame('', $this->verifier->refusal('alice.social.test'), 'this server\'s namespace');

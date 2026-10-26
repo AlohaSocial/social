@@ -73,6 +73,7 @@ class CoreRequestBuilder {
 	public const TABLE_HOST_BREAKER = 'social_host_breaker';
 	public const TABLE_POST_HOLD = 'social_post_hold';
 	public const TABLE_RECOMMENDATION_DISCOVERY = 'social_rec_discovery';
+	public const TABLE_RECOMMENDATION_EPOCH = 'social_rec_epoch';
 	public const TABLE_SCHEDULED = 'social_scheduled';
 	public const TABLE_PLACES = 'social_place';
 	public const TABLE_STARTER_PACKS = 'social_starter_pack';
@@ -795,6 +796,7 @@ class CoreRequestBuilder {
 			'last_attempt',
 			'last_success'
 		],
+		self::TABLE_RECOMMENDATION_EPOCH => ['id', 'epoch'],
 		self::TABLE_STREAM => [
 			'nid',
 			'id',

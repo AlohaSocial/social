@@ -14,6 +14,7 @@ use OCA\Social\Atproto\AppView\AppViewClient;
 use OCA\Social\Atproto\Moderation\Blocklist;
 use OCA\Social\Atproto\Moderation\LabelerService;
 use OCA\Social\Atproto\Move\PdsClient;
+use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Db\StreamCardsRequest;
@@ -91,6 +92,22 @@ class PostStore {
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
 	public function storePost(array $post, bool $fetchParent = true): bool {
+		$id = BlueskyIds::postIdOfUri((string)($post['uri'] ?? ''));
+		if (PostMapper::isHidden($post)) {
+			$known = $id !== '' ? $this->knownPost($id) : null;
+			if ($known !== null && !$known->isLocal()) {
+				// Keep the cached post and its local interactions. A moderation label
+				// can later be lifted; refresh the label metadata so the API hides the
+				// post while it is active and can restore it without losing likes.
+				$create = $this->mapper->create($post, includeHidden: true);
+				if ($create !== null) {
+					$this->refreshKnownPostRecord($post, $create, $known);
+				}
+			}
+
+			return false;
+		}
+
 		$create = $this->mapper->create($post);
 		if ($create === null) {
 			return false;
@@ -98,6 +115,7 @@ class PostStore {
 		$id = (string)$create['object']['id'];
 		$known = $this->knownPost($id);
 		if ($known !== null) {
+			$this->refreshKnownPostRecord($post, $create, $known);
 			// Feed views already carry the latest AppView counters. Keep those
 			// current as the timeline is read, instead of waiting for a separate
 			// count refresh request or for somebody to open the thread.
@@ -134,6 +152,98 @@ class PostStore {
 		}
 
 		return $this->process($create);
+	}
+
+	/**
+	 * AppView returns the current record even for a post already in the local
+	 * stream. A changed CID is an edit, so import it through the ordinary Update
+	 * path; otherwise the cache kept the old words and media forever.
+	 *
+	 * @param array $post an `app.bsky.feed.defs#postView`
+	 * @param array<string, mixed> $create the ActivityPub-shaped version of the post
+	 */
+	private function refreshKnownPostRecord(array $post, array $create, Stream $known): void {
+		if ($known->isLocal()) {
+			return;
+		}
+		$did = (string)($post['author']['did'] ?? '');
+		if (!Syntax::isDid($did) || $known->getAttributedTo() !== BlueskyIds::actorId($did)) {
+			return;
+		}
+		$atproto = is_array($create['object']['_atproto'] ?? null) ? $create['object']['_atproto'] : [];
+		$newCid = $atproto['cid'] ?? '';
+		if (!is_string($newCid) || !Cid::isValid($newCid)) {
+			return;
+		}
+		$previous = $known->getDetails(Details::ATPROTO);
+		$recordChanged = ($previous['cid'] ?? '') !== $newCid;
+
+		$embed = $post['record']['embed'] ?? null;
+		if (PostMapper::hasGenericBlobs($embed) && !PostMapper::isLoggedInOnly($post)) {
+			$pds = $this->pdsOf($did);
+			if ($pds !== '') {
+				$create = $this->mapper->create($post, $pds) ?? $create;
+			} else {
+				// Do not lose media that is already cached just because the PDS is
+				// temporarily unavailable while the AppView has the edited text.
+				$create['object']['attachment'] = array_map(
+					static fn ($attachment): array => $attachment->jsonSerialize(),
+					$known->getAttachments()
+				);
+			}
+		}
+
+		$atproto = is_array($create['object']['_atproto'] ?? null) ? $create['object']['_atproto'] : [];
+		$indexedAt = is_string($atproto['indexed_at'] ?? null) ? $atproto['indexed_at'] : '';
+		$labelsChanged = self::moderationLabelsChanged($previous, $atproto);
+		if (!$recordChanged && !$labelsChanged) {
+			return;
+		}
+		$create['type'] = 'Update';
+		$revision = $newCid;
+		if (!$recordChanged) {
+			$revision .= '-labels-' . self::moderationLabelSignature($atproto);
+		}
+		$create['id'] = $known->getId() . '/activity/update/' . $revision;
+		$create['object']['nid'] = $known->getNid();
+		$create['object']['updated'] = $labelsChanged && !$recordChanged
+			? gmdate('Y-m-d\\TH:i:s\\Z', $this->time->getTime())
+			: $this->editTime($indexedAt);
+
+		if (!$this->process($create)) {
+			return;
+		}
+		if (!is_array($atproto['card'] ?? null)) {
+			$this->cards->deleteByStreamId($known->getId());
+		}
+	}
+
+	/** @param array<string, mixed> $previous @param array<string, mixed> $current */
+	private static function moderationLabelsChanged(array $previous, array $current): bool {
+		return self::moderationLabelSignature($previous) !== self::moderationLabelSignature($current);
+	}
+
+	/** @param array<string, mixed> $details */
+	private static function moderationLabelSignature(array $details): string {
+		$labels = is_array($details['labels'] ?? null) ? $details['labels'] : [];
+		$labels = array_values(array_unique(array_filter($labels, static fn (mixed $label): bool => is_string($label) && $label !== '')));
+		sort($labels, SORT_STRING);
+		$sources = [];
+		foreach (is_array($details['label_sources'] ?? null) ? $details['label_sources'] : [] as $source) {
+			if (is_array($source) && is_string($source['src'] ?? null) && is_string($source['val'] ?? null)) {
+				$sources[] = [$source['src'], $source['val']];
+			}
+		}
+		usort($sources, static fn (array $a, array $b): int => [$a[0], $a[1]] <=> [$b[0], $b[1]]);
+
+		return hash('sha256', serialize([$labels, $sources]));
+	}
+
+	/** Use the AppView indexing time as the revision time, with a valid fallback. */
+	private function editTime(string $indexedAt): string {
+		$timestamp = $indexedAt !== '' ? strtotime($indexedAt) : false;
+
+		return gmdate('Y-m-d\\TH:i:s\\Z', $timestamp !== false ? $timestamp : $this->time->getTime());
 	}
 
 	/**
@@ -368,8 +478,9 @@ class PostStore {
 			$exists = $parsed === null ? null : $this->postExistsAtPds($parsed);
 			if ($exists === null) {
 				$this->logger->notice('Bluesky post absence could not be confirmed at its PDS', ['post' => $id]);
-
-				return null;
+				// Keep this one for the next sweep cycle, but do not let an
+				// unavailable PDS stall every later page of the deletion cursor.
+				continue;
 			}
 			if (!$exists && $this->delete($id)) {
 				$deleted++;

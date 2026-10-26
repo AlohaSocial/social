@@ -173,19 +173,13 @@
 			{{ t('social', 'Less like this') }}
 		</NcActionButton>
 		<template v-if="canOfferRecommendationFeedback">
-			<NcActionButton
-				v-if="feedbackContext?.similarity_available"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
+			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_SIMILAR')">
 				<template #icon>
 					<ThumbUpOutline :size="20" />
 				</template>
 				{{ t('social', 'Show me more like this post') }}
 			</NcActionButton>
-			<NcActionButton
-				v-if="feedbackContext?.similarity_available"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
+			<NcActionButton :disabled="recommendationFeedbackLoading || feedbackContext?.similarity_available !== true" closeAfterClick @click="$emit('recommendationFeedback', 'LESS_SIMILAR')">
 				<template #icon>
 					<ThumbDownOutline :size="20" />
 				</template>
@@ -203,14 +197,11 @@
 				</template>
 				{{ t('social', 'Show me more from this author') }}
 			</NcActionButton>
-			<NcActionButton
-				v-if="feedbackContext?.format"
-				closeAfterClick
-				@click="$emit('recommendationFeedback', 'MORE_FORMAT')">
+			<NcActionButton :disabled="recommendationFeedbackLoading || !feedbackContext?.format" closeAfterClick @click="$emit('recommendationFeedback', 'MORE_FORMAT')">
 				<template #icon>
 					<ShapeOutline :size="20" />
 				</template>
-				{{ t('social', 'Show me more {format}', { format: formatLabel(feedbackContext.format) }) }}
+				{{ t('social', 'Show me more {format}', { format: recommendationFormatLabel }) }}
 			</NcActionButton>
 		</template>
 		<!-- what to do about somebody else, from the post that made the reader
@@ -257,15 +248,15 @@ import IconArchiveOutline from 'vue-material-design-icons/ArchiveOutline.vue'
 import IconCommentAccountOutline from 'vue-material-design-icons/CommentAccountOutline.vue'
 import IconEyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
+import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import PencilBoxOutline from 'vue-material-design-icons/PencilBoxOutline.vue'
 import Pin from 'vue-material-design-icons/Pin.vue'
 import PinOff from 'vue-material-design-icons/PinOff.vue'
+import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
 import SendCheck from 'vue-material-design-icons/SendCheck.vue'
 import ThumbDownOutline from 'vue-material-design-icons/ThumbDownOutline.vue'
 import ThumbUpOutline from 'vue-material-design-icons/ThumbUpOutline.vue'
-import AccountPlusOutline from 'vue-material-design-icons/AccountPlusOutline.vue'
-import ShapeOutline from 'vue-material-design-icons/ShapeOutline.vue'
 import Translate from 'vue-material-design-icons/Translate.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { allowedByAuthor, isShareable } from '../utils/interactionPolicy.js'
@@ -303,9 +294,9 @@ export default {
 		IconCommentAccountOutline,
 		IconEyeOffOutline,
 		IconEyeOutline,
+		AccountPlusOutline,
 		ThumbDownOutline,
 		ThumbUpOutline,
-		AccountPlusOutline,
 		ShapeOutline,
 		NcActionButton,
 		NcActionLink,
@@ -373,6 +364,11 @@ export default {
 			default: false,
 		},
 
+		recommendationFeedbackLoading: {
+			type: Boolean,
+			default: false,
+		},
+
 		feedbackContext: {
 			type: Object,
 			default: null,
@@ -412,6 +408,18 @@ export default {
 				&& !!this.currentAccount
 				&& !this.isMine
 				&& !!this.item.nid
+		},
+
+		/** @return {string} readable name for a supported recommendation format */
+		recommendationFormatLabel() {
+			return {
+				audio: t('social', 'audio posts'),
+				image: t('social', 'photo posts'),
+				poll: t('social', 'polls'),
+				short: t('social', 'short videos'),
+				text: t('social', 'text posts'),
+				video: t('social', 'video posts'),
+			}[this.feedbackContext?.format] || t('social', 'posts like this')
 		},
 
 		/** @return {boolean} whether the reader wrote this post */
@@ -519,18 +527,6 @@ export default {
 
 	methods: {
 		t,
-		/** @param {string} format a server-detected post format @return {string} */
-		formatLabel(format) {
-			return {
-				audio: t('social', 'audio posts'),
-				image: t('social', 'photo posts'),
-				poll: t('social', 'polls'),
-				short: t('social', 'short videos'),
-				text: t('social', 'text posts'),
-				video: t('social', 'video posts'),
-			}[format] || t('social', 'posts like this')
-		},
-
 		async copyEmbedCode() {
 			try {
 				const embedUrl = new URL(this.item.url)

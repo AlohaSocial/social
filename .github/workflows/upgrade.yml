@@ -126,7 +126,7 @@ jobs:
             tar -xzf "$release/$asset" -C apps
           else
             git clone --quiet --depth 1 --branch "$tag" "https://github.com/$GITHUB_REPOSITORY" "apps/$APP_NAME"
-            composer i --no-dev --no-interaction --working-dir "apps/$APP_NAME"
+            bash "apps/$APP_NAME/.github/scripts/composer-install-retry.sh" install --no-dev --no-interaction --no-progress --prefer-dist --working-dir="apps/$APP_NAME"
           fi
           grep -o '<version>[^<]*</version>' "apps/$APP_NAME/appinfo/info.xml"
 
@@ -162,7 +162,7 @@ jobs:
           set -euo pipefail
           rm -rf "apps/$APP_NAME"
           mv upgrade-to "apps/$APP_NAME"
-          composer i --no-interaction --working-dir "apps/$APP_NAME"
+          bash "apps/$APP_NAME/.github/scripts/composer-install-retry.sh" install --no-interaction --no-progress --prefer-dist --working-dir="apps/$APP_NAME"
 
       - name: Upgrade
         run: |

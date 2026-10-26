@@ -12,6 +12,7 @@ namespace OCA\Social\Service;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\Postgates;
 use OCA\Social\Atproto\Reader\Threadgates;
+use OCA\Social\Db\StreamCardsRequest;
 use OCA\Social\Events\PostEditedEvent;
 use OCA\Social\Events\PostPublishedEvent;
 use OCA\Social\Exceptions\FederationDeliveryException;
@@ -33,6 +34,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Post;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\BlockedBy\BlockedByService;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -90,6 +92,7 @@ class PostService {
 		private InterestService $interestService,
 		private VideoDeliveryHold $videoDeliveryHold,
 		private DocumentService $documentService,
+		private StreamCardsRequest $streamCardsRequest,
 		private ?ContainerInterface $container = null,
 	) {
 	}
@@ -189,6 +192,16 @@ class PostService {
 		if ($post->getVideoMeta() !== []) {
 			$note->setVideoMeta($post->getVideoMeta());
 		}
+		if ($post->getAtprotoRecordEmbed() !== null) {
+			$atproto = $note->getDetails(Details::ATPROTO);
+			$atproto[Details::ATPROTO_RECORD_EMBED] = $post->getAtprotoRecordEmbed();
+			$note->setDetailArray(Details::ATPROTO, $atproto);
+		}
+		if ($post->getAtprotoSelfLabels() !== []) {
+			$atproto = $note->getDetails(Details::ATPROTO);
+			$atproto[Details::ATPROTO_SELF_LABELS] = $post->getAtprotoSelfLabels();
+			$note->setDetailArray(Details::ATPROTO, $atproto);
+		}
 		$quotedAuthor = $this->applyQuote($note, $post->getQuotedId(), $post->getActor());
 		$this->streamService->addRecipients($note, $post->getType(), $post->getTo());
 		$this->streamService->addChannelFollowers($note);
@@ -216,6 +229,21 @@ class PostService {
 		// are never asked again; 0, and nothing waits, for every other post
 		$holdUntil = $this->videoDeliveryHold->holdUntil($note);
 		$token = $this->activityService->createActivity($actor, $note, $activity, $holdUntil);
+		$linkCard = $post->getLinkCard();
+		if ($linkCard !== null) {
+			try {
+				$this->streamCardsRequest->save((new StreamCard($note->getId(), $linkCard['url']))
+					->setTitle($linkCard['title'])
+					->setDescription($linkCard['description'])
+					->setImage($linkCard['image'])
+					->setProviderName($linkCard['provider']));
+			} catch (Throwable $e) {
+				$this->logger->warning('Post link card was not stored', [
+					'post' => $note->getId(),
+					'exception' => $e,
+				]);
+			}
+		}
 		if ($holdUntil > 0) {
 			$this->videoDeliveryHold->convertSoon($note);
 		}
@@ -348,6 +376,46 @@ class PostService {
 		}
 	}
 
+	/** Apply the same permission checks as a new reply before changing a post. */
+	private function editReplyTarget(Stream $stream, Person $actor, string $replyTo): void {
+		if (!$stream instanceof Note || !$stream->isLocal()) {
+			throw new InvalidActionException('Only a local post reply target can be changed');
+		}
+		$parent = $this->replyParent((new Post($actor))->setReplyTo($replyTo));
+		if ($parent !== null) {
+			if (($stream->isPublic() && !$parent->isPublic())
+				|| self::visibilityOfReply($stream->getVisibility(), $parent) !== $stream->getVisibility()) {
+				throw new InvalidActionException('Changing the reply target cannot widen the parent audience');
+			}
+			$this->blockedBy()?->assertMayReply($actor, $parent);
+			$refusal = $this->threadgates()?->refusal($actor, $parent) ?? '';
+			if ($refusal === '') {
+				$refusal = $this->replyRules()?->refusal($parent, $actor->getId()) ?? '';
+			}
+			if ($refusal !== '') {
+				throw new InvalidActionException($refusal);
+			}
+			// Never attach a post to itself or to one of its descendants. Bound
+			// the walk, including malformed remote chains that already cycle.
+			$seen = [$stream->getId() => true];
+			$ancestor = $parent;
+			for ($depth = 0; ; $depth++) {
+				if ($depth >= 64 || isset($seen[$ancestor->getId()])) {
+					throw new InvalidActionException('The reply would create a cyclic or overly deep thread');
+				}
+				$seen[$ancestor->getId()] = true;
+				if ($ancestor->getInReplyTo() === '') {
+					break;
+				}
+				$ancestor = $this->streamService->getStreamById($ancestor->getInReplyTo(), true);
+			}
+		}
+		$stream->setInReplyTo('');
+		$stream->setReplyState('');
+		$stream->setConversation($parent === null ? '' : ($parent->getConversation() ?: $parent->getId()));
+		$this->streamService->replyTo($stream, $replyTo, $parent);
+	}
+
 	/**
 	 * @param ?string $language the language the client sent, null or empty to
 	 *                          keep the post's; a post that never had one gets
@@ -361,6 +429,9 @@ class PostService {
 	public function editPost(
 		int|string $nid, Person $actor, string $content, ?string $spoilerText = null, ?bool $sensitive = null,
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
+		?array $mediaIds = null, ?array $linkCard = null, bool $linkCardProvided = false,
+		bool $atprotoEmbedProvided = false, string $quotedId = '', ?array $atprotoRecordEmbed = null,
+		?array $atprotoSelfLabels = null, ?string $replyTo = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -377,6 +448,11 @@ class PostService {
 		// the revision recorded below is the version being replaced, so it has
 		// to be taken before any of the fields are overwritten
 		$original = clone $stream;
+		if ($replyTo !== null && $replyTo !== $stream->getInReplyTo()) {
+			$this->editReplyTarget($stream, $actor, $replyTo);
+		}
+		$oldQuotedId = $stream->getQuote();
+		$quotedAuthor = null;
 		// the tags first: they are what the markup below may link, and an edit
 		// is a fresh parse of the text
 		$this->reapplyEntities($stream, $content);
@@ -393,6 +469,57 @@ class PostService {
 			$stream->setSensitive($sensitive);
 		}
 		$stream->setLanguage($this->languageFor((string)$language, $actor, $stream->getLanguage()));
+		if ($mediaIds !== null) {
+			$stream->setAttachments($this->documentService->mediaAttachmentsForEdit(
+				$mediaIds, $actor->getPreferredUsername(), $stream->getVisibility()
+			));
+		}
+		if ($atprotoEmbedProvided && $oldQuotedId !== $quotedId) {
+			$stream->setQuote('');
+			$stream->setQuoteAuthorization('');
+			$stream->setQuoteState('');
+			if ($quotedId !== '') {
+				$quotedAuthor = $this->applyQuote($stream, $quotedId, $actor);
+			}
+		}
+		if ($atprotoEmbedProvided) {
+			$details = $stream->getDetails(Details::ATPROTO);
+			if ($atprotoRecordEmbed === null) {
+				unset($details[Details::ATPROTO_RECORD_EMBED]);
+			} else {
+				$details[Details::ATPROTO_RECORD_EMBED] = $atprotoRecordEmbed;
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		}
+		if ($atprotoSelfLabels !== null) {
+			$details = $stream->getDetails(Details::ATPROTO);
+			if ($atprotoSelfLabels === []) {
+				unset($details[Details::ATPROTO_SELF_LABELS]);
+			} else {
+				$details[Details::ATPROTO_SELF_LABELS] = array_values(array_unique($atprotoSelfLabels));
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		} elseif ($spoilerText !== null) {
+			// A Fediverse client can explicitly add or remove the warning.
+			// Keep the Bluesky self-label in step, while retaining every other
+			// label the original Bluesky author supplied.
+			$details = $stream->getDetails(Details::ATPROTO);
+			$labels = [];
+			foreach (is_array($details[Details::ATPROTO_SELF_LABELS] ?? null) ? $details[Details::ATPROTO_SELF_LABELS] : [] as $label) {
+				if ($label !== '!warn') {
+					$labels[] = $label;
+				}
+			}
+			if (trim($spoilerText) !== '') {
+				array_unshift($labels, '!warn');
+			}
+			if ($labels === []) {
+				unset($details[Details::ATPROTO_SELF_LABELS]);
+			} else {
+				$details[Details::ATPROTO_SELF_LABELS] = array_values(array_unique($labels));
+			}
+			$stream->setDetailArray(Details::ATPROTO, $details);
+		}
 
 		// a new list rather than changed objects: `$original` shares them, and
 		// the revision recorded below is the version with the old words
@@ -418,8 +545,9 @@ class PostService {
 		// `published` stays the creation time. The edit used to be stamped
 		// there instead, and Mastodon — which reads an Update without
 		// `updated` as an implicit one — refreshed the poll counters and threw
-		// the new content away. UTC and second-resolution like `published`.
-		$stream->setUpdated(gmdate('Y-m-d\TH:i:s\Z'));
+		// the new content away. UTC and second-resolution like `published`, but
+		// strictly later than the prior edit so remote peers can order updates.
+		$stream->setUpdated(self::nextEditTimestamp($original));
 		$this->snapshotSource($stream);
 
 		// An edit can name a person who was not in the original audience.
@@ -428,7 +556,33 @@ class PostService {
 		// Mention and inbox path, but no local delivery/timeline destination is
 		// recorded for the newly named account.
 		$this->streamService->updateStream($stream, true);
+		if ($original->getInReplyTo() !== $stream->getInReplyTo()) {
+			$this->streamService->recountReplies($original->getInReplyTo());
+			$this->streamService->recountReplies($stream->getInReplyTo());
+		}
+		if ($atprotoEmbedProvided && $oldQuotedId !== $quotedId) {
+			$this->streamService->recountQuotes($oldQuotedId);
+			$this->streamService->recountQuotes($quotedId);
+		}
 		$this->revisionService->recordEdit($original, $stream);
+		if ($linkCardProvided) {
+			try {
+				if ($linkCard === null) {
+					$this->streamCardsRequest->deleteByStreamId($stream->getId());
+				} else {
+					$this->streamCardsRequest->save((new StreamCard($stream->getId(), $linkCard['url']))
+						->setTitle($linkCard['title'])
+						->setDescription($linkCard['description'])
+						->setImage($linkCard['image'])
+						->setProviderName($linkCard['provider']));
+				}
+			} catch (Throwable $e) {
+				$this->logger->warning('Edited post link card was not stored', [
+					'post' => $stream->getId(),
+					'exception' => $e,
+				]);
+			}
+		}
 
 		$updated = $this->streamService->getStreamByNid(\OCA\Social\Tools\Nid::fromStorage($nid));
 		// The reloaded post carries the instance paths it was created with —
@@ -458,6 +612,9 @@ class PostService {
 			// so it cannot overtake the Create or carry the old file
 			$holdUntil = $this->videoDeliveryHold->holdUntil($updated);
 			$this->activityService->updateActivity($actor, $updated, $holdUntil);
+			if ($quotedAuthor !== null) {
+				$this->requestQuoteApproval($actor, $updated, $quotedAuthor);
+			}
 			if ($holdUntil > 0) {
 				$this->videoDeliveryHold->convertSoon($updated);
 			}
@@ -470,6 +627,23 @@ class PostService {
 			);
 		}
 		return $updated;
+	}
+
+	/**
+	 * ActivityPub update timestamps have second precision. Advance past the
+	 * previous edit when two local edits happen within the same second so peers
+	 * can order the resulting Update activities reliably.
+	 */
+	private static function nextEditTimestamp(Stream $previous): string {
+		$timestamp = time();
+		if ($previous->getUpdated() !== '') {
+			$previousTimestamp = strtotime($previous->getUpdated());
+			if ($previousTimestamp !== false) {
+				$timestamp = max($timestamp, $previousTimestamp + 1);
+			}
+		}
+
+		return gmdate('Y-m-d\\TH:i:s\\Z', $timestamp);
 	}
 
 	/**
@@ -550,7 +724,7 @@ class PostService {
 	 *                                client can act on, and the one PinService::pin() raises for the
 	 *                                same refusal
 	 */
-	private function applyQuote(Note $note, string $quotedId, Person $quoter): ?Person {
+	private function applyQuote(Stream $note, string $quotedId, Person $quoter): ?Person {
 		if ($quotedId === '') {
 			return null;
 		}
@@ -643,7 +817,8 @@ class PostService {
 	 */
 	private function requestQuoteApproval(Person $actor, Stream $note, Person $author): void {
 		$request = new QuoteRequest();
-		$request->setId($note->getId() . '#quote-request');
+		$quoteRequestKey = substr(hash('sha256', $note->getQuote() . "\0" . $note->getUpdated() . "\0" . $note->getPublished()), 0, 24);
+		$request->setId($note->getId() . '#quote-request-' . $quoteRequestKey);
 		$request->setActor($actor);
 		$request->setObjectId($note->getQuote());
 		$request->setInstrument($note->getId());

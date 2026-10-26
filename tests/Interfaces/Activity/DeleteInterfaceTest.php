@@ -15,6 +15,7 @@ use OCA\Social\Interfaces\Activity\DeleteInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
@@ -98,6 +99,31 @@ class DeleteInterfaceTest extends ActivityPubTestCase {
 		$this->personInterface->expects($this->never())->method('delete');
 
 		$this->handler->processIncomingRequest($this->delete(self::NOTE));
+	}
+
+	public function testRepeatedDeleteAfterRemovalIsSafeAndDoesNotDeleteTwice(): void {
+		$note = $this->note(self::NOTE, self::BOB);
+		$lookups = 0;
+		$this->noteInterface->method('getItemById')->with(self::NOTE)->willReturnCallback(
+			static function () use (&$lookups, $note): Note {
+				if ($lookups++ === 0) {
+					return $note;
+				}
+
+				throw new ItemNotFoundException();
+			}
+		);
+		$this->noteInterface->expects($this->once())->method('delete')->with($this->identicalTo($note));
+		$this->personInterface->method('getItemById')->willThrowException(new ItemNotFoundException());
+		$this->storyInterface->method('getItemById')->willThrowException(new ItemNotFoundException());
+		$entries = [];
+		$cache = $this->memory($entries);
+		$handler = new DeleteInterface($cache);
+
+		$handler->processIncomingRequest($this->delete(self::NOTE));
+		$handler->processIncomingRequest($this->delete(self::NOTE));
+
+		$this->assertTrue(DeleteInterface::deletedBeforeArrival($cache, self::NOTE, self::BOB));
 	}
 
 	/**
