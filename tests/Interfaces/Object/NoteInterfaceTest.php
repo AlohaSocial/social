@@ -727,6 +727,35 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 		$this->handler->activity($this->wrap(Update::TYPE, $note), $note);
 	}
 
+	public function testEventMetadataUpdateIsStoredAndRecordsARevision(): void {
+		$note = $this->incomingNote();
+		$note->setSubType('Event');
+		$note->setDetailArray(Details::EVENT, [
+			'name' => 'Community gathering',
+			'start_time' => '2026-11-03T18:00:00Z',
+			'end_time' => '2026-11-03T20:00:00Z',
+			'location' => 'New hall',
+		]);
+		$stored = $this->storedCopy();
+		$stored->setSubType('Event');
+		$stored->setDetailArray(Details::EVENT, [
+			'name' => 'Community gathering',
+			'start_time' => '2026-11-02T18:00:00Z',
+			'end_time' => '2026-11-02T20:00:00Z',
+			'location' => 'Old hall',
+		]);
+		$this->streamRequest->method('getStreamById')->with(self::NOTE)->willReturn($stored);
+
+		$this->streamRequest->expects($this->once())->method('update')->with($this->identicalTo($note));
+		$this->streamRequest->expects($this->once())->method('updateDetails')
+			->with($this->identicalTo($note), Details::EVENT);
+		$this->revisionService->expects($this->once())
+			->method('recordEdit')
+			->with($this->identicalTo($stored), $this->identicalTo($note));
+
+		$this->handler->activity($this->wrap(Update::TYPE, $note), $note);
+	}
+
 	/** @return iterable<string, array{string, string, bool}> */
 	public static function editOrders(): iterable {
 		yield 'a newer edit' => ['2026-05-01T12:00:00Z', '2026-05-01T11:00:00Z', true];

@@ -66,11 +66,13 @@ class CalendarEventController extends MastodonApiController {
 			}
 
 			$filename = 'fediverse-event-' . substr(hash('sha256', $item->getId()), 0, 16) . '.ics';
-			return new DataDisplayResponse($calendar, Http::STATUS_OK, [
+			$response = new DataDisplayResponse($calendar, Http::STATUS_OK, [
 				'Content-Type' => 'text/calendar; charset=utf-8',
-				'Content-Disposition' => 'attachment; filename="' . $filename . '"',
 				'Cache-Control' => 'private, no-store',
 			]);
+			$response->addHeader('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+			return $response;
 		} catch (Throwable $e) {
 			return $this->error($e);
 		}
