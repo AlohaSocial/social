@@ -57,8 +57,6 @@ class PostMapper {
 	private const STARTER_PACK_VIEW = 'app.bsky.graph.defs#starterPackViewBasic';
 	private const REPOST = 'app.bsky.feed.defs#reasonRepost';
 
-	/** labels that make the pictures sensitive and warn when the post did not */
-	private const ADULT = ['porn', 'sexual', 'nudity', 'graphic-media', 'nsfl', 'gore'];
 	/** labels that hide the post altogether */
 	private const HIDE = ['!hide', '!takedown'];
 	/**
@@ -191,8 +189,7 @@ class PostMapper {
 			$content .= '<p><a href="' . self::escape($card['url']) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($card['title']) . '</a></p>';
 		}
 
-		$warning = $this->warning($contentLabels, $inlineWarning);
-		$adult = array_intersect($contentLabels, self::ADULT) !== [];
+		$warning = self::warning($contentLabels, $inlineWarning);
 		$published = self::datetime((string)($record['createdAt'] ?? ''), (string)($post['indexedAt'] ?? ''));
 		$streamedBlobs = [];
 		foreach ($attachments as $attachment) {
@@ -211,7 +208,7 @@ class PostMapper {
 		] + self::audience(BlueskyIds::followersId($did), self::isLoggedInOnly($post)) + [
 			'content' => $content,
 			'summary' => $warning,
-			'sensitive' => $adult || $warning !== '',
+			'sensitive' => $warning !== '',
 			'tag' => $this->tags($text, $facets, (string)($record['reply']['parent']['uri'] ?? ''), $record['tags'] ?? []),
 			'attachment' => $attachments,
 			'inReplyTo' => $this->local->postId((string)($record['reply']['parent']['uri'] ?? '')),
@@ -871,13 +868,20 @@ class PostMapper {
 	 * The content warning the labels ask for: the post's own `!warn` with
 	 * no text of its own, or the service's label named.
 	 */
-	private function warning(array $labels, string $inlineWarning = ''): string {
+	public static function warning(array $labels, string $inlineWarning = ''): string {
 		$named = [];
 		foreach ($labels as $label) {
 			if ($label === '!warn') {
 				$named[] = $inlineWarning !== '' ? $inlineWarning : 'Content warning';
 			} elseif (!str_starts_with($label, '!')) {
-				$named[] = ucfirst(str_replace('-', ' ', $label));
+				$named[] = match ($label) {
+					'porn' => 'Pornography',
+					'sexual' => 'Sexual content',
+					'nudity' => 'Nudity',
+					'graphic-media' => 'Graphic media',
+					'nsfl' => 'NSFL',
+					default => ucfirst(str_replace('-', ' ', $label)),
+				};
 			}
 		}
 

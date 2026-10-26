@@ -580,6 +580,7 @@ class WriteServiceTest extends TestCase {
 			$this->assertSame('https://bsky.app/profile/' . self::BOB . '/post/3kbob', $post->getReplyTo());
 			$this->assertSame(['custom-label', 'porn'], $post->getAtprotoSelfLabels());
 			$this->assertTrue($post->isSensitive());
+			$this->assertSame('Custom label, Pornography', $post->getSpoilerText());
 
 			return true;
 		}))->willReturnCallback(function () use ($made): Create {
@@ -944,7 +945,7 @@ class WriteServiceTest extends TestCase {
 		$this->postStore->method('isKnown')->willReturn(true);
 		$newCid = Cid::forRaw('new quote');
 		$this->posts->expects($this->once())->method('editPost')
-			->with(46, $this->alice, 'After', '', false, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null, ['custom-label'])
+			->with(46, $this->alice, 'After', 'NSFL, Gore', true, '', [], null, false, [], null, true, true, 'https://bsky.app/profile/' . self::BOB . '/post/3knew', null, ['nsfl', 'gore'])
 			->willReturn($post);
 		$this->publisher->expects($this->once())->method('editPost')->with($post);
 
@@ -960,7 +961,7 @@ class WriteServiceTest extends TestCase {
 					'uri' => $newUri,
 					'cid' => ['$link' => $newCid->toString()],
 				]],
-				'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'custom-label']]],
+				'labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'nsfl'], ['val' => 'gore']]],
 			],
 		]);
 	}

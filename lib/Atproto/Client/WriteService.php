@@ -397,15 +397,8 @@ class WriteService {
 			$language = $langs[0];
 		}
 
-		$labels = is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [];
 		$selfLabels = self::selfLabels($record);
-		$warning = false;
-		$sensitive = false;
-		foreach ($labels as $label) {
-			$value = is_array($label) ? (string)($label['val'] ?? '') : '';
-			$warning = $warning || $value === '!warn';
-			$sensitive = $sensitive || in_array($value, ['!warn', 'porn', 'sexual', 'nudity', 'graphic-media'], true);
-		}
+		$warning = in_array('!warn', $selfLabels, true);
 		$text = self::fullText($record['text'], $record['facets'] ?? []);
 		$spoilerText = '';
 		if ($warning) {
@@ -418,6 +411,11 @@ class WriteService {
 				$spoilerText = $post->getSpoilerText();
 			}
 		}
+		$spoilerText = PostMapper::warning(
+			$selfLabels,
+			$warning ? ($spoilerText !== '' ? $spoilerText : $post->getSpoilerText()) : ''
+		);
+		$sensitive = $spoilerText !== '';
 
 		try {
 			$updated = $this->posts->editPost(
@@ -998,29 +996,9 @@ class WriteService {
 			fn (Document $document) => $document->convertToMediaAttachment($this->urlGenerator, ACore::FORMAT_ACTIVITYPUB),
 			$documents
 		));
-		$warningLabels = [];
-		$hasWarningLabel = false;
-		foreach (is_array($record['labels']['values'] ?? null) ? $record['labels']['values'] : [] as $label) {
-			$value = is_array($label) && is_string($label['val'] ?? null) ? $label['val'] : '';
-			$warning = match ($value) {
-				'porn' => 'Pornography',
-				'sexual' => 'Sexual content',
-				'nudity' => 'Nudity',
-				'graphic-media' => 'Graphic media',
-				default => null,
-			};
-			if ($warning !== null) {
-				$post->setSensitive(true);
-				$warningLabels[] = $warning;
-			} elseif ($value === '!warn') {
-				$hasWarningLabel = true;
-			}
-		}
-		$warningLabels = array_values(array_unique($warningLabels));
-		if ($warningLabels !== []) {
-			$post->setSpoilerText(implode(', ', $warningLabels));
-		} elseif ($hasWarningLabel) {
-			$post->setSpoilerText('Content warning');
+		$spoilerText = PostMapper::warning(self::selfLabels($record));
+		if ($spoilerText !== '') {
+			$post->setSpoilerText($spoilerText);
 			$post->setSensitive(true);
 		}
 		$this->holdForReview($actor, $post, $documents);
