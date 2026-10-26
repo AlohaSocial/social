@@ -41,7 +41,17 @@ function available(overrides = {}) {
 
 describe('ProfileHighlights', () => {
 	beforeEach(() => {
+		window.localStorage.clear()
 		axios.get.mockReset()
+	})
+
+	it('places posting activity in a card that stays hidden after dismissal', async () => {
+		const wrapper = await mountHighlights(available())
+		expect(wrapper.find('.info-card').attributes('aria-label')).toBe('Posting activity')
+		await wrapper.find('[aria-label="Hide Posting activity"]').trigger('click')
+		expect(wrapper.find('.profile-highlights').exists()).toBe(false)
+		const reopened = await mountHighlights(available())
+		expect(reopened.find('.profile-highlights').exists()).toBe(false)
 	})
 
 	it('asks the account it was given for', async () => {

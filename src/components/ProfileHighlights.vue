@@ -3,7 +3,11 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section v-if="show" class="profile-highlights">
+	<InfoCard
+		v-if="show"
+		:dismissKey="'profile-activity-v1:' + accountId"
+		:title="t('social', 'Posting activity')"
+		class="profile-highlights">
 		<p v-if="sinceLabel" class="profile-highlights__since">
 			{{ sinceLabel }}
 		</p>
@@ -39,7 +43,7 @@
 		     their counts. They are the same tags `FeaturedTags` draws above the
 		     bio with counts, so the page said the same thing twice and the
 		     second time said less. -->
-	</section>
+	</InfoCard>
 </template>
 
 <script>
@@ -47,13 +51,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import logger from '../services/logger.js'
-import { tagStyle } from '../utils/tagColour.js'
-
-/** the tallest a bar is drawn, as a proportion of the chart */
-const MAX_BAR = 100
-
-/** and the shortest a week with something in it may be, so it is still seen */
-const MIN_BAR = 12
+import InfoCard from './InfoCard.vue'
 
 /**
  * What an account is like, over and above how much of it there is.
@@ -75,6 +73,7 @@ const RECENT_WEEKS = 4
 
 export default {
 	name: 'ProfileHighlights',
+	components: { InfoCard },
 
 	props: {
 		/** whose profile this is, as the API addresses accounts */
@@ -89,7 +88,6 @@ export default {
 			available: false,
 			since: 0,
 			weeks: [],
-			hashtags: [],
 		}
 	},
 
@@ -100,7 +98,7 @@ export default {
 		 *         "here since" line alone if it has one, and otherwise nothing
 		 */
 		show() {
-			return this.available && (this.sinceLabel !== '' || this.hasPosts || this.hashtags.length > 0)
+			return this.available && (this.sinceLabel !== '' || this.hasPosts)
 		},
 
 		/** @return {boolean} whether the window holds any posts at all */
@@ -265,27 +263,7 @@ export default {
 	methods: {
 		t,
 		n,
-		tagStyle,
 
-		/**
-		 * How tall one week's bar is, relative to the busiest week.
-		 *
-		 * A week with one post in it and a week with none must not look alike,
-		 * so anything above zero gets a floor — otherwise a quiet week next to
-		 * a very busy one rounds to nothing and reads as silence.
-		 *
-		 * @param {number} count how many posts that week held
-		 * @return {string} a CSS percentage
-		 */
-		barHeight(count) {
-			if (count === 0 || this.busiest === 0) {
-				return '0%'
-			}
-
-			return `${Math.max(MIN_BAR, Math.round((count / this.busiest) * MAX_BAR))}%`
-		},
-
-		/** Reads the account's highlights, and shows nothing if it cannot. */
 		async load() {
 			this.available = false
 
@@ -299,7 +277,6 @@ export default {
 				this.available = data?.available === true
 				this.since = Number(data?.since) || 0
 				this.weeks = Array.isArray(data?.weeks) ? data.weeks.map((count) => Number(count) || 0) : []
-				this.hashtags = Array.isArray(data?.hashtags) ? data.hashtags : []
 			} catch (error) {
 				// a profile is readable without this; it is an extra, and a
 				// failed extra should not be an error message on somebody's page
@@ -313,16 +290,19 @@ export default {
 
 <style lang="scss" scoped>
 .profile-highlights {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
 	margin-block: 8px;
+
+	:deep(.info-card__body) {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
 }
 
 .profile-highlights__since,
 .profile-highlights__summary {
 	margin: 0;
-	color: var(--color-text-maxcontrast);
+	color: var(--color-main-text);
 	font-size: 13px;
 }
 
@@ -360,39 +340,4 @@ export default {
 	fill: var(--color-primary-element);
 }
 
-.profile-highlights__tags {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-
-.profile-highlights__tag {
-	display: inline-block;
-	padding: 1px 8px;
-	border: 1px solid var(--tag-colour, var(--color-border));
-	border-radius: var(--border-radius-pill, 16px);
-	color: var(--tag-colour, var(--color-main-text));
-	font-size: 12px;
-	text-decoration: none;
-
-	&:hover,
-	&:focus-visible {
-		background: var(--color-background-hover);
-	}
-}
-
-@media (prefers-color-scheme: dark) {
-	.profile-highlights__tag {
-		border-color: var(--tag-colour-dark, var(--color-border));
-		color: var(--tag-colour-dark, var(--color-main-text));
-	}
-}
-
-[data-themes*='dark'] .profile-highlights__tag {
-	border-color: var(--tag-colour-dark, var(--color-border));
-	color: var(--tag-colour-dark, var(--color-main-text));
-}
 </style>

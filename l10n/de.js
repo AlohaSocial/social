@@ -3367,6 +3367,10 @@ OC.L10N.register(
     "Share photos or a video" : "Fotos oder Video teilen",
     "Attachment preview" : "Anhangvorschau",
     "Previous attachment" : "Vorheriger Anhang",
-    "Next attachment" : "Nächster Anhang"
+    "Next attachment" : "Nächster Anhang",
+    "About this feed" : "Über diesen Feed",
+    "Available recommendations" : "Verfügbare Empfehlungen",
+    "Posting activity" : "Beitragsaktivität",
+    "Hide {title}" : "{title} ausblenden"
 },
 "nplurals=2; plural=(n != 1);");

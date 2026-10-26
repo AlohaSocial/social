@@ -24,14 +24,22 @@
 			:options="scopes"
 			:value="scope"
 			:label="t('social', 'Which posts to show')" />
-		<p v-if="scopeDescription" class="timeline-scope-description">
-			{{ scopeDescription }}
-		</p>
+		<InfoCard
+			v-if="scopeDescription"
+			:dismissKey="'feed-help-v1:' + scope"
+			:title="t('social', 'About this feed')"
+			class="timeline-scope-description">
+			<p>{{ scopeDescription }}</p>
+		</InfoCard>
 
 		<InterestsLearningBanner v-if="type === 'interests' && hasInterestsTab" />
-		<NcNoteCard v-if="showRecommendationCoverageNote" type="info" class="timeline-recommendation-coverage">
+		<InfoCard
+			v-if="showRecommendationCoverageNote"
+			dismissKey="recommendation-coverage-v1"
+			:title="t('social', 'Available recommendations')"
+			class="timeline-recommendation-coverage">
 			{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
-		</NcNoteCard>
+		</InfoCard>
 
 		<div
 			class="timeline-heading-row"
@@ -208,7 +216,7 @@ import HashtagFollowedList from './../components/HashtagFollowedList.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import InfoCard from '../components/InfoCard.vue'
 import eventBus, { NOTIFICATIONS_READ } from './../services/eventBus.js'
 import { rememberFilter, rememberedFilter } from './../services/notifications.js'
 import { hasInterestsFeed, isTracking } from './../services/interests.js'
@@ -236,7 +244,7 @@ export default {
 		Announcements,
 		IconCheckAll,
 		NcButton,
-		NcNoteCard,
+		InfoCard,
 		FirstPostCelebration,
 		FirstRun,
 		HashtagFollowButton,
@@ -935,7 +943,7 @@ export default {
 .timeline-scope-description {
 	max-width: 72ch;
 	margin: calc(var(--default-grid-baseline) * 1) calc(var(--default-grid-baseline) * 2) calc(var(--default-grid-baseline) * 2);
-	color: var(--color-text-maxcontrast);
+	color: var(--color-main-text);
 	font-size: 0.9rem;
 }
 
