@@ -33,6 +33,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Accept;
 use OCA\Social\Model\ActivityPub\Activity\Add;
 use OCA\Social\Model\ActivityPub\Activity\Create;
+use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Model\ActivityPub\Activity\Remove;
 use OCA\Social\Model\ActivityPub\Actor\Application;
 use OCA\Social\Model\ActivityPub\Actor\Group;
@@ -255,6 +256,15 @@ class InteropRegressionTest extends TestCase {
 		$this->assertStringContainsString('DTSTART:20261114T170000Z', $calendar);
 		$this->assertStringContainsString('DTEND:20261114T190000Z', $calendar);
 		$this->assertStringContainsString('LOCATION:Community Hall\\, Main Street 12\\, Berlin', $calendar);
+	}
+
+	public function testGancioDeleteActivityNamesItsTombstonedEvent(): void {
+		/** @var Delete $delete */
+		$delete = AP::instance()->getItemFromData($this->fixture('gancio-delete-event'));
+
+		$this->assertInstanceOf(Delete::class, $delete);
+		$this->assertSame('https://gancio.example/@events', $delete->getActorId());
+		$this->assertSame('https://gancio.example/federation/events/42', $delete->getObjectId());
 	}
 
 	/**
