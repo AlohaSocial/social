@@ -333,6 +333,25 @@ place shows as a small marker under the post, and tapping it opens the page
 of everything public that was taken there. Release the pin and the post has
 no place.
 
+## Following events from Gancio
+
+Gancio publishes events over ActivityPub from one instance-wide account. Search
+for and follow that account from Social: it is usually `@events@gancio.example`
+on Gancio 1.24 and newer, or `@relay@gancio.example` on older instances. The
+Gancio administrator can customize this name, so use the federation address
+shown on that Gancio site's follow link when it differs. The Gancio instance
+must have federation enabled. Once the follow is accepted, incoming public
+events appear in Social like other followed ActivityPub posts, with a card for
+the event title, time and venue.
+
+On a signed-in Social timeline, choose **Add to Nextcloud Calendar** on an
+event card to import it directly into your first writable Nextcloud calendar.
+The event keeps its title, start and end time, venue and source link. Social
+detects an event that is already in a calendar and avoids adding it twice. If
+the Calendar app is unavailable or no writable calendar exists, the card offers
+an `.ics` download instead. Public status pages offer the `.ics` download;
+direct import requires a signed-in Nextcloud session and a writable calendar.
+
 ## Reading
 
 The browser tab names the page you are on — the feed, the account, the author
