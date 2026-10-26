@@ -587,7 +587,7 @@ class InterestFeedService {
 	 * tags most often found on the ranked posts that the reader has no weight
 	 * for, and the newest posts that carry one of them and nothing listed.
 	 *
-	 * @return list<array{nid: string, author: string, updated: string, tags: string[], reason: string}>
+	 * @return list<array{nid: string, idPrim: string, author: string, updated: string, tags: string[], reason: string}>
 	 */
 	private function related(array $ranked, array $profile, string $since, array $hidden, array $languages, string $media): array {
 		$company = [];
@@ -631,7 +631,7 @@ class InterestFeedService {
 	 *
 	 * @param string[] $seen the posts to leave out
 	 *
-	 * @return list<array{nid: string, tags: string[], reason: string, author: string, updated: string}>
+	 * @return list<array{nid: string, idPrim: string, tags: string[], reason: string, author: string, updated: string}>
 	 */
 	private function popular(Person $viewer, string $media, array $seen, int $wanted): array {
 		$statuses = $this->trendService->trendingStatuses(
