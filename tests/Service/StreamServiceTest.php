@@ -1802,6 +1802,54 @@ class StreamServiceTest extends TestCase {
 		}
 	}
 
+	public function testSyncRemoteTimelineRefreshesAnExistingGancioEventFromAnUpdateActivity(): void {
+		$gancio = $this->remoteActor('https://events.example/@events');
+		$eventId = 'https://events.example/federation/events/42';
+		$existing = (new Note())
+			->setId($eventId)
+			->setSubType('Event')
+			->setContent('<p>Old event details</p>');
+		$existing->setDetailArray(Details::EVENT, [
+			'name' => 'Old title',
+			'start_time' => '2026-11-14T17:00:00Z',
+			'end_time' => '2026-11-14T19:00:00Z',
+			'location' => 'Old venue',
+		]);
+		$updatedEvent = [
+			'id' => $eventId,
+			'type' => 'Event',
+			'name' => 'Updated community assembly',
+			'url' => 'https://events.example/events/42',
+			'attributedTo' => $gancio->getId(),
+			'updated' => '2026-11-10T12:00:00Z',
+			'content' => '<p>New event details</p>',
+			'startTime' => '2026-11-15T18:00:00+01:00',
+			'endTime' => '2026-11-15T20:00:00+01:00',
+			'location' => ['type' => 'Place', 'name' => 'New venue'],
+		];
+		$this->curlService->method('retrieveObject')->willReturn([
+			'orderedItems' => [[
+				'id' => 'https://events.example/federation/activities/42-update',
+				'type' => 'Update',
+				'actor' => $gancio->getId(),
+				'object' => $updatedEvent,
+			]],
+		]);
+		$this->streamRequest->method('getStreamById')->with($eventId)->willReturn($existing);
+		$this->streamRequest->expects(self::once())->method('update')->with($existing);
+		$this->streamRequest->expects(self::once())->method('updateDetails')->with($existing, Details::EVENT);
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($gancio));
+		self::assertSame('<p>New event details</p>', $existing->getContent());
+		self::assertSame('2026-11-10T12:00:00Z', $existing->getUpdated());
+		self::assertSame([
+			'name' => 'Updated community assembly',
+			'start_time' => '2026-11-15T17:00:00Z',
+			'end_time' => '2026-11-15T19:00:00Z',
+			'location' => 'New venue',
+		], $existing->getDetails(Details::EVENT));
+	}
+
 	public function testSyncRemoteTimelineSanitisesWhatItStores(): void {
 		// This path bypasses NoteInterface::save(), so nothing else validates what
 		// the remote server sent. Content and summary are saved by a read-time

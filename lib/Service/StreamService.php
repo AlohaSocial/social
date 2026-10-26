@@ -1084,7 +1084,7 @@ class StreamService {
 
 					// Extract the status or Event data from the activity item
 					$itemType = $this->get('type', $itemData, '');
-					if ($itemType === 'Create' && isset($itemData['object']) && is_array($itemData['object'])) {
+					if (in_array($itemType, ['Create', 'Update'], true) && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
 					} elseif (in_array($itemType, ['Note', 'Event'], true)) {
 						$noteData = $itemData;
@@ -1114,9 +1114,29 @@ class StreamService {
 						continue;
 					}
 
-					// Check if we already have it
+					// Gancio edits an event in place and exposes the new object in an
+					// Update activity. Refresh the event facts on that path; otherwise
+					// the profile outbox can discover new events but never reflect a
+					// changed date, venue, title or description. Keep the event details
+					// update scoped so locally maintained counters and quote state survive.
 					try {
-						$this->streamRequest->getStreamById($noteId);
+						$existing = $this->streamRequest->getStreamById($noteId);
+						if ($itemType === 'Update' && $isEvent && $existing->getSubType() === 'Event'
+							&& $existing instanceof Note) {
+							$updated = $existing->validate(ACore::AS_DATE, 'updated', $noteData, '');
+							if ($updated !== '') {
+								$existing->setUpdated($updated);
+							}
+							$existing->setUrl($existing->validate(ACore::AS_URL, 'url', $noteData, ''));
+							$existing->setContent($existing->validate(ACore::AS_CONTENT, 'content', $noteData, ''));
+							$existing->setSummary($existing->validate(ACore::AS_STRING, 'summary', $noteData, ''));
+							$existing->setSensitive(!empty($noteData['sensitive']));
+							$existing->setSource(json_encode($noteData, JSON_UNESCAPED_SLASHES));
+							$existing->setDetailArray(Details::EVENT, ActivityPubEvent::metadata($noteData));
+							$this->streamRequest->update($existing);
+							$this->streamRequest->updateDetails($existing, Details::EVENT);
+							$synced++;
+						}
 						continue;
 					} catch (StreamNotFoundException $e) {
 					}
