@@ -180,7 +180,7 @@ class RecommendationRankerTest extends TestCase {
 		$this->assertSame('other', $normal[3]['nid'], 'automatic ranking should surface another topic after three matches');
 	}
 
-	public function testRepeatedHighScoringStoriesDoNotFillThePageWhenOtherTopicsAreAvailable(): void {
+	public function testOneOfThirtyHighScoringIncidentPostsCannotCrowdOutSeventyOtherStories(): void {
 		$ranked = [];
 		for ($i = 1; $i <= 30; $i++) {
 			$ranked[] = [
@@ -188,22 +188,36 @@ class RecommendationRankerTest extends TestCase {
 				'rank_score' => 0.98 - ($i * 0.001),
 				'author_key' => 'author-' . $i,
 				'topic_ids' => ['technology', 'software', 'software.security'],
+				'story_terms' => [
+					'php', 'security', 'remote', 'execution', 'vulnerability', 'patch',
+					'maintainer' . $i, 'release' . $i,
+				],
 			];
 		}
-		for ($i = 1; $i <= 20; $i++) {
+		for ($i = 1; $i <= 70; $i++) {
 			$ranked[] = [
 				'nid' => 'different-topic-' . $i,
-				'rank_score' => 0.80 - ($i * 0.001),
+				'rank_score' => 0.80 - ($i * 0.0001),
 				'author_key' => 'different-author-' . $i,
 				'topic_ids' => ['topic.' . $i],
+				'story_terms' => [
+					'community' . $i,
+					'local' . $i,
+					'event' . $i,
+					'music' . $i,
+					'festival' . $i,
+					'edition' . $i,
+				],
 			];
 		}
 
-		$page = (new RecommendationReRanker())->page($ranked, 20, 'topic-diversity-regression');
+		$page = (new RecommendationReRanker())->page($ranked, 100, 'topic-diversity-regression');
 		$repeatedStories = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'security-story-'));
 
-		$this->assertLessThanOrEqual(3, count($repeatedStories), 'one story cluster should not crowd out other subjects in the first page');
+		$this->assertCount(74, $page, 'the page should retain all 70 independent alternatives and at most the four-post exhausted-story allowance');
+		$this->assertCount(4, $repeatedStories, 'the exhausted story can use one overflow slot only after the other 70 stories are selected');
 		$this->assertContains('different-topic-1', array_column($page, 'nid'));
+		$this->assertContains('different-topic-70', array_column($page, 'nid'));
 	}
 
 	public function testLinkPostsWithGenericCaptionsAreGroupedByTheirPreviewHeadline(): void {

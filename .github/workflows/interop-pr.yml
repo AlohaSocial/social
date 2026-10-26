@@ -23,6 +23,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/interop*.yml'
+      - '.github/scripts/composer-install-retry.sh'
       - 'appinfo/routes.php'
       - 'composer.json'
       - 'composer.lock'

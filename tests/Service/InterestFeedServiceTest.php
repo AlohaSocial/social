@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Service;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\StreamCard;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
@@ -49,6 +50,8 @@ class InterestFeedServiceTest extends TestCase {
 	private int $storyLookups = 0;
 	/** @var array[] the arguments of every candidate query */
 	private array $queries = [];
+	/** @var array<string, string> link preview titles that have finished loading */
+	private array $previewTitles = [];
 
 	private function nid(int $ageSeconds, int $n): string {
 		return Nid::fromPublishedTime(self::NOW - $ageSeconds, $n, StreamRequest::NID_LIMIT);
@@ -120,6 +123,26 @@ class InterestFeedServiceTest extends TestCase {
 
 			return $statuses;
 		});
+		$linkPreviews = $this->createStub(LinkPreviewService::class);
+		$linkPreviews->method('cardsByStreamPrims')->willReturnCallback(function (array $prims): array {
+			$cards = [];
+			foreach ($this->previewTitles as $nid => $title) {
+				$prim = 'p' . $nid;
+				if (in_array($prim, $prims, true)) {
+					$cards[$prim] = (new StreamCard($prim))->setTitle($title);
+				}
+			}
+
+			return $cards;
+		});
+		$linkPreviews->method('attachCards')->willReturnCallback(function (array $statuses): void {
+			foreach ($statuses as $status) {
+				$nid = (string)$status->getNid();
+				if (isset($this->previewTitles[$nid])) {
+					$status->setCard((new StreamCard('p' . $nid))->setTitle($this->previewTitles[$nid]));
+				}
+			}
+		});
 
 		$streamService = $this->createStub(StreamService::class);
 		$streamService->method('visiblePosts')->willReturnCallback(function (array $nids): array {
@@ -187,7 +210,7 @@ class InterestFeedServiceTest extends TestCase {
 			$time,
 			new RecommendationFeatureExtractor(new RecommendationTopicCatalog()),
 			$config,
-			$this->createStub(LinkPreviewService::class),
+			$linkPreviews,
 		);
 	}
 
@@ -294,6 +317,56 @@ class InterestFeedServiceTest extends TestCase {
 		$this->assertContains('music-story', array_column($spread, 'nid'));
 	}
 
+	public function testLegacySpreadIntroducesOtherTopicsAcrossDifferentHashtags(): void {
+		$ranked = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$ranked[] = [
+				'nid' => 'security-' . $i,
+				'author' => 'security-author-' . $i,
+				'tags' => ['security-report-' . $i],
+				'diversity_topics' => ['tech.security', 'software.backend'],
+			];
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$ranked[] = [
+				'nid' => 'garden-' . $i,
+				'author' => 'garden-author-' . $i,
+				'tags' => ['garden-' . $i],
+				'diversity_topics' => ['home.gardening'],
+			];
+		}
+
+		$spread = $this->service()->spread($ranked, []);
+
+		self::assertSame('garden-1', $spread[6]['nid'], 'six security posts are followed by a different topic, even when every post has a different hashtag');
+	}
+
+	public function testLegacyRankingDerivesTopicDiversityFromPostContent(): void {
+		$this->weights(['updates' => 3.0]);
+		$communityNids = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$this->given($i * 60, ['updates'], 'security-author-' . $i, $i);
+			$uniqueTerms = implode(' ', array_map(static fn (int $term): string => 'case' . $i . 'token' . $term, range(1, 24)));
+			$this->posts[array_key_last($this->posts)]['content'] = 'PHP maintainers disclose a security vulnerability. ' . $uniqueTerms;
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$communityNids[] = $this->given(self::HOUR + $i * 60, ['updates'], 'garden-author-' . $i, 100 + $i);
+			$this->posts[array_key_last($this->posts)]['content'] = 'Community gardens welcome volunteers for a neighborhood planting day.';
+		}
+
+		$ranked = $this->service()->rank($this->viewer());
+		$firstOtherTopic = null;
+		foreach ($ranked as $index => $entry) {
+			if (in_array($entry['nid'], $communityNids, true)) {
+				$firstOtherTopic = $index;
+				break;
+			}
+		}
+
+		self::assertGreaterThan(0, $this->storyLookups);
+		self::assertSame(6, $firstOtherTopic, 'classified security posts with varied text and hashtag arrive in a bounded run before another topic');
+	}
+
 	public function testOneSlotInTenIsATagThatKeepsCompanyWithTheReadersOwn(): void {
 		$this->weights(['cats' => 1.0]);
 		foreach (range(1, 12) as $i) {
@@ -345,6 +418,26 @@ class InterestFeedServiceTest extends TestCase {
 		$this->service()->rank($this->viewer());
 
 		self::assertSame($lookupsAfterFirstRank, $this->storyLookups);
+	}
+
+	public function testStoryTermCacheIsInvalidatedWhenALinkPreviewArrives(): void {
+		$this->weights(['php' => 3.0]);
+		$nid = $this->given(60, ['php'], 'a', 1);
+		$service = $this->service();
+
+		$service->rank($this->viewer());
+		$lookupsWithoutPreview = $this->storyLookups;
+		self::assertGreaterThan(0, $lookupsWithoutPreview);
+
+		// LinkPreviewGenerate runs after the first rank and does not change the
+		// stream's `updated` value. The preview must still invalidate its story terms.
+		$this->previewTitles[$nid] = 'A newly available headline about city gardens';
+		$service->rank($this->viewer());
+		$lookupsWithPreview = $this->storyLookups;
+		self::assertGreaterThan($lookupsWithoutPreview, $lookupsWithPreview);
+
+		$service->rank($this->viewer());
+		self::assertSame($lookupsWithPreview, $this->storyLookups, 'the refreshed card terms are cached for later rankings');
 	}
 
 	public function testPagingByTheLastPostContinuesTheSameRanking(): void {

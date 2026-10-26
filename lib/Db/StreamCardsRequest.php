@@ -90,13 +90,21 @@ class StreamCardsRequest extends StreamCardsRequestBuilder {
 	 * @return array<string, StreamCard> keyed by the prim of the stream id
 	 */
 	public function getByStreamIds(array $streamIds): array {
-		if ($streamIds === []) {
+		return $this->getByStreamPrims(array_map(static fn (string $id): string => md5($id), $streamIds));
+	}
+
+	/**
+	 * @param string[] $prims
+	 * @return array<string, StreamCard> keyed by the prim of the stream id
+	 */
+	public function getByStreamPrims(array $prims): array {
+		$prims = array_values(array_unique($prims));
+		if ($prims === []) {
 			return [];
 		}
 
 		$cards = [];
 		$qb = $this->getStreamCardsSelectSql();
-		$prims = array_map(static fn (string $id): string => md5($id), $streamIds);
 		$qb->andWhere(
 			$qb->expr()->in('sc.stream_id_prim', $qb->createNamedParameter($prims, IQueryBuilder::PARAM_STR_ARRAY))
 		);
