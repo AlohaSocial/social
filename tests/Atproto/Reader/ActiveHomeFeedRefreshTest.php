@@ -93,4 +93,56 @@ class ActiveHomeFeedRefreshTest extends TestCase {
 
 		$refresh->wakeFollowedFeeds($viewer);
 	}
+
+	public function testFollowSamplingWrapsToTheFirstPageWhenTheSavedCursorIsAtTheEnd(): void {
+		$viewer = new Person();
+		$viewer->setId('https://social.example/@alice');
+		$namespace = 'social.atproto.home-refresh';
+		$cursorKey = 'follow-cursor:' . hash('sha256', $viewer->getId());
+		$cursor = '1800-' . str_repeat('a', 32);
+		$follow = new Follow();
+		$follow->setId('https://social.example/@alice/follows/last');
+		$follow->setCreation(1700);
+		$follow->setObjectId('https://bsky.app/profile/' . self::DID);
+
+		$config = $this->createStub(AtprotoConfig::class);
+		$config->method('isEnabled')->willReturn(true);
+		$followService = $this->createMock(FollowService::class);
+		$followService->expects(self::exactly(2))->method('getFollowingAfter')
+			->willReturnCallback(static function (Person $actor, int $limit, string $after) use (&$cursor, $follow): array {
+				if ($after === $cursor) {
+					return [];
+				}
+				self::assertSame('', $after, 'an exhausted keyset rotation restarts at the first page');
+				return [$follow];
+			});
+		$watches = $this->createMock(AtprotoWatchRequest::class);
+		$watches->expects(self::once())->method('getByDids')->with([self::DID])->willReturn([]);
+		$cache = $this->createMock(DurableCache::class);
+		$cache->expects(self::once())->method('addShared')->willReturn(true);
+		$cache->expects(self::once())->method('getShared')->with($namespace, $cursorKey)->willReturnCallback(static function () use (&$cursor): string {
+			return $cursor;
+		});
+		$cache->expects(self::once())->method('setShared')
+			->with($namespace, $cursorKey, '', 30 * 86400)
+			->willReturnCallback(static function (string $namespace, string $key, string $next) use (&$cursor): void {
+				$cursor = $next;
+			});
+		$time = $this->createStub(ITimeFactory::class);
+		$time->method('getTime')->willReturn(2000);
+
+		$refresh = new ActiveHomeFeedRefresh(
+			$config,
+			$followService,
+			$watches,
+			$this->createStub(BlueskyActorService::class),
+			$this->createStub(Blocklist::class),
+			$cache,
+			$time,
+			new NullLogger(),
+		);
+
+		$refresh->wakeFollowedFeeds($viewer);
+		self::assertSame('', $cursor, 'the stored cursor is cleared after wrapping');
+	}
 }
