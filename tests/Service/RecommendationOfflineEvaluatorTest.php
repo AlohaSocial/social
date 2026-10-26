@@ -74,7 +74,17 @@ class RecommendationOfflineEvaluatorTest extends TestCase {
 			$reader['h0_ranker']['story_repeat_rate'],
 			'the reranker should reduce repeated coverage of the synthetic Nextcloud release story',
 		);
-		$this->assertGreaterThan(0, $reader['h0_ranker']['identifiable_story_posts']);
+		$this->assertGreaterThanOrEqual(
+			3,
+			$reader['h0_ranker']['unique_stories'],
+			'the ranked fixture page should include several distinct stories',
+		);
+		$this->assertGreaterThanOrEqual(8, $reader['h0_ranker']['identifiable_story_posts']);
+		$this->assertLessThan(
+			$reader['h0_ranker']['largest_story_share'],
+			$reader['h0_plus_rerank']['largest_story_share'],
+			'the reranker should reduce the share of the page occupied by the largest synthetic story',
+		);
 		$this->assertFalse($report['methodology']['weights_promoted']);
 	}
 
