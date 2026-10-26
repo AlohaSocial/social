@@ -87,6 +87,7 @@ class InterestFeedService {
 		private ITimeFactory $timeFactory,
 		private RecommendationFeatureExtractor $features,
 		private IConfig $config,
+		private LinkPreviewService $linkPreviews,
 	) {
 	}
 
@@ -462,7 +463,9 @@ class InterestFeedService {
 		}
 
 		foreach (array_chunk(array_keys($indicesByNid), 200) as $nids) {
-			foreach ($this->streamRequest->getVisibleByNids($nids) as $nid => $post) {
+			$posts = $this->streamRequest->getVisibleByNids($nids);
+			$this->linkPreviews->attachCards(array_values($posts));
+			foreach ($posts as $nid => $post) {
 				$key = (string)$nid;
 				$indices = $indicesByNid[$key] ?? [];
 				if ($indices === []) {
@@ -486,7 +489,7 @@ class InterestFeedService {
 	}
 
 	private static function storyTermCacheKey(string $owner, string $nid, string $updated, string $secret): string {
-		return 'story-v1-' . hash('sha256', hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated);
+		return 'story-v2-' . hash('sha256', hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated);
 	}
 
 	private function storyTermCache(): ICache {

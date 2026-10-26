@@ -15,6 +15,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestScorer;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\RecommendationFeatureExtractor;
 use OCA\Social\Service\RecommendationTopicCatalog;
 use OCA\Social\Service\StreamService;
@@ -185,7 +186,8 @@ class InterestFeedServiceTest extends TestCase {
 			$cacheFactory,
 			$time,
 			new RecommendationFeatureExtractor(new RecommendationTopicCatalog()),
-			$config
+			$config,
+			$this->createStub(LinkPreviewService::class),
 		);
 	}
 

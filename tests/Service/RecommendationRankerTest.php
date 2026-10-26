@@ -9,8 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\StreamCard;
+use OCA\Social\Service\RecommendationFeatureExtractor;
 use OCA\Social\Service\RecommendationRanker;
 use OCA\Social\Service\RecommendationReRanker;
+use OCA\Social\Service\RecommendationTopicCatalog;
 use PHPUnit\Framework\TestCase;
 
 class RecommendationRankerTest extends TestCase {
@@ -200,6 +204,41 @@ class RecommendationRankerTest extends TestCase {
 
 		$this->assertLessThanOrEqual(3, count($repeatedStories), 'one story cluster should not crowd out other subjects in the first page');
 		$this->assertContains('different-topic-1', array_column($page, 'nid'));
+	}
+
+	public function testLinkPostsWithGenericCaptionsAreGroupedByTheirPreviewHeadline(): void {
+		$extractor = new RecommendationFeatureExtractor(new RecommendationTopicCatalog());
+		$candidates = [];
+		for ($i = 1; $i <= 5; $i++) {
+			$post = (new Note())
+				->setContent('<p>Read the linked report.</p>')
+				->setCard((new StreamCard())
+					->setTitle('PHP maintainers disclose PHP2Shell security vulnerability')
+					->setDescription('Critical remote code execution affects PHP installations.'));
+			$candidates[] = [
+				'nid' => 'incident-' . $i,
+				'rank_score' => 1.0 - ($i / 100),
+				'author_key' => 'author-' . $i,
+				'story_terms' => $extractor->extractStoryTerms($post),
+			];
+		}
+		$other = (new Note())
+			->setContent('<p>Read the linked report.</p>')
+			->setCard((new StreamCard())
+				->setTitle('Community gardens open for spring planting')
+				->setDescription('Volunteers can register for the neighborhood event.'));
+		$candidates[] = [
+			'nid' => 'community-event',
+			'rank_score' => 0.90,
+			'author_key' => 'community-author',
+			'story_terms' => $extractor->extractStoryTerms($other),
+		];
+
+		$page = (new RecommendationReRanker())->page($candidates, 6, 'link-preview-story-regression');
+
+		self::assertSame('community-event', $page[3]['nid']);
+		self::assertSame(4, count(array_filter($page, static fn (array $item): bool => str_starts_with($item['nid'], 'incident-'))), 'one incident placement may overflow after every other story is exhausted');
+		self::assertSame('incident-4', $page[4]['nid']);
 	}
 
 	public function testOneStoryCannotReturnAfterTwentyOtherPostsInTheSameSnapshot(): void {

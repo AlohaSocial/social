@@ -33,6 +33,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 		private ITimeFactory $timeFactory,
 		private IConfig $config,
 		private CacheActorsRequest $cachedActors,
+		private LinkPreviewService $linkPreviews,
 	) {
 	}
 
@@ -116,6 +117,7 @@ final class RecommendationSignalService implements IRecommendationSignalRecorder
 		if ($postIds !== []) {
 			$this->streams->setViewer($viewer);
 			$posts = $this->streams->getVisibleByNids(array_values(array_unique($postIds)));
+			$this->linkPreviews->attachCards(array_values($posts));
 		}
 
 		$counts = ['accepted' => 0, 'duplicates' => 0, 'discarded' => $discarded, 'profile_version' => $state['revision']];
