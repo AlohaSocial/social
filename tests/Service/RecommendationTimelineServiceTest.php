@@ -285,7 +285,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			$this->appleAliases(), $this->isString(), 50, [], ['en'], 2_000_000_000
 		)->willReturn(['123' => $post]);
 		$this->snapshots->expects($this->once())->method('create')->with(
-			'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
+			'alice', 'for-you-v18-story-concentration', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
 		)->willReturn(['session_id' => 'session', 'nids' => ['123'], 'exploration_nids' => [], 'next_cursor' => null]);
 		$this->queue->expects($this->exactly(2))->method('fillPosts')->willReturnCallback(
 			static function (string $kind, string $term, Person $viewer): bool {
@@ -601,8 +601,8 @@ class RecommendationTimelineServiceTest extends TestCase {
 		$this->assertSame(4, $page['coverage']['returned']);
 		$this->assertNull($page['next_cursor']);
 		$this->assertSame([
-			['signed-cursor', 'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, 4],
-			['next-cursor', 'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, 3],
+			['signed-cursor', 'alice', 'for-you-v18-story-concentration', '', 3, 2, 2_000_000_000, 4],
+			['next-cursor', 'alice', 'for-you-v18-story-concentration', '', 3, 2, 2_000_000_000, 3],
 		], $pageCalls);
 	}
 

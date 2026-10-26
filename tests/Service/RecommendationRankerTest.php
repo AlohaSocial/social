@@ -214,8 +214,8 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 100, 'topic-diversity-regression');
 		$repeatedStories = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'security-story-'));
 
-		$this->assertCount(74, $page, 'the page should retain all 70 independent alternatives and at most the four-post exhausted-story allowance');
-		$this->assertCount(4, $repeatedStories, 'the exhausted story can use one overflow slot only after the other 70 stories are selected');
+		$this->assertCount(73, $page, 'the page should retain all 70 independent alternatives and at most the three-post exhausted-story allowance');
+		$this->assertCount(3, $repeatedStories, 'the exhausted story can use one overflow slot only after the other 70 stories are selected');
 		$this->assertContains('different-topic-1', array_column($page, 'nid'));
 		$this->assertContains('different-topic-70', array_column($page, 'nid'));
 	}
@@ -250,9 +250,9 @@ class RecommendationRankerTest extends TestCase {
 
 		$page = (new RecommendationReRanker())->page($candidates, 6, 'link-preview-story-regression');
 
-		self::assertSame('community-event', $page[3]['nid']);
-		self::assertSame(4, count(array_filter($page, static fn (array $item): bool => str_starts_with($item['nid'], 'incident-'))), 'one incident placement may overflow after every other story is exhausted');
-		self::assertSame('incident-4', $page[4]['nid']);
+		self::assertSame('community-event', $page[2]['nid']);
+		self::assertSame(3, count(array_filter($page, static fn (array $item): bool => str_starts_with($item['nid'], 'incident-'))), 'one incident placement may overflow after every other story is exhausted');
+		self::assertSame('incident-3', $page[3]['nid']);
 	}
 
 	public function testOneStoryCannotReturnAfterTwentyOtherPostsInTheSameSnapshot(): void {
@@ -276,8 +276,8 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 100, 'story-cap-whole-snapshot');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'incident-'));
 
-		$this->assertCount(4, $incidentPosts, 'one extra incident may fill the page after distinct alternatives are exhausted');
-		$this->assertCount(64, $page, 'remaining incident candidates are omitted after one sparse-feed overflow');
+		$this->assertCount(3, $incidentPosts, 'one extra incident may fill the page after distinct alternatives are exhausted');
+		$this->assertCount(63, $page, 'remaining incident candidates are omitted after one sparse-feed overflow');
 	}
 
 	public function testRecentlyOverexposedStoriesYieldToUnseenAlternativesAcrossFeedRefreshes(): void {
@@ -322,8 +322,8 @@ class RecommendationRankerTest extends TestCase {
 
 		$page = (new RecommendationReRanker())->page($ranked, 5, 'fatigue-fallback');
 
-		$this->assertCount(4, $page, 'one fatigued story overflow may fill a sparse page');
-		$this->assertSame(['only-seen-story-1', 'only-seen-story-2', 'only-seen-story-3', 'only-seen-story-4'], array_column($page, 'nid'));
+		$this->assertCount(3, $page, 'one fatigued story overflow may fill a sparse page');
+		$this->assertSame(['only-seen-story-1', 'only-seen-story-2', 'only-seen-story-3'], array_column($page, 'nid'));
 	}
 
 	public function testSimilarStoryVariantsCannotEvadeTheCapThroughAnOverlapChain(): void {
@@ -345,8 +345,8 @@ class RecommendationRankerTest extends TestCase {
 
 		$page = (new RecommendationReRanker())->page($ranked, 12, 'overlap-chain-story-cap');
 
-		$this->assertCount(4, $page, 'a sparse page may show one additional item from the connected story cluster');
-		$this->assertSame(['story-0-1', 'story-0-2', 'story-0-3', 'story-0-4'], array_column($page, 'nid'));
+		$this->assertCount(3, $page, 'a sparse page may show one additional item from the connected story cluster');
+		$this->assertSame(['story-0-1', 'story-0-2', 'story-0-3'], array_column($page, 'nid'));
 		foreach ($page as $candidate) {
 			$this->assertArrayNotHasKey('_story_cluster', $candidate, 'internal cluster IDs are not exposed');
 		}
@@ -375,8 +375,8 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 20, 'story-diversity-without-tags');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'same-incident-'));
 
-		$this->assertCount(4, $incidentPosts);
-		$this->assertCount(16, $page, 'one story overflow fills a slot after other stories run out');
+		$this->assertCount(3, $incidentPosts);
+		$this->assertCount(15, $page, 'one story overflow fills a slot after other stories run out');
 		$this->assertContains('other-story-1', array_column($page, 'nid'));
 		foreach ($page as $candidate) {
 			$this->assertArrayNotHasKey('story_terms', $candidate, 'text terms stay transient and are not exposed with ranked items');
@@ -402,9 +402,9 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 5, 'short-overlap-is-not-a-story');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'incident-'));
 
-		$this->assertCount(4, $incidentPosts, 'one additional item may appear after the alternative is used');
+		$this->assertCount(3, $incidentPosts, 'one additional item may appear after the alternative is used');
 		$this->assertContains('long-unrelated-post', array_column($page, 'nid'));
-		$this->assertCount(5, $page);
+		$this->assertCount(4, $page);
 	}
 
 	public function testSharedOpeningKeepsLongCoverageOfOneStoryTogether(): void {
@@ -426,9 +426,9 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 5, 'shared-opening-long-articles');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'long-incident-'));
 
-		$this->assertCount(4, $incidentPosts);
+		$this->assertCount(3, $incidentPosts);
 		$this->assertContains('other-story', array_column($page, 'nid'));
-		$this->assertCount(5, $page);
+		$this->assertCount(4, $page);
 	}
 
 	public function testHalfMatchingHeadlinesClusterEvenWhenArticleBodiesDiffer(): void {
@@ -453,9 +453,9 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 5, 'shared-half-headline');
 		$coverage = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'coverage-'));
 
-		$this->assertCount(4, $coverage);
+		$this->assertCount(3, $coverage);
 		$this->assertContains('different-event', array_column($page, 'nid'));
-		$this->assertCount(5, $page);
+		$this->assertCount(4, $page);
 	}
 
 	public function testSimilarStoryLimitStillAppliesWhenItWouldLeaveThePageUnderfilled(): void {
@@ -467,8 +467,8 @@ class RecommendationRankerTest extends TestCase {
 
 		$page = (new RecommendationReRanker())->page($ranked, 5, 'story-diversity-no-alternative');
 
-		$this->assertCount(4, $page, 'a sparse page allows one item above the ordinary story limit');
-		$this->assertSame(['only-story-1', 'only-story-2', 'only-story-3', 'only-story-4'], array_column($page, 'nid'));
+		$this->assertCount(3, $page, 'a sparse page allows one item above the ordinary story limit');
+		$this->assertSame(['only-story-1', 'only-story-2', 'only-story-3'], array_column($page, 'nid'));
 	}
 
 	public function testShortPHPHeadlineVariantsShareTheStoryCap(): void {
@@ -488,8 +488,8 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 10, 'short-story-diversity');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'php-security-'));
 
-		$this->assertCount(4, $incidentPosts, 'one extra variant may appear when no other stories remain');
-		$this->assertCount(8, $page, 'each story may overflow once after the alternatives are exhausted');
+		$this->assertCount(3, $incidentPosts, 'one extra variant may appear when no other stories remain');
+		$this->assertCount(6, $page, 'each story may overflow once after the alternatives are exhausted');
 	}
 
 	public function testThreeTermStoryTitlesAreGroupedWhenTheirWordsMatchExactly(): void {
@@ -504,8 +504,8 @@ class RecommendationRankerTest extends TestCase {
 		$page = (new RecommendationReRanker())->page($ranked, 10, 'three-term-story-diversity');
 		$incidentPosts = array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'php-incident-'));
 
-		$this->assertCount(4, $incidentPosts);
-		$this->assertCount(8, $page);
+		$this->assertCount(3, $incidentPosts);
+		$this->assertCount(6, $page);
 	}
 
 	public function testAHighInterestTopicCannotOverrideTheDiversityCapWhenAlternativesExist(): void {
@@ -604,7 +604,7 @@ class RecommendationRankerTest extends TestCase {
 
 		$this->assertCount(8, $page, 'an unselectable fifth post from one story must not suppress an otherwise available topic');
 		$this->assertContains('topic-4', array_column($page, 'nid'));
-		$this->assertCount(4, array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'incident-')));
+		$this->assertCount(3, array_filter($page, static fn (array $candidate): bool => str_starts_with($candidate['nid'], 'incident-')));
 	}
 
 	public function testQualifiedExplorationUsesOneStableBoundedSlot(): void {

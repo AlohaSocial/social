@@ -17,7 +17,7 @@ final class RecommendationReRanker {
 	private const MAX_TOPIC_IN_SNAPSHOT = 6;
 	private const MAX_FORMAT_IN_WINDOW = 5;
 	private const FORMAT_CONCENTRATION_COST = 0.08;
-	private const MAX_STORY_IN_PAGE = 3;
+	private const MAX_STORY_IN_PAGE = 2;
 	private const MAX_STORY_OVERFLOW = 1;
 	private const MIN_STORY_TERMS = 3;
 	private const MIN_FUZZY_STORY_OVERLAP = 3;

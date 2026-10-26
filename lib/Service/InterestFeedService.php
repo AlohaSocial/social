@@ -59,7 +59,7 @@ class InterestFeedService {
 	public const DIVERSITY_WINDOW = 20;
 	public const PER_AUTHOR = 2;
 	public const TAG_SHARE = 0.4;
-	private const STORY_LIMIT = 3;
+	private const STORY_LIMIT = 2;
 	private const STORY_OVERFLOW = 1;
 	private const MAX_TAG_IN_SNAPSHOT = 10;
 	private const MAX_TOPIC_IN_SNAPSHOT = 6;

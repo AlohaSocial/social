@@ -311,8 +311,8 @@ class InterestFeedServiceTest extends TestCase {
 		$spread = $this->service()->spread($ranked, []);
 		$incidentPosts = array_filter($spread, static fn (array $post): bool => str_starts_with($post['nid'], 'incident-'));
 
-		$this->assertCount(6, $spread, 'the legacy feed should stop after distinct stories and one sparse-feed overflow are exhausted');
-		$this->assertCount(4, $incidentPosts, 'the legacy feed may show one extra post from a story cluster');
+		$this->assertCount(5, $spread, 'the legacy feed should stop after distinct stories and one sparse-feed overflow are exhausted');
+		$this->assertCount(3, $incidentPosts, 'the legacy feed may show one extra post from a story cluster');
 		$this->assertContains('garden-story', array_column($spread, 'nid'));
 		$this->assertContains('music-story', array_column($spread, 'nid'));
 	}
