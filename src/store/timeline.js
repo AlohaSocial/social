@@ -134,6 +134,7 @@ function rememberCelebrated() {
  * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object, fetchedAt?: number}[]} remembered the lists lately visited
  * @property {boolean} restored whether the list was put back rather than loaded
  * @property {Object<string, true>} filled the lists that have shown a post this session, by identity
+ * @property {Record<string, Record<string, object|null>>} recommendationReasons explanation snapshots by feed and status
  * @property {Record<string, string|null>} recommendationCursors opaque continuation cursors for ranked For You timelines, by identity
  * @property {Record<string, {state: string, known_eligible: number|null, returned: number, remote_refresh_queued: boolean}>} recommendationCoverage ranked-feed coverage, by identity
  * @property {boolean} composerDisplayStatus whether the full composer is open
@@ -167,13 +168,6 @@ function indexStatus(state, status) {
 	if (status === undefined || status === null || status.id === undefined) {
 		return
 	}
-	// A timeline page carries this reader-specific explanation; the ordinary
-	// status endpoint used to refresh counts and reactions does not. Keep the
-	// explanation with the indexed copy until a new timeline page replaces it.
-	const existing = state.statuses[status.id]
-	if (status.interest === undefined && existing?.interest !== undefined) {
-		status = { ...status, interest: existing.interest }
-	}
 
 	// assigned in place: replacing the whole map per status meant fifteen full
 	// copies of every status in memory for each page that loaded
@@ -184,6 +178,21 @@ function indexStatus(state, status) {
 	if (status.type !== undefined) {
 		indexStatus(state, status.status)
 	}
+}
+
+/**
+ * Snapshot metadata belongs to a feed, not the shared status that polling updates.
+ *
+ * @param {TimelineState} state the store state
+ * @param {IndexedEntry[]} items a page returned by the personalized timeline
+ * @param {string} identity the feed that requested the page
+ */
+function rememberRecommendationReasons(state, items, identity) {
+	const reasons = { ...(state.recommendationReasons[identity] ?? {}) }
+	for (const status of items) {
+		reasons[status.id] = status.interest ?? null
+	}
+	state.recommendationReasons[identity] = reasons
 }
 
 /**
@@ -230,6 +239,24 @@ function pruneIndex(state) {
 		}
 	}
 	state.statuses = statuses
+	const currentIdentity = JSON.stringify([state.type, state.account, state.params])
+	const keptFeeds = new Map([[currentIdentity, state.timeline]])
+	for (const held of state.remembered) {
+		keptFeeds.set(held.identity, held.timeline)
+	}
+	for (const identity of Object.keys(state.recommendationReasons)) {
+		const ids = keptFeeds.get(identity)
+		if (!ids) {
+			delete state.recommendationReasons[identity]
+			continue
+		}
+		const visible = new Set(ids)
+		for (const id of Object.keys(state.recommendationReasons[identity])) {
+			if (!visible.has(id)) {
+				delete state.recommendationReasons[identity][id]
+			}
+		}
+	}
 }
 
 /** @param {{type: string, params?: {scope?: string}}} state timeline identity @return {boolean} */
@@ -519,6 +546,8 @@ export const useTimelineStore = defineStore('timeline', {
 		remembered: [],
 		/** Opaque ranked-feed cursors keyed by the same identity as the timeline lists. */
 		recommendationCursors: {},
+		/** Explanations survive ordinary status refreshes, only within their feed. */
+		recommendationReasons: {},
 		/** Coverage returned by the ranked-feed endpoint, keyed by timeline identity. */
 		recommendationCoverage: {},
 		/**
@@ -591,6 +620,17 @@ export const useTimelineStore = defineStore('timeline', {
 		getComposerDisplayStatus(state) {
 			return state.composerDisplayStatus
 		},
+		/**
+		 * @param {TimelineState} state the store state
+		 * @return {(statusId: string) => object|null|undefined} the active snapshot's explanation
+		 */
+		getRecommendationReason(state) {
+			const identity = JSON.stringify([state.type, state.account, state.params])
+			return (statusId) => isPersonalizedFeed(state)
+				? state.recommendationReasons[identity]?.[statusId]
+				: undefined
+		},
+
 		/**
 		 * The timeline, newest first.
 		 *
@@ -779,6 +819,9 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 		addToTimeline(data) {
 			if (Array.isArray(data)) {
+				if (isPersonalizedFeed(this)) {
+					rememberRecommendationReasons(this, data, this.getTimelineIdentity)
+				}
 				data.forEach((status) => indexStatus(this, status))
 				appendNew(this.timeline, data)
 			} else {
@@ -869,6 +912,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.statuses = statuses
 		},
 		resetTimeline() {
+			delete this.recommendationReasons[this.getTimelineIdentity]
 			if (usesV4RecommendationTimeline(this)) {
 				const cursors = { ...this.recommendationCursors }
 				delete cursors[this.getTimelineIdentity]
@@ -1246,6 +1290,10 @@ export const useTimelineStore = defineStore('timeline', {
 				this.recommendationCoverage = { ...this.recommendationCoverage, [identity]: data.coverage ?? null }
 			}
 
+			if (isPersonalizedFeed({ type, params })) {
+				delete this.recommendationReasons[identity]
+				rememberRecommendationReasons(this, items, identity)
+			}
 			items.forEach((status) => indexStatus(this, status))
 			const ids = []
 			appendNew(ids, items)

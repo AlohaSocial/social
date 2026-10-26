@@ -83,17 +83,44 @@ describe('timeline store state changes', () => {
 		expect(store.timeline).toEqual([])
 	})
 
-	it('keeps a For You explanation when a status refresh omits timeline-only metadata', async () => {
-		const explanation = { reason: 'topic', text: 'Because you follow Technology', label: 'Shown for Technology' }
+	it.each([undefined, null])('keeps the feed explanation when a status refresh returns interest=%s', async (interest) => {
+		const explanation = { reason: 'topic', tags: ['technology'] }
+		store.changeTimelineType({ type: 'interests', params: {} })
 		store.addToTimeline([makeStatus('42', { interest: explanation })])
-		axios.get.mockResolvedValue({ data: makeStatus('42', { favourites_count: 7 }) })
-
+		axios.get.mockResolvedValue({ data: makeStatus('42', { favourites_count: 7, interest }) })
 		await store.fetchStatus('42', true)
+		expect(store.getStatus('42').favourites_count).toBe(7)
+		expect(store.getRecommendationReason('42')).toEqual(explanation)
+		expect(store.getStatus('42').interest).toBe(interest)
+	})
 
-		expect(store.getStatus('42')).toMatchObject({
-			interest: explanation,
-			favourites_count: 7,
-		})
+	it('keeps separate explanation snapshots across scopes and clears a refreshed feed', () => {
+		const posts = { reason: 'topic', tags: ['technology'] }
+		const photos = { reason: 'followed', tags: ['photography'] }
+		store.changeTimelineType({ type: 'interests', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: posts })])
+		store.changeTimelineType({ type: 'photos', params: { scope: 'interests' } })
+		store.addToTimeline([makeStatus('42', { interest: photos })])
+		expect(store.getRecommendationReason('42')).toEqual(photos)
+		store.changeTimelineType({ type: 'home', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: null })])
+		expect(store.getRecommendationReason('42')).toBeUndefined()
+		store.changeTimelineType({ type: 'interests', params: {} })
+		expect(store.getRecommendationReason('42')).toEqual(posts)
+		store.resetTimeline()
+		expect(store.getRecommendationReason('42')).toBeUndefined()
+		store.addToTimeline([makeStatus('42', { interest: null })])
+		expect(store.getRecommendationReason('42')).toBeNull()
+	})
+
+	it('prunes explanations when a feed leaves the bounded history', () => {
+		store.changeTimelineType({ type: 'interests', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: { reason: 'popular' } })])
+		for (let index = 0; index < 8; index++) {
+			store.changeTimelineType({ type: 'tags', params: { tag: `topic${index}` } })
+			store.addToTimeline([makeStatus(String(index))])
+		}
+		expect(store.recommendationReasons).toEqual({})
 	})
 
 	/**

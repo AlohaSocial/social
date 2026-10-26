@@ -646,3 +646,14 @@ Ranked pagination also requires a persistent Nextcloud memory cache. Configure `
 Learning event generations combine an account's reset/consent generation with the instance epoch. Changing the administrator learning switch advances the single-row epoch, so queued events and open cursors become stale without updating every account profile.
 
 For local checks, run `composer test:unit -- --filter 'RecommendationPreferenceServiceTest|RecommendationPreferencesMigrationTest|UserDeletedListenerTest'`, then `npm test -- --run` and `npm run build`. Disable the instance switch to roll back the ranked feed; the additive schema is retained and the existing feed remains available.
+
+### Persistent frontend explanations
+
+The browser keeps explanation metadata by feed identity and status ID, separately
+from the shared status index. Ordinary status, reaction and bookmark responses
+may explicitly contain `interest: null`; they update the post without discarding
+the explanation for the visible recommendation snapshot. There is no timer that
+hides these hints. Posts, Photos, Videos and Shorts keep their own personalized
+contexts. Chronological feeds and post-detail views do not show a cached For You
+explanation. Refreshing the feed replaces its metadata; snapshots are pruned with
+the bounded remembered-feed history rather than retained indefinitely.
