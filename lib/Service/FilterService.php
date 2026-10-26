@@ -175,7 +175,7 @@ class FilterService {
 		if ($filters === [] && !$hidesAi) {
 			return array_values(array_filter(
 				$notifications,
-				fn (mixed $notification): bool => !$this->hasHiddenAtprotoLabel($this->matchable($notification))
+				fn (mixed $notification): bool => !$this->hasHiddenAtprotoLabelInItem($notification)
 			));
 		}
 
@@ -266,10 +266,31 @@ class FilterService {
 				continue;
 			}
 			$bluesky = is_array($entity['bluesky'] ?? null) ? $entity['bluesky'] : [];
-			foreach (is_array($bluesky['labels'] ?? null) ? $bluesky['labels'] : [] as $label) {
-				if (is_array($label) && in_array($label['val'] ?? '', self::HIDDEN_ATPROTO_LABELS, true)) {
-					return true;
-				}
+			if ($this->containsHiddenAtprotoLabel($bluesky['labels'] ?? [])) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** Notifications are usually Streams; inspect only their saved labels on the fast path. */
+	private function hasHiddenAtprotoLabelInItem(mixed $item): bool {
+		if (!($item instanceof Stream)) {
+			return $this->hasHiddenAtprotoLabel($this->exportForClient($item));
+		}
+		$object = $item->getObject();
+		$subject = ($object instanceof Stream) ? $object : $item;
+		$details = $subject->getDetails(Details::ATPROTO);
+
+		return $this->containsHiddenAtprotoLabel($details['label_sources'] ?? []);
+	}
+
+	/** @param mixed $labels */
+	private function containsHiddenAtprotoLabel(mixed $labels): bool {
+		foreach (is_array($labels) ? $labels : [] as $label) {
+			if (is_array($label) && in_array($label['val'] ?? '', self::HIDDEN_ATPROTO_LABELS, true)) {
+				return true;
 			}
 		}
 
