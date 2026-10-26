@@ -18,6 +18,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Details;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -61,6 +62,27 @@ class PostMapperTest extends TestCase {
 		$note = (new PostMapper($this->resolver()))->note($this->postView(['embed' => $record($list)]));
 		$this->assertStringContainsString('<a href="https://bsky.app/profile/bob.test/lists/3kl"', $note['content']);
 		$this->assertSame('Friends', $note['_atproto']['card']['title']);
+	}
+
+	public function testARecordWithExternalMediaKeepsItsNonPostStrongRefForRepublishing(): void {
+		$uri = 'at://' . self::OTHER . '/app.bsky.feed.generator/3kgenerator';
+		$cid = Cid::forRaw('generator record')->toString();
+		$view = $this->postView([
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia#view',
+				'record' => ['record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => $uri, 'cid' => $cid]],
+				'media' => ['$type' => 'app.bsky.embed.external#view', 'external' => [
+					'uri' => 'https://example.com/story',
+					'title' => 'A story',
+					'description' => 'Details',
+				]],
+			],
+		]);
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['uri' => $uri, 'cid' => $cid], $note['_atproto'][Details::ATPROTO_RECORD_EMBED]);
+		$this->assertSame('https://example.com/story', $note['_atproto']['card']['url']);
 	}
 
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {

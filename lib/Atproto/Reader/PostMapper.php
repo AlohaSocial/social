@@ -190,6 +190,7 @@ class PostMapper {
 				$streamedBlobs[] = $attachment['url'];
 			}
 		}
+		$recordEmbed = self::nonPostRecordEmbed($embed);
 
 		$note = [
 			'id' => $id,
@@ -218,7 +219,13 @@ class PostMapper {
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
-			] + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
+			] + ($recordEmbed === null ? [] : [
+				// recordWithMedia can embed a feed, list or starter pack beside a
+				// link card. The social stream stores the card separately, so keep
+				// the original StrongRef alongside it for the publisher to rebuild
+				// the same combined embed instead of silently dropping the record.
+				Details::ATPROTO_RECORD_EMBED => $recordEmbed,
+			]) + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
 				// the quoted author detached this quote, so it is withdrawn
 				// here too (PostStore)
 				'quote_detached' => true,
@@ -928,6 +935,38 @@ class PostMapper {
 		}
 
 		return ['uri' => $value['uri'], 'cid' => $value['cid']];
+	}
+
+	/**
+	 * A feed, list or starter-pack StrongRef the post embeds, kept for a
+	 * lossless publish roundtrip. Ordinary post quotes use the quote relation.
+	 * AppView wraps the reference in one or two `record` view objects; the raw
+	 * record has the StrongRef directly on the first nested record.
+	 *
+	 * @return array{uri: string, cid: string}|null
+	 */
+	private static function nonPostRecordEmbed(array $embed): ?array {
+		if (!in_array($embed['$type'] ?? '', [self::RECORD, self::RECORD_RECORD, self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
+			return null;
+		}
+
+		$record = $embed['record'] ?? null;
+		for ($depth = 0; $depth < 3 && is_array($record); $depth++) {
+			$reference = self::strongRef($record);
+			if ($reference !== null) {
+				$parsed = Syntax::parseAtUri($reference['uri']);
+				if (($parsed['collection'] ?? '') !== ''
+					&& ($parsed['rkey'] ?? '') !== ''
+					&& $parsed['collection'] !== 'app.bsky.feed.post'
+					&& Cid::isValid($reference['cid'])) {
+					return $reference;
+				}
+				return null;
+			}
+			$record = $record['record'] ?? null;
+		}
+
+		return null;
 	}
 
 	/** An ISO instant for the import, from the record's time or the index time. */
