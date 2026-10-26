@@ -34,6 +34,7 @@ use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Service\Counts\CountService;
 use OCA\Social\Service\Thread\ThreadService;
+use OCA\Social\Tools\ActivityPubEvent;
 use OCA\Social\Tools\Exceptions\DateTimeException;
 use OCA\Social\Tools\Exceptions\MalformedArrayException;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -1081,15 +1082,16 @@ class StreamService {
 						continue;
 					}
 
-					// Extract the Note data from the activity item
+					// Extract the status or Event data from the activity item
 					$itemType = $this->get('type', $itemData, '');
 					if ($itemType === 'Create' && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
-					} elseif ($itemType === 'Note') {
+					} elseif (in_array($itemType, ['Note', 'Event'], true)) {
 						$noteData = $itemData;
 					} else {
 						continue;
 					}
+					$isEvent = $this->get('type', $noteData, '') === 'Event';
 
 					$noteId = $this->get('id', $noteData, '');
 					if ($noteId === '') {
@@ -1132,6 +1134,10 @@ class StreamService {
 					$note->setPublished($this->get('published', $noteData, date('c')));
 					$note->setContent($note->validate(ACore::AS_CONTENT, 'content', $noteData, ''));
 					$note->setSummary($note->validate(ACore::AS_STRING, 'summary', $noteData, ''));
+					if ($isEvent) {
+						$note->setSubType('Event');
+						$note->setDetailArray(Details::EVENT, ActivityPubEvent::metadata($noteData));
+					}
 					$note->setSensitive(!empty($noteData['sensitive']));
 					$note->setSource(json_encode($noteData, JSON_UNESCAPED_SLASHES));
 					$note->setLocal(false);

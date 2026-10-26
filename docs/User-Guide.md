@@ -342,9 +342,12 @@ Gancio administrator can customize this name, so use the federation address
 shown on that Gancio site's follow link when it differs. The Gancio instance
 must have federation enabled. Once the follow is accepted, new public events
 that Gancio delivers appear in Social like other followed ActivityPub posts,
-with a card for the event title, time and venue. Following does not backfill
-the instance's existing event catalogue; Social currently has no Gancio API
-sync for older events.
+with a card for the event title, time and venue. Following alone does not
+backfill the instance's existing event catalogue. To look for older events,
+open the followed Gancio account's profile in Social; Social reads its public
+ActivityPub outbox in bounded pages, including Gancio `Event` objects, as you
+open and page through that profile. This uses ActivityPub rather than Gancio's
+instance-specific API, and only imports entries the Gancio outbox exposes.
 
 On a signed-in Social timeline, choose **Add to Nextcloud Calendar** on an
 event card to import it directly into your first writable Nextcloud calendar.

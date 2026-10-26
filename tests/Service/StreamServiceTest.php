@@ -43,6 +43,7 @@ use OCA\Social\Service\ReactionSummaryService;
 use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\Thread\ThreadService;
+use OCA\Social\Tools\ActivityPubEvent;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -1738,6 +1739,67 @@ class StreamServiceTest extends TestCase {
 		$this->assertSame(1, $second['synced']);
 		$this->assertTrue($second['success']);
 		$this->assertSame(['url' => $bob->getOutbox() . '?page=2', 'offset' => 0], $second['next']);
+	}
+
+	public function testSyncRemoteTimelineImportsGancioEventsFromDirectAndCreateOutboxEntries(): void {
+		$gancio = $this->remoteActor('https://events.example/@events');
+		$event = static fn (string $id, string $name): array => [
+			'id' => $id,
+			'type' => 'Event',
+			'name' => $name,
+			'url' => str_replace('/federation/events/', '/events/', $id),
+			'attributedTo' => 'https://events.example/@events',
+			'published' => '2026-11-14T12:00:00Z',
+			'to' => [ACore::CONTEXT_PUBLIC],
+			'content' => '<p>Community event</p>',
+			'startTime' => '2026-11-14T18:00:00+01:00',
+			'endTime' => '2026-11-14T20:00:00+01:00',
+			'location' => [
+				'type' => 'Place',
+				'name' => 'Community Hall',
+				'address' => 'Main Street 12, Berlin',
+			],
+		];
+		$direct = $event('https://events.example/federation/events/42', 'Direct Gancio event');
+		$created = $event('https://events.example/federation/events/43', 'Created Gancio event');
+		$this->curlService->method('retrieveObject')->willReturn([
+			'orderedItems' => [
+				$direct,
+				[
+					'id' => 'https://events.example/federation/activities/43',
+					'type' => 'Create',
+					'actor' => $gancio->getId(),
+					'object' => $created,
+				],
+			],
+		]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+
+		$saved = [];
+		$this->streamRequest->expects($this->exactly(2))
+			->method('save')
+			->willReturnCallback(static function (Stream $stream) use (&$saved): bool {
+				$saved[] = $stream;
+
+				return true;
+			});
+
+		$this->assertSame(2, $this->service->syncRemoteTimeline($gancio));
+		$this->assertCount(2, $saved);
+		foreach ($saved as $index => $stream) {
+			$this->assertSame('Event', $stream->getSubType());
+			$this->assertSame([
+				'name' => $index === 0 ? 'Direct Gancio event' : 'Created Gancio event',
+				'start_time' => '2026-11-14T17:00:00Z',
+				'end_time' => '2026-11-14T19:00:00Z',
+				'location' => 'Community Hall, Main Street 12, Berlin',
+			], $stream->getDetails(Details::EVENT));
+			$this->assertSame(
+				$index === 0 ? 'Direct Gancio event' : 'Created Gancio event',
+				$stream->exportAsLocal()['event']['name'] ?? null
+			);
+			$this->assertIsString(ActivityPubEvent::calendar($stream, 1_800_000_000));
+		}
 	}
 
 	public function testSyncRemoteTimelineSanitisesWhatItStores(): void {
