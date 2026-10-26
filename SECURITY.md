@@ -28,7 +28,7 @@ saves the person sending it.
 ## Supported versions
 
 The latest release on the [Nextcloud App Store](https://apps.nextcloud.com/apps/social)
-and `master` get security fixes; a fix is released as a new version of the
+and `main` get security fixes; a fix is released as a new version of the
 app. Older releases are not patched: upgrade to the latest. The Nextcloud
 server versions a release supports are in `appinfo/info.xml` and in
 [docs/Architecture.md](docs/Architecture.md).

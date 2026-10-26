@@ -68,7 +68,7 @@
 import { translate as t } from '@nextcloud/l10n'
 
 /** Where the whole story lives, nginx included. */
-const CLIENT_API_DOCS = 'https://github.com/alohasocial/social/blob/master/docs/Admin.md#mastodon-apps-cannot-connect'
+const CLIENT_API_DOCS = 'https://github.com/alohasocial/social/blob/HEAD/docs/Admin.md#mastodon-apps-cannot-connect'
 
 export default {
 	name: 'SetupChecks',

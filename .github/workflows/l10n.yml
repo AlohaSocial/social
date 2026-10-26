@@ -14,7 +14,7 @@
 
 name: l10n
 
-# A push to master extracts and pushes the source strings, as before. The
+# A push to main extracts and pushes the source strings, as before. The
 # extraction is checked nightly, by hand and on a pull request labelled
 # `full-ci` (labelled-ci.yml) rather than on every pull request.
 on:
