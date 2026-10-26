@@ -67,11 +67,14 @@
 			oneLine
 			:listenForIntents="false" />
 
-		<MediaUploadButton
-			v-if="type === 'photos' && !settingsStore.getServerData.public && !timelineStore.composerDisplayStatus"
-			accept="image/*,video/*"
-			multiple
-			:label="t('social', 'Share photos or a video')" />
+		<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
+			<MediaUploadButton
+				v-if="!timelineStore.composerDisplayStatus"
+				accept="image/*,video/*"
+				multiple
+				:label="t('social', 'Share photos or a video')" />
+			<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
+		</div>
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
@@ -198,6 +201,7 @@ import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
+import DraftsButton from '../components/DraftsButton.vue'
 import MediaUploadButton from '../components/MediaUploadButton.vue'
 import TimelineList from './../components/TimelineList.vue'
 import DirectMessages from './../components/DirectMessages.vue'
@@ -256,6 +260,7 @@ export default {
 		WeeklyRecap,
 		TimelineList,
 		MediaUploadButton,
+		DraftsButton,
 		DirectMessages,
 		TimelineSwitcher,
 		IconBellCogOutline,
@@ -938,6 +943,13 @@ export default {
 	max-width: var(--social-column);
 	margin: 0 auto;
 	padding: 0;
+}
+
+.photo-compose-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 
 .timeline-scope-description {

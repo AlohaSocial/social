@@ -853,6 +853,7 @@ export default {
 		/** Initial context is available before the lazy dialog editor mounts. */
 		initialQuote: { type: Object, default: null },
 		initialDraft: { type: Object, default: null },
+		initialDraftContext: { type: String, default: '' },
 		initialRedraft: { type: Object, default: null },
 		showReplyContext: { type: Boolean, default: false },
 		listenForIntents: { type: Boolean, default: true },
@@ -1119,7 +1120,7 @@ export default {
 				return `quote.${this.quoteOf.id}`
 			}
 
-			return ''
+			return this.initialDraftContext
 		},
 
 		/**

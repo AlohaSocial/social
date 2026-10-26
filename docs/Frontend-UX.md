@@ -91,6 +91,24 @@ and document-only posts are excluded by the database **before pagination**. The
 ordinary timeline remains unrestricted. For You uses its existing combined visual
 media filter; legacy candidate and trend fallback queries follow the same rule.
 
+## Continuing drafts from Photos
+
+Photos shows Drafts (with a count) beside its media picker when this account has
+valid saved composer drafts in this browser. The existing account-scoped storage
+is enumerated without adopting unscoped legacy drafts or other readers' entries.
+The list includes new-post, reply, quote and re-draft contexts, sorted by save time;
+existing validation and seven-day expiry still apply. This is not server-side or
+cross-device draft synchronization, nor a separate draft archive.
+
+Selecting a draft reuses the shared modal. Replies and quotes first reload their
+original post through the current viewer's status API; unavailable or inaccessible
+targets leave the draft intact and show a retryable error instead of converting it
+into a standalone post. Re-drafts retain their original storage slot even after
+the deleted source post is gone. Draft selection does not publish or delete it.
+Existing attachment revalidation, team permissions and unsaved-content protection
+remain authoritative. The button refreshes after composing, tab focus and storage
+changes, and disappears when no drafts remain.
+
 ## Composer attachment gallery (FR-03 / FR-11)
 
 Attachments are reviewed one at a time with previous/next controls and an announced

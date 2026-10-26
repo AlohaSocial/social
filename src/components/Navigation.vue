@@ -314,6 +314,7 @@
 				:inReplyTo="composerReply"
 				:initialQuote="composerQuote"
 				:initialDraft="composerDraft"
+				:initialDraftContext="composerDraftContext"
 				:initialRedraft="composerRedraft"
 				:initialFiles="composerFiles"
 				:initialPaths="composerPaths"
@@ -529,6 +530,7 @@ export default {
 			composerReply: null,
 			composerQuote: null,
 			composerDraft: null,
+			composerDraftContext: '',
 			composerRedraft: null,
 			composerEdit: null,
 			composerFiles: [],
@@ -1061,6 +1063,7 @@ export default {
 			this.composerReply = intent.reply || null
 			this.composerQuote = intent.quote || null
 			this.composerDraft = intent.draft || null
+			this.composerDraftContext = typeof intent.context === 'string' ? intent.context : ''
 			this.composerRedraft = intent.redraft || null
 			this.composerEdit = intent.edit || null
 			this.composerFiles = intent.files || []

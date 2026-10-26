@@ -1151,6 +1151,17 @@ describe('Composer', () => {
 			expect(wrapper.vm.quoteOf.id).toBe('77')
 		})
 
+		it('edits a listed re-draft in its own storage slot without overwriting the new-post draft', async () => {
+			localStorage.setItem('social.composer.draft::alice', JSON.stringify({ text: 'Unrelated new post', savedAt: Date.now() }))
+			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Saved revision', savedAt: Date.now() }))
+			const { wrapper } = mountComposer({ initialDraftContext: 'redraft.101', listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Saved revision')
+			await setContent(wrapper, 'Continue this revision')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft.redraft.101::alice')).text).toBe('Continue this revision')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft::alice')).text).toBe('Unrelated new post')
+		})
+
 		it('restores an unfinished re-draft instead of replacing it with the deleted text', async () => {
 			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Already revised', savedAt: Date.now() }))
 			const { wrapper } = mountComposer({ initialRedraft: { id: '101', content: '<p>Old text</p>' }, listenForIntents: false, startExpanded: true })
