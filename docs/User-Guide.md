@@ -340,9 +340,11 @@ for and follow that account from Social: it is usually `@events@gancio.example`
 on Gancio 1.24 and newer, or `@relay@gancio.example` on older instances. The
 Gancio administrator can customize this name, so use the federation address
 shown on that Gancio site's follow link when it differs. The Gancio instance
-must have federation enabled. Once the follow is accepted, incoming public
-events appear in Social like other followed ActivityPub posts, with a card for
-the event title, time and venue.
+must have federation enabled. Once the follow is accepted, new public events
+that Gancio delivers appear in Social like other followed ActivityPub posts,
+with a card for the event title, time and venue. Following does not backfill
+the instance's existing event catalogue; Social currently has no Gancio API
+sync for older events.
 
 On a signed-in Social timeline, choose **Add to Nextcloud Calendar** on an
 event card to import it directly into your first writable Nextcloud calendar.
