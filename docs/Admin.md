@@ -1461,3 +1461,36 @@ of this costs on the hardware in front of you.
 # Ranked For You recommendations switch
 
 Administration → Social → For you includes an independent **Ranked For You recommendations** switch. It is off by default and is separate from the legacy hashtag For You setting below it. Enabling it makes the automatically ranked timeline available; readers cannot select topics or request topic-specific feeds. It does not enable any discovery, behavioral learning, analytics or experiments. Turn it off to immediately disable the ranked timeline and learning controls. Legacy preference storage remains only for migration compatibility and is not exposed by the API.
+
+## Empty application after installing development dependencies
+
+A running Nextcloud should use Social's production Composer autoloader. Development
+packages such as Psalm pull in Amp versions that may collide with the Mail app's
+Amp functions during Nextcloud startup. A typical fatal error is
+`Cannot redeclare function Amp\delay()`. This can affect even `status.php`.
+
+From the Social app directory, regenerate the runtime autoloader without
+development packages:
+
+```sh
+composer dump-autoload --no-dev --no-scripts
+```
+
+For a production installation, install the production dependencies directly with
+`composer install --no-dev --prefer-dist --no-interaction`. The dump command repairs
+the local autoloader when the packages are already installed; it does not update
+the lock file or remove packages. Run development checks in a development checkout
+or restore the development autoloader there with `composer dump-autoload --dev`.
+Do not leave that development autoloader active in a shared running Nextcloud.
+
+Afterward verify `/status.php`, `occ status`, and the Social page in a browser.
+A successful Webpack build alone does not exercise Nextcloud bootstrap.
+
+### Local verification on 26 October 2026
+
+The installed checkout was verified on Nextcloud 35.0.0 RC3 with Social and
+Calendar enabled, maintenance off and no pending database upgrade. After the
+production autoloader repair, `status.php` returned 200 and the public Social
+timeline rendered posts in Chromium without JavaScript errors or failed network
+responses. The user also confirmed their frontend was working again. This does
+not verify public Bluesky indexing or all remote servers.

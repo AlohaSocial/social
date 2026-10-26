@@ -12,6 +12,9 @@
 	<p class="post-details">
 		<time class="post-details__item" :datetime="status.created_at">{{ published }}</time>
 		<span class="post-details__item">{{ visibilityText }}</span>
+		<span v-if="viewCount !== null" class="post-details__item post-details__views">
+			{{ n('social', '%n account here opened this post', '%n accounts here opened this post', viewCount) }}
+		</span>
 		<span v-if="languageName" class="post-details__item">{{ languageName }}</span>
 		<!-- "Edited" told a reader the words are not the words somebody replied
 		     to, and nothing about what changed. The versions have been served
@@ -42,7 +45,7 @@
 </template>
 
 <script>
-import { getLanguage, translate as t } from '@nextcloud/l10n'
+import { getLanguage, translate as t, translatePlural as n } from '@nextcloud/l10n'
 import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
 import visibilities from './Visibility/VisibilitiesInfos.js'
 import { fullDateTime } from '../utils/relativeTime.js'
@@ -69,6 +72,12 @@ export default {
 	},
 
 	computed: {
+		/** @return {number|null} author-only local reach, separate from the action row */
+		viewCount() {
+			const count = this.status.view_count
+			return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null
+		},
+
 		/** @return {string} when it was posted, in full rather than "14 hours ago" */
 		published() {
 			return fullDateTime(this.status.created_at)
@@ -128,6 +137,7 @@ export default {
 
 	methods: {
 		t,
+		n,
 	},
 }
 </script>

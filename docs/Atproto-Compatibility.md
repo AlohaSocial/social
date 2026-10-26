@@ -2703,8 +2703,10 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   with a link). `putRecord` of the profile sets the display name and bio; of an existing
   post it replaces the text, language, media and self-labels under the same
   record key, so its AT URI stays stable. Supported quoted-post and non-post
-  record embeds can be replaced or removed; changing a reply target or an
-  embed Social cannot represent without loss is refused. OAuth `create` or
+  record embeds and reply targets can be replaced or removed. Reply edits
+  check parent access, blocking, reply gates, audience and cycles, and update
+  both parent counts in the existing repository transaction. An embed Social
+  cannot represent without loss is refused. OAuth `create` or
   `update` permission is checked against whether the target record exists
   while the repository write lock is held.
   `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may

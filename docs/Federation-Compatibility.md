@@ -103,3 +103,10 @@ Protocol references:
 The profile-link schema is vendored from the installed official ATProto SDK;
 see also the [upstream link record](https://github.com/bluesky-social/atproto/blob/a6f5a3c7f5e294e96971810d61f23b8f5998a5e2/lexicons/app/bsky/actor/link.json)
 and [FEP-3b86](https://fediverse.codeberg.page/fep/fep/3b86/).
+
+## Post detail presentation
+
+Author-only local view counts are text metadata on the post detail page, not an
+eye icon in the floating interaction menu. Background thread polls that still
+have no ancestors do not recenter the page. The initial ancestor reveal avoids
+scrolling while an input is focused and respects reduced-motion preferences.

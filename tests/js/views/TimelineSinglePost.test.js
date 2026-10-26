@@ -459,6 +459,31 @@ describe('TimelineSinglePost', () => {
 		expect(wrapper.findComponent(TimelineEntryStub).exists()).toBe(true)
 	})
 
+	it('does not move the reply editor when repeated polls still return no ancestors', async () => {
+		const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+		mountView()
+		for (let attempt = 0; attempt < 3; attempt++) {
+			store.addToTimeline({ ancestors: [], descendants: [] })
+			await nextTick()
+			await nextTick()
+		}
+		expect(scrollIntoView).not.toHaveBeenCalled()
+	})
+
+	it('does not interrupt typing when delayed ancestors arrive', async () => {
+		const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+		const wrapper = mountView()
+		const input = document.createElement('textarea')
+		wrapper.element.append(input)
+		input.focus()
+		store.addToTimeline({ ancestors: [parent], descendants: [] })
+		await nextTick()
+		await nextTick()
+
+		expect(document.activeElement).toBe(input)
+		expect(scrollIntoView).not.toHaveBeenCalled()
+	})
+
 	it('scrolls the post into view when its first ancestors are loaded', async () => {
 		const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
 		const wrapper = mountView()

@@ -8,10 +8,7 @@
       "key": "tid",
       "record": {
         "type": "object",
-        "required": [
-          "url",
-          "createdAt"
-        ],
+        "required": ["url", "createdAt"],
         "properties": {
           "url": {
             "type": "string",
@@ -27,24 +24,10 @@
           "icon": {
             "type": "blob",
             "description": "The destination site's icon, uploaded when the link is saved.",
-            "accept": [
-              "image/png",
-              "image/jpeg",
-              "image/webp"
-            ],
+            "accept": ["image/png", "image/jpeg", "image/webp"],
             "maxSize": 100000
           },
-          "createdAt": {
-            "type": "string",
-            "format": "datetime"
-          },
-          "labels": {
-            "type": "union",
-            "description": "Self-label values for this link.",
-            "refs": [
-              "com.atproto.label.defs#selfLabels"
-            ]
-          }
+          "createdAt": { "type": "string", "format": "datetime" }
         }
       }
     }

@@ -312,16 +312,6 @@
 							</NcButton>
 							<RollingCount v-if="!hidesCounts" :count="item.replies_count || 0" />
 						</div>
-						<!-- only ever on the author's own copy: the server sends
-						     `view_count` as null on everybody else's, because how
-						     many people read a post is the author's business -->
-						<div
-							v-if="item.view_count !== null && item.view_count !== undefined"
-							class="post-action post-action--views"
-							:title="n('social', '%n account here opened this post', '%n accounts here opened this post', item.view_count)">
-							<IconEyeOutline :size="20" />
-							<RollingCount :count="item.view_count" />
-						</div>
 					</div>
 				</div>
 			</div>
@@ -422,7 +412,6 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import EyeOff from 'vue-material-design-icons/EyeOff.vue'
-import IconEyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { showError, showSuccess, showUndo } from '../services/toast.js'
@@ -482,7 +471,6 @@ export default {
 		QuoteControlDialog,
 		ReplyControlDialog,
 		TagPeopleDialog,
-		IconEyeOutline,
 		CollectionPickerDialog,
 		MuteDialog,
 		ReactionBar,

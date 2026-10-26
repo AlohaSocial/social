@@ -186,6 +186,14 @@ const actionButton = (wrapper, label) => wrapper.find(`.post-actions button[aria
 const menuItem = (wrapper, label) => wrapper.findAll('.post-menu__item').find((button) => button.text() === label)
 
 describe('TimelinePost', () => {
+	it('keeps view counts out of the floating action menu and timestamp area', () => {
+		const { wrapper } = mountPost({ item: makeItem({ view_count: 12 }) })
+		expect(wrapper.find('.post-action--views').exists()).toBe(false)
+		expect(wrapper.find('.eye-outline-icon').exists()).toBe(false)
+		expect(wrapper.find('.post-timestamp').exists()).toBe(true)
+		expect(wrapper.findAll('.post-action-group').length).toBe(3)
+	})
+
 	it('lets the author\'s name set its own direction', () => {
 		const { wrapper } = mountPost({ item: makeItem({ account: { ...alice, display_name: 'أليس' } }) })
 

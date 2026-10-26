@@ -26,6 +26,8 @@ class VendoredFilesTest extends TestCase {
 	public const INTEROP_TESTS_COMMIT = '056e5741bb330757205d6b16db5266fffcae937b';
 	/** github.com/bluesky-social/atproto, main as of 2026-10-08 17:25 UTC */
 	public const ATPROTO_COMMIT = 'b023046f9266b8755ad9b44928032426bb05599e';
+	/** The profile and link lexicons, refreshed together for ordered profile links. */
+	public const PROFILE_LINKS_COMMIT = 'a6f5a3c7f5e294e96971810d61f23b8f5998a5e2';
 
 	/**
 	 * tests/Atproto/fixtures, each file as upstream has it at
@@ -72,10 +74,11 @@ class VendoredFilesTest extends TestCase {
 		'w3c_didkey_P256.json' => 'f52ce904d192075fcbd162c95e43e8bb593e1b0d7024b390066e5c5e010a54a7',
 	];
 
-	/** lib/Atproto/lexicons, each file as upstream has it at ATPROTO_COMMIT */
+	/** lib/Atproto/lexicons at ATPROTO_COMMIT, except actor profile/link at PROFILE_LINKS_COMMIT. */
 	private const LEXICONS = [
 		'app.bsky.actor.defs.json' => '46ad2031e7358d9ce28f7c9782ccb02f50182e3268129762055037585448fc6e',
-		'app.bsky.actor.profile.json' => 'b6f4de76b2e516db6532de4c97963b70e9d9eae205808328d0a45f4bd0941234',
+		'app.bsky.actor.link.json' => 'e10cff0d8b8f7ca34266a9a0c793d6c90e96da592c0a1b0165a3281896b50f48',
+		'app.bsky.actor.profile.json' => '34ef6b3a0f5fbd705214c6581d4601b6e7bbb25cbc1f2d2532dad1cb69f85b7e',
 		'app.bsky.embed.defs.json' => 'c9db5f67269836b6f1c147eb507685548f0cdbe2ac6bbd31f1d0c9eb796fd42e',
 		'app.bsky.embed.external.json' => '0193c2f4704b4a1ad94e3c747b386530f4ec277c0d6336882e4ba5d8980c9ba1',
 		'app.bsky.embed.gallery.json' => '6348fe6355898f76b6e87fdee7e19e7aa158dec657a1612dff04247e18989083',
@@ -189,7 +192,7 @@ class VendoredFilesTest extends TestCase {
 			$this->reach($document['defs']['main']['record'], $nsid, $documents, $seen, $missing);
 		}
 
-		$this->assertSame(14, $records, 'post, like, repost, follow, block, profile, list, listitem, threadgate, postgate, starterpack, generator, verification, chat declaration');
+		$this->assertSame(15, $records, 'post, like, repost, follow, block, profile, profile link, list, listitem, threadgate, postgate, starterpack, generator, verification, chat declaration');
 		$this->assertSame([], array_values(array_unique($missing)));
 	}
 

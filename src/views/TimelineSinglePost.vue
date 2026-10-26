@@ -296,10 +296,11 @@ export default {
 			},
 		},
 
-		parentsTimeline(_, previousValue) {
+		parentsTimeline(parents, previousValue) {
 			// beforeMount() resets the timeline, so this fires during the first render's
 			// pre-flush, before the template refs exist.
-			if (previousValue.length !== 0 || !this.$refs.socialWrapper) {
+			if (parents.length === 0 || previousValue.length !== 0 || !this.$refs.socialWrapper
+				|| document.activeElement?.closest('input, textarea, [contenteditable="true"]')) {
 				return
 			}
 
@@ -307,7 +308,10 @@ export default {
 				return
 			}
 
-			this.$nextTick(() => /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.mainPost)?.$el?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+			this.$nextTick(() => /** @type {{$el?: HTMLElement}|undefined} */ (this.$refs.mainPost)?.$el?.scrollIntoView({
+				behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+				block: 'center',
+			}))
 		},
 	},
 

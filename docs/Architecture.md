@@ -4393,3 +4393,23 @@ This file, `docs/API.md` and `docs/OCC-Commands.md` describe the current impleme
 - two claims of *absence*, which is the direction the rest of it is blind in: a sentence saying there is no `/some/route` must be true, and a symbol the docs call "commented out" may not be called by live code. The false claim that key-pair rotation was unavailable, published six lines after the flag that performs it, is what these were written for.
 
 Everything else is on the author of the change. In particular nothing can check a paragraph of prose against the behaviour it describes, so a feature described in words the "not implemented" guard does not recognise, or a mechanism described plausibly and wrongly, still gets through.
+
+### Remote outbox reference imports and reply edits
+
+`RemoteOutboxPageReader::resolveEntry()` resolves URI-only collection entries and
+referenced `Create` / `Update` objects on the actor origin. The per-page budget is
+six reference requests with a three-second request timeout. The caller advances
+its cursor only past consumed entries; budget exhaustion leaves the pending entry
+for the continuation. Failed requests are isolated, with the first page eligible
+for a later fresh profile refresh. A remote object must return the exact requested
+ID. Embedded foreign boost content is replaced with its object ID before parsing:
+`AnnounceInterface` verifies the boosting activity and its normal cache queue
+retrieves the original post. Existing visibility restrictions and duplicate-boost
+handling remain in that handler.
+
+For native ATProto post replacements, `WriteService` maps changed reply references
+into `PostService::editPost()`. The service checks readability, blocking and reply
+gates, rejects audience widening and cycles, and resets the old conversation and
+approval state. `StreamRequest::update()` writes local parent columns alongside
+the source snapshot; both parent counts are refreshed before the repository
+batch commits. This uses the same conditional-write lock as other post changes.
