@@ -119,6 +119,8 @@ class MstTest extends TestCase {
 		$this->assertFalse(Mst::isValidKey('notansid/3jqfcqzm3fo2j'));
 		$this->assertFalse(Mst::isValidKey('app.bsky.feed.post/..'));
 		$this->assertFalse(Mst::isValidKey('app.bsky.feed.post/a/b'));
+		$this->assertTrue(Mst::isValidKey('app.bsky.feed.post/' . str_repeat('a', 512)));
+		$this->assertFalse(Mst::isValidKey('app.bsky.feed.post/' . str_repeat('a', 513)));
 	}
 
 	/**

@@ -61,15 +61,21 @@ class DevDependenciesTest extends TestCase {
 	public function testTheInteropJobEnablesTheAppWithoutItsDevDependencies(): void {
 		$workflow = (string)file_get_contents($this->root() . '/.github/workflows/interop.yml');
 
-		$noDev = strpos($workflow, 'composer i --no-dev');
+		$noDev = strpos($workflow, 'composer-install-retry.sh install --no-dev');
 		$enable = strpos($workflow, 'app:enable --force social');
 		// the suites run one at a time, each through the interop config
 		$tests = strpos($workflow, '-c tests/Interop/phpunit.xml');
 
-		$this->assertNotFalse($noDev, 'the interop job installs the dev dependencies before the server starts');
+		$this->assertNotFalse($noDev, 'the interop job installs production dependencies before the server starts');
 		$this->assertNotFalse($enable);
 		$this->assertNotFalse($tests);
 		$this->assertLessThan($enable, $noDev);
 		$this->assertLessThan($tests, $enable);
+	}
+
+	public function testComposerRetryChangesRunTheInteropJobs(): void {
+		$workflow = (string)file_get_contents($this->root() . '/.github/workflows/interop-pr.yml');
+
+		$this->assertStringContainsString("- '.github/scripts/composer-install-retry.sh'", $workflow);
 	}
 }

@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
+use OCA\Social\Atproto\Protocol\Mst;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
 use OCA\Social\Atproto\Publisher\BlueskyBlocks;
@@ -138,12 +139,19 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		$postRkey = null;
+		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
+			if (!is_string($body['rkey']) || !Tid::isValid($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
+				throw XrpcException::invalidRequest('A post record key must be a valid TID');
+			}
+			$postRkey = $body['rkey'];
+		}
 		if ($collection === ChatDeclaration::COLLECTION) {
 			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), $record));
 		}
 		$actor = $this->actor($session);
 		$written = match ($collection) {
-			RecordMapper::POST => $this->post($session, $actor, $record),
+			RecordMapper::POST => $this->post($session, $actor, $record, $postRkey),
 			RecordMapper::LIKE => $this->like($actor, $record),
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
@@ -163,6 +171,75 @@ class WriteService {
 	 * @throws XrpcException
 	 */
 	public function put(ClientSession $session, array $body): array {
+		$this->assertOwnRepo($session, $body);
+		$collection = $body['collection'] ?? null;
+		$rkey = $body['rkey'] ?? null;
+		if (!is_string($collection) || !is_string($rkey) || !Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('putRecord needs a valid collection and record key');
+		}
+		if ($collection === RecordMapper::POST && !Tid::isValid($rkey)) {
+			throw XrpcException::invalidRequest('A post record key must be a valid TID');
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$swapRecords = [];
+		if (array_key_exists('swapRecord', $body)) {
+			$swapRecord = $body['swapRecord'];
+			if ($swapRecord !== null && (!is_string($swapRecord) || !Cid::isValid($swapRecord))) {
+				throw XrpcException::invalidRequest('swapRecord must be null or a valid record CID');
+			}
+			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
+		}
+		$hasConditionalWrite = $swapCommit !== null || array_key_exists('swapRecord', $body);
+		$ownsBatch = $hasConditionalWrite && !$this->repositories->batchActive();
+		if ($this->repositories->batchActive() && $hasConditionalWrite) {
+			throw XrpcException::invalidRequest('Conditional putRecord checks cannot be nested inside another repository batch');
+		}
+		if ($ownsBatch) {
+			try {
+				$this->repositories->beginBatch(
+					$session->identity->did,
+					$this->identities->signingKey($session->identity),
+					$swapCommit,
+					$swapRecords,
+				);
+			} catch (InvalidSwapException $e) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+		}
+		try {
+			$result = $this->putInBatch($session, $body);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+			}
+
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				// A reviewed post is intentionally kept in the moderation queue
+				// before XRPC returns an error. Commit that queue entry even though
+				// no repository record is written.
+				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+					$this->repositories->commitBatch();
+				} else {
+					$this->repositories->rollbackBatch();
+				}
+			}
+			if ($e instanceof XrpcException) {
+				throw $e;
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** The operation after putRecord's CAS guards have been checked under the repository lock. */
+	private function putInBatch(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		if ($collection === RecordMapper::POST) {
@@ -226,7 +303,9 @@ class WriteService {
 		}
 		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::POST, $rkey);
 		if ($stored === null) {
-			throw new XrpcException(404, 'RecordNotFound', 'There is no post at that record key');
+			$created = $this->post($session, $this->actor($session), $record, $rkey);
+
+			return $this->created($session, $created);
 		}
 		$currentRecord = $stored->value();
 		try {
@@ -803,7 +882,7 @@ class WriteService {
 	/**
 	 * @throws XrpcException
 	 */
-	private function post(ClientSession $session, Person $actor, array $record): StoredRecord {
+	private function post(ClientSession $session, Person $actor, array $record, ?string $rkey = null): StoredRecord {
 		$text = self::fullText((string)($record['text'] ?? ''), $record['facets'] ?? []);
 		$post = new Post($actor);
 		$card = null;
@@ -888,7 +967,11 @@ class WriteService {
 		if (!$note instanceof Stream) {
 			throw new XrpcException(500, 'InternalServerError', 'The post was not made');
 		}
-		$this->publisher->publishPost($note);
+		if ($rkey === null) {
+			$this->publisher->publishPost($note);
+		} else {
+			$this->publisher->publishPost($note, $rkey);
+		}
 
 		return $this->recordOf($note->getId(), RecordMapper::POST);
 	}

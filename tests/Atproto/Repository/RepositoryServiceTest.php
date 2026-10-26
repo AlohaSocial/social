@@ -170,6 +170,35 @@ class RepositoryServiceTest extends TestCase {
 		$this->assertSame(2, $this->store->getHead(self::DID)?->recordCount);
 	}
 
+	public function testSwapRecordIsCheckedWhileTheRepositoryHeadIsLocked(): void {
+		$first = $this->service->write(self::DID, $this->key, [RepoWrite::create('app.bsky.feed.post', self::post('one'), '', '3kznmn7xqxl22')]);
+		$record = $this->service->getRecord(self::DID, 'app.bsky.feed.post', '3kznmn7xqxl22');
+		$this->assertNotNull($first);
+		$this->assertNotNull($record);
+
+		$this->service->beginBatch(self::DID, $this->key, null, ['app.bsky.feed.post/3kznmn7xqxl22' => $record->cid->toString()]);
+		$this->service->write(self::DID, $this->key, [RepoWrite::update('app.bsky.feed.post', '3kznmn7xqxl22', self::post('two'))]);
+		$this->service->commitBatch();
+		$updated = $this->service->getRecord(self::DID, 'app.bsky.feed.post', '3kznmn7xqxl22');
+		$this->assertNotNull($updated);
+
+		try {
+			$this->service->beginBatch(self::DID, $this->key, null, ['app.bsky.feed.post/3kznmn7xqxl22' => $record->cid->toString()]);
+			$this->fail('a stale swapRecord must be rejected before staging');
+		} catch (InvalidSwapException) {
+			$this->assertSame($updated->cid->toString(), $this->service->getRecord(self::DID, 'app.bsky.feed.post', '3kznmn7xqxl22')?->cid->toString());
+		}
+	}
+
+	public function testNullSwapRecordRequiresTheRecordToBeAbsent(): void {
+		$this->service->beginBatch(self::DID, $this->key, null, ['app.bsky.feed.post/3kznmn7xqxl22' => null]);
+		$this->service->rollbackBatch();
+		$this->service->write(self::DID, $this->key, [RepoWrite::create('app.bsky.feed.post', self::post('one'), '', '3kznmn7xqxl22')]);
+
+		$this->expectException(InvalidSwapException::class);
+		$this->service->beginBatch(self::DID, $this->key, null, ['app.bsky.feed.post/3kznmn7xqxl22' => null]);
+	}
+
 	public function testADeleteDropsTheRecordAndTheNodesItWasIn(): void {
 		$this->service->write(self::DID, $this->key, [
 			RepoWrite::create('app.bsky.feed.post', self::post('one'), '', '3kznmn7xqxl22'),

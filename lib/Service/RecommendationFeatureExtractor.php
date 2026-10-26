@@ -17,7 +17,7 @@ use OCA\Social\Tools\SearchTerms;
 
 /** Deterministic, local-only features used to retrieve recommendation candidates. */
 final class RecommendationFeatureExtractor {
-	public const VERSION = 8;
+	public const VERSION = 9;
 	private const MAX_CONTENT_CHARS = 20000;
 	// A 20,000-character body cannot contain more than 10,000 two-character
 	// words separated by at least one character; cover it fully for both
@@ -66,10 +66,11 @@ final class RecommendationFeatureExtractor {
 		$hashtagTerms = array_map(self::normaliseHashtag(...), $post->getHashtags());
 		// If the body was clipped, a sensitive marker might be in the unseen
 		// tail. Do not create any story fingerprints from a partial view.
+		$storySegments = $includeStoryTerms ? self::storySegments($post, $bodySegments) : [];
 		$hasSensitiveEvidence = $includeStoryTerms && ($contentExceedsBound
-			|| self::hasSensitiveEvidence($bodySegments, $hashtagTerms, $this->compiledSensitiveAliases));
+			|| self::hasSensitiveEvidence($storySegments, $hashtagTerms, $this->compiledSensitiveAliases));
 		$storyTerms = $includeStoryTerms && !$hasSensitiveEvidence
-			? self::storyTermsFromSegments($bodySegments)
+			? self::storyTermsFromSegments($storySegments)
 			: [];
 		$matches = [];
 
@@ -132,13 +133,34 @@ final class RecommendationFeatureExtractor {
 			return [];
 		}
 
-		$segments = self::contentSegments($content);
+		$segments = self::storySegments($post, self::contentSegments($content));
 		$hashtags = array_map(self::normaliseHashtag(...), $post->getHashtags());
 		if (self::hasSensitiveEvidence($segments, $hashtags, $this->compiledSensitiveAliases)) {
 			return [];
 		}
 
 		return self::storyTermsFromSegments($segments);
+	}
+
+	/**
+	 * Link-card metadata often carries the actual headline while the post body
+	 * says only "read this" and a URL. Cards are attached in one batch by the
+	 * feed services before extraction; keep their title first so the headline
+	 * fingerprint represents the linked story, then include body and summary.
+	 *
+	 * @param list<list<string>> $bodySegments
+	 * @return list<list<string>>
+	 */
+	private static function storySegments(Stream $post, array $bodySegments): array {
+		$card = $post->getCard();
+		if ($card === null) {
+			return $bodySegments;
+		}
+
+		$title = self::contentSegments($card->getTitle());
+		$description = self::contentSegments($card->getDescription());
+
+		return [...$title, ...$bodySegments, ...$description];
 	}
 
 	/** @param list<string> $topicIds @return list<string> the most specific classified topics */

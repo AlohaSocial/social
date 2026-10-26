@@ -94,8 +94,12 @@ class RepositoryService {
 		return $result;
 	}
 
-	/** Begin a repository write scope for several Social actions to share one commit. */
-	public function beginBatch(string $did, PrivateKey $signingKey, ?string $swapCommit = null): void {
+	/**
+	 * Begin a repository write scope for several Social actions to share one commit.
+	 * @param array<string, string|null> $swapRecords record paths mapped to
+	 *                                                their expected CID, or null when the path must not exist
+	 */
+	public function beginBatch(string $did, PrivateKey $signingKey, ?string $swapCommit = null, array $swapRecords = []): void {
 		if ($this->batchDid !== null) {
 			throw new AtprotoException('A repository write batch is already active');
 		}
@@ -104,6 +108,17 @@ class RepositoryService {
 			$head = $this->repoRequest->lockHead($did);
 			if ($swapCommit !== null && $head?->commitCid !== $swapCommit) {
 				throw new InvalidSwapException('The repository commit changed before the batch could be applied');
+			}
+			foreach ($swapRecords as $path => $expectedCid) {
+				[$collection, $rkey] = array_pad(explode('/', $path, 2), 2, '');
+				if ($collection === '' || $rkey === '') {
+					throw new AtprotoException('Invalid record path in swap check');
+				}
+				$record = $this->repoRequest->getRecord($did, $collection, $rkey);
+				$actualCid = $record?->cid->toString();
+				if ($actualCid !== $expectedCid) {
+					throw new InvalidSwapException('The record changed before the write could be applied');
+				}
 			}
 		} catch (Throwable $e) {
 			$this->connection->rollBack();
@@ -114,6 +129,10 @@ class RepositoryService {
 		$this->batchSwapCommit = $swapCommit;
 		$this->batchWrites = [];
 		$this->batchRecords = [];
+	}
+
+	public function batchActive(): bool {
+		return $this->batchDid !== null;
 	}
 
 	/** Commit every write staged in the active scope as one repository commit. */

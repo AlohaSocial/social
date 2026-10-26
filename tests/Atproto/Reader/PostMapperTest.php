@@ -18,6 +18,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\Details;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 
@@ -63,6 +64,27 @@ class PostMapperTest extends TestCase {
 		$this->assertSame('Friends', $note['_atproto']['card']['title']);
 	}
 
+	public function testARecordWithExternalMediaKeepsItsNonPostStrongRefForRepublishing(): void {
+		$uri = 'at://' . self::OTHER . '/app.bsky.feed.generator/3kgenerator';
+		$cid = Cid::forRaw('generator record')->toString();
+		$view = $this->postView([
+			'embed' => [
+				'$type' => 'app.bsky.embed.recordWithMedia#view',
+				'record' => ['record' => ['$type' => 'app.bsky.embed.record#viewRecord', 'uri' => $uri, 'cid' => $cid]],
+				'media' => ['$type' => 'app.bsky.embed.external#view', 'external' => [
+					'uri' => 'https://example.com/story',
+					'title' => 'A story',
+					'description' => 'Details',
+				]],
+			],
+		]);
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['uri' => $uri, 'cid' => $cid], $note['_atproto'][Details::ATPROTO_RECORD_EMBED]);
+		$this->assertSame('https://example.com/story', $note['_atproto']['card']['url']);
+	}
+
 	public function testAPostViewBecomesACreateOfAPublicNote(): void {
 		$create = (new PostMapper($this->resolver()))->create($this->postView());
 		$this->assertNotNull($create);
@@ -86,6 +108,23 @@ class PostMapperTest extends TestCase {
 		$this->assertSame('https://bsky.app/profile/' . self::OTHER . '/post/3kparent', $note['inReplyTo']);
 		$this->assertSame(['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kznmn7xqxl22', 'cid' => 'bafyreipost', 'likes' => 3, 'reposts' => 1, 'replies' => 2, 'quotes' => 0, 'labels' => [], 'label_sources' => [], 'indexed_at' => '2026-10-08T10:00:01.000Z', 'reply_root' => ['uri' => 'at://' . self::OTHER . '/app.bsky.feed.post/3kparent', 'cid' => 'bafyr']], $note['_atproto']);
 		$this->assertArrayNotHasKey('quote', $note);
+	}
+
+	public function testPostRecordSelfLabelsAreRetainedAndAffectVisibilityAndWarnings(): void {
+		$view = $this->postView();
+		$view['record']['labels'] = [
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => '!no-unauthenticated'], ['val' => 'porn'], ['val' => 'custom-label']],
+		];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['https://bsky.app/profile/' . self::DID . '/followers'], $note['to'], 'the privacy self-label keeps the post out of public timelines');
+		$this->assertSame([], $note['cc']);
+		$this->assertTrue($note['sensitive']);
+		$this->assertSame('Porn, Custom label', $note['summary']);
+		$this->assertSame(['!no-unauthenticated', 'porn', 'custom-label'], $note['_atproto'][Details::ATPROTO_SELF_LABELS]);
+		$this->assertSame([], $note['_atproto']['label_sources'], 'self-labels are not attributed to a moderation labeler');
 	}
 
 	/**
