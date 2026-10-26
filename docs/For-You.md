@@ -639,6 +639,10 @@ The internal ranker uses a deterministic, versioned linear score and assembles p
 | GET | `/api/v1/recommendations/export` | Export activity-learning status and explicit feedback; no topic preferences |
 | GET/PUT | `/admin/recommendations` | Administrator-only instance kill switch |
 
+Upgrading to Social 0.26.279 requires the normal Nextcloud app upgrade (`occ upgrade`) before serving requests. Migration `1000Date20261025000001` creates `social_rec_epoch`; deploying source files alone does not create the table. If both recommendation preferences and the timeline fail with a missing `social_rec_epoch` table, complete the app upgrade rather than resetting learned profiles. The migration is additive and preserves existing recommendation data.
+
+Ranked pagination also requires a persistent Nextcloud memory cache. Configure `memcache.distributed` with a supported shared backend such as Redis (including the deployment-specific Redis connection settings). Without a cache, the initial page may load but its snapshot is immediately lost, causing continuation cursors to expire. Check Administration → Overview → Aloha Social: memory cache when diagnosing repeated feed refreshes.
+
 Learning event generations combine an account's reset/consent generation with the instance epoch. Changing the administrator learning switch advances the single-row epoch, so queued events and open cursors become stale without updating every account profile.
 
 For local checks, run `composer test:unit -- --filter 'RecommendationPreferenceServiceTest|RecommendationPreferencesMigrationTest|UserDeletedListenerTest'`, then `npm test -- --run` and `npm run build`. Disable the instance switch to roll back the ranked feed; the additive schema is retained and the existing feed remains available.
