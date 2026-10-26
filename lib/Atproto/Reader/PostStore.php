@@ -92,6 +92,16 @@ class PostStore {
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
 	public function storePost(array $post, bool $fetchParent = true): bool {
+		$id = BlueskyIds::postIdOfUri((string)($post['uri'] ?? ''));
+		if (PostMapper::isHidden($post)) {
+			$known = $id !== '' ? $this->knownPost($id) : null;
+			if ($known !== null && !$known->isLocal()) {
+				$this->delete($id);
+			}
+
+			return false;
+		}
+
 		$create = $this->mapper->create($post);
 		if ($create === null) {
 			return false;
@@ -160,9 +170,7 @@ class PostStore {
 			return;
 		}
 		$previous = $known->getDetails(Details::ATPROTO);
-		if (($previous['cid'] ?? '') === $newCid) {
-			return;
-		}
+		$recordChanged = ($previous['cid'] ?? '') !== $newCid;
 
 		$embed = $post['record']['embed'] ?? null;
 		if (PostMapper::hasGenericBlobs($embed) && !PostMapper::isLoggedInOnly($post)) {
@@ -181,10 +189,20 @@ class PostStore {
 
 		$atproto = is_array($create['object']['_atproto'] ?? null) ? $create['object']['_atproto'] : [];
 		$indexedAt = is_string($atproto['indexed_at'] ?? null) ? $atproto['indexed_at'] : '';
+		$labelsChanged = self::moderationLabelsChanged($previous, $atproto);
+		if (!$recordChanged && !$labelsChanged) {
+			return;
+		}
 		$create['type'] = 'Update';
-		$create['id'] = $known->getId() . '/activity/update/' . $newCid;
+		$revision = $newCid;
+		if (!$recordChanged) {
+			$revision .= '-labels-' . self::moderationLabelSignature($atproto);
+		}
+		$create['id'] = $known->getId() . '/activity/update/' . $revision;
 		$create['object']['nid'] = $known->getNid();
-		$create['object']['updated'] = $this->editTime($indexedAt);
+		$create['object']['updated'] = $labelsChanged && !$recordChanged
+			? gmdate('Y-m-d\\TH:i:s\\Z', $this->time->getTime())
+			: $this->editTime($indexedAt);
 
 		if (!$this->process($create)) {
 			return;
@@ -192,6 +210,27 @@ class PostStore {
 		if (!is_array($atproto['card'] ?? null)) {
 			$this->cards->deleteByStreamId($known->getId());
 		}
+	}
+
+	/** @param array<string, mixed> $previous @param array<string, mixed> $current */
+	private static function moderationLabelsChanged(array $previous, array $current): bool {
+		return self::moderationLabelSignature($previous) !== self::moderationLabelSignature($current);
+	}
+
+	/** @param array<string, mixed> $details */
+	private static function moderationLabelSignature(array $details): string {
+		$labels = is_array($details['labels'] ?? null) ? $details['labels'] : [];
+		$labels = array_values(array_unique(array_filter($labels, static fn (mixed $label): bool => is_string($label) && $label !== '')));
+		sort($labels, SORT_STRING);
+		$sources = [];
+		foreach (is_array($details['label_sources'] ?? null) ? $details['label_sources'] : [] as $source) {
+			if (is_array($source) && is_string($source['src'] ?? null) && is_string($source['val'] ?? null)) {
+				$sources[] = [$source['src'], $source['val']];
+			}
+		}
+		usort($sources, static fn (array $a, array $b): int => [$a[0], $a[1]] <=> [$b[0], $b[1]]);
+
+		return hash('sha256', serialize([$labels, $sources]));
 	}
 
 	/** Use the AppView indexing time as the revision time, with a valid fallback. */
@@ -433,8 +472,9 @@ class PostStore {
 			$exists = $parsed === null ? null : $this->postExistsAtPds($parsed);
 			if ($exists === null) {
 				$this->logger->notice('Bluesky post absence could not be confirmed at its PDS', ['post' => $id]);
-
-				return null;
+				// Keep this one for the next sweep cycle, but do not let an
+				// unavailable PDS stall every later page of the deletion cursor.
+				continue;
 			}
 			if (!$exists && $this->delete($id)) {
 				$deleted++;
