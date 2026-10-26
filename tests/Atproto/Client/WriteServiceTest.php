@@ -331,7 +331,7 @@ class WriteServiceTest extends TestCase {
 	}
 
 	public function testApplyWritesStoresKeptRecordsInOneCommit(): void {
-		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => count($writes) === 2))->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => count($writes) === 11))->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
 			foreach ($writes as $write) {
 				$bytes = DagCbor::encode($write->record);
 				$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
@@ -341,16 +341,21 @@ class WriteServiceTest extends TestCase {
 		});
 		$list = static fn (string $name): array => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => $name, 'createdAt' => '2026-10-09T10:00:00.000Z'];
 		$firstRkey = Tid::next();
-		$secondRkey = Tid::next();
+		$writes = [];
+		for ($i = 0; $i < 11; $i++) {
+			$writes[] = [
+				'$type' => 'com.atproto.repo.applyWrites#create',
+				'collection' => 'app.bsky.graph.list',
+				'rkey' => $i === 0 ? $firstRkey : Tid::next(),
+				'value' => $list('List ' . $i),
+			];
+		}
 
-		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
-			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'app.bsky.graph.list', 'rkey' => $firstRkey, 'value' => $list('Friends')],
-			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => 'app.bsky.graph.list', 'rkey' => $secondRkey, 'value' => $list('Family')],
-		]]);
+		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => $writes]);
 
-		$this->assertCount(2, $answer['results']);
+		$this->assertCount(11, $answer['results'], 'valid batches larger than the former arbitrary limit are accepted');
 		$this->assertSame('at://' . self::DID . '/app.bsky.graph.list/' . $firstRkey, $answer['results'][0]['uri']);
-		$this->assertSame('valid', $answer['results'][1]['validationStatus']);
+		$this->assertSame('valid', $answer['results'][10]['validationStatus']);
 		$this->assertSame(['cid' => Cid::forRaw('batch commit')->toString(), 'rev' => '3kbatch'], $answer['commit']);
 	}
 

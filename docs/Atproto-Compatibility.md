@@ -2704,9 +2704,10 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   embed Social cannot represent without loss is refused.
   `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
   send direct messages here, which writes the record (§10.1).
-  `deleteRecord` undoes the action. `applyWrites` keeps a batch of
-  repository-native records (lists and their members, starter packs, feed
-  generators, thread gates and post gates) in one repository commit, and
+  `deleteRecord` undoes the action. `applyWrites` keeps a batch of up to 200
+  operations—the repository commit limit—of repository-native records (lists
+  and their members, starter packs, feed generators, thread gates and post
+  gates) in one repository commit, and
   rejects an invalid batch before writing any of it. For these batches,
   `swapCommit` is compared with the locked repository head inside the write
   transaction; a stale CID returns `InvalidSwap` without changing the repo.

@@ -714,8 +714,8 @@ class WriteService {
 	public function apply(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$writes = $body['writes'] ?? null;
-		if (!is_array($writes) || !array_is_list($writes) || count($writes) > 10) {
-			throw XrpcException::invalidRequest('writes must be a list of at most 10');
+		if (!is_array($writes) || !array_is_list($writes) || count($writes) > RepositoryService::MAX_WRITES) {
+			throw XrpcException::invalidRequest('writes must be a list of at most ' . RepositoryService::MAX_WRITES);
 		}
 		$swapCommit = $body['swapCommit'] ?? null;
 		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
