@@ -1483,11 +1483,11 @@ describe('timeline store actions', () => {
 			// `media_type` as well as `only_media`, or the page answers with
 			// every video on the instance: "carries an attachment" is not the
 			// question a page called Photos is asking.
-			['photos', {}, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'image' }],
-			['photos', { scope: 'timeline' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'image', local: true }],
-			['photos', { scope: 'federated' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'image' }],
+			['photos', {}, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'visual' }],
+			['photos', { scope: 'timeline' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'visual', local: true }],
+			['photos', { scope: 'federated' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'visual' }],
 			// a scope from the address bar that names nothing is read as the default
-			['photos', { scope: 'favourites' }, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'image' }],
+			['photos', { scope: 'favourites' }, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'visual' }],
 			// the same page again, one predicate narrower. `only_media` goes
 			// out as well, so a server that has not been upgraded yet answers
 			// with media rather than with everything.
@@ -1508,7 +1508,7 @@ describe('timeline store actions', () => {
 			['interests', {}, `${API}/timelines/interests`, { limit: 15 }],
 			['interests', { media: 'videos' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
 			['interests', { media: 'podcasts' }, `${API}/timelines/interests`, { limit: 15 }],
-			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'photos' }],
+			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'media' }],
 			['videos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
 			['shorts', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, only_short: true }],
 			['bluesky', { feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }, `${API}/timelines/bluesky`, { limit: 15, feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }],
@@ -1541,7 +1541,7 @@ describe('timeline store actions', () => {
 			await store.fetchTimeline()
 			const videos = axios.get.mock.calls[0][1].params
 
-			expect(photos.media_type).toBe('image')
+			expect(photos.media_type).toBe('visual')
 			expect(photos.only_video).toBeUndefined()
 			expect(videos.only_video).toBe(true)
 			expect(videos.media_type).toBeUndefined()

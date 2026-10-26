@@ -279,6 +279,12 @@ trait StreamTimelines {
 			return;
 		}
 
+		if ($options->getMediaType() === 'visual') {
+			$qb->limitToVisualMedia();
+
+			return;
+		}
+
 		// `media_type=video` and `only_video` are the same question, so they
 		// are one predicate: a profile's Videos tab and the Videos timeline
 		// cannot come to disagree about whether a PeerTube `Video` is a video.

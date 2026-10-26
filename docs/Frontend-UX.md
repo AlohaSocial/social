@@ -72,6 +72,20 @@ operation (`idle`); idle does not promise full remote indexing. Guest reads keep
 the existing cache-only behavior. Tests cover the local queue/state contracts;
 this does not certify availability or completeness of every public remote server.
 
+## Photos feed presentation (FR-01 / FR-11)
+
+The Photos timeline offers Media feed (the existing full post cards, with media
+before the caption) and Tiles (the existing shared media grid). The reader's
+choice is remembered per account in browser storage; unavailable storage does not
+prevent switching. Changing the layout does not reset the feed scope, cursor or
+loaded post index. Profile Photos tabs retain their separate image-only grid.
+
+Both timeline presentations request the same visual feed: images, videos and
+animated images, including native PeerTube Video objects. Text-only, audio-only
+and document-only posts are excluded by the database **before pagination**. The
+ordinary timeline remains unrestricted. For You uses its existing combined visual
+media filter; legacy candidate and trend fallback queries follow the same rule.
+
 ## Completed stabilization
 
 - Author-only view counts are text on the post detail page. There is no eye icon

@@ -434,11 +434,11 @@ function timelineRequest(list, params) {
 					? 'apps/social/api/v1/recommendations/timeline'
 					: 'apps/social/api/v1/timelines/interests')
 				if (usesV4RecommendationTimeline(list)) {
-					params.media = list.type === 'shorts' ? 'shorts' : list.type
+					params.media = list.type === 'photos' ? 'media' : list.type
 				} else if (list.type === 'shorts') {
 					params.only_short = true
 				} else {
-					params.media = list.type
+					params.media = list.type === 'photos' ? 'media' : list.type
 				}
 				break
 			}
@@ -450,14 +450,8 @@ function timelineRequest(list, params) {
 			} else {
 				url = generateUrl('apps/social/api/v1/timelines/home')
 			}
-			// `only_media` is Mastodon's question — "does this post
-			// carry an attachment" — and it is not the question either
-			// of these pages is asking: it answered Photos with every
-			// video on the instance and Videos with every photograph.
-			// `media_type` and `only_video` are this app's own and name
-			// the kind. All of them go out, so a server that has not
-			// been upgraded yet still answers with media rather than
-			// with everything.
+			// Photos is a visual feed: images and videos, never audio-only or text.
+			// Filter before pagination; only_media stays for older server compatibility.
 			params.only_media = true
 			if (list.type === 'shorts') {
 				// the Shorts stack: a single video of at most three minutes,
@@ -467,9 +461,8 @@ function timelineRequest(list, params) {
 			} else if (list.type === 'videos') {
 				params.only_video = true
 			} else {
-				// a post carrying both is `mixed` and is in both pages,
-				// which is what `limitToMediaType()` already says
-				params.media_type = 'image'
+				// Includes mixed and native PeerTube video objects.
+				params.media_type = 'visual'
 			}
 			break
 		case 'link':

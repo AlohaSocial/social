@@ -1610,3 +1610,12 @@ valid LAST-MODIFIED when the post has been updated. Calendar import confirms its
 outcome through `imported: true`; `already_imported: true` identifies an existing
 stable-UID copy and does not mean that copy was updated. See [Events.md](Events.md)
 for timezone, content-warning, import and attendance boundaries.
+
+### Visual media timeline filter
+
+The Social `media_type` extension accepts `visual` in addition to `image`, `video`
+and `audio`. It selects posts with photos, videos or animated images, including
+native ActivityPub Video objects. It implies media filtering and excludes pure
+text, audio and documents before pagination. Existing individual media filters
+and unfiltered timeline semantics are unchanged. Photos timeline layouts share
+this filter; profile Photos tabs continue to request `image`.

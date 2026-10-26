@@ -380,7 +380,7 @@ describe('Timeline', () => {
 	/** A feed of text is read in a narrower column; a grid of pictures keeps the wide one. */
 	it('reads a list in the narrow column and shows a grid in the wide one', () => {
 		expect(mountTimeline({ params: { type: 'home' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
-		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).not.toContain('social__wrapper--reading')
+		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
 	})
 
 	it('unmounts the compact editor while the shared popup is open', async () => {
@@ -1054,10 +1054,23 @@ describe('Timeline', () => {
 		// is a list; Photos and Videos are what they showed, which is a grid.
 		// These two pages were a list here and a grid on a profile, so the same
 		// picture was a row in one place and a tile in the other.
-		it.each(['photos'])('draws %s as a grid', (type) => {
+		it.each(['photos'])('draws %s as a media list by default', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
+			expect(wrapper.findComponent(TimelineListStub).props('display')).toBe('list')
+		})
+
+		it('switches Photos between the shared grid and media list without changing the feed', async () => {
+			const wrapper = mountTimeline({ params: { type: 'photos' } })
+			const store = useTimelineStore()
+			const before = store.getTimelineIdentity
+			await wrapper.vm.choosePhotoLayout('grid')
 			expect(wrapper.findComponent(TimelineListStub).props('display')).toBe('grid')
+			expect(store.getTimelineIdentity).toBe(before)
+			const reopened = mountTimeline({ params: { type: 'photos' } })
+			expect(reopened.findComponent(TimelineListStub).props('display')).toBe('grid')
+			await reopened.vm.choosePhotoLayout('list')
+			expect(reopened.findComponent(TimelineListStub).props('display')).toBe('list')
 		})
 
 		/** Videos is a video site's front page, with an upload button in place of the composer */

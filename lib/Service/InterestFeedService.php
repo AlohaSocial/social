@@ -74,7 +74,7 @@ class InterestFeedService {
 	/** A ranking shorter than this is filled from what is trending. */
 	public const POPULAR_FILL = TrendService::MAX_LIMIT;
 	/** What `TrendService` is asked for, by kind. */
-	private const TREND_KIND = ['photos' => 'image', 'videos' => 'video', 'shorts' => 'short', 'media' => ''];
+	private const TREND_KIND = ['photos' => 'image', 'videos' => 'video', 'shorts' => 'short', 'media' => 'visual'];
 
 	private ?ICache $cache = null;
 	private ?ICache $storyTermCache = null;
