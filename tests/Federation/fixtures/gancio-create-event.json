@@ -5,7 +5,7 @@
   "actor": "https://gancio.example/@events",
   "to": ["https://www.w3.org/ns/activitystreams#Public"],
   "object": {
-    "id": "https://gancio.example/events/42",
+    "id": "https://gancio.example/federation/events/42",
     "type": "Event",
     "name": "Community assembly",
     "url": "https://gancio.example/events/42",
