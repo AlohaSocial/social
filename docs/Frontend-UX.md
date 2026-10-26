@@ -42,8 +42,8 @@ entry supersedes the earlier strict modal-only creation requirement.
 The compact instance unmounts while the popup is open, avoiding two editors
 writing the same draft. Replies, quotes, delete-and-re-draft, Files handoffs,
 video uploads and the keyboard shortcut use the shared modal host. Search no
-longer owns a hidden editor. The established PostEditForm is reused inside that
-same modal for editing supported fields. Stories keep their existing dialog.
+longer owns a hidden editor. PostEditForm adapts the same Composer inside that
+modal for editing supported fields. Stories keep their existing dialog.
 
 Initial context is supplied before the lazy editor mounts. New posts, replies,
 quotes and re-drafts keep separate drafts. Closing preserves ordinary drafts;
@@ -186,3 +186,25 @@ New controls must be localized, keyboard reachable and responsive. Each major
 block includes focused regression coverage; browser evidence and backend/service
 availability are reported separately. This table is a work list, not a claim
 that every requirement is finished.
+
+
+### Shared published-post editor
+
+The Edit action now opens the same `Composer` used for new posts, inside the
+existing modal host. Text, mention/emoji tools, content warnings, the attachment
+carousel and descriptions, and supported event fields share the creation UI.
+`PostEditForm` only adapts save/cancel events and unsaved-change/upload guards.
+Editing never reads, replaces or clears a creation/reply draft.
+
+Save sends text, explicit warning/sensitive values, language, the full replacement
+attachment list and descriptions through the existing status-update API. Media
+descriptions remain local until Save, including an explicitly empty description.
+A failed save keeps the editor and changes available; pending saves and uploads
+block another submission. Escape/cancel asks before discarding changes.
+
+Published-post editing does not offer creation-only settings that the update API
+cannot apply: audience/identity changes, polls, scheduling, new event creation,
+location, video metadata, image filters and focal-point writes. Existing event
+dates and location remain editable. Existing polls and other untouched metadata
+are preserved by omitting them from the update request. This is UI/API reuse, not
+a new publication path or a claim of remote server edit propagation.

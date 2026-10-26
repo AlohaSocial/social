@@ -1073,7 +1073,8 @@ export default {
 
 		onComposerEscape(event) {
 			const composer = /** @type {{tribute?: {isActive: boolean}}|undefined} */ (this.$refs.modalComposer)
-			if (event.defaultPrevented || this.composerDiscardOpen || composer?.tribute?.isActive) {
+			const editor = /** @type {{isAutocompleteActive: boolean}|undefined} */ (this.$refs.postEditForm)
+			if (event.defaultPrevented || this.composerDiscardOpen || composer?.tribute?.isActive || editor?.isAutocompleteActive) {
 				return
 			}
 			event.preventDefault()

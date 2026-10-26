@@ -2087,7 +2087,7 @@ describe('Composer', () => {
 			await setContent(wrapper, 'no longer a spoiler')
 			await addWarning(wrapper, 'season finale')
 			// the same button closes it again
-			await wrapper.find('button[aria-label="Remove content warning"]').trigger('click')
+			await wrapper.find('.content-warning-row__remove').trigger('click')
 
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
@@ -3712,6 +3712,93 @@ describe('Composer', () => {
 
 		it('are not named on a server that offers no Bluesky', () => {
 			expect(reaches(mountWith({ handle: 'alice.cloud.example.org', active: true }, false))).toBe(false)
+		})
+	})
+	describe('editing through the shared composer', () => {
+		const post = (extra = {}) => ({ id: '123', content: '<p>Original</p>', visibility: 'public', media_attachments: [], ...extra })
+		const edit = (extra = {}) => mountComposer({ editItem: post(extra), startExpanded: true, compactOptions: true, listenForIntents: false, editMaxLength: 500 })
+
+		it('loads published text without reading or overwriting creation drafts', async () => {
+			localStorage.setItem('social.composer.draft::alice', 'untouched draft')
+			const { wrapper, store } = edit({ content: '<p>First</p><p>Second</p>', sensitive: true, spoiler_text: 'Warning' })
+			expect(wrapper.vm.statusText).toBe('First\nSecond')
+			expect(wrapper.vm.isEditDirty).toBe(false)
+			await setContent(wrapper, 'Changed')
+			expect(wrapper.vm.isEditDirty).toBe(true)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ content: 'Changed', spoiler_text: 'Warning', sensitive: true })
+			expect(store.post).not.toHaveBeenCalled()
+			expect(localStorage.getItem('social.composer.draft::alice')).toBe('untouched draft')
+		})
+
+		it('clears warnings and sensitivity explicitly and leaves the source unchanged', async () => {
+			const { wrapper } = edit({ spoiler_text: 'Warning', sensitive: true })
+			await nextTick()
+			await wrapper.find('.content-warning-row__remove').trigger('click')
+			await wrapper.find('.composer-sensitive input').setValue(false)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ spoiler_text: '', sensitive: false })
+			expect(wrapper.props('editItem').spoiler_text).toBe('Warning')
+		})
+
+		it('keeps media descriptions local until Save and sends removal and empty descriptions', async () => {
+			const { wrapper, store } = edit({ media_attachments: [{ ...media, id: '1', description: 'First' }, { ...media, id: '2', description: 'Second' }] })
+			const [first, second] = Object.keys(wrapper.vm.attachments)
+			wrapper.vm.describeAttachment({ key: first, description: '' })
+			await nextTick()
+			wrapper.findComponent(PreviewGridItem).vm.$emit('commitDescription', { key: first, description: 'Changed' })
+			await nextTick()
+			expect(store.describeMedia).not.toHaveBeenCalled()
+			wrapper.vm.deletePreview(second)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ media_ids: ['1'], media_attributes: [{ id: '1', description: '' }] })
+			expect(wrapper.findComponent(PreviewGridItem).props('allowEffects')).toBe(false)
+		})
+
+		it('uses the event editor and validates dates without throwing while editing', async () => {
+			const { wrapper } = edit({ event: { name: 'Gathering', start_time: '2026-11-03T09:00:00Z', end_time: null, location: 'Old venue' } })
+			wrapper.vm.eventLocation = 'New venue'
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0].event).toEqual({ name: 'Gathering', start_time: '2026-11-03T09:00:00.000Z', end_time: null, location: 'New venue' })
+			wrapper.vm.eventStart = 'invalid'
+			expect(() => wrapper.vm.isEditDirty).not.toThrow()
+			expect(wrapper.vm.canPost).toBe(false)
+		})
+
+		it('hides unsupported published-post options while retaining language and media tools', async () => {
+			const { wrapper } = edit()
+			wrapper.vm.moreOptionsOpen = true
+			await nextTick()
+			for (const label of ['Add poll', 'Create an event', 'Schedule for later', 'Say where this was taken']) {
+				expect(wrapper.find(`button[aria-label="${label}"]`).exists()).toBe(false)
+			}
+			expect(wrapper.findComponent(VisibilitySelect).exists()).toBe(false)
+			expect(wrapper.findComponent(LanguageSelect).exists()).toBe(true)
+			expect(wrapper.find('button[aria-label="Add attachment"]').exists()).toBe(true)
+			wrapper.vm.language = 'de'
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0].language).toBe('de')
+		})
+
+		it('blocks empty, oversized, uploading and pending saves and retains failed edits', async () => {
+			const { wrapper } = edit()
+			await setContent(wrapper, '')
+			expect(wrapper.vm.canPost).toBe(false)
+			await setContent(wrapper, 'x'.repeat(501))
+			expect(wrapper.vm.canPost).toBe(false)
+			await setContent(wrapper, 'Changed')
+			wrapper.vm.attachments = { pending: { data: null, file: new File(['x'], 'x.png', { type: 'image/png' }) } }
+			expect(wrapper.vm.canPost).toBe(false)
+			wrapper.vm.attachments = {}
+			await wrapper.setProps({ editSaving: true })
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')).toBeUndefined()
+			expect(wrapper.find('[contenteditable]').attributes('contenteditable')).toBe('false')
+			await wrapper.setProps({ editSaving: false })
+			await wrapper.vm.createPost()
+			// A failed save leaves the editor mounted with its contents and dirty guard.
+			expect(wrapper.vm.statusText).toBe('Changed')
+			expect(wrapper.vm.isEditDirty).toBe(true)
 		})
 	})
 })

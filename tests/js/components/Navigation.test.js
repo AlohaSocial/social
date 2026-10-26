@@ -63,7 +63,7 @@ const stubs = {
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
 	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean, show: Boolean }, emits: ['close', 'update:show'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { name: 'Composer', data: () => ({ loading: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	Composer: { name: 'Composer', data: () => ({ loading: false, isEditDirty: false, hasPendingUploads: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'initialDraftContext', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -1498,11 +1498,11 @@ describe('Navigation', () => {
 			}))
 			eventBus.emit('composer-edit', { edit: post })
 			await flushPromises()
-			await vi.waitFor(() => expect(wrapper.find('.post-edit-textarea').exists()).toBe(true))
+			await vi.waitFor(() => expect(wrapper.findComponent({ name: 'PostEditForm' }).exists()).toBe(true))
 			const editor = wrapper.findComponent({ name: 'PostEditForm' })
-			await editor.find('.post-edit-textarea').setValue('  After  ')
-			editor.vm.save()
-			editor.vm.save()
+			const composer = editor.findComponent({ name: 'Composer' })
+			composer.vm.$emit('save', { content: 'After' })
+			composer.vm.$emit('save', { content: 'After' })
 			await nextTick()
 			expect(save).toHaveBeenCalledTimes(1)
 			expect(save).toHaveBeenCalledWith(expect.objectContaining({ status: post, content: 'After' }))
@@ -1510,10 +1510,10 @@ describe('Navigation', () => {
 			expect(await wrapper.vm.requestComposerClose()).toBe(false)
 			complete(undefined)
 			await flushPromises()
-			expect(editor.find('.post-edit-textarea').element.value).toBe('  After  ')
+			expect(editor.exists()).toBe(true)
 			expect(wrapper.vm.showComposer).toBe(true)
 			save.mockResolvedValueOnce({ id: '123' })
-			editor.vm.save()
+			composer.vm.$emit('save', { content: 'After' })
 			await flushPromises()
 			expect(wrapper.vm.showComposer).toBe(false)
 		})
@@ -1523,17 +1523,19 @@ describe('Navigation', () => {
 			const post = { id: '123', content: '<p>Before</p>', media_attachments: [] }
 			eventBus.emit('composer-edit', { edit: post })
 			await flushPromises()
-			await vi.waitFor(() => expect(wrapper.find('.post-edit-textarea').exists()).toBe(true))
+			await vi.waitFor(() => expect(wrapper.findComponent({ name: 'PostEditForm' }).exists()).toBe(true))
 			const editor = wrapper.findComponent({ name: 'PostEditForm' })
-			await editor.find('.post-edit-textarea').setValue('Unsaved')
-			await editor.find('.post-edit-textarea').trigger('keydown', { key: 'Escape' })
+			const composer = editor.findComponent({ name: 'Composer' })
+			composer.vm.isEditDirty = true
+			await nextTick()
+			await editor.trigger('keydown', { key: 'Escape' })
 			await nextTick()
 			expect(wrapper.vm.composerDiscardOpen).toBe(true)
 			wrapper.vm.answerComposerDiscard(false)
 			await flushPromises()
 			expect(wrapper.findComponent(stubs.NcModal).props('show')).toBe(true)
 			expect(wrapper.vm.showComposer).toBe(true)
-			expect(editor.find('.post-edit-textarea').element.value).toBe('Unsaved')
+			expect(composer.vm.isEditDirty).toBe(true)
 			const confirmed = wrapper.vm.requestComposerClose()
 			await nextTick()
 			// The real ConfirmDialog emits close followed by confirm.

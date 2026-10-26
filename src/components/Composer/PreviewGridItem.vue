@@ -141,6 +141,7 @@ export default {
 	},
 
 	props: {
+		allowEffects: { type: Boolean, default: true },
 		preview: {
 			type: /** @type {import('vue').PropType<import('../../types/Composer.js').LocalAttachment>} */ (Object),
 			required: true,
@@ -197,7 +198,7 @@ export default {
 		canFocus() {
 			const type = this.preview?.file?.type || this.preview?.data?.type || ''
 
-			return !this.preview.failed && Boolean(this.preview.data?.id)
+			return this.allowEffects && !this.preview.failed && Boolean(this.preview.data?.id)
 				&& (type.startsWith('image/') || type === 'image')
 		},
 
@@ -223,6 +224,9 @@ export default {
 		 * @return {boolean}
 		 */
 		isPicture() {
+			if (!this.allowEffects) {
+				return false
+			}
 			const type = this.preview?.file?.type || this.preview?.data?.type || ''
 
 			return type.startsWith('image/')

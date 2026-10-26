@@ -357,6 +357,7 @@ OC.L10N.register(
     "Add a reaction" : "Reaktion hinzufügen",
     "Event details" : "Veranstaltungsdetails",
     "Add to Nextcloud Calendar" : "Zum Nextcloud-Kalender hinzufügen",
+    "Edit event" : "Veranstaltung bearbeiten",
     "Create an event" : "Veranstaltung erstellen",
     "Remove event" : "Veranstaltung entfernen",
     "Event title" : "Veranstaltungstitel",

@@ -56,10 +56,10 @@ describe('PreviewGrid', () => {
 		const wrapper = mountGrid(miniatures)
 
 		expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
-		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:one'], randomKey: 'blob:one' })
+		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:one'], randomKey: 'blob:one', allowEffects: true })
 		await wrapper.find('[aria-label="Next attachment"]').trigger('click')
 		expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
-		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:two'], randomKey: 'blob:two' })
+		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:two'], randomKey: 'blob:two', allowEffects: true })
 		await wrapper.find('[aria-label="Previous attachment"]').trigger('click')
 		expect(wrapper.findComponent(PreviewGridItem).props('randomKey')).toBe('blob:one')
 	})
