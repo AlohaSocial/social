@@ -277,6 +277,7 @@ class InterestFeedService {
 
 			$ranked[] = [
 				'nid' => (string)$nid,
+				'idPrim' => $candidate['idPrim'],
 				'author' => $candidate['author'],
 				'updated' => $candidate['updated'],
 				'tags' => $matched,
@@ -444,10 +445,19 @@ class InterestFeedService {
 		}
 
 		if ($secret !== '') {
+			$prims = array_values(array_unique(array_filter(array_map(
+				static fn (array $entry): string => (string)($entry['idPrim'] ?? ''),
+				$entries
+			))));
+			$cardsByPrim = $this->linkPreviews->cardsByStreamPrims($prims);
 			foreach (array_keys($indicesByNid) as $rawNid) {
 				$nid = (string)$rawNid;
 				$entry = $entries[$indicesByNid[$nid][0]];
-				$cacheKey = self::storyTermCacheKey($owner, $nid, (string)($entry['updated'] ?? ''), $secret);
+				$card = $cardsByPrim[(string)($entry['idPrim'] ?? '')] ?? null;
+				$cardVersion = $card === null ? '' : hash_hmac(
+					'sha256', $card->getTitle() . "\0" . $card->getDescription(), $secret
+				);
+				$cacheKey = self::storyTermCacheKey($owner, $nid, (string)($entry['updated'] ?? ''), $cardVersion, $secret);
 				$cacheKeys[$nid] = $cacheKey;
 				$cachedTerms = $this->storyTermCache()->get($cacheKey);
 				if (!is_array($cachedTerms) || !array_is_list($cachedTerms)
@@ -488,8 +498,8 @@ class InterestFeedService {
 		return $entries;
 	}
 
-	private static function storyTermCacheKey(string $owner, string $nid, string $updated, string $secret): string {
-		return 'story-v2-' . hash('sha256', hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated);
+	private static function storyTermCacheKey(string $owner, string $nid, string $updated, string $cardVersion, string $secret): string {
+		return 'story-v3-' . hash('sha256', hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated . "\0" . $cardVersion);
 	}
 
 	private function storyTermCache(): ICache {
@@ -600,6 +610,7 @@ class InterestFeedService {
 		foreach ($this->group($this->streamRequest->interestCandidates($tags, $since, 200, $seen, $languages, $media)) as $nid => $candidate) {
 			$related[] = [
 				'nid' => (string)$nid,
+				'idPrim' => $candidate['idPrim'],
 				'author' => $candidate['author'],
 				'updated' => $candidate['updated'],
 				'tags' => [$candidate['tags'][0]],
@@ -638,7 +649,7 @@ class InterestFeedService {
 				continue;
 			}
 			$seen[$nid] = true;
-			$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid, 'updated' => $status->getUpdated()];
+			$popular[] = ['nid' => $nid, 'idPrim' => md5($status->getId()), 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid, 'updated' => $status->getUpdated()];
 		}
 
 		// a narrowed ranking's trending is already topped up with the newest
@@ -651,7 +662,7 @@ class InterestFeedService {
 					continue;
 				}
 				$seen[$nid] = true;
-				$popular[] = ['nid' => $nid, 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid, 'updated' => $status->getUpdated()];
+				$popular[] = ['nid' => $nid, 'idPrim' => md5($status->getId()), 'tags' => [], 'reason' => 'popular', 'author' => $status->getAttributedTo() ?: 'post:' . $nid, 'updated' => $status->getUpdated()];
 			}
 		}
 
