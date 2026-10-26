@@ -45,7 +45,7 @@ on:
       - Unit tests in far time zones
       - Upgrade from a release
     types: [completed]
-    branches: [master]
+    branches: [main, master]
 
 permissions: {}
 
@@ -95,7 +95,7 @@ jobs:
           failed=$(gh api --paginate "repos/$REPO/actions/runs/$RUN_ID/jobs?filter=latest&per_page=100" \
             --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "- [\(.name)](\(.html_url))"')
           body=$(printf '%s\n' \
-            "The scheduled run of **$WORKFLOW** on \`master\` failed." \
+            "The scheduled run of **$WORKFLOW** on \`main\` failed." \
             "" \
             "Last failing run: $RUN_URL (commit ${SHA:0:9}, $CONCLUSION)" \
             "" \
@@ -106,7 +106,7 @@ jobs:
 
           if [ -z "$issue" ]; then
             gh label create nightly-failure --repo "$REPO" --force \
-              --color B60205 --description 'A scheduled workflow on master is failing'
+              --color B60205 --description 'A scheduled workflow on main is failing'
             gh issue create --repo "$REPO" --title "$title" --label nightly-failure --body "$body"
           else
             gh issue edit "$issue" --repo "$REPO" --body "$body"

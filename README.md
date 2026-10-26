@@ -916,7 +916,7 @@ runs on the upgraded instance.
 night.
 
 **Several open pull requests together** are checked by `stack-check.yml`: it
-merges their heads onto master in the order given (`tests/Stack/merge.sh`),
+merges their heads onto main in the order given (`tests/Stack/merge.sh`),
 stops with the files in conflict if one does not merge, and runs the unit and
 integration suites on the result. Start it from the Actions tab with the
 numbers in merge order, or put the `stack-check` label on the pull requests;
@@ -1019,10 +1019,10 @@ E2E_PSEUDO_LOCALE=1 E2E_BASE_URL=… E2E_USER=alice E2E_PASSWORD=… npm run tes
 A pull request runs a fast core, about 30 jobs and 40 runner minutes, so
 that it is green within minutes rather than hours: it used to start 70 jobs
 and some 320 runner minutes, which the runner pool queued for about three
-hours. Everything else runs every night on master, between 02:00 and 03:00
+hours. Everything else runs every night on main, between 02:00 and 03:00
 UTC, where a version-specific failure is found the next morning.
 
-**On every pull request** (and every push to master):
+**On every pull request** (and every push to main):
 
 - PHPUnit, unit and integration suites: SQLite and PostgreSQL on the newest
   stable Nextcloud, plus the SQLite coverage leg on Nextcloud master, all on

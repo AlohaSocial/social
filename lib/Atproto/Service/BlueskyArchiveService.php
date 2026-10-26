@@ -314,7 +314,7 @@ class BlueskyArchiveService {
 			'6. goat account activate',
 			'',
 			'The flags are goat\'s as of 2026; `goat <command> --help` shows them. The app\'s',
-			'docs/Moving.md (https://github.com/alohasocial/social/blob/master/docs/Moving.md)',
+			'docs/Moving.md (https://github.com/alohasocial/social/blob/HEAD/docs/Moving.md)',
 			'says the same with more context.',
 			'',
 			'While this server still exists, its own key ranks above your recovery key: for 72',

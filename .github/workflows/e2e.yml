@@ -5,7 +5,7 @@
 # Playwright the way a person would drive it. The unit and integration suites
 # cannot see a page that stays empty; this can. See tests/e2e/.
 #
-# A pull request and a push to master run one leg, about four minutes: the
+# A pull request and a push to main run one leg, about four minutes: the
 # newest stable server on SQLite in Chromium, with the Guests app. The nightly
 # run, a manual run and the `full-ci` label (labelled-ci.yml) add Nextcloud
 # master, the oldest server info.xml claims (34), PostgreSQL, and the smoke
@@ -29,6 +29,7 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - master
   workflow_dispatch:
   workflow_call:

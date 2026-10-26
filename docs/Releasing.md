@@ -1,6 +1,6 @@
 # Releasing Aloha Social
 
-How a version of this app gets from `master` to the Nextcloud App Store, and
+How a version of this app gets from `main` to the Nextcloud App Store, and
 what has to be in place before the first time. Everything here is run by a
 person; the workflows do the building, signing and uploading, and one of them
 waits for that person's approval before anything leaves GitHub.
@@ -36,7 +36,7 @@ number without the `v`.
 
 ## Every release
 
-1. **Green `master`.** The pull request and push workflows are green on the
+1. **Green `main`.** The pull request and push workflows are green on the
    commit to be released, and the open `nightly-failure` issues are either
    closed or understood.
 2. **The changelog.** `make changelog` regenerates `CHANGELOG.md` from the
@@ -46,14 +46,14 @@ number without the `v`.
    `docs(changelog): X.Y.Z`. Only `feat`, `fix`, `perf` and `docs` commits
    become entries; `cliff.toml` says which types are left out.
 3. **The dry run.** Dispatch *Test App Store Release (Dry Run)*
-   (`test-release.yml`) on `master`. It is the release workflow without the
+   (`test-release.yml`) on `main`. It is the release workflow without the
    publishing: it checks that the five version places agree, that
    `CHANGELOG.md` is what `make changelog` produces (an error on a tag, a
    warning on a branch), runs the unit, lint and type checks on the PHP
    version `appinfo/info.xml` declares as the floor, builds the tarball with
    `make appstore`, signs it with `APP_PRIVATE_KEY` against the registered
    certificate, and leaves the signed archive as a three-day Actions
-   artifact. Nothing is published. A red dry run is fixed on `master` and
+   artifact. Nothing is published. A red dry run is fixed on `main` and
    dispatched again; do not tag over it.
 4. **The tag and the GitHub release.** On the dry-run commit:
 
@@ -96,13 +96,13 @@ number without the `v`.
   `CHANGELOG.md` to be at or after the newest `v*` tag wherever git can list
   the tags, so a tag cut without step 2 fails the unit suite on every full
   checkout.
-- **The version bumps** continue on `master` as before; the next release's
+- **The version bumps** continue on `main` as before; the next release's
   changelog section covers everything since `v0.24.1` until a tag after that
   exists, and from the next tag on, everything since that tag.
 
 ## When it goes wrong
 
-- *The build job failed after the release was published.* Fix on `master`,
+- *The build job failed after the release was published.* Fix on `main`,
   delete the GitHub release and the tag (`gh release delete vX.Y.Z
   --cleanup-tag`), bump the version and release again. Nothing reached the
   App Store: the publish job never ran.
