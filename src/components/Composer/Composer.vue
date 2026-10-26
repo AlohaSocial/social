@@ -35,7 +35,7 @@
 				:class="{ 'too-long': statusIsTooLong }"
 				:aria-invalid="statusIsTooLong"
 				:title="charactersLeftLabel"
-				:contenteditable="!loading"
+				:contenteditable="!loading && !editSaving"
 				role="textbox"
 				aria-multiline="true"
 				dir="auto"
@@ -157,7 +157,7 @@
 				@submit.prevent>
 				<!-- A video has its own name and details on other servers. -->
 				<VideoMetadataEditor
-					v-if="isVideoPost"
+					v-if="!editItem && isVideoPost"
 					v-model:title="videoTitle"
 					v-model:category="videoCategory"
 					v-model:licence="videoLicence" />
@@ -169,7 +169,7 @@
 					@choose="chooseWarning" />
 				<div
 					ref="composerInput"
-					:contenteditable="!loading"
+					:contenteditable="!loading && !editSaving"
 					class="message"
 					role="textbox"
 					aria-multiline="true"
@@ -191,9 +191,10 @@
 					:uploadProgress="uploadProgress"
 					:progressLabel="progressLabel"
 					:miniatures="attachments"
+					:allowEffects="!editItem"
 					@deleted="deletePreview"
 					@describe="describeAttachment"
-					@commitDescription="commitDescription"
+					@commitDescription="!editItem && commitDescription($event)"
 					@focus="focusAttachment"
 					@commitFocus="commitFocus"
 					@filter="applyFilter" />
@@ -267,6 +268,7 @@
 					v-model:start="eventStart"
 					v-model:end="eventEnd"
 					v-model:location="eventLocation"
+					:editing="Boolean(editItem)"
 					:valid="eventIsValid"
 					:reachesBluesky="reachesBluesky" />
 
@@ -296,6 +298,10 @@
 					@update:place="place = $event"
 					@close="togglePlace" />
 
+				<label v-if="editItem" class="composer-sensitive">
+					<input v-model="editSensitive" type="checkbox">
+					{{ t('social', 'Mark media as sensitive') }}
+				</label>
 				<div class="options" :class="{ 'options--compact': compactOptions }">
 					<NcButton
 						v-if="offerShort && (!compactOptions || moreOptionsOpen)"
@@ -428,7 +434,7 @@
 						<!-- a short post, drawn big on colour; only offered while the
 					     post is short enough to look good that way -->
 						<NcButton
-							v-if="canBeCard"
+							v-if="!editItem && canBeCard"
 							:title="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
 							variant="tertiary"
 							class="card-toggle"
@@ -441,6 +447,7 @@
 							<span v-if="compactOptions">{{ asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card') }}</span>
 						</NcButton>
 						<NcButton
+							v-if="!editItem"
 							:title="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
 							variant="tertiary"
 							:disabled="showEvent"
@@ -452,6 +459,7 @@
 							<span v-if="compactOptions">{{ showPoll ? t('social', 'Remove poll') : t('social', 'Add poll') }}</span>
 						</NcButton>
 						<NcButton
+							v-if="!editItem"
 							:title="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
 							:aria-label="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
 							variant="tertiary"
@@ -462,8 +470,9 @@
 							</template>
 							<span v-if="compactOptions">{{ showEvent ? t('social', 'Remove event') : t('social', 'Create an event') }}</span>
 						</NcButton>
-						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Timing and place') }}</span>
+						<span v-if="compactOptions && !editItem" class="composer-advanced-options__label">{{ t('social', 'Timing and place') }}</span>
 						<NcButton
+							v-if="!editItem"
 							:title="scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later')"
 							variant="tertiary"
 							class="schedule-toggle"
@@ -482,6 +491,7 @@
 						</NcButton>
 
 						<NcButton
+							v-if="!editItem"
 							:title="placing ? t('social', 'No place') : t('social', 'Say where this was taken')"
 							variant="tertiary"
 							class="place-toggle"
@@ -499,7 +509,7 @@
 					     account. Absent on every instance that has none, which is
 					     most of them, rather than a control that always says "me" -->
 						<select
-							v-if="teams.length"
+							v-if="!editItem && teams.length"
 							v-model="postAs"
 							class="composer-post-as"
 							:aria-label="t('social', 'Post as')">
@@ -513,7 +523,7 @@
 						<div class="composer-publishing-controls">
 							<LanguageSelect :language="language" @update:language="language = $event" />
 							<ReplyPolicySelect
-								v-if="visibility !== 'direct'"
+								v-if="!editItem && visibility !== 'direct'"
 								:policy="replyPolicy"
 								@update:policy="replyPolicy = $event" />
 						</div>
@@ -522,6 +532,7 @@
 						{{ undescribedWarning }}
 					</span>
 					<VisibilitySelect
+						v-if="!editItem"
 						:visibility="visibility"
 						:reachesBluesky="reachesBluesky"
 						@update:visibility="chooseVisibility" />
@@ -540,7 +551,19 @@
 							{{ charsLeft <= 50 ? charactersLeftLabel : '' }}
 						</span>
 					</span>
+					<NcButton
+						v-if="editItem"
+						variant="primary"
+						:disabled="!canPost || editSaving"
+						:aria-busy="editSaving"
+						@click="createPost">
+						{{ editSaving ? t('social', 'Saving …') : t('social', 'Save') }}
+					</NcButton>
+					<NcButton v-if="editItem" @click="$emit('cancel')">
+						{{ t('social', 'Cancel') }}
+					</NcButton>
 					<SubmitStatusButton
+						v-else
 						:visibility="visibility"
 						:scheduled="scheduling"
 						:disabled="!canPost || loading"
@@ -851,6 +874,9 @@ export default {
 		},
 
 		/** Initial context is available before the lazy dialog editor mounts. */
+		editItem: { type: Object, default: null },
+		editSaving: { type: Boolean, default: false },
+		editMaxLength: { type: Number, default: null },
 		initialQuote: { type: Object, default: null },
 		initialDraft: { type: Object, default: null },
 		initialDraftContext: { type: String, default: '' },
@@ -878,7 +904,7 @@ export default {
 		},
 	},
 
-	emits: ['posted'],
+	emits: ['posted', 'save', 'cancel'],
 	setup(props) {
 		const { hostname, serverData } = useServerData()
 		const { currentUser, username } = useCurrentUser()
@@ -924,6 +950,8 @@ export default {
 			moreOptionsOpen: false,
 			/** whether that download is in flight, so a second press is ignored */
 			emojiPickerLoading: false,
+			originalEditSignature: '',
+			editSensitive: this.editItem?.sensitive === true,
 			statusContent: '',
 			/** what would actually be sent — the string the counter measures */
 			statusText: '',
@@ -1033,6 +1061,29 @@ export default {
 	},
 
 	computed: {
+		editPayload() {
+			return {
+				content: this.statusText.trim(),
+				spoiler_text: this.showWarning ? this.spoilerText.trim() : '',
+				sensitive: this.editSensitive,
+				language: this.language,
+				media_ids: this.mediaIds,
+				media_attributes: Object.values(this.attachments).filter(({ data }) => data?.id).map(({ data, description }) => ({ id: data.id, description: description || '' })),
+				...(this.editItem?.event
+					? { event: {
+							name: this.eventName.trim(),
+							start_time: this.editTime(this.eventStart),
+							end_time: this.editTime(this.eventEnd),
+							location: this.eventLocation.trim(),
+						} }
+					: {}),
+			}
+		},
+
+		isEditDirty() {
+			return JSON.stringify(this.editPayload) !== this.originalEditSignature
+		},
+
 		...mapStores(useAccountStore, useInstanceStore, useTimelineStore),
 
 		/** @return {string[]} the warnings offered as one press each */
@@ -1067,7 +1118,7 @@ export default {
 
 		/** @return {number} what the server accepts in one status */
 		maxLength() {
-			return this.instanceStore.maxCharacters
+			return this.editMaxLength ?? this.instanceStore.maxCharacters
 		},
 
 		/**
@@ -1077,6 +1128,9 @@ export default {
 		 * @return {string}
 		 */
 		prompt() {
+			if (this.editItem) {
+				return t('social', 'Edit your post')
+			}
 			if (this.hasAttachments) {
 				return t('social', 'Write a caption…')
 			}
@@ -1163,6 +1217,9 @@ export default {
 		},
 
 		canPost() {
+			if (this.editSaving) {
+				return false
+			}
 			// an upload that has not answered yet is worth waiting for; one
 			// that failed used to leave `data: undefined`, which passed this
 			// check and then threw on `preview.data.id` before the try block
@@ -1192,7 +1249,7 @@ export default {
 				return false
 			}
 
-			if (this.visibility === 'direct' && !this.hasMentions) {
+			if (!this.editItem && this.visibility === 'direct' && !this.hasMentions) {
 				return false
 			}
 
@@ -1390,7 +1447,7 @@ export default {
 		 * @return {boolean}
 		 */
 		wouldLoseOnLeave() {
-			return this.hasPendingUploads
+			return this.hasPendingUploads || (this.editItem !== null && this.isEditDirty)
 		},
 
 		/**
@@ -1439,6 +1496,9 @@ export default {
 		 * @param {string} before the one just left
 		 */
 		draftContext(_now, before) {
+			if (this.editItem) {
+				return
+			}
 			clearDraft(before)
 			this.rememberDraft()
 		},
@@ -1521,8 +1581,12 @@ export default {
 
 		// before the mention prefill, which declines to overwrite a non-empty
 		// composer: whatever the last attempt left is what the reader wants back
-		const existingDraft = loadDraft(this.draftContext)
-		this.restoreDraft()
+		const existingDraft = this.editItem ? null : loadDraft(this.draftContext)
+		if (this.editItem) {
+			this.restoreEdit()
+		} else {
+			this.restoreDraft()
+		}
 		if (this.inReplyTo !== null && !this.listenForIntents) {
 			if (this.oneLine) {
 				this.prefillMessageWithMentions(participantsOf(this.inReplyTo, this.username, this.hostname))
@@ -1589,6 +1653,38 @@ export default {
 	},
 
 	methods: {
+		editTime(value) {
+			const date = new Date(value)
+			return value && Number.isFinite(date.getTime()) ? date.toISOString() : null
+		},
+
+		restoreEdit() {
+			const post = this.editItem
+			this.inputElement().innerText = htmlToPlainText(post.content || '')
+			this.updateStatusContent()
+			this.spoilerText = post.spoiler_text || ''
+			this.showWarning = this.spoilerText !== ''
+			this.visibility = post.visibility || 'public'
+			this.visibilityChosen = true
+			this.language = post.language || defaultLanguage()
+			this.restoreMedia(post.media_attachments || [])
+			if (post.event) {
+				const local = (value) => {
+					const date = new Date(value)
+					return value && Number.isFinite(date.getTime())
+						? new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+						: ''
+				}
+				this.showEvent = true
+				this.eventName = post.event.name || ''
+				this.eventStart = local(post.event.start_time)
+				this.eventEnd = local(post.event.end_time)
+				this.eventLocation = post.event.location || ''
+			}
+			this.originalEditSignature = JSON.stringify(this.editPayload)
+			this.focusInput()
+		},
+
 		onLinePaste(event) {
 			const files = Array.from(event.clipboardData?.files ?? [])
 			if (files.length > 0) {
@@ -1600,6 +1696,10 @@ export default {
 		},
 
 		onComposerDrop(event) {
+			if (this.editSaving) {
+				event.preventDefault()
+				return
+			}
 			if (this.oneLine && event.dataTransfer?.files?.length > 0) {
 				event.preventDefault()
 				this.draggingFiles = false
@@ -1904,7 +2004,9 @@ export default {
 
 		/** Keeps what is in the box, so a failed post or a reload cannot eat it. */
 		rememberDraft() {
-			saveDraft(this.draft, this.draftContext)
+			if (!this.editItem) {
+				saveDraft(this.draft, this.draftContext)
+			}
 		},
 
 		/**
@@ -2176,6 +2278,12 @@ export default {
 
 		n,
 		async createPost() {
+			if (this.editItem) {
+				if (this.canPost) {
+					this.$emit('save', this.editPayload)
+				}
+				return
+			}
 			if (this.oneLine && this.oneLineNeedsDetails) {
 				this.openFullComposer()
 				return
@@ -2524,6 +2632,13 @@ function rememberedVisibility() {
 
 <style scoped lang="scss">
 @use '../../styles/layout.scss' as layout;
+
+.composer-sensitive {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-block: 10px;
+}
 
 // one duration and one curve for the whole opening, so the parts of it arrive
 // together rather than each on its own schedule

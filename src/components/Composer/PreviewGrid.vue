@@ -49,6 +49,7 @@
 				v-if="activeKey"
 				:key="activeKey"
 				:preview="miniatures[activeKey]"
+				:allowEffects="allowEffects"
 				:randomKey="activeKey"
 				@delete="deletePreview"
 				@describe="$emit('describe', $event)"
@@ -79,6 +80,7 @@ export default {
 	},
 
 	props: {
+		allowEffects: { type: Boolean, default: true },
 		uploadProgress: {
 			type: Number,
 			required: true,

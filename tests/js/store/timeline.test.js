@@ -1099,6 +1099,12 @@ describe('timeline store actions', () => {
 			expect(response.data).toEqual(edited)
 		})
 
+		it('sends the edited language when explicitly supplied', async () => {
+			axios.put.mockResolvedValue({ data: makeStatus('1') })
+			await store.postEdit({ status: makeStatus('1'), content: 'Text', language: 'de' })
+			expect(axios.put.mock.calls[0][1].language).toBe('de')
+		})
+
 		it('sends edited event details when the post is an event', async () => {
 			const status = makeStatus('1')
 			store.addToTimeline([status])
