@@ -14,7 +14,14 @@ import { describe, expect, it } from 'vitest'
  * mode, which replaces every colour and takes the scrims away.
  */
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8')
-const styleOf = (path) => read(path).slice(read(path).indexOf('<style'))
+const STYLE_SOURCES = {
+	'src/views/VideoShorts.vue': 'src/views/VideoShorts.scss',
+}
+function styleOf(path) {
+	return STYLE_SOURCES[path]
+		? read(STYLE_SOURCES[path])
+		: read(path).slice(read(path).indexOf('<style'))
+}
 
 const ON_DARK = [
 	'src/views/VideoShorts.vue',

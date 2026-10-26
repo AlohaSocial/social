@@ -373,9 +373,27 @@ jobs:
           NODE_EXTRA_CA_CERTS=/tls/ca.crt
           ENV
 
+          peertube_image=chocobozzz/peertube:v8.3.1
+          pulled=false
+          for attempt in 1 2 3; do
+            if docker pull "$peertube_image"; then
+              pulled=true
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 10))
+              echo "PeerTube image pull failed (attempt $attempt/3); retrying in ${delay}s"
+              sleep "$delay"
+            fi
+          done
+          if [ "$pulled" != true ]; then
+            echo "Could not pull $peertube_image after 3 attempts" >&2
+            exit 1
+          fi
+
           docker run -d --name peertube --network host --env-file /tmp/peertube.env \
             -v /tmp/tls:/tls:ro \
-            chocobozzz/peertube:v8.3.1
+            "$peertube_image"
 
       - name: Wait for PeerTube
         run: |

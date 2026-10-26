@@ -20,6 +20,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\Discovery\PostDiscoveryService;
 use OCA\Social\Service\InterestFeedService;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\RecommendationBehavioralProfile;
 use OCA\Social\Service\RecommendationContentCluster;
 use OCA\Social\Service\RecommendationExplanationService;
@@ -112,6 +113,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			$this->clock,
 			$this->createStub(IConfig::class),
 			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(LinkPreviewService::class),
 		), $this->catalog);
 
 		return new RecommendationTimelineService(
@@ -130,6 +132,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			new RecommendationSocialGraphCandidates($this->streams, new RecommendationFeatureExtractor($this->catalog)),
 			new RecommendationSavedFeedCandidates($this->savedFeeds, $this->streams, new RecommendationFeatureExtractor($this->catalog)),
 			$this->queue,
+			$this->createStub(LinkPreviewService::class),
 			$this->clock,
 		);
 	}
@@ -282,7 +285,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			$this->appleAliases(), $this->isString(), 50, [], ['en'], 2_000_000_000
 		)->willReturn(['123' => $post]);
 		$this->snapshots->expects($this->once())->method('create')->with(
-			'alice', 'for-you-v16-topic-exposure-diversity', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
+			'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, ['123'], 20, [], $this->anything()
 		)->willReturn(['session_id' => 'session', 'nids' => ['123'], 'exploration_nids' => [], 'next_cursor' => null]);
 		$this->queue->expects($this->exactly(2))->method('fillPosts')->willReturnCallback(
 			static function (string $kind, string $term, Person $viewer): bool {
@@ -461,7 +464,7 @@ class RecommendationTimelineServiceTest extends TestCase {
 			'authors' => [hash('sha256', 'https://remote.example/users/apple') => ['fast' => 3.0, 'slow' => 3.0, 'updated_at' => 2_000_000_000]],
 			'formats' => [],
 		];
-		$signals = new RecommendationSignalService($this->preferences, $this->signals, new RecommendationFeatureExtractor($this->catalog), $this->streams, $this->clock, $this->createStub(IConfig::class), $this->createStub(CacheActorsRequest::class));
+		$signals = new RecommendationSignalService($this->preferences, $this->signals, new RecommendationFeatureExtractor($this->catalog), $this->streams, $this->clock, $this->createStub(IConfig::class), $this->createStub(CacheActorsRequest::class), $this->createStub(LinkPreviewService::class));
 		self::assertSame(1.0, $signals->profile('alice')['topics']['tech.apple']);
 		$this->interests->method('hiddenFor')->willReturn([]);
 		$this->interests->method('languagesFor')->willReturn([]);
@@ -598,8 +601,8 @@ class RecommendationTimelineServiceTest extends TestCase {
 		$this->assertSame(4, $page['coverage']['returned']);
 		$this->assertNull($page['next_cursor']);
 		$this->assertSame([
-			['signed-cursor', 'alice', 'for-you-v16-topic-exposure-diversity', '', 3, 2, 2_000_000_000, 4],
-			['next-cursor', 'alice', 'for-you-v16-topic-exposure-diversity', '', 3, 2, 2_000_000_000, 3],
+			['signed-cursor', 'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, 4],
+			['next-cursor', 'alice', 'for-you-v17-link-preview-story-diversity', '', 3, 2, 2_000_000_000, 3],
 		], $pageCalls);
 	}
 
