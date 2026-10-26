@@ -29,8 +29,9 @@ use OCP\IConfig;
  * their languages. Each is ranked by how well it matches, halved for every day
  * of its age. Then the page is spread out: no author more than twice in any
  * twenty, no one hashtag more than two fifths of them or ten posts across a
- * snapshot while alternatives remain, and one post in ten from a hashtag that
- * often travels with the reader's own but is not on their list yet.
+ * snapshot, and no classified topic more than six posts while alternatives
+ * remain. One post in ten comes from a hashtag that often travels with the
+ * reader's own but is not on their list yet.
  *
  * A ranked feed cannot be paged by id the way a timeline is, because the next
  * page is not "older than the last post". So the ranking is made once, kept
@@ -61,6 +62,7 @@ class InterestFeedService {
 	private const STORY_LIMIT = 3;
 	private const STORY_OVERFLOW = 1;
 	private const MAX_TAG_IN_SNAPSHOT = 10;
+	private const MAX_TOPIC_IN_SNAPSHOT = 6;
 	/** One slot in this many is an exploration post. */
 	public const EXPLORE_EVERY = 10;
 	public const RELATED_TAGS = 5;
@@ -321,7 +323,7 @@ class InterestFeedService {
 		$ranked = array_slice($candidates, 0, count($ranked));
 		$related = array_slice($candidates, count($ranked));
 
-		return $this->spreadFrom([], [], $ranked, $related);
+		return $this->spreadFrom([], [], [], $ranked, $related);
 	}
 
 	/**
@@ -338,18 +340,22 @@ class InterestFeedService {
 		$head = array_slice($candidates, 0, count($head));
 		$tail = array_slice($candidates, count($head));
 		$storyCounts = [];
+		$topicCounts = [];
 		foreach ($head as $entry) {
 			$cluster = $entry['_story_cluster'] ?? null;
 			if (is_int($cluster)) {
 				$storyCounts[$cluster] = ($storyCounts[$cluster] ?? 0) + 1;
 			}
+			foreach (self::diversityTopics($entry) as $topic) {
+				$topicCounts[$topic] = ($topicCounts[$topic] ?? 0) + 1;
+			}
 		}
 
-		return $this->spreadFrom($head, $storyCounts, $tail, []);
+		return $this->spreadFrom($head, $storyCounts, $topicCounts, $tail, []);
 	}
 
-	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param list<array<string, mixed>> $ranked @param list<array<string, mixed>> $related */
-	private function spreadFrom(array $placed, array $storyCounts, array $ranked, array $related): array {
+	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, int> $topicCounts @param list<array<string, mixed>> $ranked @param list<array<string, mixed>> $related */
+	private function spreadFrom(array $placed, array $storyCounts, array $topicCounts, array $ranked, array $related): array {
 		$tagLimit = (int)floor((float)self::DIVERSITY_WINDOW * self::TAG_SHARE);
 		$tagCounts = [];
 		foreach ($placed as $entry) {
@@ -363,10 +369,12 @@ class InterestFeedService {
 			$slot = count($placed);
 			$hasTagAlternative = self::hasTagAlternative($ranked, $tagCounts)
 				|| self::hasTagAlternative($related, $tagCounts);
+			$hasTopicAlternative = self::hasTopicAlternative($ranked, $topicCounts)
+				|| self::hasTopicAlternative($related, $topicCounts);
 			if ($related !== [] && ($slot % self::EXPLORE_EVERY) === self::EXPLORE_EVERY - 1) {
-				$relatedIndex = self::firstAvailableAlternative($related, $storyCounts, $tagCounts, $hasTagAlternative);
+				$relatedIndex = self::firstAvailableAlternative($related, $storyCounts, $tagCounts, $hasTagAlternative, $topicCounts, $hasTopicAlternative);
 				if ($relatedIndex !== null) {
-					self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $related[$relatedIndex]);
+					self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $topicCounts, $related[$relatedIndex]);
 					array_splice($related, $relatedIndex, 1);
 					continue;
 				}
@@ -400,6 +408,9 @@ class InterestFeedService {
 				if (is_int($cluster) && $storyCount >= self::STORY_LIMIT && !$storyOverflow) {
 					continue;
 				}
+				if ($hasTopicAlternative && self::allTopicsSaturated(self::diversityTopics($entry), $topicCounts)) {
+					continue;
+				}
 				$tag = self::primaryTag($entry);
 				if ($hasTagAlternative && $tag !== '' && ($tagCounts[$tag] ?? 0) >= self::MAX_TAG_IN_SNAPSHOT) {
 					continue;
@@ -415,16 +426,16 @@ class InterestFeedService {
 			}
 			$pick ??= $authorOnly;
 			if ($pick === null && $hasStoryAlternative) {
-				$pick = self::firstAvailableAlternative($ranked, $storyCounts, $tagCounts, $hasTagAlternative);
+				$pick = self::firstAvailableAlternative($ranked, $storyCounts, $tagCounts, $hasTagAlternative, $topicCounts, $hasTopicAlternative);
 			}
 			if ($pick === null && !$hasStoryAlternative) {
-				$pick = self::firstStoryOverflow($ranked, $storyCounts);
+				$pick = self::firstStoryOverflow($ranked, $storyCounts, $topicCounts, $hasTopicAlternative);
 			}
 			if ($pick === null) {
 				break;
 			}
 
-			self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $ranked[$pick]);
+			self::appendWithStoryAndTagCount($placed, $storyCounts, $tagCounts, $topicCounts, $ranked[$pick]);
 			array_splice($ranked, $pick, 1);
 		}
 
@@ -459,14 +470,20 @@ class InterestFeedService {
 				);
 				$cacheKey = self::storyTermCacheKey($owner, $nid, (string)($entry['updated'] ?? ''), $cardVersion, $secret);
 				$cacheKeys[$nid] = $cacheKey;
-				$cachedTerms = $this->storyTermCache()->get($cacheKey);
-				if (!is_array($cachedTerms) || !array_is_list($cachedTerms)
-					|| count(array_filter($cachedTerms, 'is_string')) !== count($cachedTerms)) {
+				$cachedFeatures = $this->storyTermCache()->get($cacheKey);
+				if (!is_array($cachedFeatures)
+					|| !is_array($cachedFeatures['story_terms'] ?? null)
+					|| !array_is_list($cachedFeatures['story_terms'])
+					|| count(array_filter($cachedFeatures['story_terms'], 'is_string')) !== count($cachedFeatures['story_terms'])
+					|| !is_array($cachedFeatures['diversity_topics'] ?? null)
+					|| !array_is_list($cachedFeatures['diversity_topics'])
+					|| count(array_filter($cachedFeatures['diversity_topics'], 'is_string')) !== count($cachedFeatures['diversity_topics'])) {
 					continue;
 				}
 
 				foreach ($indicesByNid[$nid] as $cachedIndex) {
-					$entries[$cachedIndex]['story_terms'] = $cachedTerms;
+					$entries[$cachedIndex]['story_terms'] = $cachedFeatures['story_terms'];
+					$entries[$cachedIndex]['diversity_topics'] = $cachedFeatures['diversity_topics'];
 				}
 				unset($indicesByNid[$nid]);
 			}
@@ -482,15 +499,20 @@ class InterestFeedService {
 					continue;
 				}
 
-				$terms = $this->features->extractStoryTerms($post);
+				$features = $this->features->extract($post, true);
+				$terms = $features['story_terms'] ?? [];
 				$cachedTerms = $secret === ''
 					? $terms
 					: RecommendationStoryFingerprint::opaqueTerms($terms, $secret, $owner);
+				$cachedFeatures = [
+					'story_terms' => $cachedTerms,
+					'diversity_topics' => $this->features->diversityTopics(array_keys($features['topics'])),
+				];
 				foreach ($indices as $index) {
-					$entries[$index]['story_terms'] = $cachedTerms;
+					$entries[$index] += $cachedFeatures;
 				}
 				if ($secret !== '' && isset($cacheKeys[$key])) {
-					$this->storyTermCache()->set($cacheKeys[$key], $cachedTerms, self::SNAPSHOT_TTL);
+					$this->storyTermCache()->set($cacheKeys[$key], $cachedFeatures, self::SNAPSHOT_TTL);
 				}
 			}
 		}
@@ -499,15 +521,19 @@ class InterestFeedService {
 	}
 
 	private static function storyTermCacheKey(string $owner, string $nid, string $updated, string $cardVersion, string $secret): string {
-		return 'story-v3-' . hash('sha256', hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated . "\0" . $cardVersion);
+		return 'story-v4-' . hash(
+			'sha256',
+			hash('sha256', $secret) . "\0" . $owner . "\0" . $nid . "\0" . $updated . "\0" . $cardVersion
+			. "\0" . RecommendationFeatureExtractor::VERSION . "\0" . RecommendationTopicCatalog::VERSION
+		);
 	}
 
 	private function storyTermCache(): ICache {
 		return $this->storyTermCache ??= $this->cacheFactory->createDistributed('social.interests.stories');
 	}
 
-	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, int> $tagCounts @param array<string, mixed> $candidate */
-	private static function appendWithStoryAndTagCount(array &$placed, array &$storyCounts, array &$tagCounts, array $candidate): void {
+	/** @param list<array<string, mixed>> $placed @param array<int, int> $storyCounts @param array<string, int> $tagCounts @param array<string, int> $topicCounts @param array<string, mixed> $candidate */
+	private static function appendWithStoryAndTagCount(array &$placed, array &$storyCounts, array &$tagCounts, array &$topicCounts, array $candidate): void {
 		$cluster = $candidate['_story_cluster'] ?? null;
 		if (is_int($cluster)) {
 			$storyCounts[$cluster] = ($storyCounts[$cluster] ?? 0) + 1;
@@ -515,6 +541,9 @@ class InterestFeedService {
 		$tag = self::primaryTag($candidate);
 		if ($tag !== '') {
 			$tagCounts[$tag] = ($tagCounts[$tag] ?? 0) + 1;
+		}
+		foreach (self::diversityTopics($candidate) as $topic) {
+			$topicCounts[$topic] = ($topicCounts[$topic] ?? 0) + 1;
 		}
 		$placed[] = $candidate;
 	}
@@ -539,11 +568,48 @@ class InterestFeedService {
 		return false;
 	}
 
-	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts @param array<string, int> $tagCounts */
-	private static function firstAvailableAlternative(array $entries, array $storyCounts, array $tagCounts, bool $hasTagAlternative): ?int {
+	/** @param list<array<string, mixed>> $entries @param array<string, int> $topicCounts */
+	private static function hasTopicAlternative(array $entries, array $topicCounts): bool {
+		foreach ($entries as $entry) {
+			if (!self::allTopicsSaturated(self::diversityTopics($entry), $topicCounts)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** @param array<string, mixed> $candidate @return list<string> */
+	private static function diversityTopics(array $candidate): array {
+		$topics = $candidate['diversity_topics'] ?? [];
+
+		return is_array($topics)
+			? array_values(array_unique(array_filter($topics, static fn (mixed $topic): bool => is_string($topic) && $topic !== '')))
+			: [];
+	}
+
+	/** @param list<string> $topics @param array<string, int> $topicCounts */
+	private static function allTopicsSaturated(array $topics, array $topicCounts): bool {
+		if ($topics === []) {
+			return false;
+		}
+		foreach ($topics as $topic) {
+			if (($topicCounts[$topic] ?? 0) < self::MAX_TOPIC_IN_SNAPSHOT) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts @param array<string, int> $tagCounts @param array<string, int> $topicCounts */
+	private static function firstAvailableAlternative(array $entries, array $storyCounts, array $tagCounts, bool $hasTagAlternative, array $topicCounts, bool $hasTopicAlternative): ?int {
 		foreach ($entries as $index => $entry) {
 			$cluster = $entry['_story_cluster'] ?? null;
 			if (is_int($cluster) && ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT) {
+				continue;
+			}
+			if ($hasTopicAlternative && self::allTopicsSaturated(self::diversityTopics($entry), $topicCounts)) {
 				continue;
 			}
 			$tag = self::primaryTag($entry);
@@ -568,13 +634,14 @@ class InterestFeedService {
 		return false;
 	}
 
-	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts */
-	private static function firstStoryOverflow(array $entries, array $storyCounts): ?int {
+	/** @param list<array<string, mixed>> $entries @param array<int, int> $storyCounts @param array<string, int> $topicCounts */
+	private static function firstStoryOverflow(array $entries, array $storyCounts, array $topicCounts, bool $hasTopicAlternative): ?int {
 		foreach ($entries as $index => $entry) {
 			$cluster = $entry['_story_cluster'] ?? null;
 			if (is_int($cluster)
 				&& ($storyCounts[$cluster] ?? 0) >= self::STORY_LIMIT
-				&& ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT + self::STORY_OVERFLOW) {
+				&& ($storyCounts[$cluster] ?? 0) < self::STORY_LIMIT + self::STORY_OVERFLOW
+				&& (!$hasTopicAlternative || !self::allTopicsSaturated(self::diversityTopics($entry), $topicCounts))) {
 				return $index;
 			}
 		}
