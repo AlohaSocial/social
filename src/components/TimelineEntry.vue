@@ -199,7 +199,7 @@ import { onTick } from '../services/clock.js'
 import { isPhone, onPhoneChange } from '../services/phone.js'
 import { mapStores } from 'pinia'
 import { useSettingsStore } from '../store/settings.js'
-import { useTimelineStore } from '../store/timeline.js'
+import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 
 /** the face's size inside the card, on a phone */
 const PHONE_AVATAR = 36
@@ -424,11 +424,12 @@ export default {
 		 * @return {{tag: string|null, reason?: string, text: string, label: string}|null}
 		 */
 		interest() {
-			if (this.isNotification) {
+			if (this.isNotification || !isPersonalizedFeed({ type: this.type, params: this.timelineStore.params })) {
 				return null
 			}
 
-			return interestReason(this.status.interest ?? this.entryContent?.interest)
+			const snapshot = this.timelineStore.getRecommendationReason(this.status.id)
+			return interestReason(snapshot !== undefined ? snapshot : (this.status.interest ?? this.entryContent?.interest))
 		},
 
 		/** @return {boolean} */
