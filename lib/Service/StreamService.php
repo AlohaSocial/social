@@ -1097,8 +1097,8 @@ class StreamService {
 						}
 						AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
 						$synced++;
-					continue;
-				}
+						continue;
+					}
 					if (in_array($itemType, ['Create', 'Update'], true) && isset($itemData['object']) && is_array($itemData['object'])) {
 						$noteData = $itemData['object'];
 					} elseif (in_array($itemType, ['Note', 'Event'], true)) {
