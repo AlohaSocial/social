@@ -1927,7 +1927,7 @@ export const useTimelineStore = defineStore('timeline', {
 				? (attempt < 3 ? PROFILE_REFETCH_MS : REMOTE_PROFILE_REFETCH_MS)
 				: this.profilePageFilling
 					? PROFILE_REFETCH_MS
-				: Math.min(THREAD_REFETCH_MS * (2 ** attempt), THREAD_REFETCH_MAX_MS)
+					: Math.min(THREAD_REFETCH_MS * (2 ** attempt), THREAD_REFETCH_MAX_MS)
 			setTimeout(async () => {
 				if (this.getTimelineIdentity !== identity) {
 					return
