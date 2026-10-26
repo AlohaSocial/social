@@ -52,6 +52,26 @@ their values. Publishing/saving prevents duplicate submissions and unsafe route
 changes. The Nextcloud dialog provides its focus trap and Escape handling, with
 focus restored to an available opening control or compact field afterwards.
 
+## Remote profile synchronization (FR-04 / FR-13)
+
+Cached profile posts remain visible during background synchronization. The shared
+list/grid parent shows localized pending, failed and taking-longer notices. A
+failed or overdue read is never presented as an empty account; recovery checks
+the first page while preserving the list and deduplicating new posts.
+
+ActivityPub outbox jobs expose a safe failure state, with a 60-second backoff
+before re-queuing. Empty filtered first pages may continue an existing outbox
+cursor, so older photos/videos can be found behind recent non-media items. The
+frontend also handles failed HTTP polls and bounded polling exhaustion. It
+cancels scheduled checks on navigation and keeps only one scheduled check for
+the active timeline. Existing Bluesky pending-profile headers receive the same
+bounded waiting UX; detailed AppView failure reporting still belongs to FR-07.
+
+The API state distinguishes a pending or failed operation from no current
+operation (`idle`); idle does not promise full remote indexing. Guest reads keep
+the existing cache-only behavior. Tests cover the local queue/state contracts;
+this does not certify availability or completeness of every public remote server.
+
 ## Completed stabilization
 
 - Author-only view counts are text on the post detail page. There is no eye icon
@@ -68,7 +88,7 @@ focus restored to an available opening control or compact field afterwards.
 | FR-01 | Shared media grid, switcher and route history exist. Continue checking loading/failure consistency and transitions across all five views. |
 | FR-02 | Public default and optional-tab preferences are implemented in this stack; direct links keep normal access checks. |
 | FR-03 | Shared Composer: compact one-line sending plus the existing full modal, as subsequently requested. Draft contexts, pending-save protection and dirty-edit confirmation are covered. |
-| FR-04 | Cached remote profiles, bounded outbox jobs and filling headers exist; refine incomplete, failed and retry states. |
+| FR-04 | Cached posts stay visible with pending/failure/overdue notices and a deduplicating first-page recheck. Outbox failures, retry backoff and empty filtered-page continuation are implemented; live remote availability is separate. |
 | FR-05 | Existing Event, poll, video, audio and link components remain the rendering foundation; audit safe fallback and original-source actions. |
 | FR-06 | Event metadata, Calendar import/update and ICS fallback exist. RSVP remains backend-dependent and must not be presented as Calendar import. |
 | FR-07 | Network badges, ordered profile links, feeds/lists/starter packs and moderation exist; improve discoverability and failure feedback. |

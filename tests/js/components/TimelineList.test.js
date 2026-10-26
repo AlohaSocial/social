@@ -155,6 +155,64 @@ describe('TimelineList', () => {
 		vi.unstubAllGlobals()
 	})
 
+	describe('remote profile synchronization', () => {
+		const profile = (options = {}) => mountList({
+			identity: '["account","bob@remote.example",{}]',
+			route: { name: 'profile', params: { account: 'bob@remote.example' } },
+			props: { type: 'account' },
+			...options,
+		})
+
+		it.each(['list', 'grid'])('keeps cached %s posts visible during synchronization', async (display) => {
+			const { wrapper, store } = profile({ timeline: [status('1')], props: { type: 'account', display } })
+			await flushPromises()
+			store.profileSyncState = 'pending'
+			await nextTick()
+			expect(wrapper.find('.profile-sync-notice').text()).toContain('Available posts are shown below')
+			expect(store.timeline).toEqual(['1'])
+			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
+		})
+
+		it.each(['pending', 'failed', 'stalled'])('never presents %s as an empty account', async (state) => {
+			const { wrapper, store } = profile()
+			await flushPromises()
+			store.profileSyncState = state
+			await nextTick()
+			expect(wrapper.find('.profile-sync-notice').exists()).toBe(true)
+			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
+			expect(wrapper.find('.profile-sync-notice button').exists()).toBe(state !== 'pending')
+		})
+
+		it('checks the first page without dropping cached posts and prevents duplicate checks', async () => {
+			const { wrapper, store, dispatch } = profile({ timeline: [status('1')] })
+			await flushPromises()
+			store.profileSyncState = 'stalled'
+			let complete
+			dispatch.mockImplementationOnce(() => new Promise((resolve) => {
+				complete = resolve
+			}))
+			const first = wrapper.vm.retryProfileSync()
+			await wrapper.vm.retryProfileSync()
+			expect(wrapper.vm.profileSyncChecking).toBe(true)
+			expect(dispatch).toHaveBeenLastCalledWith({})
+			expect(store.timeline).toEqual(['1'])
+			complete([])
+			await first
+			expect(wrapper.vm.profileSyncChecking).toBe(false)
+		})
+
+		it('keeps a failed manual check recoverable without an empty-state lie', async () => {
+			const { wrapper, store, dispatch } = profile()
+			await flushPromises()
+			store.profileSyncState = 'stalled'
+			dispatch.mockRejectedValueOnce(new Error('Offline'))
+			await wrapper.vm.retryProfileSync()
+			expect(store.profileSyncState).toBe('failed')
+			expect(wrapper.find('.profile-sync-notice').text()).toContain('This does not mean it has no posts')
+			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
+		})
+	})
+
 	it('refreshes visible remote counts on entry and throttles repeated checks', async () => {
 		const post = { ...status('bsky'), uri: 'at://did:plc:alice/app.bsky.feed.post/1' }
 		const { wrapper, store } = mountList({ timeline: [post] })
@@ -1616,38 +1674,37 @@ describe('TimelineList', () => {
 			await flushPromises()
 
 			expect(emptyTitle(own)).toBe('You have not tooted yet')
-			expect(emptyTitle(other)).toBe('alice hasn\'t tooted yet')
+			expect(emptyTitle(other)).toBe('No posts are available here yet')
 		})
 
-		it('names the account on somebody else\'s empty profile', async () => {
+		it('does not claim an uncached profile has never posted', async () => {
 			const { wrapper } = mountList({ route: { name: 'profile', params: { account: 'bob' } } })
 			await flushPromises()
-			expect(emptyTitle(wrapper)).toBe('bob hasn\'t tooted yet')
+			expect(emptyTitle(wrapper)).toBe('No posts are available here yet')
 		})
 
 		/**
-		 * One sentence with a placeholder, not a name glued to a translated
-		 * fragment: a translator has to be able to put the name where their
-		 * language puts it.
+		 * Keep the availability message as one translation key rather than
+		 * building it from fragments that cannot be translated naturally.
 		 */
 		it('offers the empty-profile sentence for translation whole', async () => {
-			register('social', { '{account} hasn\'t tooted yet': 'Nothing from {account} so far' })
+			register('social', { 'No posts are available here yet': 'No cached posts so far' })
 			try {
 				const { wrapper } = mountList({ route: { name: 'profile', params: { account: 'bob' } } })
 				await flushPromises()
-				expect(emptyTitle(wrapper)).toBe('Nothing from bob so far')
+				expect(emptyTitle(wrapper)).toBe('No cached posts so far')
 			} finally {
 				unregister('social')
 			}
 		})
 
-		it('names the account on the public profile page even for the owner', async () => {
+		it('uses cache availability wording on a public profile, even for the owner', async () => {
 			const { wrapper } = mountList({
 				route: { name: 'profile', params: { account: 'alice' } },
 				serverData: { public: true, cloudAddress: 'https://cloud.example.org' },
 			})
 			await flushPromises()
-			expect(emptyTitle(wrapper)).toBe('alice hasn\'t tooted yet')
+			expect(emptyTitle(wrapper)).toBe('No posts are available here yet')
 		})
 
 		/**
@@ -1860,7 +1917,7 @@ describe('TimelineList', () => {
 				serverData: { public: true, cloudAddress: 'https://cloud.example.org' },
 			})
 			await flushPromises()
-			expect(emptyTitle(first.wrapper)).toBe('alice hasn\'t tooted yet')
+			expect(emptyTitle(first.wrapper)).toBe('No posts are available here yet')
 
 			const second = mountList({ route: { name: 'profile', params: { account: 'alice' } } })
 			await flushPromises()

@@ -1584,3 +1584,19 @@ Status `nid` values are exposed as decimal strings wherever the API carries IDs 
 ### ATProto post reply replacement
 
 `com.atproto.repo.putRecord` supports replacing or omitting `reply` on an existing local `app.bsky.feed.post`. Omission removes its parent; unchanged references preserve the existing relationship. Parent access, reply permissions, audience and cycle checks apply before persistence. The Social row and ATProto repository use the existing conditional-write transaction. See [federation compatibility](Federation-Compatibility.md#editing-reply-targets).
+
+### Remote profile synchronization metadata
+
+For an authenticated read of `GET /api/v1/accounts/{account}/statuses` for a
+remote ActivityPub actor, `X-Social-Profile-Sync-State` is one of `pending`,
+`failed` or `idle`. It describes the background read, not whether the entire
+remote account has been indexed. A failed outbox read or queue write remains
+visible for a 60-second backoff before normal reads may queue it again. No raw
+remote exception is exposed. `X-Social-Profile-Filling` and the existing filling
+headers remain backward compatible. Anonymous requests remain cache-only.
+
+An empty first page can continue an existing outbox cursor too, including a
+Photos/Videos filter that has not found matching posts yet. The web frontend
+keeps cached posts while checking, stops automatic profile polls after their
+bounded window, and offers a first-page recheck without clearing or duplicating
+those posts. A stalled check is not a declaration that the remote account is empty.

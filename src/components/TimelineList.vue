@@ -21,6 +21,24 @@
 				{{ n('social', '%n new post', '%n new posts', arrived) }}
 			</button>
 		</transition>
+		<div
+			v-if="profileSyncNotice && error === null"
+			class="profile-sync-notice"
+			:class="{ 'profile-sync-notice--warning': profileSyncState !== 'pending' }"
+			role="status"
+			:aria-busy="profileSyncChecking"
+			aria-live="polite">
+			<Refresh :size="18" aria-hidden="true" />
+			<p>{{ profileSyncNotice }}</p>
+			<NcButton
+				v-if="profileSyncState !== 'pending'"
+				variant="tertiary"
+				:disabled="profileSyncChecking || loading"
+				@click="retryProfileSync">
+				{{ profileSyncChecking ? t('social', 'Checking…') : profileSyncState === 'stalled' ? t('social', 'Check again') : t('social', 'Try again') }}
+			</NcButton>
+		</div>
+
 		<!-- The grid is a different way of drawing the same timeline, not a
 		     different timeline: paging, the new-post pill, the error state and
 		     the empty state all stay here, because otherwise the grid would
@@ -375,6 +393,7 @@ export default {
 			 */
 			focusObserver: null,
 			loading: false,
+			profileSyncChecking: false,
 			allLoaded: false,
 			/**
 			 * Which list the requests in flight belong to. Switching timeline
@@ -599,9 +618,31 @@ export default {
 			return this.timelineStore.timelinePageEmpty
 		},
 
+		/** @return {string} the backend or bounded-poll synchronization state */
+		profileSyncState() {
+			return this.timelineStore.type === 'account' ? this.timelineStore.profileSyncState : ''
+		},
+
+		profileSyncNotice() {
+			if (this.profileSyncState === 'pending') {
+				return this.timeline.length > 0
+					? t('social', 'This profile is being synchronized. Available posts are shown below.')
+					: t('social', 'This profile is being synchronized. Posts will appear as they arrive.')
+			}
+			if (this.profileSyncState === 'failed') {
+				return this.timeline.length > 0
+					? t('social', 'This profile could not be refreshed. Previously loaded posts are still available. Try again shortly.')
+					: t('social', 'This profile could not be refreshed. This does not mean it has no posts. Try again shortly.')
+			}
+			return this.profileSyncState === 'stalled'
+				? t('social', 'Synchronization is taking longer than expected. Check again to see whether more posts have arrived.')
+				: ''
+		},
+
 		/** @return {boolean} nothing to show, and nothing went wrong */
 		showEmptyContent() {
 			return this.error === null
+				&& !['pending', 'failed', 'stalled'].includes(this.profileSyncState)
 				&& this.allLoaded
 				&& this.timeline.length === 0
 				&& this.emptyContentData.title !== ''
@@ -668,7 +709,8 @@ export default {
 				if (this.$route.name === 'profile' && (this.serverData.public || !this.isOwnHandle(this.$route.params.account))) {
 					return {
 						...byName,
-						title: t('social', '{account} hasn\'t tooted yet', { account: String(this.$route.params.account) }),
+						title: t('social', 'No posts are available here yet'),
+						description: t('social', 'This server has no posts to show for this profile.'),
 					}
 				}
 				return byName
@@ -918,6 +960,7 @@ export default {
 		 * @param {string} before the list being left
 		 */
 		timelineIdentity(now, before) {
+			this.profileSyncChecking = false
 			if (!this.showParents) {
 				// a list put back, or fetched ahead, replaces the one on
 				// screen in the same render: drawn as a swap, like a held-over
@@ -1669,6 +1712,33 @@ export default {
 			this.ensureMarker()
 			this.watchSentinel()
 			this.loadFirstPage()
+		},
+
+		/** Recheck the first page without discarding cached posts or adding duplicates. */
+		async retryProfileSync() {
+			if (this.profileSyncChecking || this.loading) {
+				return
+			}
+			const generation = this.generation
+			this.profileSyncChecking = true
+			this.timelineStore.cancelBackgroundRefetch()
+			try {
+				await this.timelineStore.fetchTimeline({})
+				if (generation === this.generation) {
+					this.allLoaded = this.timeline.length === 0 && !this.timelinePageFilling
+					this.watchSentinel()
+				}
+			} catch (error) {
+				if (generation === this.generation) {
+					this.timelineStore.markProfileSyncFailed()
+					this.allLoaded = this.timeline.length === 0
+				}
+				logger.debug('The profile synchronization check failed', { error })
+			} finally {
+				if (generation === this.generation) {
+					this.profileSyncChecking = false
+				}
+			}
 		},
 
 		/** What the retry button does: the one thing that re-arms the sentinel after a failure. */
