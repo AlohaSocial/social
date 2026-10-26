@@ -351,6 +351,10 @@ detects an event that is already in a calendar and avoids adding it twice. If
 the Calendar app is unavailable or no writable calendar exists, the card offers
 an `.ics` download instead. Public status pages offer the `.ics` download;
 direct import requires a signed-in Nextcloud session and a writable calendar.
+The calendar entry is a copy, not a live subscription. If Gancio later changes
+an event, Social updates the event in its timeline, but an entry already
+imported into Calendar stays as it was. To import the changed details, delete
+the old entry in Calendar first and then import the event again from Social.
 
 ## Reading
 
