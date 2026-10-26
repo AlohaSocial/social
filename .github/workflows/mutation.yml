@@ -44,7 +44,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up dependencies
-        run: composer i
+        run: bash .github/scripts/composer-install-retry.sh install --no-interaction --no-progress --prefer-dist
 
       - name: Infection
         run: composer run test:mutation
