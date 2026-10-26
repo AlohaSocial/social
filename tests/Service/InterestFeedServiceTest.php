@@ -317,6 +317,56 @@ class InterestFeedServiceTest extends TestCase {
 		$this->assertContains('music-story', array_column($spread, 'nid'));
 	}
 
+	public function testLegacySpreadIntroducesOtherTopicsAcrossDifferentHashtags(): void {
+		$ranked = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$ranked[] = [
+				'nid' => 'security-' . $i,
+				'author' => 'security-author-' . $i,
+				'tags' => ['security-report-' . $i],
+				'diversity_topics' => ['tech.security', 'software.backend'],
+			];
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$ranked[] = [
+				'nid' => 'garden-' . $i,
+				'author' => 'garden-author-' . $i,
+				'tags' => ['garden-' . $i],
+				'diversity_topics' => ['home.gardening'],
+			];
+		}
+
+		$spread = $this->service()->spread($ranked, []);
+
+		self::assertSame('garden-1', $spread[6]['nid'], 'six security posts are followed by a different topic, even when every post has a different hashtag');
+	}
+
+	public function testLegacyRankingDerivesTopicDiversityFromPostContent(): void {
+		$this->weights(['updates' => 3.0]);
+		$communityNids = [];
+		for ($i = 1; $i <= 12; $i++) {
+			$this->given($i * 60, ['updates'], 'security-author-' . $i, $i);
+			$uniqueTerms = implode(' ', array_map(static fn (int $term): string => 'case' . $i . 'token' . $term, range(1, 24)));
+			$this->posts[array_key_last($this->posts)]['content'] = 'PHP maintainers disclose a security vulnerability. ' . $uniqueTerms;
+		}
+		for ($i = 1; $i <= 3; $i++) {
+			$communityNids[] = $this->given(self::HOUR + $i * 60, ['updates'], 'garden-author-' . $i, 100 + $i);
+			$this->posts[array_key_last($this->posts)]['content'] = 'Community gardens welcome volunteers for a neighborhood planting day.';
+		}
+
+		$ranked = $this->service()->rank($this->viewer());
+		$firstOtherTopic = null;
+		foreach ($ranked as $index => $entry) {
+			if (in_array($entry['nid'], $communityNids, true)) {
+				$firstOtherTopic = $index;
+				break;
+			}
+		}
+
+		self::assertGreaterThan(0, $this->storyLookups);
+		self::assertSame(6, $firstOtherTopic, 'classified security posts with varied text and hashtag arrive in a bounded run before another topic');
+	}
+
 	public function testOneSlotInTenIsATagThatKeepsCompanyWithTheReadersOwn(): void {
 		$this->weights(['cats' => 1.0]);
 		foreach (range(1, 12) as $i) {

@@ -30,6 +30,7 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
+use OCA\Social\Model\ActivityPub\Activity\Update;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -83,6 +84,7 @@ class PostStoreTest extends TestCase {
 				'Create' => new Create(),
 				'Announce' => new Announce(),
 				'Delete' => new Delete(),
+				'Update' => new Update(),
 				'Person' => new Person(),
 			};
 			$item->setUrlCloud('https://social.test');
@@ -442,6 +444,64 @@ class PostStoreTest extends TestCase {
 		$this->assertTrue($this->store->storePost($this->postView()));
 	}
 
+	public function testImportedPostSelfLabelsSurviveOnTheStoredAtprotoDetails(): void {
+		$view = $this->postView();
+		$view['record']['labels'] = [
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => 'custom-label'], ['val' => 'graphic-media']],
+		];
+
+		$this->assertTrue($this->store->storePost($view));
+		$this->assertSame(
+			['custom-label', 'graphic-media'],
+			$this->imported[0]->getObject()->getDetails(PostMapper::DETAIL)[Details::ATPROTO_SELF_LABELS],
+			'the original labels remain available to RecordMapper when this post is republished'
+		);
+	}
+
+	public function testNewTakedownLabelDeletesTheCachedRemotePost(): void {
+		$id = 'https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22';
+		$this->known[] = $id;
+		$view = $this->postView();
+		$view['labels'] = [['src' => self::OTHER, 'uri' => 'at://' . self::OTHER . '/app.bsky.labeler.service/self', 'val' => '!takedown']];
+
+		$this->assertFalse($this->store->storePost($view));
+		$this->assertCount(1, $this->imported);
+		$this->assertInstanceOf(Delete::class, $this->imported[0]);
+		$this->assertSame($id, $this->imported[0]->getObjectId());
+	}
+
+	public function testTakedownLabelDoesNotDeleteTheLocalSourcePost(): void {
+		$id = 'https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22';
+		$this->known[] = $id;
+		$this->local[] = $id;
+		$view = $this->postView();
+		$view['labels'] = [['src' => self::OTHER, 'uri' => 'at://' . self::OTHER . '/app.bsky.labeler.service/self', 'val' => '!takedown']];
+
+		$this->assertFalse($this->store->storePost($view));
+		$this->assertSame([], $this->imported, 'the source post remains stored locally');
+	}
+
+	public function testLabelerChangesRefreshAnUnchangedPostRecord(): void {
+		$id = 'https://bsky.app/profile/' . self::DID . '/post/3kznmn7xqxl22';
+		$cid = \OCA\Social\Atproto\Protocol\Cid::forRaw('the unchanged post record')->toString();
+		$known = (new Note())->setId($id)->setAttributedTo('https://bsky.app/profile/' . self::DID);
+		$known->setDetailArray(Details::ATPROTO, ['cid' => $cid, 'labels' => [], 'label_sources' => []]);
+		$this->known[] = $id;
+		$this->streams->method('getStreamById')->willReturn($known);
+		$view = $this->postView();
+		$view['cid'] = $cid;
+		$view['labels'] = [['src' => self::OTHER, 'uri' => 'at://' . self::OTHER . '/app.bsky.labeler.service/self', 'val' => 'porn']];
+
+		$this->assertFalse($this->store->storePost($view), 'the cached row is refreshed, not created again');
+		$this->assertCount(1, $this->imported);
+		$this->assertInstanceOf(Update::class, $this->imported[0]);
+		$updated = $this->imported[0]->getObject();
+		$this->assertTrue($updated->isSensitive());
+		$this->assertSame(['porn'], $updated->getDetails(PostMapper::DETAIL)['labels']);
+		$this->assertSame([['src' => self::OTHER, 'val' => 'porn']], $updated->getDetails(PostMapper::DETAIL)['label_sources']);
+	}
+
 	public function testALimitedAuthorsPostsAreNotStored(): void {
 		$limited = $this->person(self::DID);
 		$limited->setDetailArray(ActorMapper::DETAIL, ['limited' => true]);
@@ -569,6 +629,22 @@ class PostStoreTest extends TestCase {
 
 		$this->assertSame(1, $this->store->deleteGone([$id]));
 		$this->assertSame($id, $this->imported[0]->getObjectId());
+	}
+
+	public function testAnUnavailablePdsDoesNotHoldTheDeletionSweepOnOneOmittedPost(): void {
+		$uncertain = 'https://bsky.app/profile/' . self::DID . '/post/3kuncertain';
+		$present = 'https://bsky.app/profile/' . self::DID . '/post/3kpresent';
+		$this->known = [$uncertain, $present];
+		$this->actors->method('pdsEndpoint')->willReturn('https://pds.example');
+		$this->pds->expects($this->once())->method('call')->willThrowException(new AtprotoException('PDS unavailable'));
+		$presentView = ['uri' => 'at://' . self::DID . '/app.bsky.feed.post/3kpresent', 'likeCount' => 2];
+		$this->appView->method('query')->willReturn(['posts' => [$presentView]]);
+
+		$this->assertSame([
+			'posts' => [$present => $presentView],
+			'deleted' => 0,
+		], $this->store->postViews([$uncertain, $present], confirmMissing: true));
+		$this->assertSame([], $this->imported, 'an unconfirmed absence is retained');
 	}
 
 	public function testAnInteractiveCountReadDoesNotWaitForThePdsWhenAppViewOmitsAPost(): void {

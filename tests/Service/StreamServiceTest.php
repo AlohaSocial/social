@@ -19,6 +19,7 @@ use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Activity\Delete;
 use OCA\Social\Model\ActivityPub\Actor\Group;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -1848,6 +1849,54 @@ class StreamServiceTest extends TestCase {
 			'end_time' => '2026-11-15T19:00:00Z',
 			'location' => 'New venue',
 		], $existing->getDetails(Details::EVENT));
+	}
+
+	public function testSyncRemoteTimelineAppliesDeletesFromTheOutboxOwner(): void {
+		$gancio = $this->remoteActor('https://events.example/@events');
+		$eventId = 'https://events.example/federation/events/42';
+		$deleteData = [
+			'id' => 'https://events.example/federation/activities/42-delete',
+			'type' => 'Delete',
+			'actor' => $gancio->getId(),
+			'object' => ['type' => 'Tombstone', 'id' => $eventId],
+		];
+		$delete = new Delete();
+		$delete->setId($deleteData['id']);
+		$delete->setActorId($gancio->getId());
+		$delete->setObjectId($eventId);
+
+		$deleteInterface = $this->createMock(IActivityPubInterface::class);
+		$deleteInterface->expects(self::once())->method('processIncomingRequest')->with($delete);
+		$activityPub = $this->createMock(AP::class);
+		$activityPub->expects(self::once())->method('getItemFromData')->with($deleteData)->willReturn($delete);
+		$activityPub->expects(self::once())->method('getInterfaceForItem')->with($delete)->willReturn($deleteInterface);
+		AP::set($activityPub);
+
+		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [$deleteData]]);
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($gancio));
+	}
+
+	public function testSyncRemoteTimelineIgnoresOutboxDeletesByAnotherActorOnTheSameServer(): void {
+		$gancio = $this->remoteActor('https://events.example/@events');
+		$deleteData = [
+			'id' => 'https://events.example/federation/activities/42-delete',
+			'type' => 'Delete',
+			'actor' => 'https://events.example/@someone-else',
+			'object' => 'https://events.example/federation/events/42',
+		];
+		$delete = new Delete();
+		$delete->setId($deleteData['id']);
+		$delete->setActorId($deleteData['actor']);
+		$delete->setObjectId($deleteData['object']);
+
+		$activityPub = $this->createMock(AP::class);
+		$activityPub->expects(self::once())->method('getItemFromData')->with($deleteData)->willReturn($delete);
+		$activityPub->expects(self::never())->method('getInterfaceForItem');
+		AP::set($activityPub);
+		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [$deleteData]]);
+
+		self::assertSame(0, $this->service->syncRemoteTimeline($gancio));
 	}
 
 	public function testSyncRemoteTimelineSanitisesWhatItStores(): void {
