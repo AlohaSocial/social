@@ -3352,6 +3352,9 @@ OC.L10N.register(
     "Started" : "Begonnen",
     "Ongoing" : "Laufend",
     "Past" : "Vergangen",
-    "Adding a calendar copy does not confirm attendance or automatically synchronize changes." : "Eine Kalenderkopie bestätigt keine Teilnahme und synchronisiert Änderungen nicht automatisch."
+    "Adding a calendar copy does not confirm attendance or automatically synchronize changes." : "Eine Kalenderkopie bestätigt keine Teilnahme und synchronisiert Änderungen nicht automatisch.",
+    "Photo feed layout" : "Ansicht des Foto-Feeds",
+    "Media feed" : "Medien-Feed",
+    "Tiles" : "Kacheln"
 },
 "nplurals=2; plural=(n != 1);");

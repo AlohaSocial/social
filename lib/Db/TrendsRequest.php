@@ -69,7 +69,7 @@ class TrendsRequest extends TrendsRequestBuilder {
 
 		// what a picture-first discover screen shows: a text post is a fine
 		// trending status and a poor thing to put in a grid of squares
-		if ($onlyMedia) {
+		if ($onlyMedia && $mediaType !== 'visual') {
 			$qb->limitToMedia();
 		}
 
@@ -77,7 +77,9 @@ class TrendsRequest extends TrendsRequestBuilder {
 		// `video` has a predicate of its own because a video need not be an
 		// attachment at all: PeerTube publishes a `Video` object, which arrives
 		// carrying `Video` in `subtype` and no file this instance can see.
-		if ($mediaType === 'video') {
+		if ($mediaType === 'visual') {
+			$qb->limitToVisualMedia();
+		} elseif ($mediaType === 'video') {
 			$qb->limitToVideo();
 		} elseif ($mediaType === 'short') {
 			$qb->limitToShort();
@@ -129,9 +131,13 @@ class TrendsRequest extends TrendsRequestBuilder {
 
 		$qb->andWhere($expr->eq('s.visibility', $qb->createNamedParameter(Stream::TYPE_PUBLIC)));
 		$qb->andWhere($expr->eq('s.type', $qb->createNamedParameter(Note::TYPE)));
-		$qb->limitToMedia();
+		if ($mediaType !== 'visual') {
+			$qb->limitToMedia();
+		}
 
-		if ($mediaType === 'video') {
+		if ($mediaType === 'visual') {
+			$qb->limitToVisualMedia();
+		} elseif ($mediaType === 'video') {
 			$qb->limitToVideo();
 		} elseif ($mediaType === 'short') {
 			$qb->limitToShort();

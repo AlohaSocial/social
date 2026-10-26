@@ -43,6 +43,12 @@
 				{{ heading }}
 			</h1>
 
+			<TimelineSwitcher
+				v-if="type === 'photos'"
+				:options="photoLayouts"
+				:value="selectedPhotoLayout"
+				:label="t('social', 'Photo feed layout')"
+				@update:value="choosePhotoLayout" />
 			<HashtagFollowButton
 				v-if="type === 'tags' && !followedTagsOnly"
 				:tag="String($route.params.tag)"
@@ -168,6 +174,9 @@ import IconBellCogOutline from 'vue-material-design-icons/BellCogOutline.vue'
 import IconCheckAll from 'vue-material-design-icons/CheckAll.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
+import IconViewGridOutline from 'vue-material-design-icons/ViewGridOutline.vue'
+import IconViewAgendaOutline from 'vue-material-design-icons/ViewAgendaOutline.vue'
+import { photoLayout, rememberPhotoLayout } from '../services/photoLayout.js'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
@@ -242,6 +251,7 @@ export default {
 	data() {
 		return {
 			infoHidden: false,
+			selectedPhotoLayout: photoLayout(),
 			/** the pending fetch-ahead of the other scopes, or 0 */
 			prefetchTimer: 0,
 			/** the title of the list being read, once the server has said */
@@ -365,21 +375,15 @@ export default {
 			return ['photos', 'videos'].includes(this.type)
 		},
 
-		/**
-		 * How the posts are drawn here.
-		 *
-		 * The same rule the profile follows, and for the same reason it gives:
-		 * Posts is what somebody wrote, which is a list; Photos and Videos are
-		 * what they showed, which is a grid. Those two pages were a list here
-		 * and a grid on a profile, so the same picture was a row in one place
-		 * and a tile in the other.
-		 *
-		 * Not a toggle. One question, one answer — a control to make Photos
-		 * look like a list would be asking the reader to settle something the
-		 * page has already answered by being Photos.
-		 *
-		 * @return {string} 'grid', 'videos' or 'list'
-		 */
+		/** @return {object[]} presentation choices, independent of feed scope */
+		photoLayouts() {
+			return [
+				{ value: 'list', label: t('social', 'Media feed'), icon: IconViewAgendaOutline },
+				{ value: 'grid', label: t('social', 'Tiles'), icon: IconViewGridOutline },
+			]
+		},
+
+		/** @return {string} shared list, media grid or video browse presentation */
 		display() {
 			// the Videos page is a video site's front page; it has its own
 			// "Upload a video" in place of the composer
@@ -387,7 +391,7 @@ export default {
 				return 'videos'
 			}
 
-			return this.type === 'photos' ? 'grid' : 'list'
+			return this.type === 'photos' ? this.selectedPhotoLayout : 'list'
 		},
 
 		/**
@@ -716,6 +720,13 @@ export default {
 	},
 
 	methods: {
+		choosePhotoLayout(layout) {
+			if (!['list', 'grid'].includes(layout)) {
+				return
+			}
+			this.selectedPhotoLayout = layout
+			rememberPhotoLayout(layout)
+		},
 
 		/**
 		 * Once a scope of the feed is on screen, fetches the first page of

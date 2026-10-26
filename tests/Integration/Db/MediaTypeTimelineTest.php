@@ -144,6 +144,14 @@ class MediaTypeTimelineTest extends TestCase {
 		);
 	}
 
+	public function testVisualFeedIncludesPhotosAndVideosAndExcludesTextAndAudio(): void {
+		$this->seed();
+		$this->assertEqualsCanonicalizing(
+			[self::BASE . '/notes/picture', self::BASE . '/notes/film'],
+			$this->profile('visual')
+		);
+	}
+
 	public function testPhotosAreThePostsCarryingAPicture(): void {
 		$this->seed();
 

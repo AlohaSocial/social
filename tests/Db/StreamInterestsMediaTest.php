@@ -44,7 +44,7 @@ class StreamInterestsMediaTest extends TestCase {
 		$this->assertStringContainsString("string \$media = ''", $body, 'the whole feed is the default');
 		$this->assertMatchesRegularExpression("/'photos'\) \{\s+\\\$qb->limitToMediaType\('image'\);/", $body);
 		$this->assertMatchesRegularExpression("/'videos'\) \{\s+\\\$qb->limitToVideo\(\);/", $body);
-		$this->assertMatchesRegularExpression("/'media'\) \{\s+\\\$qb->limitToMedia\(\);/", $body);
+		$this->assertMatchesRegularExpression("/'media'\) \{\s+\\\$qb->limitToVisualMedia\(\);/", $body);
 		$this->assertMatchesRegularExpression("/'shorts'\) \{\s+\\\$qb->limitToShort\(\);/", $body);
 	}
 }

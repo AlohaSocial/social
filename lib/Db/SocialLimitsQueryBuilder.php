@@ -562,6 +562,32 @@ class SocialLimitsQueryBuilder extends SocialCrossQueryBuilder {
 		return $this;
 	}
 
+	/** Photos feed: images, videos and animated images, excluding audio-only posts. */
+	public function limitToVisualMedia(): self {
+		$expr = $this->expr();
+		$pf = $this->getDefaultSelectAlias();
+		$byKind = $expr->in($pf . '.media_kind', $this->createNamedParameter(
+			['image', 'video', 'gifv', Stream::MEDIA_KIND_MIXED], IQueryBuilder::PARAM_STR_ARRAY
+		));
+		if ($this->mediaKindIsFilled()) {
+			$this->andWhere($byKind);
+			return $this;
+		}
+		$this->andWhere($expr->orX(
+			$byKind,
+			$expr->andX(
+				$expr->isNull($pf . '.media_kind'),
+				$expr->orX(
+					$expr->eq($pf . '.subtype', $this->createNamedParameter('Video')),
+					...array_map(fn (string $type) => $expr->like(
+						$pf . '.attachments', $this->createNamedParameter('%"type":"' . $type . '"%')
+					), ['image', 'video', 'gifv'])
+				)
+			)
+		));
+		return $this;
+	}
+
 	/**
 	 * Limit to posts that are a video.
 	 *
