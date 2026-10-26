@@ -21,7 +21,6 @@ on:
   push:
     branches:
       - main
-      - master
       - stable*
 
 permissions:

@@ -45,7 +45,7 @@ on:
       - Unit tests in far time zones
       - Upgrade from a release
     types: [completed]
-    branches: [main, master]
+    branches: [main]
 
 permissions: {}
 
