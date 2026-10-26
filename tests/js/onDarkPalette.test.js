@@ -17,9 +17,11 @@ const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8')
 const STYLE_SOURCES = {
 	'src/views/VideoShorts.vue': 'src/views/VideoShorts.scss',
 }
-const styleOf = (path) => STYLE_SOURCES[path]
-	? read(STYLE_SOURCES[path])
-	: read(path).slice(read(path).indexOf('<style'))
+function styleOf(path) {
+	return STYLE_SOURCES[path]
+		? read(STYLE_SOURCES[path])
+		: read(path).slice(read(path).indexOf('<style'))
+}
 
 const ON_DARK = [
 	'src/views/VideoShorts.vue',
