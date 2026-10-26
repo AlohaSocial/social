@@ -122,7 +122,7 @@ class PostMapperTest extends TestCase {
 		$this->assertSame(['https://bsky.app/profile/' . self::DID . '/followers'], $note['to'], 'the privacy self-label keeps the post out of public timelines');
 		$this->assertSame([], $note['cc']);
 		$this->assertTrue($note['sensitive']);
-		$this->assertSame('Porn, Custom label', $note['summary']);
+		$this->assertSame('Pornography, Custom label', $note['summary']);
 		$this->assertSame(['!no-unauthenticated', 'porn', 'custom-label'], $note['_atproto'][Details::ATPROTO_SELF_LABELS]);
 		$this->assertSame([], $note['_atproto']['label_sources'], 'self-labels are not attributed to a moderation labeler');
 	}
@@ -172,7 +172,7 @@ class PostMapperTest extends TestCase {
 		$adult = $this->postView(['labels' => [['src' => self::DID, 'uri' => 'at://x', 'val' => 'porn']]]);
 		$note = $mapper->note($adult);
 		$this->assertTrue($note['sensitive']);
-		$this->assertSame('Porn', $note['summary'], 'a warning naming the label when the post had none');
+		$this->assertSame('Pornography', $note['summary'], 'a warning naming the label when the post had none');
 
 		$spam = $mapper->note($this->postView(['labels' => [['src' => 'did:plc:ar7c4by46qjdydhdevvrndac', 'uri' => 'at://x', 'val' => 'spam'], ['src' => self::DID, 'uri' => 'at://x', 'val' => '!warn']]]));
 		$this->assertSame('Spam, Content warning', $spam['summary']);
