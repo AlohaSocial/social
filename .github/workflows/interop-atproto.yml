@@ -245,6 +245,14 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           patch --batch --forward --fuzz=0 -p1 < patches/@atproto+oauth-provider+0.24.3.patch
+          node --input-type=module <<'NODE'
+          import { htuSchema } from '@atproto/jwk'
+
+          const result = htuSchema.safeParse('not a URL')
+          if (result.success || result.error.issues[0]?.code !== 'custom') {
+            throw new Error('Zod 4 must return a valid issue for malformed HTTP target URLs')
+          }
+          NODE
           nohup node network.mjs > /tmp/network.log 2>&1 &
           for attempt in $(seq 1 60); do
             if [ -f "$NETWORK_FILE" ]; then
