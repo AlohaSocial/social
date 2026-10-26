@@ -155,6 +155,10 @@ class CalendarEventControllerTest extends TestCase {
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		self::assertStringStartsWith('BEGIN:VCALENDAR', $response->getData());
 		self::assertSame('text/calendar; charset=utf-8', $response->getHeaders()['Content-Type']);
+		self::assertSame(
+			'attachment; filename="fediverse-event-' . substr(hash('sha256', $this->event->getId()), 0, 16) . '.ics"',
+			$response->getHeaders()['Content-Disposition'],
+		);
 	}
 
 	private function controller(?CalendarManager $calendarManager = null): CalendarEventController {

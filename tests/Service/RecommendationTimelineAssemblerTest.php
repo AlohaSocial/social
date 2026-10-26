@@ -14,6 +14,7 @@ use OCA\Social\Db\RecommendationSignalRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\MediaAttachment;
+use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\RecommendationBehavioralProfile;
 use OCA\Social\Service\RecommendationExplanationService;
 use OCA\Social\Service\RecommendationFeatureExtractor;
@@ -36,6 +37,7 @@ class RecommendationTimelineAssemblerTest extends TestCase {
 			$this->createStub(ITimeFactory::class),
 			$this->createStub(IConfig::class),
 			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(LinkPreviewService::class),
 		);
 		$assembler = new RecommendationTimelineAssembler(
 			$catalog,
@@ -69,6 +71,7 @@ class RecommendationTimelineAssemblerTest extends TestCase {
 			$this->createStub(ITimeFactory::class),
 			$this->createStub(IConfig::class),
 			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(LinkPreviewService::class),
 		);
 		$assembler = new RecommendationTimelineAssembler(
 			$catalog,
@@ -98,6 +101,7 @@ class RecommendationTimelineAssemblerTest extends TestCase {
 			$this->createStub(ITimeFactory::class),
 			$this->createStub(IConfig::class),
 			$this->createStub(CacheActorsRequest::class),
+			$this->createStub(LinkPreviewService::class),
 		);
 		$assembler = new RecommendationTimelineAssembler(
 			$catalog,
