@@ -100,6 +100,31 @@ class DeleteInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($this->delete(self::NOTE));
 	}
 
+	public function testRepeatedDeleteAfterRemovalIsSafeAndDoesNotDeleteTwice(): void {
+		$note = $this->note(self::NOTE, self::BOB);
+		$lookups = 0;
+		$this->noteInterface->method('getItemById')->with(self::NOTE)->willReturnCallback(
+			static function () use (&$lookups, $note): Note {
+				if ($lookups++ === 0) {
+					return $note;
+				}
+
+				throw new ItemNotFoundException();
+			}
+		);
+		$this->noteInterface->expects($this->once())->method('delete')->with($this->identicalTo($note));
+		$this->personInterface->method('getItemById')->willThrowException(new ItemNotFoundException());
+		$this->storyInterface->method('getItemById')->willThrowException(new ItemNotFoundException());
+		$entries = [];
+		$cache = $this->memory($entries);
+		$handler = new DeleteInterface($cache);
+
+		$handler->processIncomingRequest($this->delete(self::NOTE));
+		$handler->processIncomingRequest($this->delete(self::NOTE));
+
+		$this->assertTrue(DeleteInterface::deletedBeforeArrival($cache, self::NOTE, self::BOB));
+	}
+
 	/**
 	 * The origin check stops at the host; a stored note is removed only by its
 	 * stored author, so another account on bob's server cannot delete bob's post.
