@@ -43,6 +43,7 @@ use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Service\PinService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Model\TActivityPubMocks;
+use OCA\Social\Tools\ActivityPubEvent;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -230,6 +231,30 @@ class InteropRegressionTest extends TestCase {
 			'end_time' => '2026-04-05T19:00:00Z',
 			'location' => 'Community hall, Main Street 12, Berlin, 10115, DE',
 		], $event->exportAsLocal()['event']);
+	}
+
+	public function testGancioCreateActivityBecomesATimelineEventAndCalendarEntry(): void {
+		$activity = AP::instance()->getItemFromData($this->fixture('gancio-create-event'));
+
+		$this->assertInstanceOf(Create::class, $activity);
+		$this->assertTrue($activity->hasObject());
+		$event = $activity->getObject();
+		$this->assertInstanceOf(Note::class, $event);
+		$this->assertSame('Event', $event->getSubType());
+		$this->assertSame('<p>Open discussion for the neighborhood.</p>', $event->getContent());
+		$this->assertSame([
+			'name' => 'Community assembly',
+			'start_time' => '2026-11-14T17:00:00Z',
+			'end_time' => '2026-11-14T19:00:00Z',
+			'location' => 'Community Hall, Main Street 12, Berlin',
+		], $event->exportAsLocal()['event']);
+
+		$calendar = ActivityPubEvent::calendar($event, 1_800_000_000);
+		$this->assertIsString($calendar);
+		$this->assertStringContainsString('SUMMARY:Community assembly', $calendar);
+		$this->assertStringContainsString('DTSTART:20261114T170000Z', $calendar);
+		$this->assertStringContainsString('DTEND:20261114T190000Z', $calendar);
+		$this->assertStringContainsString('LOCATION:Community Hall\\, Main Street 12\\, Berlin', $calendar);
 	}
 
 	/**
