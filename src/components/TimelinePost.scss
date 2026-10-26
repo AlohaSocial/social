@@ -1,0 +1,603 @@
+// SPDX-FileCopyrightText: 2026 Aloha Social contributors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+@use '../styles/layout.scss' as layout;
+
+/* the like confirmation: a short overshoot, not a bounce */
+@keyframes post-pop {
+	0% { transform: scale(1); }
+	40% { transform: scale(1.35); }
+	70% { transform: scale(.92); }
+	100% { transform: scale(1); }
+}
+
+@keyframes post-burst {
+	0% { transform: scale(.2); opacity: .55; }
+	100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* the petals: they open out of the heart, then drift on and fall away */
+@keyframes post-petal {
+	0% { transform: rotate(var(--angle)) translateY(2px) scale(.2); opacity: 0; }
+	30% { transform: rotate(var(--angle)) translateY(-6px) scale(1); opacity: 1; }
+	100% { transform: translateY(8px) rotate(calc(var(--angle) + 35deg)) translateY(-18px) scale(.7); opacity: 0; }
+}
+
+@keyframes post-spin {
+	0% { transform: rotate(0); }
+	100% { transform: rotate(360deg); }
+}
+
+/* the server refused: the optimistic change is being taken back */
+@keyframes post-refused {
+	0%, 100% { transform: translateX(0); }
+	25% { transform: translateX(-4px); }
+	75% { transform: translateX(4px); }
+}
+
+@include layout.below(layout.$phone) {
+	.post-content {
+		// the screen's width is the post's: less of it goes to the frame
+		padding: 14px 16px 12px;
+	}
+}
+
+.post-content--openable {
+	cursor: pointer;
+}
+
+.post-content {
+	/* the foot of the card is one row in flow, so the padding is padding
+	   again: it holds nothing and needs only to look like the sides */
+	padding: 18px 20px 14px;
+	font-size: 15px;
+	line-height: 1.65;
+	border-radius: 8px;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border);
+	position: relative;
+	z-index: 1;
+	box-shadow: var(--social-elevation-resting);
+	transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+
+	&:hover {
+		border-color: var(--color-primary-element);
+		box-shadow: var(--social-elevation-raised);
+		transform: translateY(-1px);
+	}
+
+	&:focus-within {
+		border-color: var(--color-primary-element);
+		box-shadow: 0 0 0 2px var(--color-primary-element-light);
+	}
+
+	/* The card keeps its own shape now. What used to happen here — the bottom
+	   corners squaring off and the bottom border going transparent — was the
+	   seam between the card and a panel as wide as it was. The pill is not that
+	   wide and is not part of the card's outline, so there is no seam to hide.
+	   The stacking order still has to change: the pill hangs into the gap and
+	   the card below it comes later in the document. */
+	&:hover,
+	&:focus-within,
+	&:has(.post-actions-reveal--held) {
+		z-index: 4;
+	}
+
+	.post-hidden-by-author {
+		margin: 0 0 4px;
+		color: var(--color-text-maxcontrast);
+		font-size: 13px;
+	}
+
+	.post-tagged {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-block: 4px 0;
+		color: var(--color-text-maxcontrast);
+		font-size: 90%;
+	}
+
+	.post-tagged__person {
+		color: var(--color-main-text);
+
+		&:hover,
+		&:focus-visible {
+			text-decoration: underline;
+		}
+	}
+
+	.post-message {
+		margin-bottom: 10px;
+		overflow-wrap: break-word;
+		overflow: visible;
+
+		:deep(p) {
+			margin: 0 0 8px;
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		:deep(a) {
+			overflow-wrap: anywhere;
+
+			&:hover {
+				text-decoration: underline;
+			}
+		}
+
+		:deep(.mention) {
+			color: var(--color-primary-element);
+			font-weight: 500;
+		}
+
+		:deep(.hashtag) {
+			color: var(--color-primary-element);
+			font-weight: 500;
+		}
+
+		:deep(img:not(.emoji):not(.custom-emoji)) {
+			max-width: 100%;
+			height: auto;
+			border-radius: 8px;
+			margin: 12px 0;
+			display: block;
+		}
+
+		// Emoji are inline words, including in remote ActivityPub statuses.
+		// The generic image rule above is for content images and must never turn
+		// each emoji into a block with its own line and large vertical margins.
+		:deep(img.emoji) {
+			display: inline-block;
+			width: 1em;
+			height: 1em;
+			max-width: none;
+			margin: 0 .08em;
+			border-radius: 0;
+			vertical-align: -.15em;
+		}
+
+		:deep(img.custom-emoji) {
+			display: inline-block;
+			width: auto;
+			height: 1.25em;
+			max-width: none;
+			margin: 0 .08em;
+			border-radius: 0;
+			vertical-align: -.2em;
+		}
+	}
+
+	/*
+	 * One row across the foot: the reactions at the near end, the counts and
+	 * their controls at the far one. It wraps, so a post with a dozen
+	 * reactions puts the controls on a line of their own rather than crushing
+	 * them, and `align-items: center` keeps the two halves on one baseline
+	 * whatever height the reactions take.
+	 */
+	.post-footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin-top: 2px;
+	}
+
+	.post-footer--profile-actions {
+		display: block;
+		padding-top: 8px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.post-actions-reveal {
+		/* in flow now, at the far end of the footer. `relative` is what the
+		   surface below is drawn against */
+		position: relative;
+		margin-inline-start: auto;
+		display: flex;
+		padding: 1px;
+		border: 1px solid transparent;
+		border-radius: 999px;
+	}
+
+	/*
+	 * The surface, drawn *behind* the row at the size the row already has.
+	 * A pseudo-element rather than the background, border and shadow of the
+	 * row itself, so the whole thing arrives as one opacity — one compositor
+	 * property, on a page that can be showing a hundred of these.
+	 */
+	.post-actions-reveal::before {
+		content: '';
+		position: absolute;
+		inset: -1px;
+		border-radius: 999px;
+		background: var(--color-main-background);
+		border: 1px solid var(--color-primary-element);
+		box-shadow: var(--social-elevation-raised);
+		opacity: 0;
+		/* out in a tenth of a second and flat: a pointer crossing four cards
+		   on its way somewhere else must not leave four pills fading behind it */
+		transition: opacity .1s linear;
+		pointer-events: none;
+	}
+
+	/*
+	 * `focus-within` is not decoration here: it is the whole of the keyboard
+	 * path. Tabbing into a card has to open the same pill the pointer does, or
+	 * the controls are focusable and unmarked.
+	 */
+	&:hover .post-actions-reveal::before,
+	&:focus-within .post-actions-reveal::before,
+	.post-actions-reveal--held::before {
+		opacity: 1;
+		transition: opacity .2s ease;
+	}
+
+	/* the menu is a control rather than a fact about the post, so it keeps to
+	   the same rule as the glyphs: out of the way until it is asked for */
+	.post-actions :deep(.action-item),
+	.post-actions :deep(.actions) {
+		opacity: 0;
+		transition: opacity .16s ease;
+	}
+
+	&:hover .post-actions :deep(.action-item),
+	&:hover .post-actions :deep(.actions),
+	&:focus-within .post-actions :deep(.action-item),
+	&:focus-within .post-actions :deep(.actions),
+	.post-actions-reveal--held :deep(.action-item),
+	.post-actions-reveal--held :deep(.actions) {
+		opacity: 1;
+	}
+
+	.post-actions__groups {
+		display: flex;
+		flex: 1 1 auto;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 4px;
+		min-inline-size: 0;
+
+	}
+
+	/* it had a top margin from when it was a row of its own */
+	.post-footer :deep(.reaction-bar) {
+		margin-top: 0;
+	}
+
+	&:hover .post-actions :deep(.button-vue__icon),
+	&:focus-within .post-actions :deep(.button-vue__icon),
+	.post-actions-reveal--held :deep(.button-vue__icon) {
+		opacity: 1;
+	}
+
+	.post-actions {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+
+		.post-action-group {
+			display: inline-flex;
+			flex: 0 0 auto;
+			align-items: center;
+			gap: 3px;
+
+			/* against its own glyph, across the button's padding, so it
+			   reads as that glyph's number and not the next one's */
+			.post-action-count {
+				margin-inline-start: -4px;
+				text-align: start;
+			}
+		}
+
+		.post-action-count {
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--color-main-text);
+			text-align: center;
+		}
+
+		:deep(.button-vue) {
+			border-radius: 8px;
+
+			&:hover {
+				background: var(--color-background-dark);
+			}
+		}
+
+		/* gone at rest, back with the pointer or the keyboard: thirty grey
+		   glyphs down a page are noise, and the one row that is being looked
+		   at is the one that is pointed at. A touch screen keeps them (see the
+		   `hover: none` block below), since it cannot point first */
+		:deep(.button-vue__icon) {
+			opacity: var(--post-action-rest, 0);
+			transition: opacity .2s ease;
+		}
+
+		/* a number needs its glyph to say what it counts, so a control with
+		   a count beside it keeps a hairline at rest */
+		.post-action-group:has(.post-action-count) {
+			--post-action-rest: .38;
+		}
+
+		/* except a like or a boost this reader has already given. That is the
+		   state of the post as far as they are concerned, and it is the one
+		   thing on this row worth seeing without pointing at it. */
+		:deep(.button-vue[aria-pressed="true"] .button-vue__icon) {
+			opacity: 1;
+		}
+
+		/* 28px rather than the 34px a button is elsewhere: this is a
+		   secondary row, and the pill has to be short enough to fit between
+		   the text and the next card. Still above the 24px floor a pointer
+		   target has. */
+		:deep(.button-vue--icon-only) {
+			min-height: 28px;
+			min-width: 28px;
+		}
+
+		:deep(.button-vue) {
+			border-radius: 999px;
+		}
+	}
+}
+
+.post-action-group {
+	position: relative;
+
+	&--refused :deep(button) {
+		animation: post-refused .4s ease;
+	}
+}
+
+	.post-action-group--reply {
+		margin-inline-start: auto;
+	}
+
+.post-action--popped :deep(.material-design-icon) {
+	animation: post-pop .45s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.post-action--spun :deep(.material-design-icon) {
+	animation: post-spin .5s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* the ring that expands out of the heart once */
+.post-action__burst {
+	position: absolute;
+	top: 50%;
+	inset-inline-start: 22px;
+	width: 20px;
+	height: 20px;
+	margin: -10px 0 0 -10px;
+	border-radius: 50%;
+	background: var(--color-element-error);
+	pointer-events: none;
+	animation: post-burst .5s ease-out forwards;
+}
+
+/**
+ * Five petals around the heart, in the author's colour: a plumeria that opens
+ * and lets go.
+ *
+ * The colour comes from `--account-hue`, which the card carries for its
+ * author, so a like on Maya's post opens in Maya's colour -- the same one her
+ * avatar, her story ring and her messages are. Each petal is gold at its base,
+ * the way a plumeria is. A card that somehow has no hue falls back to the
+ * heart's own red.
+ */
+.post-action__petal {
+	position: absolute;
+	top: 50%;
+	inset-inline-start: 22px;
+	width: 8px;
+	height: 13px;
+	/* the petal's foot sits on the middle of the heart, and it turns there */
+	margin: -13px 0 0 -4px;
+	border-radius: 50% 50% 50% 50% / 65% 65% 35% 35%;
+	background: linear-gradient(to top, #f0b23c 0 22%, hsl(var(--account-hue, 355) 78% 64%) 70%);
+	pointer-events: none;
+	--angle: calc(var(--petal) * 72deg);
+	transform-origin: 50% 100%;
+	animation: post-petal .9s cubic-bezier(.2, .7, .3, 1) both;
+	animation-delay: calc(var(--petal) * 18ms);
+}
+
+.post-pinned {
+	animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.post-content,
+	.post-content:hover {
+		transition: none;
+		transform: none;
+	}
+
+	.post-action-group--refused :deep(button),
+	.post-action--popped :deep(.material-design-icon),
+	.post-action--spun :deep(.material-design-icon) {
+		animation: none;
+	}
+
+	.post-action__burst,
+	.post-action__petal {
+		display: none;
+	}
+}
+
+/**
+ * A content warning is the author asking for their post not to be shown
+ * until the reader chooses to see it. Honouring that is the whole point,
+ * so the body is not in the DOM until it is opened.
+ */
+.post-warning {
+	margin: 4px 0 8px;
+
+	&__text {
+		margin-bottom: 8px;
+		font-weight: 600;
+	}
+}
+
+/* the text of a picture post is its caption: smaller, and nearer the picture */
+.post-message--caption {
+	margin-top: 2px;
+	font-size: 14.5px;
+	color: var(--color-main-text);
+}
+
+.post-sensitive--leading {
+	min-height: 180px;
+}
+
+.post-message--behind-warning {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--color-border);
+}
+
+/**
+ * A post one of the reader's own keyword filters matched. Boxed rather than
+ * written as plain text like a content warning: this cover is the reader's own
+ * doing and not the author's, and the two should not be mistaken for each
+ * other. Nothing of the post is behind it — the body is not rendered at all
+ * until the button is pressed.
+ */
+.post-filtered {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin: 10px 0;
+	padding: 12px 16px;
+	border: 1px dashed var(--color-border-dark);
+	border-radius: 12px;
+	background: var(--color-background-dark);
+
+	&__reason {
+		margin: 0;
+		font-weight: 600;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+}
+
+/**
+ * A post flagged sensitive without a warning shows its text but not its
+ * pictures until the reader asks for them.
+ */
+.post-sensitive__hidden {
+	color: var(--color-text-maxcontrast);
+	font-style: italic;
+}
+
+.post-sensitive {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 10px 0;
+	padding: 20px;
+	border: 1px dashed var(--color-border-dark);
+	border-radius: 12px;
+	background: var(--color-background-dark);
+}
+
+.delete-hint {
+	padding: 0 12px 12px;
+	color: var(--color-text-lighter);
+	line-height: 1.5;
+}
+
+/*
+ * A finger cannot hover, so on a touch screen there is no state in which the
+ * pill would ever open. It is not a pill there: the row goes back into the
+ * card's flow, open, where it takes its own space and pushes nothing, because
+ * nothing is moving.
+ */
+@media (hover: none) {
+	.post-content .post-actions-reveal {
+		padding: 0;
+		border: none;
+		border-radius: 0;
+	}
+
+	/* no surface either: there is no pointer to arrive and reveal one, so the
+	   row is a row */
+	.post-content .post-actions-reveal::before {
+		display: none;
+	}
+
+	/* and nothing is dimmed waiting for a hover that never comes */
+	.post-content .post-actions :deep(.button-vue__icon),
+	.post-content .post-actions :deep(.action-item),
+	.post-content .post-actions :deep(.actions) {
+		opacity: 1;
+	}
+
+	.post-content .post-actions {
+		margin-top: 10px;
+		padding-top: 8px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	/* the menu goes back to the far end of a full-width row */
+	.post-content .post-actions :deep(.actions) {
+		margin-inline-start: auto;
+	}
+}
+
+/*
+ * Reduced motion takes the fade away, not the reveal: the pill and the glyphs
+ * still have to arrive when the pointer does, they just stop easing into it.
+ * Nothing here moves in the first place, so there is no movement left to cut.
+ */
+/*
+ * A post the reader has just published drops into place from above and glows
+ * once in their colour, so the thing they made is visibly the thing that
+ * arrived. The glow is a pseudo-element ring rather than a shadow: a shadow in
+ * a keyframe is exactly what the shared elevation tokens exist to prevent.
+ */
+@keyframes post-arrive {
+	0% { opacity: 0; transform: translateY(-18px) scale(.97); }
+	60% { opacity: 1; transform: translateY(3px) scale(1.005); }
+	100% { opacity: 1; transform: none; }
+}
+
+@keyframes post-arrive-glow {
+	0% { opacity: 0; }
+	25% { opacity: .9; }
+	100% { opacity: 0; }
+}
+
+.post-content--arrived {
+	animation: post-arrive .56s cubic-bezier(.2, .9, .3, 1.15) both;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: -3px;
+		border-radius: inherit;
+		border: 2px solid hsl(var(--account-hue, 210) 70% 55%);
+		pointer-events: none;
+		animation: post-arrive-glow 1.8s ease-out both;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.post-content--arrived,
+	.post-content--arrived::after {
+		animation: none;
+	}
+
+	.post-content .post-actions-reveal::before,
+	.post-content .post-actions :deep(.button-vue__icon),
+	.post-content .post-actions :deep(.action-item),
+	.post-content .post-actions :deep(.actions) {
+		transition-duration: .01ms !important;
+	}
+}
