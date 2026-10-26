@@ -72,4 +72,10 @@ class DevDependenciesTest extends TestCase {
 		$this->assertLessThan($enable, $noDev);
 		$this->assertLessThan($tests, $enable);
 	}
+
+	public function testComposerRetryChangesRunTheInteropJobs(): void {
+		$workflow = (string)file_get_contents($this->root() . '/.github/workflows/interop-pr.yml');
+
+		$this->assertStringContainsString("- '.github/scripts/composer-install-retry.sh'", $workflow);
+	}
 }

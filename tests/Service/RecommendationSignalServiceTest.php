@@ -16,6 +16,7 @@ use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Service\InterestService;
+use OCA\Social\Service\LinkPreviewService;
 use OCA\Social\Service\RecommendationFeatureExtractor;
 use OCA\Social\Service\RecommendationPreferenceService;
 use OCA\Social\Service\RecommendationSignalService;
@@ -60,6 +61,7 @@ class RecommendationSignalServiceTest extends TestCase {
 			$clock,
 			$this->config,
 			$this->cachedActors,
+			$this->createStub(LinkPreviewService::class),
 		);
 	}
 
