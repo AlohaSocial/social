@@ -141,8 +141,8 @@ class WriteService {
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 		$postRkey = null;
 		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
-			if (!is_string($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
-				throw XrpcException::invalidRequest('A post record key is invalid');
+			if (!is_string($body['rkey']) || !Tid::isValid($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
+				throw XrpcException::invalidRequest('A post record key must be a valid TID');
 			}
 			$postRkey = $body['rkey'];
 		}
@@ -176,6 +176,9 @@ class WriteService {
 		$rkey = $body['rkey'] ?? null;
 		if (!is_string($collection) || !is_string($rkey) || !Mst::isValidKey($collection . '/' . $rkey)) {
 			throw XrpcException::invalidRequest('putRecord needs a valid collection and record key');
+		}
+		if ($collection === RecordMapper::POST && !Tid::isValid($rkey)) {
+			throw XrpcException::invalidRequest('A post record key must be a valid TID');
 		}
 		$swapCommit = $body['swapCommit'] ?? null;
 		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
