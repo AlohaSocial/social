@@ -552,6 +552,30 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('valid', $answer['validationStatus']);
 	}
 
+	public function testPutRecordCreatesANewPostAtTheRequestedRecordKey(): void {
+		$made = new Note();
+		$made->setId('https://social.test/@alice/22');
+		$this->postStore->method('isKnown')->willReturn(true);
+		$this->posts->expects($this->once())->method('createPost')->willReturnCallback(function () use ($made): Create {
+			$this->records[] = $this->record(RecordMapper::POST, '3krequested', $made->getId());
+			$activity = new Create();
+			$activity->setObjectId($made->getId());
+
+			return $activity;
+		});
+		$this->streams->method('getStreamById')->willReturn($made);
+		$this->publisher->expects($this->once())->method('publishPost')->with($made, '3krequested');
+
+		$result = $this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => RecordMapper::POST,
+			'rkey' => '3krequested',
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'A new record through putRecord', 'createdAt' => '2026-10-26T10:00:00.000Z'],
+		]);
+
+		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3krequested', $result['uri']);
+	}
+
 	public function testARecordWithMediaExternalCardIsPreservedWhenAnAppCreatesAPost(): void {
 		$made = new Note();
 		$made->setId('https://social.test/@alice/4');

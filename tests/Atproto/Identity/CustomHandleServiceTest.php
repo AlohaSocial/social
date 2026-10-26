@@ -99,6 +99,22 @@ class CustomHandleServiceTest extends TestCase {
 		$this->assertSame($this->alice, $this->handles->clear($this->alice), 'nothing to do without one');
 	}
 
+	public function testSettingTheCurrentCustomHandleIsAnIdempotentNoOp(): void {
+		$custom = self::identity('alice.example.org');
+		$this->identities->expects($this->never())->method('useCustomHandle');
+		$this->verifier->expects($this->never())->method('refusal');
+
+		$this->assertSame($custom, $this->handles->set($custom, 'alice.example.org'));
+	}
+
+	public function testSettingTheAssignedHandleClearsTheCustomHandle(): void {
+		$custom = self::identity('alice.example.org');
+		$this->identities->expects($this->once())->method('useCustomHandle')->with($custom, '')->willReturn($this->alice);
+		$this->verifier->expects($this->never())->method('refusal');
+
+		$this->assertSame($this->alice, $this->handles->set($custom, $custom->assignedHandle()));
+	}
+
 	public function testHandlesAreCheckedAgainAndABrokenOneShows(): void {
 		$this->request->method('getCustomHandlesDue')->willReturn([self::identity('alice.example.org'), self::identity('gone.example.org')]);
 		$this->verifier->method('verify')->willReturnCallback(static fn (string $h): string => $h === 'alice.example.org' ? 'https' : '');

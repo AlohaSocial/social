@@ -92,7 +92,7 @@ class Publisher {
 	 * @return CommitResult|null the commit, or null when nothing was written
 	 * @throws AtprotoException
 	 */
-	public function publishPost(Stream $post): ?CommitResult {
+	public function publishPost(Stream $post, ?string $requestedRkey = null): ?CommitResult {
 		if (!$this->goesToBluesky($post)) {
 			return null;
 		}
@@ -125,7 +125,7 @@ class Publisher {
 			return null;
 		}
 		$mapped = $this->mapper->post($post, $identity, $author, $video);
-		$rkey = Tid::next();
+		$rkey = $requestedRkey ?? Tid::next();
 		$threadWrites = $this->threadWrites($post, $identity, $mapped, null, $rkey);
 		$gateWrites = $this->gateWrites($post, $identity->did, $rkey);
 		$writes = $this->rootAndGatesFirst($threadWrites, $rkey, $gateWrites);
