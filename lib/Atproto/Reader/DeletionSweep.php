@@ -17,8 +17,8 @@ use OCP\AppFramework\Utility\ITimeFactory;
  * Notices posts deleted on Bluesky (§9.5). Bluesky has no `Delete` this
  * app is sent, and a deleted post simply stops appearing, so stored Bluesky
  * posts are asked about a page at a time — one `getPosts` per run — including
- * older posts. The place it got to is kept, and it starts over when it reaches
- * the end, so the work stays bounded without leaving old copies unchecked.
+ * older posts. Each cycle snapshots its highest NID so a steady stream of new
+ * posts cannot keep moving the end ahead of the cursor and starve old checks.
  */
 class DeletionSweep {
 	public const PAGE = 25;
@@ -36,9 +36,21 @@ class DeletionSweep {
 	 */
 	public function run(): int {
 		$after = (int)$this->configService->getAppValue(ConfigService::ATPROTO_DELETE_CURSOR);
-		$ids = $this->streams->getBlueskyPostIds(0, $after, self::PAGE);
+		$through = (int)$this->configService->getAppValue(ConfigService::ATPROTO_DELETE_MAX_NID);
+		if ($through <= 0) {
+			$through = $this->streams->getBlueskyPostMaxNid();
+			if ($through <= 0) {
+				$this->configService->setAppValue(ConfigService::ATPROTO_DELETE_CURSOR, '0');
+				$this->configService->setAppValue(ConfigService::ATPROTO_DELETE_MAX_NID, '0');
+				return 0;
+			}
+			$after = 0;
+			$this->configService->setAppValue(ConfigService::ATPROTO_DELETE_MAX_NID, (string)$through);
+		}
+		$ids = $this->streams->getBlueskyPostIds(0, $after, self::PAGE, $through);
 		if ($ids === []) {
 			$this->configService->setAppValue(ConfigService::ATPROTO_DELETE_CURSOR, '0');
+			$this->configService->setAppValue(ConfigService::ATPROTO_DELETE_MAX_NID, '0');
 
 			return 0;
 		}

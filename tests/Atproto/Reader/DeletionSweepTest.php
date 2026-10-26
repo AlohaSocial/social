@@ -26,15 +26,21 @@ class DeletionSweepTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
 		$cursor = '0';
-		$config->method('getAppValue')->willReturnCallback(static fn (string $key): string => $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '');
-		$config->expects($this->never())->method('setAppValue');
+		$config->method('getAppValue')->willReturnCallback(static function (string $key) use (&$cursor): string {
+			return match ($key) {
+				ConfigService::ATPROTO_DELETE_CURSOR => $cursor,
+				ConfigService::ATPROTO_DELETE_MAX_NID => '0',
+				default => '',
+			};
+		});
+		$streams->method('getBlueskyPostMaxNid')->willReturn(11);
 		$streams->method('getBlueskyPostIds')->willReturn([11 => 'https://bsky.app/profile/did:plc:a/post/1']);
 		$store->expects($this->once())->method('deleteGone')->willReturn(null);
 
 		$sweep = new DeletionSweep($streams, $store, $config, $time);
 
 		$this->assertSame(0, $sweep->run());
-		$this->assertSame('0', $cursor);
+		$this->assertSame('0', $cursor, 'an incomplete AppView response keeps the current page retryable');
 	}
 
 	public function testAPageIsCheckedAndThePlaceKeptThenItStartsOver(): void {
@@ -44,15 +50,29 @@ class DeletionSweepTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1760000000);
 		$cursor = '0';
-		$config->method('getAppValue')->willReturnCallback(static function (string $key) use (&$cursor): string {
-			return $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '';
+		$upper = '0';
+		$streams->method('getBlueskyPostMaxNid')->willReturn(17);
+		$config->method('getAppValue')->willReturnCallback(static function (string $key) use (&$cursor, &$upper): string {
+			return match ($key) {
+				ConfigService::ATPROTO_DELETE_CURSOR => $cursor,
+				ConfigService::ATPROTO_DELETE_MAX_NID => $upper,
+				default => '',
+			};
 		});
-		$config->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor): void {
-			$cursor = $value;
+		$config->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor, &$upper): void {
+			if ($key === ConfigService::ATPROTO_DELETE_CURSOR) {
+				$cursor = $value;
+			} elseif ($key === ConfigService::ATPROTO_DELETE_MAX_NID) {
+				$upper = $value;
+			}
 		});
-		$streams->method('getBlueskyPostIds')->willReturnCallback(static fn (int $since, int $after, int $limit): array => match ($after) {
-			0 => [11 => 'https://bsky.app/profile/did:plc:a/post/1', 17 => 'https://bsky.app/profile/did:plc:a/post/2'],
-			default => [],
+		$streams->method('getBlueskyPostIds')->willReturnCallback(static function (int $since, int $after, int $limit, ?int $through): array {
+			if ($through !== 17) {
+				return [];
+			}
+			return $after === 0
+				? [11 => 'https://bsky.app/profile/did:plc:a/post/1', 17 => 'https://bsky.app/profile/did:plc:a/post/2']
+				: [];
 		});
 		$store->expects($this->once())->method('deleteGone')->with(['https://bsky.app/profile/did:plc:a/post/1', 'https://bsky.app/profile/did:plc:a/post/2'])->willReturn(1);
 		$sweep = new DeletionSweep($streams, $store, $config, $time);
@@ -61,6 +81,7 @@ class DeletionSweepTest extends TestCase {
 		$this->assertSame('17', $cursor);
 		$this->assertSame(0, $sweep->run(), 'the end: nothing left this round');
 		$this->assertSame('0', $cursor, 'the next run starts over');
+		$this->assertSame('0', $upper, 'a completed bounded cycle releases its snapshot ceiling');
 	}
 
 	public function testAConfirmedPageAdvancesEvenWhenNoPostWasDeleted(): void {
@@ -69,11 +90,23 @@ class DeletionSweepTest extends TestCase {
 		$config = $this->createMock(ConfigService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$cursor = '0';
-		$config->method('getAppValue')->willReturnCallback(static fn (string $key): string => $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '');
-		$config->expects($this->once())->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor): void {
-			$cursor = $value;
+		$upper = '0';
+		$streams->method('getBlueskyPostMaxNid')->willReturn(11);
+		$config->method('getAppValue')->willReturnCallback(static function (string $key) use (&$cursor, &$upper): string {
+			return match ($key) {
+				ConfigService::ATPROTO_DELETE_CURSOR => $cursor,
+				ConfigService::ATPROTO_DELETE_MAX_NID => $upper,
+				default => '',
+			};
 		});
-		$streams->expects($this->once())->method('getBlueskyPostIds')->with(0, 0, DeletionSweep::PAGE)
+		$config->expects($this->exactly(2))->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor, &$upper): void {
+			if ($key === ConfigService::ATPROTO_DELETE_CURSOR) {
+				$cursor = $value;
+			} elseif ($key === ConfigService::ATPROTO_DELETE_MAX_NID) {
+				$upper = $value;
+			}
+		});
+		$streams->expects($this->once())->method('getBlueskyPostIds')->with(0, 0, DeletionSweep::PAGE, 11)
 			->willReturn([11 => 'https://bsky.app/profile/did:plc:a/post/1']);
 		$store->expects($this->once())->method('deleteGone')->willReturn(0);
 
@@ -89,11 +122,23 @@ class DeletionSweepTest extends TestCase {
 		$config = $this->createMock(ConfigService::class);
 		$time = $this->createMock(ITimeFactory::class);
 		$cursor = '0';
-		$config->method('getAppValue')->willReturnCallback(static fn (string $key): string => $key === ConfigService::ATPROTO_DELETE_CURSOR ? $cursor : '');
-		$config->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor): void {
-			$cursor = $value;
+		$upper = '0';
+		$streams->method('getBlueskyPostMaxNid')->willReturn(11);
+		$config->method('getAppValue')->willReturnCallback(static function (string $key) use (&$cursor, &$upper): string {
+			return match ($key) {
+				ConfigService::ATPROTO_DELETE_CURSOR => $cursor,
+				ConfigService::ATPROTO_DELETE_MAX_NID => $upper,
+				default => '',
+			};
 		});
-		$streams->method('getBlueskyPostIds')->willReturnCallback(static fn (int $since, int $after): array => $after === 0
+		$config->method('setAppValue')->willReturnCallback(static function (string $key, string $value) use (&$cursor, &$upper): void {
+			if ($key === ConfigService::ATPROTO_DELETE_CURSOR) {
+				$cursor = $value;
+			} elseif ($key === ConfigService::ATPROTO_DELETE_MAX_NID) {
+				$upper = $value;
+			}
+		});
+		$streams->method('getBlueskyPostIds')->willReturnCallback(static fn (int $since, int $after, int $limit, ?int $through): array => $after === 0 && $through === 11
 			? [11 => 'https://bsky.app/profile/did:plc:a/post/1']
 			: []);
 		$store->expects($this->exactly(2))->method('deleteGone')

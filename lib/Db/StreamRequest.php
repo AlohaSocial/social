@@ -921,11 +921,12 @@ class StreamRequest extends StreamRequestBuilder {
 	/**
 	 * The ids of stored Bluesky posts published since a moment, after a
 	 * stream number, in order: what the check for posts deleted on Bluesky
-	 * walks through a page at a time.
+	 * walks through a page at a time. When supplied, $throughNid bounds this
+	 * pass to a fixed high-water mark so new posts wait for the next cycle.
 	 *
 	 * @return array<int, string> id by nid
 	 */
-	public function getBlueskyPostIds(int $since, int $afterNid, int $limit): array {
+	public function getBlueskyPostIds(int $since, int $afterNid, int $limit, ?int $throughNid = null): array {
 		$qb = $this->getQueryBuilder();
 		$qb->select('nid', 'id')
 			->from(self::TABLE_STREAM)
@@ -935,6 +936,9 @@ class StreamRequest extends StreamRequestBuilder {
 			->andWhere($qb->expr()->gte('published_time', $qb->createNamedParameter(new \DateTime('@' . $since), IQueryBuilder::PARAM_DATE)))
 			->orderBy('nid', 'asc')
 			->setMaxResults(max(1, $limit));
+		if ($throughNid !== null) {
+			$qb->andWhere($qb->expr()->lte('nid', $qb->createNamedParameter($throughNid, IQueryBuilder::PARAM_INT)));
+		}
 		$ids = [];
 		$result = $qb->executeQuery();
 		while ($row = $result->fetch()) {
@@ -943,6 +947,17 @@ class StreamRequest extends StreamRequestBuilder {
 		$result->closeCursor();
 
 		return $ids;
+	}
+
+	/** The highest NID among stored Bluesky posts, used to bound one sweep cycle. */
+	public function getBlueskyPostMaxNid(): int {
+		$qb = $this->getQueryBuilder();
+		$qb->select($qb->func()->max('nid'))
+			->from(self::TABLE_STREAM)
+			->where($qb->expr()->like('attributed_to', $qb->createNamedParameter('https://bsky.app/profile/%')))
+			->andWhere($qb->expr()->eq('type', $qb->createNamedParameter(Note::TYPE)));
+
+		return (int)$qb->executeQuery()->fetchOne();
 	}
 
 	/**
