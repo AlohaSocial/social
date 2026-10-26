@@ -1093,10 +1093,10 @@ class StreamService {
 						// outbox owner itself authored.
 						$delete = AP::instance()->getItemFromData($itemData);
 						if ($delete->getType() !== 'Delete' || $delete->getActorId() !== $actor->getId()) {
-						continue;
-					}
-					AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
-					$synced++;
+							continue;
+						}
+						AP::instance()->getInterfaceForItem($delete)->processIncomingRequest($delete);
+						$synced++;
 					continue;
 				}
 					if (in_array($itemType, ['Create', 'Update'], true) && isset($itemData['object']) && is_array($itemData['object'])) {
