@@ -137,6 +137,12 @@ function rememberCelebrated() {
  * @property {Record<string, Record<string, object|null>>} recommendationReasons explanation snapshots by feed and status
  * @property {Record<string, string|null>} recommendationCursors opaque continuation cursors for ranked For You timelines, by identity
  * @property {Record<string, {state: string, known_eligible: number|null, returned: number, remote_refresh_queued: boolean}>} recommendationCoverage ranked-feed coverage, by identity
+ * @property {boolean} timelinePageFilling whether the current page can grow
+ * @property {boolean} profilePageFilling whether profile content is pending
+ * @property {boolean} remoteProfilePageFilling whether an outbox import is pending
+ * @property {string} profileSyncState pending, failed, stalled, idle or unknown
+ * @property {number|null} backgroundRefetchTimer scheduled background check
+ * @property {number} backgroundRefetchGeneration rejects checks from a previous view
  * @property {boolean} composerDisplayStatus whether the full composer is open
  * @property {boolean} composerSubmitting whether a composer is currently publishing
  * @property {string} searchQuery what is being searched for
@@ -153,6 +159,36 @@ function rememberCelebrated() {
  *
  * @typedef {import('../types/Mastodon.js').Status & {status?: import('../types/Mastodon.js').Status|null}} IndexedEntry
  */
+
+/**
+ * @param {TimelineState} state the active timeline
+ * @param {string} status safe UI state, never a raw remote exception
+ */
+function stopProfileRefresh(state, status) {
+	state.profileSyncState = status
+	if (state.backgroundRefetchTimer !== null) {
+		window.clearTimeout(state.backgroundRefetchTimer)
+		state.backgroundRefetchTimer = null
+	}
+	state.profilePageFilling = false
+	state.remoteProfilePageFilling = false
+	state.timelinePageFilling = false
+}
+
+/**
+ * @param {TimelineState} state the active timeline
+ * @param {Record<string, unknown>} headers safe response metadata
+ */
+function readProfileSyncState(state, headers = {}) {
+	const raw = headers['x-social-profile-sync-state']
+	const explicit = typeof raw === 'string' ? raw : ''
+	state.profileSyncState = state.type === 'account'
+		? (['pending', 'failed', 'idle'].includes(explicit) ? explicit : (state.profilePageFilling ? 'pending' : ''))
+		: ''
+	if (state.profileSyncState === 'failed') {
+		stopProfileRefresh(state, 'failed')
+	}
+}
 
 /**
  * Indexes a status, and the status it boosts, by id.
@@ -498,6 +534,9 @@ export const useTimelineStore = defineStore('timeline', {
 		profilePageFilling: false,
 		/** Whether a remote ActivityPub outbox is being imported in the background. */
 		remoteProfilePageFilling: false,
+		profileSyncState: '',
+		backgroundRefetchTimer: null,
+		backgroundRefetchGeneration: 0,
 		/** Whether the last page read for the current timeline had no visible posts. */
 		timelinePageEmpty: false,
 		timeline: [],
@@ -912,6 +951,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.statuses = statuses
 		},
 		resetTimeline() {
+			this.cancelBackgroundRefetch()
 			delete this.recommendationReasons[this.getTimelineIdentity]
 			if (usesV4RecommendationTimeline(this)) {
 				const cursors = { ...this.recommendationCursors }
@@ -928,6 +968,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timelinePageFilling = false
 			this.profilePageFilling = false
 			this.remoteProfilePageFilling = false
+			this.profileSyncState = ''
 			this.timelinePageEmpty = false
 			// the id lists used to be the only thing cleared, so `statuses` grew
 			// for the whole session: every page of every timeline ever opened.
@@ -1208,11 +1249,13 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timelinePageFilling = false
 			this.profilePageFilling = false
 			this.remoteProfilePageFilling = false
+			this.profileSyncState = ''
 			this.timelinePageEmpty = false
 
 			// a page still on its way for the list being left would be dropped
 			// on arrival; cancelled, it costs the server nothing more either
 			abortRequests(left.identity)
+			this.cancelBackgroundRefetch()
 
 			const wanted = this.getTimelineIdentity
 			const held = this.remembered.find((entry) => entry.identity === wanted) ?? null
@@ -1862,6 +1905,7 @@ export const useTimelineStore = defineStore('timeline', {
 				this.timelinePageFilling = false
 				this.profilePageFilling = false
 				this.remoteProfilePageFilling = false
+				this.profileSyncState = ''
 				this.timelinePageEmpty = seeded.length === 0
 				this.addToTimeline(seeded)
 
@@ -1917,6 +1961,7 @@ export const useTimelineStore = defineStore('timeline', {
 				|| response.headers?.['x-social-thread-filling'] === '1'
 			this.profilePageFilling = response.headers?.['x-social-profile-filling'] === '1'
 			this.remoteProfilePageFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
+			readProfileSyncState(this, response.headers)
 			this.timelinePageEmpty = Array.isArray(timelineData)
 				? timelineData.length === 0
 				: this.type === 'single-post' && Array.isArray(timelineData?.descendants) && timelineData.descendants.length === 0
@@ -1927,7 +1972,7 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 			// more of it is being read from elsewhere: the rest of a
 			// conversation, or a hashtag's posts beyond this server
-			if (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1') {
+			if (this.profileSyncState !== 'failed' && (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')) {
 				this.refetchThreadLater(url, params, identity)
 			}
 
@@ -1961,6 +2006,19 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 
+		/** Cancel the previous feed's scheduled check before replacing it. */
+		cancelBackgroundRefetch() {
+			this.backgroundRefetchGeneration++
+			if (this.backgroundRefetchTimer !== null) {
+				window.clearTimeout(this.backgroundRefetchTimer)
+				this.backgroundRefetchTimer = null
+			}
+		},
+
+		markProfileSyncFailed() {
+			stopProfileRefresh(this, 'failed')
+		},
+
 		/**
 		 * The rest of a page is being read from the servers it lives on: asked
 		 * for once more a little later, and what came in meanwhile added to
@@ -1971,39 +2029,53 @@ export const useTimelineStore = defineStore('timeline', {
 		 * @param {string} identity the timeline it belongs to
 		 * @param {number} attempt the retry number, starting at zero
 		 */
+
 		refetchThreadLater(url, params, identity, attempt = 0) {
+			if (this.backgroundRefetchTimer !== null) {
+				return
+			}
+			this.cancelBackgroundRefetch()
+			const generation = this.backgroundRefetchGeneration
 			const remoteProfileFill = this.remoteProfilePageFilling
 			const delay = remoteProfileFill
 				? (attempt < 3 ? PROFILE_REFETCH_MS : REMOTE_PROFILE_REFETCH_MS)
 				: this.profilePageFilling
 					? PROFILE_REFETCH_MS
 					: Math.min(THREAD_REFETCH_MS * (2 ** attempt), THREAD_REFETCH_MAX_MS)
-			setTimeout(async () => {
-				if (this.getTimelineIdentity !== identity) {
+			this.backgroundRefetchTimer = window.setTimeout(async () => {
+				this.backgroundRefetchTimer = null
+				if (this.getTimelineIdentity !== identity || this.backgroundRefetchGeneration !== generation) {
 					return
 				}
 				try {
 					// Each poll must reach the server afresh. Reusing a timeline URL
 					// can let its ETag short-circuit the count refresh as a 304.
 					const response = await axios.get(url, { params: { ...params, _social_refresh: Date.now() } })
-					if (this.getTimelineIdentity === identity) {
+					if (this.getTimelineIdentity === identity && this.backgroundRefetchGeneration === generation) {
 						this.timelinePageFilling = response.headers?.['x-social-filling'] === '1'
 							|| response.headers?.['x-social-thread-filling'] === '1'
 						this.profilePageFilling = response.headers?.['x-social-profile-filling'] === '1'
 						this.remoteProfilePageFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
+						readProfileSyncState(this, response.headers)
 						this.timelinePageEmpty = Array.isArray(response.data)
 							? response.data.length === 0
 							: this.type === 'single-post' && Array.isArray(response.data?.descendants) && response.data.descendants.length === 0
 						this.addToTimeline(response.data)
 						const remoteProfileFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
 						const maxRefetches = remoteProfileFilling ? MAX_REMOTE_PROFILE_REFETCHES : MAX_THREAD_REFETCHES
-						if ((response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')
+						if (this.profileSyncState !== 'failed'
+							&& (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')
 							&& attempt + 1 < maxRefetches) {
 							this.refetchThreadLater(url, params, identity, attempt + 1)
+						} else if (this.profilePageFilling) {
+							stopProfileRefresh(this, 'stalled')
 						}
 					}
 				} catch (error) {
-					logger.debug('The rest of the conversation was not read again', { error })
+					if (this.getTimelineIdentity === identity && this.backgroundRefetchGeneration === generation && this.type === 'account') {
+						stopProfileRefresh(this, 'failed')
+					}
+					logger.debug('The background timeline refresh failed', { error })
 				}
 			}, delay)
 		},

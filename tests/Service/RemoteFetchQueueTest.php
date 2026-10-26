@@ -141,8 +141,28 @@ class RemoteFetchQueueTest extends TestCase {
 
 		$this->assertFalse($this->queue->syncTimeline($actor));
 		$fail = false;
+		$this->assertTrue($this->queue->timelineSyncFailed($actor->getId()));
+		$this->assertFalse($this->queue->syncTimeline($actor));
+		$this->now += RemoteFetchQueue::TIMELINE_RETRY_INTERVAL;
 		$this->assertTrue($this->queue->syncTimeline($actor));
 		$this->assertFalse($this->queue->syncTimeline($actor));
+	}
+
+	public function testFailedOutboxReadIsVisibleAndRetriesOnlyAfterBackoff(): void {
+		$actor = $this->remote();
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add');
+		$this->assertTrue($this->queue->syncTimeline($actor));
+		$this->queue->finishTimelinePage($actor->getId(), false, null);
+		$this->assertTrue($this->queue->timelineSyncFailed($actor->getId()));
+		$this->assertFalse($this->queue->isTimelinePending($actor->getId()));
+		$this->assertFalse($this->queue->syncTimeline($actor));
+		$this->assertFalse($this->queue->fillTimeline($actor));
+		$this->now += RemoteFetchQueue::TIMELINE_RETRY_INTERVAL;
+		$this->assertFalse($this->queue->timelineSyncFailed($actor->getId()));
+		$this->assertTrue($this->queue->syncTimeline($actor));
+		$this->queue->finishTimelinePage($actor->getId(), true, null);
+		$this->assertFalse($this->queue->timelineSyncFailed($actor->getId()));
 	}
 
 	public function testEachActorIsQueuedOnceWithoutItsKeyFragment(): void {

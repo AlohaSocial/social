@@ -3328,6 +3328,15 @@
     "Discard these changes?" : "Diese Änderungen verwerfen?",
     "Your unsaved changes and unfinished uploads will be lost. The published post will stay unchanged." : "Nicht gespeicherte Änderungen und noch nicht abgeschlossene Uploads gehen verloren. Der veröffentlichte Beitrag bleibt unverändert.",
     "Discard changes" : "Änderungen verwerfen",
-    "Edit post" : "Beitrag bearbeiten"
+    "Edit post" : "Beitrag bearbeiten",
+    "This profile is being synchronized. Available posts are shown below." : "Dieses Profil wird synchronisiert. Bereits verfügbare Beiträge werden unten angezeigt.",
+    "This profile is being synchronized. Posts will appear as they arrive." : "Dieses Profil wird synchronisiert. Beiträge erscheinen, sobald sie verfügbar sind.",
+    "This profile could not be refreshed. Previously loaded posts are still available. Try again shortly." : "Dieses Profil konnte nicht aktualisiert werden. Bereits geladene Beiträge bleiben verfügbar. Versuche es in Kürze erneut.",
+    "This profile could not be refreshed. This does not mean it has no posts. Try again shortly." : "Dieses Profil konnte nicht aktualisiert werden. Das bedeutet nicht, dass es keine Beiträge hat. Versuche es in Kürze erneut.",
+    "Synchronization is taking longer than expected. Check again to see whether more posts have arrived." : "Die Synchronisierung dauert länger als erwartet. Prüfe erneut, ob weitere Beiträge verfügbar sind.",
+    "Check again" : "Erneut prüfen",
+    "Checking…" : "Wird geprüft…",
+    "No posts are available here yet" : "Hier sind noch keine Beiträge verfügbar",
+    "This server has no posts to show for this profile." : "Dieser Server kann für dieses Profil derzeit keine Beiträge anzeigen."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }
