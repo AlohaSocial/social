@@ -43,6 +43,7 @@ use OCA\Social\Service\PushService;
 use OCA\Social\Service\ReplyRuleService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamQueueService;
+use OCA\Social\Tools\ActivityPubEvent;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 class NoteInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
@@ -134,6 +135,14 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 				$item->setUpdated($stored->getUpdated());
 			}
 			$this->streamRequest->update($item);
+			if ($stored->getSubType() === 'Event' || $item->getSubType() === 'Event') {
+				// Event facts live in a dedicated key in `details`. The general
+				// stream update rewrites the ActivityPub fields, but deliberately
+				// leaves locally maintained details alone; merge just this key so
+				// a Gancio date or venue change is visible without losing counters,
+				// quote state, or other local metadata.
+				$this->streamRequest->updateDetails($item, Details::EVENT);
+			}
 			if (!$edited) {
 				return;
 			}
@@ -163,7 +172,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			|| $stored->getSummary() !== $incoming->getSummary()
 			|| $stored->isSensitive() !== $incoming->isSensitive()
 			|| self::attachmentsOf($stored) !== self::attachmentsOf($incoming)
-			|| self::pollOf($stored) !== self::pollOf($incoming);
+			|| self::pollOf($stored) !== self::pollOf($incoming)
+			|| ActivityPubEvent::fromStream($stored) !== ActivityPubEvent::fromStream($incoming);
 	}
 
 	/** @return list<array{?string, string}> each attachment's origin and description */
