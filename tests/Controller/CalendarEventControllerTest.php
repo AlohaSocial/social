@@ -123,7 +123,7 @@ class CalendarEventControllerTest extends TestCase {
 		$calendar->expects(self::once())->method('createFromString')->with(
 			substr(hash('sha256', $this->event->getId()), 0, 32) . '.ics',
 			self::callback(static fn (string $ics): bool
-				=> str_contains($ics, 'UID:' . hash('sha256', 'https://gancio.example/events/42') . '@social')
+				=> str_contains($ics, 'UID:' . hash('sha256', 'https://gancio.example/federation/events/42') . '@social')
 					&& str_contains($ics, 'SUMMARY:Community assembly')
 					&& str_contains($ics, 'DTSTART:20261114T170000Z')
 					&& str_contains($ics, 'DTEND:20261114T190000Z')
