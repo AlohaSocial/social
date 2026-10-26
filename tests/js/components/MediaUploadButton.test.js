@@ -7,14 +7,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import eventBus from '../../../src/services/eventBus.js'
-import VideoUploadButton from '../../../src/components/VideoUploadButton.vue'
+import MediaUploadButton from '../../../src/components/MediaUploadButton.vue'
 
 const ComposerStub = { name: 'Composer', props: { initialFiles: Array, startExpanded: Boolean }, emits: ['posted'], template: '<div class="composer-stub" />' }
 const ModalStub = { name: 'NcModal', emits: ['close'], template: '<div class="modal-stub"><slot /></div>' }
 
 /** @return {object} the mounted button */
 function mountButton() {
-	return mount(VideoUploadButton, {
+	return mount(MediaUploadButton, {
 		global: { stubs: { Composer: ComposerStub, NcModal: ModalStub } },
 	})
 }
@@ -54,6 +54,20 @@ describe('Upload a video', () => {
 
 		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		expect(wrapper.findComponent(ModalStub).exists()).toBe(false)
+	})
+
+	it('supports the Photos multi-file picker and hands all media to the same composer', async () => {
+		const wrapper = mountButton()
+		await wrapper.setProps({ accept: 'image/*,video/*', multiple: true, label: 'Share photos or a video' })
+		const files = [new File(['x'], 'photo.png', { type: 'image/png' }), new File(['v'], 'clip.mp4', { type: 'video/mp4' })]
+		const opened = vi.fn()
+		eventBus.on('composer-open', opened)
+		await pick(wrapper, files)
+		expect(wrapper.find('input').attributes('accept')).toBe('image/*,video/*')
+		expect(wrapper.find('input').attributes('multiple')).toBeDefined()
+		expect(opened).toHaveBeenCalledWith({ files })
+		expect(wrapper.find('button').text()).toBe('Share photos or a video')
+		eventBus.off('composer-open', opened)
 	})
 
 	it('opens nothing when the picker was dismissed', async () => {

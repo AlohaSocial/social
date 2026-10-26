@@ -119,6 +119,27 @@ test.describe('Shorts, in a browser', () => {
 		await expect(page.locator('article.short').filter({ hasText: markers.text }), 'nor is a post of text').toHaveCount(0)
 	})
 
+	test('visible controls retain the clip when paging fails', async ({ page }) => {
+		test.skip(!measured, 'needs measured video fixtures')
+		let first = true
+		await page.route('**/api/v1/timelines/public*', (route) => {
+			if (new URL(route.request().url()).searchParams.get('only_short') !== 'true') {
+				return route.fallback()
+			}
+			if (first) {
+				first = false
+				return route.fulfill({ contentType: 'application/json', body: JSON.stringify([short]) })
+			}
+			return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary failure' }) })
+		})
+		await login(page)
+		await openApp(page, '/shorts?scope=timeline')
+		await expect(page.getByRole('group', { name: 'Short playback' })).toBeVisible()
+		await expect(page.locator('.shorts__page-error')).toContainText('current short is still available')
+		await expect(page.locator('article.short')).toHaveCount(1)
+		await expect(page.locator('.shorts__page-error').getByRole('button', { name: 'Try again' })).toBeEnabled()
+	})
+
 	test('a reader with no shorts in their feed is told what a short is', async ({ page }) => {
 		test.skip(!await ensureUser(SHORTLESS, BYSTANDER_PASSWORD) && !process.env.CI, 'needs the administrator to create an account of its own')
 		const api = await apiAs(SHORTLESS, BYSTANDER_PASSWORD)

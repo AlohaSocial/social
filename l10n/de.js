@@ -3355,6 +3355,18 @@ OC.L10N.register(
     "Adding a calendar copy does not confirm attendance or automatically synchronize changes." : "Eine Kalenderkopie bestätigt keine Teilnahme und synchronisiert Änderungen nicht automatisch.",
     "Photo feed layout" : "Ansicht des Foto-Feeds",
     "Media feed" : "Medien-Feed",
-    "Tiles" : "Kacheln"
+    "Tiles" : "Kacheln",
+    "Shorts player" : "Shorts-Player",
+    "Short playback" : "Shorts-Wiedergabe",
+    "Previous short" : "Vorheriger Short",
+    "Next short" : "Nächster Short",
+    "More videos could not be loaded. The current short is still available." : "Weitere Videos konnten nicht geladen werden. Der aktuelle Short ist weiterhin verfügbar.",
+    "Use Up and Down to change shorts, Space to pause, M for sound and L to like." : "Mit den Pfeiltasten nach oben und unten wechselst du Shorts, mit der Leertaste pausierst du, mit M steuerst du den Ton und mit L vergibst du ein Gefällt mir.",
+    "This video could not be played. You can retry or move to the next short." : "Dieses Video konnte nicht abgespielt werden. Versuche es erneut oder wechsle zum nächsten Short.",
+    "{current} of {total}" : "{current} von {total}",
+    "Share photos or a video" : "Fotos oder Video teilen",
+    "Attachment preview" : "Anhangvorschau",
+    "Previous attachment" : "Vorheriger Anhang",
+    "Next attachment" : "Nächster Anhang"
 },
 "nplurals=2; plural=(n != 1);");

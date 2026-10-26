@@ -225,8 +225,11 @@ export default {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 38px;
-		height: 38px;
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		min-height: 44px;
+		margin: 0;
 		padding: 0;
 		border: 1px solid var(--color-border-dark);
 		border-radius: 50%;
@@ -252,8 +255,10 @@ export default {
 	&__pager {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		margin-block-start: 6px;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 4px 8px;
+		margin-block-start: 4px;
 	}
 
 	&__counter {
@@ -265,29 +270,47 @@ export default {
 	&__dots {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: 0;
 	}
 
-	/* the current dot is a longer bar, not only a differently coloured one */
+	/* The target is 24px; only its 6px marker is painted. Override the
+	   Nextcloud button minimum explicitly so dots cannot become 44px bars. */
 	&__dot {
-		width: 8px;
-		height: 8px;
+		display: grid;
+		place-items: center;
+		flex: 0 0 24px;
+		width: 24px;
+		height: 24px;
+		min-width: 24px;
+		min-height: 24px;
 		padding: 0;
-		border: none;
-		border-radius: 4px;
-		background: var(--color-border-dark);
-		transition: width .2s ease, background-color .2s ease;
+		margin: 0;
+		border: 0;
+		border-radius: 50%;
+		background: transparent;
 
-		&--current {
-			width: 20px;
-			background: var(--color-primary-element);
+		&::after {
+			content: '';
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: var(--color-text-maxcontrast);
 		}
 
-		&:hover,
+		&--current::after {
+			width: 8px;
+			height: 8px;
+			background: var(--color-primary-element);
+			outline: 1px solid var(--color-main-text);
+			outline-offset: 2px;
+		}
+
 		&:focus-visible {
-			background: var(--color-primary-element-hover);
+			outline: 2px solid var(--color-primary-element);
+			outline-offset: -2px;
 		}
 	}
+
 }
 
 @media (prefers-reduced-motion: reduce) {

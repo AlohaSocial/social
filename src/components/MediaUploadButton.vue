@@ -3,23 +3,25 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div class="video-upload">
+	<div class="media-upload">
 		<!-- the file picker opens from the press itself: a browser only lets
 		     a page open one in answer to something the reader just did, and a
 		     composer that has to load first is no longer that -->
 		<input
 			ref="input"
 			type="file"
-			accept="video/*"
+			:accept="accept"
+			:multiple="multiple"
 			class="hidden-visually"
 			tabindex="-1"
 			aria-hidden="true"
 			@change="onPicked">
 		<NcButton variant="secondary" @click="pick">
 			<template #icon>
-				<IconVideoPlusOutline :size="20" />
+				<IconImagePlus v-if="multiple" :size="20" />
+				<IconVideoPlusOutline v-else :size="20" />
 			</template>
-			{{ t('social', 'Upload a video') }}
+			{{ label || t('social', 'Upload a video') }}
 		</NcButton>
 	</div>
 </template>
@@ -27,22 +29,29 @@
 <script>
 import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import IconImagePlus from 'vue-material-design-icons/ImagePlus.vue'
 import IconVideoPlusOutline from 'vue-material-design-icons/VideoPlusOutline.vue'
 
 import eventBus from '../services/eventBus.js'
 
 /**
- * The Videos page's way to post one: the file first, then the composer with
- * it attached, where the title, category and licence of a video are asked.
- * The page has no composer box of its own; a page for watching is not a page
- * for writing, and the box took the place of the first row of videos.
+ * Shared media-first entry for Photos and Videos. The picker opens directly
+ * from the click; selected files go to the existing modal composer and its
+ * uploader, draft handling and permissions. No editor is mounted here.
  */
 export default {
-	name: 'VideoUploadButton',
+	name: 'MediaUploadButton',
 
 	components: {
 		IconVideoPlusOutline,
+		IconImagePlus,
 		NcButton,
+	},
+
+	props: {
+		accept: { type: String, default: 'video/*' },
+		multiple: { type: Boolean, default: false },
+		label: { type: String, default: '' },
 	},
 
 	methods: {
@@ -67,7 +76,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.video-upload {
+.media-upload {
 	flex: 0 0 auto;
 
 }

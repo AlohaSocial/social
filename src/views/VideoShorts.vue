@@ -9,22 +9,12 @@
 		role="region"
 		:aria-label="t('social', 'Videos, one at a time')">
 		<header ref="header" class="shorts__header">
-			<h1 class="shorts__heading">
-				{{ t('social', 'Shorts') }}
-			</h1>
-			<div class="shorts__header-actions">
-				<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
-					<router-link
-						v-for="option in scopes"
-						:key="option.value"
-						class="shorts__scope"
-						:class="{ 'shorts__scope--current': option.value === watching }"
-						:aria-current="option.value === watching ? 'page' : undefined"
-						:to="{ name: 'shorts', query: { scope: option.value } }">
-						{{ option.label }}
-					</router-link>
-				</nav>
+			<div class="shorts__heading-row">
+				<h1 class="shorts__heading">
+					{{ t('social', 'Shorts') }}
+				</h1>
 				<NcButton
+					v-if="!settingsStore.getServerData.public"
 					class="shorts__create"
 					variant="primary"
 					:aria-label="t('social', 'New short')"
@@ -35,11 +25,24 @@
 					{{ t('social', 'New short') }}
 				</NcButton>
 			</div>
+			<nav class="shorts__scopes" :aria-label="t('social', 'Whose videos')">
+				<router-link
+					v-for="option in scopes"
+					:key="option.value"
+					class="shorts__scope"
+					:class="{ 'shorts__scope--current': option.value === watching }"
+					:aria-current="option.value === watching ? 'page' : undefined"
+					:to="{ name: 'shorts', query: { scope: option.value } }">
+					{{ option.label }}
+				</router-link>
+			</nav>
 		</header>
 		<div
 			ref="track"
 			class="shorts__track"
 			:style="trackStyle"
+			:aria-label="t('social', 'Shorts player')"
+			aria-describedby="shorts-keyboard-help"
 			tabindex="0"
 			@keydown="onKey"
 			@scroll.passive="onScroll">
@@ -111,7 +114,8 @@
 					v-if="canOfferRecommendationFeedback(entry)"
 					class="short__recommendation-menu"
 					:aria-label="t('social', 'For You recommendations')"
-					:menuName="t('social', 'For You recommendations')"
+					:title="t('social', 'For You recommendations')"
+					variant="tertiary-no-background"
 					@update:open="onRecommendationMenuToggle(entry.status, $event)">
 					<NcActionButton :disabled="recommendationActionLoading(entry.status) || recommendationContext(entry.status)?.similarity_available !== true" closeAfterClick @click="applyRecommendationFeedback(entry.status, 'MORE_SIMILAR')">
 						<template #icon>
@@ -219,10 +223,20 @@
 				playsinline
 				:loop="!current.day"
 				preload="auto"
+				@play="playerPaused = false"
+				@pause="playerPaused = true"
+				@error="onPlaybackError"
 				@loadedmetadata="onVideoMetadata"
 				@timeupdate="onVideoProgress"
 				@ended="onEnded"
 				@click="onVideoTap(playing, $event)" />
+
+			<div v-if="current?.isVideo && videoFailed" class="short__playback-error" role="alert">
+				<p>{{ t('social', 'This video could not be played. You can retry or move to the next short.') }}</p>
+				<NcButton @click="retryPlayback">
+					{{ t('social', 'Try again') }}
+				</NcButton>
+			</div>
 
 			<div v-if="shorts.length === 0 && (loading || !dayReady)" class="shorts__empty">
 				<NcLoadingIcon :size="44" appearance="light" />
@@ -247,6 +261,44 @@
 				</p>
 			</div>
 		</div>
+
+		<div ref="controls" class="shorts__footer">
+			<div v-if="shorts.length > 0 && failed" class="shorts__page-error" role="alert">
+				<p>{{ t('social', 'More videos could not be loaded. The current short is still available.') }}</p>
+				<NcButton :disabled="loading" @click="load">
+					{{ t('social', 'Try again') }}
+				</NcButton>
+			</div>
+			<div
+				v-if="current"
+				class="shorts__controls"
+				role="group"
+				:aria-label="t('social', 'Short playback')">
+				<NcButton :disabled="playing === 0" :aria-label="t('social', 'Previous short')" @click="scrollToSlide(playing - 1)">
+					<template #icon>
+						<IconChevronUp :size="20" />
+					</template>
+				</NcButton>
+				<NcButton :aria-label="playbackPaused ? t('social', 'Play') : t('social', 'Pause')" @click="togglePlay(playing)">
+					<template #icon>
+						<IconPlay v-if="playbackPaused" :size="20" />
+						<IconPause v-else :size="20" />
+					</template>
+					{{ playbackPaused ? t('social', 'Play') : t('social', 'Pause') }}
+				</NcButton>
+				<span class="shorts__position" role="status">
+					{{ loading ? t('social', 'Loading…') : t('social', '{current} of {total}', { current: playing + 1, total: shorts.length }) }}
+				</span>
+				<NcButton :disabled="loading || (allLoaded && playing >= shorts.length - 1)" :aria-label="t('social', 'Next short')" @click="nextShort">
+					<template #icon>
+						<IconChevronDown :size="20" />
+					</template>
+				</NcButton>
+			</div>
+		</div>
+		<p id="shorts-keyboard-help" class="hidden-visually">
+			{{ t('social', 'Use Up and Down to change shorts, Space to pause, M for sound and L to like.') }}
+		</p>
 
 		<ShortComposerDialog v-model:open="composing" @posted="onPosted" />
 	</div>
@@ -303,6 +355,10 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import IconChevronUp from 'vue-material-design-icons/ChevronUp.vue'
+import IconChevronDown from 'vue-material-design-icons/ChevronDown.vue'
+import IconPlay from 'vue-material-design-icons/Play.vue'
+import IconPause from 'vue-material-design-icons/Pause.vue'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHeartOutline from 'vue-material-design-icons/HeartOutline.vue'
 import IconPlus from 'vue-material-design-icons/Plus.vue'
@@ -360,6 +416,10 @@ export default {
 	name: 'VideoShorts',
 	components: {
 		DayShortPanel,
+		IconChevronUp,
+		IconChevronDown,
+		IconPlay,
+		IconPause,
 		IconHeart,
 		IconHeartOutline,
 		IconPlus,
@@ -423,6 +483,8 @@ export default {
 			startAt: '',
 			/** the slide on screen, which the player is over */
 			playing: 0,
+			playerPaused: true,
+			videoFailed: false,
 			/** slide currently loaded by the single video player */
 			playerSlideKey: '',
 			/** the 24-hour shorts, in the order they are watched */
@@ -599,6 +661,11 @@ export default {
 			return entries
 		},
 
+		/** @return {boolean} the real video state, or the held picture timer */
+		playbackPaused() {
+			return this.current?.isVideo ? this.playerPaused : this.held
+		},
+
 		/** @return {object|undefined} the slide the player is over */
 		current() {
 			return this.shorts[this.playing]
@@ -654,6 +721,8 @@ export default {
 		},
 
 		currentKey() {
+			this.videoFailed = false
+			this.playerPaused = true
 			const ratio = this.mediaAspectRatio(this.current?.video)
 			this.videoAspectRatio = ratio || 9 / 16
 			this.$nextTick(this.alignCurrentSlide)
@@ -688,6 +757,9 @@ export default {
 			}
 			if (this.$refs.header) {
 				this.layoutObserver.observe(this.$refs.header)
+			}
+			if (this.$refs.controls) {
+				this.layoutObserver.observe(this.$refs.controls)
 			}
 		} else {
 			this.resizeHandler = this.measureTrackBounds
@@ -828,11 +900,12 @@ export default {
 		measureTrackBounds() {
 			const page = /** @type {HTMLElement|undefined} */ (this.$refs.page)
 			const header = /** @type {HTMLElement|undefined} */ (this.$refs.header)
+			const controls = /** @type {HTMLElement|undefined} */ (this.$refs.controls)
 			if (!page) {
 				return
 			}
 			this.availableWidth = page.clientWidth
-			this.availableHeight = Math.max(0, page.clientHeight - (header?.offsetHeight ?? 0) - 8)
+			this.availableHeight = Math.max(0, page.clientHeight - (header?.offsetHeight ?? 0) - (controls?.offsetHeight ?? 0) - 24)
 		},
 
 		/** @param {object|undefined} media the media object from the timeline */
@@ -1379,6 +1452,7 @@ export default {
 
 		/** Opens the New short dialog, with the stack paused behind it. */
 		startShort() {
+			this.held = true
 			this.player()?.pause?.()
 			this.composing = true
 		},
@@ -1409,6 +1483,38 @@ export default {
 			this.toggleMute(this.player())
 		},
 
+		/** @param {Event} event the current player's network/decoding failure */
+		onPlaybackError(event) {
+			const video = /** @type {HTMLVideoElement} */ (event.target)
+			if (this.isCurrentPlayerSource(video)) {
+				this.videoFailed = true
+				this.playerPaused = true
+			}
+		},
+
+		async retryPlayback() {
+			const video = this.player()
+			if (!video || !this.current?.isVideo) {
+				return
+			}
+			this.videoFailed = false
+			video.load()
+			await this.playWithSound(video)
+		},
+
+		/** Loads the next page when the last available short is reached. */
+		async nextShort() {
+			const currentKey = this.currentKey
+			const generation = this.generation
+			if (this.playing >= this.shorts.length - 1 && !this.allLoaded) {
+				await this.load()
+				await this.$nextTick()
+			}
+			if (this.currentKey === currentKey && this.generation === generation) {
+				this.scrollToSlide(this.playing + 1)
+			}
+		},
+
 		/**
 		 * Up and down, and space for pause — a stack is reachable without a
 		 * finger or it is reachable by nobody using a keyboard.
@@ -1417,13 +1523,18 @@ export default {
 		 */
 		onKey(event) {
 			// somebody writing a reply is not paging
-			if (/** @type {Element|null} */ (event.target)?.closest?.('input, textarea, [contenteditable]')) {
+			if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey
+				|| /** @type {Element|null} */ (event.target)?.closest?.('button, a, input, textarea, select, [contenteditable], [role=button], [role=menuitem]')) {
 				return
 			}
 
 			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 				event.preventDefault()
-				this.scrollToSlide(this.playing + ((event.key === 'ArrowDown') ? 1 : -1))
+				if (event.key === 'ArrowDown') {
+					this.nextShort()
+				} else {
+					this.scrollToSlide(this.playing - 1)
+				}
 			} else if (event.key === ' ') {
 				event.preventDefault()
 				this.togglePlay(this.playing)

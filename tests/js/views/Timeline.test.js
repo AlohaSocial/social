@@ -1082,12 +1082,20 @@ describe('Timeline', () => {
 			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		})
 
-		it.each(['photos', '', 'timeline'])('keeps %s off the video layout and offers the shared composer action', (type) => {
+		it.each(['', 'timeline'])('keeps %s off the video layout and offers the shared composer action', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
 			expect(wrapper.findComponent(TimelineListStub).props('display')).not.toBe('videos')
 			expect(wrapper.find('.social__wrapper').classes()).not.toContain('social__wrapper--videos')
 			expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
+		})
+
+		it('offers a media-first entry on Photos instead of the text-only field', () => {
+			const wrapper = mountTimeline({ params: { type: 'photos' } })
+			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+			const upload = wrapper.findComponent({ name: 'MediaUploadButton' })
+			expect(upload.props('accept')).toBe('image/*,video/*')
+			expect(upload.props('multiple')).toBe(true)
 		})
 
 		it.each(['', 'timeline', 'federated', 'notifications'])('draws %s as a list', (type) => {
