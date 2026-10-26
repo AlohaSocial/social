@@ -214,6 +214,11 @@ class WriteService {
 			}
 		}
 		try {
+			$current = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
+			$action = $current === null ? 'create' : 'update';
+			if (!$session->permissions()->mayWrite($collection, $action)) {
+				throw new XrpcException(403, 'InsufficientScope', 'This app was not allowed to ' . $action . ' records of ' . $collection);
+			}
 			$result = $this->putInBatch($session, $body);
 			if ($ownsBatch) {
 				$this->repositories->commitBatch();

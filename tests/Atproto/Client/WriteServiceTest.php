@@ -330,6 +330,42 @@ class WriteServiceTest extends TestCase {
 		]);
 	}
 
+	public function testCreateOnlyPermissionCannotReplaceAnExistingRecordWithPutRecord(): void {
+		$rkey = Tid::next();
+		$record = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
+		$bytes = DagCbor::encode($record);
+		$this->records[] = new StoredRecord(self::DID, 'app.bsky.graph.list', $rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$createOnly = new ClientSession('alice', $this->session->identity, 'oauth', ['atproto', 'repo:app.bsky.graph.list?action=create']);
+
+		try {
+			$this->writes->put($createOnly, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey, 'record' => $record]);
+			$this->fail('create permission must not authorize replacement of an existing record');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+			$this->assertSame('InsufficientScope', $e->error);
+		}
+	}
+
+	public function testUpdateOnlyPermissionCannotCreateAMissingRecordWithPutRecord(): void {
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('write');
+		$updateOnly = new ClientSession('alice', $this->session->identity, 'oauth', ['atproto', 'repo:app.bsky.graph.list?action=update']);
+
+		try {
+			$this->writes->put($updateOnly, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => Tid::next(), 'record' => [
+				'$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z',
+			]]);
+			$this->fail('update permission must not authorize creation of a missing record');
+		} catch (XrpcException $e) {
+			$this->assertSame(403, $e->status);
+			$this->assertSame('InsufficientScope', $e->error);
+		}
+	}
+
 	public function testApplyWritesStoresKeptRecordsInOneCommit(): void {
 		$this->repositories->expects($this->once())->method('write')->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => count($writes) === 11))->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
 			foreach ($writes as $write) {

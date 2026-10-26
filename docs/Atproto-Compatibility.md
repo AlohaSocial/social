@@ -2701,7 +2701,9 @@ thread root), `RecordMapper` (reply, quote and card embeds, the postgate),
   post it replaces the text, language, media and self-labels under the same
   record key, so its AT URI stays stable. Supported quoted-post and non-post
   record embeds can be replaced or removed; changing a reply target or an
-  embed Social cannot represent without loss is refused.
+  embed Social cannot represent without loss is refused. OAuth `create` or
+  `update` permission is checked against whether the target record exists
+  while the repository write lock is held.
   `putRecord` of `chat.bsky.actor.declaration` (as `createRecord` of it) sets who may
   send direct messages here, which writes the record (§10.1).
   `deleteRecord` undoes the action. `applyWrites` keeps a batch of up to 200
