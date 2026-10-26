@@ -1471,30 +1471,15 @@ describe('TimelinePost', () => {
 			expect(menuItem(wrapper, 'Delete')).toBeDefined()
 		})
 
-		it('lets what is typed into the edit form set its own direction', async () => {
-			const { wrapper } = mountPost()
+		it('hands editing to the shared modal without changing the post card', async () => {
+			const opened = vi.fn()
+			eventBus.on('composer-edit', opened)
+			const { wrapper, item } = mountPost()
 			await menuItem(wrapper, 'Edit').trigger('click')
-
-			expect(wrapper.find('.post-edit-textarea').attributes('dir')).toBe('auto')
-			expect(wrapper.find('.post-edit-warning').attributes('dir')).toBe('auto')
-		})
-
-		it('gives the focus back to the menu button once the edit form is left', async () => {
-			const { wrapper } = mountPost()
-			const menuButton = document.createElement('button')
-			const inside = document.createElement('button')
-			document.body.append(menuButton, inside)
-			menuButton.focus()
-			wrapper.findComponent({ name: 'PostMenu' }).vm.$emit('update:open', true)
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-			inside.focus()
-			await wrapper.findAll('button').find((button) => button.text() === 'Cancel').trigger('click')
-			await flushPromises()
-
-			expect(document.activeElement).toBe(menuButton)
-			menuButton.remove()
-			inside.remove()
+			expect(opened).toHaveBeenCalledWith({ edit: item, opener: null })
+			expect(wrapper.find('.post-edit-inline').exists()).toBe(false)
+			expect(wrapper.find('.post-message').exists()).toBe(true)
+			eventBus.off('composer-edit', opened)
 		})
 
 		it('lets the report dialog close itself, which needs a two-way binding', async () => {
@@ -1766,177 +1751,6 @@ describe('TimelinePost', () => {
 			const dialog = wrapper.findAll('.nc-dialog').find((el) => el.text().includes('Delivery status'))
 			expect(dialog.find('.delivery-hint--error').text()).toBe('Could not read the delivery status of this post.')
 		})
-
-		it('opens an inline editor prefilled with the plain text of the post', async () => {
-			const { wrapper } = mountPost({ item: makeItem({ content: '<p>Line one</p><p>Line <b>two</b><br>three</p>' }) })
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-
-			expect(wrapper.find('.post-message').exists()).toBe(false)
-			expect(wrapper.find('textarea.post-edit-textarea').element.value).toBe('Line one\nLine two\nthree')
-		})
-
-		it('saves the trimmed text and leaves edit mode', async () => {
-			const { wrapper, item, store } = mountPost()
-			await menuItem(wrapper, 'Edit').trigger('click')
-
-			await wrapper.find('textarea').setValue('  Edited text  ')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(store.postEdit).toHaveBeenCalledWith({
-				status: item,
-				content: 'Edited text',
-				spoiler_text: '',
-				sensitive: false,
-				media_attributes: [],
-			})
-			expect(wrapper.find('textarea').exists()).toBe(false)
-			expect(wrapper.find('.post-message').exists()).toBe(true)
-		})
-
-		it('keeps the content warning of the post it is editing', async () => {
-			// saveEdit always sent spoiler_text: '' and sensitive: false, so
-			// fixing a typo un-hid sensitive content for every follower
-			const item = makeItem({ spoiler_text: 'politics', sensitive: true, content: '<p>Old</p>' })
-			const { wrapper, store } = mountPost({ item })
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-			expect(wrapper.find('input.post-edit-warning').element.value).toBe('politics')
-
-			await wrapper.find('textarea').setValue('New text')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(store.postEdit).toHaveBeenCalledWith({
-				status: item,
-				content: 'New text',
-				spoiler_text: 'politics',
-				sensitive: true,
-				media_attributes: [],
-			})
-		})
-
-		it('lets the warning be changed and removed from the inline editor', async () => {
-			const item = makeItem({ spoiler_text: 'politics', sensitive: true, content: '<p>Old</p>' })
-			const { wrapper, store } = mountPost({ item })
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-			await wrapper.find('input.post-edit-warning').setValue('  ')
-			await wrapper.find('.post-edit-sensitive input').setValue(false)
-			await wrapper.find('textarea').setValue('Now harmless')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({
-				spoiler_text: '',
-				// the post was flagged sensitive; dropping the warning does
-				// not silently unflag the media
-				sensitive: false,
-			}))
-		})
-
-		it('removes an attachment by sending the replacement media list', async () => {
-			const item = makeItem({
-				content: '<p>Photo post</p>',
-				media_attachments: [{ id: 'media-12', type: 'image', url: '/media/12', preview_url: '/media/12', description: 'old alt' }],
-			})
-			const { wrapper, store } = mountPost({ item })
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-			await wrapper.find('.post-edit-media__item button').trigger('click')
-			await wrapper.find('textarea.post-edit-textarea').setValue('Photo post updated')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ media_ids: [] }))
-		})
-
-		it('edits an event title, time and location with the ActivityPub update', async () => {
-			const item = makeItem({
-				nid: '123',
-				event: { name: 'Old meetup', start_time: '2026-10-25T10:00:00Z', end_time: null, location: 'Old hall' },
-			})
-			const { wrapper, store } = mountPost({ item })
-			await menuItem(wrapper, 'Edit').trigger('click')
-			await wrapper.find('.post-edit-event input').setValue('New meetup')
-			await wrapper.findAll('.post-edit-event input')[1].setValue('2026-10-26T11:30')
-			await wrapper.findAll('.post-edit-event input')[3].setValue('New hall')
-			await wrapper.find('textarea').setValue('New event post')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			const edit = store.postEdit.mock.calls[0][0]
-			expect(edit.event).toMatchObject({ name: 'New meetup', location: 'New hall' })
-			expect(edit.event.start_time).toBe(new Date('2026-10-26T11:30').toISOString())
-		})
-
-		it('never seeds the editor from the author bio, and refuses an over-long edit', async () => {
-			const { wrapper, store } = mountPost({
-				item: makeItem({ content: '', account: { ...alice, note: '<p>the bio</p>' } }),
-			})
-
-			await menuItem(wrapper, 'Edit').trigger('click')
-			expect(wrapper.find('textarea').element.value).toBe('')
-
-			await wrapper.find('textarea').setValue('x'.repeat(501))
-			expect(wrapper.find('.post-edit-actions button[aria-label="Save"]').attributes('disabled')).toBeDefined()
-			expect(wrapper.find('.post-edit-count').text()).toBe('1 character too many')
-
-			await wrapper.find('textarea').trigger('keydown', { key: 'Enter', ctrlKey: true })
-			await flushPromises()
-			expect(store.postEdit).not.toHaveBeenCalled()
-		})
-
-		it('keeps the editor open when the server refuses the edit', async () => {
-			const { wrapper } = mountPost({ dispatch: vi.fn().mockResolvedValue(undefined) })
-			await menuItem(wrapper, 'Edit').trigger('click')
-
-			await wrapper.find('textarea').setValue('Edited text')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(wrapper.find('textarea').element.value).toBe('Edited text')
-		})
-
-		it('saves on Ctrl+Enter', async () => {
-			const { wrapper, store } = mountPost()
-			await menuItem(wrapper, 'Edit').trigger('click')
-
-			await wrapper.find('textarea').setValue('Quick fix')
-			await wrapper.find('textarea').trigger('keydown', { key: 'Enter', ctrlKey: true })
-			await flushPromises()
-
-			expect(store.postEdit).toHaveBeenCalledWith(expect.objectContaining({ content: 'Quick fix' }))
-		})
-
-		it('refuses to save an empty edit and stays in edit mode', async () => {
-			const { wrapper, dispatch } = mountPost()
-			await menuItem(wrapper, 'Edit').trigger('click')
-
-			await wrapper.find('textarea').setValue('   ')
-			await wrapper.find('.post-edit-actions button[aria-label="Save"]').trigger('click')
-			await flushPromises()
-
-			expect(dispatch).not.toHaveBeenCalled()
-			expect(wrapper.find('textarea').exists()).toBe(true)
-		})
-
-		it('cancels without saving and restores the content', async () => {
-			const { wrapper, dispatch } = mountPost()
-			await menuItem(wrapper, 'Edit').trigger('click')
-			await wrapper.find('textarea').setValue('Never saved')
-
-			await wrapper.find('.post-edit-actions button[aria-label="Cancel"]').trigger('click')
-
-			expect(dispatch).not.toHaveBeenCalled()
-			expect(wrapper.find('textarea').exists()).toBe(false)
-			expect(wrapper.find('.post-message strong').text()).toBe('world')
-
-			// the draft is not kept for the next edit
-			await menuItem(wrapper, 'Edit').trigger('click')
-			expect(wrapper.find('textarea').element.value).toBe('Hello world')
-		})
 	})
 	describe('the media-first layout', () => {
 		it('leads with the pictures and reads the text as their caption', () => {
@@ -1969,15 +1783,11 @@ describe('TimelinePost', () => {
 			expect(wrapper.find('.post-message').exists()).toBe(false)
 		})
 
-		it('puts the text back on top while the post is being edited', async () => {
+		it('keeps the card layout stable when editing opens in the modal', async () => {
 			const { wrapper } = mountPost({ item: makeItem({ media_attachments: [photo(1)] }) })
-
 			await menuItem(wrapper, 'Edit').trigger('click')
-
-			// the editor is what is being worked on, and it is the text
-			expect(wrapper.find('.post-edit-textarea').exists()).toBe(true)
-			expect(attachmentsOf(wrapper).props('mediaFirst')).toBe(false)
-			expect(isBefore(wrapper.find('.post-edit-inline').element, attachmentsOf(wrapper).element)).toBe(true)
+			expect(wrapper.find('.post-edit-textarea').exists()).toBe(false)
+			expect(attachmentsOf(wrapper).props('mediaFirst')).toBe(true)
 		})
 
 		it('never renders the pictures twice, in either layout', () => {

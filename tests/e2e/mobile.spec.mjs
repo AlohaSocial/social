@@ -68,7 +68,8 @@ test.describe('on a phone', () => {
 		await openApp(page)
 		const text = `Hello from a phone ${Date.now()}`
 
-		const composer = page.locator('.social__wrapper .new-post').first()
+		await page.locator('.composer-line__expand').click()
+		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await page.keyboard.type(text)
 		await composer.getByRole('button', { name: /^Post(?! as)/ }).click()

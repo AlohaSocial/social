@@ -1071,6 +1071,94 @@ describe('Composer', () => {
 		})
 	})
 
+	describe('the compact single-line mode', () => {
+		it('stays one line while typing and sends through the existing publisher', async () => {
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'A short update')
+			expect(wrapper.find('.options').exists()).toBe(false)
+			expect(wrapper.vm.expanded).toBe(false)
+			await wrapper.find('.composer-line__send').trigger('click')
+			await flushPromises()
+			expect(postedStatus(store).status).toBe('A short update')
+			expect(wrapper.emitted('posted')).toHaveLength(1)
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('keeps a refused quick post and hands its draft to the full modal', async () => {
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			store.post.mockResolvedValueOnce(undefined)
+			await setContent(wrapper, 'Keep these words')
+			await wrapper.find('.composer-line__send').trigger('click')
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Keep these words')
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			await wrapper.find('.composer-line__expand').trigger('click')
+			expect(opened).toHaveBeenCalledTimes(1)
+			expect(JSON.parse(localStorage.getItem('social.composer.draft::alice')).text).toBe('Keep these words')
+			eventBus.off('composer-open', opened)
+		})
+
+		it('hands the full draft directly to the modal even when browser storage is unavailable', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+				throw new Error('Storage unavailable')
+			})
+			await setContent(wrapper, 'Keep it without localStorage')
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			await wrapper.find('.composer-line__expand').trigger('click')
+			const intent = opened.mock.calls[0][0]
+			expect(intent.draft.text).toBe('Keep it without localStorage')
+			wrapper.unmount()
+			const full = mountComposer({ initialDraft: intent.draft, startExpanded: true, listenForIntents: false }).wrapper
+			await flushPromises()
+			expect(typed(full)).toBe('Keep it without localStorage')
+			eventBus.off('composer-open', opened)
+		})
+
+		it('opens rich drafts for review instead of silently sending hidden settings', async () => {
+			localStorage.setItem('social.composer.draft::alice', JSON.stringify({ text: 'Warned', spoilerText: 'Sensitive topic', savedAt: Date.now() }))
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			await flushPromises()
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			expect(wrapper.find('.composer-line__send').attributes('aria-label')).toBe('Continue draft')
+			await wrapper.vm.createPost()
+			expect(store.post).not.toHaveBeenCalled()
+			expect(opened).toHaveBeenCalledTimes(1)
+			eventBus.off('composer-open', opened)
+		})
+	})
+
+	describe('initial modal context', () => {
+		it('prefills a reply even when its lazy editor did not hear the opening event', async () => {
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(bob), listenForIntents: false, startExpanded: true, showReplyContext: true })
+			await flushPromises()
+			expect(typed(wrapper)).toContain('@bob@remote.example')
+			expect(wrapper.vm.replyTo.id).toBe('42')
+			expect(wrapper.vm.anchoredReply).toBe(false)
+		})
+
+		it('restores a quote draft in its own context and ignores later global intents', async () => {
+			localStorage.setItem('social.composer.draft.quote.77::alice', JSON.stringify({ text: 'My saved commentary', savedAt: Date.now() }))
+			const quoted = { id: '77', content: '<p>Quoted</p>', account: bob }
+			const { wrapper } = mountComposer({ initialQuote: quoted, listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('My saved commentary')
+			expect(wrapper.vm.quoteOf).toEqual(quoted)
+			eventBus.emit('composer-quote', { id: '88' })
+			expect(wrapper.vm.quoteOf.id).toBe('77')
+		})
+
+		it('restores an unfinished re-draft instead of replacing it with the deleted text', async () => {
+			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Already revised', savedAt: Date.now() }))
+			const { wrapper } = mountComposer({ initialRedraft: { id: '101', content: '<p>Old text</p>' }, listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Already revised')
+		})
+	})
+
 	describe('the draft', () => {
 		const stored = () => JSON.parse(localStorage.getItem('social.composer.draft::alice') ?? 'null')
 

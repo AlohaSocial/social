@@ -31,7 +31,7 @@ vi.hoisted(() => {
 
 const ComposerStub = {
 	name: 'Composer',
-	props: ['defaultVisibility', 'initialMention', 'offerShort'],
+	props: ['defaultVisibility', 'initialMention', 'offerShort', 'oneLine', 'listenForIntents'],
 	template: '<div class="composer-stub" />',
 }
 const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-stub" />' }
@@ -362,13 +362,13 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'tags', params: { tag: 'nextcloud' } })
 		expect(wrapper.find('h1').text()).toBe('#nextcloud')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('tags')
-		expect(wrapper.findComponent(ComposerStub).exists()).toBe(true)
+		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
 	})
 
-	it('shows the composer on the home timeline without a preset visibility', () => {
+	it('offers a single line backed by the same composer on the home feed', () => {
 		const composer = mountTimeline().findComponent(ComposerStub)
-		expect(composer.exists()).toBe(true)
-		expect(composer.props('defaultVisibility')).toBeUndefined()
+		expect(composer.props('oneLine')).toBe('')
+		expect(composer.props('listenForIntents')).toBe(false)
 	})
 
 	it('uses the conversation interface instead of the ordinary timeline composer for direct messages', () => {
@@ -383,9 +383,12 @@ describe('Timeline', () => {
 		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).not.toContain('social__wrapper--reading')
 	})
 
-	it('offers the New short camera in the composer on the home feed only', () => {
-		expect(mountTimeline({ params: { type: 'home' } }).findComponent(ComposerStub).props('offerShort')).toBe(true)
-		expect(mountTimeline({ params: { type: 'timeline' } }).findComponent(ComposerStub).props('offerShort')).toBe(false)
+	it('unmounts the compact editor while the shared popup is open', async () => {
+		const wrapper = mountTimeline({ params: { type: 'home' } })
+		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
+		timelineStore.setComposerDisplayStatus(true)
+		await nextTick()
+		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 	})
 
 	it('hides the composer on the notifications timeline and titles it', () => {
@@ -614,8 +617,8 @@ describe('Timeline', () => {
 			const row = wrapper.find('.timeline-heading-row')
 			expect(row.find('h1').text()).toBe('#nextcloud')
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/tags/nextcloud')
-			expect(row.find('button').text()).toBe('Follow')
-			expect(row.find('button').attributes('aria-pressed')).toBe('false')
+			expect(wrapper.findComponent(HashtagFollowButton).find('button').text()).toBe('Follow')
+			expect(wrapper.findComponent(HashtagFollowButton).find('button').attributes('aria-pressed')).toBe('false')
 		})
 
 		it('says which hashtags are already followed', async () => {
@@ -1066,12 +1069,12 @@ describe('Timeline', () => {
 			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		})
 
-		it.each(['photos', '', 'timeline'])('keeps %s off the video layout and keeps its composer', (type) => {
+		it.each(['photos', '', 'timeline'])('keeps %s off the video layout and offers the shared composer action', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
 			expect(wrapper.findComponent(TimelineListStub).props('display')).not.toBe('videos')
 			expect(wrapper.find('.social__wrapper').classes()).not.toContain('social__wrapper--videos')
-			expect(wrapper.findComponent(ComposerStub).exists()).toBe(true)
+			expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
 		})
 
 		it.each(['', 'timeline', 'federated', 'notifications'])('draws %s as a list', (type) => {

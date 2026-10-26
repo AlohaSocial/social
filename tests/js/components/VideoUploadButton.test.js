@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
+import eventBus from '../../../src/services/eventBus.js'
 import VideoUploadButton from '../../../src/components/VideoUploadButton.vue'
 
 const ComposerStub = { name: 'Composer', props: { initialFiles: Array, startExpanded: Boolean }, emits: ['posted'], template: '<div class="composer-stub" />' }
@@ -45,11 +46,14 @@ describe('Upload a video', () => {
 		const wrapper = mountButton()
 		const file = new File(['x'], 'harbour.mp4', { type: 'video/mp4' })
 
+		const opened = vi.fn()
+		eventBus.on('composer-open', opened)
 		await pick(wrapper, [file])
+		expect(opened).toHaveBeenCalledWith({ files: [file] })
+		eventBus.off('composer-open', opened)
 
-		const composer = wrapper.findComponent(ComposerStub)
-		expect(composer.props('initialFiles')).toEqual([file])
-		expect(composer.props('startExpanded')).toBe(true)
+		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+		expect(wrapper.findComponent(ModalStub).exists()).toBe(false)
 	})
 
 	it('opens nothing when the picker was dismissed', async () => {
@@ -59,14 +63,15 @@ describe('Upload a video', () => {
 		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 	})
 
-	it('closes once the video is posted, or when closed', async () => {
+	it('allows picking the same file again through the common composer entry point', async () => {
 		const wrapper = mountButton()
-		await pick(wrapper, [new File(['x'], 'a.mp4', { type: 'video/mp4' })])
-		await wrapper.findComponent(ComposerStub).vm.$emit('posted')
-		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
-
-		await pick(wrapper, [new File(['x'], 'b.mp4', { type: 'video/mp4' })])
-		await wrapper.findComponent(ModalStub).vm.$emit('close')
-		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+		const opened = vi.fn()
+		eventBus.on('composer-open', opened)
+		const file = new File(['x'], 'a.mp4', { type: 'video/mp4' })
+		await pick(wrapper, [file])
+		await pick(wrapper, [file])
+		expect(opened).toHaveBeenCalledTimes(2)
+		expect(wrapper.find('input').element.value).toBe('')
+		eventBus.off('composer-open', opened)
 	})
 })

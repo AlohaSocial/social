@@ -136,7 +136,8 @@ function rememberCelebrated() {
  * @property {Object<string, true>} filled the lists that have shown a post this session, by identity
  * @property {Record<string, string|null>} recommendationCursors opaque continuation cursors for ranked For You timelines, by identity
  * @property {Record<string, {state: string, known_eligible: number|null, returned: number, remote_refresh_queued: boolean}>} recommendationCoverage ranked-feed coverage, by identity
- * @property {boolean} composerDisplayStatus whether the composer is open
+ * @property {boolean} composerDisplayStatus whether the full composer is open
+ * @property {boolean} composerSubmitting whether a composer is currently publishing
  * @property {string} searchQuery what is being searched for
  * @property {boolean} firstPostCelebration whether the celebration is on screen
  * @property {boolean} firstPostCelebrated whether this session has celebrated already
@@ -538,6 +539,7 @@ export const useTimelineStore = defineStore('timeline', {
 		 */
 		filled: {},
 		composerDisplayStatus: false,
+		composerSubmitting: false,
 		searchQuery: '',
 		/** whether the one-time first-post celebration is on screen right now */
 		firstPostCelebration: false,

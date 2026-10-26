@@ -16,11 +16,6 @@
 		<!-- said once, on the pages where the reading it describes happens -->
 		<InterestsNotice v-if="showInterestsNotice" />
 
-		<Composer
-			v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct' && type !== 'videos'"
-			compactOptions
-			:offerShort="isHome && settingsStore.getServerData.sections?.stories !== false" />
-
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while
 		     reading, not something they navigate to -->
@@ -47,11 +42,16 @@
 			<h1 class="timeline-heading" :class="{ 'hidden-visually': !headingIsVisible }">
 				{{ heading }}
 			</h1>
+
 			<HashtagFollowButton
 				v-if="type === 'tags' && !followedTagsOnly"
 				:tag="String($route.params.tag)"
 				@changed="onHashtagFollowChanged" />
 		</div>
+		<Composer
+			v-if="!settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos'].includes(type) && !timelineStore.composerDisplayStatus"
+			oneLine
+			:listenForIntents="false" />
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
@@ -208,15 +208,16 @@ import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 /** How long after a feed is on screen its other scopes are fetched ahead, in milliseconds. */
 const PREFETCH_AFTER = 1500
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 // only drawn when somebody asks to review who is waiting
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
+
+const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
 export default {
 	name: 'Timeline',
 	components: {
-		Announcements,
 		Composer,
+		Announcements,
 		IconCheckAll,
 		NcButton,
 		NcNoteCard,
@@ -715,6 +716,7 @@ export default {
 	},
 
 	methods: {
+
 		/**
 		 * Once a scope of the feed is on screen, fetches the first page of
 		 * the others, so that the switcher puts each on screen at once.

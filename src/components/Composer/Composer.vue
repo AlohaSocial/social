@@ -7,6 +7,7 @@
 		class="new-post"
 		:class="{
 			'new-post--collapsed': !expanded,
+			'new-post--one-line': oneLine,
 			'new-post--drop-target': draggingFiles,
 			'new-post--refused': refusedDrop,
 			'new-post--posted': justPosted,
@@ -18,505 +19,557 @@
 		@dragenter="handleDragEnter"
 		@dragover="handleDragOver"
 		@dragleave="handleDragLeave"
-		@drop="handleDrop">
-		<!-- announced only to the eye: a drag is not something a screen reader
-		     is in the middle of, and the pill must never take the drop it
-		     announces, hence pointer-events: none -->
-		<div v-if="draggingFiles" class="new-post__drop-hint" aria-hidden="true">
-			<span>{{ t('social', 'Drop to attach') }}</span>
-		</div>
-		<input
-			id="file-upload"
-			ref="fileUploadInput"
-			type="file"
-			:accept="acceptedTypes"
-			multiple="true"
-			tabindex="-1"
-			aria-hidden="true"
-			class="hidden-visually"
-			@change="handleFileChange($event)">
-		<div v-if="!compactOptions || closable" class="new-post-author">
-			<!-- the reader's own face, and `disableMenu` because a card about
-			     yourself, over the box you are typing in, is nobody's idea of
-			     a preview -->
+		@drop="onComposerDrop">
+		<div v-if="oneLine" class="composer-line">
 			<NcAvatar
-				v-if="!compactOptions"
 				:url="ownAvatarUrl"
 				:displayName="currentUser.displayName"
 				:hideStatus="true"
 				:disableMenu="true"
 				:disableTooltip="true"
-				:size="32" />
-			<!-- The way out. The box opens on a click and closes again when the
-			     reader clicks elsewhere — but only while it holds nothing worth
-			     keeping, so as soon as a word is typed the only way back to a
-			     one-line box was to delete that word by hand. Nothing is thrown
-			     away here: what is in the box stays in it, and is put back from
-			     the draft after a reload. -->
-			<NcButton
-				v-if="closable"
-				variant="tertiary"
-				class="new-post-author__close"
-				:aria-label="t('social', 'Close the composer')"
-				:title="t('social', 'Close the composer. What you have written is kept.')"
-				@click="close">
-				<template #icon>
-					<Close :size="20" />
-				</template>
-			</NcButton>
-		</div>
-		<div v-if="replyTo && !anchoredReply" class="reply-to">
-			<p class="reply-info">
-				<span>{{ t('social', 'In reply to') }}</span>
-				<ActorAvatar :actor="replyTo.account" :size="16" :link="false" />
-				<strong>{{ replyTo.account.acct }}</strong>
-				<NcButton
-					variant="tertiary"
-					class="close-button"
-					:aria-label="t('social', 'Close reply')"
-					@click="closeReply">
-					<template #icon>
-						<Close :size="20" />
-					</template>
-				</NcButton>
-			</p>
-			<MessageContent :item="replyTo" />
-		</div>
-		<div v-if="quoteOf" class="quote-of">
-			<p class="quote-info">
-				<span>{{ t('social', 'Quoting') }}</span>
-				<ActorAvatar :actor="quoteOf.account" :size="16" :link="false" />
-				<strong>{{ quoteOf.account.acct }}</strong>
-				<NcButton
-					variant="tertiary"
-					class="close-button"
-					:aria-label="t('social', 'Remove quote')"
-					@click="removeQuote">
-					<template #icon>
-						<Close :size="20" />
-					</template>
-				</NcButton>
-			</p>
-			<MessageContent :item="quoteOf" />
-		</div>
-		<form
-			class="new-post-form"
-			:class="{ 'new-post-form--with-media': hasAttachments }"
-			@submit.prevent>
-			<!-- A video has its own name and details on other servers. -->
-			<VideoMetadataEditor
-				v-if="isVideoPost"
-				v-model:title="videoTitle"
-				v-model:category="videoCategory"
-				v-model:licence="videoLicence" />
-			<ContentWarningEditor
-				v-if="showWarning"
-				v-model:value="spoilerText"
-				:presets="warningPresets"
-				@remove="toggleWarning"
-				@choose="chooseWarning" />
+				:size="32"
+				aria-hidden="true" />
 			<div
 				ref="composerInput"
+				class="message composer-line__input"
+				:class="{ 'too-long': statusIsTooLong }"
+				:aria-invalid="statusIsTooLong"
+				:title="charactersLeftLabel"
 				:contenteditable="!loading"
-				class="message"
 				role="textbox"
 				aria-multiline="true"
 				dir="auto"
 				:aria-label="prompt"
-				:aria-describedby="statusIsTooLong ? 'composer-length' : undefined"
 				:placeholder="prompt"
-				:class="{'icon-loading': loading, 'too-long': statusIsTooLong, 'message--caption': hasAttachments}"
-				@keyup.prevent.enter="keyup"
 				@input="updateStatusContent"
-				@paste="handlePaste"
+				@keyup.prevent.enter="keyup"
+				@paste="onLinePaste"
 				@tribute-replaced="updatePostFromTribute" />
-
-			<!-- under the box, as Mastodon and Bluesky have them: above it, four
-			     pictures and their descriptions pushed the box off a phone's
-			     screen. In the DOM too, so the tab order follows the eye -->
-			<PreviewGrid
-				:uploading="uploading"
-				:uploadProgress="uploadProgress"
-				:progressLabel="progressLabel"
-				:miniatures="attachments"
-				@deleted="deletePreview"
-				@describe="describeAttachment"
-				@commitDescription="commitDescription"
-				@focus="focusAttachment"
-				@commitFocus="commitFocus"
-				@filter="applyFilter" />
-
-			<!-- /dice, /flip and /pick are played when the post goes out; this
-			     says so while one is in the box, and shows the roll itself -->
-			<div
-				v-if="rolling.length > 0"
-				class="composer-roll"
-				:class="{ 'composer-roll--landed': rollLanded }"
-				role="status"
-				aria-live="polite">
-				<span v-for="(die, index) in rolling" :key="index" class="composer-roll__die">
-					<span aria-hidden="true">{{ die.icon }}</span> {{ die.shown }}
-				</span>
+			<NcButton
+				class="composer-line__expand"
+				variant="tertiary"
+				:disabled="loading"
+				:aria-label="t('social', 'Open full composer')"
+				:title="t('social', 'Open full composer')"
+				aria-haspopup="dialog"
+				@click="openFullComposer">
+				<template #icon>
+					<OpenInNew :size="20" />
+				</template>
+			</NcButton>
+			<NcButton
+				class="composer-line__send"
+				variant="primary"
+				:disabled="loading || (!oneLineNeedsDetails && !canPost)"
+				:aria-busy="loading"
+				:aria-label="oneLineNeedsDetails ? t('social', 'Continue draft') : t('social', 'Send')"
+				:title="oneLineNeedsDetails ? t('social', 'Continue draft') : t('social', 'Send')"
+				@click="sendFromLine">
+				<template #icon>
+					<Send :size="20" />
+				</template>
+			</NcButton>
+		</div>
+		<template v-else>
+			<!-- announced only to the eye: a drag is not something a screen reader
+			     is in the middle of, and the pill must never take the drop it
+			     announces, hence pointer-events: none -->
+			<div v-if="draggingFiles" class="new-post__drop-hint" aria-hidden="true">
+				<span>{{ t('social', 'Drop to attach') }}</span>
 			</div>
-			<p v-else-if="gamesInPost.length > 0" class="composer-games">
-				{{ t('social', 'Played when you post. Everybody sees the same result.') }}
-			</p>
-
-			<div v-if="asCard && canBeCard" class="composer-card">
+			<input
+				id="file-upload"
+				ref="fileUploadInput"
+				type="file"
+				:accept="acceptedTypes"
+				multiple="true"
+				tabindex="-1"
+				aria-hidden="true"
+				class="hidden-visually"
+				@change="handleFileChange($event)">
+			<div v-if="!compactOptions || closable" class="new-post-author">
+				<!-- the reader's own face, and `disableMenu` because a card about
+				     yourself, over the box you are typing in, is nobody's idea of
+				     a preview -->
+				<NcAvatar
+					v-if="!compactOptions"
+					:url="ownAvatarUrl"
+					:displayName="currentUser.displayName"
+					:hideStatus="true"
+					:disableMenu="true"
+					:disableTooltip="true"
+					:size="32" />
+				<!-- The way out. The box opens on a click and closes again when the
+				     reader clicks elsewhere — but only while it holds nothing worth
+				     keeping, so as soon as a word is typed the only way back to a
+				     one-line box was to delete that word by hand. Nothing is thrown
+				     away here: what is in the box stays in it, and is put back from
+				     the draft after a reload. -->
+				<NcButton
+					v-if="closable"
+					variant="tertiary"
+					class="new-post-author__close"
+					:aria-label="t('social', 'Close the composer')"
+					:title="t('social', 'Close the composer. What you have written is kept.')"
+					@click="close">
+					<template #icon>
+						<Close :size="20" />
+					</template>
+				</NcButton>
+			</div>
+			<div v-if="replyTo && !anchoredReply" class="reply-to">
+				<p class="reply-info">
+					<span>{{ t('social', 'In reply to') }}</span>
+					<ActorAvatar :actor="replyTo.account" :size="16" :link="false" />
+					<strong>{{ replyTo.account.acct }}</strong>
+					<NcButton
+						variant="tertiary"
+						class="close-button"
+						:aria-label="t('social', 'Close reply')"
+						@click="closeReply">
+						<template #icon>
+							<Close :size="20" />
+						</template>
+					</NcButton>
+				</p>
+				<MessageContent :item="replyTo" />
+			</div>
+			<div v-if="quoteOf" class="quote-of">
+				<p class="quote-info">
+					<span>{{ t('social', 'Quoting') }}</span>
+					<ActorAvatar :actor="quoteOf.account" :size="16" :link="false" />
+					<strong>{{ quoteOf.account.acct }}</strong>
+					<NcButton
+						variant="tertiary"
+						class="close-button"
+						:aria-label="t('social', 'Remove quote')"
+						@click="removeQuote">
+						<template #icon>
+							<Close :size="20" />
+						</template>
+					</NcButton>
+				</p>
+				<MessageContent :item="quoteOf" />
+			</div>
+			<form
+				class="new-post-form"
+				:class="{ 'new-post-form--with-media': hasAttachments }"
+				@submit.prevent>
+				<!-- A video has its own name and details on other servers. -->
+				<VideoMetadataEditor
+					v-if="isVideoPost"
+					v-model:title="videoTitle"
+					v-model:category="videoCategory"
+					v-model:licence="videoLicence" />
+				<ContentWarningEditor
+					v-if="showWarning"
+					v-model:value="spoilerText"
+					:presets="warningPresets"
+					@remove="toggleWarning"
+					@choose="chooseWarning" />
 				<div
-					class="composer-card__preview"
-					:style="{ background: cardBackground, color: cardGradient.ink, '--card-length': statusText.length }"
-					aria-hidden="true">
-					<p class="composer-card__text">
-						{{ statusText }}
+					ref="composerInput"
+					:contenteditable="!loading"
+					class="message"
+					role="textbox"
+					aria-multiline="true"
+					dir="auto"
+					:aria-label="prompt"
+					:aria-describedby="statusIsTooLong ? 'composer-length' : undefined"
+					:placeholder="prompt"
+					:class="{'icon-loading': loading, 'too-long': statusIsTooLong, 'message--caption': hasAttachments}"
+					@keyup.prevent.enter="keyup"
+					@input="updateStatusContent"
+					@paste="handlePaste"
+					@tribute-replaced="updatePostFromTribute" />
+
+				<!-- under the box, as Mastodon and Bluesky have them: above it, four
+				     pictures and their descriptions pushed the box off a phone's
+				     screen. In the DOM too, so the tab order follows the eye -->
+				<PreviewGrid
+					:uploading="uploading"
+					:uploadProgress="uploadProgress"
+					:progressLabel="progressLabel"
+					:miniatures="attachments"
+					@deleted="deletePreview"
+					@describe="describeAttachment"
+					@commitDescription="commitDescription"
+					@focus="focusAttachment"
+					@commitFocus="commitFocus"
+					@filter="applyFilter" />
+
+				<!-- /dice, /flip and /pick are played when the post goes out; this
+				     says so while one is in the box, and shows the roll itself -->
+				<div
+					v-if="rolling.length > 0"
+					class="composer-roll"
+					:class="{ 'composer-roll--landed': rollLanded }"
+					role="status"
+					aria-live="polite">
+					<span v-for="(die, index) in rolling" :key="index" class="composer-roll__die">
+						<span aria-hidden="true">{{ die.icon }}</span> {{ die.shown }}
+					</span>
+				</div>
+				<p v-else-if="gamesInPost.length > 0" class="composer-games">
+					{{ t('social', 'Played when you post. Everybody sees the same result.') }}
+				</p>
+
+				<div v-if="asCard && canBeCard" class="composer-card">
+					<div
+						class="composer-card__preview"
+						:style="{ background: cardBackground, color: cardGradient.ink, '--card-length': statusText.length }"
+						aria-hidden="true">
+						<p class="composer-card__text">
+							{{ statusText }}
+						</p>
+					</div>
+					<div class="composer-card__gradients" role="radiogroup" :aria-label="t('social', 'Background')">
+						<button
+							v-for="option in cardGradients"
+							:key="option.id"
+							type="button"
+							role="radio"
+							class="composer-card__gradient"
+							:aria-checked="option.id === cardGradientId"
+							:aria-label="option.name"
+							:title="option.name"
+							:style="{ background: backgroundOf(option) }"
+							@click="cardGradientId = option.id" />
+					</div>
+					<p class="composer-card__hint">
+						{{ t('social', 'Sent as a picture of these words, with the words as its description and as the post, so every server shows the card and every reader can still hear it.') }}
 					</p>
 				</div>
-				<div class="composer-card__gradients" role="radiogroup" :aria-label="t('social', 'Background')">
-					<button
-						v-for="option in cardGradients"
-						:key="option.id"
-						type="button"
-						role="radio"
-						class="composer-card__gradient"
-						:aria-checked="option.id === cardGradientId"
-						:aria-label="option.name"
-						:title="option.name"
-						:style="{ background: backgroundOf(option) }"
-						@click="cardGradientId = option.id" />
-				</div>
-				<p class="composer-card__hint">
-					{{ t('social', 'Sent as a picture of these words, with the words as its description and as the post, so every server shows the card and every reader can still hear it.') }}
-				</p>
-			</div>
 
-			<GifPicker
-				v-if="showGifs"
-				@close="showGifs = false"
-				@chosen="attachGif" />
+				<GifPicker
+					v-if="showGifs"
+					@close="showGifs = false"
+					@chosen="attachGif" />
 
-			<!-- what the server will publish, once the writer asks to see it;
-			     under the box, above everything the post is being given -->
-			<ComposerPreview
-				v-if="showPreview"
-				:text="statusText"
-				:warning="showWarning ? spoilerText : ''"
-				@close="showPreview = false" />
+				<!-- what the server will publish, once the writer asks to see it;
+				     under the box, above everything the post is being given -->
+				<ComposerPreview
+					v-if="showPreview"
+					:text="statusText"
+					:warning="showWarning ? spoilerText : ''"
+					@close="showPreview = false" />
 
-			<PollEditor
-				v-if="showPoll"
-				v-model:options="pollOptions"
-				v-model:multiple="pollMultiple"
-				v-model:expiresIn="pollExpiresIn"
-				@remove="togglePoll" />
+				<PollEditor
+					v-if="showPoll"
+					v-model:options="pollOptions"
+					v-model:multiple="pollMultiple"
+					v-model:expiresIn="pollExpiresIn"
+					@remove="togglePoll" />
 
-			<EventEditor
-				v-if="showEvent"
-				v-model:name="eventName"
-				v-model:start="eventStart"
-				v-model:end="eventEnd"
-				v-model:location="eventLocation"
-				:valid="eventIsValid"
-				:reachesBluesky="reachesBluesky" />
+				<EventEditor
+					v-if="showEvent"
+					v-model:name="eventName"
+					v-model:start="eventStart"
+					v-model:end="eventEnd"
+					v-model:location="eventLocation"
+					:valid="eventIsValid"
+					:reachesBluesky="reachesBluesky" />
 
-			<!-- When the post goes out, if not now. The picker is most of a
-			     date library and arrives when the clock is pressed, not with
-			     every composer; until then this block is not here at all. -->
-			<SchedulePicker v-if="scheduling" v-model="scheduledAt">
-				<NcButton
-					variant="tertiary"
-					class="schedule-editor__remove"
-					:aria-label="t('social', 'Post now instead')"
-					:title="t('social', 'Post now instead')"
-					@click.prevent="toggleSchedule">
-					<template #icon>
-						<Close :size="18" />
-					</template>
-				</NcButton>
-			</SchedulePicker>
+				<!-- When the post goes out, if not now. The picker is most of a
+				     date library and arrives when the clock is pressed, not with
+				     every composer; until then this block is not here at all. -->
+				<SchedulePicker v-if="scheduling" v-model="scheduledAt">
+					<NcButton
+						variant="tertiary"
+						class="schedule-editor__remove"
+						:aria-label="t('social', 'Post now instead')"
+						:title="t('social', 'Post now instead')"
+						@click.prevent="toggleSchedule">
+						<template #icon>
+							<Close :size="18" />
+						</template>
+					</NcButton>
+				</SchedulePicker>
 
-			<!-- A panel, and so above the toolbar with the others rather than
-			     inside it: the toolbar row is `max-height: 120px; overflow:
-			     hidden` for its collapse, which cut the picker off — the
-			     country box under the suggestions was simply not there. -->
-			<PlacePicker
-				v-if="placing"
-				:place="place"
-				@update:place="place = $event"
-				@close="togglePlace" />
+				<!-- A panel, and so above the toolbar with the others rather than
+				     inside it: the toolbar row is `max-height: 120px; overflow:
+				     hidden` for its collapse, which cut the picker off — the
+				     country box under the suggestions was simply not there. -->
+				<PlacePicker
+					v-if="placing"
+					:place="place"
+					@update:place="place = $event"
+					@close="togglePlace" />
 
-			<div class="options" :class="{ 'options--compact': compactOptions }">
-				<NcButton
-					v-if="offerShort && (!compactOptions || moreOptionsOpen)"
-					:title="t('social', 'New short')"
-					variant="tertiary"
-					:aria-label="t('social', 'New short')"
-					@click.prevent="composeShort">
-					<template #icon>
-						<CameraOutline :size="22" decorative title="" />
-					</template>
-				</NcButton>
-				<NcButton
-					:title="t('social', 'Add attachment')"
-					variant="tertiary"
-					:aria-label="t('social', 'Add attachment')"
-					:disabled="attachmentsFull"
-					@click.prevent="clickImportInput">
-					<template #icon>
-						<Paperclip :size="22" decorative title="" />
-					</template>
-				</NcButton>
+				<div class="options" :class="{ 'options--compact': compactOptions }">
+					<NcButton
+						v-if="offerShort && (!compactOptions || moreOptionsOpen)"
+						:title="t('social', 'New short')"
+						variant="tertiary"
+						:aria-label="t('social', 'New short')"
+						@click.prevent="composeShort">
+						<template #icon>
+							<CameraOutline :size="22" decorative title="" />
+						</template>
+					</NcButton>
+					<NcButton
+						:title="t('social', 'Add attachment')"
+						variant="tertiary"
+						:aria-label="t('social', 'Add attachment')"
+						:disabled="attachmentsFull"
+						@click.prevent="clickImportInput">
+						<template #icon>
+							<Paperclip :size="22" decorative title="" />
+						</template>
+					</NcButton>
 
-				<NcButton
-					v-if="hasFiles"
-					:title="t('social', 'Add from Files')"
-					variant="tertiary"
-					:aria-label="t('social', 'Add from Files')"
-					:disabled="attachmentsFull || picking"
-					@click.prevent="pickFromFiles">
-					<template #icon>
-						<FolderImage :size="22" decorative title="" />
-					</template>
-				</NcButton>
+					<NcButton
+						v-if="hasFiles"
+						:title="t('social', 'Add from Files')"
+						variant="tertiary"
+						:aria-label="t('social', 'Add from Files')"
+						:disabled="attachmentsFull || picking"
+						@click.prevent="pickFromFiles">
+						<template #icon>
+							<FolderImage :size="22" decorative title="" />
+						</template>
+					</NcButton>
 
-				<NcButton
-					:title="showWarning ? t('social', 'Remove content warning') : t('social', 'Add content warning')"
-					variant="tertiary"
-					:aria-label="showWarning ? t('social', 'Remove content warning') : t('social', 'Add content warning')"
-					:aria-pressed="showWarning"
-					@click.prevent="toggleWarning">
-					<template #icon>
-						<AlertOutline :size="22" decorative title="" />
-					</template>
-				</NcButton>
-				<div class="new-post-form__emoji-picker">
-					<NcEmojiPicker
-						v-if="emojiPickerLoaded"
-						:search="search"
-						:closeOnSelect="false"
-						:container="emojiPickerContainer"
-						@select="insert">
+					<NcButton
+						:title="showWarning ? t('social', 'Remove content warning') : t('social', 'Add content warning')"
+						variant="tertiary"
+						:aria-label="showWarning ? t('social', 'Remove content warning') : t('social', 'Add content warning')"
+						:aria-pressed="showWarning"
+						@click.prevent="toggleWarning">
+						<template #icon>
+							<AlertOutline :size="22" decorative title="" />
+						</template>
+					</NcButton>
+					<div class="new-post-form__emoji-picker">
+						<NcEmojiPicker
+							v-if="emojiPickerLoaded"
+							:search="search"
+							:closeOnSelect="false"
+							:container="emojiPickerContainer"
+							@select="insert">
+							<NcButton
+								ref="emojiButton"
+								:title="t('social', 'Add emoji')"
+								variant="tertiary"
+								:aria-haspopup="true"
+								:aria-label="t('social', 'Add emoji')">
+								<template #icon>
+									<EmoticonOutline :size="22" decorative title="" />
+								</template>
+							</NcButton>
+						</NcEmojiPicker>
 						<NcButton
-							ref="emojiButton"
+							v-else
 							:title="t('social', 'Add emoji')"
 							variant="tertiary"
 							:aria-haspopup="true"
-							:aria-label="t('social', 'Add emoji')">
+							:aria-label="t('social', 'Add emoji')"
+							@click="loadEmojiPicker">
 							<template #icon>
-								<EmoticonOutline :size="22" decorative title="" />
+								<NcLoadingIcon v-if="emojiPickerLoading" :size="22" />
+								<EmoticonOutline
+									v-else
+									:size="22"
+									decorative
+									title="" />
 							</template>
 						</NcButton>
-					</NcEmojiPicker>
-					<NcButton
-						v-else
-						:title="t('social', 'Add emoji')"
-						variant="tertiary"
-						:aria-haspopup="true"
-						:aria-label="t('social', 'Add emoji')"
-						@click="loadEmojiPicker">
-						<template #icon>
-							<NcLoadingIcon v-if="emojiPickerLoading" :size="22" />
-							<EmoticonOutline
-								v-else
-								:size="22"
-								decorative
-								title="" />
-						</template>
-					</NcButton>
-				</div>
-				<NcButton
-					v-if="compactOptions"
-					variant="tertiary"
-					class="more-options-toggle"
-					:aria-expanded="moreOptionsOpen"
-					@click.prevent="moreOptionsOpen = !moreOptionsOpen">
-					{{ moreOptionsOpen ? t('social', 'Fewer options') : t('social', 'More options') }}
-				</NcButton>
-				<div v-if="!compactOptions || moreOptionsOpen" class="composer-advanced-options">
-					<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Post options') }}</span>
-					<!-- the author's own word that this was made with AI. It is a
-				     hashtag in the text rather than a field of its own, so the
-				     button reads its state off the words: typing the tag by
-				     hand lights it, and pressing it writes or removes the tag -->
-					<NcButton
-						:title="t('social', 'Made with AI')"
-						variant="tertiary"
-						class="ai-toggle"
-						:aria-label="t('social', 'Made with AI')"
-						:aria-pressed="madeWithAi"
-						@click.prevent="toggleAiMark">
-						<template #icon>
-							<CreationOutline :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ t('social', 'Made with AI') }}</span>
-					</NcButton>
-					<NcButton
-						:title="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
-						variant="tertiary"
-						:aria-label="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
-						:aria-pressed="showGifs"
-						:disabled="attachmentsFull"
-						@click.prevent="showGifs = !showGifs">
-						<template #icon>
-							<FileGifBox :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ t('social', 'Add from the picture library') }}</span>
-					</NcButton>
-
-					<NcButton
-						:title="showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post')"
-						variant="tertiary"
-						:aria-label="showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post')"
-						:aria-pressed="showPreview"
-						@click.prevent="showPreview = !showPreview">
-						<template #icon>
-							<EyeOutline :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post') }}</span>
-					</NcButton>
-					<!-- a short post, drawn big on colour; only offered while the
-				     post is short enough to look good that way -->
-					<NcButton
-						v-if="canBeCard"
-						:title="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
-						variant="tertiary"
-						class="card-toggle"
-						:aria-label="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
-						:aria-pressed="asCard"
-						@click.prevent="asCard = !asCard">
-						<template #icon>
-							<CardTextOutline :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card') }}</span>
-					</NcButton>
-					<NcButton
-						:title="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
-						variant="tertiary"
-						:disabled="showEvent"
-						:aria-label="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
-						@click.prevent="togglePoll">
-						<template #icon>
-							<PollIcon :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ showPoll ? t('social', 'Remove poll') : t('social', 'Add poll') }}</span>
-					</NcButton>
-					<NcButton
-						:title="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
-						:aria-label="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
-						variant="tertiary"
-						:aria-pressed="showEvent"
-						@click.prevent="toggleEvent">
-						<template #icon>
-							<CalendarMonthOutline :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ showEvent ? t('social', 'Remove event') : t('social', 'Create an event') }}</span>
-					</NcButton>
-					<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Timing and place') }}</span>
-					<NcButton
-						:title="scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later')"
-						variant="tertiary"
-						class="schedule-toggle"
-						:aria-label="scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later')"
-						:aria-pressed="scheduling"
-						@click.prevent="toggleSchedule">
-						<template #icon>
-							<NcLoadingIcon v-if="schedulePickerLoading" :size="22" />
-							<ClockOutline
-								v-else
-								:size="22"
-								decorative
-								title="" />
-						</template>
-						<span v-if="compactOptions">{{ scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later') }}</span>
-					</NcButton>
-
-					<NcButton
-						:title="placing ? t('social', 'No place') : t('social', 'Say where this was taken')"
-						variant="tertiary"
-						class="place-toggle"
-						:aria-label="placing ? t('social', 'No place') : t('social', 'Say where this was taken')"
-						:aria-pressed="placing"
-						@click.prevent="togglePlace">
-						<template #icon>
-							<MapMarkerOutline :size="22" decorative title="" />
-						</template>
-						<span v-if="compactOptions">{{ placing ? t('social', 'No place') : t('social', 'Say where this was taken') }}</span>
-					</NcButton>
-
-					<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Publishing settings') }}</span>
-					<!-- who is speaking, when the writer is in a team that has an
-				     account. Absent on every instance that has none, which is
-				     most of them, rather than a control that always says "me" -->
-					<select
-						v-if="teams.length"
-						v-model="postAs"
-						class="composer-post-as"
-						:aria-label="t('social', 'Post as')">
-						<option value="">
-							{{ t('social', 'As myself') }}
-						</option>
-						<option v-for="team in teams" :key="team.acct" :value="team.acct">
-							{{ team.display_name || team.username }}
-						</option>
-					</select>
-					<div class="composer-publishing-controls">
-						<LanguageSelect :language="language" @update:language="language = $event" />
-						<ReplyPolicySelect
-							v-if="visibility !== 'direct'"
-							:policy="replyPolicy"
-							@update:policy="replyPolicy = $event" />
 					</div>
-				</div>
-				<span v-if="undescribed > 0" class="composer-alt-warning" role="status">
-					{{ undescribedWarning }}
-				</span>
-				<VisibilitySelect
-					:visibility="visibility"
-					:reachesBluesky="reachesBluesky"
-					@update:visibility="chooseVisibility" />
-				<div class="emptySpace" />
-				<span
-					v-if="statusText.length > 0"
-					id="composer-length"
-					class="char-ring"
-					:class="{ 'char-ring--warning': charsLeft <= 50, 'char-ring--over': statusIsTooLong }"
-					:style="{ '--char-progress': charProgress }"
-					:title="charactersLeftLabel">
-					<span v-if="charsLeft <= 50" class="char-ring__count" aria-hidden="true">{{ charsLeft }}</span>
-					<!-- the ring is a colour and an arc; this is the same news in words,
-					     announced only once it is worth interrupting for -->
-					<span class="hidden-visually" role="status">
-						{{ charsLeft <= 50 ? charactersLeftLabel : '' }}
+					<NcButton
+						v-if="compactOptions"
+						variant="tertiary"
+						class="more-options-toggle"
+						:aria-expanded="moreOptionsOpen"
+						@click.prevent="moreOptionsOpen = !moreOptionsOpen">
+						{{ moreOptionsOpen ? t('social', 'Fewer options') : t('social', 'More options') }}
+					</NcButton>
+					<div v-if="!compactOptions || moreOptionsOpen" class="composer-advanced-options">
+						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Post options') }}</span>
+						<!-- the author's own word that this was made with AI. It is a
+					     hashtag in the text rather than a field of its own, so the
+					     button reads its state off the words: typing the tag by
+					     hand lights it, and pressing it writes or removes the tag -->
+						<NcButton
+							:title="t('social', 'Made with AI')"
+							variant="tertiary"
+							class="ai-toggle"
+							:aria-label="t('social', 'Made with AI')"
+							:aria-pressed="madeWithAi"
+							@click.prevent="toggleAiMark">
+							<template #icon>
+								<CreationOutline :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ t('social', 'Made with AI') }}</span>
+						</NcButton>
+						<NcButton
+							:title="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							variant="tertiary"
+							:aria-label="showGifs ? t('social', 'Close the picture library') : t('social', 'Add from the picture library')"
+							:aria-pressed="showGifs"
+							:disabled="attachmentsFull"
+							@click.prevent="showGifs = !showGifs">
+							<template #icon>
+								<FileGifBox :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ t('social', 'Add from the picture library') }}</span>
+						</NcButton>
+
+						<NcButton
+							:title="showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post')"
+							variant="tertiary"
+							:aria-label="showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post')"
+							:aria-pressed="showPreview"
+							@click.prevent="showPreview = !showPreview">
+							<template #icon>
+								<EyeOutline :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ showPreview ? t('social', 'Hide preview') : t('social', 'Preview this post') }}</span>
+						</NcButton>
+						<!-- a short post, drawn big on colour; only offered while the
+					     post is short enough to look good that way -->
+						<NcButton
+							v-if="canBeCard"
+							:title="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
+							variant="tertiary"
+							class="card-toggle"
+							:aria-label="asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card')"
+							:aria-pressed="asCard"
+							@click.prevent="asCard = !asCard">
+							<template #icon>
+								<CardTextOutline :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ asCard ? t('social', 'Post as plain text') : t('social', 'Post as a card') }}</span>
+						</NcButton>
+						<NcButton
+							:title="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
+							variant="tertiary"
+							:disabled="showEvent"
+							:aria-label="showPoll ? t('social', 'Remove poll') : t('social', 'Add poll')"
+							@click.prevent="togglePoll">
+							<template #icon>
+								<PollIcon :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ showPoll ? t('social', 'Remove poll') : t('social', 'Add poll') }}</span>
+						</NcButton>
+						<NcButton
+							:title="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
+							:aria-label="showEvent ? t('social', 'Remove event') : t('social', 'Create an event')"
+							variant="tertiary"
+							:aria-pressed="showEvent"
+							@click.prevent="toggleEvent">
+							<template #icon>
+								<CalendarMonthOutline :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ showEvent ? t('social', 'Remove event') : t('social', 'Create an event') }}</span>
+						</NcButton>
+						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Timing and place') }}</span>
+						<NcButton
+							:title="scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later')"
+							variant="tertiary"
+							class="schedule-toggle"
+							:aria-label="scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later')"
+							:aria-pressed="scheduling"
+							@click.prevent="toggleSchedule">
+							<template #icon>
+								<NcLoadingIcon v-if="schedulePickerLoading" :size="22" />
+								<ClockOutline
+									v-else
+									:size="22"
+									decorative
+									title="" />
+							</template>
+							<span v-if="compactOptions">{{ scheduling ? t('social', 'Post now instead') : t('social', 'Schedule for later') }}</span>
+						</NcButton>
+
+						<NcButton
+							:title="placing ? t('social', 'No place') : t('social', 'Say where this was taken')"
+							variant="tertiary"
+							class="place-toggle"
+							:aria-label="placing ? t('social', 'No place') : t('social', 'Say where this was taken')"
+							:aria-pressed="placing"
+							@click.prevent="togglePlace">
+							<template #icon>
+								<MapMarkerOutline :size="22" decorative title="" />
+							</template>
+							<span v-if="compactOptions">{{ placing ? t('social', 'No place') : t('social', 'Say where this was taken') }}</span>
+						</NcButton>
+
+						<span v-if="compactOptions" class="composer-advanced-options__label">{{ t('social', 'Publishing settings') }}</span>
+						<!-- who is speaking, when the writer is in a team that has an
+					     account. Absent on every instance that has none, which is
+					     most of them, rather than a control that always says "me" -->
+						<select
+							v-if="teams.length"
+							v-model="postAs"
+							class="composer-post-as"
+							:aria-label="t('social', 'Post as')">
+							<option value="">
+								{{ t('social', 'As myself') }}
+							</option>
+							<option v-for="team in teams" :key="team.acct" :value="team.acct">
+								{{ team.display_name || team.username }}
+							</option>
+						</select>
+						<div class="composer-publishing-controls">
+							<LanguageSelect :language="language" @update:language="language = $event" />
+							<ReplyPolicySelect
+								v-if="visibility !== 'direct'"
+								:policy="replyPolicy"
+								@update:policy="replyPolicy = $event" />
+						</div>
+					</div>
+					<span v-if="undescribed > 0" class="composer-alt-warning" role="status">
+						{{ undescribedWarning }}
 					</span>
-				</span>
-				<SubmitStatusButton
-					:visibility="visibility"
-					:scheduled="scheduling"
-					:disabled="!canPost || loading"
-					@click="createPost" />
-			</div>
-			<!-- Social's own limit stays the counter's; this is the other
-			     network's, said once it matters and not before -->
-			<p
-				v-if="blueskyHint"
-				class="composer-bluesky-hint"
-				role="status"
-				aria-live="polite">
-				{{ t('social', 'A long post may be split into a thread on Bluesky to fit its post limits.') }}
-			</p>
-		</form>
-		<!-- the way to a 24-hour short on the one line the composer is at rest; open,
-		     the same button is in the toolbar above -->
-		<NcButton
-			v-if="offerShort && !expanded"
-			class="new-post__short"
-			variant="tertiary"
-			:title="t('social', 'New short')"
-			:aria-label="t('social', 'New short')"
-			@click="composeShort">
-			<template #icon>
-				<CameraOutline :size="22" />
-			</template>
-		</NcButton>
+					<VisibilitySelect
+						:visibility="visibility"
+						:reachesBluesky="reachesBluesky"
+						@update:visibility="chooseVisibility" />
+					<div class="emptySpace" />
+					<span
+						v-if="statusText.length > 0"
+						id="composer-length"
+						class="char-ring"
+						:class="{ 'char-ring--warning': charsLeft <= 50, 'char-ring--over': statusIsTooLong }"
+						:style="{ '--char-progress': charProgress }"
+						:title="charactersLeftLabel">
+						<span v-if="charsLeft <= 50" class="char-ring__count" aria-hidden="true">{{ charsLeft }}</span>
+						<!-- the ring is a colour and an arc; this is the same news in words,
+						     announced only once it is worth interrupting for -->
+						<span class="hidden-visually" role="status">
+							{{ charsLeft <= 50 ? charactersLeftLabel : '' }}
+						</span>
+					</span>
+					<SubmitStatusButton
+						:visibility="visibility"
+						:scheduled="scheduling"
+						:disabled="!canPost || loading"
+						@click="createPost" />
+				</div>
+				<!-- Social's own limit stays the counter's; this is the other
+				     network's, said once it matters and not before -->
+				<p
+					v-if="blueskyHint"
+					class="composer-bluesky-hint"
+					role="status"
+					aria-live="polite">
+					{{ t('social', 'A long post may be split into a thread on Bluesky to fit its post limits.') }}
+				</p>
+			</form>
+			<!-- the way to a 24-hour short on the one line the composer is at rest; open,
+			     the same button is in the toolbar above -->
+			<NcButton
+				v-if="offerShort && !expanded"
+				class="new-post__short"
+				variant="tertiary"
+				:title="t('social', 'New short')"
+				:aria-label="t('social', 'New short')"
+				@click="composeShort">
+				<template #icon>
+					<CameraOutline :size="22" />
+				</template>
+			</NcButton>
+		</template>
 		<!-- Escape on a box with words in it: what is in the box is kept
 		     either way, and the question is only so that a key pressed to
 		     dismiss something else does not fold the composer away mid-sentence -->
@@ -547,6 +600,8 @@ import ClockOutline from 'vue-material-design-icons/ClockOutline.vue'
 import CalendarMonthOutline from 'vue-material-design-icons/CalendarMonthOutline.vue'
 import MapMarkerOutline from 'vue-material-design-icons/MapMarkerOutline.vue'
 import CameraOutline from 'vue-material-design-icons/CameraOutline.vue'
+import OpenInNew from 'vue-material-design-icons/OpenInNew.vue'
+import Send from 'vue-material-design-icons/Send.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import FolderImage from 'vue-material-design-icons/FolderImage.vue'
 import FileGifBox from 'vue-material-design-icons/FileGifBox.vue'
@@ -672,6 +727,8 @@ export const CARD_MAX = 120
 export default {
 	name: 'Composer',
 	components: {
+		OpenInNew,
+		Send,
 		NcAvatar,
 		NcEmojiPicker: defineAsyncComponent({
 			loader: emojiPickerModule,
@@ -722,6 +779,7 @@ export default {
 	},
 
 	props: {
+		oneLine: { type: Boolean, default: false },
 		/**
 		 * Whether the camera for a new 24-hour short is offered: only above
 		 * the home feed, where the Shorts bar that opens the dialog is.
@@ -792,6 +850,13 @@ export default {
 			default: () => [],
 		},
 
+		/** Initial context is available before the lazy dialog editor mounts. */
+		initialQuote: { type: Object, default: null },
+		initialDraft: { type: Object, default: null },
+		initialRedraft: { type: Object, default: null },
+		showReplyContext: { type: Boolean, default: false },
+		listenForIntents: { type: Boolean, default: true },
+
 		/**
 		 * Where floating-vue teleports the emoji picker popper. The inline
 		 * composer keeps it in the themed app root (`#content`): inside the
@@ -805,6 +870,7 @@ export default {
 		 * which clips a 420px picker when it opens above the toolbar. The overlay
 		 * wrapper stays inside the mask and focus layer without clipping it.
 		 */
+
 		emojiPickerContainer: {
 			type: String,
 			default: '#content',
@@ -950,7 +1016,7 @@ export default {
 			search: '',
 			replyTo: this.inReplyTo,
 			/** the post this one quotes, as the timeline handed it over */
-			quoteOf: null,
+			quoteOf: this.initialQuote,
 			tributeOptions: mentionTributeOptions(),
 
 			// the eventBus and document handlers mounted() adds, kept so that
@@ -1043,6 +1109,9 @@ export default {
 		 * @return {string} '' for a post of its own
 		 */
 		draftContext() {
+			if (this.initialRedraft !== null) {
+				return `redraft.${this.initialRedraft.id}`
+			}
 			if (this.replyTo !== null) {
 				return `reply.${this.replyTo.id}`
 			}
@@ -1063,7 +1132,7 @@ export default {
 		 * @return {boolean}
 		 */
 		anchoredReply() {
-			return this.inReplyTo !== null && this.replyTo?.id === this.inReplyTo.id
+			return !this.showReplyContext && this.inReplyTo !== null && this.replyTo?.id === this.inReplyTo.id
 		},
 
 		charactersLeftLabel() {
@@ -1084,6 +1153,12 @@ export default {
 			}
 
 			return isTooSoon(this.scheduledAt)
+		},
+
+		oneLineNeedsDetails() {
+			return this.hasAttachments || this.showPoll || this.showEvent || this.showWarning
+				|| this.scheduling || this.placing || this.asCard || this.quoteOf !== null
+				|| this.postAs !== '' || this.pendingPostAs !== '' || this.checkingMedia
 		},
 
 		canPost() {
@@ -1148,6 +1223,9 @@ export default {
 		 * @return {boolean}
 		 */
 		expanded() {
+			if (this.oneLine) {
+				return false
+			}
 			if (this.closedByHand) {
 				// what was written is still in the box and still on disk; it is
 				// simply not on screen until the reader asks for it again
@@ -1332,6 +1410,10 @@ export default {
 	},
 
 	watch: {
+		loading(loading) {
+			this.timelineStore.composerSubmitting = loading
+		},
+
 		/**
 		 * Another post's page, in the same component: the router reuses this
 		 * view, so without this the box would still be replying to the post
@@ -1410,7 +1492,9 @@ export default {
 			// button, the first words typed went nowhere
 			this.$nextTick(() => this.focusInput({ atEnd: true }))
 		}
-		eventBus.on('composer-reply', this.onComposerReply)
+		if (this.listenForIntents) {
+			eventBus.on('composer-reply', this.onComposerReply)
+		}
 
 		// a quote carries no mention and does not take the quoted post's
 		// visibility: it is addressed by whoever writes it, not by whoever
@@ -1418,19 +1502,36 @@ export default {
 		this.onComposerQuote = (data) => {
 			this.quoteOf = data
 		}
-		eventBus.on('composer-quote', this.onComposerQuote)
+		if (this.listenForIntents) {
+			eventBus.on('composer-quote', this.onComposerQuote)
+		}
 
 		// a post that was just deleted, coming back to be written again
 		this.onComposerRedraft = (post) => this.redraft(post)
-		eventBus.on('composer-redraft', this.onComposerRedraft)
+		if (this.listenForIntents) {
+			eventBus.on('composer-redraft', this.onComposerRedraft)
+		}
 
 		// the shortcuts help offers "n" to write a post; this is what answers it
 		this.onComposerFocus = () => this.focusInput()
-		eventBus.on('shortcut:compose', this.onComposerFocus)
+		if (this.listenForIntents) {
+			eventBus.on('shortcut:compose', this.onComposerFocus)
+		}
 
 		// before the mention prefill, which declines to overwrite a non-empty
 		// composer: whatever the last attempt left is what the reader wants back
+		const existingDraft = loadDraft(this.draftContext)
 		this.restoreDraft()
+		if (this.inReplyTo !== null && !this.listenForIntents) {
+			if (this.oneLine) {
+				this.prefillMessageWithMentions(participantsOf(this.inReplyTo, this.username, this.hostname))
+			} else {
+				this.onComposerReply(this.inReplyTo)
+			}
+		}
+		if (this.initialRedraft !== null && existingDraft === null) {
+			this.redraft(this.initialRedraft)
+		}
 
 		if (this.initialMention !== null) {
 			this.prefillMessageWithMention(this.initialMention)
@@ -1458,13 +1559,13 @@ export default {
 		// the draft keeps everything else; what it cannot keep is asked about
 		// before the page is left, and only then
 		this.onBeforeUnload = (event) => {
-			if (this.wouldLoseOnLeave) {
+			if (this.wouldLoseOnLeave || this.loading) {
 				event.preventDefault()
 				event.returnValue = ''
 			}
 		}
 		window.addEventListener('beforeunload', this.onBeforeUnload)
-		if (typeof this.$router?.beforeEach === 'function') {
+		if (this.listenForIntents && typeof this.$router?.beforeEach === 'function') {
 			this.stopLeaveGuard = this.$router.beforeEach((to, from) => this.confirmLeave(to, from))
 		}
 	},
@@ -1487,6 +1588,38 @@ export default {
 	},
 
 	methods: {
+		onLinePaste(event) {
+			const files = Array.from(event.clipboardData?.files ?? [])
+			if (files.length > 0) {
+				event.preventDefault()
+				this.openFullComposer(files)
+			} else {
+				this.handlePaste(event)
+			}
+		},
+
+		onComposerDrop(event) {
+			if (this.oneLine && event.dataTransfer?.files?.length > 0) {
+				event.preventDefault()
+				this.draggingFiles = false
+				this.openFullComposer(Array.from(event.dataTransfer.files))
+			} else {
+				this.handleDrop(event)
+			}
+		},
+
+		async sendFromLine() {
+			await this.createPost()
+		},
+
+		openFullComposer(files = []) {
+			if (this.loading) {
+				return
+			}
+			this.rememberDraft()
+			eventBus.emit('composer-open', { reply: this.inReplyTo, files: Array.isArray(files) ? files : [], draft: this.draft })
+		},
+
 		/** Asks the Shorts bar for New short, on 24 hours. */
 		composeShort() {
 			eventBus.emit(SHORT_COMPOSE)
@@ -1778,7 +1911,7 @@ export default {
 		 * something else has already filled the composer (a reply mention).
 		 */
 		restoreDraft() {
-			const draft = loadDraft(this.draftContext)
+			const draft = this.initialDraft ?? loadDraft(this.draftContext)
 			if (draft === null || this.inputElement() === undefined) {
 				return false
 			}
@@ -2042,6 +2175,10 @@ export default {
 
 		n,
 		async createPost() {
+			if (this.oneLine && this.oneLineNeedsDetails) {
+				this.openFullComposer()
+				return
+			}
 			if (!this.canPost || this.loading) {
 				return
 			}
@@ -2426,6 +2563,48 @@ $composer-duration: 220ms;
 		&__emoji-picker {
 			z-index: 1;
 		}
+	}
+}
+
+.new-post.new-post--one-line {
+	position: relative;
+	z-index: auto;
+	margin: 12px auto 20px;
+	padding: 10px 12px;
+	border-width: 1px;
+	border-radius: var(--border-radius-large, 12px);
+	box-shadow: none;
+}
+
+.composer-line {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+
+	.message.composer-line__input {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 40px;
+		max-height: 44px;
+		overflow: auto;
+		padding: 8px 12px;
+		border-color: transparent;
+		background: var(--color-background-hover);
+		border-radius: 20px;
+		font-size: 14px;
+	}
+
+	&__send,
+	&__expand {
+		flex: 0 0 auto;
+	}
+}
+
+@include layout.below(layout.$phone) {
+	.composer-line {
+		gap: 4px;
 	}
 }
 

@@ -18,7 +18,7 @@ vi.hoisted(() => {
 })
 
 const ProfileInfoStub = { name: 'ProfileInfo', props: ['uid'], template: '<section class="profile-info-stub" />' }
-const ComposerStub = { name: 'Composer', props: ['initialMention', 'defaultVisibility'], template: '<div class="composer-stub" />' }
+const ComposerStub = { name: 'Composer', props: ['initialMention', 'defaultVisibility', 'oneLine', 'listenForIntents'], template: '<div class="composer-stub" />' }
 const RouterViewStub = { name: 'RouterView', props: ['name'], template: '<div class="router-view-stub" :data-name="name" />' }
 
 const bob = {
@@ -209,12 +209,8 @@ describe('Profile', () => {
 			const wrapper = mountProfile({ name: 'profile', params: { account: 'alice' } })
 			await flushPromises()
 			const composer = wrapper.findComponent(ComposerStub)
-
-			expect(composer.exists()).toBe(true)
-			// a post from your own profile is an ordinary post: no mention of
-			// anybody, and whatever visibility you last chose
-			expect(composer.props('initialMention')).toBeFalsy()
-			expect(composer.props('defaultVisibility')).toBeFalsy()
+			expect(composer.props('oneLine')).toBe('')
+			expect(composer.props('listenForIntents')).toBe(false)
 		})
 
 		it('is not offered on somebody else\'s profile', async () => {

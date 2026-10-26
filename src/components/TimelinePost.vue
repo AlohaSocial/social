@@ -52,12 +52,6 @@
 			</NcButton>
 		</p>
 
-		<PostEditForm
-			v-if="isEditing"
-			:item="item"
-			:maxLength="maxLength"
-			@save="saveEdit"
-			@cancel="cancelEdit" />
 		<!--
 		  A filter the reader wrote themselves matched this post. Same shape as
 		  the content warning below, and for the same reason: the body is not in
@@ -72,7 +66,7 @@
 		  is still covered by the warning afterwards — the author's cover is not
 		  the reader's to lift.
 		-->
-		<div v-else-if="filterCovers" class="post-filtered">
+		<div v-if="filterCovers" class="post-filtered">
 			<p class="post-filtered__reason">
 				{{ filterLabel }}
 			</p>
@@ -406,7 +400,6 @@ import PostMenu from './PostMenu.vue'
 import PostCard from './PostCard.vue'
 import TimelineEventCard from './TimelineEventCard.vue'
 import TimelinePostHeader from './TimelinePostHeader.vue'
-import PostEditForm from './PostEditForm.vue'
 import ReactionBar from './ReactionBar.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -467,7 +460,6 @@ export default {
 		IconAccountBoxMultiple,
 		TimelineEventCard,
 		TimelinePostHeader,
-		PostEditForm,
 		QuoteControlDialog,
 		ReplyControlDialog,
 		TagPeopleDialog,
@@ -527,7 +519,6 @@ export default {
 
 	data() {
 		return {
-			isEditing: false,
 			/** the petal directions, so the template does not build a list per render */
 			PETALS: [0, 1, 2, 3, 4],
 			/** the press-and-hold timer on the heart, null when nothing is held */
@@ -610,9 +601,6 @@ export default {
 		},
 
 		/** @return {number} what the server accepts in one status, as the composer shows it */
-		maxLength() {
-			return this.instanceStore.maxCharacters
-		},
 
 		/**
 		 * Where this post lives, or `null` when the reader is already there.
@@ -742,7 +730,7 @@ export default {
 		 * the post until the reader lifts it.
 		 */
 		mediaLeads() {
-			return this.hasAttachments && !this.hasSpoiler && !this.isEditing
+			return this.hasAttachments && !this.hasSpoiler
 		},
 
 		/** Who wrote it, so moving between posts by landmark says something. */
@@ -799,7 +787,7 @@ export default {
 		 * edit form, is on screen
 		 */
 		dialogOpen() {
-			return this.showBlockDialog || this.showReportDialog || this.showDeleteDialog || this.isEditing
+			return this.showBlockDialog || this.showReportDialog || this.showDeleteDialog
 		},
 
 		/** @return {import('../types/Nextcloud.js').DialogButton[]} */
@@ -1367,22 +1355,7 @@ export default {
 		},
 
 		editPost() {
-			this.isEditing = true
-		},
-
-		async saveEdit(edit) {
-			const response = await this.timelineStore.postEdit({
-				status: this.item,
-				...edit,
-			})
-			if (response === undefined) {
-				return
-			}
-			this.isEditing = false
-		},
-
-		cancelEdit() {
-			this.isEditing = false
+			eventBus.emit('composer-edit', { edit: this.item, opener: this.menuOpener })
 		},
 
 		/**

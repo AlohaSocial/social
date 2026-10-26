@@ -24,7 +24,8 @@ vi.mock('../../../src/components/Composer/Composer.vue', () => ({
 	__isTeleport: false,
 	__isKeepAlive: false,
 	default: {
-		props: ['initialPaths'],
+		name: 'Composer',
+		props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'listenForIntents'],
 		emits: ['posted'],
 		template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />',
 	},
@@ -61,8 +62,8 @@ const stubs = {
 	NcActionButton: { emits: ['click'], template: '<button class="nav-caption__action" @click="$emit(\'click\')"><slot /></button>' },
 	NcAppNavigationSettings: { props: ['name'], template: '<div class="nav-settings" :data-name="name"><slot /></div>' },
 	NcAvatar: { props: ['user', 'displayName', 'size'], template: '<span class="nc-avatar-stub" :data-user="user" :data-size="size" />' },
-	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean }, emits: ['close'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
-	Composer: { props: ['initialPaths'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
+	NcModal: { props: { name: String, labelId: String, closeOnClickOutside: Boolean, show: Boolean }, emits: ['close', 'update:show'], template: '<div class="modal-stub" :data-name="name" :data-label-id="labelId" :data-closes-on-outside-click="closeOnClickOutside ? \'yes\' : \'no\'"><slot /></div>' },
+	Composer: { name: 'Composer', data: () => ({ loading: false }), methods: { confirmLeave: () => true, rememberDraft: vi.fn() }, props: ['initialPaths', 'initialFiles', 'inReplyTo', 'initialQuote', 'initialRedraft', 'initialDraft', 'listenForIntents'], emits: ['posted'], template: '<div class="composer-stub" :data-paths="JSON.stringify(initialPaths)" @click="$emit(\'posted\')" />' },
 }
 
 let pinia
@@ -1451,6 +1452,97 @@ describe('Navigation', () => {
 		await wrapper.find('.composer-stub').trigger('click')
 
 		expect(wrapper.find('.modal-stub').exists()).toBe(false)
+	})
+
+	describe('the common composer host', () => {
+		it.each([
+			['composer-reply', 'inReplyTo'],
+			['composer-quote', 'initialQuote'],
+			['composer-redraft', 'initialRedraft'],
+		])('keeps the initial context for lazy loading: %s', async (event, prop) => {
+			const wrapper = mountNavigation()
+			const post = { id: '123', content: '<p>Context</p>' }
+			eventBus.emit(event, post)
+			await flushPromises()
+			const composer = wrapper.findComponent({ name: 'Composer' })
+			expect(composer.props(prop)).toEqual(post)
+			expect(composer.props('listenForIntents')).toBe(false)
+			expect(wrapper.findAll('.composer-stub')).toHaveLength(1)
+		})
+
+		it('passes picked files to the same editor', async () => {
+			const wrapper = mountNavigation()
+			const file = new File(['x'], 'clip.mp4', { type: 'video/mp4' })
+			eventBus.emit('composer-open', { files: [file] })
+			await flushPromises()
+			expect(wrapper.findComponent({ name: 'Composer' }).props('initialFiles')).toEqual([file])
+		})
+
+		it('retains a failed edit, prevents duplicate saves and closes only on success', async () => {
+			const wrapper = mountNavigation()
+			const post = { id: '123', content: '<p>Before</p>', media_attachments: [] }
+			const store = useTimelineStore()
+			let complete
+			const save = vi.spyOn(store, 'postEdit').mockImplementation(() => new Promise((resolve) => {
+				complete = resolve
+			}))
+			eventBus.emit('composer-edit', { edit: post })
+			await flushPromises()
+			await vi.waitFor(() => expect(wrapper.find('.post-edit-textarea').exists()).toBe(true))
+			const editor = wrapper.findComponent({ name: 'PostEditForm' })
+			await editor.find('.post-edit-textarea').setValue('  After  ')
+			editor.vm.save()
+			editor.vm.save()
+			await nextTick()
+			expect(save).toHaveBeenCalledTimes(1)
+			expect(save).toHaveBeenCalledWith(expect.objectContaining({ status: post, content: 'After' }))
+			expect(editor.props('saving')).toBe(true)
+			expect(await wrapper.vm.requestComposerClose()).toBe(false)
+			complete(undefined)
+			await flushPromises()
+			expect(editor.find('.post-edit-textarea').element.value).toBe('  After  ')
+			expect(wrapper.vm.showComposer).toBe(true)
+			save.mockResolvedValueOnce({ id: '123' })
+			editor.vm.save()
+			await flushPromises()
+			expect(wrapper.vm.showComposer).toBe(false)
+		})
+
+		it('keeps unsaved edits when closing is cancelled and discards only after confirmation', async () => {
+			const wrapper = mountNavigation()
+			const post = { id: '123', content: '<p>Before</p>', media_attachments: [] }
+			eventBus.emit('composer-edit', { edit: post })
+			await flushPromises()
+			await vi.waitFor(() => expect(wrapper.find('.post-edit-textarea').exists()).toBe(true))
+			const editor = wrapper.findComponent({ name: 'PostEditForm' })
+			await editor.find('.post-edit-textarea').setValue('Unsaved')
+			await editor.find('.post-edit-textarea').trigger('keydown', { key: 'Escape' })
+			await nextTick()
+			expect(wrapper.vm.composerDiscardOpen).toBe(true)
+			wrapper.vm.answerComposerDiscard(false)
+			await flushPromises()
+			expect(wrapper.findComponent(stubs.NcModal).props('show')).toBe(true)
+			expect(wrapper.vm.showComposer).toBe(true)
+			expect(editor.find('.post-edit-textarea').element.value).toBe('Unsaved')
+			const confirmed = wrapper.vm.requestComposerClose()
+			await nextTick()
+			// The real ConfirmDialog emits close followed by confirm.
+			wrapper.vm.answerComposerDiscard(false)
+			wrapper.vm.answerComposerDiscard(true)
+			expect(await confirmed).toBe(true)
+			expect(post.content).toBe('<p>Before</p>')
+		})
+
+		it('returns keyboard focus to the opening control after closing', async () => {
+			const opener = document.createElement('button')
+			document.body.append(opener)
+			const wrapper = mountNavigation()
+			eventBus.emit('composer-edit', { edit: { id: '123', content: 'Before' }, opener })
+			await flushPromises()
+			await wrapper.vm.requestComposerClose()
+			await vi.waitFor(() => expect(document.activeElement).toBe(opener))
+			opener.remove()
+		})
 	})
 
 	it('offers nothing more in the footer menu than what it says it does', () => {
