@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Nextcloud GmbH and Nextcloud contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Runs the unit and integration suites on what master will be once several
+# Runs the unit and integration suites on what main will be once several
 # open pull requests have landed, in a given order.
 #
 # What GitHub already covers: every pull request is tested on its merge ref,
@@ -9,15 +9,15 @@
 # For a pull request stacked on another one's branch, that base already holds
 # everything below it, so the top of a properly stacked chain is tested
 # together with the whole chain -- but against the bottom branch as it was
-# when the chain was built, not against master today.
+# when the chain was built, not against main today.
 #
 # What this adds:
-#   - pull requests that each target master (siblings, not a chain): GitHub
-#     tests each one alone against master, and two that are green alone can
+#   - pull requests that each target main (siblings, not a chain): GitHub
+#     tests each one alone against main, and two that are green alone can
 #     be red together -- a golden file both change, a guard test that does not
 #     know the other's new file, two classes of one name;
-#   - a chain whose bottom is behind master, or several chains at once (a fix
-#     stack and a test stack), merged onto master as it is now;
+#   - a chain whose bottom is behind main, or several chains at once (a fix
+#     stack and a test stack), merged onto main as it is now;
 #   - the order: the same pull requests merged in another order can conflict
 #     where this one does not, and a conflict is reported with the pull
 #     request that hits it and the earlier ones that touched the same files.
@@ -41,9 +41,8 @@ on:
         description: 'Pull request numbers in merge order, separated by spaces or commas'
         required: true
       base:
-        description: 'Branch to merge them into'
+        description: 'Branch to merge them into; the default branch when empty'
         required: false
-        default: 'master'
   pull_request:
     types: [labeled, synchronize]
 
@@ -82,14 +81,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_PRS: ${{ inputs.prs }}
           INPUT_BASE: ${{ inputs.base }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             prs=$(echo "$INPUT_PRS" | tr ',' ' ' | xargs)
-            base=${INPUT_BASE:-master}
+            base=${INPUT_BASE:-$DEFAULT_BRANCH}
           else
             prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --label stack-check --state open --limit 100 \
               --json number --jq 'map(.number) | sort | map(tostring) | join(" ")')
-            base=master
+            base=$DEFAULT_BRANCH
           fi
           if [ -z "$prs" ]; then
             echo "::error::no pull requests to merge"

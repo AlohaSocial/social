@@ -131,5 +131,5 @@ Muting hides nothing from timelines (decided: notifications only). Timed convers
 
 1. Shared hold rules + `emit()` checks the policy and the conversation mute (closes gap 1, server only, with tests).
 2. Calm defaults for new accounts + admin defaults (gap 3).
-3. Port `feat/notification-policy-web` onto master: `muted` export, Mute/Unmute in the post menu, requests line atop Activities — adapted to this document (placement in Notifications, two choices, mute on mention/reply cards, sidebar count, digest line, always-allowed list, one-time notice).
+3. Port `feat/notification-policy-web` onto main: `muted` export, Mute/Unmute in the post menu, requests line atop Activities — adapted to this document (placement in Notifications, two choices, mute on mention/reply cards, sidebar count, digest line, always-allowed list, one-time notice).
 4. Docs (User-Guide, API, Mastodon-Compatibility, Admin) and the interop tests.
