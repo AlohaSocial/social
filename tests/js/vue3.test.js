@@ -20,13 +20,13 @@ import { SHORTCUTS } from '../../src/services/shortcuts.js'
 // vitest runs from the project root; import.meta.url is not a file url here
 const SRC = resolve(process.cwd(), 'src')
 
-/** @return {string[]} every .vue and .js file under src/ */
+/** @return {string[]} every .vue, .js and .scss file under src/ */
 function sourceFiles(dir = SRC, found = []) {
 	for (const entry of readdirSync(dir)) {
 		const path = join(dir, entry)
 		if (statSync(path).isDirectory()) {
 			sourceFiles(path, found)
-		} else if (/\.(vue|js)$/.test(entry)) {
+		} else if (/\.(vue|js|scss)$/.test(entry)) {
 			found.push(path)
 		}
 	}
@@ -306,7 +306,7 @@ describe('cards agree on how far off the page they sit', () => {
 	})
 
 	it('raises a card on hover rather than only bordering it', () => {
-		const post = files.find(({ name }) => name === 'components/TimelinePost.vue').content
+		const post = files.find(({ name }) => name === 'components/TimelinePost.scss').content
 
 		expect(post).toContain('box-shadow: var(--social-elevation-resting)')
 		expect(post).toContain('box-shadow: var(--social-elevation-raised)')

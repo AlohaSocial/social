@@ -129,8 +129,16 @@ class PostMapper {
 	 * @param array $post an `app.bsky.feed.defs#postView`
 	 */
 	public static function isLoggedInOnly(array $post): bool {
-		return in_array(self::NO_UNAUTHENTICATED, ActorMapper::labelValues($post['labels'] ?? []), true)
+		return in_array(self::NO_UNAUTHENTICATED, [
+			...ActorMapper::labelValues($post['labels'] ?? []),
+			...self::selfLabelValues(is_array($post['record'] ?? null) ? $post['record'] : []),
+		], true)
 			|| in_array(self::NO_UNAUTHENTICATED, ActorMapper::labelValues($post['author']['labels'] ?? []), true);
+	}
+
+	/** Whether an AppView label currently hides this post. */
+	public static function isHidden(array $post): bool {
+		return array_intersect(self::HIDE, ActorMapper::labelValues($post['labels'] ?? [])) !== [];
 	}
 
 	/**
@@ -159,13 +167,15 @@ class PostMapper {
 			return null;
 		}
 		$labels = ActorMapper::labelValues($post['labels'] ?? []);
-		if (array_intersect($labels, self::HIDE) !== []) {
+		if (self::isHidden($post)) {
 			return null;
 		}
+		$selfLabels = self::selfLabelValues($record);
+		$contentLabels = array_values(array_unique([...$labels, ...$selfLabels]));
 		$rkey = BlueskyIds::parsePostId($id)['rkey'] ?? '';
 		$text = (string)($record['text'] ?? '');
 		$facets = $record['facets'] ?? [];
-		[$text, $facets, $inlineWarning] = self::removeInlineWarning($text, $facets, in_array('!warn', $labels, true));
+		[$text, $facets, $inlineWarning] = self::removeInlineWarning($text, $facets, in_array('!warn', $contentLabels, true));
 		$content = FacetRenderer::html($text, $facets);
 		$viewEmbed = is_array($post['embed'] ?? null) ? $post['embed'] : [];
 		$embed = self::hasUsableEmbedView($viewEmbed, $did)
@@ -181,8 +191,8 @@ class PostMapper {
 			$content .= '<p><a href="' . self::escape($card['url']) . '" rel="nofollow noopener noreferrer" target="_blank">' . self::escape($card['title']) . '</a></p>';
 		}
 
-		$warning = $this->warning($labels, $inlineWarning);
-		$adult = array_intersect($labels, self::ADULT) !== [];
+		$warning = $this->warning($contentLabels, $inlineWarning);
+		$adult = array_intersect($contentLabels, self::ADULT) !== [];
 		$published = self::datetime((string)($record['createdAt'] ?? ''), (string)($post['indexedAt'] ?? ''));
 		$streamedBlobs = [];
 		foreach ($attachments as $attachment) {
@@ -190,6 +200,7 @@ class PostMapper {
 				$streamedBlobs[] = $attachment['url'];
 			}
 		}
+		$recordEmbed = self::nonPostRecordEmbed($embed);
 
 		$note = [
 			'id' => $id,
@@ -218,7 +229,13 @@ class PostMapper {
 				'indexed_at' => (string)($post['indexedAt'] ?? ''),
 				// what a reply from here names as its thread's root
 				'reply_root' => self::strongRef($record['reply']['root'] ?? null),
-			] + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
+			] + ($selfLabels === [] ? [] : [Details::ATPROTO_SELF_LABELS => $selfLabels]) + ($recordEmbed === null ? [] : [
+				// recordWithMedia can embed a feed, list or starter pack beside a
+				// link card. The social stream stores the card separately, so keep
+				// the original StrongRef alongside it for the publisher to rebuild
+				// the same combined embed instead of silently dropping the record.
+				Details::ATPROTO_RECORD_EMBED => $recordEmbed,
+			]) + ($streamedBlobs === [] ? [] : ['streamed_blobs' => $streamedBlobs]) + (self::quoteDetached($embed) ? [
 				// the quoted author detached this quote, so it is withdrawn
 				// here too (PostStore)
 				'quote_detached' => true,
@@ -867,6 +884,27 @@ class PostMapper {
 		return implode(', ', array_unique($named));
 	}
 
+	/** @return list<string> self-label values carried by the source post record */
+	private static function selfLabelValues(array $record): array {
+		$container = $record['labels'] ?? null;
+		if (!is_array($container)
+			|| ($container['$type'] ?? '') !== 'com.atproto.label.defs#selfLabels'
+			|| !is_array($container['values'] ?? null)
+			|| !array_is_list($container['values'])) {
+			return [];
+		}
+
+		$labels = [];
+		foreach (array_slice($container['values'], 0, 10) as $label) {
+			$value = is_array($label) && is_string($label['val'] ?? null) ? trim($label['val']) : '';
+			if ($value !== '' && mb_strlen($value) <= 128) {
+				$labels[] = $value;
+			}
+		}
+
+		return array_values(array_unique($labels));
+	}
+
 	/**
 	 * Social writes the warning alongside `!warn` in the post text, because
 	 * ATProto labels carry no warning text of their own. Restore that warning
@@ -928,6 +966,38 @@ class PostMapper {
 		}
 
 		return ['uri' => $value['uri'], 'cid' => $value['cid']];
+	}
+
+	/**
+	 * A feed, list or starter-pack StrongRef the post embeds, kept for a
+	 * lossless publish roundtrip. Ordinary post quotes use the quote relation.
+	 * AppView wraps the reference in one or two `record` view objects; the raw
+	 * record has the StrongRef directly on the first nested record.
+	 *
+	 * @return array{uri: string, cid: string}|null
+	 */
+	private static function nonPostRecordEmbed(array $embed): ?array {
+		if (!in_array($embed['$type'] ?? '', [self::RECORD, self::RECORD_RECORD, self::RECORD_WITH_MEDIA, self::RECORD_RECORD_WITH_MEDIA], true)) {
+			return null;
+		}
+
+		$record = $embed['record'] ?? null;
+		for ($depth = 0; $depth < 3 && is_array($record); $depth++) {
+			$reference = self::strongRef($record);
+			if ($reference !== null) {
+				$parsed = Syntax::parseAtUri($reference['uri']);
+				if (($parsed['collection'] ?? '') !== ''
+					&& ($parsed['rkey'] ?? '') !== ''
+					&& $parsed['collection'] !== 'app.bsky.feed.post'
+					&& Cid::isValid($reference['cid'])) {
+					return $reference;
+				}
+				return null;
+			}
+			$record = $record['record'] ?? null;
+		}
+
+		return null;
 	}
 
 	/** An ISO instant for the import, from the record's time or the index time. */

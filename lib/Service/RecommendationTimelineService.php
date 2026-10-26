@@ -23,7 +23,7 @@ class RecommendationTimelineService {
 	private const MAX_REFRESH_TOPICS = 2;
 	private const LOOKBACK_DAYS = RecommendationFreshness::LOOKBACK_DAYS;
 	private const MIN_COVERAGE = 15;
-	private const MODE = 'for-you-v16-topic-exposure-diversity';
+	private const MODE = 'for-you-v17-link-preview-story-diversity';
 
 	public function __construct(
 		private RecommendationPreferenceService $preferences,
@@ -41,6 +41,7 @@ class RecommendationTimelineService {
 		private RecommendationSocialGraphCandidates $socialGraphCandidates,
 		private RecommendationSavedFeedCandidates $savedFeedCandidates,
 		private RemoteFetchQueue $remoteFetchQueue,
+		private LinkPreviewService $linkPreviews,
 		private ITimeFactory $timeFactory,
 	) {
 	}
@@ -166,6 +167,10 @@ class RecommendationTimelineService {
 				$posts[$nid] = $automaticPost;
 			}
 		}
+		// Story fingerprints need the article title too: many link posts have
+		// only a generic caption, while their locally fetched card names the
+		// incident. Attach cards in one query before extracting any features.
+		$this->linkPreviews->attachCards(array_values($posts));
 		$automaticSignals = $this->interests->isEnabled()
 			? $this->legacyFeed->recommendationSignals($viewer, array_values($posts))
 			: [];
@@ -314,6 +319,7 @@ class RecommendationTimelineService {
 		$sessionId = $page['session_id'];
 		for ($scan = 0; $scan < 5; $scan++) {
 			$posts = $this->streams->getVisibleByNids($page['nids']);
+			$this->linkPreviews->attachCards(array_values($posts));
 			$followedAuthors = $this->followFeatures->followedAuthors($viewer, array_values($posts));
 			$exposurePenalties = $this->behavioralProfile->exposurePenalties($viewer, array_values($posts));
 			$automaticSignals = $this->interests->isEnabled()
