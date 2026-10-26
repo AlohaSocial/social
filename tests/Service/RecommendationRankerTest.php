@@ -188,7 +188,10 @@ class RecommendationRankerTest extends TestCase {
 				'rank_score' => 0.98 - ($i * 0.001),
 				'author_key' => 'author-' . $i,
 				'topic_ids' => ['technology', 'software', 'software.security'],
-				'story_terms' => ['php', 'security', 'remote', 'execution', 'vulnerability', 'maintainer', 'patch', 'disclosure'],
+				'story_terms' => [
+					'php', 'security', 'remote', 'execution', 'vulnerability', 'patch',
+					'maintainer' . $i, 'release' . $i,
+				],
 			];
 		}
 		for ($i = 1; $i <= 70; $i++) {
