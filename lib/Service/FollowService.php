@@ -606,6 +606,15 @@ class FollowService {
 	}
 
 	/**
+	 * Read one keyset-paginated page of the accounts an actor follows.
+	 *
+	 * @return Follow[]
+	 */
+	public function getFollowingAfter(Person $actor, int $limit, string $cursor = ''): array {
+		return $this->followsRequest->getFollowingByActorId($actor->getId(), $limit, 0, $cursor);
+	}
+
+	/**
 	 * Which authors from one page the reader follows, in one bounded query.
 	 *
 	 * @param string[] $actorIds
