@@ -193,7 +193,11 @@ class WriteService {
 			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
 		}
 		$hasConditionalWrite = $swapCommit !== null || array_key_exists('swapRecord', $body);
-		$ownsBatch = $hasConditionalWrite && !$this->repositories->batchActive();
+		// A put can change both Social-side state (posts, profile rows, queued
+		// federation work) and the ATProto repository. Keep both in one database
+		// transaction even when the client did not request compare-and-swap.
+		// The CAS fields are optional in the Lexicon; atomicity is not.
+		$ownsBatch = !$this->repositories->batchActive();
 		if ($this->repositories->batchActive() && $hasConditionalWrite) {
 			throw XrpcException::invalidRequest('Conditional putRecord checks cannot be nested inside another repository batch');
 		}

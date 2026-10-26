@@ -300,6 +300,8 @@ class WriteServiceTest extends TestCase {
 
 	public function testAListAndItsMembersAreKeptAsTheAppWroteThem(): void {
 		$this->keepWrites();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->once())->method('commitBatch');
 		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
 
 		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => $list]);
@@ -311,6 +313,21 @@ class WriteServiceTest extends TestCase {
 
 		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'rkey' => $rkey]);
 		$this->assertSame([], $this->records);
+	}
+
+	public function testPutRecordWithoutCompareAndSwapRollsBackWhenTheRepositoryWriteFails(): void {
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->never())->method('commitBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->once())->method('write')->willThrowException(new \RuntimeException('repository unavailable'));
+
+		$this->expectException(\RuntimeException::class);
+		$this->writes->put($this->session, [
+			'repo' => self::DID,
+			'collection' => 'app.bsky.graph.list',
+			'rkey' => '3kznmn7xqxl22',
+			'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'],
+		]);
 	}
 
 	public function testApplyWritesStoresKeptRecordsInOneCommit(): void {
