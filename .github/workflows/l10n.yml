@@ -21,7 +21,6 @@ on:
   push:
     branches:
       - main
-      - master
   schedule:
     - cron: '43 21 * * *'
   workflow_call:

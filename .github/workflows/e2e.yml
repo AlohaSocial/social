@@ -30,7 +30,6 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
   workflow_call:
     inputs:
