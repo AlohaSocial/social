@@ -136,6 +136,11 @@ class PostMapper {
 			|| in_array(self::NO_UNAUTHENTICATED, ActorMapper::labelValues($post['author']['labels'] ?? []), true);
 	}
 
+	/** Whether an AppView label currently hides this post. */
+	public static function isHidden(array $post): bool {
+		return array_intersect(self::HIDE, ActorMapper::labelValues($post['labels'] ?? [])) !== [];
+	}
+
 	/**
 	 * Who a post or a boost is addressed to: the public, with the followers
 	 * collection the home timeline joins on in `cc`; the followers alone when
@@ -162,7 +167,7 @@ class PostMapper {
 			return null;
 		}
 		$labels = ActorMapper::labelValues($post['labels'] ?? []);
-		if (array_intersect($labels, self::HIDE) !== []) {
+		if (self::isHidden($post)) {
 			return null;
 		}
 		$selfLabels = self::selfLabelValues($record);
