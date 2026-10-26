@@ -1,0 +1,11 @@
+{
+  "@context": "https://www.w3.org/ns/activitystreams",
+  "id": "https://gancio.example/federation/activities/events/42/delete",
+  "type": "Delete",
+  "actor": "https://gancio.example/@events",
+  "to": ["https://www.w3.org/ns/activitystreams#Public"],
+  "object": {
+    "id": "https://gancio.example/federation/events/42",
+    "type": "Tombstone"
+  }
+}
