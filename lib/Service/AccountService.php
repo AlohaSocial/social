@@ -41,6 +41,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Moderation;
+use OCA\Social\Model\ProfileLayout;
 use OCP\Accounts\IAccountManager;
 use OCP\BackgroundJob\IJobList;
 use OCP\IUser;
@@ -142,7 +143,7 @@ class AccountService {
 	public function getActor(string $username): Person {
 		$actor = $this->actorsRequest->getFromUsername($username);
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -155,7 +156,7 @@ class AccountService {
 	public function getFromId(string $id): Person {
 		$actor = $this->actorsRequest->getFromId($id);
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -200,7 +201,7 @@ class AccountService {
 			}
 		}
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -487,6 +488,27 @@ class AccountService {
 		$this->actorsRequest->updateLocked($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
 		$this->federateProfile($userId);
+	}
+
+	/** The public profile's default and optional tabs; no content access changes. */
+	public function setProfileLayout(string $userId, array $layout): array {
+		$layout = ProfileLayout::normalize($layout, true);
+		$actor = $this->getActorFromUserId($userId);
+		$this->configService->setValueForUser($userId, 'profile_layout', json_encode($layout, JSON_THROW_ON_ERROR));
+		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
+		$this->federateProfile($userId);
+
+		return $layout;
+	}
+
+	private function withProfileLayout(Person $actor): Person {
+		if ($actor->getUserId() !== '') {
+			$stored = $this->configService->getValueForUser($actor->getUserId(), 'profile_layout');
+			$layout = is_string($stored) ? json_decode($stored, true) : null;
+			$actor->setProfileLayout(is_array($layout) ? $layout : []);
+		}
+
+		return $actor;
 	}
 
 	/**

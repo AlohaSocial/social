@@ -4413,3 +4413,18 @@ gates, rejects audience widening and cycles, and resets the old conversation and
 approval state. `StreamRequest::update()` writes local parent columns alongside
 the source snapshot; both parent counts are refreshed before the repository
 batch commits. This uses the same conditional-write lock as other post changes.
+
+### Public profile navigation preferences
+
+`Model\ProfileLayout` validates the public default and visible tabs. `AccountService`
+reads and writes the existing per-user `profile_layout` config and rebuilds the
+actor cache; no new permission store or content query is introduced. `Person`
+exports the selection through the local account API and the optional native
+ActivityPub presentation extension. `LocalController::accountProfileLayout()`
+requires the current Nextcloud account and CSRF protection. Invalid defaults
+return 422. The parent Profile view supplies the same preference to its existing
+child views and resolves unspecified entry URLs with `router.replace`; explicit
+tab links remain authoritative. Public page state carries the configured cloud
+address without running signed-in setup, and local public lookups use bare
+usernames rather than generated remote handles. Guest views do not use private
+read-marker endpoints.

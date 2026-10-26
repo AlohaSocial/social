@@ -71,6 +71,8 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		'featured' => ['@id' => 'toot:featured', '@type' => '@id'],
 		'discoverable' => 'toot:discoverable',
 		'indexable' => 'toot:indexable',
+		'profileDefaultTab' => 'https://nextcloud.com/ns/social#profileDefaultTab',
+		'profileTabs' => ['@id' => 'https://nextcloud.com/ns/social#profileTabs', '@container' => '@list'],
 		'votersCount' => 'toot:votersCount',
 		'blurhash' => 'toot:blurhash',
 		'focalPoint' => ['@container' => '@list', '@id' => 'toot:focalPoint'],

@@ -24,6 +24,7 @@ use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Object\Document;
 use OCA\Social\Model\ActivityPub\Object\Image;
 use OCA\Social\Model\Details;
+use OCA\Social\Model\ProfileLayout;
 use OCA\Social\Security\HtmlSanitizer;
 use OCA\Social\Service\VerificationService;
 use OCA\Social\Tools\IQueryRow;
@@ -97,6 +98,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	private array $attributedToActors = [];
 	private bool $discoverable = false;
 	private bool $indexable = false;
+	private array $profileLayout = ProfileLayout::DEFAULT;
 	private string $privacy = 'public';
 	private bool $sensitive = false;
 	private string $language = 'en';
@@ -688,6 +690,17 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	 * Whether the account's public posts may be full-text indexed by other
 	 * servers (`toot:indexable`). Opt-in, like `discoverable`.
 	 */
+	/** @return array{default_tab: string, tabs: list<string>} */
+	public function getProfileLayout(): array {
+		return $this->profileLayout;
+	}
+
+	public function setProfileLayout(array $layout): self {
+		$this->profileLayout = ProfileLayout::normalize($layout);
+
+		return $this;
+	}
+
 	public function isIndexable(): bool {
 		return $this->indexable;
 	}
@@ -1147,6 +1160,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		// Mastodon serialises an unset preference as null; getBool() reads that as the default
 		$this->setDiscoverable($this->getBool('discoverable', $data, false));
 		$this->setIndexable($this->getBool('indexable', $data, false));
+		$this->setProfileLayout(['default_tab' => $data['profileDefaultTab'] ?? 'posts', 'tabs' => $data['profileTabs'] ?? ProfileLayout::TABS]);
 		$this->setFields($this->extractFieldsFromAttachment($data));
 
 		/** @var Image $icon */
@@ -1252,6 +1266,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		$this->setBot($this->getBool('bot', $data));
 		$this->setDiscoverable($this->getBool('discoverable', $data));
 		$this->setIndexable($this->getBool('indexable', $data));
+		$this->setProfileLayout(is_array($data['profile_layout'] ?? null) ? $data['profile_layout'] : []);
 		$this->setMovedTo($this->get('moved.url', $data, ''));
 		$this->setDescription($this->get('note', $data));
 		$this->setUrl($this->get('url', $data));
@@ -1342,6 +1357,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 
 		$source = json_decode($this->getSource(), true);
 		if (is_array($source)) {
+			$this->setProfileLayout(['default_tab' => $source['profileDefaultTab'] ?? 'posts', 'tabs' => $source['profileTabs'] ?? ProfileLayout::TABS]);
 			$banner = self::largestImage($source, 'image');
 			$image = $this->validate(self::AS_URL, 'url', $banner, '');
 			if ($image !== '') {
@@ -1515,6 +1531,8 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		// full-text searched: they have to be said out loud to opt in.
 		$data['discoverable'] = $this->isDiscoverable();
 		$data['indexable'] = $this->isIndexable();
+		$data['profileDefaultTab'] = $this->profileLayout['default_tab'];
+		$data['profileTabs'] = $this->profileLayout['tabs'];
 
 		if ($this->getFeatured() !== '') {
 			$data['featured'] = $this->getFeatured();
@@ -1718,6 +1736,7 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				'bot' => $this->isBot(),
 				'discoverable' => $this->isDiscoverable(),
 				'indexable' => $this->isIndexable(),
+				'profile_layout' => $this->getProfileLayout(),
 				// Mastodon's own flag for "this is not a person". It was
 				// hardcoded false, which was true until channels existed: a
 				// PeerTube channel and one of ours are both `Group`s, and a

@@ -1989,6 +1989,16 @@ describe('TimelineList', () => {
 			expect(JSON.parse(window.localStorage.getItem(PLACE)).id).toBe('30')
 		})
 
+		it('never reads or writes private read markers for a public visitor', async () => {
+			const { wrapper, store } = mountList({ timeline: posts, serverData: { public: true } })
+			await flushPromises()
+			await vi.advanceTimersByTimeAsync(2000)
+			wrapper.vm.markSeen()
+
+			expect(store.fetchHomeMarker).not.toHaveBeenCalled()
+			expect(store.markHomeRead).not.toHaveBeenCalled()
+		})
+
 		it('asks the server nothing on the other timelines', async () => {
 			const { store } = mountList({
 				timeline: posts,

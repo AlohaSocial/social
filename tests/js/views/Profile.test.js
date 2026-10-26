@@ -82,7 +82,7 @@ function makeStore(serverData = {}) {
 	setActivePinia(pinia)
 	accountStore = useAccountStore()
 	vi.spyOn(accountStore, 'fetchAccountInfo').mockImplementation(fetchAccount)
-	vi.spyOn(accountStore, 'fetchPublicAccountInfo').mockImplementation(fetchAccount)
+	vi.spyOn(accountStore, 'fetchPublicAccountInfo').mockImplementation((uid) => fetchAccount(uid.includes('@') ? uid : `${uid}@cloud.example.org`))
 	vi.spyOn(accountStore, 'fetchAccountRelationshipInfo').mockResolvedValue([])
 	useSettingsStore().setServerData({ public: false, cloudAddress: 'https://cloud.example.org', ...serverData })
 
@@ -93,7 +93,7 @@ function mountProfile(route) {
 	return mount(Profile, {
 		global: {
 			plugins: [pinia],
-			mocks: { $route: route },
+			mocks: { $route: route, $router: { replace: vi.fn() } },
 			stubs: { ProfileInfo: ProfileInfoStub, Composer: ComposerStub, RouterView: RouterViewStub },
 		},
 	})
@@ -107,6 +107,22 @@ describe('Profile', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks()
+	})
+
+	it('uses a public profile default only for an unspecified tab', async () => {
+		const route = reactive({ name: 'profile', params: { account: 'bob@remote.example' }, query: {} })
+		const wrapper = mountProfile(route)
+		await flushPromises()
+		accountStore.addAccount({ actorId: bob.url, data: { ...bob, profile_layout: { default_tab: 'photos', tabs: ['posts', 'photos'] } } })
+		await flushPromises()
+
+		expect(wrapper.vm.$router.replace).toHaveBeenCalledWith(expect.objectContaining({ query: { media: 'image' } }))
+		wrapper.vm.$router.replace.mockClear()
+		route.query = { media: 'posts' }
+		await flushPromises()
+		wrapper.vm.applyDefaultProfileTab()
+		expect(wrapper.vm.$router.replace).not.toHaveBeenCalled()
+		wrapper.unmount()
 	})
 
 	it('loads the routed remote account, then its relationship, and shows the profile with the details view', async () => {
@@ -234,7 +250,7 @@ describe('Profile', () => {
 
 		it('uses the public lookup for the account from the server data and skips the relationship', async () => {
 			const wrapper = mountProfile({ name: undefined, params: {} })
-			expect(accountStore.fetchPublicAccountInfo).toHaveBeenCalledWith('carol@cloud.example.org')
+			expect(accountStore.fetchPublicAccountInfo).toHaveBeenCalledWith('carol')
 			await flushPromises()
 			expect(accountStore.fetchAccountRelationshipInfo).not.toHaveBeenCalled()
 			expect(accountStore.fetchAccountInfo).not.toHaveBeenCalled()

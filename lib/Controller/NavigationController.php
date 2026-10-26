@@ -149,6 +149,7 @@ class NavigationController extends Controller {
 		if ($this->userId === null) {
 			$this->initialState->provideInitialState('serverData', [
 				'public' => true,
+				'cloudAddress' => $this->configService->getAppValue(ConfigService::CLOUD_URL),
 				'firstrun' => false,
 				'needsAccount' => false,
 				'setup' => false,

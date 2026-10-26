@@ -1113,7 +1113,7 @@ export default {
 				// no stored place to read, which is not a failure
 			}
 
-			if (this.type !== 'home') {
+			if (this.serverData.public || this.type !== 'home') {
 				return
 			}
 			const identity = this.timelineIdentity
@@ -1530,7 +1530,7 @@ export default {
 		 * next visit draws its line against a marker this one has moved.
 		 */
 		ensureMarker() {
-			if (this.type !== 'notifications' || this.showParents) {
+			if (this.serverData.public || this.type !== 'notifications' || this.showParents) {
 				this.markerAsked = false
 				this.markerKnown = false
 				this.seenUpTo = '0'
@@ -1563,7 +1563,7 @@ export default {
 			// than exchanges to open one at a time, so having looked at it is
 			// having read them -- and the home timeline, whose marker every
 			// other client draws its own line from
-			if (!['notifications', 'direct', 'home'].includes(this.type) || this.showParents) {
+			if (this.serverData.public || !['notifications', 'direct', 'home'].includes(this.type) || this.showParents) {
 				return
 			}
 			if (this.entries.length === 0 || document.visibilityState === 'hidden') {
@@ -1622,6 +1622,9 @@ export default {
 		 */
 		markSeen() {
 			this.seenTimer = -1
+			if (this.serverData.public) {
+				return
+			}
 
 			if (this.type === 'direct') {
 				this.notificationsStore.markDirectMessagesRead()

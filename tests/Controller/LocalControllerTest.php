@@ -246,6 +246,24 @@ class LocalControllerTest extends TestCase {
 		$this->assertFailure($response, AccountDoesNotExistException::class, 'User not logged in');
 	}
 
+	public function testProfileLayoutIsSavedForTheAuthenticatedPersonalAccount(): void {
+		$this->actorForUser();
+		$layout = ['default_tab' => 'photos', 'tabs' => ['posts', 'photos']];
+		$this->accountService->expects(self::once())->method('setProfileLayout')->with('alice', $layout)->willReturn($layout);
+
+		$response = $this->controller()->accountProfileLayout($layout);
+
+		self::assertSame(200, $response->getStatus());
+		self::assertSame($layout, $response->getData()['result']['layout']);
+	}
+
+	public function testInvalidProfileLayoutIsAValidationFailure(): void {
+		$this->actorForUser();
+		$this->accountService->method('setProfileLayout')->willThrowException(new \InvalidArgumentException('Invalid default tab'));
+
+		self::assertSame(422, $this->controller()->accountProfileLayout(['default_tab' => 'private'])->getStatus());
+	}
+
 	// postCreate()
 
 	public function testPostCreateBuildsThePostFromTheRequest(): void {
@@ -355,6 +373,7 @@ class LocalControllerTest extends TestCase {
 			'actionFollow' => fn () => $this->controller()->actionFollow('bob@remote.example'),
 			'actionUnfollow' => fn () => $this->controller()->actionUnfollow('bob@remote.example'),
 			'accountFields' => fn () => $this->controller()->accountFields([]),
+			'accountProfileLayout' => fn () => $this->controller()->accountProfileLayout([]),
 			'uploadBanner' => fn () => $this->controller()->uploadBanner(),
 			'uploadBannerByUrl' => fn () => $this->controller()->uploadBannerByUrl('https://cdn.example/banner.png'),
 		] as $route => $call) {

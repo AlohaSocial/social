@@ -83,6 +83,7 @@ class SocialPubControllerTest extends TestCase {
 	private function controller(?string $userId): SocialPubController {
 		$configService = $this->createStub(ConfigService::class);
 		$configService->method('getSocialUrl')->willReturn(self::SOCIAL_URL);
+		$configService->method('getCloudUrl')->willReturn('https://cloud.example');
 		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(
 			static fn (string $text, array $parameters = []): string => vsprintf($text, $parameters)
@@ -222,7 +223,7 @@ class SocialPubControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('main', $response->getTemplateName());
 		$this->assertSame('Alice - Aloha Social', $response->getParams()['application']);
-		$this->assertSame(['public' => true], $this->states['serverData']);
+		$this->assertSame(['public' => true, 'cloudAddress' => 'https://cloud.example'], $this->states['serverData']);
 	}
 
 	public function testThePublicPageFallsBackToTheHandleWhenTheAccountHasNoName(): void {
@@ -294,7 +295,7 @@ class SocialPubControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('main', $response->getTemplateName());
 		$this->assertSame('nextcloud@mastodon.xyz - Aloha Social', $response->getParams()['application']);
-		$this->assertSame(['public' => true], $this->states['serverData']);
+		$this->assertSame(['public' => true, 'cloudAddress' => 'https://cloud.example'], $this->states['serverData']);
 	}
 
 	/**
@@ -372,7 +373,7 @@ class SocialPubControllerTest extends TestCase {
 		$this->assertSame('main', $response->getTemplateName());
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame($post, $this->states['item']);
-		$this->assertSame(['public' => true, 'firstrun' => false, 'setup' => false], $this->states['serverData']);
+		$this->assertSame(['public' => true, 'cloudAddress' => 'https://cloud.example', 'firstrun' => false, 'setup' => false], $this->states['serverData']);
 		$this->assertStringContainsString('rel="alternate"', $response->getHeaders()['Link']);
 		$this->assertStringContainsString('/api/oembed?url=', $response->getHeaders()['Link']);
 	}

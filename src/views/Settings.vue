@@ -171,6 +171,7 @@ import { currentSection, scrollToSection, watchSections } from '../services/sect
 // The forms, switches and lists below are only ever drawn on this page, so
 // they travel in a chunk of their own rather than in the entry every reader
 // loads.
+const ProfileLayoutSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/ProfileLayoutSettings.vue'))
 const AccountSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/AccountSettings.vue'))
 const DirectMessagesSettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/DirectMessagesSettings.vue'))
 const BlueskySettings = defineAsyncComponent(() => import(/* webpackChunkName: "settings" */'../components/BlueskySettings.vue'))
@@ -218,6 +219,7 @@ export default {
 
 	components: {
 		AccountSettings,
+		ProfileLayoutSettings,
 		ArchivedPosts,
 		AuthorizedApps,
 		BlueskySettings,
@@ -311,6 +313,14 @@ export default {
 					component: 'AccountSettings',
 					title: t('social', 'Who can find and follow you'),
 					lede: t('social', 'How others find you, and who sees what you post.'),
+				},
+				{
+					id: 'profile-layout',
+					group: 'profile',
+					icon: 'IconAccount',
+					component: 'ProfileLayoutSettings',
+					title: t('social', 'Public profile layout'),
+					lede: t('social', 'Choose the first tab visitors see and which tabs appear on your profile.'),
 				},
 				{
 					id: 'direct-messages',

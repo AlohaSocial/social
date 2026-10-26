@@ -36,6 +36,17 @@ class PersonTest extends TestCase {
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
 
+	public function testProfilePresentationSurvivesAnActivityPubRoundTrip(): void {
+		$layout = ['default_tab' => 'photos', 'tabs' => ['posts', 'photos']];
+		$actor = new Person();
+		$actor->setId('https://remote.example/@alice')->setPreferredUsername('alice');
+		$actor->setProfileLayout($layout);
+		$copy = new Person();
+		$copy->import($actor->exportAsActivityPub());
+
+		self::assertSame($layout, $copy->getProfileLayout());
+	}
+
 	protected function setUp(): void {
 		$this->timezone = date_default_timezone_get();
 		date_default_timezone_set('UTC');

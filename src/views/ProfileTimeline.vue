@@ -47,6 +47,8 @@ export default {
 		TimelineSwitcher,
 	},
 
+	props: { profileLayout: { type: Object, default: undefined } },
+
 	data() {
 		return {
 			pinnedIds: [],
@@ -106,7 +108,7 @@ export default {
 		 * @return {object[]} the three tabs, for the switcher
 		 */
 		kinds() {
-			return profileKinds(this.routeAccount)
+			return profileKinds(this.routeAccount, this.profileLayout, this.kind)
 		},
 
 		/**

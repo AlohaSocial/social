@@ -281,6 +281,9 @@ class NavigationControllerTest extends TestCase {
 		$this->accountService->expects($this->never())->method('getActorFromUserId');
 		$this->accountService->expects($this->never())->method('generateHandleFromUserId');
 		$this->configService->expects($this->never())->method('getCloudUrl');
+		$this->configService->method('getAppValue')->willReturnCallback(
+			static fn (string $key): string => $key === ConfigService::CLOUD_URL ? 'https://cloud.example' : ''
+		);
 		$this->streamService->expects($this->never())->method('getTimeline');
 
 		$response = $this->controller(null)->navigate();
@@ -290,6 +293,7 @@ class NavigationControllerTest extends TestCase {
 		$this->assertTrue($this->serverData()['public']);
 		$this->assertFalse($this->serverData()['needsAccount']);
 		$this->assertFalse($this->serverData()['isAdmin']);
+		$this->assertSame('https://cloud.example', $this->serverData()['cloudAddress']);
 	}
 
 	/**
