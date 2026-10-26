@@ -67,7 +67,15 @@ class ActorMapperTest extends TestCase {
 			'did' => self::DID, 'handle' => 'alice.bsky.social', 'pds' => 'https://morel.us-east.host.bsky.network',
 			'labels' => ['!no-unauthenticated'], 'limited' => false, 'indexed_at' => '2026-10-08T10:00:00.000Z',
 		], $person->getDetails(ActorMapper::DETAIL));
-		$this->assertSame(['handle' => 'alice.bsky.social', 'did' => self::DID, 'url' => 'https://bsky.app/profile/alice.bsky.social', 'native' => true, 'verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => false], $person->getDetails(Details::BLUESKY));
+		$this->assertSame(['links' => [], 'handle' => 'alice.bsky.social', 'did' => self::DID, 'url' => 'https://bsky.app/profile/alice.bsky.social', 'native' => true, 'verified' => false, 'verified_by' => [], 'verified_by_bluesky' => false, 'trusted_verifier' => false], $person->getDetails(Details::BLUESKY));
+	}
+
+	public function testProfileLinksKeepTheirOrderBeyondTheFourFediverseFields(): void {
+		$links = array_map(static fn (int $i): array => ['url' => 'https://example.org/' . $i, 'title' => 'Link ' . $i], range(1, 6));
+		$links[] = ['url' => 'javascript:alert(1)', 'title' => 'Unsafe'];
+		$person = (new ActorMapper())->person($this->profile() + ['links' => $links]);
+
+		$this->assertSame(array_slice($links, 0, 6), $person->getDetails(Details::BLUESKY)['links']);
 	}
 
 	public function testThePronounsAndTheWebsiteAreProfileRows(): void {

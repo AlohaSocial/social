@@ -12,6 +12,7 @@ namespace OCA\Social\Atproto\Client;
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\StoredRecord;
+use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Mst;
@@ -89,6 +90,7 @@ class WriteService {
 	 * refused (D16).
 	 */
 	public const KEPT_AS_WRITTEN = [
+		ProfileLinks::COLLECTION,
 		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
 		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
 	];
@@ -267,6 +269,7 @@ class WriteService {
 		}
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 		$this->assertProfileWebsite($record);
+		$profileLinks = ProfileLinks::references($session->identity->did, $record['links'] ?? []);
 		$actor = $this->actor($session);
 		$current = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
 		$was = $current === null ? [] : DagCbor::decode($current->bytes);
@@ -292,6 +295,16 @@ class WriteService {
 		$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY);
 		if ($stored === null) {
 			throw new XrpcException(500, 'InternalServerError', 'The profile was not written');
+		}
+		$replacement = $stored->value();
+		unset($replacement['links']);
+		if ($profileLinks !== []) {
+			$replacement['links'] = $profileLinks;
+		}
+		if (DagCbor::encode($replacement) !== $stored->bytes) {
+			$this->writeRaw($session, RepoWrite::update(RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY, $replacement, $stored->localId));
+			$stored = $this->repositories->getRecord($session->identity->did, RecordMapper::PROFILE, RecordMapper::PROFILE_RKEY)
+				?? throw new XrpcException(500, 'InternalServerError', 'The profile links were not written');
 		}
 
 		return $this->created($session, $stored);
@@ -791,6 +804,9 @@ class WriteService {
 				$rkey = $gated['rkey'];
 			}
 			$rkey = $rkey !== '' ? $rkey : Tid::next();
+			if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
+				throw XrpcException::invalidRequest('A profile link record key must be a TID');
+			}
 			$path = $collection . '/' . $rkey;
 			if (isset($paths[$path])) {
 				throw XrpcException::invalidRequest('A batch may change a record only once');
@@ -1415,6 +1431,9 @@ class WriteService {
 			$rkey = $gated['rkey'];
 		}
 		$rkey = $rkey !== '' ? $rkey : Tid::next();
+		if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
+			throw XrpcException::invalidRequest('A profile link record key must be a TID');
+		}
 		if (($record['$type'] ?? $collection) !== $collection) {
 			throw XrpcException::invalidRequest('The record is not of its collection');
 		}

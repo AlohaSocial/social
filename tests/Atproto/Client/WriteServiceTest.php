@@ -315,6 +315,22 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame([], $this->records);
 	}
 
+	public function testAnAppCanCreateAProfileLinkAndSelectItInTheProfile(): void {
+		$this->keepWrites();
+		$link = ['$type' => 'app.bsky.actor.link', 'url' => 'https://alice.example', 'title' => 'My website', 'createdAt' => '2026-10-26T10:00:00Z'];
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.actor.link', 'record' => $link]);
+		$this->records[] = $this->record(RecordMapper::PROFILE, 'self', $this->alice->getId());
+		$refs = [['uri' => $made['uri'], 'cid' => $made['cid']]];
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::PROFILE, 'rkey' => 'self',
+			'record' => ['$type' => RecordMapper::PROFILE, 'links' => $refs]]);
+
+		$profile = array_values(array_filter($this->records, static fn (StoredRecord $record): bool => $record->collection === RecordMapper::PROFILE))[0];
+		$this->assertEquals($refs, $profile->value()['links']);
+		$views = (new \OCA\Social\Atproto\Profile\ProfileLinks($this->repositories))->forIdentity($this->session->identity);
+		$this->assertSame([['url' => 'https://alice.example', 'title' => 'My website']], $views);
+	}
+
 	public function testPutRecordWithoutCompareAndSwapRollsBackWhenTheRepositoryWriteFails(): void {
 		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), null, []);
 		$this->repositories->expects($this->never())->method('commitBatch');

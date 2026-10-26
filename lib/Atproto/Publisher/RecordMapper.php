@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\BlobRef;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\StoredRecord;
+use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Reader\BlueskyIds;
@@ -341,6 +342,11 @@ class RecordMapper {
 	 */
 	public function profile(Person $actor, Identity $identity): array {
 		$record = ['$type' => self::PROFILE];
+		$stored = $this->repositories->getRecord($identity->did, self::PROFILE, self::PROFILE_RKEY);
+		$links = ProfileLinks::references($identity->did, $stored?->value()['links'] ?? []);
+		if ($links !== []) {
+			$record['links'] = $links;
+		}
 		$name = self::displayNameOf($actor);
 		if ($name !== '') {
 			$record['displayName'] = $name;

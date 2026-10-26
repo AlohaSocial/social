@@ -329,6 +329,13 @@
 			     is; renders nothing for a remote account, whose history this
 			     instance only ever holds a part of -->
 			<ProfileHighlights :accountId="highlightsAccountId" />
+			<ul v-if="blueskyProfileLinks.length" class="user-profile__links" :aria-label="t('social', 'Profile links')">
+				<li v-for="(link, index) in blueskyProfileLinks" :key="index">
+					<a :href="link.url" target="_blank" rel="nofollow noopener noreferrer">
+						{{ link.title }}
+					</a>
+				</li>
+			</ul>
 			<dl v-if="profileFields.length" class="user-profile__fields">
 				<div
 					v-for="(field, index) in profileFields"
@@ -799,6 +806,25 @@ export default {
 		 */
 		profileFields() {
 			return profileFields(this.accountInfo.fields)
+		},
+
+		/** @return {Array<{url: string, title: string}>} native and remote Bluesky profile links */
+		blueskyProfileLinks() {
+			const links = this.accountInfo.bluesky?.links
+			if (!Array.isArray(links)) {
+				return []
+			}
+			return links.slice(0, 10).flatMap((link) => {
+				try {
+					const url = new URL(link.url)
+					if (url.protocol !== 'https:' || url.username || url.password) {
+						return []
+					}
+					return [{ url: url.href, title: link.title || url.hostname }]
+				} catch {
+					return []
+				}
+			})
 		},
 
 		/**

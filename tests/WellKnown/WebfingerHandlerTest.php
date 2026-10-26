@@ -205,6 +205,7 @@ class WebfingerHandlerTest extends TestCase {
 				// of the account's posts. It stays an alias, above.
 				['rel' => 'http://webfinger.net/rel/profile-page', 'type' => 'text/html', 'href' => self::ACTOR_URL],
 				['rel' => 'http://ostatus.org/schema/1.0/subscribe', 'template' => 'https://cloud.example/index.php/apps/social/ostatus/follow/?uri={uri}'],
+				['rel' => 'https://w3id.org/fep/3b86/Follow', 'template' => 'https://cloud.example/index.php/apps/social/ostatus/follow/?uri={object}'],
 			],
 		], $this->jsonOf($response));
 	}
@@ -396,7 +397,10 @@ class WebfingerHandlerTest extends TestCase {
 		$this->assertSame('acct:cloud.example@cloud.example', $json['subject']);
 		$this->assertSame([self::INSTANCE_ACTOR_URL], $json['aliases']);
 		$this->assertSame(
-			[['rel' => 'self', 'type' => 'application/activity+json', 'href' => self::INSTANCE_ACTOR_URL]],
+			[
+				['rel' => 'self', 'type' => 'application/activity+json', 'href' => self::INSTANCE_ACTOR_URL],
+				['rel' => 'https://w3id.org/fep/3b86/Follow', 'template' => 'https://cloud.example/index.php/apps/social/ostatus/follow/?uri={object}'],
+			],
 			$json['links']
 		);
 	}

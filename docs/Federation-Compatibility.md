@@ -37,6 +37,11 @@ Links, or embedded pages. Relative continuations use the embedded page's own ID
 when it has one. Page links cannot change the outbox origin, carry credentials,
 or point back to the current page indefinitely.
 
+WebFinger advertises the existing remote-follow confirmation page using the
+FEP-3b86 `Follow` relation for both local users and the instance actor. Opening
+the intent does not follow an account automatically; the person confirms the
+action in Social.
+
 ## Bluesky client writes
 
 The existing PDS surface already supports sessions, OAuth, repository writes,
@@ -49,6 +54,20 @@ the same owned-upload path as images, including galleries beside a quoted record
 in `recordWithMedia`. Galleries accept up to ten images; the older images embed
 accepts four. Invalid or oversized lists are refused before upload descriptions
 are changed. An empty image/video alt text clears the previous description.
+
+### Ordered profile links
+
+`app.bsky.actor.link` records can be created, replaced and deleted through the
+ordinary repository endpoints, including batches. A profile's `links` property
+selects up to ten strong references to link records in the same repository.
+Replacing the profile updates this selection; publishing a later bio/avatar edit
+preserves it. The links are stored independently of the four Mastodon profile
+fields, so a six-link Bluesky profile does not silently lose two links.
+
+The profile API exposes the selected links as `bluesky.links`, each with `url`
+and `title`, in display order. Remote AppView profile links use the same shape.
+The profile page renders HTTPS destinations as direct links and omits hidden,
+taken-down and unsafe destinations. Link icons are not fetched for this view.
 
 ## Confirmed remaining gaps
 
@@ -74,3 +93,6 @@ Protocol references:
 [ActivityStreams vocabulary](https://www.w3.org/TR/activitystreams-vocabulary/),
 [Bluesky gallery design](https://github.com/bluesky-social/atproto/discussions/5032),
 [record-with-media lexicon](https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/embed/recordWithMedia.json).
+The profile-link schema is vendored from the installed official ATProto SDK;
+see also the [upstream link record](https://github.com/bluesky-social/atproto/blob/a6f5a3c7f5e294e96971810d61f23b8f5998a5e2/lexicons/app/bsky/actor/link.json)
+and [FEP-3b86](https://fediverse.codeberg.page/fep/fep/3b86/).
