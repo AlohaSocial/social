@@ -4,6 +4,9 @@
 -->
 # Bluesky and AT Protocol compatibility
 
+For the current remote-profile import paths and confirmed interoperability gaps,
+see [Remote profiles and content compatibility](Federation-Compatibility.md).
+
 **Status: phases 1, 2 and 3 (§18) and phase 4 — custom handles (4a), moving away (4b), moving here (4c), Bridgy twins with any migration tool (4d) and a moved account's posts in its timeline (4e) — are implemented, as are custom feeds and lists (§9.6).**
 This document is the contract for a multi-PR project: the decisions were
 taken by the product owner in two interviews (2026-09-25 and 2026-10-06)

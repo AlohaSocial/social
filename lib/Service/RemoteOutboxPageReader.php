@@ -45,10 +45,19 @@ class RemoteOutboxPageReader {
 			$pageData = $outboxData;
 
 			if (isset($outboxData['first'])) {
-				if (is_array($outboxData['first'])) {
-					$pageData = $outboxData['first'];
-				} elseif (is_string($outboxData['first'])) {
-					$firstPage = $this->resolvePageUrl($outboxData['first'], $pageUrl);
+				$first = $outboxData['first'];
+				if (is_array($first) && (array_key_exists('items', $first) || array_key_exists('orderedItems', $first)
+					|| in_array($first['type'] ?? '', ['CollectionPage', 'OrderedCollectionPage'], true))) {
+					$pageData = $first;
+					$id = $this->collectionPageLink($first);
+					if ($id !== '') {
+						$pageUrl = $this->resolvePageUrl($id, $pageUrl);
+						if (!$this->isOutboxPageUrl($pageUrl, $outboxUrl)) {
+							return $result;
+						}
+					}
+				} else {
+					$firstPage = $this->resolvePageUrl($this->collectionPageLink($first), $pageUrl);
 					if ($firstPage === '' || !$this->isOutboxPageUrl($firstPage, $outboxUrl)) {
 						return $result;
 					}
@@ -66,7 +75,7 @@ class RemoteOutboxPageReader {
 			$nextUrl = $this->collectionPageLink($pageData['next'] ?? null);
 			if ($nextUrl !== '') {
 				$nextUrl = $this->resolvePageUrl($nextUrl, $pageUrl);
-				if ($nextUrl === '' || !$this->isOutboxPageUrl($nextUrl, $outboxUrl)) {
+				if ($nextUrl === '' || $nextUrl === $pageUrl || !$this->isOutboxPageUrl($nextUrl, $outboxUrl)) {
 					$this->logger->warning('[RemoteOutboxPageReader] Rejected an outbox page outside the actor server', [
 						'actor' => $actor->getId(),
 					]);
@@ -90,7 +99,7 @@ class RemoteOutboxPageReader {
 			return trim($link);
 		}
 		if (is_array($link)) {
-			$id = $link['id'] ?? $link['@id'] ?? '';
+			$id = $link['id'] ?? $link['@id'] ?? $link['href'] ?? '';
 			return is_string($id) ? trim($id) : '';
 		}
 
@@ -98,6 +107,9 @@ class RemoteOutboxPageReader {
 	}
 
 	private function resolvePageUrl(string $link, string $baseUrl): string {
+		if ($link === '') {
+			return '';
+		}
 		if (preg_match('#^https?://#i', $link) === 1) {
 			return $link;
 		}
@@ -134,6 +146,7 @@ class RemoteOutboxPageReader {
 		$outboxPort = $outbox['port'] ?? $defaultPort;
 
 		return in_array($scheme, ['http', 'https'], true)
+			&& !isset($page['user']) && !isset($page['pass']) && !isset($page['fragment'])
 			&& $pageScheme === $scheme
 			&& strtolower($page['host'] ?? '') === strtolower($outbox['host'] ?? '')
 			&& $pagePort === $outboxPort;

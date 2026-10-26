@@ -880,6 +880,23 @@ class AccountApiController extends MastodonApiController {
 					|| $remoteProfileFilling;
 				$profileFilling = $remoteProfileFilling || $profileFilling;
 			}
+			// The outbox job can finish before its media files have been cached.
+			// Keep the visible profile refreshing until those stored copies gain
+			// their local URLs, or the media worker records a permanent refusal.
+			if ($remoteProfile) {
+				foreach ($shown as $post) {
+					if (!$post instanceof Stream) {
+						continue;
+					}
+					foreach ($post->getAttachments() as $media) {
+						if ($media->getCacheError() === 0 && (string)$media->getUrl() === '' && (string)$media->getRemoteUrl() !== '') {
+							$remoteProfileFilling = true;
+							$profileFilling = true;
+							break 2;
+						}
+					}
+				}
+			}
 
 			$response = $this->paged(
 				$this->filterService->apply($shown, Filter::CONTEXT_ACCOUNT, $this->viewer),

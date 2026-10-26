@@ -875,6 +875,86 @@ class WriteServiceTest extends TestCase {
 		]);
 	}
 
+	public static function galleryWrites(): iterable {
+		yield 'create gallery' => [false, false];
+		yield 'edit gallery' => [true, false];
+		yield 'create gallery beside a record' => [false, true];
+		yield 'edit gallery beside a record' => [true, true];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('galleryWrites')]
+	public function testClientGalleriesKeepAllImagesAndCanClearAltText(bool $editing, bool $withRecord): void {
+		$items = [];
+		$blobs = [];
+		$documents = [];
+		for ($i = 0; $i < 6; $i++) {
+			$cid = Cid::forRaw('gallery image ' . $i);
+			$document = new Document();
+			$document->setNid(22 + $i);
+			$document->setId('https://social.test/documents/' . $i);
+			$document->setAccount('alice');
+			$document->setMediaType('image/jpeg');
+			$document->setDescription('Previous alt text');
+			$documents[$document->getId()] = $document;
+			$blobs[$cid->toString()] = new BlobRef(self::DID, $cid, $document->getId(), 'image/jpeg', 20);
+			$items[] = [
+				'$type' => 'app.bsky.embed.gallery#image',
+				'image' => ['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 20],
+				'alt' => '', 'aspectRatio' => ['width' => 640, 'height' => 480],
+			];
+		}
+		$this->blobs->expects(self::exactly(6))->method('get')->willReturnCallback(static fn (string $did, string $cid): ?BlobRef => $blobs[$cid] ?? null);
+		$this->documents->method('getDocumentById')->willReturnCallback(static fn (string $id): Document => $documents[$id]);
+		$this->documents->expects(self::exactly(6))->method('updateDescription')->with(self::callback(
+			static fn (Document $document): bool => $document->getDescription() === ''
+		));
+		$embed = ['$type' => 'app.bsky.embed.gallery', 'items' => $items];
+		if ($withRecord) {
+			$embed = ['$type' => 'app.bsky.embed.recordWithMedia',
+				'record' => ['$type' => 'app.bsky.embed.record', 'record' => [
+					'uri' => 'at://' . self::DID . '/app.bsky.feed.generator/test',
+					'cid' => Cid::forDagCbor('feed')->toString(),
+				]], 'media' => $embed];
+		}
+		$post = new Note();
+		$post->setId('https://social.test/@alice/44')->setNid(44)->setAttributedTo($this->alice->getId());
+		$this->streams->method('getStreamById')->willReturn($post);
+		$rkey = '3jqfcqzm3fo2j';
+		$record = ['$type' => RecordMapper::POST, 'text' => 'Six photographs', 'createdAt' => '2026-10-08T10:00:00Z', 'embed' => $embed];
+		$body = ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => $rkey, 'record' => $record];
+		if ($editing) {
+			$this->records[] = $this->record(RecordMapper::POST, $rkey, $post->getId());
+			$this->posts->expects(self::once())->method('editPost')->with(
+				44, $this->alice, 'Six photographs', '', false, '', [], null, false, [22, 23, 24, 25, 26, 27],
+			)->willReturn($post);
+			$this->writes->put($this->session, $body);
+		} else {
+			$this->posts->expects(self::once())->method('createPost')->with(self::callback(static function (Post $post): bool {
+				self::assertCount(6, $post->getMedias());
+				self::assertSame(['22', '23', '24', '25', '26', '27'], array_map(static fn ($media): string => $media->getId(), $post->getMedias()));
+
+				return true;
+			}))->willReturnCallback(function () use ($post, $rkey): Create {
+				$this->records[] = $this->record(RecordMapper::POST, $rkey, $post->getId());
+
+				return (new Create())->setObjectId($post->getId());
+			});
+			$this->writes->create($this->session, $body);
+		}
+	}
+
+	public function testOversizedImageEmbedsAreRejectedBeforeAnyUploadIsChanged(): void {
+		$this->blobs->expects(self::never())->method('get');
+		$this->posts->expects(self::never())->method('createPost');
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('at most 4 images');
+
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [
+			'$type' => RecordMapper::POST, 'text' => 'Too many pictures',
+			'embed' => ['$type' => 'app.bsky.embed.images', 'images' => array_fill(0, 5, ['alt' => '', 'image' => []])],
+		]]);
+	}
+
 	public function testUpdatingExternalEmbedReplacesThePostLinkCard(): void {
 		$old = [
 			'$type' => RecordMapper::POST,

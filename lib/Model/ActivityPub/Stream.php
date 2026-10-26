@@ -20,6 +20,7 @@ use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\InvalidResourceEntryException;
 use OCA\Social\Exceptions\ItemUnknownException;
+use OCA\Social\Interfaces\Object\DocumentInterface;
 use OCA\Social\Model\ActivityPub\Activity\Update;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
@@ -53,6 +54,13 @@ use Throwable;
  * @package OCA\Social\Model\ActivityPub
  */
 class Stream extends ACore implements IQueryRow, JsonSerializable {
+	/** Outbox imports store attachment rows for the media worker to download. */
+	private bool $deferAttachmentDownloads = false;
+
+	public function setDeferAttachmentDownloads(bool $defer): void {
+		$this->deferAttachmentDownloads = $defer;
+	}
+
 	/**
 	 * The six values `social_stream.media_kind` holds.
 	 *
@@ -2156,7 +2164,11 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			}
 
 			try {
-				$interface->save($attachment);
+				if ($this->deferAttachmentDownloads && $interface instanceof DocumentInterface) {
+					$interface->save($attachment, true);
+				} else {
+					$interface->save($attachment);
+				}
 			} catch (Throwable $e) {
 				// A post is not its attachments. Storing one means fetching a
 				// file from another server, which fails in every way a request

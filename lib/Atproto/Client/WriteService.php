@@ -455,21 +455,8 @@ class WriteService {
 			return [];
 		}
 
-		if ($mediaType === 'app.bsky.embed.images') {
-			$images = is_array($media['images'] ?? null) ? $media['images'] : [];
-		} elseif ($mediaType === 'app.bsky.embed.gallery') {
-			$items = is_array($media['items'] ?? null) ? $media['items'] : [];
-			$images = [];
-			foreach ($items as $item) {
-				if (!is_array($item) || !is_array($item['image'] ?? null)) {
-					throw XrpcException::invalidRequest('A gallery image is invalid');
-				}
-				$images[] = [
-					'image' => $item['image'],
-					'alt' => is_string($item['alt'] ?? null) ? $item['alt'] : '',
-					'aspectRatio' => is_array($item['aspectRatio'] ?? null) ? $item['aspectRatio'] : ['width' => 1, 'height' => 1],
-				];
-			}
+		if (in_array($mediaType, ['app.bsky.embed.images', 'app.bsky.embed.gallery'], true)) {
+			$images = self::imagesFromEmbed($embed);
 		} else {
 			$video = self::videoEmbedOf($embed);
 			if ($video === null) {
@@ -480,9 +467,6 @@ class WriteService {
 			return [(int)$document->getNid()];
 		}
 
-		if (count($images) > 4) {
-			throw XrpcException::invalidRequest('A post can contain at most four images');
-		}
 		$documents = $images === [] ? [] : $this->pictures($session, $images);
 
 		return array_map(static fn (Document $document): int => (int)$document->getNid(), $documents);
@@ -986,8 +970,8 @@ class WriteService {
 			}
 		}
 		$post->setLinkCard($card);
-		$images = $embed['images'] ?? $embed['media']['images'] ?? [];
-		$documents = is_array($images) && $images !== [] ? $this->pictures($session, $images) : [];
+		$images = self::imagesFromEmbed($embed);
+		$documents = $images !== [] ? $this->pictures($session, $images) : [];
 		$video = self::videoEmbedOf($embed);
 		if ($video !== null && $documents === []) {
 			$documents = [$this->uploaded($session, self::blobCid($video['video'] ?? []), (string)($video['alt'] ?? ''))];
@@ -1281,6 +1265,40 @@ class WriteService {
 		return array_values(array_unique($result));
 	}
 
+	/** Images and galleries share the same owned-blob import for creates and edits. */
+	private static function imagesFromEmbed(array $embed): array {
+		$media = ($embed['$type'] ?? '') === 'app.bsky.embed.recordWithMedia'
+			? (is_array($embed['media'] ?? null) ? $embed['media'] : [])
+			: $embed;
+		$type = $media['$type'] ?? '';
+		if (!in_array($type, ['app.bsky.embed.images', 'app.bsky.embed.gallery'], true)) {
+			return [];
+		}
+		$gallery = $type === 'app.bsky.embed.gallery';
+		$images = $media[$gallery ? 'items' : 'images'] ?? null;
+		$limit = $gallery ? PictureService::MAX_PER_POST : PictureService::MAX_PER_IMAGES_EMBED;
+		if (!is_array($images) || !array_is_list($images) || count($images) > $limit) {
+			throw XrpcException::invalidRequest('This image embed must be a list of at most ' . $limit . ' images');
+		}
+		foreach ($images as $image) {
+			if (!is_array($image) || !is_array($image['image'] ?? null) || !is_string($image['alt'] ?? null)) {
+				throw XrpcException::invalidRequest('Each image must name an uploaded blob and its alt text');
+			}
+			if ($gallery && ($image['$type'] ?? 'app.bsky.embed.gallery#image') !== 'app.bsky.embed.gallery#image') {
+				throw XrpcException::invalidRequest('Unsupported gallery item');
+			}
+			if ($gallery) {
+				$ratio = $image['aspectRatio'] ?? null;
+				if (!is_array($ratio) || !is_int($ratio['width'] ?? null) || !is_int($ratio['height'] ?? null)
+					|| $ratio['width'] < 1 || $ratio['height'] < 1) {
+					throw XrpcException::invalidRequest('A gallery image must have a positive aspect ratio');
+				}
+			}
+		}
+
+		return $images;
+	}
+
 	/**
 	 * The uploads a post's pictures name, in order, with their alt text.
 	 *
@@ -1289,7 +1307,7 @@ class WriteService {
 	 */
 	private function pictures(ClientSession $session, array $images): array {
 		$documents = [];
-		foreach (array_slice($images, 0, 4) as $image) {
+		foreach ($images as $image) {
 			$documents[] = $this->uploaded($session, self::blobCid(is_array($image['image'] ?? null) ? $image['image'] : []), (string)($image['alt'] ?? ''));
 		}
 
@@ -1314,9 +1332,9 @@ class WriteService {
 		if ($document->getAccount() !== $this->actor($session)->getPreferredUsername()) {
 			throw XrpcException::invalidRequest('A post can only use the signed-in account\'s own uploads');
 		}
-		$alt = trim($alt);
-		if ($alt !== '') {
-			$document->setDescription(mb_substr($alt, 0, 1500));
+		$alt = mb_substr(trim($alt), 0, 1500);
+		if ($document->getDescription() !== $alt) {
+			$document->setDescription($alt);
 			$this->documents->updateDescription($document);
 		}
 

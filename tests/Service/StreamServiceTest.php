@@ -18,6 +18,7 @@ use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\SocialAppConfigException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Interfaces\Activity\DeleteInterface;
+use OCA\Social\Interfaces\Actor\PersonInterface;
 use OCA\Social\Interfaces\IActivityPubInterface;
 use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -47,6 +48,7 @@ use OCA\Social\Service\ReactionSummaryService;
 use OCA\Social\Service\RemoteFetchQueue;
 use OCA\Social\Service\StreamService;
 use OCA\Social\Service\Thread\ThreadService;
+use OCA\Social\Tests\Model\TActivityPubMocks;
 use OCA\Social\Tools\ActivityPubEvent;
 use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\IURLGenerator;
@@ -58,8 +60,11 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
+require_once __DIR__ . '/../Model/TActivityPubMocks.php';
+
 #[AllowMockObjectsWithoutExpectations]
 class StreamServiceTest extends TestCase {
+	use TActivityPubMocks;
 	private const SOCIAL_URL = 'https://social.example/';
 	private const ACTOR_ID = 'https://social.example/@alice';
 	private const ACTOR_FOLLOWERS = 'https://social.example/@alice/followers';
@@ -142,11 +147,10 @@ class StreamServiceTest extends TestCase {
 		// `Note::fillMentions()` asks the registry for the Person interface, so
 		// a sync of a post that names anybody needs one; a mention nobody here
 		// knows keeps the handle the post wrote, which is what this produces.
-		$personInterface = $this->createStub(IActivityPubInterface::class);
+		$this->installActivityPub();
+		$personInterface = $this->apInterface(PersonInterface::class);
 		$personInterface->method('getItemById')
 			->willThrowException(new ItemNotFoundException());
-		AP::set($this->createStub(AP::class));
-		AP::instance()->method('getInterfaceFromType')->willReturn($personInterface);
 	}
 
 	protected function tearDown(): void {
@@ -265,6 +269,23 @@ class StreamServiceTest extends TestCase {
 		$actor->setOutbox($id . '/outbox');
 
 		return $actor;
+	}
+
+	private function useRealOutboxUpdateHandler(): void {
+		$ap = $this->installActivityPub();
+		$ap->updateInterface = new \OCA\Social\Interfaces\Activity\UpdateInterface();
+		$ap->noteInterface = new NoteInterface(
+			$this->streamRequest,
+			$this->createStub(\OCA\Social\Db\CacheActorsRequest::class),
+			$this->createStub(\OCA\Social\Service\PollService::class),
+			$this->createStub(\OCA\Social\Service\PushService::class),
+			$this->createStub(\OCA\Social\Service\StreamQueueService::class),
+			$this->linkPreviewService,
+			$this->createStub(\OCA\Social\Service\ForwardService::class),
+			$this->createStub(\OCA\Social\Service\NotificationService::class),
+			$this->createStub(\OCA\Social\Service\StatusRevisionService::class),
+			$this->createStub(\OCA\Social\Service\FileCommentsService::class),
+		);
 	}
 
 	private AccountService|MockObject $accountService;
@@ -1806,11 +1827,111 @@ class StreamServiceTest extends TestCase {
 		}
 	}
 
+	public static function profileObjectTypes(): iterable {
+		foreach (['Article', 'Page', 'Audio', 'Video', 'Event'] as $type) {
+			yield $type => [$type];
+		}
+	}
+
+	#[DataProvider('profileObjectTypes')]
+	public function testRemoteProfilesImportTheSameObjectTypesAsTheInbox(string $type): void {
+		$actor = $this->remoteActor();
+		$this->curlService->method('retrieveObject')->willReturn(['items' => [[
+			'id' => 'https://remote.example/objects/42',
+			'type' => $type,
+			'attributedTo' => $actor->getId(),
+			'name' => 'A title <script>never run</script>',
+			'to' => [ACore::CONTEXT_PUBLIC],
+			'url' => 'https://remote.example/read/42',
+		]]]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::once())->method('save')->with(self::callback(static function (Stream $post) use ($type): bool {
+			self::assertSame($type, $post->getSubType());
+			self::assertSame(Stream::TYPE_PUBLIC, $post->getVisibility());
+			self::assertStringContainsString('A title', $post->getContent());
+			self::assertStringNotContainsString('<script>', $post->getContent());
+
+			return true;
+		}));
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($actor));
+	}
+
+	public function testProfilePullPreservesPixelfedPicturesWithoutDownloadingTheirBytes(): void {
+		$this->installActivityPub(mocked: [\OCA\Social\Interfaces\Object\DocumentInterface::class]);
+		$this->apInterface(\OCA\Social\Interfaces\Object\DocumentInterface::class)
+			->expects(self::once())->method('save')
+			->with(self::isInstanceOf(\OCA\Social\Model\ActivityPub\Object\Document::class), true)
+			->willReturnCallback(static function ($document): void {
+				$document->setNid(9);
+			});
+		$actor = $this->remoteActor();
+		$this->curlService->expects(self::once())->method('retrieveObject')->willReturn(['orderedItems' => [[
+			'id' => 'https://remote.example/p/42', 'type' => 'Note',
+			'attributedTo' => $actor->getId(), 'to' => [ACore::CONTEXT_PUBLIC],
+			'attachment' => ['type' => 'Document', 'mediaType' => 'image/jpeg',
+				'url' => 'https://cdn.example/photo.jpg', 'name' => 'Sunset'],
+		]]]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::once())->method('save')->with(self::callback(static function (Stream $post): bool {
+			$media = $post->getAttachments();
+			self::assertCount(1, $media);
+			self::assertSame('image', $media[0]->getType());
+			self::assertSame('Sunset', $media[0]->getDescription());
+			self::assertSame('https://cdn.example/photo.jpg', $media[0]->getRemoteUrl());
+
+			return true;
+		}));
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($actor));
+	}
+
+	public function testAnUpdateInAProfileCanDiscoverAPostWhoseCreateWasNotReceived(): void {
+		$actor = $this->remoteActor();
+		$this->curlService->method('retrieveObject')->willReturn(['items' => [[
+			'id' => 'https://remote.example/activities/42-update', 'type' => 'Update',
+			'actor' => $actor->getId(),
+			'object' => ['id' => 'https://remote.example/notes/42', 'type' => 'Note',
+				'attributedTo' => $actor->getId(), 'content' => 'Newest version',
+				'to' => [ACore::CONTEXT_PUBLIC]],
+		]]]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::once())->method('save')->with(self::callback(
+			static fn (Stream $post): bool => $post->getContent() === 'Newest version'
+		));
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($actor));
+	}
+
+	public function testProfilePullKeepsPollOptionsAndVoteTotals(): void {
+		$actor = $this->remoteActor();
+		$this->curlService->method('retrieveObject')->willReturn(['items' => [[
+			'id' => 'https://remote.example/questions/42', 'type' => 'Question',
+			'attributedTo' => $actor->getId(), 'content' => 'Which day?',
+			'to' => [ACore::CONTEXT_PUBLIC], 'endTime' => '2026-12-01T12:00:00Z',
+			'oneOf' => [
+				['type' => 'Note', 'name' => 'Friday', 'replies' => ['totalItems' => 3]],
+				['type' => 'Note', 'name' => 'Saturday', 'replies' => ['totalItems' => 4]],
+			],
+		]]]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::once())->method('save')->with(self::callback(static function (Stream $post): bool {
+			self::assertInstanceOf(\OCA\Social\Model\ActivityPub\Object\Question::class, $post);
+			self::assertSame([['title' => 'Friday', 'votes_count' => 3], ['title' => 'Saturday', 'votes_count' => 4]], $post->getOptions());
+
+			return true;
+		}));
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($actor));
+	}
+
 	public function testSyncRemoteTimelineRefreshesAnExistingGancioEventFromAnUpdateActivity(): void {
+		$this->useRealOutboxUpdateHandler();
 		$gancio = $this->remoteActor('https://events.example/@events');
 		$eventId = 'https://events.example/federation/events/42';
 		$existing = (new Note())
 			->setId($eventId)
+			->setAttributedTo($gancio->getId())
 			->setSubType('Event')
 			->setContent('<p>Old event details</p>');
 		$existing->setDetailArray(Details::EVENT, [
@@ -1840,18 +1961,21 @@ class StreamServiceTest extends TestCase {
 			]],
 		]);
 		$this->streamRequest->method('getStreamById')->with($eventId)->willReturn($existing);
-		$this->streamRequest->expects(self::once())->method('update')->with($existing);
-		$this->streamRequest->expects(self::once())->method('updateDetails')->with($existing, Details::EVENT);
+		$incoming = null;
+		$this->streamRequest->expects(self::once())->method('update')->willReturnCallback(static function (Stream $note) use (&$incoming): void {
+			$incoming = $note;
+		});
+		$this->streamRequest->expects(self::once())->method('updateDetails')->with(self::isInstanceOf(Note::class), Details::EVENT);
 
 		self::assertSame(1, $this->service->syncRemoteTimeline($gancio));
-		self::assertSame('<p>New event details</p>', $existing->getContent());
-		self::assertSame('2026-11-10T12:00:00Z', $existing->getUpdated());
+		self::assertSame('<p>New event details</p>', $incoming->getContent());
+		self::assertSame('2026-11-10T12:00:00Z', $incoming->getUpdated());
 		self::assertSame([
 			'name' => 'Updated community assembly',
 			'start_time' => '2026-11-15T17:00:00Z',
 			'end_time' => '2026-11-15T19:00:00Z',
 			'location' => 'New venue',
-		], $existing->getDetails(Details::EVENT));
+		], $incoming->getDetails(Details::EVENT));
 	}
 
 	public function testSyncRemoteTimelineRoutesRemotePostEditsThroughTheInboxUpdateHandler(): void {
