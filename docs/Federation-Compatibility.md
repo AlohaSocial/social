@@ -57,6 +57,18 @@ in `recordWithMedia`. Galleries accept up to ten images; the older images embed
 accepts four. Invalid or oversized lists are refused before upload descriptions
 are changed. An empty image/video alt text clears the previous description.
 
+### Editing reply targets
+
+`putRecord` can replace or remove a local post's `reply` reference. The update
+keeps its AT URI and uses the existing repository batch, including conditional
+`swapRecord` / `swapCommit` checks. Social updates its parent columns, conversation,
+reply approval state, source snapshot and both parents' reply counts. The new
+parent must be readable, permit replies and pass blocking and thread-gate checks.
+Public posts cannot be moved under a non-public parent, and ancestor walks reject
+cycles or chains deeper than 64 posts. A missing parent is not silently accepted.
+The published reference uses the mapped parent's current thread root; imported
+remote copies and third-party AppViews still need to process the update.
+
 ### Ordered profile links
 
 `app.bsky.actor.link` records can be created, replaced and deleted through the
@@ -73,9 +85,6 @@ taken-down and unsafe destinations. Link icons are not fetched for this view.
 
 ## Confirmed remaining gaps
 
-- Changing a post's reply target through ATProto `putRecord` is explicitly
-  refused. The shared conversation state must be updated atomically before
-  that replacement can be accepted.
 - General XRPC account activation/deactivation, deletion, email and password
   management are not all ordinary-session handlers. Migration has its own
   restricted activation/status flow; Nextcloud owns the account credentials.

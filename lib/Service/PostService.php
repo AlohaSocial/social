@@ -376,6 +376,46 @@ class PostService {
 		}
 	}
 
+	/** Apply the same permission checks as a new reply before changing a post. */
+	private function editReplyTarget(Stream $stream, Person $actor, string $replyTo): void {
+		if (!$stream instanceof Note || !$stream->isLocal()) {
+			throw new InvalidActionException('Only a local post reply target can be changed');
+		}
+		$parent = $this->replyParent((new Post($actor))->setReplyTo($replyTo));
+		if ($parent !== null) {
+			if (($stream->isPublic() && !$parent->isPublic())
+				|| self::visibilityOfReply($stream->getVisibility(), $parent) !== $stream->getVisibility()) {
+				throw new InvalidActionException('Changing the reply target cannot widen the parent audience');
+			}
+			$this->blockedBy()?->assertMayReply($actor, $parent);
+			$refusal = $this->threadgates()?->refusal($actor, $parent) ?? '';
+			if ($refusal === '') {
+				$refusal = $this->replyRules()?->refusal($parent, $actor->getId()) ?? '';
+			}
+			if ($refusal !== '') {
+				throw new InvalidActionException($refusal);
+			}
+			// Never attach a post to itself or to one of its descendants. Bound
+			// the walk, including malformed remote chains that already cycle.
+			$seen = [$stream->getId() => true];
+			$ancestor = $parent;
+			for ($depth = 0; ; $depth++) {
+				if ($depth >= 64 || isset($seen[$ancestor->getId()])) {
+					throw new InvalidActionException('The reply would create a cyclic or overly deep thread');
+				}
+				$seen[$ancestor->getId()] = true;
+				if ($ancestor->getInReplyTo() === '') {
+					break;
+				}
+				$ancestor = $this->streamService->getStreamById($ancestor->getInReplyTo(), true);
+			}
+		}
+		$stream->setInReplyTo('');
+		$stream->setReplyState('');
+		$stream->setConversation($parent === null ? '' : ($parent->getConversation() ?: $parent->getId()));
+		$this->streamService->replyTo($stream, $replyTo, $parent);
+	}
+
 	/**
 	 * @param ?string $language the language the client sent, null or empty to
 	 *                          keep the post's; a post that never had one gets
@@ -391,7 +431,7 @@ class PostService {
 		?string $language = null, array $mediaAttributes = [], ?array $event = null, bool $eventProvided = false,
 		?array $mediaIds = null, ?array $linkCard = null, bool $linkCardProvided = false,
 		bool $atprotoEmbedProvided = false, string $quotedId = '', ?array $atprotoRecordEmbed = null,
-		?array $atprotoSelfLabels = null,
+		?array $atprotoSelfLabels = null, ?string $replyTo = null,
 	): Stream {
 		$this->moderationService->assertNotSuspended($actor->getId());
 		$this->moderationService->assertNotMoved($actor);
@@ -408,6 +448,9 @@ class PostService {
 		// the revision recorded below is the version being replaced, so it has
 		// to be taken before any of the fields are overwritten
 		$original = clone $stream;
+		if ($replyTo !== null && $replyTo !== $stream->getInReplyTo()) {
+			$this->editReplyTarget($stream, $actor, $replyTo);
+		}
 		$oldQuotedId = $stream->getQuote();
 		$quotedAuthor = null;
 		// the tags first: they are what the markup below may link, and an edit
@@ -513,6 +556,10 @@ class PostService {
 		// Mention and inbox path, but no local delivery/timeline destination is
 		// recorded for the newly named account.
 		$this->streamService->updateStream($stream, true);
+		if ($original->getInReplyTo() !== $stream->getInReplyTo()) {
+			$this->streamService->recountReplies($original->getInReplyTo());
+			$this->streamService->recountReplies($stream->getInReplyTo());
+		}
 		if ($atprotoEmbedProvided && $oldQuotedId !== $quotedId) {
 			$this->streamService->recountQuotes($oldQuotedId);
 			$this->streamService->recountQuotes($quotedId);

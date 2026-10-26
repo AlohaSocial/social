@@ -1579,3 +1579,7 @@ Successful Mastodon-compatible responses are **not** wrapped: the client API con
 ## Numeric status identifiers
 
 Status `nid` values are exposed as decimal strings wherever the API carries IDs or pagination cursors. This preserves their exact value on 32-bit PHP, where generated IDs can be larger than `PHP_INT_MAX`; clients should keep IDs as strings and must not parse them through a fixed-width signed integer. Their numeric order is the timeline order, so `min_id`, `max_id`, and `since_id` continue to work as before.
+
+### ATProto post reply replacement
+
+`com.atproto.repo.putRecord` supports replacing or omitting `reply` on an existing local `app.bsky.feed.post`. Omission removes its parent; unchanged references preserve the existing relationship. Parent access, reply permissions, audience and cycle checks apply before persistence. The Social row and ATProto repository use the existing conditional-write transaction. See [federation compatibility](Federation-Compatibility.md#editing-reply-targets).

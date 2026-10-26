@@ -1094,6 +1094,59 @@ class PostServiceTest extends TestCase {
 	}
 
 	/** Whatever copied the post somewhere else has to show the new text. */
+	public function testMovingAReplyUpdatesItsParentAndRecountsBothThreads(): void {
+		$post = $this->storedNote();
+		$post->setInReplyTo('https://remote.example/posts/old');
+		$parent = $this->storedNote();
+		$parent->setId('https://remote.example/posts/new');
+		$parent->setAttributedTo('https://remote.example/@bob');
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->with($parent->getId(), true)->willReturn($parent);
+		$bob = new Person();
+		$bob->setId($parent->getAttributedTo());
+		$bob->setInbox('https://remote.example/inbox');
+		$this->cacheActorService->method('getFromId')->willReturn($bob);
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamRequest->expects(self::once())->method('update')->with(self::callback(
+			static fn (Stream $edited): bool => $edited->getInReplyTo() === $parent->getId()
+				&& $edited->getConversation() === $parent->getId()
+		), true);
+		$counts = [];
+		$this->streamRequest->expects(self::exactly(2))->method('recountReplies')
+			->willReturnCallback(static function (string $id) use (&$counts): void {
+				$counts[] = $id;
+			});
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: $parent->getId());
+
+		self::assertSame(['https://remote.example/posts/old', $parent->getId()], $counts);
+	}
+
+	public function testRemovingAReplyTargetClearsConversationAndApprovalState(): void {
+		$post = $this->storedNote();
+		$post->setInReplyTo('https://remote.example/posts/old');
+		$post->setConversation('old thread');
+		$post->setReplyState(Stream::REPLY_PENDING);
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->activityService->method('updateActivity')->willReturn('token');
+		$this->streamRequest->expects(self::once())->method('update')->with(self::callback(
+			static fn (Stream $edited): bool => $edited->getInReplyTo() === ''
+				&& $edited->getConversation() === '' && $edited->getReplyState() === ''
+		), true);
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: '');
+	}
+
+	public function testMovingAReplyBelowItselfIsRejectedBeforeWriting(): void {
+		$post = $this->storedNote();
+		$this->streamRequest->method('getStreamByNid')->willReturn($post);
+		$this->streamRequest->method('getStreamById')->willReturn($post);
+		$this->streamRequest->expects(self::never())->method('update');
+		$this->expectException(InvalidActionException::class);
+
+		$this->service->editPost(7, $this->actor(), 'new', replyTo: $post->getId());
+	}
+
 	public function testAnEditIsAnnouncedWithThePostAsEdited(): void {
 		$reloaded = $this->storedNote();
 		$reloaded->setContent('new');

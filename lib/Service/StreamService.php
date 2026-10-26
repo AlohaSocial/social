@@ -759,6 +759,11 @@ class StreamService {
 		$this->streamRequest->update($stream, $generateDest);
 	}
 
+	/** Refresh both parents after moving or removing a local reply. */
+	public function recountReplies(string $parentId): void {
+		$this->streamRequest->recountReplies($parentId);
+	}
+
 	/** Refresh the cached count on a post after a local quote was moved. */
 	public function recountQuotes(string $quotedId): void {
 		$this->streamRequest->recountQuotes($quotedId);

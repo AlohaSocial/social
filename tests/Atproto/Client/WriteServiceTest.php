@@ -838,6 +838,42 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame('at://' . self::DID . '/app.bsky.feed.post/3kvid', $answer['uri']);
 	}
 
+	public function testPutRecordCanChangeAndRemoveAReplyTarget(): void {
+		$old = ['$type' => RecordMapper::POST, 'text' => 'Before', 'createdAt' => '2026-10-08T10:00:00.000Z'];
+		$bytes = DagCbor::encode($old);
+		$stored = new StoredRecord(self::DID, RecordMapper::POST, '3jqfcqzm3fo2j', Cid::forDagCbor($bytes), $bytes, 'https://social.test/@alice/44', 0);
+		$this->records[] = $stored;
+		$post = new Note();
+		$post->setId($stored->localId)->setNid(44)->setAttributedTo($this->alice->getId());
+		$this->streams->method('getStreamById')->with($stored->localId)->willReturn($post);
+		$this->postStore->method('isKnown')->willReturn(true);
+		$parent = ['uri' => 'at://' . self::BOB . '/app.bsky.feed.post/3kbob', 'cid' => Cid::forRaw('parent')->toString()];
+		$reply = ['root' => $parent, 'parent' => $parent];
+		$targets = [];
+		$this->posts->expects(self::exactly(2))->method('editPost')->willReturnCallback(
+			function (...$args) use (&$targets, $post): Note {
+				$targets[] = $args[16];
+				return $post;
+			}
+		);
+		$this->publisher->method('editPost')->willReturnCallback(function () use ($old, $reply, $stored, &$targets): string {
+			$updated = $old;
+			if (count($targets) === 1) {
+				$updated['reply'] = $reply;
+			}
+			$bytes = DagCbor::encode($updated);
+			$this->records = [new StoredRecord(self::DID, RecordMapper::POST, $stored->rkey, Cid::forDagCbor($bytes), $bytes, $stored->localId, 0)];
+
+			return 'published';
+		});
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'rkey' => $stored->rkey, 'record' => $old + ['reply' => $reply]]);
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'rkey' => $stored->rkey, 'record' => $old]);
+
+		self::assertSame(['https://bsky.app/profile/' . self::BOB . '/post/3kbob', ''], $targets);
+	}
+
 	public function testUpdatingPostImagesReplacesTheSocialAttachmentsFromOwnedBlobs(): void {
 		$oldEmbed = ['$type' => 'app.bsky.embed.images', 'images' => []];
 		$old = [

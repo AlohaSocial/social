@@ -302,6 +302,8 @@ class StreamRequest extends StreamRequestBuilder {
 		// not carry our local transport metadata, so leave that column alone for
 		// ordinary rewrites instead of erasing it with an empty array.
 		if ($generateDest) {
+			$qb->set('in_reply_to', $qb->createNamedParameter($stream->getInReplyTo()));
+			$qb->set('in_reply_to_prim', $qb->createNamedParameter($qb->prim($stream->getInReplyTo())));
 			$qb->set('instances', $qb->createNamedParameter(
 				json_encode($stream->getInstancePaths(), JSON_UNESCAPED_SLASHES)
 			));

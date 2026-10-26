@@ -312,8 +312,7 @@ class WriteService {
 
 	/**
 	 * Replace the text, labels and supported picture/video embeds of a post
-	 * without changing its AT URI. Reply targets and record cards remain fixed:
-	 * Social must be able to represent their replacement before accepting it.
+	 * without changing its AT URI, including replacing or removing its reply target.
 	 *
 	 * @throws XrpcException
 	 */
@@ -336,8 +335,21 @@ class WriteService {
 		} catch (Throwable) {
 			throw XrpcException::invalidRequest('The post update contains an invalid reply');
 		}
+		$replyTo = null;
 		if ($currentReply !== $replacementReply) {
-			throw XrpcException::invalidRequest('Changing a post reply target is not supported yet');
+			$replyTo = '';
+			if (isset($record['reply'])) {
+				foreach (['root', 'parent'] as $part) {
+					$reference = $record['reply'][$part] ?? null;
+					$parsed = is_array($reference) && is_string($reference['uri'] ?? null)
+						? Syntax::parseAtUri($reference['uri']) : null;
+					if ($parsed === null || $parsed['collection'] !== RecordMapper::POST || $parsed['rkey'] === ''
+						|| !is_string($reference['cid'] ?? null) || !Cid::isValid($reference['cid'])) {
+						throw XrpcException::invalidRequest('Reply root and parent must be valid post references');
+					}
+				}
+				$replyTo = $this->knownPost($record['reply']['parent']['uri']);
+			}
 		}
 
 		$currentEmbed = is_array($currentRecord['embed'] ?? null) ? $currentRecord['embed'] : [];
@@ -434,9 +446,11 @@ class WriteService {
 			$updated = $this->posts->editPost(
 				$post->getNid(), $actor, $text, $spoilerText, $sensitive, $language,
 				[], null, false, $mediaIds, $linkCard, $linkCardProvided,
-				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed, $selfLabels
+				$atprotoEmbedProvided, $quotedId, $atprotoRecordEmbed, $selfLabels, $replyTo
 			);
 			$this->publisher->editPost($updated);
+		} catch (\OCA\Social\Exceptions\InvalidActionException|\OCA\Social\Exceptions\StreamNotFoundException $e) {
+			throw XrpcException::invalidRequest($e->getMessage());
 		} catch (Throwable $e) {
 			$this->logger->warning('AT Protocol post replacement failed', ['rkey' => $rkey, 'exception' => $e]);
 			throw new XrpcException(500, 'InternalServerError', 'The post update could not be committed');
