@@ -78,6 +78,7 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		'focalPoint' => ['@container' => '@list', '@id' => 'toot:focalPoint'],
 		'Emoji' => 'toot:Emoji',
 		'schema' => 'http://schema.org#',
+		'ical' => 'http://www.w3.org/2002/12/cal/ical#',
 		'PropertyValue' => 'schema:PropertyValue',
 		'value' => 'schema:value',
 		'ostatus' => 'http://ostatus.org#',

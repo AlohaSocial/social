@@ -3359,6 +3359,13 @@ OC.L10N.register(
     "Check again" : "Erneut prüfen",
     "Checking…" : "Wird geprüft…",
     "No posts are available here yet" : "Hier sind noch keine Beiträge verfügbar",
-    "This server has no posts to show for this profile." : "Dieser Server kann für dieses Profil derzeit keine Beiträge anzeigen."
+    "This server has no posts to show for this profile." : "Dieser Server kann für dieses Profil derzeit keine Beiträge anzeigen.",
+    "Event updated" : "Ereignis aktualisiert",
+    "Tentative" : "Vorläufig",
+    "Upcoming" : "Bevorstehend",
+    "Started" : "Begonnen",
+    "Ongoing" : "Laufend",
+    "Past" : "Vergangen",
+    "Adding a calendar copy does not confirm attendance or automatically synchronize changes." : "Eine Kalenderkopie bestätigt keine Teilnahme und synchronisiert Änderungen nicht automatisch."
 },
 "nplurals=2; plural=(n != 1);");

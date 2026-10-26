@@ -49,6 +49,7 @@ import { useSettingsStore } from '../store/settings.js'
  * @property {boolean} [keyboardShortcuts] - Whether the reader has the one-key shortcuts on (not on a public page)
  * @property {''|'show_all'|'default'|'hide_all'} [nsfwChoice] - What the reader chose for sensitive media; '' follows the instance (not on a public page)
  * @property {'show_all'|'default'|'hide_all'} [nsfwPolicy] - What happens to sensitive media for this reader (not on a public page)
+ * @property {string} [timeZone] - The reader's configured Nextcloud timezone; absent for guests
  * @property {boolean} public - False when the page is accessed by an authenticated user. True otherwise
  * @property {{quota: number, used: number}|null} [externalMedia] - A self-registered external user's media quota in MB (0 is none) and bytes used; null for everybody else
  * @property {boolean} [externalInvites] - Whether people may invite others to register on this server

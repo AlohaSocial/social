@@ -117,4 +117,25 @@ class ActivityPubEventTest extends TestCase {
 		$event = (new Note())->setId('https://example.org/events/1')->setSubType('Event');
 		self::assertNull(ActivityPubEvent::calendar($event, 1_800_000_000));
 	}
+	public function testCancellationAndUpdateSurviveCalendarExport(): void {
+		$event = (new Note())->setId('https://events.example/cancelled')->setSubType('Event');
+		$event->setUpdated('2026-10-26T09:00:00Z');
+		$event->setDetailArray(Details::EVENT, ActivityPubEvent::metadata([
+			'name' => 'Cancelled meetup',
+			'startTime' => '2026-11-01T12:00:00Z',
+			'ical:status' => 'CANCELLED',
+		]));
+		self::assertSame('cancelled', ActivityPubEvent::fromStream($event)['status']);
+		$calendar = ActivityPubEvent::calendar($event, 1_800_000_000);
+		self::assertStringContainsString('STATUS:CANCELLED', $calendar);
+		self::assertStringContainsString('LAST-MODIFIED:20261026T090000Z', $calendar);
+	}
+
+	public function testUnknownEventStatusIsDiscarded(): void {
+		foreach (['unknown', ['CANCELLED'], "CONFIRMED\r\nATTENDEE:bad"] as $status) {
+			self::assertArrayNotHasKey('status', ActivityPubEvent::metadata(['ical:status' => $status]));
+		}
+		self::assertSame('cancelled', ActivityPubEvent::metadata(['eventStatus' => 'https://schema.org/EventCancelled'])['status']);
+	}
+
 }

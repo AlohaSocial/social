@@ -18,17 +18,18 @@ use OCA\Social\Model\Details;
 final class ActivityPubEvent {
 	private const MAX_TEXT = 500;
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string} */
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string} */
 	public static function metadata(array $data): array {
 		return self::facts(
 			$data['name'] ?? '',
 			$data['startTime'] ?? null,
 			$data['endTime'] ?? null,
 			$data['location'] ?? null,
+			$data['ical:status'] ?? $data['http://www.w3.org/2002/12/cal/ical#status'] ?? $data['eventStatus'] ?? null,
 		);
 	}
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string}|null */
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string}|null */
 	public static function fromStream(Stream $stream): ?array {
 		if ($stream->getSubType() !== 'Event') {
 			return null;
@@ -40,6 +41,7 @@ final class ActivityPubEvent {
 			$event['start_time'] ?? null,
 			$event['end_time'] ?? null,
 			$event['location'] ?? null,
+			$event['status'] ?? null,
 		);
 	}
 
@@ -59,6 +61,13 @@ final class ActivityPubEvent {
 			'DTSTAMP:' . gmdate('Ymd\THis\Z', $now),
 			'DTSTART:' . self::calendarDate($event['start_time']),
 		];
+		if (isset($event['status'])) {
+			$lines[] = 'STATUS:' . strtoupper($event['status']);
+		}
+		$updated = self::date($stream->getUpdated());
+		if ($updated !== null) {
+			$lines[] = 'LAST-MODIFIED:' . self::calendarDate($updated);
+		}
 		if ($event['end_time'] !== null) {
 			$lines[] = 'DTEND:' . self::calendarDate($event['end_time']);
 		}
@@ -98,20 +107,35 @@ final class ActivityPubEvent {
 		return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
 	}
 
-	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string} */
-	private static function facts(mixed $name, mixed $start, mixed $end, mixed $location): array {
+	/** @return array{name: string, start_time: ?string, end_time: ?string, location: string, status?: string} */
+	private static function facts(mixed $name, mixed $start, mixed $end, mixed $location, mixed $status = null): array {
 		$start = self::date($start);
 		$end = self::date($end);
 		if ($start !== null && $end !== null && $end <= $start) {
 			$end = null;
 		}
 
-		return [
+		$result = [
 			'name' => self::plainText($name, 300),
 			'start_time' => $start,
 			'end_time' => $end,
 			'location' => self::location($location),
 		];
+		$statuses = [
+			'cancelled' => 'cancelled',
+			'confirmed' => 'confirmed',
+			'tentative' => 'tentative',
+			'https://schema.org/eventcancelled' => 'cancelled',
+			'http://schema.org/eventcancelled' => 'cancelled',
+			'https://schema.org/eventscheduled' => 'confirmed',
+			'http://schema.org/eventscheduled' => 'confirmed',
+		];
+		$normalized = is_string($status) ? ($statuses[strtolower(trim($status))] ?? null) : null;
+		if ($normalized !== null) {
+			$result['status'] = $normalized;
+		}
+
+		return $result;
 	}
 
 	private static function location(mixed $value): string {

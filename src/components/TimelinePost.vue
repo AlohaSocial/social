@@ -20,11 +20,7 @@
 			:isBoosted="isBoosted"
 			:isLiked="isLiked"
 			@open="getSinglePostTimeline" />
-		<TimelineEventCard
-			v-if="item.event"
-			:event="item.event"
-			:statusId="item.id"
-			:isPublic="serverData.public" />
+
 		<!-- who is in the picture, when the poster named anybody. Names rather
 		     than boxes drawn over the image: what is stored is a fact about the
 		     post, and a rectangle is a thing no client of this network draws -->
@@ -143,6 +139,13 @@
 				}) }}
 		</p>
 		<template v-if="mediaRevealed && !filterCovers">
+			<TimelineEventCard
+				v-if="item.event"
+				:event="item.event"
+				:statusId="item.id"
+				:originalUrl="item.url || item.uri || ''"
+				:updatedAt="item.edited_at || null"
+				:isPublic="serverData.public" />
 			<QuotedPost v-if="item.quote" :quote="item.quote" />
 			<Poll v-if="localPoll" :poll="localPoll" @update:poll="updatePoll" />
 			<PostAttachment
@@ -665,7 +668,7 @@ export default {
 
 		/** @return {boolean} anything a warning is supposed to cover */
 		hasMedia() {
-			return this.hasAttachments || this.localPoll !== null || this.showCard || this.hasQuote
+			return this.hasAttachments || this.localPoll !== null || this.showCard || this.hasQuote || Boolean(this.item.event)
 		},
 
 		/** @return {boolean} the post embeds another one, whatever came of it */
