@@ -35,3 +35,17 @@
          .optional(),
      /**
       * Amount of time (in ms) after which session IDs will be rotated
+
+--- a/node_modules/@atproto/jwk/dist/jwt.js
++++ b/node_modules/@atproto/jwk/dist/jwt.js
+@@ -83,8 +83,8 @@ export const htuSchema = z.string().superRefine((value, ctx) => {
+     }
+     catch (err) {
+         ctx.addIssue({
+-            code: z.ZodIssueCode.invalid_string,
+-            validation: 'url',
++            code: z.ZodIssueCode.custom,
++            message: 'Invalid URL',
+         });
+     }
+     return value;
