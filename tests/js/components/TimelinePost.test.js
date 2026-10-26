@@ -17,6 +17,8 @@ import { useInstanceStore } from '../../../src/store/instance.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
 import axios from '@nextcloud/axios'
 
+const timelinePostStyles = () => readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.scss'), 'utf8')
+
 // the toast service fetches `@nextcloud/dialogs` when it is first used, and
 // this file now has tests that reach it (mute and block from the post menu).
 // That import resolves after the test has ended, so vitest tears the
@@ -1125,7 +1127,7 @@ describe('TimelinePost', () => {
 		})
 
 		it('keeps the reply action at the outside edge without overhanging nested entries', () => {
-			const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+			const source = timelinePostStyles()
 
 			expect(source).toMatch(/\.post-action-group--reply\s*\{\s*margin-inline-start: auto;/)
 			expect(source).not.toContain('margin-inline-end: calc(var(--thread-depth')
@@ -1147,7 +1149,7 @@ describe('TimelinePost', () => {
 	 * counts: a control with a count beside it keeps a faint glyph.
 	 */
 	it('keeps a faint glyph at rest beside a count', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+		const source = timelinePostStyles()
 
 		expect(source).toMatch(/:deep\(\.button-vue__icon\) \{\s*opacity: var\(--post-action-rest, 0\);/)
 		expect(source).toMatch(/\.post-action-group:has\(\.post-action-count\) \{\s*--post-action-rest: \.38;/)
@@ -1155,7 +1157,7 @@ describe('TimelinePost', () => {
 
 	/** The button's padding stood between a glyph and its number, so the number read as the next control's. */
 	it('sets each count against its own glyph', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/components/TimelinePost.vue'), 'utf8')
+		const source = timelinePostStyles()
 
 		expect(source).toMatch(/\.post-action-group \{[^}]*\.post-action-count \{\s*margin-inline-start: -4px;\s*text-align: start;/)
 	})

@@ -75,7 +75,10 @@ class MoveOutboundTest extends TestCase {
 			$this->mastodon->await(fn (): ?bool => $this->mastodon->relationship($landingId)['following'] ? true : null, 90),
 			'Mastodon did not re-point its follower at the new account'
 		);
-		$this->assertFalse($this->mastodon->relationship($oldId)['following'], 'the old account is still followed');
+		$this->assertTrue(
+			$this->mastodon->awaitRelationship($oldId, 'following', false, 90),
+			'Mastodon did not remove the follower from the old account'
+		);
 	}
 
 	/** Sends whatever is waiting, here and now; cron is not a thing to wait for. */
