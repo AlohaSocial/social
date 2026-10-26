@@ -110,6 +110,23 @@ class PostMapperTest extends TestCase {
 		$this->assertArrayNotHasKey('quote', $note);
 	}
 
+	public function testPostRecordSelfLabelsAreRetainedAndAffectVisibilityAndWarnings(): void {
+		$view = $this->postView();
+		$view['record']['labels'] = [
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => '!no-unauthenticated'], ['val' => 'porn'], ['val' => 'custom-label']],
+		];
+
+		$note = (new PostMapper($this->resolver()))->note($view);
+
+		$this->assertSame(['https://bsky.app/profile/' . self::DID . '/followers'], $note['to'], 'the privacy self-label keeps the post out of public timelines');
+		$this->assertSame([], $note['cc']);
+		$this->assertTrue($note['sensitive']);
+		$this->assertSame('Porn, Custom label', $note['summary']);
+		$this->assertSame(['!no-unauthenticated', 'porn', 'custom-label'], $note['_atproto'][Details::ATPROTO_SELF_LABELS]);
+		$this->assertSame([], $note['_atproto']['label_sources'], 'self-labels are not attributed to a moderation labeler');
+	}
+
 	/**
 	 * The self-label asks apps not to show the account, or the post, to
 	 * people who are not logged in: the post is addressed to the author's
