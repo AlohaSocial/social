@@ -442,6 +442,21 @@ class PostStoreTest extends TestCase {
 		$this->assertTrue($this->store->storePost($this->postView()));
 	}
 
+	public function testImportedPostSelfLabelsSurviveOnTheStoredAtprotoDetails(): void {
+		$view = $this->postView();
+		$view['record']['labels'] = [
+			'$type' => 'com.atproto.label.defs#selfLabels',
+			'values' => [['val' => 'custom-label'], ['val' => 'graphic-media']],
+		];
+
+		$this->assertTrue($this->store->storePost($view));
+		$this->assertSame(
+			['custom-label', 'graphic-media'],
+			$this->imported[0]->getObject()->getDetails(PostMapper::DETAIL)[Details::ATPROTO_SELF_LABELS],
+			'the original labels remain available to RecordMapper when this post is republished'
+		);
+	}
+
 	public function testALimitedAuthorsPostsAreNotStored(): void {
 		$limited = $this->person(self::DID);
 		$limited->setDetailArray(ActorMapper::DETAIL, ['limited' => true]);
