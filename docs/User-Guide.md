@@ -359,9 +359,10 @@ direct import requires a signed-in Nextcloud session and a writable calendar.
 The calendar entry is a copy, not a live subscription. If Gancio later changes
 an event, Social updates the event in its timeline when it receives the
 ActivityPub update or reads the changed event from the followed account's
-outbox. An entry already imported into Calendar stays as it was. To import the
-changed details, delete the old entry in Calendar first and then import the
-event again from Social.
+outbox. Social also applies a Gancio `Delete` found in that outbox to the
+timeline copy. An entry already imported into Calendar stays as it was, even
+if the event is changed or deleted. To import changed details, delete the old
+entry in Calendar first and then import the event again from Social.
 
 ## Reading
 
