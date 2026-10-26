@@ -1075,11 +1075,18 @@ class StreamService {
 
 			$offset = max(0, $offset);
 			$batch = array_slice($items, $offset, self::SYNC_ITEM_LIMIT);
+			$remainingFetches = 6;
+			$consumed = 0;
 			foreach ($batch as $itemData) {
+				$resolved = null;
 				try {
-					// An OrderedCollection may list bare ids as well as objects,
-					// and everything below reads the entry as an array.
-					if (!is_array($itemData)) {
+					$resolved = $this->remoteOutboxPageReader->resolveEntry($actor, $itemData, $remainingFetches);
+					if ($resolved['deferred']) {
+						break;
+					}
+					$consumed++;
+					$itemData = $resolved['item'];
+					if ($itemData === null) {
 						continue;
 					}
 
@@ -1091,6 +1098,26 @@ class StreamService {
 						if ($activityActor !== $actor->getId()) {
 							continue;
 						}
+					}
+					if ($itemType === 'Announce') {
+						$activityActor = $itemData['actor'] ?? '';
+						$activityActor = is_array($activityActor) ? ($activityActor['id'] ?? '') : $activityActor;
+						if ($activityActor !== $actor->getId()) {
+							continue;
+						}
+						// Never trust foreign post content embedded by the booster.
+						// The Announce handler queues its object for origin verification.
+						$object = $itemData['object'] ?? '';
+						$itemData['object'] = is_array($object) ? ($object['id'] ?? '') : $object;
+						if (!is_string($itemData['object']) || $itemData['object'] === '') {
+							continue;
+						}
+						$announce = AP::instance()->getItemFromData($itemData, deferAttachmentDownloads: true);
+						$announce->setOrigin((string)parse_url($actor->getId(), PHP_URL_HOST), SignatureService::ORIGIN_REQUEST, time());
+						$announce->setActor($actor);
+						AP::instance()->getInterfaceForItem($announce)->processIncomingRequest($announce);
+						$synced++;
+						continue;
 					}
 					if ($itemType === 'Delete') {
 						// A fetched outbox is not an inbox delivery, but its Delete
@@ -1203,13 +1230,18 @@ class StreamService {
 					$synced++;
 					$this->logger->debug('[syncRemoteTimeline] Saved post', ['id' => $note->getId()]);
 				} catch (Throwable $e) {
+					// A failed reference still consumes this entry; the next profile
+					// refresh retries the first page without blocking other posts.
+					if (!isset($resolved)) {
+						$consumed++;
+					}
 					$this->logger->warning('[syncRemoteTimeline] Failed to process item', [
 						'error' => $e->getMessage(),
 					]);
 				}
 			}
 
-			$nextOffset = $offset + count($batch);
+			$nextOffset = $offset + $consumed;
 			if ($nextOffset < count($items)) {
 				$result['next'] = ['url' => $pageUrl, 'offset' => $nextOffset];
 			} elseif ($page['nextUrl'] !== '') {

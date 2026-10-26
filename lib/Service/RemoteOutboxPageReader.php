@@ -94,6 +94,63 @@ class RemoteOutboxPageReader {
 		return $result;
 	}
 
+	/**
+	 * Resolve collection references on the owner's server, never an embedded
+	 * boost's foreign object. The regular Announce cache worker fetches that
+	 * object from its own origin. A shared budget bounds one background page.
+	 *
+	 * @return array{item: ?array, deferred: bool}
+	 */
+	public function resolveEntry(Person $actor, mixed $entry, int &$remaining): array {
+		$result = $this->resolveReference($actor, $entry, $remaining);
+		$entry = $result['item'];
+		if ($entry === null) {
+			return $result;
+		}
+		if (in_array($entry['type'] ?? '', ['Create', 'Update'], true)
+			&& (is_string($entry['object'] ?? null)
+				|| (is_array($entry['object'] ?? null) && !isset($entry['object']['type'])))) {
+			$activityActor = $entry['actor'] ?? '';
+			$activityActor = is_array($activityActor) ? ($activityActor['id'] ?? '') : $activityActor;
+			if ($activityActor !== $actor->getId()) {
+				return ['item' => null, 'deferred' => false];
+			}
+			$object = $this->resolveReference($actor, $entry['object'], $remaining);
+			if ($object['item'] === null) {
+				return $object;
+			}
+			// Only objects, never recursively nested activity wrappers.
+			if (!in_array($object['item']['type'] ?? '', ['Note', 'Question', 'Article', 'Page', 'Audio', 'Video', 'Event'], true)) {
+				return ['item' => null, 'deferred' => false];
+			}
+			$entry['object'] = $object['item'];
+		}
+
+		return ['item' => $entry, 'deferred' => false];
+	}
+
+	/** @return array{item: ?array, deferred: bool} */
+	private function resolveReference(Person $actor, mixed $entry, int &$remaining): array {
+		$isReference = is_string($entry) || (is_array($entry)
+			&& (!isset($entry['type']) || $entry['type'] === 'Link'));
+		if ($isReference) {
+			$url = $this->collectionPageLink($entry);
+			if ($url === '' || !$this->isOutboxPageUrl($url, $actor->getId())) {
+				return ['item' => null, 'deferred' => false];
+			}
+			if ($remaining <= 0) {
+				return ['item' => null, 'deferred' => true];
+			}
+			$remaining--;
+			$entry = $this->curlService->retrieveObject($url, true, 3);
+			if (($entry['id'] ?? '') !== $url) {
+				return ['item' => null, 'deferred' => false];
+			}
+		}
+
+		return ['item' => is_array($entry) ? $entry : null, 'deferred' => false];
+	}
+
 	private function collectionPageLink(mixed $link): string {
 		if (is_string($link)) {
 			return trim($link);

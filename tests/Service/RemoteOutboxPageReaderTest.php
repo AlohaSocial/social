@@ -80,4 +80,43 @@ class RemoteOutboxPageReaderTest extends TestCase {
 		self::assertSame('', $reader->read($this->actor())['nextUrl']);
 		self::assertFalse($reader->read($this->actor())['success']);
 	}
+	public function testResolvesUriAndCreateObjectReferencesWithABoundedBudget(): void {
+		$url = 'https://remote.example/posts/1';
+		$note = ['id' => $url, 'type' => 'Note', 'attributedTo' => $this->actor()->getId()];
+		$curl = $this->createMock(CurlService::class);
+		$curl->expects(self::exactly(2))->method('retrieveObject')->with($url, true, 3)->willReturn($note);
+		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
+		$remaining = 2;
+
+		self::assertSame($note, $reader->resolveEntry($this->actor(), $url, $remaining)['item']);
+		$create = ['type' => 'Create', 'actor' => $this->actor()->getId(), 'object' => $url];
+		self::assertSame($note, $reader->resolveEntry($this->actor(), $create, $remaining)['item']['object']);
+		self::assertSame(0, $remaining);
+		self::assertTrue($reader->resolveEntry($this->actor(), $url, $remaining)['deferred']);
+	}
+
+	public function testReferencesCannotImportForeignOrSubstitutedObjects(): void {
+		$url = 'https://remote.example/posts/1';
+		$curl = $this->createMock(CurlService::class);
+		$curl->expects(self::once())->method('retrieveObject')->with($url, true, 3)
+			->willReturn(['id' => 'https://other.example/post', 'type' => 'Note']);
+		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
+		$remaining = 6;
+
+		foreach (['https://other.example/post', 'https://evil@remote.example/post', $url] as $reference) {
+			self::assertNull($reader->resolveEntry($this->actor(), $reference, $remaining)['item']);
+		}
+	}
+
+	public function testBoostObjectsAreLeftForTheOriginVerifiedCacheWorker(): void {
+		$curl = $this->createMock(CurlService::class);
+		$curl->expects(self::never())->method('retrieveObject');
+		$reader = new RemoteOutboxPageReader($curl, new NullLogger());
+		$remaining = 6;
+		$announce = ['type' => 'Announce', 'actor' => $this->actor()->getId(), 'object' => 'https://other.example/post'];
+
+		self::assertSame($announce, $reader->resolveEntry($this->actor(), $announce, $remaining)['item']);
+		self::assertSame(6, $remaining);
+	}
+
 }

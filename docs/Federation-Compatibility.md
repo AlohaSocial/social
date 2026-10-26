@@ -30,6 +30,8 @@ profile reads serve the cache and do not start arbitrary remote imports.
 | `Audio`, `Video` | The supported object mapping is reused; PeerTube metadata and streamed sources remain available. |
 | `Event` | Event facts are retained for the event card and Calendar import. |
 | `Update` | Existing posts use the inbox handler's author and edit-time checks. An update of a post not cached yet can import its current object. |
+| URI-only entries and `Create.object` / `Update.object` references | Same-origin objects are dereferenced with exact ID checks. Each background page has six reference requests with a three-second request timeout; exhaustion preserves the current entry in the continuation cursor. |
+| `Announce` | The outbox owner and activity origin are checked. The regular boost handler stores the boost and queues the referenced post for fetching from its own origin; embedded foreign content is not trusted. |
 | `Delete` | The outbox owner is checked before the normal idempotent deletion handler is called. |
 
 Collection `first` and `next` may be URI strings, reference objects, ActivityStreams
@@ -71,12 +73,6 @@ taken-down and unsafe destinations. Link icons are not fetched for this view.
 
 ## Confirmed remaining gaps
 
-- Outbox entries and `Create.object` references expressed only as remote URIs
-  are not dereferenced by this profile importer. Embedded objects work. A future
-  resolver needs a bounded network budget and retry cursor, rather than an
-  unbounded fetch per listed entry.
-- Outbox `Announce` activities are not imported by the profile pull; inbox
-  boosts and boosts already cached here are supported.
 - Changing a post's reply target through ATProto `putRecord` is explicitly
   refused. The shared conversation state must be updated atomically before
   that replacement can be accepted.
@@ -87,6 +83,8 @@ taken-down and unsafe destinations. Link icons are not fetched for this view.
 These gaps are distinct from an implemented endpoint returning a remote-service
 error. PDS, AppView, Chat, ActivityPub delivery and background jobs require their
 own failure evidence when diagnosing a live instance.
+
+Failed reference requests are isolated to their entry, so one unavailable post does not block the remaining page. A fresh profile refresh retries the first page; older failed references require revisiting their page. An HTTP success from the outbox is not proof that all referenced servers were reachable.
 
 Protocol references:
 [ActivityPub outboxes](https://www.w3.org/TR/activitypub/#outbox),

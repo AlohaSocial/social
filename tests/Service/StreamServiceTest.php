@@ -1450,6 +1450,49 @@ class StreamServiceTest extends TestCase {
 		$this->assertSame(0, $this->service->syncRemoteTimeline($bob));
 	}
 
+	public function testSyncRemoteTimelineResumesAtTheFirstReferenceBeyondItsNetworkBudget(): void {
+		$bob = $this->remoteActor();
+		$ids = array_map(static fn (int $i): string => 'https://remote.example/notes/' . $i, range(1, 7));
+		$this->curlService->expects(self::exactly(7))->method('retrieveObject')
+			->willReturnCallback(static fn (string $url): array => $url === $bob->getOutbox()
+				? ['orderedItems' => $ids]
+				: ['type' => 'Note', 'id' => $url, 'attributedTo' => $bob->getId(), 'to' => [ACore::CONTEXT_PUBLIC], 'content' => 'A remote post']);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::exactly(6))->method('save')->willReturn(true);
+
+		$result = $this->service->syncRemoteTimelinePage($bob);
+
+		self::assertSame(6, $result['synced']);
+		self::assertSame(['url' => $bob->getOutbox(), 'offset' => 6], $result['next']);
+	}
+
+	public function testSyncRemoteTimelineImportsBoostsThroughTheRealOriginCheckingHandler(): void {
+		$bob = $this->remoteActor();
+		$objectId = 'https://other.example/posts/42';
+		$announceData = ['id' => 'https://remote.example/activities/boost-42', 'type' => 'Announce',
+			'actor' => $bob->getId(), 'object' => ['id' => $objectId, 'type' => 'Note', 'content' => 'Untrusted embedded text'],
+			'to' => [ACore::CONTEXT_PUBLIC]];
+		$this->curlService->method('retrieveObject')->willReturn(['orderedItems' => [$announceData]]);
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->method('getAnnounceBy')->willThrowException(new StreamNotFoundException());
+		$this->streamRequest->expects(self::once())->method('save')->with(self::callback(
+			static fn (Stream $stream): bool => $stream->getType() === 'Announce'
+				&& $stream->getObjectId() === $objectId && $stream->getAttributedTo() === $bob->getId()
+		))->willReturn(true);
+		$queue = $this->createMock(\OCA\Social\Service\StreamQueueService::class);
+		$queue->expects(self::once())->method('generateStreamQueue');
+		$handler = new \OCA\Social\Interfaces\Object\AnnounceInterface($this->streamRequest,
+			$this->createStub(\OCA\Social\Db\ActionsRequest::class), $queue, $this->cacheActorService,
+			$this->createStub(\OCA\Social\Service\MiscService::class), $this->createStub(\OCA\Social\Service\NotificationService::class));
+		$ap = $this->getMockBuilder(AP::class)->disableOriginalConstructor()->onlyMethods(['getInterfaceForItem'])->getMock();
+		$ap->method('getInterfaceForItem')->willReturn($handler);
+		$this->configService->method('getCloudUrl')->willReturn(self::SOCIAL_URL);
+		$ap->configService = $this->configService;
+		AP::set($ap);
+
+		self::assertSame(1, $this->service->syncRemoteTimeline($bob));
+	}
+
 	public function testSyncRemoteTimelineFollowsFirstPageAndStoresUnknownNotes(): void {
 		$bob = $this->remoteActor();
 		$noteData = [
