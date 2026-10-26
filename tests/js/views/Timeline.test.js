@@ -234,7 +234,7 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'home', params: {} })
 		expect(timelineStore.type).toBe('home')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('home')
-		expect(wrapper.find('h2').exists()).toBe(false)
+		expect(wrapper.find('.info-card h2').text()).toBe('About this feed')
 	})
 
 	it('explains when For you has too few different posts to fill the feed', async () => {
@@ -739,7 +739,7 @@ describe('Timeline', () => {
 
 	it('explains how My Feed and For You differ', () => {
 		const home = mountTimeline()
-		expect(home.find('.timeline-scope-description').text())
+		expect(home.find('.timeline-scope-description p').text())
 			.toBe('My Feed shows posts from accounts you follow, in chronological order.')
 		home.unmount()
 
@@ -748,8 +748,23 @@ describe('Timeline', () => {
 			interests: { enabled: false, learning: false, recommendationsEnabled: true },
 		})
 		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description').text())
+		expect(forYou.find('.timeline-scope-description p').text())
 			.toBe('For You ranks eligible public posts using automatically learned interests, post content, freshness, followed accounts and discovery. Separately enabled activity learning can refine new sessions. It can include posts from beyond the accounts you follow.')
+	})
+
+	it('allows putting away feed explanations without hiding another feed context', async () => {
+		const home = mountTimeline()
+		await home.find('.timeline-scope-description button').trigger('click')
+		expect(home.find('.timeline-scope-description').exists()).toBe(false)
+		home.unmount()
+		const reopened = mountTimeline()
+		expect(reopened.find('.timeline-scope-description').exists()).toBe(false)
+		reopened.unmount()
+		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
+		const forYou = mountTimeline({ params: { type: 'interests' } })
+		expect(forYou.find('.timeline-scope-description').exists()).toBe(true)
+		forYou.unmount()
+		await flushPromises()
 	})
 
 	/**

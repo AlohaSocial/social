@@ -122,6 +122,21 @@ Recommendation feedback uses an icon-only menu with an accessible label, rather 
 intercept keys intended for buttons, links, forms or menus. Next waits for a new
 page when necessary and discards navigation after a scope/current-clip change.
 
+## Optional explanatory and activity cards
+
+Feed explanations and recommendation-coverage hints are localized cards with an
+explicit close action instead of permanent loose text. Closing remembers the
+reader's choice in this browser, separately for their Nextcloud account and card
+context; an unavailable browser store still permits closing for the current app
+session. Cards do not vanish while someone is reading them. Existing one-time
+learning notices and daily/weekly recap dismissal keep their established behavior.
+
+The profile posting-activity chart uses the same card, independently dismissible
+per viewed profile. This changes only the reader's presentation, not the profile
+owner's data. Explanations attached to recommended posts remain part of the feed
+snapshot; they are not temporary popups or timed hints. Error/retry notices remain
+operation states rather than educational cards.
+
 ## Completed stabilization
 
 - Author-only view counts are text on the post detail page. There is no eye icon
