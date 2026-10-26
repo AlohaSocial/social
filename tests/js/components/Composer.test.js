@@ -1490,7 +1490,7 @@ describe('Composer', () => {
 
 			await flushPromises()
 			expect(preview.props('preview')).toEqual({ file, data: media, failed: false })
-			expect(preview.find('img').attributes('src')).toBe(media.preview_url)
+			expect(preview.find('img').attributes('src')).toBe(media.url)
 		})
 
 		it('drops a preview again when it is deleted', async () => {
@@ -1611,7 +1611,7 @@ describe('Composer', () => {
 
 			const preview = wrapper.findComponent(PreviewGridItem)
 			expect(preview.props('preview')).toMatchObject({ path: beach, data: media, failed: false })
-			expect(preview.find('img').attributes('src')).toBe(media.preview_url)
+			expect(preview.find('img').attributes('src')).toBe(media.url)
 		})
 
 		it('sends a picked picture with the post, like any other attachment', async () => {
@@ -1634,8 +1634,9 @@ describe('Composer', () => {
 			await addFromFiles(wrapper)
 
 			const previews = wrapper.findAllComponents(PreviewGridItem)
-			expect(previews).toHaveLength(3)
-			expect(previews[1].find('.preview-item__failed').exists()).toBe(true)
+			expect(previews).toHaveLength(1)
+			await wrapper.find('[aria-label="Next attachment"]').trigger('click')
+			expect(wrapper.findComponent(PreviewGridItem).find('.preview-item__failed').exists()).toBe(true)
 
 			await setContent(wrapper, 'two of three')
 			await submitButton(wrapper).trigger('click')
@@ -1666,7 +1667,8 @@ describe('Composer', () => {
 			await addFromFiles(wrapper)
 
 			expect(pickedPaths(store)).toHaveLength(9)
-			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(10)
+			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+			expect(wrapper.find('.preview-grid__navigation').text()).toContain('1 of 10')
 		})
 
 		it('offers neither way of attaching once the post is full', async () => {
@@ -1732,7 +1734,8 @@ describe('Composer', () => {
 
 			await addFromFiles(wrapper)
 
-			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(2)
+			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+			expect(wrapper.find('.preview-grid__navigation').text()).toContain('1 of 2')
 		})
 	})
 

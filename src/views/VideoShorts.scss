@@ -7,7 +7,7 @@
 	flex-direction: column;
 	gap: 8px;
 	block-size: calc(
-		100vh - var(--header-height, 50px) - var(--body-container-margin, 8px)
+		100dvh - var(--header-height, 50px) - var(--body-container-margin, 8px)
 	);
 	inline-size: 100%;
 	min-block-size: 0;
@@ -16,27 +16,60 @@
 
 	&__header {
 		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+		padding: 8px 16px 0;
+	}
+
+	&__heading-row {
+		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		flex-wrap: wrap;
 		gap: 8px 16px;
-		padding: 8px 16px 0;
 	}
 
 	&__heading {
 		margin: 0;
-		color: var(--color-text-lighter);
-		font-size: 20px;
+		color: var(--color-main-text);
+		font-size: 22px;
 		font-weight: 700;
 	}
 
-	&__header-actions {
+
+	&__footer {
+		flex: 0 0 auto;
+		padding: 0 12px 8px;
+	}
+
+	&__controls {
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
+		justify-content: center;
 		flex-wrap: wrap;
-		gap: 8px 12px;
-		margin-inline-start: auto;
+		gap: 8px;
+	}
+
+	&__position {
+		min-inline-size: 5ch;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text-maxcontrast);
+	}
+
+	&__page-error {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 8px 16px;
+		margin-block-end: 8px;
+		padding: 8px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-large);
+		background: var(--color-background-dark);
+
+		p { margin: 0; }
 	}
 
 	&__track {
@@ -47,7 +80,7 @@
 		max-inline-size: 100%;
 		max-block-size: 100%;
 		min-block-size: 0;
-		margin: auto;
+		margin: 0 auto;
 		overflow-y: auto;
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-large, 12px);
@@ -83,6 +116,9 @@
 	/* Choose which videos fill the player. */
 	&__scopes {
 		display: flex;
+		flex-wrap: wrap;
+		width: fit-content;
+		max-width: 100%;
 		gap: 4px;
 		padding: 3px;
 		border-radius: var(--border-radius-pill, 999px);
@@ -134,6 +170,19 @@
 	block-size: 100%;
 	scroll-snap-align: start;
 	scroll-snap-stop: always;
+
+	&__playback-error {
+		position: absolute;
+		z-index: 4;
+		inset-inline: 16px;
+		inset-block-start: 35%;
+		padding: 16px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-large);
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		text-align: center;
+	}
 
 	&__video,
 	&__poster {
@@ -217,7 +266,14 @@
 		inset-inline-end: 16px;
 		z-index: 3;
 
-		:deep(button) {
+		width: 44px;
+		height: 44px;
+
+		:deep(.action-item__menutoggle) {
+			width: 44px;
+			height: 44px;
+			min-width: 44px;
+			padding: 0;
 			border-radius: 50%;
 			background: var(--social-on-dark-scrim);
 			color: var(--social-on-dark-text);
@@ -445,12 +501,6 @@
 		padding-inline: 12px;
 	}
 
-	.shorts__header-actions {
-		justify-content: flex-start;
-		gap: 8px;
-		margin-inline-start: 0;
-	}
-
 	.shorts__track {
 		border-radius: var(--border-radius-large, 12px) var(--border-radius-large, 12px) 0 0;
 	}
@@ -458,5 +508,11 @@
 	.shorts__scope {
 		padding-inline: 8px;
 		font-size: 12px;
+	}
+}
+
+@media (width < 1024px) {
+	.shorts__heading {
+		margin-inline-start: 36px;
 	}
 }

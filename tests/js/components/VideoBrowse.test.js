@@ -24,7 +24,7 @@ vi.mock('../../../src/services/videoProgress.js', async (original) => ({
 /** a link the keyboard can reach, as the router's own is */
 const RouterLinkStub = { name: 'RouterLink', props: ['to'], template: '<a href="#"><slot /></a>' }
 
-const UploadStub = { name: 'VideoUploadButton', template: '<button class="upload-stub" />' }
+const UploadStub = { name: 'MediaUploadButton', template: '<button class="upload-stub" />' }
 
 /**
  * @param {string} id the post's id
@@ -67,7 +67,7 @@ function mountBrowse(props = {}, { scope = 'home', public: isPublic = false, she
 		attachTo: document.body,
 		global: {
 			plugins: [pinia],
-			stubs: { RouterLink: RouterLinkStub, ActorAvatar: true, VideoUploadButton: UploadStub },
+			stubs: { RouterLink: RouterLinkStub, ActorAvatar: true, MediaUploadButton: UploadStub },
 		},
 	})
 }

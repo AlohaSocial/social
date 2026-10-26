@@ -55,9 +55,15 @@
 				@changed="onHashtagFollowChanged" />
 		</div>
 		<Composer
-			v-if="!settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos'].includes(type) && !timelineStore.composerDisplayStatus"
+			v-if="!settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos', 'photos'].includes(type) && !timelineStore.composerDisplayStatus"
 			oneLine
 			:listenForIntents="false" />
+
+		<MediaUploadButton
+			v-if="type === 'photos' && !settingsStore.getServerData.public && !timelineStore.composerDisplayStatus"
+			accept="image/*,video/*"
+			multiple
+			:label="t('social', 'Share photos or a video')" />
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
 
@@ -184,6 +190,7 @@ import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
+import MediaUploadButton from '../components/MediaUploadButton.vue'
 import TimelineList from './../components/TimelineList.vue'
 import DirectMessages from './../components/DirectMessages.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
@@ -240,6 +247,7 @@ export default {
 		ShortsBar,
 		WeeklyRecap,
 		TimelineList,
+		MediaUploadButton,
 		DirectMessages,
 		TimelineSwitcher,
 		IconBellCogOutline,

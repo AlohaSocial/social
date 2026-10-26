@@ -80,11 +80,47 @@ choice is remembered per account in browser storage; unavailable storage does no
 prevent switching. Changing the layout does not reset the feed scope, cursor or
 loaded post index. Profile Photos tabs retain their separate image-only grid.
 
+The Photos page uses a compact Share photos or a video picker instead of a plain
+text field. It reuses the Videos entry component and hands the selected files to
+the one existing modal composer, preserving drafts, alt text and publishing
+validation. Dismissing the picker does not open another editor.
+
 Both timeline presentations request the same visual feed: images, videos and
 animated images, including native PeerTube Video objects. Text-only, audio-only
 and document-only posts are excluded by the database **before pagination**. The
 ordinary timeline remains unrestricted. For You uses its existing combined visual
 media filter; legacy candidate and trend fallback queries follow the same rule.
+
+## Composer attachment gallery (FR-03 / FR-11)
+
+Attachments are reviewed one at a time with previous/next controls and an announced
+position. The description, filter and focal-point controls belong to the selected
+attachment. All files and descriptions remain in the existing composer state;
+changing slides does not replace the post text or lose an upload. Removal keeps a
+valid selected attachment. The full image source is used instead of a potentially
+cropped thumbnail. The preview frame follows decoded image dimensions within the
+modal height limit and uses contain, so portrait images are shown completely.
+Focal-point coordinates continue to use the full image frame. Original file and
+publishing crop settings are unchanged. Published media-first posts now page from
+two attachments onwards as well. Their gallery indicators paint small circular
+markers inside explicit 24px targets, rather than letting Nextcloud's global
+button minimum stretch them into large bars. Previous/next arrows keep 44px touch
+targets; the compact counter and keyboard navigation remain available.
+
+## Shorts playback (FR-11 / FR-13)
+
+The existing one-player stack remains shared across scopes, with native scroll
+snap, sound preference and learning consent intact. Standard Nextcloud controls
+below the player now expose previous, play/pause and next, plus the current
+position/loading state. Their space is reserved in the responsive player sizing,
+including dynamic mobile viewport height. The same controls work for held
+24-hour pictures. Opening creation holds the current picture/video.
+
+Paging failures retain the current clip and expose retry outside the video frame;
+player network/decoding failures offer a separate retry without removing the post.
+Recommendation feedback uses an icon-only menu with an accessible label, rather than a wide named button over the video. A public reader is not offered a creation action. Keyboard shortcuts no longer
+intercept keys intended for buttons, links, forms or menus. Next waits for a new
+page when necessary and discards navigation after a scope/current-clip change.
 
 ## Completed stabilization
 

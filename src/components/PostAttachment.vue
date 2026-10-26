@@ -4,7 +4,7 @@
 -->
 <template>
 	<div class="post-attachments">
-		<!-- three pictures and up are a set, not a stack of thumbnails: they are
+		<!-- multiple pictures are a set, not a stack of thumbnails: they are
 		     paged through one at a time instead of shrunk until nothing in them
 		     can be made out -->
 		<GalleryCarousel
@@ -22,7 +22,7 @@
 				:index="index"
 				:total="media.length"
 				:ratio="mosaicRatio"
-				:fit="media.length === 1 ? 'contain' : 'cover'"
+				fit="contain"
 				:interactive="to === null"
 				@open="openMedia(index)" />
 		</div>
@@ -148,7 +148,7 @@ import { useServerData } from '../composables/useServerData.js'
 const MEDIA_TRANSITION = 'social-media'
 
 /** from here on the set is paged through rather than laid out side by side */
-const CAROUSEL_FROM = 3
+const CAROUSEL_FROM = 2
 
 export default {
 	name: 'PostAttachment',
@@ -270,20 +270,9 @@ export default {
 			return this.mediaFirst && this.media.length >= CAROUSEL_FROM
 		},
 
-		/**
-		 * @return {number} the shape of a mosaic tile. A lone picture keeps its
-		 * own; a pair is squared off, because two tiles of different heights
-		 * beside one another read as two posts.
-		 *
-		 * A lone picture is drawn `contain` to go with it, so that the one
-		 * case where the frame and the media can still disagree -- an
-		 * attachment that reported no dimensions at all, and so was given
-		 * `DEFAULT_RATIO` -- letterboxes rather than crops. Tiles stay `cover`:
-		 * their square is deliberate, and a square drawn `contain` is a
-		 * picture floating in a grey box.
-		 */
+		/** @return {number} the lone attachment's natural ratio, with a safe fallback */
 		mosaicRatio() {
-			return this.media.length === 1 ? ratioOf(this.media[0], DEFAULT_RATIO) : 1
+			return ratioOf(this.media[0], DEFAULT_RATIO)
 		},
 
 		/** @return {import('../types/Mastodon.js').MediaAttachment[]} */
@@ -477,10 +466,6 @@ export default {
 	gap: 4px;
 	margin-block: 12px 10px;
 	grid-template-columns: 1fr;
-
-	&--2 {
-		grid-template-columns: 1fr 1fr;
-	}
 
 	:deep(.photo) {
 		max-height: 70vh;
