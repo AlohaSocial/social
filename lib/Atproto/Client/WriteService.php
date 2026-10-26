@@ -622,6 +622,65 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$rkey = (string)($body['rkey'] ?? '');
+		if (!Syntax::isNsid($collection) || !Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('deleteRecord needs a valid collection and record key');
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$swapRecords = [];
+		if (array_key_exists('swapRecord', $body)) {
+			$swapRecord = $body['swapRecord'];
+			if (!is_string($swapRecord) || !Cid::isValid($swapRecord)) {
+				throw XrpcException::invalidRequest('swapRecord must be a valid record CID');
+			}
+			$swapRecords[$collection . '/' . $rkey] = $swapRecord;
+		}
+		$hasConditionalWrite = $swapCommit !== null || $swapRecords !== [];
+		$ownsBatch = !$this->repositories->batchActive();
+		if (!$ownsBatch && $hasConditionalWrite) {
+			throw XrpcException::invalidRequest('Conditional deleteRecord checks cannot be nested inside another repository batch');
+		}
+		if ($ownsBatch) {
+			try {
+				$this->repositories->beginBatch(
+					$session->identity->did,
+					$this->identities->signingKey($session->identity),
+					$swapCommit,
+					$swapRecords,
+				);
+			} catch (InvalidSwapException $e) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			$this->activities->beginDeferredDeliveries();
+		}
+		try {
+			$result = $this->deleteInBatch($session, $collection, $rkey);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
+			}
+
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
+				$this->repositories->rollbackBatch();
+			}
+			if ($e instanceof XrpcException) {
+				throw $e;
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** @return array{commit: array} */
+	private function deleteInBatch(ClientSession $session, string $collection, string $rkey): array {
 		$record = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
 		if ($record === null) {
 			// already gone: what the app asked for is the case

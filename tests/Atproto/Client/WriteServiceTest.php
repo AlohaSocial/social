@@ -300,8 +300,8 @@ class WriteServiceTest extends TestCase {
 
 	public function testAListAndItsMembersAreKeptAsTheAppWroteThem(): void {
 		$this->keepWrites();
-		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), null, []);
-		$this->repositories->expects($this->once())->method('commitBatch');
+		$this->repositories->expects($this->exactly(2))->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->exactly(2))->method('commitBatch');
 		$list = ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'];
 
 		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.list', 'record' => $list]);
@@ -1080,12 +1080,58 @@ class WriteServiceTest extends TestCase {
 		$post->setId('https://social.test/@alice/1');
 		$post->setAttributedTo($this->alice->getId());
 		$this->records[] = $this->record(RecordMapper::POST, '3kmine', $post->getId());
+		$this->repositories->expects($this->exactly(2))->method('beginBatch')->with(self::DID, $this->anything(), null, []);
+		$this->repositories->expects($this->exactly(2))->method('commitBatch');
 		$this->streams->method('getStreamById')->with($post->getId())->willReturn($post);
 		$this->streams->expects($this->once())->method('deleteLocalItem')->with($post);
 		$this->publisher->expects($this->once())->method('deletePost')->with($post->getId());
 
 		$this->assertSame(['commit' => ['cid' => 'bafyreicommit', 'rev' => '3kzrev']], $this->writes->delete($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => '3kmine']));
 		$this->assertSame(['cid' => 'bafyreicommit', 'rev' => '3kzrev'], $this->writes->delete($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST, 'rkey' => '3kgone'])['commit'], 'already gone is done');
+	}
+
+	public function testDeleteRecordRejectsAStaleRecordCidBeforeDeletingTheSocialPost(): void {
+		$expected = Cid::forRaw('the record the client read')->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(
+			self::DID,
+			$this->anything(),
+			null,
+			[RecordMapper::POST . '/3kmine' => $expected],
+		)->willThrowException(new InvalidSwapException('The record changed'));
+		$this->streams->expects($this->never())->method('deleteLocalItem');
+		$this->publisher->expects($this->never())->method('deletePost');
+
+		try {
+			$this->writes->delete($this->session, [
+				'repo' => self::DID,
+				'collection' => RecordMapper::POST,
+				'rkey' => '3kmine',
+				'swapRecord' => $expected,
+			]);
+			$this->fail('a stale swapRecord must reject the delete');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
+	}
+
+	public function testDeleteRecordRejectsAStaleCommitCidBeforeDeletingTheSocialPost(): void {
+		$expected = Cid::forRaw('the commit the client read')->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), $expected, [])
+			->willThrowException(new InvalidSwapException('The repository changed'));
+		$this->streams->expects($this->never())->method('deleteLocalItem');
+		$this->publisher->expects($this->never())->method('deletePost');
+
+		try {
+			$this->writes->delete($this->session, [
+				'repo' => self::DID,
+				'collection' => RecordMapper::POST,
+				'rkey' => '3kmine',
+				'swapCommit' => $expected,
+			]);
+			$this->fail('a stale swapCommit must reject the delete');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
 	}
 
 	public function testLinksTheAppShortenedAreWholeAgainAndBrokenFacetsAreIgnored(): void {
