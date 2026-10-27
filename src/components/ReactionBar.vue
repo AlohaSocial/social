@@ -14,7 +14,13 @@
 			:aria-pressed="reaction.me ? 'true' : 'false'"
 			:aria-label="labelFor(reaction)"
 			@click.stop="toggle(reaction.name)">
-			<span class="reaction__emoji" aria-hidden="true">{{ reaction.name }}</span>
+			<img
+				v-if="reaction.url"
+				class="reaction__emoji-image"
+				:src="reaction.url"
+				alt=""
+				aria-hidden="true">
+			<span v-else class="reaction__emoji" aria-hidden="true">{{ reaction.name }}</span>
 			<span class="reaction__count" aria-hidden="true">{{ reaction.count }}</span>
 		</button>
 
@@ -260,6 +266,12 @@ export default {
 	   whatever it is sitting in */
 	font-style: normal;
 	font-weight: normal;
+}
+
+.reaction__emoji-image {
+	width: 16px;
+	height: 16px;
+	object-fit: contain;
 }
 
 .reaction__count {

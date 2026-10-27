@@ -26,6 +26,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 class ReactionSummaryService {
 	public function __construct(
 		private ReactionsRequest $reactionsRequest,
+		private EmojiService $emojiService,
 	) {
 	}
 
@@ -38,10 +39,10 @@ class ReactionSummaryService {
 	 * equal.
 	 *
 	 * @param string $viewerId the reader's actor id, or '' for anonymous
-	 * @return list<array{name: string, count: int, me: bool}>
+	 * @return list<array{name: string, count: int, me: bool, url?: string}>
 	 */
 	public function summaryOf(string $postId, string $viewerId = ''): array {
-		return self::summarise($this->reactionsRequest->getByObjectId($postId), $viewerId);
+		return $this->addLocalEmojiUrls(self::summarise($this->reactionsRequest->getByObjectId($postId), $viewerId));
 	}
 
 	/**
@@ -83,7 +84,7 @@ class ReactionSummaryService {
 	 *
 	 * @param string[] $postIds
 	 * @param string $viewerId the reader's actor id, or '' for anonymous
-	 * @return array<string, list<array{name: string, count: int, me: bool}>> keyed by post id
+	 * @return array<string, list<array{name: string, count: int, me: bool, url?: string}>> keyed by post id
 	 */
 	public function summaryOfMany(array $postIds, string $viewerId = ''): array {
 		$byPrim = $this->reactionsRequest->getByObjectIds($postIds);
@@ -92,11 +93,33 @@ class ReactionSummaryService {
 		foreach ($postIds as $postId) {
 			$reactions = $byPrim[md5($postId)] ?? [];
 			if ($reactions !== []) {
-				$summaries[$postId] = self::summarise($reactions, $viewerId);
+				$summaries[$postId] = $this->addLocalEmojiUrls(self::summarise($reactions, $viewerId));
 			}
 		}
 
 		return $summaries;
+	}
+
+	/**
+	 * Only an emoji this instance owns gets an image URL. Remote custom emoji
+	 * remain labels, so displaying a reaction never contacts its source server.
+	 *
+	 * @param list<array{name: string, count: int, me: bool}> $summary
+	 * @return list<array{name: string, count: int, me: bool, url?: string}>
+	 */
+	private function addLocalEmojiUrls(array $summary): array {
+		foreach ($summary as &$reaction) {
+			if (preg_match('/^:([a-z0-9_]{2,64}):$/iD', $reaction['name'], $match) !== 1) {
+				continue;
+			}
+			$emoji = $this->emojiService->byShortcode($match[1]);
+			if ($emoji !== null && $emoji->getUrl() !== '') {
+				$reaction['url'] = $emoji->getUrl();
+			}
+		}
+		unset($reaction);
+
+		return $summary;
 	}
 
 	/**

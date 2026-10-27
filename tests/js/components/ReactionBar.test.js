@@ -56,6 +56,20 @@ describe('ReactionBar', () => {
 		expect(chips[0].find('.reaction__count').text()).toBe('2')
 	})
 
+	it('renders a locally served custom emoji image when the server provides one', () => {
+		const wrapper = mountBar({ modelValue: [{
+			name: ':aloha:',
+			count: 2,
+			me: false,
+			url: '/apps/social/emoji/aloha',
+		}] })
+		const image = wrapper.find('.reaction__emoji-image')
+
+		expect(image.attributes('src')).toBe('/apps/social/emoji/aloha')
+		expect(image.attributes('aria-hidden')).toBe('true')
+		expect(wrapper.find('.reaction__emoji').exists()).toBe(false)
+	})
+
 	it('marks the ones the reader chose', () => {
 		const wrapper = mountBar({ modelValue: bar })
 		const chips = wrapper.findAll('.reaction:not(.reaction--add)')

@@ -15,7 +15,7 @@
 			{{ t('social', 'Loading …') }}
 		</p>
 		<template v-else>
-			<dl class="bluesky-settings__identity">
+			<dl class="bluesky-settings__identity bluesky-settings__identity--main">
 				<div class="bluesky-settings__identity-row">
 					<dt>{{ t('social', 'Handle') }}</dt>
 					<dd>
@@ -415,17 +415,19 @@
 						</li>
 					</ul>
 					<div class="bluesky-settings__app-password-create">
-						<NcTextField
-							v-model="appPasswordName"
-							class="bluesky-settings__app-password-field"
-							:label="t('social', 'Name of the new app password')"
-							:placeholder="t('social', 'The app it is for')"
-							:error="appPasswordNameError !== null"
-							maxlength="64"
-							:showTrailingButton="false"
-							@update:modelValue="appPasswordNameError = null"
-							@keydown.enter.prevent="createAppPassword" />
-						<ServerError v-if="appPasswordNameError" :error="appPasswordNameError" />
+						<div class="bluesky-settings__app-password-input">
+							<NcTextField
+								v-model="appPasswordName"
+								class="bluesky-settings__app-password-field"
+								:label="t('social', 'Name of the new app password')"
+								:placeholder="t('social', 'The app it is for')"
+								:error="appPasswordNameError !== null"
+								maxlength="64"
+								:showTrailingButton="false"
+								@update:modelValue="appPasswordNameError = null"
+								@keydown.enter.prevent="createAppPassword" />
+							<ServerError v-if="appPasswordNameError" :error="appPasswordNameError" />
+						</div>
 						<!-- Bluesky's own privileged app passwords: only an app
 						     signed in with one reaches the direct messages -->
 						<NcCheckboxRadioSwitch v-model="appPasswordPrivileged" class="bluesky-settings__app-password-privileged">
@@ -1186,29 +1188,42 @@ export default {
 .bluesky-settings {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	max-width: 420px;
+	gap: 0;
+	min-width: 0;
+	width: 100%;
+	max-width: 800px;
 
 	&__hint {
-		margin: 4px 0 0;
+		max-width: 68ch;
+		margin: 6px 0 0;
 		color: var(--color-text-maxcontrast);
 		font-size: 13px;
+		line-height: 1.5;
 	}
 
 	&__identity {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 6px;
 		margin: 0;
 	}
 
+	&__identity--main {
+		padding: 12px 16px;
+		margin-bottom: 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--border-radius-large);
+		background: var(--color-background-hover);
+	}
+
 	&__identity-row {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(96px, 140px) minmax(0, 1fr);
 		align-items: center;
-		gap: 8px;
+		gap: 8px 12px;
+		min-width: 0;
 
 		dt {
-			flex: 0 0 56px;
 			color: var(--color-text-maxcontrast);
 			font-size: 13px;
 		}
@@ -1216,10 +1231,21 @@ export default {
 		dd {
 			display: flex;
 			align-items: center;
-			gap: 2px;
+			justify-content: space-between;
+			gap: 8px;
 			min-width: 0;
 			margin: 0;
 		}
+	}
+
+	&__identity-row + &__identity-row {
+		padding-top: 6px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	&__switch {
+		align-self: flex-start;
+		margin-block: 4px;
 	}
 
 	&__code {
@@ -1233,10 +1259,6 @@ export default {
 		margin-top: 8px;
 	}
 
-	&__control {
-		margin-top: 12px;
-	}
-
 	&__control-keys {
 		margin: 4px 0;
 		padding-inline-start: 24px;
@@ -1244,18 +1266,16 @@ export default {
 		overflow-wrap: anywhere;
 	}
 
-	&__archive {
-		margin-top: 12px;
-	}
-
-	&__recovery {
-		margin-top: 4px;
-	}
-
+	&__recovery,
+	&__control,
+	&__archive,
 	&__custom-handle,
+	&__pds-sign-in,
 	&__app-passwords,
 	&__oauth-sessions {
-		margin-top: 12px;
+		padding-top: 16px;
+		border-top: 1px solid var(--color-border);
+		margin-top: 8px;
 	}
 
 	&__custom-handle-current {
@@ -1265,6 +1285,7 @@ export default {
 
 	&__custom-handle-field {
 		margin-top: 8px;
+		width: 100%;
 	}
 
 	&__custom-handle-steps {
@@ -1319,9 +1340,14 @@ export default {
 
 	&__app-password,
 	&__oauth-session {
-		padding: 8px 12px;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 3px;
+		padding: 12px 14px;
 		border: 1px solid var(--color-border);
 		border-radius: var(--border-radius-element, 8px);
+		background: var(--color-background-hover);
 	}
 
 	&__app-password-name {
@@ -1354,20 +1380,37 @@ export default {
 	}
 
 	&__app-password-create {
-		display: flex;
-		align-items: flex-end;
-		gap: 8px;
-		margin-top: 8px;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: end;
+		gap: 12px;
+		margin-top: 16px;
 	}
 
 	&__app-password-field {
-		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	&__app-password-input {
+		grid-column: 1;
+		min-width: 0;
+	}
+
+	&__app-password-privileged {
+		align-self: center;
+		grid-column: 1;
+	}
+
+	&__app-password-create > :last-child {
+		grid-column: 2;
+		grid-row: 1 / span 2;
 	}
 
 	&__title {
-		margin: 0;
-		font-size: 15px;
-		font-weight: bold;
+		margin: 0 0 8px;
+		font-size: 16px;
+		font-weight: 600;
+		line-height: 1.4;
 	}
 
 	&__phrase {
@@ -1378,6 +1421,40 @@ export default {
 		font-size: 16px;
 		line-height: 1.8;
 		user-select: all;
+	}
+
+	@media (max-width: 640px) {
+		&__identity--main {
+			padding: 10px 12px;
+		}
+
+		&__identity-row {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 4px;
+
+			dt {
+				grid-column: auto;
+			}
+
+			dd {
+				justify-content: flex-start;
+			}
+		}
+
+		&__app-password-create {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		&__app-password-field {
+			grid-column: 1;
+			width: 100%;
+		}
+
+		&__app-password-create > :last-child {
+			grid-column: 1;
+			grid-row: auto;
+			justify-self: start;
+		}
 	}
 }
 </style>
