@@ -142,7 +142,11 @@
 	}
 
 	&__scope {
-		padding: 5px 10px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-block-size: 44px;
+		padding: 5px 12px;
 		border-radius: var(--border-radius-pill, 999px);
 		color: var(--color-text-lighter);
 		font-size: 13px;
@@ -233,8 +237,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		inline-size: 40px;
-		block-size: 40px;
+		inline-size: 44px;
+		block-size: 44px;
 		border: none;
 		border-radius: 50%;
 		background: var(--social-on-dark-scrim);
@@ -295,7 +299,8 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		min-inline-size: 40px;
+		min-inline-size: 44px;
+		min-block-size: 44px;
 		padding: 8px 0 6px;
 		border: none;
 		border-radius: 20px;
@@ -380,19 +385,30 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-inline-size: 0;
 		color: inherit;
 		text-decoration: none;
 	}
 
 	&__avatar {
+		flex: 0 0 36px;
 		inline-size: 36px;
 		block-size: 36px;
 		border-radius: 50%;
 	}
 
 	&__names {
+		min-inline-size: 0;
+		max-inline-size: 100%;
 		display: flex;
 		flex-direction: column;
+	}
+
+	&__name,
+	&__handle {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	&__name {
@@ -406,12 +422,56 @@
 
 	&__text {
 		margin: 0;
+		overflow-wrap: anywhere;
+		white-space: pre-line;
 		/* a caption is a caption, not the post: three lines and the rest is
 		   behind Open the post */
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+	}
+
+	&__text--expanded {
+		display: block;
+		padding: 8px;
+		border-radius: var(--border-radius);
+		background: var(--social-on-dark-ground);
+		color: var(--social-on-dark-text);
+		max-block-size: min(28dvh, 240px);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		pointer-events: auto;
+
+		&:focus-visible {
+			outline: 2px solid var(--social-on-dark-text);
+			outline-offset: 2px;
+		}
+	}
+
+	&__caption-toggle {
+		align-self: flex-start;
+		min-block-size: 44px;
+		padding: 4px 12px;
+		border: 1px solid var(--social-on-dark-text-muted);
+		border-radius: var(--border-radius-pill);
+		background: var(--social-on-dark-scrim-heavy);
+		color: var(--social-on-dark-text);
+		font: inherit;
+		cursor: pointer;
+		pointer-events: auto;
+
+		&:hover,
+		&:focus,
+		&:active {
+			background: var(--social-on-dark-scrim-heavy);
+			color: var(--social-on-dark-text);
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--social-on-dark-text);
+			outline-offset: 2px;
+		}
 	}
 
 	&__reason {
@@ -487,6 +547,7 @@
 		color: Highlight;
 	}
 
+	.short__caption-toggle,
 	.short__caption,
 	.shorts__empty {
 		border-block-start: 1px solid CanvasText;

@@ -140,6 +140,13 @@ Recommendation feedback uses an icon-only menu with an accessible label, rather 
 intercept keys intended for buttons, links, forms or menus. Next waits for a new
 page when necessary and discards navigation after a scope/current-clip change.
 
+Long descriptions can be expanded inside the current slide, in a bounded,
+keyboard-scrollable text area. Opening the description pauses playback; closing
+it does not resume unexpectedly. Changing to another short resets the expander.
+The existing Open the post link remains available for the complete post.
+Long display names/handles truncate within the author row rather than covering
+controls. Scope links, sound and like controls have at least 44 px touch targets.
+
 ## Optional explanatory and activity cards
 
 Feed explanations and recommendation-coverage hints are localized cards with an

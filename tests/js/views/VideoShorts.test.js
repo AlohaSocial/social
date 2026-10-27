@@ -112,6 +112,36 @@ describe('VideoShorts', () => {
 		HTMLMediaElement.prototype.pause = vi.fn()
 	})
 
+	it('expands long descriptions without resuming playback and resets on another short', async () => {
+		const { wrapper } = await mountShorts([video('2', { content: '<p>' + 'Long caption '.repeat(35) + '</p>' }), video('1')])
+		const toggle = wrapper.find('.short__caption-toggle')
+		expect(toggle.attributes('aria-expanded')).toBe('false')
+		const pause = wrapper.find('video').element.pause
+		await toggle.trigger('click')
+		expect(toggle.attributes('aria-expanded')).toBe('true')
+		expect(wrapper.find('.short__text--expanded').attributes('tabindex')).toBe('0')
+		expect(pause).toHaveBeenCalled()
+		const next = vi.spyOn(wrapper.vm, 'nextShort')
+		await wrapper.find('.short__text--expanded').trigger('keydown', { key: 'ArrowDown' })
+		expect(next).not.toHaveBeenCalled()
+		const play = wrapper.find('video').element.play
+		play.mockClear()
+		await toggle.trigger('click')
+		expect(play).not.toHaveBeenCalled()
+		await toggle.trigger('click')
+		wrapper.vm.playing = 1
+		await flushPromises()
+		expect(wrapper.vm.expandedCaption).toBe('')
+	})
+
+	it('does not offer a redundant expander for short captions and ignores inactive slides', async () => {
+		const { wrapper } = await mountShorts()
+		expect(wrapper.find('.short__caption-toggle').exists()).toBe(false)
+		expect(wrapper.vm.canExpandCaption('one\ntwo\nthree')).toBe(true)
+		wrapper.vm.toggleCaption(wrapper.vm.shorts[1])
+		expect(wrapper.vm.expandedCaption).toBe('')
+	})
+
 	it('fits the player frame to the decoded video dimensions', async () => {
 		const { wrapper } = await mountShorts([video('1')])
 		wrapper.vm.availableWidth = 1000
