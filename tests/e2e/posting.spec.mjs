@@ -119,15 +119,17 @@ test.describe('posting, and acting on a post', () => {
 
 		await openApp(page, `/@${OTHER_USER}/${parent.id}`)
 		await postWith(page, question).getByRole('button', { name: 'Reply', exact: true }).click()
-		// on the post's own page the reply is written in place, addressed to
-		// the author before a word is typed
+		// The common modal receives the reply context before its lazy editor loads.
 		const composer = page.locator('.new-post').filter({ hasText: `@${OTHER_USER}` }).first()
 		await expect(composer).toBeVisible()
 		// pressing Reply puts the caret in the box, after the mention
 		await expect(composer.locator('.message')).toBeFocused()
 		await page.keyboard.type(answer)
 		await composer.getByRole('button', { name: /^(Post|Reply)(?! as)/ }).click()
-		await expect(composer).toBeHidden()
+		// The reply box remains on the post page as a cleared one-line entry
+		// point; only the expanded modal closes after a successful submission.
+		await expect(page.locator('.modal-composer')).toBeHidden()
+		await expect(page.locator('.main-post__under .new-post .message')).toBeEmpty()
 
 		// the thread as anybody opening the post gets it
 		await page.reload()

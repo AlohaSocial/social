@@ -134,9 +134,17 @@ function rememberCelebrated() {
  * @property {{identity: string, timeline: string[], parentsTimeline: string[], removedFrom: object, fetchedAt?: number}[]} remembered the lists lately visited
  * @property {boolean} restored whether the list was put back rather than loaded
  * @property {Object<string, true>} filled the lists that have shown a post this session, by identity
+ * @property {Record<string, Record<string, object|null>>} recommendationReasons explanation snapshots by feed and status
  * @property {Record<string, string|null>} recommendationCursors opaque continuation cursors for ranked For You timelines, by identity
  * @property {Record<string, {state: string, known_eligible: number|null, returned: number, remote_refresh_queued: boolean}>} recommendationCoverage ranked-feed coverage, by identity
- * @property {boolean} composerDisplayStatus whether the composer is open
+ * @property {boolean} timelinePageFilling whether the current page can grow
+ * @property {boolean} profilePageFilling whether profile content is pending
+ * @property {boolean} remoteProfilePageFilling whether an outbox import is pending
+ * @property {string} profileSyncState pending, failed, stalled, idle or unknown
+ * @property {number|null} backgroundRefetchTimer scheduled background check
+ * @property {number} backgroundRefetchGeneration rejects checks from a previous view
+ * @property {boolean} composerDisplayStatus whether the full composer is open
+ * @property {boolean} composerSubmitting whether a composer is currently publishing
  * @property {string} searchQuery what is being searched for
  * @property {boolean} firstPostCelebration whether the celebration is on screen
  * @property {boolean} firstPostCelebrated whether this session has celebrated already
@@ -153,6 +161,36 @@ function rememberCelebrated() {
  */
 
 /**
+ * @param {TimelineState} state the active timeline
+ * @param {string} status safe UI state, never a raw remote exception
+ */
+function stopProfileRefresh(state, status) {
+	state.profileSyncState = status
+	if (state.backgroundRefetchTimer !== null) {
+		window.clearTimeout(state.backgroundRefetchTimer)
+		state.backgroundRefetchTimer = null
+	}
+	state.profilePageFilling = false
+	state.remoteProfilePageFilling = false
+	state.timelinePageFilling = false
+}
+
+/**
+ * @param {TimelineState} state the active timeline
+ * @param {Record<string, unknown>} headers safe response metadata
+ */
+function readProfileSyncState(state, headers = {}) {
+	const raw = headers['x-social-profile-sync-state']
+	const explicit = typeof raw === 'string' ? raw : ''
+	state.profileSyncState = state.type === 'account'
+		? (['pending', 'failed', 'idle'].includes(explicit) ? explicit : (state.profilePageFilling ? 'pending' : ''))
+		: ''
+	if (state.profileSyncState === 'failed') {
+		stopProfileRefresh(state, 'failed')
+	}
+}
+
+/**
  * Indexes a status, and the status it boosts, by id.
  *
  * A notification is indexed under its own id like anything else a list
@@ -166,13 +204,6 @@ function indexStatus(state, status) {
 	if (status === undefined || status === null || status.id === undefined) {
 		return
 	}
-	// A timeline page carries this reader-specific explanation; the ordinary
-	// status endpoint used to refresh counts and reactions does not. Keep the
-	// explanation with the indexed copy until a new timeline page replaces it.
-	const existing = state.statuses[status.id]
-	if (status.interest === undefined && existing?.interest !== undefined) {
-		status = { ...status, interest: existing.interest }
-	}
 
 	// assigned in place: replacing the whole map per status meant fifteen full
 	// copies of every status in memory for each page that loaded
@@ -183,6 +214,21 @@ function indexStatus(state, status) {
 	if (status.type !== undefined) {
 		indexStatus(state, status.status)
 	}
+}
+
+/**
+ * Snapshot metadata belongs to a feed, not the shared status that polling updates.
+ *
+ * @param {TimelineState} state the store state
+ * @param {IndexedEntry[]} items a page returned by the personalized timeline
+ * @param {string} identity the feed that requested the page
+ */
+function rememberRecommendationReasons(state, items, identity) {
+	const reasons = { ...(state.recommendationReasons[identity] ?? {}) }
+	for (const status of items) {
+		reasons[status.id] = status.interest ?? null
+	}
+	state.recommendationReasons[identity] = reasons
 }
 
 /**
@@ -229,6 +275,24 @@ function pruneIndex(state) {
 		}
 	}
 	state.statuses = statuses
+	const currentIdentity = JSON.stringify([state.type, state.account, state.params])
+	const keptFeeds = new Map([[currentIdentity, state.timeline]])
+	for (const held of state.remembered) {
+		keptFeeds.set(held.identity, held.timeline)
+	}
+	for (const identity of Object.keys(state.recommendationReasons)) {
+		const ids = keptFeeds.get(identity)
+		if (!ids) {
+			delete state.recommendationReasons[identity]
+			continue
+		}
+		const visible = new Set(ids)
+		for (const id of Object.keys(state.recommendationReasons[identity])) {
+			if (!visible.has(id)) {
+				delete state.recommendationReasons[identity][id]
+			}
+		}
+	}
 }
 
 /** @param {{type: string, params?: {scope?: string}}} state timeline identity @return {boolean} */
@@ -370,11 +434,11 @@ function timelineRequest(list, params) {
 					? 'apps/social/api/v1/recommendations/timeline'
 					: 'apps/social/api/v1/timelines/interests')
 				if (usesV4RecommendationTimeline(list)) {
-					params.media = list.type === 'shorts' ? 'shorts' : list.type
+					params.media = list.type === 'photos' ? 'media' : list.type
 				} else if (list.type === 'shorts') {
 					params.only_short = true
 				} else {
-					params.media = list.type
+					params.media = list.type === 'photos' ? 'media' : list.type
 				}
 				break
 			}
@@ -386,14 +450,8 @@ function timelineRequest(list, params) {
 			} else {
 				url = generateUrl('apps/social/api/v1/timelines/home')
 			}
-			// `only_media` is Mastodon's question — "does this post
-			// carry an attachment" — and it is not the question either
-			// of these pages is asking: it answered Photos with every
-			// video on the instance and Videos with every photograph.
-			// `media_type` and `only_video` are this app's own and name
-			// the kind. All of them go out, so a server that has not
-			// been upgraded yet still answers with media rather than
-			// with everything.
+			// Photos is a visual feed: images and videos, never audio-only or text.
+			// Filter before pagination; only_media stays for older server compatibility.
 			params.only_media = true
 			if (list.type === 'shorts') {
 				// the Shorts stack: a single video of at most three minutes,
@@ -403,9 +461,8 @@ function timelineRequest(list, params) {
 			} else if (list.type === 'videos') {
 				params.only_video = true
 			} else {
-				// a post carrying both is `mixed` and is in both pages,
-				// which is what `limitToMediaType()` already says
-				params.media_type = 'image'
+				// Includes mixed and native PeerTube video objects.
+				params.media_type = 'visual'
 			}
 			break
 		case 'link':
@@ -470,6 +527,9 @@ export const useTimelineStore = defineStore('timeline', {
 		profilePageFilling: false,
 		/** Whether a remote ActivityPub outbox is being imported in the background. */
 		remoteProfilePageFilling: false,
+		profileSyncState: '',
+		backgroundRefetchTimer: null,
+		backgroundRefetchGeneration: 0,
 		/** Whether the last page read for the current timeline had no visible posts. */
 		timelinePageEmpty: false,
 		timeline: [],
@@ -518,6 +578,8 @@ export const useTimelineStore = defineStore('timeline', {
 		remembered: [],
 		/** Opaque ranked-feed cursors keyed by the same identity as the timeline lists. */
 		recommendationCursors: {},
+		/** Explanations survive ordinary status refreshes, only within their feed. */
+		recommendationReasons: {},
 		/** Coverage returned by the ranked-feed endpoint, keyed by timeline identity. */
 		recommendationCoverage: {},
 		/**
@@ -538,6 +600,7 @@ export const useTimelineStore = defineStore('timeline', {
 		 */
 		filled: {},
 		composerDisplayStatus: false,
+		composerSubmitting: false,
 		searchQuery: '',
 		/** whether the one-time first-post celebration is on screen right now */
 		firstPostCelebration: false,
@@ -589,6 +652,17 @@ export const useTimelineStore = defineStore('timeline', {
 		getComposerDisplayStatus(state) {
 			return state.composerDisplayStatus
 		},
+		/**
+		 * @param {TimelineState} state the store state
+		 * @return {(statusId: string) => object|null|undefined} the active snapshot's explanation
+		 */
+		getRecommendationReason(state) {
+			const identity = JSON.stringify([state.type, state.account, state.params])
+			return (statusId) => isPersonalizedFeed(state)
+				? state.recommendationReasons[identity]?.[statusId]
+				: undefined
+		},
+
 		/**
 		 * The timeline, newest first.
 		 *
@@ -777,6 +851,9 @@ export const useTimelineStore = defineStore('timeline', {
 		},
 		addToTimeline(data) {
 			if (Array.isArray(data)) {
+				if (isPersonalizedFeed(this)) {
+					rememberRecommendationReasons(this, data, this.getTimelineIdentity)
+				}
 				data.forEach((status) => indexStatus(this, status))
 				appendNew(this.timeline, data)
 			} else {
@@ -867,6 +944,8 @@ export const useTimelineStore = defineStore('timeline', {
 			this.statuses = statuses
 		},
 		resetTimeline() {
+			this.cancelBackgroundRefetch()
+			delete this.recommendationReasons[this.getTimelineIdentity]
 			if (usesV4RecommendationTimeline(this)) {
 				const cursors = { ...this.recommendationCursors }
 				delete cursors[this.getTimelineIdentity]
@@ -882,6 +961,7 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timelinePageFilling = false
 			this.profilePageFilling = false
 			this.remoteProfilePageFilling = false
+			this.profileSyncState = ''
 			this.timelinePageEmpty = false
 			// the id lists used to be the only thing cleared, so `statuses` grew
 			// for the whole session: every page of every timeline ever opened.
@@ -1162,11 +1242,13 @@ export const useTimelineStore = defineStore('timeline', {
 			this.timelinePageFilling = false
 			this.profilePageFilling = false
 			this.remoteProfilePageFilling = false
+			this.profileSyncState = ''
 			this.timelinePageEmpty = false
 
 			// a page still on its way for the list being left would be dropped
 			// on arrival; cancelled, it costs the server nothing more either
 			abortRequests(left.identity)
+			this.cancelBackgroundRefetch()
 
 			const wanted = this.getTimelineIdentity
 			const held = this.remembered.find((entry) => entry.identity === wanted) ?? null
@@ -1244,6 +1326,10 @@ export const useTimelineStore = defineStore('timeline', {
 				this.recommendationCoverage = { ...this.recommendationCoverage, [identity]: data.coverage ?? null }
 			}
 
+			if (isPersonalizedFeed({ type, params })) {
+				delete this.recommendationReasons[identity]
+				rememberRecommendationReasons(this, items, identity)
+			}
 			items.forEach((status) => indexStatus(this, status))
 			const ids = []
 			appendNew(ids, items)
@@ -1474,12 +1560,13 @@ export const useTimelineStore = defineStore('timeline', {
 				logger.error('Failed to create a status', { error })
 			}
 		},
-		async postEdit({ status, content, spoiler_text, sensitive, event = undefined, media_attributes: mediaAttributes = [], media_ids: mediaIds = undefined }) {
+		async postEdit({ status, content, spoiler_text, sensitive, language = undefined, event = undefined, media_attributes: mediaAttributes = [], media_ids: mediaIds = undefined }) {
 			try {
 				const response = await axios.put(
 					generateUrl(`apps/social/api/v1/statuses/${status.id}`),
 					{
 						status: content,
+						...(language !== undefined ? { language } : {}),
 						spoiler_text,
 						sensitive,
 						...(mediaAttributes.length > 0 ? { media_attributes: mediaAttributes } : {}),
@@ -1812,6 +1899,7 @@ export const useTimelineStore = defineStore('timeline', {
 				this.timelinePageFilling = false
 				this.profilePageFilling = false
 				this.remoteProfilePageFilling = false
+				this.profileSyncState = ''
 				this.timelinePageEmpty = seeded.length === 0
 				this.addToTimeline(seeded)
 
@@ -1867,6 +1955,7 @@ export const useTimelineStore = defineStore('timeline', {
 				|| response.headers?.['x-social-thread-filling'] === '1'
 			this.profilePageFilling = response.headers?.['x-social-profile-filling'] === '1'
 			this.remoteProfilePageFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
+			readProfileSyncState(this, response.headers)
 			this.timelinePageEmpty = Array.isArray(timelineData)
 				? timelineData.length === 0
 				: this.type === 'single-post' && Array.isArray(timelineData?.descendants) && timelineData.descendants.length === 0
@@ -1877,7 +1966,7 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 			// more of it is being read from elsewhere: the rest of a
 			// conversation, or a hashtag's posts beyond this server
-			if (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1') {
+			if (this.profileSyncState !== 'failed' && (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')) {
 				this.refetchThreadLater(url, params, identity)
 			}
 
@@ -1911,6 +2000,19 @@ export const useTimelineStore = defineStore('timeline', {
 			}
 		},
 
+		/** Cancel the previous feed's scheduled check before replacing it. */
+		cancelBackgroundRefetch() {
+			this.backgroundRefetchGeneration++
+			if (this.backgroundRefetchTimer !== null) {
+				window.clearTimeout(this.backgroundRefetchTimer)
+				this.backgroundRefetchTimer = null
+			}
+		},
+
+		markProfileSyncFailed() {
+			stopProfileRefresh(this, 'failed')
+		},
+
 		/**
 		 * The rest of a page is being read from the servers it lives on: asked
 		 * for once more a little later, and what came in meanwhile added to
@@ -1921,39 +2023,53 @@ export const useTimelineStore = defineStore('timeline', {
 		 * @param {string} identity the timeline it belongs to
 		 * @param {number} attempt the retry number, starting at zero
 		 */
+
 		refetchThreadLater(url, params, identity, attempt = 0) {
+			if (this.backgroundRefetchTimer !== null) {
+				return
+			}
+			this.cancelBackgroundRefetch()
+			const generation = this.backgroundRefetchGeneration
 			const remoteProfileFill = this.remoteProfilePageFilling
 			const delay = remoteProfileFill
 				? (attempt < 3 ? PROFILE_REFETCH_MS : REMOTE_PROFILE_REFETCH_MS)
 				: this.profilePageFilling
 					? PROFILE_REFETCH_MS
 					: Math.min(THREAD_REFETCH_MS * (2 ** attempt), THREAD_REFETCH_MAX_MS)
-			setTimeout(async () => {
-				if (this.getTimelineIdentity !== identity) {
+			this.backgroundRefetchTimer = window.setTimeout(async () => {
+				this.backgroundRefetchTimer = null
+				if (this.getTimelineIdentity !== identity || this.backgroundRefetchGeneration !== generation) {
 					return
 				}
 				try {
 					// Each poll must reach the server afresh. Reusing a timeline URL
 					// can let its ETag short-circuit the count refresh as a 304.
 					const response = await axios.get(url, { params: { ...params, _social_refresh: Date.now() } })
-					if (this.getTimelineIdentity === identity) {
+					if (this.getTimelineIdentity === identity && this.backgroundRefetchGeneration === generation) {
 						this.timelinePageFilling = response.headers?.['x-social-filling'] === '1'
 							|| response.headers?.['x-social-thread-filling'] === '1'
 						this.profilePageFilling = response.headers?.['x-social-profile-filling'] === '1'
 						this.remoteProfilePageFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
+						readProfileSyncState(this, response.headers)
 						this.timelinePageEmpty = Array.isArray(response.data)
 							? response.data.length === 0
 							: this.type === 'single-post' && Array.isArray(response.data?.descendants) && response.data.descendants.length === 0
 						this.addToTimeline(response.data)
 						const remoteProfileFilling = response.headers?.['x-social-remote-profile-filling'] === '1'
 						const maxRefetches = remoteProfileFilling ? MAX_REMOTE_PROFILE_REFETCHES : MAX_THREAD_REFETCHES
-						if ((response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')
+						if (this.profileSyncState !== 'failed'
+							&& (response.headers?.['x-social-thread-filling'] === '1' || response.headers?.['x-social-filling'] === '1')
 							&& attempt + 1 < maxRefetches) {
 							this.refetchThreadLater(url, params, identity, attempt + 1)
+						} else if (this.profilePageFilling) {
+							stopProfileRefresh(this, 'stalled')
 						}
 					}
 				} catch (error) {
-					logger.debug('The rest of the conversation was not read again', { error })
+					if (this.getTimelineIdentity === identity && this.backgroundRefetchGeneration === generation && this.type === 'account') {
+						stopProfileRefresh(this, 'failed')
+					}
+					logger.debug('The background timeline refresh failed', { error })
 				}
 			}, delay)
 		},

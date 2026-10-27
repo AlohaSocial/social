@@ -48,27 +48,32 @@ describe('PreviewGrid', () => {
 		expect(wrapper.find('.preview-grid').exists()).toBe(true)
 	})
 
-	it('renders one item per attachment, keyed by the local preview URL', () => {
+	it('shows one attachment at a time and switches the associated description', async () => {
 		const miniatures = {
 			'blob:one': { file: file('one.png'), data: media('m1') },
 			'blob:two': { file: file('two.png'), data: media('m2') },
 		}
 		const wrapper = mountGrid(miniatures)
 
-		const items = wrapper.findAllComponents(PreviewGridItem)
-		expect(items).toHaveLength(2)
-		expect(items[0].props()).toEqual({ preview: miniatures['blob:one'], randomKey: 'blob:one' })
-		expect(items[1].props()).toEqual({ preview: miniatures['blob:two'], randomKey: 'blob:two' })
+		expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:one'], randomKey: 'blob:one', allowEffects: true })
+		await wrapper.find('[aria-label="Next attachment"]').trigger('click')
+		expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+		expect(wrapper.findComponent(PreviewGridItem).props()).toEqual({ preview: miniatures['blob:two'], randomKey: 'blob:two', allowEffects: true })
+		await wrapper.find('[aria-label="Previous attachment"]').trigger('click')
+		expect(wrapper.findComponent(PreviewGridItem).props('randomKey')).toBe('blob:one')
 	})
 
-	it('shows finished uploads as images and pending ones as a spinner', () => {
+	it('shows finished uploads as images and pending ones as a spinner', async () => {
 		const wrapper = mountGrid({
 			'blob:done': { file: file('done.png'), data: media('m1') },
 			'blob:pending': { file: file('pending.png'), data: null },
 		})
 
-		const [done, pending] = wrapper.findAllComponents(PreviewGridItem)
-		expect(done.find('img').attributes('src')).toBe('https://cloud.example.org/media/m1-small.png')
+		const done = wrapper.findComponent(PreviewGridItem)
+		expect(done.find('img').attributes('src')).toBe('https://cloud.example.org/media/m1.png')
+		await wrapper.vm.select(1)
+		const pending = wrapper.findComponent(PreviewGridItem)
 		expect(pending.find('img').exists()).toBe(false)
 		expect(pending.find('.loading-icon').exists()).toBe(true)
 	})
@@ -101,7 +106,7 @@ describe('PreviewGrid', () => {
 
 	it('gives a single picture the room a post built around it needs', async () => {
 		const wrapper = mountGrid({ 'blob:one': { file: file('one.png'), data: media('m1') } })
-		expect(wrapper.find('.preview-grid').classes()).toContain('preview-grid--single')
+		expect(wrapper.find('.preview-grid__navigation').exists()).toBe(false)
 
 		await wrapper.setProps({
 			miniatures: {
@@ -109,7 +114,7 @@ describe('PreviewGrid', () => {
 				'blob:two': { file: file('two.png'), data: media('m2') },
 			},
 		})
-		expect(wrapper.find('.preview-grid').classes()).not.toContain('preview-grid--single')
+		expect(wrapper.find('.preview-grid__navigation').exists()).toBe(true)
 	})
 
 	it('passes a description on to be saved when an item commits one', async () => {
@@ -139,7 +144,8 @@ describe('PreviewGrid', () => {
 			'blob:two': { file: file('two.png'), data: media('m2') },
 		})
 
-		await wrapper.findAllComponents(PreviewGridItem)[1].find('button').trigger('click')
+		await wrapper.vm.select(1)
+		await wrapper.findComponent(PreviewGridItem).find('button').trigger('click')
 
 		expect(wrapper.emitted('deleted')).toEqual([['blob:two']])
 	})
@@ -154,5 +160,16 @@ describe('PreviewGrid', () => {
 		const items = wrapper.findAllComponents(PreviewGridItem)
 		expect(items).toHaveLength(1)
 		expect(items[0].props('randomKey')).toBe('blob:two')
+	})
+	it('preserves attachment-specific descriptions across navigation and removal', async () => {
+		const one = { file: file('one.png'), data: media('m1'), description: 'First description' }
+		const two = { file: file('two.png'), data: media('m2'), description: 'Second description' }
+		const wrapper = mountGrid({ one, two })
+		expect(wrapper.find('textarea').element.value).toBe('First description')
+		await wrapper.vm.select(1)
+		expect(wrapper.find('textarea').element.value).toBe('Second description')
+		await wrapper.setProps({ miniatures: { two } })
+		expect(wrapper.find('textarea').element.value).toBe('Second description')
+		expect(wrapper.find('.preview-grid__navigation').exists()).toBe(false)
 	})
 })

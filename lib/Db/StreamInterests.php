@@ -108,7 +108,7 @@ trait StreamInterests {
 		} elseif ($media === 'shorts') {
 			$qb->limitToShort();
 		} elseif ($media === 'media') {
-			$qb->limitToMedia();
+			$qb->limitToVisualMedia();
 		}
 
 		$qb->joinCacheActors('ca', 's.attributed_to_prim');

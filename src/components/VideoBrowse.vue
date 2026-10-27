@@ -21,7 +21,7 @@
 					{{ chipLabel(chip) }}
 				</button>
 			</div>
-			<VideoUploadButton v-if="signedIn" />
+			<MediaUploadButton v-if="signedIn" />
 		</div>
 
 		<template v-for="section in sections" :key="section.key">
@@ -90,7 +90,7 @@ import { translate as t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { mapStores } from 'pinia'
 import VideoCard from './VideoCard.vue'
-import VideoUploadButton from './VideoUploadButton.vue'
+import MediaUploadButton from './MediaUploadButton.vue'
 import { loadUnfinished } from '../services/videoProgress.js'
 import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
@@ -159,7 +159,7 @@ export default {
 	components: {
 		NcButton,
 		VideoCard,
-		VideoUploadButton,
+		MediaUploadButton,
 	},
 
 	props: {

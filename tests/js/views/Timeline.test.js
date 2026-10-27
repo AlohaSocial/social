@@ -31,7 +31,7 @@ vi.hoisted(() => {
 
 const ComposerStub = {
 	name: 'Composer',
-	props: ['defaultVisibility', 'initialMention', 'offerShort'],
+	props: ['defaultVisibility', 'initialMention', 'offerShort', 'oneLine', 'listenForIntents'],
 	template: '<div class="composer-stub" />',
 }
 const OnThisDayStub = { name: 'OnThisDay', template: '<div class="on-this-day-stub" />' }
@@ -234,7 +234,7 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'home', params: {} })
 		expect(timelineStore.type).toBe('home')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('home')
-		expect(wrapper.find('h2').exists()).toBe(false)
+		expect(wrapper.find('.info-card h2').text()).toBe('About this feed')
 	})
 
 	it('explains when For you has too few different posts to fill the feed', async () => {
@@ -362,13 +362,13 @@ describe('Timeline', () => {
 		expect(timelineStore.changeTimelineType).toHaveBeenCalledWith({ type: 'tags', params: { tag: 'nextcloud' } })
 		expect(wrapper.find('h1').text()).toBe('#nextcloud')
 		expect(wrapper.findComponent(TimelineListStub).props('type')).toBe('tags')
-		expect(wrapper.findComponent(ComposerStub).exists()).toBe(true)
+		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
 	})
 
-	it('shows the composer on the home timeline without a preset visibility', () => {
+	it('offers a single line backed by the same composer on the home feed', () => {
 		const composer = mountTimeline().findComponent(ComposerStub)
-		expect(composer.exists()).toBe(true)
-		expect(composer.props('defaultVisibility')).toBeUndefined()
+		expect(composer.props('oneLine')).toBe('')
+		expect(composer.props('listenForIntents')).toBe(false)
 	})
 
 	it('uses the conversation interface instead of the ordinary timeline composer for direct messages', () => {
@@ -380,12 +380,15 @@ describe('Timeline', () => {
 	/** A feed of text is read in a narrower column; a grid of pictures keeps the wide one. */
 	it('reads a list in the narrow column and shows a grid in the wide one', () => {
 		expect(mountTimeline({ params: { type: 'home' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
-		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).not.toContain('social__wrapper--reading')
+		expect(mountTimeline({ params: { type: 'photos' } }).find('.social__wrapper').classes()).toContain('social__wrapper--reading')
 	})
 
-	it('offers the New short camera in the composer on the home feed only', () => {
-		expect(mountTimeline({ params: { type: 'home' } }).findComponent(ComposerStub).props('offerShort')).toBe(true)
-		expect(mountTimeline({ params: { type: 'timeline' } }).findComponent(ComposerStub).props('offerShort')).toBe(false)
+	it('unmounts the compact editor while the shared popup is open', async () => {
+		const wrapper = mountTimeline({ params: { type: 'home' } })
+		expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
+		timelineStore.setComposerDisplayStatus(true)
+		await nextTick()
+		expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 	})
 
 	it('hides the composer on the notifications timeline and titles it', () => {
@@ -614,8 +617,8 @@ describe('Timeline', () => {
 			const row = wrapper.find('.timeline-heading-row')
 			expect(row.find('h1').text()).toBe('#nextcloud')
 			expect(axios.get).toHaveBeenCalledWith('/index.php/apps/social/api/v1/tags/nextcloud')
-			expect(row.find('button').text()).toBe('Follow')
-			expect(row.find('button').attributes('aria-pressed')).toBe('false')
+			expect(wrapper.findComponent(HashtagFollowButton).find('button').text()).toBe('Follow')
+			expect(wrapper.findComponent(HashtagFollowButton).find('button').attributes('aria-pressed')).toBe('false')
 		})
 
 		it('says which hashtags are already followed', async () => {
@@ -736,7 +739,7 @@ describe('Timeline', () => {
 
 	it('explains how My Feed and For You differ', () => {
 		const home = mountTimeline()
-		expect(home.find('.timeline-scope-description').text())
+		expect(home.find('.timeline-scope-description p').text())
 			.toBe('My Feed shows posts from accounts you follow, in chronological order.')
 		home.unmount()
 
@@ -745,8 +748,23 @@ describe('Timeline', () => {
 			interests: { enabled: false, learning: false, recommendationsEnabled: true },
 		})
 		const forYou = mountTimeline({ params: { type: 'interests' } })
-		expect(forYou.find('.timeline-scope-description').text())
+		expect(forYou.find('.timeline-scope-description p').text())
 			.toBe('For You ranks eligible public posts using automatically learned interests, post content, freshness, followed accounts and discovery. Separately enabled activity learning can refine new sessions. It can include posts from beyond the accounts you follow.')
+	})
+
+	it('allows putting away feed explanations without hiding another feed context', async () => {
+		const home = mountTimeline()
+		await home.find('.timeline-scope-description button').trigger('click')
+		expect(home.find('.timeline-scope-description').exists()).toBe(false)
+		home.unmount()
+		const reopened = mountTimeline()
+		expect(reopened.find('.timeline-scope-description').exists()).toBe(false)
+		reopened.unmount()
+		useSettingsStore().setServerData({ public: false, interests: { recommendationsEnabled: true } })
+		const forYou = mountTimeline({ params: { type: 'interests' } })
+		expect(forYou.find('.timeline-scope-description').exists()).toBe(true)
+		forYou.unmount()
+		await flushPromises()
 	})
 
 	/**
@@ -1051,10 +1069,23 @@ describe('Timeline', () => {
 		// is a list; Photos and Videos are what they showed, which is a grid.
 		// These two pages were a list here and a grid on a profile, so the same
 		// picture was a row in one place and a tile in the other.
-		it.each(['photos'])('draws %s as a grid', (type) => {
+		it.each(['photos'])('draws %s as a media list by default', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
+			expect(wrapper.findComponent(TimelineListStub).props('display')).toBe('list')
+		})
+
+		it('switches Photos between the shared grid and media list without changing the feed', async () => {
+			const wrapper = mountTimeline({ params: { type: 'photos' } })
+			const store = useTimelineStore()
+			const before = store.getTimelineIdentity
+			await wrapper.vm.choosePhotoLayout('grid')
 			expect(wrapper.findComponent(TimelineListStub).props('display')).toBe('grid')
+			expect(store.getTimelineIdentity).toBe(before)
+			const reopened = mountTimeline({ params: { type: 'photos' } })
+			expect(reopened.findComponent(TimelineListStub).props('display')).toBe('grid')
+			await reopened.vm.choosePhotoLayout('list')
+			expect(reopened.findComponent(TimelineListStub).props('display')).toBe('list')
 		})
 
 		/** Videos is a video site's front page, with an upload button in place of the composer */
@@ -1066,12 +1097,20 @@ describe('Timeline', () => {
 			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
 		})
 
-		it.each(['photos', '', 'timeline'])('keeps %s off the video layout and keeps its composer', (type) => {
+		it.each(['', 'timeline'])('keeps %s off the video layout and offers the shared composer action', (type) => {
 			const wrapper = mountTimeline({ params: { type } })
 
 			expect(wrapper.findComponent(TimelineListStub).props('display')).not.toBe('videos')
 			expect(wrapper.find('.social__wrapper').classes()).not.toContain('social__wrapper--videos')
-			expect(wrapper.findComponent(ComposerStub).exists()).toBe(true)
+			expect(wrapper.findComponent(ComposerStub).props('oneLine')).toBe('')
+		})
+
+		it('offers a media-first entry on Photos instead of the text-only field', () => {
+			const wrapper = mountTimeline({ params: { type: 'photos' } })
+			expect(wrapper.findComponent(ComposerStub).exists()).toBe(false)
+			const upload = wrapper.findComponent({ name: 'MediaUploadButton' })
+			expect(upload.props('accept')).toBe('image/*,video/*')
+			expect(upload.props('multiple')).toBe(true)
 		})
 
 		it.each(['', 'timeline', 'federated', 'notifications'])('draws %s as a list', (type) => {

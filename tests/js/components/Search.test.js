@@ -38,7 +38,6 @@ const NcEmptyContentStub = {
 	template: '<div class="empty-stub"><span class="empty-name">{{ name }}</span><span class="empty-description">{{ description }}</span></div>',
 }
 const NcLoadingIconStub = { name: 'NcLoadingIcon', template: '<span class="loading-stub" />' }
-const ComposerStub = { name: 'Composer', template: '<div class="composer-stub" />' }
 
 const bob = { id: 'https://remote.example/users/bob', url: 'https://remote.example/users/bob', acct: 'bob@remote.example', username: 'bob', display_name: 'Bob' }
 const carol = { id: 'https://cloud.example.org/users/carol', url: 'https://cloud.example.org/users/carol', acct: 'carol', username: 'carol', display_name: 'Carol' }
@@ -82,7 +81,6 @@ function mountSearch(term, lookup = false) {
 				RouterLink: RouterLinkStub,
 				NcEmptyContent: NcEmptyContentStub,
 				NcLoadingIcon: NcLoadingIconStub,
-				Composer: ComposerStub,
 			},
 		},
 	})
@@ -186,18 +184,12 @@ describe('Search', () => {
 			expect(wrapper.findAllComponents(TimelineEntryStub).map((candidate) => candidate.props('item').id)).toEqual(['2'])
 		})
 
-		it('has a composer for Reply to reach', async () => {
-			// Reply emits `composer-reply` on the event bus, and the listener
-			// is registered in the Composer's mounted(): with none on the page
-			// pressing it did nothing whatsoever
+		it('does not mount a second composer in search results', async () => {
+			// The application-level composer handles replies from every view.
+			// Search must not mount a hidden duplicate of that shared entry point.
 			const wrapper = await found()
-			const composer = wrapper.findComponent(ComposerStub)
-			expect(composer.exists()).toBe(true)
-			expect(composer.element.style.display).toBe('none')
-
-			timelineStore.setComposerDisplayStatus(true)
-			await nextTick()
-			expect(composer.element.style.display).toBe('')
+			expect(wrapper.find('.composer-stub').exists()).toBe(false)
+			expect(wrapper.findComponent(TimelineEntryStub).exists()).toBe(true)
 		})
 	})
 

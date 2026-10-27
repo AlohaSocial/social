@@ -112,6 +112,36 @@ describe('VideoShorts', () => {
 		HTMLMediaElement.prototype.pause = vi.fn()
 	})
 
+	it('expands long descriptions without resuming playback and resets on another short', async () => {
+		const { wrapper } = await mountShorts([video('2', { content: '<p>' + 'Long caption '.repeat(35) + '</p>' }), video('1')])
+		const toggle = wrapper.find('.short__caption-toggle')
+		expect(toggle.attributes('aria-expanded')).toBe('false')
+		const pause = wrapper.find('video').element.pause
+		await toggle.trigger('click')
+		expect(toggle.attributes('aria-expanded')).toBe('true')
+		expect(wrapper.find('.short__text--expanded').attributes('tabindex')).toBe('0')
+		expect(pause).toHaveBeenCalled()
+		const next = vi.spyOn(wrapper.vm, 'nextShort')
+		await wrapper.find('.short__text--expanded').trigger('keydown', { key: 'ArrowDown' })
+		expect(next).not.toHaveBeenCalled()
+		const play = wrapper.find('video').element.play
+		play.mockClear()
+		await toggle.trigger('click')
+		expect(play).not.toHaveBeenCalled()
+		await toggle.trigger('click')
+		wrapper.vm.playing = 1
+		await flushPromises()
+		expect(wrapper.vm.expandedCaption).toBe('')
+	})
+
+	it('does not offer a redundant expander for short captions and ignores inactive slides', async () => {
+		const { wrapper } = await mountShorts()
+		expect(wrapper.find('.short__caption-toggle').exists()).toBe(false)
+		expect(wrapper.vm.canExpandCaption('one\ntwo\nthree')).toBe(true)
+		wrapper.vm.toggleCaption(wrapper.vm.shorts[1])
+		expect(wrapper.vm.expandedCaption).toBe('')
+	})
+
 	it('fits the player frame to the decoded video dimensions', async () => {
 		const { wrapper } = await mountShorts([video('1')])
 		wrapper.vm.availableWidth = 1000
@@ -695,6 +725,69 @@ describe('VideoShorts', () => {
 		})
 	})
 
+	describe('visible playback controls and recovery', () => {
+		it('keeps loaded shorts on a paging failure and offers a retry', async () => {
+			const { wrapper, store } = await mountShorts()
+			await wrapper.setData({ allLoaded: false })
+			store.fetchTimeline.mockRejectedValueOnce(new Error('Network unavailable'))
+			await wrapper.vm.load()
+			expect(wrapper.find('.shorts__page-error').text()).toContain('current short is still available')
+			expect(wrapper.vm.shorts).toHaveLength(2)
+			store.fetchTimeline.mockResolvedValueOnce([])
+			await wrapper.find('.shorts__page-error').findComponent({ name: 'NcButton' }).trigger('click')
+			await flushPromises()
+			expect(wrapper.find('.shorts__page-error').exists()).toBe(false)
+			expect(wrapper.vm.shorts).toHaveLength(2)
+		})
+
+		it('reflects actual play and pause events in the visible control', async () => {
+			const { wrapper } = await mountShorts()
+			await wrapper.find('video').trigger('play')
+			expect(wrapper.find('.shorts__controls [aria-label="Pause"]').exists()).toBe(true)
+			await wrapper.find('video').trigger('pause')
+			expect(wrapper.find('.shorts__controls [aria-label="Play"]').exists()).toBe(true)
+		})
+
+		it('does not hijack Space on an interactive Like button', async () => {
+			const { wrapper } = await mountShorts()
+			const toggle = vi.spyOn(wrapper.vm, 'togglePlay')
+			await wrapper.find('.short__like').trigger('keydown', { key: ' ' })
+			expect(toggle).not.toHaveBeenCalled()
+			await wrapper.find('.shorts__track').trigger('keydown', { key: ' ' })
+			expect(toggle).toHaveBeenCalledOnce()
+		})
+
+		it('loads the next page before navigating beyond the final available slide', async () => {
+			const { wrapper, store } = await mountShorts([video('2')])
+			await wrapper.setData({ allLoaded: false })
+			store.fetchTimeline.mockImplementationOnce(async () => {
+				store.addToTimeline([video('1')])
+				return [video('1')]
+			})
+			const scroll = vi.spyOn(wrapper.vm, 'scrollToSlide')
+			await wrapper.vm.nextShort()
+			expect(wrapper.vm.shorts).toHaveLength(2)
+			expect(scroll).toHaveBeenCalledWith(1)
+		})
+
+		it('shows a recoverable video failure without removing the post', async () => {
+			const { wrapper } = await mountShorts()
+			const player = wrapper.find('video')
+			player.element.load = vi.fn()
+			await player.trigger('error')
+			expect(wrapper.find('.short__playback-error').text()).toContain('could not be played')
+			await wrapper.vm.retryPlayback()
+			expect(player.element.load).toHaveBeenCalledOnce()
+			expect(wrapper.find('.short__playback-error').exists()).toBe(false)
+			expect(wrapper.vm.shorts).toHaveLength(2)
+		})
+
+		it('does not offer creation to a public reader', async () => {
+			const { wrapper } = await mountShorts([], { serverData: { public: true } })
+			expect(wrapper.find('.shorts__create').exists()).toBe(false)
+		})
+	})
+
 	/**
 	 * Shorts is its own entry in the sidebar, so the circle of people whose
 	 * videos these are is chosen here rather than carried over from the grid.
@@ -815,6 +908,18 @@ describe('VideoShorts', () => {
 
 			const reasons = wrapper.findAll('.short__reason').map((reason) => reason.text())
 			expect(reasons).toEqual(['Because you follow #skate', 'Trending here: #shorts'])
+		})
+
+		it('offers recommendation feedback through a compact icon menu', async () => {
+			const { wrapper } = await mountShorts([{ ...video('1', { acct: 'remote@example.org' }), nid: '123' }], {
+				props: { scope: 'interests' },
+				serverData: { public: false, interests: { ...ON, recommendationsEnabled: true } },
+			})
+			const menu = wrapper.findComponent({ name: 'NcActions' })
+			expect(menu.exists()).toBe(true)
+			expect(menu.props('menuName')).toBeNull()
+			expect(menu.props('ariaLabel')).toBe('For You recommendations')
+			expect(menu.find('.action-item__menutoggle').text()).not.toContain('For You recommendations')
 		})
 
 		it('reports what the reader watched when they move on, under shorts', async () => {

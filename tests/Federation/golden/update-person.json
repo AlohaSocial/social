@@ -115,6 +115,14 @@
         "manuallyApprovesFollowers": false,
         "discoverable": true,
         "indexable": true,
+        "profileDefaultTab": "posts",
+        "profileTabs": [
+            "posts",
+            "photos",
+            "videos",
+            "tagged",
+            "collections"
+        ],
         "featured": "https://cloud.example/apps/social/@alice/collections/featured"
     },
     "signature": {

@@ -86,8 +86,8 @@ describe('PreviewGridItem', () => {
 
 	it('shows the uploaded media through MediaAttachment', () => {
 		const wrapper = mountItem({ file, data: media })
-		expect(wrapper.findComponent(MediaAttachment).props('attachment')).toEqual(media)
-		expect(wrapper.find('img.attachment__preview').attributes('src')).toBe(media.preview_url)
+		expect(wrapper.findComponent(MediaAttachment).props('attachment')).toEqual({ ...media, preview_url: media.url })
+		expect(wrapper.find('img.attachment__preview').attributes('src')).toBe(media.url)
 	})
 
 	it('shows a pending state while the upload has not finished', () => {
@@ -99,6 +99,20 @@ describe('PreviewGridItem', () => {
 	it('offers a delete action', () => {
 		const wrapper = mountItem({ file, data: media })
 		expect(wrapper.find('.preview-item__actions button').text()).toBe('Delete')
+	})
+
+	it('keeps the poster for animated video attachments instead of using video bytes as an image', () => {
+		const wrapper = mountItem({ data: { ...media, type: 'gifv', url: 'https://cloud.example/animation.mp4' } })
+		expect(wrapper.findComponent(MediaAttachment).props('attachment').preview_url).toBe(media.preview_url)
+	})
+
+	it('uses the full image and sizes the frame to decoded portrait dimensions', async () => {
+		const wrapper = mountItem({ file, data: media })
+		expect(wrapper.find('img').attributes('src')).toBe(media.url)
+		const image = wrapper.find('img').element
+		Object.defineProperties(image, { naturalWidth: { value: 600 }, naturalHeight: { value: 1200 } })
+		await wrapper.find('img').trigger('load')
+		expect(wrapper.find('.preview-item').attributes('style')).toContain('--preview-ratio: 0.5')
 	})
 
 	it('emits delete with its key when the delete action is used', async () => {

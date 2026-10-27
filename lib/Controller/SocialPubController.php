@@ -140,6 +140,7 @@ class SocialPubController extends Controller {
 	private function publicPage(string $displayName): Response {
 		$this->initialState->provideInitialState('serverData', [
 			'public' => true,
+			'cloudAddress' => $this->configService->getCloudUrl(),
 		]);
 		$page = new PublicTemplateResponse(Application::APP_ID, 'main', [
 			'application' => $displayName . ' - Aloha Social',
@@ -284,6 +285,7 @@ class SocialPubController extends Controller {
 		$this->initialState->provideInitialState('item', $post);
 		$this->initialState->provideInitialState('serverData', [
 			'public' => true,
+			'cloudAddress' => $this->configService->getCloudUrl(),
 			'firstrun' => false,
 			'setup' => false,
 		]);

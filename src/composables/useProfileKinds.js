@@ -24,15 +24,19 @@ import { t } from '@nextcloud/l10n'
  * in, which is why it is the last of the five rather than beside Photos.
  *
  * @param {string} account the handle in the route
+ * @param {object} [layout] public presentation preferences
+ * @param {string} [selected] the explicitly opened tab, retained for keyboard navigation
  * @return {Array<{value: string, label: string, icon: object, to: object}>}
  */
-export function profileKinds(account) {
+export function profileKinds(account, layout = {}, selected = '') {
 	const to = (media) => ({
 		name: 'profile',
 		params: { account },
-		query: media === '' ? {} : { media },
+		query: { media: media === '' ? 'posts' : media },
 	})
 
+	const tabs = Array.isArray(layout.tabs) ? layout.tabs : ['posts', 'photos', 'videos', 'tagged', 'collections']
+	const names = { '': 'posts', image: 'photos', video: 'videos', tagged: 'tagged', collections: 'collections' }
 	return [
 		{ value: '', label: t('social', 'Posts'), icon: IconTextBoxMultiple, to: to('') },
 		{ value: 'image', label: t('social', 'Photos'), icon: IconImageMultiple, to: to('image') },
@@ -49,5 +53,5 @@ export function profileKinds(account) {
 			icon: IconFolderMultipleImage,
 			to: { name: 'profile.collections', params: { account } },
 		},
-	]
+	].filter((tab) => tab.value === '' || tab.value === selected || tabs.includes(names[tab.value]))
 }

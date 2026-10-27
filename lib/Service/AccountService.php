@@ -41,6 +41,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Model\Moderation;
+use OCA\Social\Model\ProfileLayout;
 use OCP\Accounts\IAccountManager;
 use OCP\BackgroundJob\IJobList;
 use OCP\IUser;
@@ -142,7 +143,7 @@ class AccountService {
 	public function getActor(string $username): Person {
 		$actor = $this->actorsRequest->getFromUsername($username);
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -155,7 +156,7 @@ class AccountService {
 	public function getFromId(string $id): Person {
 		$actor = $this->actorsRequest->getFromId($id);
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -200,7 +201,7 @@ class AccountService {
 			}
 		}
 
-		return $actor;
+		return $this->withProfileLayout($actor);
 	}
 
 	/**
@@ -487,6 +488,27 @@ class AccountService {
 		$this->actorsRequest->updateLocked($actor);
 		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
 		$this->federateProfile($userId);
+	}
+
+	/** The public profile's default and optional tabs; no content access changes. */
+	public function setProfileLayout(string $userId, array $layout): array {
+		$layout = ProfileLayout::normalize($layout, true);
+		$actor = $this->getActorFromUserId($userId);
+		$this->configService->setValueForUser($userId, 'profile_layout', json_encode($layout, JSON_THROW_ON_ERROR));
+		$this->cacheLocalActorByUsername($actor->getPreferredUsername(), $layout);
+		$this->federateProfile($userId);
+
+		return $layout;
+	}
+
+	private function withProfileLayout(Person $actor): Person {
+		if ($actor->getUserId() !== '') {
+			$stored = $this->configService->getValueForUser($actor->getUserId(), 'profile_layout');
+			$layout = is_string($stored) ? json_decode($stored, true) : null;
+			$actor->setProfileLayout(is_array($layout) ? $layout : []);
+		}
+
+		return $actor;
 	}
 
 	/**
@@ -890,14 +912,21 @@ class AccountService {
 
 	/**
 	 * @param string $username
+	 * @param array{default_tab: string, tabs: list<string>}|null $profileLayout
 	 *
 	 * @throws SocialAppConfigException
 	 * @throws UrlCloudException
 	 * @throws ItemAlreadyExistsException
 	 */
-	public function cacheLocalActorByUsername(string $username) {
+	public function cacheLocalActorByUsername(string $username, ?array $profileLayout = null) {
 		try {
-			$actor = $this->getActor($username);
+			// A cache refresh runs over every local account. Loading a user
+			// preference here adds one database read per account; ActorService
+			// carries the already published layout from the cached actor instead.
+			$actor = $this->actorsRequest->getFromUsername($username);
+			if ($profileLayout !== null) {
+				$actor->setProfileLayout($profileLayout);
+			}
 
 			if ($this->moderationRequest->levelOf($actor->getId()) === Moderation::SUSPEND) {
 				// A suspended account is not served from this instance, and
@@ -946,12 +975,12 @@ class AccountService {
 
 			$this->loadLocalActorHeader($actor);
 
-			// the details this rebuilds are only the counts: the actors row
-			// carries none, and the write is wholesale. What was already on the
-			// cached copy and has to survive it — the verified-link verdicts —
-			// is carried over by ActorService::cacheLocalActor().
+			// The actors row carries neither cached profile layout nor details,
+			// and the cache write replaces both. ActorService carries forward
+			// profile layout and verified-link verdicts unless this call is the
+			// explicit profile-layout update.
 			$this->addLocalActorDetailCount($actor);
-			$this->actorService->cacheLocalActor($actor);
+			$this->actorService->cacheLocalActor($actor, $profileLayout === null);
 
 			// once the copy that answers WebFinger is written: Nextcloud
 			// verifies the field through it before storing the handle

@@ -149,6 +149,7 @@ class NavigationController extends Controller {
 		if ($this->userId === null) {
 			$this->initialState->provideInitialState('serverData', [
 				'public' => true,
+				'cloudAddress' => $this->configService->getAppValue(ConfigService::CLOUD_URL),
 				'firstrun' => false,
 				'needsAccount' => false,
 				'setup' => false,
@@ -165,6 +166,7 @@ class NavigationController extends Controller {
 
 		$serverData = [
 			'public' => false,
+			'timeZone' => $this->config->getUserValue($this->userId, 'core', 'timezone', $this->config->getSystemValueString('default_timezone', 'UTC')),
 			'firstrun' => false,
 			'introductionDismissed' => $this->config->getUserValue(
 				$this->userId, Application::APP_ID, 'introduction_dismissed', '0'

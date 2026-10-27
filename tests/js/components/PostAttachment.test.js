@@ -238,15 +238,11 @@ describe('PostAttachment', () => {
 			expect(frames[0].props('attachment')).toEqual(items[0])
 		})
 
-		it('sets a pair side by side, squared off so they are the same height', () => {
+		it('pages through a pair instead of placing the pictures in two columns', () => {
 			const wrapper = mountMediaFirst(attachments(2))
-
-			expect(wrapper.find('.gallery-mosaic--2').exists()).toBe(true)
-			expect(wrapper.findComponent(GalleryCarousel).exists()).toBe(false)
-
-			const frames = wrapper.findAllComponents(GalleryMedia)
-			expect(frames).toHaveLength(2)
-			expect(frames.map((frame) => frame.props('ratio'))).toEqual([1, 1])
+			expect(wrapper.find('.gallery-mosaic--2').exists()).toBe(false)
+			expect(wrapper.findComponent(GalleryCarousel).exists()).toBe(true)
+			expect(wrapper.findAll('.gallery__slide[aria-hidden="false"]')).toHaveLength(1)
 		})
 
 		it.each([3, 4, 5, 8])('pages through a set of %i rather than shrinking it into tiles', (count) => {

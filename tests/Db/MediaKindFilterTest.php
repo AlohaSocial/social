@@ -81,4 +81,19 @@ class MediaKindFilterTest extends TestCase {
 		$this->assertStringContainsString('s.media_kind IS NULL', $this->where[0]);
 		$this->assertStringContainsString('s.media_kind IS NULL', $this->where[1]);
 	}
+	public function testVisualMediaIncludesImagesVideosAndAnimationsButNotAudioAlone(): void {
+		$this->builder(true)->limitToVisualMedia();
+		$this->assertSame(['s.media_kind IN ([image,video,gifv,mixed])'], $this->where);
+	}
+
+	public function testVisualMediaKeepsTheLegacyAttachmentAndNativeVideoFallback(): void {
+		$this->builder(false)->limitToVisualMedia();
+		$this->assertCount(1, $this->where);
+		$this->assertStringContainsString('s.media_kind IS NULL', $this->where[0]);
+		$this->assertStringContainsString("s.subtype = 'Video'", $this->where[0]);
+		foreach (['image', 'video', 'gifv'] as $type) {
+			$this->assertStringContainsString('%"type":"' . $type . '"%', $this->where[0]);
+		}
+	}
+
 }

@@ -279,6 +279,12 @@ trait StreamTimelines {
 			return;
 		}
 
+		if ($options->getMediaType() === 'visual') {
+			$qb->limitToVisualMedia();
+
+			return;
+		}
+
 		// `media_type=video` and `only_video` are the same question, so they
 		// are one predicate: a profile's Videos tab and the Videos timeline
 		// cannot come to disagree about whether a PeerTube `Video` is a video.
@@ -352,8 +358,36 @@ trait StreamTimelines {
 		if ($within !== null) {
 			$page->andWhere($page->expr()->in('s.nid', $page->createNamedParameter($within, IQueryBuilder::PARAM_STR_ARRAY)));
 		}
+		$followed = $this->getNidsFromRequest($page);
+		if (!$page->hasViewer()) {
+			return $followed;
+		}
 
-		return $this->getNidsFromRequest($page);
+		// The viewer's own posts are addressed to their follower collection,
+		// which they do not follow. Read that one indexed range separately:
+		// OR-ing it with the followed range makes the database scan `s`.
+		$own = $this->getStreamNidsSelectSql();
+		$own->filterType(SocialAppNotification::TYPE);
+		$own->paginate($options);
+		$this->filterKind($own, $options);
+		$own->selectDestFollowing('sd', '');
+		$own->leftJoinFollowing('f');
+		$viewer = $own->getViewer();
+		$own->andWhere($own->expr()->andX(
+			$own->expr()->eq('s.attributed_to_prim', $own->createNamedParameter(md5($viewer->getId()))),
+			$own->expr()->eq('sd.stream_id', 's.id_prim'),
+			$own->expr()->eq('sd.actor_id', $own->createNamedParameter(md5($viewer->getFollowers()))),
+			$own->expr()->eq('sd.type', $own->createNamedParameter('recipient')),
+		));
+		if ($within !== null) {
+			$own->andWhere($own->expr()->in('s.nid', $own->createNamedParameter($within, IQueryBuilder::PARAM_STR_ARRAY)));
+		}
+		$own->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_TIMELINE);
+		$own->filterHiddenBoosts();
+		$this->timelineHomeLinkCacheActor($own, 'ca', 'f', false);
+		$own->filterDuplicate();
+
+		return $this->mergeNidPages($followed, $this->getNidsFromRequest($own), $options);
 	}
 
 	/**

@@ -1288,12 +1288,12 @@ class PostServiceTest extends TestCase {
 	public function testAnEditUpdatesActivityPubEventDetails(): void {
 		$stored = $this->storedNote();
 		$stored->setSubType('Event');
-		$stored->setDetailArray(Details::EVENT, ['name' => 'Before', 'start_time' => '2026-10-25T10:00:00Z', 'end_time' => null, 'location' => 'Old hall']);
+		$stored->setDetailArray(Details::EVENT, ['name' => 'Before', 'start_time' => '2026-10-25T10:00:00Z', 'end_time' => null, 'location' => 'Old hall', 'status' => 'cancelled']);
 		$reloaded = clone $stored;
 		$this->streamRequest->method('getStreamByNid')->with(7)
 			->willReturnOnConsecutiveCalls($stored, $reloaded);
 		$this->activityService->method('updateActivity')->willReturn('token');
-		$event = ['name' => 'After', 'start_time' => '2026-10-26T11:00:00Z', 'end_time' => null, 'location' => 'New hall'];
+		$event = ['name' => 'After', 'start_time' => '2026-10-26T11:00:00Z', 'end_time' => null, 'location' => 'New hall', 'status' => 'cancelled'];
 
 		$this->service->editPost(7, $this->actor(), 'new', null, null, null, [], $event, true);
 

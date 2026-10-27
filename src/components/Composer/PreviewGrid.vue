@@ -27,12 +27,30 @@
 				</div>
 			</div>
 		</div>
-		<div class="preview-grid" :class="{ 'preview-grid--single': count === 1 }">
+		<div class="preview-grid">
+			<div
+				v-if="keys.length > 1"
+				class="preview-grid__navigation"
+				role="group"
+				:aria-label="t('social', 'Attachment preview')">
+				<NcButton :disabled="activeIndex <= 0" :aria-label="t('social', 'Previous attachment')" @click="select(activeIndex - 1)">
+					<template #icon>
+						<ChevronLeft :size="20" />
+					</template>
+				</NcButton>
+				<span role="status">{{ t('social', '{current} of {total}', { current: activeIndex + 1, total: keys.length }) }}</span>
+				<NcButton :disabled="activeIndex >= keys.length - 1" :aria-label="t('social', 'Next attachment')" @click="select(activeIndex + 1)">
+					<template #icon>
+						<ChevronRight :size="20" />
+					</template>
+				</NcButton>
+			</div>
 			<PreviewGridItem
-				v-for="(item, randomKey) in miniatures"
-				:key="randomKey"
-				:preview="item"
-				:randomKey="randomKey"
+				v-if="activeKey"
+				:key="activeKey"
+				:preview="miniatures[activeKey]"
+				:allowEffects="allowEffects"
+				:randomKey="activeKey"
 				@delete="deletePreview"
 				@describe="$emit('describe', $event)"
 				@commitDescription="$emit('commitDescription', $event)"
@@ -45,6 +63,9 @@
 
 <script>
 import PreviewGridItem from './PreviewGridItem.vue'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import ChevronLeft from 'vue-material-design-icons/ChevronLeft.vue'
+import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import FileUpload from 'vue-material-design-icons/FileUpload.vue'
 import { translate as t } from '@nextcloud/l10n'
 
@@ -52,10 +73,14 @@ export default {
 	name: 'PreviewGrid',
 	components: {
 		PreviewGridItem,
+		NcButton,
+		ChevronLeft,
+		ChevronRight,
 		FileUpload,
 	},
 
 	props: {
+		allowEffects: { type: Boolean, default: true },
 		uploadProgress: {
 			type: Number,
 			required: true,
@@ -80,10 +105,21 @@ export default {
 
 	emits: ['deleted', 'describe', 'commitDescription', 'focus', 'commitFocus', 'filter'],
 
+	data() {
+		return { selectedKey: '' }
+	},
+
 	computed: {
-		/** @return {number} how many pictures the post is carrying */
-		count() {
-			return Object.keys(this.miniatures).length
+		keys() {
+			return Object.keys(this.miniatures)
+		},
+
+		activeKey() {
+			return this.keys.includes(this.selectedKey) ? this.selectedKey : this.keys[0] || ''
+		},
+
+		activeIndex() {
+			return this.keys.indexOf(this.activeKey)
 		},
 
 		/** @return {string} */
@@ -93,6 +129,12 @@ export default {
 	},
 
 	methods: {
+		select(index) {
+			if (this.keys[index]) {
+				this.selectedKey = this.keys[index]
+			}
+		},
+
 		deletePreview(randomKey) {
 			this.$emit('deleted', randomKey)
 		},
@@ -137,14 +179,15 @@ export default {
 }
 
 .preview-grid {
-	display: flex;
-	flex-wrap: wrap;
-	flex-direction: row;
-	margin-inline: -5px;
-}
+	display: block;
 
-// one picture is the post, not a thumbnail of it
-.preview-grid--single :deep(.preview-item) {
-	height: 260px;
+	&__navigation {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		margin-block: 8px;
+		font-variant-numeric: tabular-nums;
+	}
 }
 </style>

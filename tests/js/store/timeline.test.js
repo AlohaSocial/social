@@ -83,17 +83,44 @@ describe('timeline store state changes', () => {
 		expect(store.timeline).toEqual([])
 	})
 
-	it('keeps a For You explanation when a status refresh omits timeline-only metadata', async () => {
-		const explanation = { reason: 'topic', text: 'Because you follow Technology', label: 'Shown for Technology' }
+	it.each([undefined, null])('keeps the feed explanation when a status refresh returns interest=%s', async (interest) => {
+		const explanation = { reason: 'topic', tags: ['technology'] }
+		store.changeTimelineType({ type: 'interests', params: {} })
 		store.addToTimeline([makeStatus('42', { interest: explanation })])
-		axios.get.mockResolvedValue({ data: makeStatus('42', { favourites_count: 7 }) })
-
+		axios.get.mockResolvedValue({ data: makeStatus('42', { favourites_count: 7, interest }) })
 		await store.fetchStatus('42', true)
+		expect(store.getStatus('42').favourites_count).toBe(7)
+		expect(store.getRecommendationReason('42')).toEqual(explanation)
+		expect(store.getStatus('42').interest).toBe(interest)
+	})
 
-		expect(store.getStatus('42')).toMatchObject({
-			interest: explanation,
-			favourites_count: 7,
-		})
+	it('keeps separate explanation snapshots across scopes and clears a refreshed feed', () => {
+		const posts = { reason: 'topic', tags: ['technology'] }
+		const photos = { reason: 'followed', tags: ['photography'] }
+		store.changeTimelineType({ type: 'interests', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: posts })])
+		store.changeTimelineType({ type: 'photos', params: { scope: 'interests' } })
+		store.addToTimeline([makeStatus('42', { interest: photos })])
+		expect(store.getRecommendationReason('42')).toEqual(photos)
+		store.changeTimelineType({ type: 'home', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: null })])
+		expect(store.getRecommendationReason('42')).toBeUndefined()
+		store.changeTimelineType({ type: 'interests', params: {} })
+		expect(store.getRecommendationReason('42')).toEqual(posts)
+		store.resetTimeline()
+		expect(store.getRecommendationReason('42')).toBeUndefined()
+		store.addToTimeline([makeStatus('42', { interest: null })])
+		expect(store.getRecommendationReason('42')).toBeNull()
+	})
+
+	it('prunes explanations when a feed leaves the bounded history', () => {
+		store.changeTimelineType({ type: 'interests', params: {} })
+		store.addToTimeline([makeStatus('42', { interest: { reason: 'popular' } })])
+		for (let index = 0; index < 8; index++) {
+			store.changeTimelineType({ type: 'tags', params: { tag: `topic${index}` } })
+			store.addToTimeline([makeStatus(String(index))])
+		}
+		expect(store.recommendationReasons).toEqual({})
 	})
 
 	/**
@@ -1072,6 +1099,12 @@ describe('timeline store actions', () => {
 			expect(response.data).toEqual(edited)
 		})
 
+		it('sends the edited language when explicitly supplied', async () => {
+			axios.put.mockResolvedValue({ data: makeStatus('1') })
+			await store.postEdit({ status: makeStatus('1'), content: 'Text', language: 'de' })
+			expect(axios.put.mock.calls[0][1].language).toBe('de')
+		})
+
 		it('sends edited event details when the post is an event', async () => {
 			const status = makeStatus('1')
 			store.addToTimeline([status])
@@ -1456,11 +1489,11 @@ describe('timeline store actions', () => {
 			// `media_type` as well as `only_media`, or the page answers with
 			// every video on the instance: "carries an attachment" is not the
 			// question a page called Photos is asking.
-			['photos', {}, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'image' }],
-			['photos', { scope: 'timeline' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'image', local: true }],
-			['photos', { scope: 'federated' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'image' }],
+			['photos', {}, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'visual' }],
+			['photos', { scope: 'timeline' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'visual', local: true }],
+			['photos', { scope: 'federated' }, `${API}/timelines/public`, { limit: 15, only_media: true, media_type: 'visual' }],
 			// a scope from the address bar that names nothing is read as the default
-			['photos', { scope: 'favourites' }, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'image' }],
+			['photos', { scope: 'favourites' }, `${API}/timelines/home`, { limit: 15, only_media: true, media_type: 'visual' }],
 			// the same page again, one predicate narrower. `only_media` goes
 			// out as well, so a server that has not been upgraded yet answers
 			// with media rather than with everything.
@@ -1481,7 +1514,7 @@ describe('timeline store actions', () => {
 			['interests', {}, `${API}/timelines/interests`, { limit: 15 }],
 			['interests', { media: 'videos' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
 			['interests', { media: 'podcasts' }, `${API}/timelines/interests`, { limit: 15 }],
-			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'photos' }],
+			['photos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'media' }],
 			['videos', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, media: 'videos' }],
 			['shorts', { scope: 'interests' }, `${API}/timelines/interests`, { limit: 15, only_short: true }],
 			['bluesky', { feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }, `${API}/timelines/bluesky`, { limit: 15, feed: 'at://did:plc:bob/app.bsky.feed.generator/cats' }],
@@ -1514,7 +1547,7 @@ describe('timeline store actions', () => {
 			await store.fetchTimeline()
 			const videos = axios.get.mock.calls[0][1].params
 
-			expect(photos.media_type).toBe('image')
+			expect(photos.media_type).toBe('visual')
 			expect(photos.only_video).toBeUndefined()
 			expect(videos.only_video).toBe(true)
 			expect(videos.media_type).toBeUndefined()
@@ -1662,6 +1695,86 @@ describe('timeline store actions', () => {
 				expect(axios.get).toHaveBeenCalledTimes(3)
 				expect(store.profilePageFilling).toBe(false)
 				expect(store.timeline).toEqual(['1'])
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('exposes a failed background import without erasing cached posts or polling forever', async () => {
+			vi.useFakeTimers()
+			try {
+				store.changeTimelineTypeAccount('bob@pixelfed.social')
+				store.addToTimeline([makeStatus('1')])
+				axios.get.mockResolvedValue({ data: [], headers: { 'x-social-filling': '1', 'x-social-profile-filling': '1', 'x-social-profile-sync-state': 'failed' } })
+				await store.fetchTimeline()
+				expect(store.profileSyncState).toBe('failed')
+				expect(store.timelinePageFilling).toBe(false)
+				expect(store.timeline).toEqual(['1'])
+				await vi.advanceTimersByTimeAsync(300_000)
+				expect(axios.get).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('turns an overdue profile fill into a check-again state after its bounded polls', async () => {
+			vi.useFakeTimers()
+			try {
+				store.changeTimelineTypeAccount('bob@pixelfed.social')
+				axios.get.mockResolvedValue({ data: [], headers: { 'x-social-filling': '1', 'x-social-profile-filling': '1', 'x-social-remote-profile-filling': '1' } })
+				await store.fetchTimeline()
+				expect(store.profileSyncState).toBe('pending')
+				await vi.advanceTimersByTimeAsync(300_000)
+				expect(store.profileSyncState).toBe('stalled')
+				expect(store.timelinePageFilling).toBe(false)
+				expect(store.backgroundRefetchTimer).toBeNull()
+				expect(axios.get).toHaveBeenCalledTimes(61)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('reports an interrupted background check as a recoverable failure', async () => {
+			vi.useFakeTimers()
+			try {
+				store.changeTimelineTypeAccount('bob@pixelfed.social')
+				axios.get.mockResolvedValueOnce({ data: [makeStatus('1')], headers: { 'x-social-filling': '1', 'x-social-profile-filling': '1' } }).mockRejectedValueOnce(new Error('Connection interrupted'))
+				await store.fetchTimeline()
+				await vi.advanceTimersByTimeAsync(2000)
+				expect(store.profileSyncState).toBe('failed')
+				expect(store.profilePageFilling).toBe(false)
+				expect(store.timeline).toEqual(['1'])
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('cancels a queued profile check when navigating away', async () => {
+			vi.useFakeTimers()
+			try {
+				store.changeTimelineTypeAccount('bob@pixelfed.social')
+				axios.get.mockResolvedValue({ data: [], headers: { 'x-social-filling': '1', 'x-social-profile-filling': '1' } })
+				await store.fetchTimeline()
+				store.changeTimelineType({ type: 'home', params: {} })
+				await vi.advanceTimersByTimeAsync(300_000)
+				expect(store.profileSyncState).toBe('')
+				expect(axios.get).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it('keeps the first pending profile page check when pagination also requests a refill', async () => {
+			vi.useFakeTimers()
+			try {
+				store.changeTimelineTypeAccount('bob@pixelfed.social')
+				const pending = { 'x-social-filling': '1', 'x-social-profile-filling': '1' }
+				axios.get.mockResolvedValue({ data: [], headers: pending })
+				await store.fetchTimeline()
+				await store.fetchTimeline({ max_id: '42' })
+				await vi.advanceTimersByTimeAsync(2000)
+				expect(axios.get).toHaveBeenCalledTimes(3)
+				expect(axios.get.mock.calls[2][1].params.max_id).toBeUndefined()
 			} finally {
 				vi.useRealTimers()
 			}

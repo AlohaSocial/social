@@ -1020,6 +1020,7 @@ Boosting from a client goes through `POST /api/v1/statuses/{nid}/{act}` with `re
 
 | Method | Route | Auth | Parameters | Description |
 |--------|-------|------|------------|-------------|
+| PUT | `/api/v1/account/profile-layout` | user, CSRF | `layout`: `{default_tab, tabs}` | Saves the personal account's public profile presentation. Defaults: `posts`, all five tabs. The default can be `posts`, `photos` or `videos` and must remain visible; Posts cannot be hidden. Invalid values are rejected. Returns `{"status": 1, "result": {"layout": {...}}}`. Does not change post audiences or grant access. |
 | PUT | `/api/v1/account/fields` | user | `fields` (list of `{name, value}`) | Replaces the profile metadata fields (at most four name/value pairs; entries with an empty half are dropped, names capped at 255 and values at 500 characters). Federated as `PropertyValue` attachments on the actor. A verified link keeps its tick across the save; only a value that actually changed loses one, and it is checked again on the next cron pass rather than a day later. `{"result": {"account": <Person>}, "status": 1}`. |
 | PUT | `/api/v1/current/follow` | user | `account` (required) | Follows an account; `{"result": [], "status": 1}`. |
 | POST | `/api/v1/account/create` | user | `username` (the handle; empty takes the one derived from the user id) | Creates the reader's account — the one place an actor is made for a logged-in person; the page no longer creates one on its first load. The handle has to be theirs to take (`AccountService::assertHandleAvailable()`: the pattern, not another Nextcloud user's id, not a handle an actor holds); a refused handle is a **422** whose `error` says why. `{"result": {"account": <Account>}, "status": 1}`. |
@@ -1583,3 +1584,38 @@ Status `nid` values are exposed as decimal strings wherever the API carries IDs 
 ### ATProto post reply replacement
 
 `com.atproto.repo.putRecord` supports replacing or omitting `reply` on an existing local `app.bsky.feed.post`. Omission removes its parent; unchanged references preserve the existing relationship. Parent access, reply permissions, audience and cycle checks apply before persistence. The Social row and ATProto repository use the existing conditional-write transaction. See [federation compatibility](Federation-Compatibility.md#editing-reply-targets).
+
+### Remote profile synchronization metadata
+
+For an authenticated read of `GET /api/v1/accounts/{account}/statuses` for a
+remote ActivityPub actor, `X-Social-Profile-Sync-State` is one of `pending`,
+`failed` or `idle`. It describes the background read, not whether the entire
+remote account has been indexed. A failed outbox read or queue write remains
+visible for a 60-second backoff before normal reads may queue it again. No raw
+remote exception is exposed. `X-Social-Profile-Filling` and the existing filling
+headers remain backward compatible. Anonymous requests remain cache-only.
+
+An empty first page can continue an existing outbox cursor too, including a
+Photos/Videos filter that has not found matching posts yet. The web frontend
+keeps cached posts while checking, stops automatic profile polls after their
+bounded window, and offers a first-page recheck without clearing or duplicating
+those posts. A stalled check is not a declaration that the remote account is empty.
+
+### Event card status metadata
+
+The optional event extension includes lowercase `status` (`confirmed`, `tentative`,
+`cancelled`) when the source supplied a recognized iCalendar or Schema.org status.
+Unknown values are omitted. ICS downloads include the corresponding STATUS and a
+valid LAST-MODIFIED when the post has been updated. Calendar import confirms its
+outcome through `imported: true`; `already_imported: true` identifies an existing
+stable-UID copy and does not mean that copy was updated. See [Events.md](Events.md)
+for timezone, content-warning, import and attendance boundaries.
+
+### Visual media timeline filter
+
+The Social `media_type` extension accepts `visual` in addition to `image`, `video`
+and `audio`. It selects posts with photos, videos or animated images, including
+native ActivityPub Video objects. It implies media filtering and excludes pure
+text, audio and documents before pagination. Existing individual media filters
+and unfiltered timeline semantics are unchanged. Photos timeline layouts share
+this filter; profile Photos tabs continue to request `image`.

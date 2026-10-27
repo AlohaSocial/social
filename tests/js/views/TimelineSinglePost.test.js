@@ -27,7 +27,7 @@ vi.hoisted(() => {
 
 const ComposerStub = {
 	name: 'Composer',
-	props: { inReplyTo: { type: Object, default: null } },
+	props: { inReplyTo: { type: Object, default: null }, oneLine: Boolean, listenForIntents: Boolean },
 	template: '<div class="composer-stub" />',
 }
 const TimelineListStub = {
@@ -380,13 +380,12 @@ describe('TimelineSinglePost', () => {
 		 * conversation had nowhere to say anything, and the way to find out
 		 * was to press reply and watch the page jump.
 		 */
-		it('is under the post, pointed at it, without being asked for', () => {
+		it('offers a compact reply using the same composer and selected post', () => {
 			const wrapper = mountView()
 			const composer = wrapper.findComponent(ComposerStub)
-
-			expect(composer.exists()).toBe(true)
+			expect(composer.props('oneLine')).toBe(true)
+			expect(composer.props('listenForIntents')).toBe(false)
 			expect(composer.props('inReplyTo').id).toBe('123')
-			expect(composer.element.closest('.main-post__under')).not.toBeNull()
 		})
 
 		it('is not offered to a reader who is not logged in', () => {
@@ -512,20 +511,16 @@ describe('TimelineSinglePost', () => {
 		expect(scrollIntoView).toHaveBeenCalledTimes(1)
 	})
 
-	it('scrolls to the post being replied to and stops listening after unmount', async () => {
+	it('keeps the conversation still when a modal reply is requested', async () => {
 		const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
 		const wrapper = mountView()
-
 		eventBus.emit('composer-reply', { id: 'reply-1' })
 		await nextTick()
-		expect(scrollIntoView).toHaveBeenCalledTimes(1)
-		expect(scrollIntoView.mock.instances[0]).toBe(wrapper.find('[data-social-status="reply-1"]').element)
-		expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-
+		expect(scrollIntoView).not.toHaveBeenCalled()
 		wrapper.unmount()
 		eventBus.emit('composer-reply', { id: 'reply-1' })
 		await nextTick()
-		expect(scrollIntoView).toHaveBeenCalledTimes(1)
+		expect(scrollIntoView).not.toHaveBeenCalled()
 	})
 
 	it('takes the author from the route, not from the shape of the browser URL', async () => {

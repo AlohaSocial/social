@@ -1186,6 +1186,15 @@ class AccountServiceTest extends TestCase {
 		$this->service->createActor('alice', '');
 	}
 
+	public function testProfileLayoutIsLoadedFromTheUserPreferenceOnAuthoritativeReads(): void {
+		$this->userManager->method('get')->with('alice')->willReturn($this->user('alice'));
+		$this->actorsRequest->method('getFromUserId')->with('alice')->willReturn($this->alice());
+		$layout = ['default_tab' => 'photos', 'tabs' => ['posts', 'photos']];
+		$this->configService->method('getValueForUser')->with('alice', 'profile_layout')->willReturn(json_encode($layout));
+
+		self::assertSame($layout, $this->service->getActorFromUserId('alice')->getProfileLayout());
+	}
+
 	// --- setActorFlags -------------------------------------------------
 
 	private function aliceIsKnown(Person $alice): void {

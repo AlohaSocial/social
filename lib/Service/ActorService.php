@@ -42,16 +42,23 @@ class ActorService {
 	 *
 	 * @throws ItemAlreadyExistsException
 	 */
-	public function cacheLocalActor(Person $actor) {
+	public function cacheLocalActor(Person $actor, bool $preserveProfileLayout = true) {
 		$actor->setLocal(true);
-		$actor->setSource(json_encode($actor, JSON_UNESCAPED_SLASHES));
-
+		$cached = null;
 		try {
 			$cached = $this->cacheActorsRequest->getFromId($actor->getId());
 			$this->carryVerifiedFields($actor, $cached);
-			$this->update($actor);
+			if ($preserveProfileLayout) {
+				$actor->setProfileLayout($cached->getProfileLayout());
+			}
 		} catch (CacheActorDoesNotExistException $e) {
+			// The first published copy has no previous fields to preserve.
+		}
+		$actor->setSource(json_encode($actor, JSON_UNESCAPED_SLASHES));
+		if ($cached === null) {
 			$this->save($actor);
+		} else {
+			$this->update($actor);
 		}
 		// resolved here: CacheActorService depends on services that need this one
 		$this->container?->get(CacheActorService::class)->forget($actor->getId());

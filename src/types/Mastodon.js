@@ -88,6 +88,7 @@
 
 /**
  * @typedef Account - https://docs.joinmastodon.org/entities/Account
+ * @property {{default_tab: string, tabs: string[]}} [profile_layout] - public profile navigation preferences
    @property {string} id - Ex: "22345792"
  * @property {string} username - Ex: "Gargron"
  * @property {string} acct - Ex: "Gargron@example.com or Gargron for local users"

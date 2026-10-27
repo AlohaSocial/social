@@ -4,11 +4,15 @@
 -->
 <template>
 	<div class="preview-item-wrapper">
-		<div class="preview-item">
+		<div
+			class="preview-item"
+			:style="frameStyle"
+			@load.capture="measurePreview"
+			@loadedmetadata.capture="measurePreview">
 			<!-- a refused attachment has no picture behind it, and the spinner
 			     MediaAttachment shows for `null` would never stop -->
 			<div class="preview-item__filtered" :style="{ filter: filterCss(preview.filter) }">
-				<MediaAttachment v-if="!preview.failed" :attachment="preview.data" />
+				<MediaAttachment v-if="!preview.failed" :attachment="fullPreview" />
 			</div>
 
 			<!-- Where the subject is. A square crop — the profile grid here, the
@@ -137,6 +141,7 @@ export default {
 	},
 
 	props: {
+		allowEffects: { type: Boolean, default: true },
 		preview: {
 			type: /** @type {import('vue').PropType<import('../../types/Composer.js').LocalAttachment>} */ (Object),
 			required: true,
@@ -156,10 +161,25 @@ export default {
 			focusing: false,
 			/** whether a pointer is down on the editor and dragging the point */
 			dragging: false,
+			loadedRatio: 0,
 		}
 	},
 
 	computed: {
+		/** Keep the full original image; a server thumbnail may already be cropped. */
+		fullPreview() {
+			if (!this.preview.data || this.preview.data.type !== 'image') {
+				return this.preview.data
+			}
+			return { ...this.preview.data, preview_url: this.preview.objectUrl || this.preview.data.url || this.preview.data.preview_url }
+		},
+
+		frameStyle() {
+			const size = this.preview.data?.meta?.original || this.preview.data?.meta?.small
+			const ratio = this.loadedRatio || (size?.width > 0 && size?.height > 0 ? size.width / size.height : 1.5)
+			return { '--preview-ratio': Number.isFinite(ratio) && ratio > 0 ? ratio : 1.5 }
+		},
+
 		described() {
 			return (this.preview.description || '').trim() !== ''
 		},
@@ -178,7 +198,7 @@ export default {
 		canFocus() {
 			const type = this.preview?.file?.type || this.preview?.data?.type || ''
 
-			return !this.preview.failed && Boolean(this.preview.data?.id)
+			return this.allowEffects && !this.preview.failed && Boolean(this.preview.data?.id)
 				&& (type.startsWith('image/') || type === 'image')
 		},
 
@@ -204,6 +224,9 @@ export default {
 		 * @return {boolean}
 		 */
 		isPicture() {
+			if (!this.allowEffects) {
+				return false
+			}
 			const type = this.preview?.file?.type || this.preview?.data?.type || ''
 
 			return type.startsWith('image/')
@@ -228,6 +251,16 @@ export default {
 	},
 
 	methods: {
+		/** @param {Event} event decoded image/video dimensions, never thumbnail crop coordinates */
+		measurePreview(event) {
+			const media = /** @type {HTMLImageElement & HTMLVideoElement} */ (event.target)
+			const width = media.naturalWidth || media.videoWidth
+			const height = media.naturalHeight || media.videoHeight
+			if (width > 0 && height > 0) {
+				this.loadedRatio = width / height
+			}
+		},
+
 		t,
 		filterCss,
 		valueOf,
@@ -325,9 +358,9 @@ export default {
 
 <style scoped lang="scss">
 .preview-item-wrapper {
-	flex: 1 1 0;
-	min-width: 40%;
-	margin: 5px;
+	width: 100%;
+	min-width: 0;
+	margin-block: 5px;
 }
 
 .preview-item__missing {
@@ -441,8 +474,11 @@ export default {
 	background-position: 50%;
 	background-size: cover;
 	background-repeat: no-repeat;
-	height: 140px;
-	width: 100%;
+	--preview-max-height: min(360px, 40vh);
+	height: auto;
+	width: min(100%, calc(var(--preview-max-height) * var(--preview-ratio, 1.5)));
+	aspect-ratio: var(--preview-ratio, 1.5);
+	margin-inline: auto;
 	overflow: hidden;
 	position: relative;
 
@@ -454,7 +490,14 @@ export default {
 	   carries the filter has to be as tall as the frame, or the picture is
 	   drawn zero pixels high */
 	&__filtered {
+		position: absolute;
+		inset: 0;
 		height: 100%;
+	}
+
+	:deep(.attachment__preview),
+	:deep(.attachment__blurhash) {
+		object-fit: contain;
 	}
 
 	&__actions {

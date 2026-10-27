@@ -38,10 +38,10 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	 * What `media_type` may narrow `only_media` to.
 	 *
 	 * The first half of the attachment's MIME type, which is what
-	 * `Document::convertToMediaAttachment()` stores as its `type` — so these
-	 * are the only values the column can hold.
+	 * `Document::convertToMediaAttachment()` stores as its `type`, plus
+	 * `visual` for the combined photo/video timeline.
 	 */
-	public const MEDIA_TYPES = ['image', 'video', 'audio'];
+	public const MEDIA_TYPES = ['image', 'video', 'audio', 'visual'];
 
 	private string $probe = '';
 	private bool $local = false;
@@ -401,10 +401,10 @@ class ProbeOptions extends CoreOptions implements JsonSerializable {
 	 * predicate in `StreamRequest::filterMedia()`, so a profile's Videos tab
 	 * and the Videos timeline cannot come to disagree about what a video is.
 	 *
-	 * Anything that is not one of the three kinds an attachment can be is read
+	 * The visual extension combines photos and videos. Any other value is read
 	 * as "no preference": the value arrives from a query string.
 	 *
-	 * @param string $mediaType `image`, `video`, `audio`, or '' for all of them
+	 * @param string $mediaType `image`, `video`, `audio`, `visual` (images/videos), or '' for all of them
 	 */
 	public function setMediaType(string $mediaType): self {
 		$this->mediaType = in_array($mediaType, self::MEDIA_TYPES, true) ? $mediaType : '';

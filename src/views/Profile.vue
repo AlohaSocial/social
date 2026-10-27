@@ -8,9 +8,14 @@
 
 		<!-- your own profile is a page you post from, the way the home
 		     timeline is. Somebody else's is a page you read -->
-		<Composer v-if="isOwnProfile" compactOptions />
+		<Composer
+			v-if="isOwnProfile && !timelineStore.composerDisplayStatus"
+			oneLine
+			:listenForIntents="false" />
 
-		<router-view v-if="accountLoaded && accountInfo" name="details" />
+		<div class="profile-sections">
+			<router-view v-if="accountLoaded && accountInfo && profileRouteReady" name="details" :profileLayout="accountInfo.profile_layout" />
+		</div>
 		<!-- a follow link from another server, for an account this one does
 		     not hold: looked up when the reader asks, not when a link opens -->
 		<NcEmptyContent
@@ -61,11 +66,11 @@ const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "compose
 export default {
 	name: 'Profile',
 	components: {
+		Composer,
 		AlohaScene,
 		NcButton,
 		NcEmptyContent,
 		ProfileInfo,
-		Composer,
 	},
 
 	setup() {
@@ -90,6 +95,11 @@ export default {
 	},
 
 	computed: {
+		profileRouteReady() {
+			return this.$route.name !== 'profile' || this.$route.query?.media !== undefined
+				|| !['photos', 'videos'].includes(this.accountInfo?.profile_layout?.default_tab)
+		},
+
 		...mapStores(useAccountStore, useTimelineStore),
 		/** @return {import('../types/Mastodon').Status[]} */
 		timeline() {
@@ -145,6 +155,9 @@ export default {
 	},
 
 	watch: {
+		accountInfo: { immediate: true, handler: 'applyDefaultProfileTab' },
+		'$route.fullPath': 'applyDefaultProfileTab',
+
 		'$route.params.account': 'fetchProfileData',
 
 		// the handle until the account arrives, then the name it goes by
@@ -162,6 +175,18 @@ export default {
 	},
 
 	methods: {
+
+		applyDefaultProfileTab() {
+			if (this.$route.name !== 'profile' || this.$route.query?.media !== undefined) {
+				return
+			}
+			const tab = this.accountInfo?.profile_layout?.default_tab
+			const media = tab === 'photos' ? 'image' : tab === 'videos' ? 'video' : ''
+			if (media) {
+				this.$router.replace({ ...this.$route, query: { ...this.$route.query, media } })
+			}
+		},
+
 		async fetchProfileData() {
 			this.uid = this.$route.params.account || this.serverData.account || this.resolvedAccount
 			this.lookupFinished = false
@@ -176,7 +201,9 @@ export default {
 			const requestedHandle = String(this.$route.params.account || this.serverData.account || this.resolvedAccount || '')
 			const remote = requestedHandle.includes('@') || isBlueskyHandle(requestedHandle)
 			const fetchMethod = this.serverData.public && !remote ? 'fetchPublicAccountInfo' : 'fetchAccountInfo'
-			const account = isBlueskyHandle(requestedHandle) ? requestedHandle : this.profileAccount
+			const account = (this.serverData.public && !remote) || isBlueskyHandle(requestedHandle)
+				? requestedHandle
+				: this.profileAccount
 
 			const response = await this.accountStore[fetchMethod](account)
 			this.lookupFinished = true
@@ -235,6 +262,12 @@ export default {
 	&.icon-loading {
 		margin-top: 50vh;
 	}
+}
+
+.profile-sections {
+	min-width: 0;
+	min-height: 280px;
+	width: 100%;
 }
 
 /* NcEmptyContent pins any svg in its icon slot to 64px, with !important */

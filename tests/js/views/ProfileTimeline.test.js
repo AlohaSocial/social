@@ -96,7 +96,7 @@ describe('ProfileTimeline', () => {
 			const wrapper = mountView({ name: 'profile', params: { account: 'bob@remote.example' }, query: {} })
 
 			expect(switcher(wrapper).props('options').map((option) => option.to)).toEqual([
-				{ name: 'profile', params: { account: 'bob@remote.example' }, query: {} },
+				{ name: 'profile', params: { account: 'bob@remote.example' }, query: { media: 'posts' } },
 				{ name: 'profile', params: { account: 'bob@remote.example' }, query: { media: 'image' } },
 				{ name: 'profile', params: { account: 'bob@remote.example' }, query: { media: 'video' } },
 				{ name: 'profile.tagged', params: { account: 'bob@remote.example' } },

@@ -4,39 +4,20 @@
  */
 
 import { expect, test } from '@playwright/test'
-import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { APP, BYSTANDER_PASSWORD, PASSWORD, USER, apiAs, ensureAccount, ensureUser, login, openApp, postStatus } from './helpers.mjs'
 
 /** A Nextcloud user of this spec's own, who follows nobody and has posted nothing. */
 const SHORTLESS = 'shortless'
 
 /**
- * A two-second clip of a test pattern, made with ffmpeg: H.264 where this
- * ffmpeg has it, MPEG-4 Part 2 where it does not. Null without ffmpeg.
+ * Small, checked-in test-pattern clips avoid generating media on the runner.
  *
- * @param {number} width
- * @param {number} height
- * @return {Buffer|null}
+ * @param {'portrait'|'landscape'} orientation
+ * @return {Buffer}
  */
-function clip(width, height) {
-	const dir = mkdtempSync(join(tmpdir(), 'social-e2e-shorts-'))
-	const file = join(dir, 'clip.mp4')
-	const pattern = ['-v', 'error', '-f', 'lavfi', '-i', `testsrc=size=${width}x${height}:rate=10`, '-t', '2']
-	try {
-		for (const codec of [['-c:v', 'libx264', '-pix_fmt', 'yuv420p'], ['-c:v', 'mpeg4']]) {
-			const made = spawnSync('ffmpeg', [...pattern, ...codec, '-movflags', '+faststart', '-y', file])
-			if (made.status === 0) {
-				return readFileSync(file)
-			}
-		}
-
-		return null
-	} finally {
-		rmSync(dir, { recursive: true, force: true })
-	}
+function clip(orientation) {
+	return readFileSync(new URL(`../Interop/fixtures/shorts-${orientation}.mp4`, import.meta.url))
 }
 
 /**
@@ -44,9 +25,8 @@ function clip(width, height) {
  * a short and is on it, a landscape video and a post of text are not, and a
  * reader with no shorts in their feed is told what a short is.
  *
- * The videos are made here and measured by the server, which needs ffmpeg
- * and ffprobe; where either is missing the stack has nothing to show and the
- * test says so rather than failing.
+ * The checked-in videos are measured by the server, which needs ffmpeg and
+ * ffprobe; when either is missing the test skips the media-specific checks.
  */
 test.describe('Shorts, in a browser', () => {
 	const run = Date.now()
@@ -58,12 +38,8 @@ test.describe('Shorts, in a browser', () => {
 	let measured = true
 
 	test.beforeAll(async () => {
-		const upright = clip(360, 640)
-		const wide = clip(640, 360)
-		if (upright === null || wide === null) {
-			measured = false
-			return
-		}
+		const upright = clip('portrait')
+		const wide = clip('landscape')
 
 		const api = await apiAs(USER, PASSWORD)
 		await ensureAccount(api, USER)
@@ -117,6 +93,27 @@ test.describe('Shorts, in a browser', () => {
 
 		await expect(page.locator('article.short').filter({ hasText: markers.landscape }), 'a landscape video is no short').toHaveCount(0)
 		await expect(page.locator('article.short').filter({ hasText: markers.text }), 'nor is a post of text').toHaveCount(0)
+	})
+
+	test('visible controls retain the clip when paging fails', async ({ page }) => {
+		test.skip(!measured, 'needs measured video fixtures')
+		let first = true
+		await page.route('**/api/v1/timelines/public*', (route) => {
+			if (new URL(route.request().url()).searchParams.get('only_short') !== 'true') {
+				return route.fallback()
+			}
+			if (first) {
+				first = false
+				return route.fulfill({ contentType: 'application/json', body: JSON.stringify([short]) })
+			}
+			return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary failure' }) })
+		})
+		await login(page)
+		await openApp(page, '/shorts?scope=timeline')
+		await expect(page.getByRole('group', { name: 'Short playback' })).toBeVisible()
+		await expect(page.locator('.shorts__page-error')).toContainText('current short is still available')
+		await expect(page.locator('article.short')).toHaveCount(1)
+		await expect(page.locator('.shorts__page-error').getByRole('button', { name: 'Try again' })).toBeEnabled()
 	})
 
 	test('a reader with no shorts in their feed is told what a short is', async ({ page }) => {

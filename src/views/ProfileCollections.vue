@@ -132,6 +132,8 @@ export default {
 		TimelineSwitcher,
 	},
 
+	props: { profileLayout: { type: Object, default: undefined } },
+
 	data() {
 		return {
 			loading: true,
@@ -154,7 +156,7 @@ export default {
 		},
 
 		kinds() {
-			return profileKinds(this.account)
+			return profileKinds(this.account, this.profileLayout, 'collections')
 		},
 
 		/**
@@ -272,7 +274,7 @@ export default {
 
 <style scoped lang="scss">
 .collections {
-	padding: 0 10px;
+	min-width: 0;
 }
 
 .collections__create {

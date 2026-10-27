@@ -873,8 +873,10 @@ class AccountApiController extends MastodonApiController {
 				$posts,
 				static fn (mixed $post): bool => !($post instanceof Announce) || $post->getObject() instanceof Stream
 			));
-			if ($remoteProfile && $this->viewer !== null && $max_id && !$min_id && !$since_id
-				&& count($shown) < $options->getLimit()) {
+			// A filtered first page can be empty even though the outbox cursor
+			// has more pages (for example photos behind recent text-only posts).
+			if ($remoteProfile && $this->viewer !== null && !$min_id && !$since_id
+				&& ($max_id || $shown === []) && count($shown) < $options->getLimit()) {
 				$remoteProfileFilling = $this->remoteFetchQueue->fillTimeline($local)
 					|| $this->remoteFetchQueue->isTimelinePending($local->getId())
 					|| $remoteProfileFilling;
@@ -913,6 +915,11 @@ class AccountApiController extends MastodonApiController {
 			}
 			if ($remoteProfileFilling) {
 				$response->addHeader('X-Social-Remote-Profile-Filling', '1');
+			}
+			if ($remoteProfile && $this->viewer !== null) {
+				$syncState = $this->remoteFetchQueue->timelineSyncFailed($local->getId())
+					? 'failed' : ($profileFilling ? 'pending' : 'idle');
+				$response->addHeader('X-Social-Profile-Sync-State', $syncState);
 			}
 
 			return $response;

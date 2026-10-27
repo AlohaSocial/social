@@ -98,32 +98,21 @@ test.describe('Aloha Social, in a browser', () => {
 	 * changed their mind had to delete the word to get their feed back. Closing
 	 * it keeps the word: what was asked for is the feed, not a blank page.
 	 */
-	test('the composer in the feed closes without losing what was written', async ({ page }) => {
+	test('the feed opens one modal and Escape keeps its draft', async ({ page }) => {
 		await openApp(page)
-
-		const composer = page.locator('.social__wrapper .new-post').first()
-		await composer.locator('.message').click()
-		await page.keyboard.type('half a thought')
-		await expect(composer).not.toHaveClass(/new-post--collapsed/)
-
-		await composer.getByRole('button', { name: 'Close the composer' }).click()
-		await expect(composer).toHaveClass(/new-post--collapsed/)
+		await expect(page.locator('.social__wrapper .new-post--one-line')).toHaveCount(1)
+		await page.locator('.composer-line__expand').click()
+		const composer = page.locator('.modal-composer')
+		await composer.locator('.message').fill('half a thought')
+		await page.keyboard.press('Escape')
+		await expect(composer).toBeHidden()
+		await page.locator('.navigation__compose').click()
 		await expect(composer.locator('.message')).toHaveText('half a thought')
-
-		// and it is all still there when the box is asked for again
-		await composer.locator('.message').click()
-		await expect(composer).not.toHaveClass(/new-post--collapsed/)
-		await expect(composer.locator('.message')).toHaveText('half a thought')
-
-		// down to the next visit to the page, which is what the draft is for
+		await expect(page.locator('.new-post')).toHaveCount(1)
 		await openApp(page)
-		await expect(page.locator('.social__wrapper .new-post .message').first())
-			.toHaveText('half a thought')
-
-		// leave the feed as it was found
-		await page.locator('.social__wrapper .new-post .message').first().click()
-		await page.keyboard.press('ControlOrMeta+A')
-		await page.keyboard.press('Backspace')
+		await page.locator('.composer-line__expand').click()
+		await expect(composer.locator('.message')).toHaveText('half a thought')
+		await composer.locator('.message').fill('')
 	})
 
 	/**
@@ -133,7 +122,8 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('each composer panel closes from itself', async ({ page }) => {
 		await openApp(page)
-		const composer = page.locator('.social__wrapper .new-post').first()
+		await page.locator('.composer-line__expand').click()
+		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'More options', exact: true }).click()
 
@@ -153,8 +143,8 @@ test.describe('Aloha Social, in a browser', () => {
 		await expect(composer.locator('.composer-preview')).toBeHidden()
 
 		// and the box itself still closes, with nothing left behind in it
-		await composer.getByRole('button', { name: 'Close the composer' }).click()
-		await expect(composer).toHaveClass(/new-post--collapsed/)
+		await page.keyboard.press('Escape')
+		await expect(composer).toBeHidden()
 	})
 
 	/**
@@ -164,7 +154,8 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('the place picker has room for the box that names a new place', async ({ page }) => {
 		await openApp(page)
-		const composer = page.locator('.social__wrapper .new-post').first()
+		await page.locator('.composer-line__expand').click()
+		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'More options', exact: true }).click()
 		await composer.getByRole('button', { name: 'Say where this was taken' }).click()
@@ -188,11 +179,12 @@ test.describe('Aloha Social, in a browser', () => {
 	 */
 	test('the Files dialog has a button to confirm the pick', async ({ page }) => {
 		await openApp(page)
-		const composer = page.locator('.social__wrapper .new-post').first()
+		await page.locator('.composer-line__expand').click()
+		const composer = page.locator('.modal-composer')
 		await composer.locator('.message').click()
 		await composer.getByRole('button', { name: 'Add from Files' }).click()
 
-		const dialog = page.getByRole('dialog')
+		const dialog = page.getByRole('dialog').filter({ has: page.getByRole('button', { name: 'Attach', exact: true }) })
 		await expect(dialog.getByRole('button', { name: 'Attach' })).toBeVisible()
 		await page.keyboard.press('Escape')
 	})

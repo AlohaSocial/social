@@ -47,6 +47,9 @@ class RemoteFetchQueue {
 	private const TIMELINE_SYNCED = 'social.outboxsync';
 	private const TIMELINE_CURSOR = 'social.outbox.cursor';
 	private const TIMELINE_PENDING = 'social.outbox.pending';
+	private const TIMELINE_FAILED = 'social.outbox.failed';
+	/** Keep failed outbox reads visible and avoid re-queuing them on every poll. */
+	public const TIMELINE_RETRY_INTERVAL = 60;
 	private const TIMELINE_CURSOR_TTL = 31536000;
 	private const TIMELINE_PENDING_TTL = 300;
 
@@ -105,7 +108,7 @@ class RemoteFetchQueue {
 
 		$key = md5($actor->getId());
 		try {
-			if ($this->isTimelinePending($actor->getId())) {
+			if ($this->isTimelinePending($actor->getId()) || $this->timelineSyncFailed($actor->getId())) {
 				return false;
 			}
 		} catch (Throwable $e) {
@@ -139,8 +142,7 @@ class RemoteFetchQueue {
 			return false;
 		}
 		if (!$this->queue(SyncRemoteTimeline::class, $argument)) {
-			$this->clearSharedThrottle(self::TIMELINE_SYNCED, $key, $actor->getId(), 'timeline sync');
-			$this->durableCache->removeShared(self::TIMELINE_PENDING, $key);
+			$this->finishTimelinePage($actor->getId(), false, null, false);
 
 			return false;
 		}
@@ -162,6 +164,9 @@ class RemoteFetchQueue {
 			if ($this->isTimelinePending($actor->getId())) {
 				return true;
 			}
+			if ($this->timelineSyncFailed($actor->getId())) {
+				return false;
+			}
 
 			$cursor = $this->timelineCursor($actor->getId());
 			if (!is_array($cursor) || !is_string($cursor['url'] ?? null) || $cursor['url'] === '') {
@@ -171,7 +176,7 @@ class RemoteFetchQueue {
 			$argument = ['actor' => $actor->getId(), 'continuation' => '1'];
 			$this->durableCache->setShared(self::TIMELINE_PENDING, $key, 1, self::TIMELINE_PENDING_TTL);
 			if (!$this->queue(SyncRemoteTimeline::class, $argument)) {
-				$this->durableCache->removeShared(self::TIMELINE_PENDING, $key);
+				$this->finishTimelinePage($actor->getId(), false, null, false);
 				return false;
 			}
 
@@ -193,6 +198,11 @@ class RemoteFetchQueue {
 		return $this->durableCache->getShared(self::TIMELINE_PENDING, md5($actorId)) !== null;
 	}
 
+	/** A recent background failure, without exposing network errors to readers. */
+	public function timelineSyncFailed(string $actorId): bool {
+		return $actorId !== '' && $this->durableCache->getShared(self::TIMELINE_FAILED, md5($actorId)) !== null;
+	}
+
 	/** @return array{url: string, offset: int}|array{complete: true}|null */
 	public function timelineCursor(string $actorId): ?array {
 		$cursor = $this->durableCache->getShared(self::TIMELINE_CURSOR, md5($actorId));
@@ -204,12 +214,14 @@ class RemoteFetchQueue {
 	public function finishTimelinePage(string $actorId, bool $success, ?array $cursor, bool $updateCursor = true): void {
 		$key = md5($actorId);
 		if (!$success) {
+			$this->durableCache->setShared(self::TIMELINE_FAILED, $key, 1, self::TIMELINE_RETRY_INTERVAL);
 			$this->clearSharedThrottle(self::TIMELINE_SYNCED, $key, $actorId, 'timeline sync');
 			$this->durableCache->removeShared(self::TIMELINE_PENDING, $key);
 
 			return;
 		}
 
+		$this->durableCache->removeShared(self::TIMELINE_FAILED, $key);
 		if ($updateCursor) {
 			$this->durableCache->setShared(
 				self::TIMELINE_CURSOR,

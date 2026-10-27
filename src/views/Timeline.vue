@@ -16,11 +16,6 @@
 		<!-- said once, on the pages where the reading it describes happens -->
 		<InterestsNotice v-if="showInterestsNotice" />
 
-		<Composer
-			v-if="!settingsStore.getServerData.public && type !== 'notifications' && type !== 'single-post' && type !== 'direct' && type !== 'videos'"
-			compactOptions
-			:offerShort="isHome && settingsStore.getServerData.sections?.stories !== false" />
-
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while
 		     reading, not something they navigate to -->
@@ -29,14 +24,22 @@
 			:options="scopes"
 			:value="scope"
 			:label="t('social', 'Which posts to show')" />
-		<p v-if="scopeDescription" class="timeline-scope-description">
-			{{ scopeDescription }}
-		</p>
+		<InfoCard
+			v-if="scopeDescription"
+			:dismissKey="'feed-help-v1:' + scope"
+			:title="t('social', 'About this feed')"
+			class="timeline-scope-description">
+			<p>{{ scopeDescription }}</p>
+		</InfoCard>
 
 		<InterestsLearningBanner v-if="type === 'interests' && hasInterestsTab" />
-		<NcNoteCard v-if="showRecommendationCoverageNote" type="info" class="timeline-recommendation-coverage">
+		<InfoCard
+			v-if="showRecommendationCoverageNote"
+			dismissKey="recommendation-coverage-v1"
+			:title="t('social', 'Available recommendations')"
+			class="timeline-recommendation-coverage">
 			{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
-		</NcNoteCard>
+		</InfoCard>
 
 		<div
 			class="timeline-heading-row"
@@ -47,10 +50,30 @@
 			<h1 class="timeline-heading" :class="{ 'hidden-visually': !headingIsVisible }">
 				{{ heading }}
 			</h1>
+
+			<TimelineSwitcher
+				v-if="type === 'photos'"
+				:options="photoLayouts"
+				:value="selectedPhotoLayout"
+				:label="t('social', 'Photo feed layout')"
+				@update:value="choosePhotoLayout" />
 			<HashtagFollowButton
 				v-if="type === 'tags' && !followedTagsOnly"
 				:tag="String($route.params.tag)"
 				@changed="onHashtagFollowChanged" />
+		</div>
+		<Composer
+			v-if="!settingsStore.getServerData.public && !['notifications', 'single-post', 'direct', 'videos', 'photos'].includes(type) && !timelineStore.composerDisplayStatus"
+			oneLine
+			:listenForIntents="false" />
+
+		<div v-if="type === 'photos' && !settingsStore.getServerData.public" class="photo-compose-actions">
+			<MediaUploadButton
+				v-if="!timelineStore.composerDisplayStatus"
+				accept="image/*,video/*"
+				multiple
+				:label="t('social', 'Share photos or a video')" />
+			<DraftsButton :disabled="timelineStore.composerDisplayStatus" />
 		</div>
 
 		<HashtagFollowedList v-if="type === 'tags'" ref="followedHashtags" />
@@ -168,6 +191,9 @@ import IconBellCogOutline from 'vue-material-design-icons/BellCogOutline.vue'
 import IconCheckAll from 'vue-material-design-icons/CheckAll.vue'
 import IconClose from 'vue-material-design-icons/Close.vue'
 import IconEarth from 'vue-material-design-icons/Earth.vue'
+import IconViewGridOutline from 'vue-material-design-icons/ViewGridOutline.vue'
+import IconViewAgendaOutline from 'vue-material-design-icons/ViewAgendaOutline.vue'
+import { photoLayout, rememberPhotoLayout } from '../services/photoLayout.js'
 import IconHeart from 'vue-material-design-icons/Heart.vue'
 import IconHome from 'vue-material-design-icons/Home.vue'
 import IconInboxOutline from 'vue-material-design-icons/InboxOutline.vue'
@@ -175,6 +201,8 @@ import IconMessagePlusOutline from 'vue-material-design-icons/MessagePlusOutline
 import IconPoll from 'vue-material-design-icons/Poll.vue'
 import IconRepeat from 'vue-material-design-icons/Repeat.vue'
 import IconTagHeart from 'vue-material-design-icons/TagHeart.vue'
+import DraftsButton from '../components/DraftsButton.vue'
+import MediaUploadButton from '../components/MediaUploadButton.vue'
 import TimelineList from './../components/TimelineList.vue'
 import DirectMessages from './../components/DirectMessages.vue'
 import TimelineSwitcher from './../components/TimelineSwitcher.vue'
@@ -192,7 +220,7 @@ import HashtagFollowedList from './../components/HashtagFollowedList.vue'
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import InfoCard from '../components/InfoCard.vue'
 import eventBus, { NOTIFICATIONS_READ } from './../services/eventBus.js'
 import { rememberFilter, rememberedFilter } from './../services/notifications.js'
 import { hasInterestsFeed, isTracking } from './../services/interests.js'
@@ -208,18 +236,19 @@ import { isPersonalizedFeed, useTimelineStore } from '../store/timeline.js'
 /** How long after a feed is on screen its other scopes are fetched ahead, in milliseconds. */
 const PREFETCH_AFTER = 1500
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 // only drawn when somebody asks to review who is waiting
 const NotificationRequests = defineAsyncComponent(() => import(/* webpackChunkName: "notification-requests" */'../components/NotificationRequests.vue'))
+
+const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'../components/Composer/Composer.vue'))
 
 export default {
 	name: 'Timeline',
 	components: {
-		Announcements,
 		Composer,
+		Announcements,
 		IconCheckAll,
 		NcButton,
-		NcNoteCard,
+		InfoCard,
 		FirstPostCelebration,
 		FirstRun,
 		HashtagFollowButton,
@@ -230,6 +259,8 @@ export default {
 		ShortsBar,
 		WeeklyRecap,
 		TimelineList,
+		MediaUploadButton,
+		DraftsButton,
 		DirectMessages,
 		TimelineSwitcher,
 		IconBellCogOutline,
@@ -241,6 +272,7 @@ export default {
 	data() {
 		return {
 			infoHidden: false,
+			selectedPhotoLayout: photoLayout(),
 			/** the pending fetch-ahead of the other scopes, or 0 */
 			prefetchTimer: 0,
 			/** the title of the list being read, once the server has said */
@@ -364,21 +396,15 @@ export default {
 			return ['photos', 'videos'].includes(this.type)
 		},
 
-		/**
-		 * How the posts are drawn here.
-		 *
-		 * The same rule the profile follows, and for the same reason it gives:
-		 * Posts is what somebody wrote, which is a list; Photos and Videos are
-		 * what they showed, which is a grid. Those two pages were a list here
-		 * and a grid on a profile, so the same picture was a row in one place
-		 * and a tile in the other.
-		 *
-		 * Not a toggle. One question, one answer — a control to make Photos
-		 * look like a list would be asking the reader to settle something the
-		 * page has already answered by being Photos.
-		 *
-		 * @return {string} 'grid', 'videos' or 'list'
-		 */
+		/** @return {object[]} presentation choices, independent of feed scope */
+		photoLayouts() {
+			return [
+				{ value: 'list', label: t('social', 'Media feed'), icon: IconViewAgendaOutline },
+				{ value: 'grid', label: t('social', 'Tiles'), icon: IconViewGridOutline },
+			]
+		},
+
+		/** @return {string} shared list, media grid or video browse presentation */
 		display() {
 			// the Videos page is a video site's front page; it has its own
 			// "Upload a video" in place of the composer
@@ -386,7 +412,7 @@ export default {
 				return 'videos'
 			}
 
-			return this.type === 'photos' ? 'grid' : 'list'
+			return this.type === 'photos' ? this.selectedPhotoLayout : 'list'
 		},
 
 		/**
@@ -715,6 +741,14 @@ export default {
 	},
 
 	methods: {
+		choosePhotoLayout(layout) {
+			if (!['list', 'grid'].includes(layout)) {
+				return
+			}
+			this.selectedPhotoLayout = layout
+			rememberPhotoLayout(layout)
+		},
+
 		/**
 		 * Once a scope of the feed is on screen, fetches the first page of
 		 * the others, so that the switcher puts each on screen at once.
@@ -911,10 +945,17 @@ export default {
 	padding: 0;
 }
 
+.photo-compose-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
 .timeline-scope-description {
 	max-width: 72ch;
 	margin: calc(var(--default-grid-baseline) * 1) calc(var(--default-grid-baseline) * 2) calc(var(--default-grid-baseline) * 2);
-	color: var(--color-text-maxcontrast);
+	color: var(--color-main-text);
 	font-size: 0.9rem;
 }
 

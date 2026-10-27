@@ -29,6 +29,14 @@ use OCP\Server;
 use Throwable;
 
 class Note extends Stream implements JsonSerializable {
+	#[\Override]
+	protected function activityPubContextExtensions(): array {
+		$extensions = parent::activityPubContextExtensions();
+		if (ActivityPubEvent::fromStream($this) !== null) {
+			$extensions['ical'] = 'http://www.w3.org/2002/12/cal/ical#';
+		}
+		return $extensions;
+	}
 	private string $name = '';
 	public const TYPE = 'Note';
 
@@ -233,6 +241,9 @@ class Note extends Stream implements JsonSerializable {
 		}
 		$result['name'] = $event['name'];
 		$result['startTime'] = $event['start_time'];
+		if (isset($event['status'])) {
+			$result['ical:status'] = strtoupper($event['status']);
+		}
 		if ($event['end_time'] !== null) {
 			$result['endTime'] = $event['end_time'];
 		}

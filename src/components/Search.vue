@@ -7,11 +7,6 @@
 		class="social__wrapper social__search"
 		:class="{ 'social__search--refreshing': loading && !isEmpty }"
 		:aria-busy="loading ? 'true' : 'false'">
-		<!-- Reply used to emit `composer-reply` on the event bus with nothing
-		     on this page listening, so it did nothing at all. Kept mounted the
-		     way the single-post view keeps it, because the listener lives in
-		     the Composer's mounted(). -->
-		<Composer v-show="composerDisplayStatus" compactOptions />
 		<h1 class="social__search-heading">
 			{{ t('social', 'Search results for “{term}”', { term: query }) }}
 		</h1>
@@ -126,7 +121,6 @@
 
 <script>
 
-import { defineAsyncComponent } from 'vue'
 import UserEntry from './UserEntry.vue'
 import TimelineEntry from './TimelineEntry.vue'
 import axios from '@nextcloud/axios'
@@ -144,8 +138,6 @@ import { useAccountStore } from '../store/account.js'
 import { useSettingsStore } from '../store/settings.js'
 import { useTimelineStore } from '../store/timeline.js'
 
-const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
-
 /** how long to wait for the typing to stop before asking the server */
 const DEBOUNCE_MS = 300
 
@@ -155,7 +147,6 @@ export const SEARCH_REFILL_MS = 6000
 export default {
 	name: 'Search',
 	components: {
-		Composer,
 		Magnify,
 		NcButton,
 		NcEmptyContent,
@@ -259,9 +250,6 @@ export default {
 		},
 
 		/** @return {boolean} whether the reply composer is open */
-		composerDisplayStatus() {
-			return this.timelineStore.getComposerDisplayStatus
-		},
 
 		/**
 		 * Whether what is on screen answers what is in the search box.

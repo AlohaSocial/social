@@ -95,6 +95,8 @@ export default {
 		TimelineSwitcher,
 	},
 
+	props: { profileLayout: { type: Object, default: undefined } },
+
 	data() {
 		return {
 			posts: [],
@@ -116,7 +118,7 @@ export default {
 
 		/** @return {Array} the five places a profile can be read */
 		kinds() {
-			return profileKinds(this.account)
+			return profileKinds(this.account, this.profileLayout, 'tagged')
 		},
 
 		/** @return {string} */

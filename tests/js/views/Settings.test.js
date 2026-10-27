@@ -98,7 +98,7 @@ describe('Settings', () => {
 		expect(wrapper.find('h1.settings__heading').text()).toBe('Settings')
 		expect(groupTitles(wrapper)).toEqual(['Profile and privacy', 'Reading', 'Notifications', 'Your posts', 'Apps and account', 'Help'])
 		expect(wrapper.find('.settings__group-heading').text()).toBe('Profile and privacy')
-		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Who may send you direct messages', 'Featured hashtags', 'Portfolio'])
+		expect(headings(wrapper)).toEqual(['Who can find and follow you', 'Public profile layout', 'Who may send you direct messages', 'Featured hashtags', 'Portfolio'])
 	})
 
 	it('has every section in exactly one group, in the order they are read', async () => {
@@ -112,6 +112,7 @@ describe('Settings', () => {
 
 		expect(seen).toEqual([
 			'Who can find and follow you',
+			'Public profile layout',
 			'Who may send you direct messages',
 			'Featured hashtags',
 			'Portfolio',

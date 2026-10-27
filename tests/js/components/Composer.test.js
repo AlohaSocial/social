@@ -1071,6 +1071,105 @@ describe('Composer', () => {
 		})
 	})
 
+	describe('the compact single-line mode', () => {
+		it('stays one line while typing and sends through the existing publisher', async () => {
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'A short update')
+			expect(wrapper.find('.options').exists()).toBe(false)
+			expect(wrapper.vm.expanded).toBe(false)
+			await wrapper.find('.composer-line__send').trigger('click')
+			await flushPromises()
+			expect(postedStatus(store).status).toBe('A short update')
+			expect(wrapper.emitted('posted')).toHaveLength(1)
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('keeps a refused quick post and hands its draft to the full modal', async () => {
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			store.post.mockResolvedValueOnce(undefined)
+			await setContent(wrapper, 'Keep these words')
+			await wrapper.find('.composer-line__send').trigger('click')
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Keep these words')
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			await wrapper.find('.composer-line__expand').trigger('click')
+			expect(opened).toHaveBeenCalledTimes(1)
+			expect(JSON.parse(localStorage.getItem('social.composer.draft::alice')).text).toBe('Keep these words')
+			eventBus.off('composer-open', opened)
+		})
+
+		it('hands the full draft directly to the modal even when browser storage is unavailable', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+				throw new Error('Storage unavailable')
+			})
+			await setContent(wrapper, 'Keep it without localStorage')
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			await wrapper.find('.composer-line__expand').trigger('click')
+			const intent = opened.mock.calls[0][0]
+			expect(intent.draft.text).toBe('Keep it without localStorage')
+			wrapper.unmount()
+			const full = mountComposer({ initialDraft: intent.draft, startExpanded: true, listenForIntents: false }).wrapper
+			await flushPromises()
+			expect(typed(full)).toBe('Keep it without localStorage')
+			eventBus.off('composer-open', opened)
+		})
+
+		it('opens rich drafts for review instead of silently sending hidden settings', async () => {
+			localStorage.setItem('social.composer.draft::alice', JSON.stringify({ text: 'Warned', spoilerText: 'Sensitive topic', savedAt: Date.now() }))
+			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
+			await flushPromises()
+			const opened = vi.fn()
+			eventBus.on('composer-open', opened)
+			expect(wrapper.find('.composer-line__send').attributes('aria-label')).toBe('Continue draft')
+			await wrapper.vm.createPost()
+			expect(store.post).not.toHaveBeenCalled()
+			expect(opened).toHaveBeenCalledTimes(1)
+			eventBus.off('composer-open', opened)
+		})
+	})
+
+	describe('initial modal context', () => {
+		it('prefills a reply even when its lazy editor did not hear the opening event', async () => {
+			const { wrapper } = mountComposer({ inReplyTo: replyTo(bob), listenForIntents: false, startExpanded: true, showReplyContext: true })
+			await flushPromises()
+			expect(typed(wrapper)).toContain('@bob@remote.example')
+			expect(wrapper.vm.replyTo.id).toBe('42')
+			expect(wrapper.vm.anchoredReply).toBe(false)
+		})
+
+		it('restores a quote draft in its own context and ignores later global intents', async () => {
+			localStorage.setItem('social.composer.draft.quote.77::alice', JSON.stringify({ text: 'My saved commentary', savedAt: Date.now() }))
+			const quoted = { id: '77', content: '<p>Quoted</p>', account: bob }
+			const { wrapper } = mountComposer({ initialQuote: quoted, listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('My saved commentary')
+			expect(wrapper.vm.quoteOf).toEqual(quoted)
+			eventBus.emit('composer-quote', { id: '88' })
+			expect(wrapper.vm.quoteOf.id).toBe('77')
+		})
+
+		it('edits a listed re-draft in its own storage slot without overwriting the new-post draft', async () => {
+			localStorage.setItem('social.composer.draft::alice', JSON.stringify({ text: 'Unrelated new post', savedAt: Date.now() }))
+			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Saved revision', savedAt: Date.now() }))
+			const { wrapper } = mountComposer({ initialDraftContext: 'redraft.101', listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Saved revision')
+			await setContent(wrapper, 'Continue this revision')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft.redraft.101::alice')).text).toBe('Continue this revision')
+			expect(JSON.parse(localStorage.getItem('social.composer.draft::alice')).text).toBe('Unrelated new post')
+		})
+
+		it('restores an unfinished re-draft instead of replacing it with the deleted text', async () => {
+			localStorage.setItem('social.composer.draft.redraft.101::alice', JSON.stringify({ text: 'Already revised', savedAt: Date.now() }))
+			const { wrapper } = mountComposer({ initialRedraft: { id: '101', content: '<p>Old text</p>' }, listenForIntents: false, startExpanded: true })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Already revised')
+		})
+	})
+
 	describe('the draft', () => {
 		const stored = () => JSON.parse(localStorage.getItem('social.composer.draft::alice') ?? 'null')
 
@@ -1402,7 +1501,7 @@ describe('Composer', () => {
 
 			await flushPromises()
 			expect(preview.props('preview')).toEqual({ file, data: media, failed: false })
-			expect(preview.find('img').attributes('src')).toBe(media.preview_url)
+			expect(preview.find('img').attributes('src')).toBe(media.url)
 		})
 
 		it('drops a preview again when it is deleted', async () => {
@@ -1523,7 +1622,7 @@ describe('Composer', () => {
 
 			const preview = wrapper.findComponent(PreviewGridItem)
 			expect(preview.props('preview')).toMatchObject({ path: beach, data: media, failed: false })
-			expect(preview.find('img').attributes('src')).toBe(media.preview_url)
+			expect(preview.find('img').attributes('src')).toBe(media.url)
 		})
 
 		it('sends a picked picture with the post, like any other attachment', async () => {
@@ -1546,8 +1645,9 @@ describe('Composer', () => {
 			await addFromFiles(wrapper)
 
 			const previews = wrapper.findAllComponents(PreviewGridItem)
-			expect(previews).toHaveLength(3)
-			expect(previews[1].find('.preview-item__failed').exists()).toBe(true)
+			expect(previews).toHaveLength(1)
+			await wrapper.find('[aria-label="Next attachment"]').trigger('click')
+			expect(wrapper.findComponent(PreviewGridItem).find('.preview-item__failed').exists()).toBe(true)
 
 			await setContent(wrapper, 'two of three')
 			await submitButton(wrapper).trigger('click')
@@ -1578,7 +1678,8 @@ describe('Composer', () => {
 			await addFromFiles(wrapper)
 
 			expect(pickedPaths(store)).toHaveLength(9)
-			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(10)
+			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+			expect(wrapper.find('.preview-grid__navigation').text()).toContain('1 of 10')
 		})
 
 		it('offers neither way of attaching once the post is full', async () => {
@@ -1644,7 +1745,8 @@ describe('Composer', () => {
 
 			await addFromFiles(wrapper)
 
-			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(2)
+			expect(wrapper.findAllComponents(PreviewGridItem)).toHaveLength(1)
+			expect(wrapper.find('.preview-grid__navigation').text()).toContain('1 of 2')
 		})
 	})
 
@@ -1985,7 +2087,7 @@ describe('Composer', () => {
 			await setContent(wrapper, 'no longer a spoiler')
 			await addWarning(wrapper, 'season finale')
 			// the same button closes it again
-			await wrapper.find('button[aria-label="Remove content warning"]').trigger('click')
+			await wrapper.find('.content-warning-row__remove').trigger('click')
 
 			await submitButton(wrapper).trigger('click')
 			await flushPromises()
@@ -3610,6 +3712,93 @@ describe('Composer', () => {
 
 		it('are not named on a server that offers no Bluesky', () => {
 			expect(reaches(mountWith({ handle: 'alice.cloud.example.org', active: true }, false))).toBe(false)
+		})
+	})
+	describe('editing through the shared composer', () => {
+		const post = (extra = {}) => ({ id: '123', content: '<p>Original</p>', visibility: 'public', media_attachments: [], ...extra })
+		const edit = (extra = {}) => mountComposer({ editItem: post(extra), startExpanded: true, compactOptions: true, listenForIntents: false, editMaxLength: 500 })
+
+		it('loads published text without reading or overwriting creation drafts', async () => {
+			localStorage.setItem('social.composer.draft::alice', 'untouched draft')
+			const { wrapper, store } = edit({ content: '<p>First</p><p>Second</p>', sensitive: true, spoiler_text: 'Warning' })
+			expect(wrapper.vm.statusText).toBe('First\nSecond')
+			expect(wrapper.vm.isEditDirty).toBe(false)
+			await setContent(wrapper, 'Changed')
+			expect(wrapper.vm.isEditDirty).toBe(true)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ content: 'Changed', spoiler_text: 'Warning', sensitive: true })
+			expect(store.post).not.toHaveBeenCalled()
+			expect(localStorage.getItem('social.composer.draft::alice')).toBe('untouched draft')
+		})
+
+		it('clears warnings and sensitivity explicitly and leaves the source unchanged', async () => {
+			const { wrapper } = edit({ spoiler_text: 'Warning', sensitive: true })
+			await nextTick()
+			await wrapper.find('.content-warning-row__remove').trigger('click')
+			await wrapper.find('.composer-sensitive input').setValue(false)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ spoiler_text: '', sensitive: false })
+			expect(wrapper.props('editItem').spoiler_text).toBe('Warning')
+		})
+
+		it('keeps media descriptions local until Save and sends removal and empty descriptions', async () => {
+			const { wrapper, store } = edit({ media_attachments: [{ ...media, id: '1', description: 'First' }, { ...media, id: '2', description: 'Second' }] })
+			const [first, second] = Object.keys(wrapper.vm.attachments)
+			wrapper.vm.describeAttachment({ key: first, description: '' })
+			await nextTick()
+			wrapper.findComponent(PreviewGridItem).vm.$emit('commitDescription', { key: first, description: 'Changed' })
+			await nextTick()
+			expect(store.describeMedia).not.toHaveBeenCalled()
+			wrapper.vm.deletePreview(second)
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0]).toMatchObject({ media_ids: ['1'], media_attributes: [{ id: '1', description: '' }] })
+			expect(wrapper.findComponent(PreviewGridItem).props('allowEffects')).toBe(false)
+		})
+
+		it('uses the event editor and validates dates without throwing while editing', async () => {
+			const { wrapper } = edit({ event: { name: 'Gathering', start_time: '2026-11-03T09:00:00Z', end_time: null, location: 'Old venue', status: 'cancelled' } })
+			wrapper.vm.eventLocation = 'New venue'
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0].event).toEqual({ name: 'Gathering', start_time: '2026-11-03T09:00:00.000Z', end_time: null, location: 'New venue', status: 'cancelled' })
+			wrapper.vm.eventStart = 'invalid'
+			expect(() => wrapper.vm.isEditDirty).not.toThrow()
+			expect(wrapper.vm.canPost).toBe(false)
+		})
+
+		it('hides unsupported published-post options while retaining language and media tools', async () => {
+			const { wrapper } = edit()
+			wrapper.vm.moreOptionsOpen = true
+			await nextTick()
+			for (const label of ['Add poll', 'Create an event', 'Schedule for later', 'Say where this was taken']) {
+				expect(wrapper.find(`button[aria-label="${label}"]`).exists()).toBe(false)
+			}
+			expect(wrapper.findComponent(VisibilitySelect).exists()).toBe(false)
+			expect(wrapper.findComponent(LanguageSelect).exists()).toBe(true)
+			expect(wrapper.find('button[aria-label="Add attachment"]').exists()).toBe(true)
+			wrapper.vm.language = 'de'
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')[0][0].language).toBe('de')
+		})
+
+		it('blocks empty, oversized, uploading and pending saves and retains failed edits', async () => {
+			const { wrapper } = edit()
+			await setContent(wrapper, '')
+			expect(wrapper.vm.canPost).toBe(false)
+			await setContent(wrapper, 'x'.repeat(501))
+			expect(wrapper.vm.canPost).toBe(false)
+			await setContent(wrapper, 'Changed')
+			wrapper.vm.attachments = { pending: { data: null, file: new File(['x'], 'x.png', { type: 'image/png' }) } }
+			expect(wrapper.vm.canPost).toBe(false)
+			wrapper.vm.attachments = {}
+			await wrapper.setProps({ editSaving: true })
+			await wrapper.vm.createPost()
+			expect(wrapper.emitted('save')).toBeUndefined()
+			expect(wrapper.find('[contenteditable]').attributes('contenteditable')).toBe('false')
+			await wrapper.setProps({ editSaving: false })
+			await wrapper.vm.createPost()
+			// A failed save leaves the editor mounted with its contents and dirty guard.
+			expect(wrapper.vm.statusText).toBe('Changed')
+			expect(wrapper.vm.isEditDirty).toBe(true)
 		})
 	})
 })

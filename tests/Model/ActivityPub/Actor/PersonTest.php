@@ -36,6 +36,17 @@ class PersonTest extends TestCase {
 	/** @var IURLGenerator&MockObject */
 	private $urlGenerator;
 
+	public function testProfilePresentationSurvivesAnActivityPubRoundTrip(): void {
+		$layout = ['default_tab' => 'photos', 'tabs' => ['posts', 'photos']];
+		$actor = new Person();
+		$actor->setId('https://remote.example/@alice')->setPreferredUsername('alice');
+		$actor->setProfileLayout($layout);
+		$copy = new Person();
+		$copy->import($actor->exportAsActivityPub());
+
+		self::assertSame($layout, $copy->getProfileLayout());
+	}
+
 	protected function setUp(): void {
 		$this->timezone = date_default_timezone_get();
 		date_default_timezone_set('UTC');
@@ -464,6 +475,7 @@ class PersonTest extends TestCase {
 			->setFollowers('https://cloud.example.org/apps/social/@alice/followers')
 			->setFollowing('https://cloud.example.org/apps/social/@alice/following')
 			->setSharedInbox('https://cloud.example.org/apps/social/inbox')
+			->setLocal(true)
 			->setPublicKey(self::PEM)
 			->setUrlSocial('https://cloud.example.org/apps/social/');
 
@@ -474,10 +486,14 @@ class PersonTest extends TestCase {
 		$export = $this->localActor()->exportAsActivityPub();
 
 		$this->assertSame(
-			[ACore::CONTEXT_ACTIVITYSTREAMS, ACore::CONTEXT_SECURITY, ACore::CONTEXT_EXTENSIONS],
+			[ACore::CONTEXT_ACTIVITYSTREAMS, ACore::CONTEXT_SECURITY, array_merge(ACore::CONTEXT_EXTENSIONS, [
+				'profileDefaultTab' => 'https://nextcloud.com/ns/social#profileDefaultTab',
+				'profileTabs' => ['@id' => 'https://nextcloud.com/ns/social#profileTabs', '@container' => '@list'],
+			])],
 			$export['@context']
 		);
 		$this->assertSame('Person', $export['type']);
+		$this->assertSame('posts', $export['profileDefaultTab']);
 		$this->assertSame('alice', $export['preferredUsername']);
 		$this->assertSame('Alice', $export['name']);
 		$this->assertSame('https://cloud.example.org/apps/social/@alice/inbox', $export['inbox']);
@@ -504,7 +520,10 @@ class PersonTest extends TestCase {
 		$person->setPublicKey('');
 
 		$this->assertSame(
-			[ACore::CONTEXT_ACTIVITYSTREAMS, ACore::CONTEXT_EXTENSIONS],
+			[ACore::CONTEXT_ACTIVITYSTREAMS, array_merge(ACore::CONTEXT_EXTENSIONS, [
+				'profileDefaultTab' => 'https://nextcloud.com/ns/social#profileDefaultTab',
+				'profileTabs' => ['@id' => 'https://nextcloud.com/ns/social#profileTabs', '@container' => '@list'],
+			])],
 			$person->exportAsActivityPub()['@context']
 		);
 	}

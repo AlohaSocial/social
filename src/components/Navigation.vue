@@ -42,7 +42,7 @@
 				variant="primary"
 				wide
 				alignment="start"
-				@click="showComposer = true">
+				@click="openComposer()">
 				<template #icon>
 					<IconPlus :size="20" />
 				</template>
@@ -268,8 +268,9 @@
 		v-if="showComposer"
 		closeOnClickOutside
 		labelId="social-new-post-title"
-		@close="showComposer = false">
-		<div class="modal-composer">
+		:show="showComposer"
+		@update:show="onComposerVisibility">
+		<div class="modal-composer" @keydown.esc="onComposerEscape">
 			<div class="modal-composer__header">
 				<h2 id="social-new-post-title" class="modal-composer__title">
 					<NcAvatar
@@ -280,10 +281,10 @@
 						:disableTooltip="true"
 						:size="32"
 						aria-hidden="true" />
-					{{ t('social', 'New post') }}
+					{{ composerEdit ? t('social', 'Edit post') : composerReply ? t('social', 'Reply') : t('social', 'New post') }}
 				</h2>
 				<NcButton
-					v-if="storiesAvailable"
+					v-if="storiesAvailable && !composerEdit"
 					class="modal-composer__story"
 					variant="tertiary"
 					@click="openStoryComposer">
@@ -295,14 +296,40 @@
 			</div>
 			<!-- the box emptied and the modal stayed open, which reads as if
 			     nothing had been sent -->
+			<PostEditForm
+				v-if="composerEdit"
+				ref="postEditForm"
+				:item="composerEdit"
+				:maxLength="instanceStore.maxCharacters"
+				:saving="composerSaving"
+				@save="saveComposerEdit"
+				@cancel="requestComposerClose" />
 			<Composer
+				v-else
+				ref="modalComposer"
 				startExpanded
 				compactOptions
+				showReplyContext
+				:listenForIntents="false"
+				:inReplyTo="composerReply"
+				:initialQuote="composerQuote"
+				:initialDraft="composerDraft"
+				:initialDraftContext="composerDraftContext"
+				:initialRedraft="composerRedraft"
+				:initialFiles="composerFiles"
 				:initialPaths="composerPaths"
 				emojiPickerContainer=".modal-wrapper"
-				@posted="showComposer = false" />
+				@posted="finishComposer" />
 		</div>
 	</NcModal>
+
+	<ConfirmDialog
+		:open="composerDiscardOpen"
+		:name="t('social', 'Discard these changes?')"
+		:message="t('social', 'Your unsaved changes and unfinished uploads will be lost. The published post will stay unchanged.')"
+		:confirmLabel="t('social', 'Discard changes')"
+		@update:open="answerComposerDiscard(false)"
+		@confirm="answerComposerDiscard(true)" />
 
 	<ShortComposerDialog
 		v-if="showStoryComposer"
@@ -390,6 +417,8 @@ import { pageIdentity } from '../services/pageOrder.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { afterFirstTimeline } from '../services/boot.js'
+import ConfirmDialog from './admin/ConfirmDialog.vue'
+import { focusedElement, returnFocusTo } from '../utils/focus.js'
 import eventBus, { BLUESKY_FEEDS_CHANGED, LISTS_CHANGED } from '../services/eventBus.js'
 import { fetchSavedFeeds, routeFor as feedRoute, uriOf } from '../services/blueskyFeeds.js'
 import { ownAvatarUrl } from '../services/avatar.js'
@@ -397,6 +426,7 @@ import { ownAvatarUrl } from '../services/avatar.js'
 // the composer pulls the emoji picker and the attachment stack with it:
 // its own chunk keeps all of that out of the entry bundle
 const Composer = defineAsyncComponent(() => import(/* webpackChunkName: "composer" */'./Composer/Composer.vue'))
+const PostEditForm = defineAsyncComponent(() => import(/* webpackChunkName: "composer-edit" */'./PostEditForm.vue'))
 const ShortComposerDialog = defineAsyncComponent(() => import(/* webpackChunkName: "short-composer" */'./ShortComposerDialog.vue'))
 
 /** how often to re-read the badges when the server cannot push */
@@ -436,6 +466,8 @@ export default {
 		NcButton,
 		NcCounterBubble,
 		Composer,
+		PostEditForm,
+		ConfirmDialog,
 		ShortComposerDialog,
 		IconImageMultiple,
 		IconHome,
@@ -495,6 +527,21 @@ export default {
 			ringing: false,
 			ringTimer: null,
 			showComposer: false,
+			composerReply: null,
+			composerQuote: null,
+			composerDraft: null,
+			composerDraftContext: '',
+			composerRedraft: null,
+			composerEdit: null,
+			composerFiles: [],
+			composerSaving: false,
+			composerDiscardOpen: false,
+			resolveComposerDiscard: null,
+			composerHandlers: {},
+			composerIntentGeneration: 0,
+			composerOpener: null,
+			stopComposerRouteGuard: null,
+			onComposerBeforeUnload: null,
 			/** the 24-hour story composer opened from the New post dialog */
 			showStoryComposer: false,
 			/** files "Share to Social" in the Files app sent along, attached when the dialog opens */
@@ -878,6 +925,18 @@ export default {
 			// the paths were for that one dialog; a later "New post" starts empty
 			if (!open) {
 				this.composerPaths = []
+				this.$nextTick(() => {
+					window.requestAnimationFrame(() => {
+						if (!returnFocusTo(this.composerOpener)) {
+							const replacement = document.querySelector('.new-post--one-line .composer-line__input')
+								|| document.querySelector('.navigation__compose')
+							const rect = replacement?.getBoundingClientRect()
+							if (replacement instanceof HTMLElement && rect && rect.left >= 0 && rect.right <= window.innerWidth) {
+								returnFocusTo(replacement)
+							}
+						}
+					})
+				})
 			}
 		},
 
@@ -893,6 +952,32 @@ export default {
 	},
 
 	mounted() {
+		this.composerHandlers = {
+			'composer-open': (intent) => this.openComposer(intent),
+			'composer-reply': (reply) => this.openComposer({ reply }),
+			'composer-quote': (quote) => this.openComposer({ quote }),
+			'composer-redraft': (redraft) => this.openComposer({ redraft }),
+			'composer-edit': (intent) => this.openComposer(intent),
+			'shortcut:compose': () => this.openComposer(),
+		}
+		for (const [event, handler] of Object.entries(this.composerHandlers)) {
+			eventBus.on(event, handler)
+		}
+		this.onComposerBeforeUnload = (event) => {
+			const editor = /** @type {{isDirty: boolean, editMediaUploading: boolean}|undefined} */ (this.$refs.postEditForm)
+			if (this.showComposer && (this.composerSaving || this.timelineStore.composerSubmitting || editor?.isDirty || editor?.editMediaUploading)) {
+				event.preventDefault()
+				event.returnValue = ''
+			}
+		}
+		window.addEventListener('beforeunload', this.onComposerBeforeUnload)
+		if (this.$router?.beforeEach) {
+			this.stopComposerRouteGuard = this.$router.beforeEach((to, from) => {
+				return !this.timelineStore.composerSubmitting
+					&& (!this.showComposer || to.path === from.path || this.requestComposerClose())
+			})
+		}
+
 		this.$nextTick(() => this.placeIndicator())
 		// none of these is what the reader opened the page for, and fired
 		// together with the timeline they slowed it down by their number:
@@ -935,6 +1020,13 @@ export default {
 	},
 
 	beforeUnmount() {
+		for (const [event, handler] of Object.entries(this.composerHandlers)) {
+			eventBus.off(event, handler)
+		}
+		window.removeEventListener('beforeunload', this.onComposerBeforeUnload)
+		this.stopComposerRouteGuard?.()
+		this.resolveComposerDiscard?.(false)
+
 		eventBus.off(LISTS_CHANGED, this.onListsChanged)
 		eventBus.off(BLUESKY_FEEDS_CHANGED, this.fetchBlueskyFeeds)
 		window.removeEventListener('resize', this.measureViewport)
@@ -950,6 +1042,119 @@ export default {
 	},
 
 	methods: {
+		async openComposer(intent = {}) {
+			if (!this.showComposer && this.timelineStore.composerSubmitting) {
+				return
+			}
+			const generation = ++this.composerIntentGeneration
+			const opener = intent.opener || focusedElement()
+			if (this.showComposer && !(await this.requestComposerClose())) {
+				return
+			}
+			if (generation !== this.composerIntentGeneration) {
+				return
+			}
+			this.timelineStore.setComposerDisplayStatus(true)
+			await this.$nextTick()
+			if (generation !== this.composerIntentGeneration) {
+				return
+			}
+			this.composerOpener = opener
+			this.composerReply = intent.reply || null
+			this.composerQuote = intent.quote || null
+			this.composerDraft = intent.draft || null
+			this.composerDraftContext = typeof intent.context === 'string' ? intent.context : ''
+			this.composerRedraft = intent.redraft || null
+			this.composerEdit = intent.edit || null
+			this.composerFiles = intent.files || []
+			this.composerPaths = intent.paths || []
+			this.showComposer = true
+		},
+
+		onComposerEscape(event) {
+			const composer = /** @type {{tribute?: {isActive: boolean}}|undefined} */ (this.$refs.modalComposer)
+			const editor = /** @type {{isAutocompleteActive: boolean}|undefined} */ (this.$refs.postEditForm)
+			if (event.defaultPrevented || this.composerDiscardOpen || composer?.tribute?.isActive || editor?.isAutocompleteActive) {
+				return
+			}
+			event.preventDefault()
+			event.stopPropagation()
+			this.requestComposerClose()
+		},
+
+		onComposerVisibility(open) {
+			if (!open) {
+				this.requestComposerClose()
+			}
+		},
+
+		async requestComposerClose() {
+			const composer = /** @type {{loading: boolean, confirmLeave: (to: {path: string}, from: {path: string}) => boolean|Promise<boolean>, rememberDraft: () => void}|undefined} */ (this.$refs.modalComposer)
+			if (this.composerSaving || composer?.loading) {
+				return false
+			}
+			const editor = /** @type {{isDirty: boolean, editMediaUploading: boolean}|undefined} */ (this.$refs.postEditForm)
+			if (editor?.isDirty || editor?.editMediaUploading) {
+				if (this.composerDiscardOpen) {
+					return false
+				}
+				this.composerDiscardOpen = true
+				const discard = await new Promise((resolve) => {
+					this.resolveComposerDiscard = resolve
+				})
+				if (!discard) {
+					return false
+				}
+			} else if (composer) {
+				if (!(await composer.confirmLeave({ path: 'close-modal' }, { path: 'composer' }))) {
+					return false
+				}
+				composer.rememberDraft()
+			}
+			this.finishComposer()
+			return true
+		},
+
+		answerComposerDiscard(discard) {
+			this.composerDiscardOpen = false
+			const resolve = this.resolveComposerDiscard
+			if (!resolve) {
+				return
+			}
+			if (discard) {
+				this.resolveComposerDiscard = null
+				resolve(true)
+				return
+			}
+			// ConfirmDialog closes before emitting confirm in the same tick.
+			this.$nextTick(() => {
+				if (this.resolveComposerDiscard === resolve) {
+					this.resolveComposerDiscard = null
+					resolve(false)
+				}
+			})
+		},
+
+		finishComposer() {
+			this.showComposer = false
+			this.timelineStore.setComposerDisplayStatus(false)
+		},
+
+		async saveComposerEdit(edit) {
+			if (this.composerSaving || !this.composerEdit) {
+				return
+			}
+			this.composerSaving = true
+			try {
+				const response = await this.timelineStore.postEdit({ status: this.composerEdit, ...edit })
+				if (response !== undefined) {
+					this.finishComposer()
+				}
+			} finally {
+				this.composerSaving = false
+			}
+		},
+
 		/**
 		 * The badge in words: the bubble sits outside the entry's link, so a
 		 * screen reader hearing "Activities" was told nothing of the number
@@ -987,9 +1192,10 @@ export default {
 			return answered.some(Boolean)
 		},
 
-		openStoryComposer() {
-			this.showComposer = false
-			this.showStoryComposer = true
+		async openStoryComposer() {
+			if (await this.requestComposerClose()) {
+				this.showStoryComposer = true
+			}
 		},
 
 		/**
@@ -1160,8 +1366,7 @@ export default {
 				return
 			}
 
-			this.composerPaths = paths
-			this.showComposer = true
+			this.openComposer({ paths })
 
 			const query = { ...this.$route.query }
 			delete query.attach

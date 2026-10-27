@@ -245,6 +245,7 @@ class ApiContractTest extends TestCase {
 		$person->setId('https://cloud.example.org/apps/social/@alice');
 		$person->setPreferredUsername('alice');
 		$person->setUrlSocial('https://cloud.example.org/apps/social/');
+		$person->setLocal(true);
 
 		$account = $person->exportAsLocal();
 
@@ -263,7 +264,7 @@ class ApiContractTest extends TestCase {
 			'acct', 'avatar', 'avatar_default', 'avatar_static', 'bluesky', 'bot', 'created_at', 'discoverable',
 			'display_name', 'emojis', 'fields', 'followers_count', 'following_count',
 			'group', 'header', 'header_default', 'header_static', 'id', 'indexable', 'last_status_at', 'locked',
-			'nextcloud_user', 'nid', 'note', 'pronouns', 'roles', 'statuses_count', 'support_link', 'url', 'username', 'verification',
+			'nextcloud_user', 'nid', 'note', 'profile_layout', 'pronouns', 'roles', 'statuses_count', 'support_link', 'url', 'username', 'verification',
 		];
 		$actual = array_keys($account);
 		sort($expected);

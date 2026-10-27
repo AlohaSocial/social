@@ -3,8 +3,8 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<section class="event-editor" :aria-label="t('social', 'Create an event')">
-		<h3>{{ t('social', 'Create an event') }}</h3>
+	<section class="event-editor" :aria-label="editing ? t('social', 'Edit event') : t('social', 'Create an event')">
+		<h3>{{ editing ? t('social', 'Edit event') : t('social', 'Create an event') }}</h3>
 		<label>
 			{{ t('social', 'Event title') }}
 			<input
@@ -62,6 +62,7 @@ export default {
 	name: 'EventEditor',
 
 	props: {
+		editing: { type: Boolean, default: false },
 		name: { type: String, default: '' },
 		start: { type: String, default: '' },
 		end: { type: String, default: '' },

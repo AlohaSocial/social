@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import TimelineEntry from '../../../src/components/TimelineEntry.vue'
 import AccountHoverCard from '../../../src/components/AccountHoverCard.vue'
 import ActorAvatar from '../../../src/components/ActorAvatar.vue'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from '../../../src/store/settings.js'
 import { useTimelineStore } from '../../../src/store/timeline.js'
@@ -513,6 +514,38 @@ describe('why For you shows a post', () => {
 		expect(chip.text()).toBe('Popular right now')
 		expect(chip.attributes('aria-label')).toBe('Why you\'re seeing this: popular right now')
 		expect(wrapper.findAllComponents(RouterLinkStub).some((link) => link.classes().includes('interest-reason'))).toBe(false)
+	})
+
+	it('keeps a visible explanation after polling clears status metadata and time advances', async () => {
+		vi.useFakeTimers()
+		try {
+			const original = { ...post, interest: { tags: ['photography'], reason: 'followed' } }
+			const { wrapper, timelineStore } = mountEntry(original, { type: 'interests' })
+			timelineStore.setTimelineType('interests')
+			timelineStore.addToTimeline([original])
+			const refreshed = { ...post, interest: null, favourites_count: 9 }
+			timelineStore.updateStatus(refreshed)
+			await wrapper.setProps({ item: refreshed })
+			await vi.advanceTimersByTimeAsync(60_000)
+			expect(wrapper.find('.interest-reason').text()).toBe('Because you follow #photography')
+			await wrapper.setProps({ type: 'home' })
+			expect(wrapper.find('.interest-reason').exists()).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it.each(['photos', 'videos', 'shorts'])('retains personalized explanations in %s only', async (type) => {
+		const original = { ...post, interest: { tags: [], reason: 'popular' } }
+		const { wrapper, timelineStore } = mountEntry(original, { type })
+		timelineStore.setTimelineType(type)
+		timelineStore.setTimelineParams({ scope: 'interests' })
+		timelineStore.addToTimeline([original])
+		await wrapper.setProps({ item: { ...post, interest: null } })
+		expect(wrapper.find('.interest-reason').text()).toBe('Popular right now')
+		timelineStore.setTimelineParams({ scope: 'home' })
+		await nextTick()
+		expect(wrapper.find('.interest-reason').exists()).toBe(false)
 	})
 
 	it('draws nothing on a post the feed did not choose', () => {
