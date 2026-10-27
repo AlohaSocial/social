@@ -161,11 +161,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install ffmpeg
-        # The server measures the checked-in Shorts fixtures with ffprobe.
-        # The runner image already has apt indexes; avoid a slow apt-get update.
-        run: sudo apt-get install -y -qq --no-install-recommends ffmpeg
-
       - name: Start PostgreSQL
         # the image phpunit-pgsql.yml uses
         if: matrix.db == 'pgsql'
