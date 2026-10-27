@@ -274,7 +274,7 @@ class ChatStore {
 		}
 
 		$createdAt = (string)($reaction['createdAt'] ?? '');
-		$eventKey = $revision !== '' ? $revision : hash('sha256', $createdAt . "\\0" . $emoji);
+		$eventKey = $revision !== '' ? $revision : hash('sha256', $createdAt . '\\0' . $emoji);
 		$record = new EmojiReact();
 		$record->setId(
 			$actorId . '/convo/' . rawurlencode($convoId) . '/' . rawurlencode($messageId)
