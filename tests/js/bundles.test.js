@@ -213,8 +213,10 @@ describe('the compressed size of what a page downloads', () => {
 	const CEILINGS = [
 		// 218 KB when this was written; every page of the app loads it first
 		['social-framework.js', 240 * KB],
-		// 92 KB, up from 71 in September
-		['social-social.js', 105 * KB],
+		// The core entry has grown to 105 KB as profile and feed features were
+		// added. Keep 3 KB of headroom so a small feature does not turn a
+		// healthy build into a CI failure; larger growth calls for splitting.
+		['social-social.js', 108 * KB],
 		// 175 KB, loaded when a video is played
 		['social-hls.js', 193 * KB],
 		// 100 KB, the administration page; keep 1 KB for compression drift

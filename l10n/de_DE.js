@@ -2,6 +2,8 @@ OC.L10N.register(
     "social",
     {
     "Aloha Social" : "Aloha Social",
+    "Play" : "Abspielen",
+    "Pause" : "Pausieren",
     "{account} mentioned you" : "{account} hat Sie erwähnt",
     "{account} favourited your post" : "{account} gefällt Ihr Beitrag",
     "{account} boosted your post" : "{account} hat Ihren Beitrag geteilt",

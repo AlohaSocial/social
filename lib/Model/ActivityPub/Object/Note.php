@@ -29,6 +29,14 @@ use OCP\Server;
 use Throwable;
 
 class Note extends Stream implements JsonSerializable {
+	#[\Override]
+	protected function activityPubContextExtensions(): array {
+		$extensions = parent::activityPubContextExtensions();
+		if (ActivityPubEvent::fromStream($this) !== null) {
+			$extensions['ical'] = 'http://www.w3.org/2002/12/cal/ical#';
+		}
+		return $extensions;
+	}
 	private string $name = '';
 	public const TYPE = 'Note';
 

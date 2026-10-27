@@ -50,7 +50,7 @@ export function mentionMenuItem(account) {
 export function mentionChip(account) {
 	return '<span class="mention" contenteditable="false">'
 		+ `<a href="${safeHref(account.url)}" target="_blank" rel="noopener noreferrer">`
-		+ `<img src="${safeHref(account.avatar)}" alt="" />`
+		+ `<img src="${safeHref(account.avatar)}" alt="@${escapeHtml(account.value)}" />`
 		+ `@${escapeHtml(account.value)}`
 		+ '</a>'
 		+ '</span>&nbsp;'

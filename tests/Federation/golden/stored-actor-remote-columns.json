@@ -9,6 +9,16 @@
         "bot": false,
         "discoverable": true,
         "indexable": false,
+        "profile_layout": {
+            "default_tab": "posts",
+            "tabs": [
+                "posts",
+                "photos",
+                "videos",
+                "tagged",
+                "collections"
+            ]
+        },
         "group": false,
         "created_at": "2025-01-02T03:04:05.000Z",
         "note": "<p>grows beans</p>",

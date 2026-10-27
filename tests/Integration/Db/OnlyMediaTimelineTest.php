@@ -43,7 +43,7 @@ class OnlyMediaTimelineTest extends TestCase {
 	private const AUTHOR = 'https://remote.example/onlymedia/users/author';
 	private const AUTHOR_FOLLOWERS = self::AUTHOR . '/followers';
 
-	private const SUFFIXES = ['with-media', 'empty-array', 'empty-string', 'two-pictures'];
+	private const SUFFIXES = ['with-media', 'empty-array', 'empty-string', 'two-pictures', 'own-photo'];
 
 	private StreamRequest $streamRequest;
 	private string $fastPathBefore = '';
@@ -102,12 +102,12 @@ class OnlyMediaTimelineTest extends TestCase {
 	}
 
 	/** @param MediaAttachment[] $attachments */
-	private function note(string $suffix, array $attachments): Note {
+	private function note(string $suffix, array $attachments, ?Person $author = null): Note {
 		$note = new Note();
 		$note->setId(self::BASE . '/notes/' . $suffix);
-		$note->setAttributedTo(self::AUTHOR);
+		$note->setAttributedTo($author?->getId() ?? self::AUTHOR);
 		$note->setTo(ACore::CONTEXT_PUBLIC);
-		$note->setCcArray([self::AUTHOR_FOLLOWERS]);
+		$note->setCcArray([$author?->getFollowers() ?? self::AUTHOR_FOLLOWERS]);
 		$note->setContent('<p>' . $suffix . '</p>');
 		$note->setAttachments($attachments);
 		$note->setPublishedTime(time());
@@ -201,6 +201,13 @@ class OnlyMediaTimelineTest extends TestCase {
 		$home = $this->home($viewer, true);
 
 		$this->assertSame(1, count(array_keys($home, $both->getId(), true)));
+	}
+
+	public function testOwnPicturesRemainInTheFilteredHomeTimeline(): void {
+		$viewer = $this->seedFollowedAuthor();
+		$own = $this->note('own-photo', [$this->attachment('own1')], $viewer);
+
+		$this->assertContains($own->getId(), $this->home($viewer, true));
 	}
 
 	/**

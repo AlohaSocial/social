@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { expect, test } from '@playwright/test'
-import { APP, login, openApp } from './helpers.mjs'
+import { APP, PASSWORD, USER, apiAs, login, openApp } from './helpers.mjs'
 
 test('profile settings control the default without breaking explicit tabs on mobile', async ({ page }) => {
 	await login(page)
@@ -13,12 +13,13 @@ test('profile settings control the default without breaking explicit tabs on mob
 	const original = await form.getByLabel('Open my profile on').inputValue()
 	const photoSwitch = form.getByRole('switch', { name: 'Photos', exact: true })
 	const hadPhotos = await photoSwitch.isChecked()
+	const api = await apiAs(USER, PASSWORD)
 	try {
 		await photoSwitch.check()
 		await form.getByLabel('Open my profile on').selectOption('photos')
 		await form.getByRole('button', { name: 'Save', exact: true }).click()
 		await expect(form.getByRole('status')).toHaveText('Profile layout saved')
-		const me = await page.request.get(`${APP}/api/v1/accounts/verify_credentials`)
+		const me = await api.get(`${APP}/api/v1/accounts/verify_credentials`)
 		expect(me.ok()).toBe(true)
 		const account = await me.json()
 		await page.setViewportSize({ width: 375, height: 812 })
@@ -28,12 +29,16 @@ test('profile settings control the default without breaking explicit tabs on mob
 		await expect(page).toHaveURL(/media=posts/)
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 	} finally {
-		await openApp(page, '/settings#profile-layout')
-		await form.getByLabel('Open my profile on').selectOption(original)
-		if (!hadPhotos) {
-			await form.getByRole('switch', { name: 'Photos', exact: true }).uncheck()
+		try {
+			await openApp(page, '/settings#profile-layout')
+			await form.getByLabel('Open my profile on').selectOption(original)
+			if (!hadPhotos) {
+				await form.getByRole('switch', { name: 'Photos', exact: true }).uncheck()
+			}
+			await form.getByRole('button', { name: 'Save', exact: true }).click()
+			await expect(form.getByRole('status')).toHaveText('Profile layout saved')
+		} finally {
+			await api.dispose()
 		}
-		await form.getByRole('button', { name: 'Save', exact: true }).click()
-		await expect(form.getByRole('status')).toHaveText('Profile layout saved')
 	}
 })

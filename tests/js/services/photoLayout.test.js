@@ -26,8 +26,12 @@ describe('photo feed presentation', () => {
 	it('rejects unknown values and works without browser storage', () => {
 		rememberPhotoLayout('unknown')
 		expect(photoLayout()).toBe('list')
-		vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => { throw new Error('Storage disabled') })
-		vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('Storage disabled') })
+		vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+			throw new Error('Storage disabled')
+		})
+		vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+			throw new Error('Storage disabled')
+		})
 		expect(() => rememberPhotoLayout('grid')).not.toThrow()
 		expect(photoLayout()).toBe('list')
 	})

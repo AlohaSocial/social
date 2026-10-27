@@ -106,6 +106,24 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 	private int $headerVersion = -1;
 	private string $viewerLink = '';
 
+	#[\Override]
+	protected function activityPubContextExtensions(): array {
+		$extensions = parent::activityPubContextExtensions();
+		if (!$this->shouldPublishProfileLayout()) {
+			return $extensions;
+		}
+
+		return array_merge($extensions, [
+			'profileDefaultTab' => 'https://nextcloud.com/ns/social#profileDefaultTab',
+			'profileTabs' => ['@id' => 'https://nextcloud.com/ns/social#profileTabs', '@container' => '@list'],
+		]);
+	}
+
+	private function shouldPublishProfileLayout(): bool {
+		return $this->getType() === self::TYPE
+			&& ($this->isLocal() || $this->profileLayout !== ProfileLayout::DEFAULT);
+	}
+
 	/**
 	 * The `id_prim` of a local account's row, as stored. It is the md5 of the
 	 * id the row was made under, which is not the id read back once the
@@ -1531,8 +1549,10 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 		// full-text searched: they have to be said out loud to opt in.
 		$data['discoverable'] = $this->isDiscoverable();
 		$data['indexable'] = $this->isIndexable();
-		$data['profileDefaultTab'] = $this->profileLayout['default_tab'];
-		$data['profileTabs'] = $this->profileLayout['tabs'];
+		if ($this->shouldPublishProfileLayout()) {
+			$data['profileDefaultTab'] = $this->profileLayout['default_tab'];
+			$data['profileTabs'] = $this->profileLayout['tabs'];
+		}
 
 		if ($this->getFeatured() !== '') {
 			$data['featured'] = $this->getFeatured();
@@ -1782,6 +1802,9 @@ class Person extends ACore implements IQueryRow, JsonSerializable {
 				// to, which its face and its Nextcloud profile page go by
 				'nextcloud_user' => $this->nextcloudUser(),
 			];
+		if ($this->shouldPublishProfileLayout()) {
+			$result['profile_layout'] = $this->getProfileLayout();
+		}
 
 		if ($this->getMovedTo() !== '') {
 			$result['moved'] = $this->exportMovedAccount();

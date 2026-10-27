@@ -77,6 +77,11 @@
             "manualApproval": {
                 "@id": "gts:manualApproval",
                 "@type": "@id"
+            },
+            "profileDefaultTab": "https://nextcloud.com/ns/social#profileDefaultTab",
+            "profileTabs": {
+                "@id": "https://nextcloud.com/ns/social#profileTabs",
+                "@container": "@list"
             }
         }
     ],
@@ -107,6 +112,14 @@
     "manuallyApprovesFollowers": false,
     "discoverable": true,
     "indexable": true,
+    "profileDefaultTab": "posts",
+    "profileTabs": [
+        "posts",
+        "photos",
+        "videos",
+        "tagged",
+        "collections"
+    ],
     "featured": "https://cloud.example/apps/social/@alice/collections/featured",
     "alsoKnownAs": [
         "https://old.example/users/alice"

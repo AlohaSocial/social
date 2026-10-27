@@ -71,14 +71,11 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		'featured' => ['@id' => 'toot:featured', '@type' => '@id'],
 		'discoverable' => 'toot:discoverable',
 		'indexable' => 'toot:indexable',
-		'profileDefaultTab' => 'https://nextcloud.com/ns/social#profileDefaultTab',
-		'profileTabs' => ['@id' => 'https://nextcloud.com/ns/social#profileTabs', '@container' => '@list'],
 		'votersCount' => 'toot:votersCount',
 		'blurhash' => 'toot:blurhash',
 		'focalPoint' => ['@container' => '@list', '@id' => 'toot:focalPoint'],
 		'Emoji' => 'toot:Emoji',
 		'schema' => 'http://schema.org#',
-		'ical' => 'http://www.w3.org/2002/12/cal/ical#',
 		'PropertyValue' => 'schema:PropertyValue',
 		'value' => 'schema:value',
 		'ostatus' => 'http://ostatus.org#',
@@ -994,7 +991,7 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 
 			// last, so a term this app defines can never shadow one of the two
 			// named contexts — see CONTEXT_EXTENSIONS
-			$context[] = self::CONTEXT_EXTENSIONS;
+			$context[] = $this->activityPubContextExtensions();
 
 			$this->addEntryArray('@context', $context);
 		} else {
@@ -1052,6 +1049,16 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		$this->cleanArray($result);
 
 		return $result;
+	}
+
+	/**
+	 * Context terms needed by this root document. Subclasses can add terms for
+	 * fields they actually emit, keeping unrelated wire documents stable.
+	 *
+	 * @return array<string, mixed>
+	 */
+	protected function activityPubContextExtensions(): array {
+		return self::CONTEXT_EXTENSIONS;
 	}
 
 	/**

@@ -126,7 +126,10 @@ test.describe('posting, and acting on a post', () => {
 		await expect(composer.locator('.message')).toBeFocused()
 		await page.keyboard.type(answer)
 		await composer.getByRole('button', { name: /^(Post|Reply)(?! as)/ }).click()
-		await expect(composer).toBeHidden()
+		// The reply box remains on the post page as a cleared one-line entry
+		// point; only the expanded modal closes after a successful submission.
+		await expect(page.locator('.modal-composer')).toBeHidden()
+		await expect(page.locator('.main-post__under .new-post .message')).toBeEmpty()
 
 		// the thread as anybody opening the post gets it
 		await page.reload()

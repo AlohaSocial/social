@@ -797,7 +797,24 @@ trait StreamTimelines {
 		$qb->filterType(SocialAppNotification::TYPE);
 		$qb->paginate($options);
 		$this->filterKind($qb, $options);
-		$qb->limitToViewer('sd', 'f', false);
+		$viewer = $qb->getViewer();
+		if ($viewer === null) {
+			$qb->limitToViewer('sd', 'f', false);
+		} else {
+			$qb->selectDestFollowing('sd', '');
+			$followedPosts = $qb->exprStreamDestFollowed($viewer->getId(), 'sd', 'f');
+			// The optimized recipient query adds the viewer's own follower
+			// collection separately. Narrowed home feeds use this join query,
+			// which otherwise omitted the viewer's own media and posts.
+			$ownPosts = $qb->expr()->andX(
+				$qb->expr()->eq('s.attributed_to_prim', $qb->createNamedParameter(md5($viewer->getId()))),
+				$qb->expr()->eq('sd.stream_id', 's.id_prim'),
+				$qb->expr()->eq('sd.actor_id', $qb->createNamedParameter(md5($viewer->getFollowers()))),
+				$qb->expr()->eq('sd.type', $qb->createNamedParameter('recipient')),
+			);
+			$qb->andWhere($qb->expr()->orX($followedPosts, $ownPosts));
+			$qb->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_TIMELINE);
+		}
 		// "show me this account, not what they pass on"
 		$qb->filterHiddenBoosts();
 		// a filter, not a join: it constrains on the follow's type
