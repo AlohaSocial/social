@@ -495,7 +495,7 @@ class AccountService {
 		$layout = ProfileLayout::normalize($layout, true);
 		$actor = $this->getActorFromUserId($userId);
 		$this->configService->setValueForUser($userId, 'profile_layout', json_encode($layout, JSON_THROW_ON_ERROR));
-		$this->cacheLocalActorByUsername($actor->getPreferredUsername());
+		$this->cacheLocalActorByUsername($actor->getPreferredUsername(), $layout);
 		$this->federateProfile($userId);
 
 		return $layout;
@@ -912,14 +912,21 @@ class AccountService {
 
 	/**
 	 * @param string $username
+	 * @param array{default_tab: string, tabs: list<string>}|null $profileLayout
 	 *
 	 * @throws SocialAppConfigException
 	 * @throws UrlCloudException
 	 * @throws ItemAlreadyExistsException
 	 */
-	public function cacheLocalActorByUsername(string $username) {
+	public function cacheLocalActorByUsername(string $username, ?array $profileLayout = null) {
 		try {
-			$actor = $this->getActor($username);
+			// A cache refresh runs over every local account. Loading a user
+			// preference here adds one database read per account; ActorService
+			// carries the already published layout from the cached actor instead.
+			$actor = $this->actorsRequest->getFromUsername($username);
+			if ($profileLayout !== null) {
+				$actor->setProfileLayout($profileLayout);
+			}
 
 			if ($this->moderationRequest->levelOf($actor->getId()) === Moderation::SUSPEND) {
 				// A suspended account is not served from this instance, and
@@ -968,12 +975,12 @@ class AccountService {
 
 			$this->loadLocalActorHeader($actor);
 
-			// the details this rebuilds are only the counts: the actors row
-			// carries none, and the write is wholesale. What was already on the
-			// cached copy and has to survive it — the verified-link verdicts —
-			// is carried over by ActorService::cacheLocalActor().
+			// The actors row carries neither cached profile layout nor details,
+			// and the cache write replaces both. ActorService carries forward
+			// profile layout and verified-link verdicts unless this call is the
+			// explicit profile-layout update.
 			$this->addLocalActorDetailCount($actor);
-			$this->actorService->cacheLocalActor($actor);
+			$this->actorService->cacheLocalActor($actor, $profileLayout === null);
 
 			// once the copy that answers WebFinger is written: Nextcloud
 			// verifies the field through it before storing the handle

@@ -358,8 +358,36 @@ trait StreamTimelines {
 		if ($within !== null) {
 			$page->andWhere($page->expr()->in('s.nid', $page->createNamedParameter($within, IQueryBuilder::PARAM_STR_ARRAY)));
 		}
+		$followed = $this->getNidsFromRequest($page);
+		if (!$page->hasViewer()) {
+			return $followed;
+		}
 
-		return $this->getNidsFromRequest($page);
+		// The viewer's own posts are addressed to their follower collection,
+		// which they do not follow. Read that one indexed range separately:
+		// OR-ing it with the followed range makes the database scan `s`.
+		$own = $this->getStreamNidsSelectSql();
+		$own->filterType(SocialAppNotification::TYPE);
+		$own->paginate($options);
+		$this->filterKind($own, $options);
+		$own->selectDestFollowing('sd', '');
+		$own->leftJoinFollowing('f');
+		$viewer = $own->getViewer();
+		$own->andWhere($own->expr()->andX(
+			$own->expr()->eq('s.attributed_to_prim', $own->createNamedParameter(md5($viewer->getId()))),
+			$own->expr()->eq('sd.stream_id', 's.id_prim'),
+			$own->expr()->eq('sd.actor_id', $own->createNamedParameter(md5($viewer->getFollowers()))),
+			$own->expr()->eq('sd.type', $own->createNamedParameter('recipient')),
+		));
+		if ($within !== null) {
+			$own->andWhere($own->expr()->in('s.nid', $own->createNamedParameter($within, IQueryBuilder::PARAM_STR_ARRAY)));
+		}
+		$own->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_TIMELINE);
+		$own->filterHiddenBoosts();
+		$this->timelineHomeLinkCacheActor($own, 'ca', 'f', false);
+		$own->filterDuplicate();
+
+		return $this->mergeNidPages($followed, $this->getNidsFromRequest($own), $options);
 	}
 
 	/**
@@ -797,28 +825,7 @@ trait StreamTimelines {
 		$qb->filterType(SocialAppNotification::TYPE);
 		$qb->paginate($options);
 		$this->filterKind($qb, $options);
-		if (!$qb->hasViewer()) {
-			$qb->limitToViewer('sd', 'f', false);
-		} else {
-			$viewer = $qb->getViewer();
-			$qb->selectDestFollowing('sd', '');
-			// The author relation filter below needs the viewer's accepted
-			// Follow/Loopback row as `f`. Keep it as the indexed viewer join,
-			// rather than adding a free-standing follows table to the FROM list.
-			$qb->leftJoinFollowing('f');
-			$followedPosts = $qb->exprStreamDestFollowed($viewer->getId(), 'sd', 'f');
-			// The optimized recipient query adds the viewer's own follower
-			// collection separately. Narrowed home feeds use this join query,
-			// which otherwise omitted the viewer's own media and posts.
-			$ownPosts = $qb->expr()->andX(
-				$qb->expr()->eq('s.attributed_to_prim', $qb->createNamedParameter(md5($viewer->getId()))),
-				$qb->expr()->eq('sd.stream_id', 's.id_prim'),
-				$qb->expr()->eq('sd.actor_id', $qb->createNamedParameter(md5($viewer->getFollowers()))),
-				$qb->expr()->eq('sd.type', $qb->createNamedParameter('recipient')),
-			);
-			$qb->andWhere($qb->expr()->orX($followedPosts, $ownPosts));
-			$qb->filterHiddenActors(SocialCoreQueryBuilder::HIDDEN_TIMELINE);
-		}
+		$qb->limitToViewer('sd', 'f', false);
 		// "show me this account, not what they pass on"
 		$qb->filterHiddenBoosts();
 		// a filter, not a join: it constrains on the follow's type
