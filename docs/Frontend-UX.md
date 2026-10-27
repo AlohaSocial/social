@@ -4,10 +4,11 @@
 -->
 # Frontend interoperability and UX work
 
-This tracks the frontend requirements without treating a component or a passing
-build as proof of complete end-to-end interoperability. Changes reuse the Vue,
-Pinia and Nextcloud implementation. Intermediate stacked PRs can have pending
-checks; the final consolidation still needs its required checks.
+This is an implementation record for the frontend requirements, not a promise
+that every remote service has been verified end to end. Changes reuse the Vue,
+Pinia and Nextcloud implementation. The sections below describe shipped UI and
+its boundaries; use the API, integration and operator guides for server-side
+requirements.
 
 ## Public profile presentation (FR-01 / FR-02)
 

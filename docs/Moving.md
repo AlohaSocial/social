@@ -5,7 +5,7 @@
 # Moving to Aloha Social, and moving away
 
 One page for the whole move, in the order it happens. Each button it names
-is described on its own in the [User Guide](User-Guide.md#settings) and
+is described on its own in the [User Guide](User-Guide.md#managing-your-account) and
 each route in the [API reference](API.md#migration); this is the order, and
 what does not move.
 
@@ -245,5 +245,5 @@ on the new server, so the order is yours from then on.
 - **Your handle.** `@you@old.example` stays on the old server; here you are
   `@you@this.server`. Keeping a handle across a change of domain is a server
   migration, not an account one — see
-  [Mastodon-Compatibility.md](Mastodon-Compatibility.md#54-what-would-have-to-be-written).
+  [Mastodon-Compatibility.md](Mastodon-Compatibility.md).
 - **Direct messages and boosts** are left out of the post copy on purpose.

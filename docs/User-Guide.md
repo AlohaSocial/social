@@ -1,16 +1,17 @@
 # User guide
 
+**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**.
+
 How to use Aloha Social as a person with an account on this Nextcloud:
 getting onto the fediverse, following people, writing and reading posts, and
 looking after the account. It describes the web client that comes with the
 app; where something is only reachable through the Mastodon-compatible API or
 a Mastodon client, it says so.
 
-**Verified against:** app version 0.19.95, `master`, 2026-09-15 — every claim
-below was checked against the code of that tree — and 0.26.60, 2026-09-25, for
-*Getting an account*, the group lists under Explore and *What the web client
-does not do yet* only; the rest has not been re-checked since. Menu and button
-names are the English strings of the web client.
+This guide describes the current web experience represented by this checkout.
+Menu and button names are the English strings of the web client. Federation,
+third-party client and deployment behavior can vary; see
+[Integrations.md](Integrations.md) and [Admin.md](Admin.md) for those limits.
 
 ## Contents
 
@@ -161,9 +162,12 @@ people** makes an invitation link: it works once and for a week.
 
 ## Writing a post
 
-**New post** at the top of the sidebar, or `n`, puts the caret in the
-composer; the composer also sits above most timelines. An empty composer greets
-you by first name: "Aloha, Frank. What’s new?" A post may be up to
+**New post** at the top of the sidebar, the compact post field on a feed or
+profile, or `n` opens the shared composer. The compact field sends a simple
+text post directly; expand it to open the full popup for attachments, polls,
+events, warnings, scheduling and other options. Replies use the same compact
+entry and popup with the reply context. An empty composer greets you by first
+name: "Aloha, Frank. What’s new?" A post may be up to
 5,000 characters, content warning included. What is in the composer is kept
 as a draft across a failed post, a reload or leaving the page: the words, the
 content warning, the audience, the language, who may reply, the team account
@@ -176,9 +180,9 @@ yet, so leaving the page while one is on its way asks you first. A draft is
 kept for a week, for your account only. A reply keeps its own draft, under the
 post it answers, and so does a quote, so starting one does not take the place
 of a post you were still writing.
-**Ctrl+Enter** (**⌘+Enter** on a Mac) sends; once the post is out the box
-folds back to a single line. **Escape** folds an empty box away too, and asks
-first when there are words in it — they are kept either way.
+**Ctrl+Enter** (**⌘+Enter** on a Mac) sends from the full composer. Closing the
+popup preserves the draft; unsaved edits and unfinished uploads ask before
+discarding. **Escape** closes the popup subject to that protection.
 
 - **Visibility** is chosen with the globe menu next to the post button. The
   choice decides who receives the post on the fediverse, not only who sees it
@@ -543,59 +547,25 @@ live; without it the page checks every 30 seconds.
 
 ### For you
 
-**For you** is the second feed in the switcher above the posts, right
-after My Feed and before Local and Global. It is made of the hashtags you read: Aloha Social notices
-which posts you stay on longer than you usually do, which you scroll past, and
-what you like, boost, reply to, bookmark, open, or whose pictures and links you
-open. From that it keeps a list of hashtags, and the feed shows the posts of
-the last week that carry them — the best matches first, fresher ones ahead of
-older ones, with nobody allowed to fill it, and now and then a post from a
-hashtag that often comes up alongside yours. Each post says why it is there:
-*Because you're interested in #photography*, *Because you follow #nextcloud*,
-*Related to #film*. Hashtags you follow count from the start, so the feed has
-something to show on the first day; until it has learned a little, it also
-shows what is trending here, and says so.
+**For You** is an optional ranked feed beside My Feed and the local and global
+timelines. The administrator can enable it. It combines relevant posts already
+known to this server with bounded discovery; available candidates can include
+ActivityPub and Bluesky posts. Photos, Videos and Shorts can use the same ranking
+with the relevant media filter. A sparse candidate pool may include fallback
+discovery, so this feed is not a complete or guaranteed index of either network.
 
-**Photos, videos and Shorts.** Photos, Videos and Shorts have a **For you**
-of their own: the same hashtags, narrowed to posts with a picture, to
-videos, or to shorts, and looking back twice as far, because such posts are rarer. Where
-that finds fewer than about forty, the rest is what is popular here in the
-same kind right now — the posts Explore's Pictures and Videos tabs show —
-and those say *Popular right now* rather than naming a hashtag they did not
-match. A short says so, or *Trending here*, only once the clip has gathered
-about ten likes, boosts and views between them; one nobody has touched yet
-carries the author line alone. In Shorts, what counts is how much of each video you watch: all of it,
-or most, counts for a lot, half of it for a little, and swiping it away within
-about two seconds counts against its hashtags. In the Photos and Videos grids,
-opening a post counts.
+Post menus offer feedback such as hiding a post, seeing more from an author, or
+seeing less like similar content. These actions influence recommendations; they
+do not follow, mute or block anyone. The feed may show a short explanation for a
+post while it is in For You. The explanation is tied to that feed and does not
+appear in ordinary timelines.
 
-**Less like this**, in a post's menu, takes that post out of the feed and
-counts its hashtags down. On the feed itself the post goes at once and *Undo*
-brings it back. Muting somebody from one of their posts counts too.
-
-**Where you change it.** **Settings → Reading → For you** shows the list as a cloud:
-the bigger and bolder a hashtag, the more it counts. Drag one to where you want
-it, or click it for *Higher priority*, *Lower priority*, *Move to top*, *Pin*
-and *Remove*; with the keyboard, the arrow keys move between hashtags, Enter
-opens that menu and Alt with ← or → moves one. A moved hashtag is **pinned**:
-it stays where you put it, while the others move as you read. *+ Add* puts a
-hashtag of your own on the list, and the ones Aloha Social has almost learned are
-offered underneath. Removing a hashtag forgets it — reading more about it can
-bring it back — and a hashtag you follow stays for as long as you follow it.
-*Languages* limits the feed to posts in the languages you choose.
-
-**Turning it off.** *Learn from my browsing* stops the learning and takes the
-feed away; what was learned is kept, frozen, in case you turn it back on.
-*Pause learning* keeps the feed as it is and stops learning for a while — for
-the day you are reading about something you do not want more of — and nothing
-fades while it is paused. *Reset all interests* forgets everything. None of it
-leaves this server, nobody else can see it, and it travels with your account
-when you export it. Your administrator may have turned the feature off, or made
-learning something you switch on yourself.
-
-**In a Mastodon app** there is no For you feed: it is part of this web
-interface. What you like, boost, reply to and bookmark in an app still counts;
-only the web interface knows how long you looked at something.
+Behavioral learning is a separate setting and is not required for the feed to
+work. If enabled, supported reading and video actions can refine future feed
+sessions. Learned data is private to the account and is not federated. The
+current interface does not provide manual topic selection or topic editing.
+For details about signals, consent, data export and operational limits, see
+[For-You.md](For-You.md).
 
 ### Announcements from your administrators
 
@@ -1221,7 +1191,7 @@ shows the key they stand for: the private key in the form the `goat` command-lin
 tool takes (`z…`) and as hex, and the public key (`did:key:…`) that your
 identifier lists. Keep the words; the key lines are the same secret written
 differently, and the words can be turned back into them offline
-([how](Atproto-Compatibility.md#44-what-the-person-sees-of-their-identity)).
+([how](Atproto-Compatibility.md)).
 The server's key ranks above yours: for 72 hours the server can undo a change
 made with the phrase, a move to another server included.
 
@@ -1337,9 +1307,10 @@ heading to jump to.
 
 ## What the web client does not do yet
 
-Mastodon apps on a phone or desktop can connect only once the web server
-maps `/api` and `/oauth` at the domain root onto the app: the API is served
-under the app's own path, and a Mastodon app looks for it at the root. The
-rules are in `contrib/webserver/` and [Admin.md](Admin.md#mastodon-apps-cannot-connect);
-ask your administrator whether they are in place. There is no streaming API,
-so the page polls.
+Mastodon apps on a phone or desktop can connect only once the web server maps
+`/api` and `/oauth` at the domain root onto the app. The rules are in
+`contrib/webserver/` and [Admin.md](Admin.md#mastodon-apps-cannot-connect); ask
+your administrator whether they are in place. The web app uses Nextcloud's
+own update channels and refresh behavior. Mastodon-compatible clients can also
+use the optional streaming daemon when the administrator runs it and proxies
+its WebSocket/SSE routes; see [Mastodon-Compatibility.md](Mastodon-Compatibility.md#streaming).

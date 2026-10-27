@@ -49,7 +49,7 @@ action in Social.
 The existing PDS surface already supports sessions, OAuth, repository writes,
 identity resolution, custom handles, blob uploads, preferences and AppView/Chat
 proxying. See [ATProto compatibility](Atproto-Compatibility.md) and the
-[XRPC API](API.md#bluesky-at-protocol) for their boundaries.
+[XRPC API](API.md) for their boundaries.
 
 Both `createRecord` and `putRecord` now import `app.bsky.embed.gallery` through
 the same owned-upload path as images, including galleries beside a quoted record
