@@ -30,7 +30,7 @@
 					{{ t('social', 'No drafts are available.') }}
 				</p>
 				<ul v-else>
-					<li v-for="entry in drafts" :key="entry.context">
+					<li v-for="entry in drafts" :key="entry.context" class="drafts-list__row">
 						<button
 							type="button"
 							class="drafts-list__item"
@@ -41,6 +41,16 @@
 							<span v-if="entry.draft.media.length">{{ n('social', '%n attachment', '%n attachments', entry.draft.media.length) }}</span>
 							<time v-if="entry.draft.savedAt" :datetime="new Date(entry.draft.savedAt).toISOString()">{{ savedAt(entry.draft.savedAt) }}</time>
 						</button>
+						<NcButton
+							variant="tertiary"
+							:disabled="resuming"
+							:aria-label="t('social', 'Delete draft: {draft}', { draft: preview(entry.draft) })"
+							:title="t('social', 'Delete draft')"
+							@click="askDelete(entry.context)">
+							<template #icon>
+								<DeleteOutline :size="20" />
+							</template>
+						</NcButton>
 					</li>
 				</ul>
 				<p v-if="resuming" role="status">
@@ -48,25 +58,46 @@
 				</p>
 			</div>
 		</NcModal>
+		<NcDialog
+			:open="deleteDialogOpen"
+			:name="t('social', 'Delete this draft?')"
+			:buttons="deleteButtons"
+			@update:open="deleteDialogOpen = $event">
+			<p>{{ t('social', 'This draft will be permanently removed from this browser.') }}</p>
+		</NcDialog>
 	</div>
 </template>
 
 <script>
 import { translate as t, translatePlural as n } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcModal from '@nextcloud/vue/components/NcModal'
+import DeleteOutline from 'vue-material-design-icons/DeleteOutline.vue'
 import FileDocumentEditOutline from 'vue-material-design-icons/FileDocumentEditOutline.vue'
-import { listDrafts, loadDraft } from '../services/draft.js'
+import { clearDraft, listDrafts, loadDraft } from '../services/draft.js'
 import eventBus from '../services/eventBus.js'
 import { useTimelineStore } from '../store/timeline.js'
 import { userLocale } from '../utils/locale.js'
 
 export default {
 	name: 'DraftsButton',
-	components: { NcButton, NcModal, FileDocumentEditOutline },
+	components: { NcButton, NcDialog, NcModal, DeleteOutline, FileDocumentEditOutline },
 	props: { disabled: { type: Boolean, default: false } },
 	data() {
-		return { drafts: listDrafts(), open: false, resuming: false, error: '', resumeRequest: 0 }
+		return { drafts: listDrafts(), open: false, resuming: false, error: '', resumeRequest: 0, deleteContext: null, deleteDialogOpen: false }
+	},
+
+	computed: {
+		deleteButtons() {
+			return [
+				{ label: t('social', 'Cancel'), callback: () => { this.deleteDialogOpen = false } },
+				{ label: t('social', 'Delete draft'), variant: 'error', callback: () => {
+					this.deleteDialogOpen = false
+					this.delete(this.deleteContext)
+				} },
+			]
+		},
 	},
 
 	watch: {
@@ -105,6 +136,21 @@ export default {
 			this.resumeRequest++
 			this.open = false
 			this.resuming = false
+		},
+
+		askDelete(context) {
+			this.deleteContext = context
+			this.deleteDialogOpen = true
+		},
+
+		delete(context) {
+			if (typeof context !== 'string' || !clearDraft(context)) {
+				this.error = t('social', 'Could not delete this draft. Please try again.')
+				return
+			}
+			this.deleteContext = null
+			this.error = ''
+			this.refresh()
 		},
 
 		contextLabel(context) {
@@ -188,14 +234,20 @@ export default {
 	h2 { margin-block: 0 12px; }
 	p { margin-block: 8px 12px; }
 	ul { padding: 0; margin: 0; list-style: none; }
-	li + li { margin-block-start: 8px; }
+	&__row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+	&__row + &__row { margin-block-start: 8px; }
 
 	&__item {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 4px;
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		height: auto;
 		padding: 12px;
 		border: 1px solid var(--color-border);
