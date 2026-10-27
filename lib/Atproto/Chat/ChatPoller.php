@@ -27,8 +27,8 @@ use Throwable;
  * The direct messages local accounts receive on Bluesky's chat service,
  * read into their messages here (`ChatStore`): a Bluesky conversation is a
  * conversation here like any other. The chat log (`getLog`) is read as each
- * account, from where it was read up to; an account's first read starts at
- * the newest message of each conversation that has unread ones. The log
+ * account, from where it was read up to; an account's first read backfills
+ * all unread conversations and messages before establishing the log cursor. The log
  * also brings what the account wrote in a Bluesky app, and how far it read
  * a conversation there, which is read here too.
  */
@@ -37,10 +37,8 @@ class ChatPoller {
 	/** an account nobody messages on Bluesky is still asked every half hour */
 	public const MAX_BACKOFF = 1800;
 	public const BATCH = 50;
-	/** how many conversations an account's first read looks at */
-	public const FIRST_CONVOS = 20;
-	/** the most unread messages of one conversation an account's first read takes */
-	public const FIRST_MESSAGES = 20;
+	/** the upstream maximum page size for both chat conversation and message queries */
+	public const PAGE = 100;
 	private const TABLE = CoreRequestBuilder::TABLE_ATPROTO_CHAT_CURSOR;
 	private const CREATE = 'chat.bsky.convo.defs#logCreateMessage';
 	private const DELETE = 'chat.bsky.convo.defs#logDeleteMessage';
@@ -148,8 +146,9 @@ class ChatPoller {
 	}
 
 	/**
-	 * The first read: the unread messages of the newest conversations, and
-	 * the newest `rev` among them, which the log is read from next time.
+	 * The first read imports unread messages from every conversation, following
+	 * upstream pages. If any page or durable local write fails, the caller leaves
+	 * the log cursor empty and retries the complete idempotent backfill.
 	 * Who may write to the account is told to Bluesky first, where its
 	 * repository does not say it yet.
 	 *
@@ -158,27 +157,78 @@ class ChatPoller {
 	private function first(Identity $identity): array {
 		$this->declaration->ensure($identity);
 		$key = $this->identities->signingKey($identity);
-		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', ['limit' => self::FIRST_CONVOS]);
 		$handled = 0;
 		$rev = '';
-		foreach (is_array($answer['convos'] ?? null) ? $answer['convos'] : [] as $convo) {
-			if (!is_array($convo)) {
-				continue;
+		$convoCursor = '';
+		$seenConvoCursors = [];
+		do {
+			$params = ['limit' => self::PAGE];
+			if ($convoCursor !== '') {
+				$params['cursor'] = $convoCursor;
 			}
-			$rev = max($rev, (string)($convo['rev'] ?? ''));
-			$unread = (int)($convo['unreadCount'] ?? 0);
-			$id = (string)($convo['id'] ?? '');
-			if ($unread <= 0 || $id === '') {
-				continue;
+			$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', $params);
+			if (!is_array($answer['convos'] ?? null)) {
+				throw new \RuntimeException('Bluesky chat conversation response is missing its conversation list');
 			}
-			$messages = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', ['convoId' => $id, 'limit' => min($unread, self::FIRST_MESSAGES)]);
-			// newest first on the wire; stored oldest first, so each answers the one before
-			$list = is_array($messages['messages'] ?? null) ? array_reverse($messages['messages']) : [];
-			$members = self::dids($convo['members'] ?? null);
-			foreach ($list as $message) {
-				$handled += is_array($message) && $this->store->received($identity, $id, $message, $members) ? 1 : 0;
+			foreach ($answer['convos'] as $convo) {
+				if (!is_array($convo)) {
+					continue;
+				}
+				$rev = max($rev, (string)($convo['rev'] ?? ''));
+				$unread = max(0, (int)($convo['unreadCount'] ?? 0));
+				$id = (string)($convo['id'] ?? '');
+				if ($unread === 0 || $id === '') {
+					continue;
+				}
+				$members = self::dids($convo['members'] ?? null);
+				$this->members[$id] = $members;
+				$messageCursor = '';
+				$remaining = $unread;
+				$messagesToStore = [];
+				$seenMessageCursors = [];
+				do {
+					$messageParams = ['convoId' => $id, 'limit' => min($remaining, self::PAGE)];
+					if ($messageCursor !== '') {
+						$messageParams['cursor'] = $messageCursor;
+					}
+					$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', $messageParams);
+					if (!is_array($page['messages'] ?? null)) {
+						throw new \RuntimeException('Bluesky chat message response is missing its message list');
+					}
+					$list = $page['messages'];
+					if ($list === []) {
+						break;
+					}
+					$messagesToStore = [...$messagesToStore, ...$list];
+					$remaining -= count($list);
+					$nextMessageCursor = (string)($page['cursor'] ?? '');
+					if ($remaining <= 0 || $nextMessageCursor === '') {
+						break;
+					}
+					if ($nextMessageCursor === $messageCursor || isset($seenMessageCursors[$nextMessageCursor])) {
+						throw new \RuntimeException('Bluesky chat message pagination did not advance');
+					}
+					$seenMessageCursors[$nextMessageCursor] = true;
+					$messageCursor = $nextMessageCursor;
+				} while ($remaining > 0);
+				// Pages and messages are newest first. Store the complete unread range
+				// oldest first so local conversation reply links remain chronological.
+				foreach (array_reverse($messagesToStore) as $message) {
+					if (is_array($message) && $this->store->received($identity, $id, $message, $members)) {
+						$handled++;
+					}
+				}
 			}
-		}
+			$nextConvoCursor = (string)($answer['cursor'] ?? '');
+			if ($nextConvoCursor === '') {
+				break;
+			}
+			if ($nextConvoCursor === $convoCursor || isset($seenConvoCursors[$nextConvoCursor])) {
+				throw new \RuntimeException('Bluesky chat conversation pagination did not advance');
+			}
+			$seenConvoCursors[$nextConvoCursor] = true;
+			$convoCursor = $nextConvoCursor;
+		} while (true);
 
 		return [$handled, $rev];
 	}
@@ -197,18 +247,21 @@ class ChatPoller {
 			if (!is_array($log)) {
 				continue;
 			}
-			$newest = max($newest, (string)($log['rev'] ?? ''));
 			$convo = (string)($log['convoId'] ?? '');
+			$type = (string)($log['$type'] ?? '');
 			$message = is_array($log['message'] ?? null) ? $log['message'] : null;
-			if ($convo === '' || $message === null) {
-				continue;
+			if ($convo !== '' && $message !== null) {
+				$handled += match ($type) {
+					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
+					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
+					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
+					default => 0,
+				};
 			}
-			$handled += match ((string)($log['$type'] ?? '')) {
-				self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
-				self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
-				self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
-				default => 0,
-			};
+			// Do not let a page cursor jump over an event that was only received
+			// in memory: synced() runs only after every event completed without a
+			// retryable error. Unhandled event types are intentional no-ops.
+			$newest = max($newest, (string)($log['rev'] ?? ''));
 		}
 		$cursor = (string)($answer['cursor'] ?? '');
 
@@ -226,11 +279,16 @@ class ChatPoller {
 		if ($own && !isset($this->members[$convo])) {
 			try {
 				$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvo', ['convoId' => $convo]);
-				$this->members[$convo] = self::dids($answer['convo']['members'] ?? null);
+				$members = $answer['convo']['members'] ?? null;
+				if (!is_array($members)) {
+					throw new \RuntimeException('Bluesky chat conversation response did not include members');
+				}
+				$this->members[$convo] = self::dids($members);
 			} catch (Throwable $e) {
-				// a conversation that cannot be asked about holds up nothing else in the log
 				$this->logger->notice('Members of a Bluesky conversation not read', ['convo' => $convo, 'exception' => $e]);
-				$this->members[$convo] = [];
+				// Leave the log cursor before this event. The next poll retries the
+				// lookup instead of permanently treating the conversation as empty.
+				throw $e;
 			}
 		}
 

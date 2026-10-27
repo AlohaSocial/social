@@ -43,6 +43,8 @@ class ChatPollerTest extends TestCase {
 	private string $chat = 'https://api.bsky.chat';
 	/** @var array<string, array> answers by method */
 	private array $answers = [];
+	/** @var array<string, array<string, array>> answers by method and opaque page cursor */
+	private array $cursorAnswers = [];
 	/** @var list<array{string, array}> */
 	private array $asked = [];
 	/** @var list<array{string, string}> what the store was handed: kind and message id */
@@ -60,6 +62,8 @@ class ChatPollerTest extends TestCase {
 	private string $state = Identity::STATE_ACTIVE;
 	/** @var list<string> the DIDs whose cursor was dropped */
 	private array $removed = [];
+	private bool $failReceivedOnce = false;
+	private bool $failGetConvoOnce = false;
 
 	private function poller(): ChatPoller {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -72,6 +76,14 @@ class ChatPollerTest extends TestCase {
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = []): array {
 			$this->asked[] = [$method, $params];
+			if ($method === 'chat.bsky.convo.getConvo' && $this->failGetConvoOnce) {
+				$this->failGetConvoOnce = false;
+				throw new AtprotoException('temporary conversation lookup failure');
+			}
+			$cursor = (string)($params['cursor'] ?? '');
+			if (isset($this->cursorAnswers[$method][$cursor])) {
+				return $this->cursorAnswers[$method][$cursor];
+			}
 
 			return $this->answers[$method] ?? throw new AtprotoException('chat service down');
 		});
@@ -90,6 +102,10 @@ class ChatPollerTest extends TestCase {
 		});
 		$store = $this->createMock(ChatStore::class);
 		$store->method('received')->willReturnCallback(function (Identity $identity, string $convo, array $message, array $members = []): bool {
+			if ($this->failReceivedOnce) {
+				$this->failReceivedOnce = false;
+				throw new AtprotoException('temporary local persistence failure');
+			}
 			$this->handed[] = ['received', $convo . '/' . $message['id']];
 			$this->members[$message['id']] = $members;
 
@@ -140,6 +156,35 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([self::ALICE], $this->declared, 'who may write is seen to on the first read');
 	}
 
+	public function testTheInitialReadFollowsConversationAndUnreadMessagePages(): void {
+		$convos = [];
+		for ($i = 0; $i < 20; $i++) {
+			$convos[] = ['id' => 'c' . $i, 'rev' => '3k00' . $i, 'unreadCount' => 0];
+		}
+		$convos[0]['unreadCount'] = 21;
+		$this->cursorAnswers['chat.bsky.convo.listConvos'][''] = ['convos' => $convos, 'cursor' => 'convos-next'];
+		$this->cursorAnswers['chat.bsky.convo.listConvos']['convos-next'] = ['convos' => [
+			['id' => 'c20', 'rev' => '3k021', 'unreadCount' => 0],
+		]];
+		$firstMessages = [];
+		for ($i = 21; $i >= 2; $i--) {
+			$firstMessages[] = self::message('m' . $i);
+		}
+		$this->cursorAnswers['chat.bsky.convo.getMessages'][''] = ['messages' => $firstMessages, 'cursor' => 'messages-next'];
+		$this->cursorAnswers['chat.bsky.convo.getMessages']['messages-next'] = ['messages' => [self::message('m1')]];
+
+		$this->assertSame(21, $this->poller()->pollAccount(self::cursor('')));
+
+		$this->assertSame(range(1, 21), array_map(
+			static fn (array $message): int => (int)substr($message[1], strrpos($message[1], 'm') + 1),
+			$this->handed,
+		));
+		$this->assertSame([self::ALICE, '3k021', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
+		$this->assertSame(['convoId' => 'c0', 'limit' => 21], $this->asked[1][1]);
+		$this->assertSame(['convoId' => 'c0', 'limit' => 1, 'cursor' => 'messages-next'], $this->asked[2][1]);
+		$this->assertSame(['limit' => ChatPoller::PAGE, 'cursor' => 'convos-next'], $this->asked[3][1]);
+	}
+
 	public function testTheLogSaysWhatWasSentAndDeletedSinceTheLastRead(): void {
 		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
 			['$type' => 'chat.bsky.convo.defs#logBeginConvo', 'rev' => '3k006', 'convoId' => 'c3'],
@@ -174,17 +219,35 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([], $this->declared, 'only the first read sees to the declaration');
 	}
 
-	public function testAConversationThatCannotBeAskedAboutHoldsUpNothingElse(): void {
-		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
+	public function testAConversationLookupFailureDoesNotAdvanceTheLogCursorAndRetries(): void {
+		$this->answers['chat.bsky.convo.getConvo'] = ['convo' => ['id' => 'c3', 'members' => [['did' => self::ALICE], ['did' => self::BOB]]]];
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k007', 'logs' => [
 			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c3', 'message' => self::message('m6', self::ALICE)],
-			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k007', 'convoId' => 'c1', 'message' => self::message('m7')],
 		]];
+		$this->failGetConvoOnce = true;
+		$poller = $this->poller();
 
-		$this->poller()->pollAccount(self::cursor('3k005'));
+		$this->assertSame(0, $poller->pollAccount(self::cursor('3k005')));
+		$this->assertSame([], $this->synced, 'the cursor remains before the unimported message');
+		$this->assertSame([self::ALICE, ChatPoller::INTERVAL * 2, self::TABLE], $this->failed[0]);
 
-		$this->assertSame([], $this->members['m6'], 'nobody to address it to, so it is not stored');
-		$this->assertSame([['received', 'c3/m6'], ['received', 'c1/m7']], $this->handed);
-		$this->assertSame('3k009', $this->synced[0][1]);
+		$this->assertSame(1, $poller->pollAccount(self::cursor('3k005')));
+		$this->assertSame('3k007', $this->synced[0][1]);
+		$this->assertSame([['received', 'c3/m6']], $this->handed);
+	}
+
+	public function testAStoreFailureDoesNotAdvanceTheLogCursorAndIsRetried(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k007', 'logs' => [
+			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c3', 'message' => self::message('m6')],
+		]];
+		$this->failReceivedOnce = true;
+		$poller = $this->poller();
+
+		$this->assertSame(0, $poller->pollAccount(self::cursor('3k005')));
+		$this->assertSame([], $this->synced, 'no cursor is committed before a durable write');
+
+		$this->assertSame(1, $poller->pollAccount(self::cursor('3k005')));
+		$this->assertSame('3k007', $this->synced[0][1]);
 	}
 
 	public function testAConversationReadOnBlueskyIsReadHere(): void {

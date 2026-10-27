@@ -44,7 +44,7 @@ class ChatStoreTest extends TestCase {
 	/** @var list<string> the messages a conversation here was read up to */
 	private array $readUpTo = [];
 
-	private function store(): ChatStore {
+	private function store(bool $failActorResolution = false): ChatStore {
 		$posts = $this->createMock(PostStore::class);
 		$posts->method('storeMessage')->willReturnCallback(function (array $create): bool {
 			$this->stored[] = $create;
@@ -77,7 +77,13 @@ class ChatStoreTest extends TestCase {
 			return true;
 		});
 		$actors = $this->createMock(BlueskyActorService::class);
-		$actors->method('resolve')->willReturnCallback(static fn (string $did): Person => (new Person())->setId('https://bsky.app/profile/' . $did));
+		$actors->method('resolve')->willReturnCallback(static function (string $did) use ($failActorResolution): Person {
+			if ($failActorResolution) {
+				throw new \RuntimeException('temporary DID resolution failure');
+			}
+
+			return (new Person())->setId('https://bsky.app/profile/' . $did);
+		});
 		$blocklist = $this->createMock(Blocklist::class);
 		$blocklist->method('isBlockedDid')->willReturnCallback(fn (): bool => $this->blocked);
 		$factory = $this->createStub(ICacheFactory::class);
@@ -129,6 +135,13 @@ class ChatStoreTest extends TestCase {
 		$this->blocked = true;
 		$this->assertFalse($store->received($this->alice(), 'convo1', self::message('m2', 'blocked')));
 		$this->assertSame([], $this->stored);
+	}
+
+	public function testATemporarySenderResolutionFailureIsRetryable(): void {
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('temporary DID resolution failure');
+
+		$this->store(true)->received($this->alice(), 'convo1', self::message('m2', 'retry me'));
 	}
 
 	public function testWhatTheAccountWroteInABlueskyAppIsItsOwnDirectMessageAndIsNeverDelivered(): void {

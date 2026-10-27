@@ -1408,9 +1408,11 @@ like any other; nothing in it says which network it runs on.
   each local account's chat log (`chat.bsky.convo.getLog`, as the account,
   with a service-auth token for the chat service, `AppViewClient::chatAs()`)
   from where it was read up to (`social_atproto_chat_cursor`). An account's
-  first read takes the unread messages (up to 20) of its 20 newest
-  conversations (`listConvos`, `getMessages`). Each message somebody else
-  sent becomes a direct `Note` from its sender to the account, naming it
+  first read follows the chat service's opaque pagination cursors through all
+  conversations and all unread messages (`listConvos`, `getMessages`). A
+  retryable lookup or storage failure leaves the log cursor unchanged; the
+  idempotent backfill is retried before the live log advances. Each message
+  somebody else sent becomes a direct `Note` from its sender to the account, naming it
   (`Chat\ChatStore`, id `https://bsky.app/profile/<sender>/convo/<convo>/<message>`),
   through the same import path as a post, so it notifies, pushes and counts
   as unread like a direct message from the Fediverse, and the notification

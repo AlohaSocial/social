@@ -96,8 +96,7 @@ class ChatStore {
 			$actor = $this->actors->resolve($sender);
 		} catch (Throwable $e) {
 			$this->logger->notice('Sender of a Bluesky direct message not resolved', ['did' => $sender, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
 		if (BlueskyActorService::isLimited($actor) || $this->blocklist->isBlockedActor($actor)) {
 			return false;
@@ -115,9 +114,11 @@ class ChatStore {
 			'cc' => [],
 			'object' => $note,
 		]);
-		if ($stored) {
-			$this->remember($identity->did, $convoId, $noteId);
+		$known = $stored || $this->posts->isKnown($noteId);
+		if (!$known) {
+			throw new \RuntimeException('Bluesky direct message was not durably stored');
 		}
+		$this->remember($identity->did, $convoId, $noteId);
 
 		return $stored;
 	}
@@ -137,7 +138,12 @@ class ChatStore {
 		}
 		$noteId = self::messageId($identity->did, $convoId, $id);
 		if ($this->posts->isKnown($noteId)) {
+			$this->remember($identity->did, $convoId, $noteId);
+
 			return false;
+		}
+		if ($members === []) {
+			throw new \RuntimeException('Bluesky conversation members are not available for an own message');
 		}
 		$to = [];
 		foreach ($members as $did) {
@@ -148,6 +154,7 @@ class ChatStore {
 				$to[] = $this->actors->resolve($did)->getId();
 			} catch (Throwable $e) {
 				$this->logger->notice('Member of a Bluesky conversation not resolved', ['did' => $did, 'exception' => $e]);
+				throw $e;
 			}
 		}
 		if ($to === []) {
@@ -164,11 +171,12 @@ class ChatStore {
 			$note->setPublished($data['published']);
 			$note->convertPublished();
 			$note->setVisibility(Stream::TYPE_DIRECT);
-			$this->streams->save($note);
+			if (!$this->streams->save($note)) {
+				throw new \RuntimeException('Own Bluesky direct message was not durably stored');
+			}
 		} catch (Throwable $e) {
 			$this->logger->warning('Own Bluesky direct message not stored', ['id' => $noteId, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
 		$this->remember($identity->did, $convoId, $noteId);
 
@@ -190,7 +198,12 @@ class ChatStore {
 		}
 		$noteId = self::messageId($sender, $convoId, $id);
 		if ($sender !== $identity->did) {
-			return $this->posts->delete($noteId);
+			$deleted = $this->posts->delete($noteId);
+			if (!$deleted && $this->posts->isKnown($noteId)) {
+				throw new \RuntimeException('Bluesky direct message deletion was not durably stored');
+			}
+
+			return $deleted;
 		}
 		try {
 			if ($this->streams->getStreamById($noteId)->getAttributedTo() !== $identity->actorId) {
@@ -223,8 +236,7 @@ class ChatStore {
 			return $this->conversations->markReadUpTo($this->cacheActors->getFromId($identity->actorId), $noteId);
 		} catch (Throwable $e) {
 			$this->logger->info('Bluesky read state not taken over', ['did' => $identity->did, 'exception' => $e]);
-
-			return false;
+			throw $e;
 		}
 	}
 
