@@ -33,11 +33,10 @@ use Psr\Log\LoggerInterface;
  * for it. What is different is that the emoji has to survive the round trip,
  * and that not every emoji a peer might send is one this app will show.
  *
- * Unicode emoji and bounded custom shortcode labels are accepted. A custom
- * reaction's remote image is deliberately never fetched or rendered: it
- * could track each reader, and this instance neither moderates nor caches
- * that image. Keeping its shortcode preserves a text label and the fact that
- * the reaction happened.
+ * Unicode emoji and bounded custom shortcode labels are accepted on input.
+ * A custom reaction's remote image is deliberately never fetched or rendered:
+ * it could track each reader. Outbound custom reactions are refused until
+ * this instance can attach a verified Emoji tag for its own shortcode.
  */
 class ReactionService {
 	use TStringTools;
@@ -65,12 +64,12 @@ class ReactionService {
 	}
 
 	/**
-	 * Whether this is something the app will store and draw.
+	 * Whether an inbound reaction is something the app will store and draw.
 	 *
 	 * Unicode emoji are accepted without a fixed list, so new Unicode releases
-	 * do not need code changes. A custom shortcode is accepted only in its
-	 * bounded ASCII label form; arbitrary text, markup and whitespace remain
-	 * invalid.
+	 * do not need code changes. A custom shortcode is accepted only in a bounded
+	 * ASCII label form, optionally qualified by its origin domain as Misskey
+	 * does. The label stays plain text; its remote image is never fetched.
 	 */
 	public static function isUsableEmoji(string $emoji): bool {
 		$emoji = trim($emoji);
@@ -78,7 +77,12 @@ class ReactionService {
 		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH) {
 			return false;
 		}
-		if (preg_match('/^:[A-Za-z0-9_+-]{1,48}:$/D', $emoji) === 1) {
+		if (preg_match('/^:[A-Za-z0-9_+-]{1,48}(?:@([A-Za-z0-9.-]+))?:$/D', $emoji, $match) === 1) {
+			if (isset($match[1]) && $match[1] !== ''
+				&& filter_var($match[1], FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
+				return false;
+			}
+
 			return true;
 		}
 
@@ -93,6 +97,21 @@ class ReactionService {
 		// Regional indicators are the second half of this and not a detail: a
 		// flag is two of them and they are *not* Extended_Pictographic, so
 		// that property alone refuses every flag there is.
+		return self::isUnicodeEmoji($emoji);
+	}
+
+	/** Custom shortcode metadata is not available here, so never emit a bare shortcode. */
+	public static function isUsableOutboundEmoji(string $emoji): bool {
+		$emoji = trim($emoji);
+		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH
+			|| preg_match('/[\p{L}\p{N}\p{P}\s]/u', $emoji) === 1) {
+			return false;
+		}
+
+		return self::isUnicodeEmoji($emoji);
+	}
+
+	private static function isUnicodeEmoji(string $emoji): bool {
 		return preg_match('/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u', $emoji) === 1;
 	}
 
@@ -106,7 +125,7 @@ class ReactionService {
 		$this->moderationService->assertNotSuspended($actor->getId());
 
 		$emoji = trim($emoji);
-		if (!self::isUsableEmoji($emoji)) {
+		if (!self::isUsableOutboundEmoji($emoji)) {
 			throw new ItemUnknownException('not an emoji this app can draw');
 		}
 

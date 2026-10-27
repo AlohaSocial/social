@@ -21,6 +21,7 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ReplyRuleService;
 use OCP\IConfig;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -29,7 +30,7 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		private StreamRequest $streams,
 		private ReplyRuleService $replyRules,
 		private CacheActorService $actors,
-		private ActivityService $activities,
+		private ?ContainerInterface $container,
 		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
@@ -71,8 +72,17 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		} catch (StreamNotFoundException $e) {
 			return;
 		}
-		if (!$target->isLocal()
-			|| !in_array($target->getAttributedTo(), $item->addressed(), true)) {
+		$recipients = array_merge($item->getToAll(), $item->getCcArray(), $item->getBccArray());
+		if (!$target->isLocal() || !in_array($target->getAttributedTo(), $recipients, true)) {
+			return;
+		}
+		// The authorization URL is intentionally public and serves no post
+		// content. Do not issue a grant for a private target that its later
+		// anonymous verifier must refuse to disclose.
+		if (!$target->isPublic()
+			&& !in_array($target->getVisibility(), [Stream::TYPE_PUBLIC, Stream::TYPE_UNLISTED], true)) {
+			$this->answer($item, $target, false, '');
+
 			return;
 		}
 
@@ -124,8 +134,10 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 	public static function replyFromStamp(string $stamp, string $targetId, string $secret): string {
 		[$encoded, $signature] = array_pad(explode('.', $stamp, 2), 2, '');
 		$replyId = base64_decode(strtr($encoded, '-_', '+/'), true);
-		if ($replyId === false || $replyId === ''
-			|| rtrim(strtr(base64_encode($replyId), '+/', '-_'), '=') !== $encoded
+		if (!is_string($replyId) || $replyId === '') {
+			return '';
+		}
+		if (rtrim(strtr(base64_encode($replyId), '+/', '-_'), '=') !== $encoded
 			|| !hash_equals(hash_hmac('sha256', $targetId . "\n" . $replyId, $secret), $signature)
 			|| !(str_starts_with($replyId, 'https://') || str_starts_with($replyId, 'http://'))) {
 			return '';
@@ -161,6 +173,17 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 			$answer->addEntry('result', $authorization);
 		}
 		$answer->addInstancePath(new InstancePath($inbox, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_TOP));
-		$this->activities->request($answer);
+		try {
+			$activities = $this->container?->get(ActivityService::class);
+			if (!$activities instanceof ActivityService) {
+				throw new \RuntimeException('Activity service is unavailable');
+			}
+			$activities->request($answer);
+		} catch (Throwable $e) {
+			$this->logger->error('Could not send the GoToSocial ReplyRequest answer', [
+				'activity' => $request->getId(),
+				'exception' => $e,
+			]);
+		}
 	}
 }

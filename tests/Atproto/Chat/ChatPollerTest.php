@@ -156,7 +156,7 @@ class ChatPollerTest extends TestCase {
 
 		$this->assertSame([['received', 'c1/m1'], ['received', 'c1/m2']], $this->handed);
 		$this->assertSame([self::ALICE, self::BOB], $this->members['m1'], 'the conversation\'s members come along');
-		$this->assertSame(['convoId' => 'c1', 'limit' => 2], $this->asked[1][1]);
+		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
 		$this->assertSame([self::ALICE, '3k005', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
 		$this->assertSame([self::ALICE], $this->declared, 'who may write is seen to on the first read');
 	}
@@ -185,9 +185,49 @@ class ChatPollerTest extends TestCase {
 			$this->handed,
 		));
 		$this->assertSame([self::ALICE, '3k021', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
-		$this->assertSame(['convoId' => 'c0', 'limit' => 21], $this->asked[1][1]);
-		$this->assertSame(['convoId' => 'c0', 'limit' => 1, 'cursor' => 'messages-next'], $this->asked[2][1]);
+		$this->assertSame(['convoId' => 'c0', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
+		$this->assertSame(['convoId' => 'c0', 'limit' => ChatPoller::PAGE, 'cursor' => 'messages-next'], $this->asked[2][1]);
 		$this->assertSame(['limit' => ChatPoller::PAGE, 'cursor' => 'convos-next'], $this->asked[3][1]);
+	}
+
+	public function testTheInitialBackfillCountsUnreadIncomingMessagesAcrossOwnAndDeletedMessagesAndPages(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k022', 'unreadCount' => 3, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$latestFirst = [];
+		for ($i = 0; $i < ChatPoller::PAGE - 2; $i++) {
+			$latestFirst[] = self::message('own-' . $i, self::ALICE);
+		}
+		$latestFirst[] = self::message('incoming-2');
+		$latestFirst[] = self::message('incoming-1');
+		$this->cursorAnswers['chat.bsky.convo.getMessages'][''] = [
+			'messages' => $latestFirst,
+			'cursor' => 'older',
+		];
+		$this->cursorAnswers['chat.bsky.convo.getMessages']['older'] = [
+			'messages' => [self::message('deleted-incoming') + ['$type' => 'chat.bsky.convo.defs#deletedMessageView']],
+		];
+
+		$this->assertSame(ChatPoller::PAGE, $this->poller()->pollAccount(self::cursor('')));
+
+		$this->assertSame('3k022', $this->synced[0][1], 'the log cursor is set only after the unread boundary was found');
+		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
+		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE, 'cursor' => 'older'], $this->asked[2][1]);
+		$this->assertCount(ChatPoller::PAGE, $this->handed, 'own messages are imported, while the deleted placeholder is not');
+		$this->assertSame('received', $this->handed[0][0]);
+		$this->assertStringEndsWith('/incoming-1', $this->handed[0][1], 'the imported range is stored oldest first');
+		$this->assertStringEndsWith('/own-0', $this->handed[array_key_last($this->handed)][1]);
+	}
+
+	public function testTheInitialBackfillDoesNotAdvanceWhenUnreadMessagesCannotBeFound(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k022', 'unreadCount' => 2, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => [self::message('only-one')]];
+
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([], $this->synced, 'an incomplete backfill must be retried instead of cursor-committed');
+		$this->assertNotEmpty($this->failed);
 	}
 
 	public function testTheLogSaysWhatWasSentAndDeletedSinceTheLastRead(): void {

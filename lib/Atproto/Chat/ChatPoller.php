@@ -185,11 +185,14 @@ class ChatPoller {
 				$members = self::dids($convo['members'] ?? null);
 				$this->members[$id] = $members;
 				$messageCursor = '';
-				$remaining = $unread;
+				$unreadIncoming = 0;
 				$messagesToStore = [];
 				$seenMessageCursors = [];
 				do {
-					$messageParams = ['convoId' => $id, 'limit' => min($remaining, self::PAGE)];
+					// unreadCount counts unread messages from other members, not the
+					// number of newest messages. Own messages may be interleaved, and
+					// deleted-message views still count toward that unread total.
+					$messageParams = ['convoId' => $id, 'limit' => self::PAGE];
 					if ($messageCursor !== '') {
 						$messageParams['cursor'] = $messageCursor;
 					}
@@ -197,26 +200,40 @@ class ChatPoller {
 					if (!is_array($page['messages'] ?? null)) {
 						throw new \RuntimeException('Bluesky chat message response is missing its message list');
 					}
-					$list = $page['messages'];
+					/** @var list<array<array-key, mixed>> $list */
+					$list = array_values(array_filter($page['messages'], 'is_array'));
 					if ($list === []) {
+						throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
+					}
+					foreach ($list as $message) {
+						$sender = (string)($message['sender']['did'] ?? '');
+						if ($sender !== '' && $sender !== $identity->did) {
+							$unreadIncoming++;
+						}
+						$messagesToStore[] = $message;
+					}
+					if ($unreadIncoming >= $unread) {
 						break;
 					}
-					$messagesToStore = [...$messagesToStore, ...$list];
-					$remaining -= count($list);
 					$nextMessageCursor = (string)($page['cursor'] ?? '');
-					if ($remaining <= 0 || $nextMessageCursor === '') {
-						break;
+					if ($nextMessageCursor === '') {
+						throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
 					}
 					if ($nextMessageCursor === $messageCursor || isset($seenMessageCursors[$nextMessageCursor])) {
 						throw new \RuntimeException('Bluesky chat message pagination did not advance');
 					}
 					$seenMessageCursors[$nextMessageCursor] = true;
 					$messageCursor = $nextMessageCursor;
-				} while ($remaining > 0);
+				} while ($unreadIncoming < $unread);
 				// Pages and messages are newest first. Store the complete unread range
 				// oldest first so local conversation reply links remain chronological.
 				foreach (array_reverse($messagesToStore) as $message) {
-					if (is_array($message) && $this->store->received($identity, $id, $message, $members)) {
+					if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
+						// A tombstone proves an unread message existed, but has no
+						// content to import. It is deliberately not made into a post.
+						continue;
+					}
+					if ($this->store->received($identity, $id, $message, $members)) {
 						$handled++;
 					}
 				}
