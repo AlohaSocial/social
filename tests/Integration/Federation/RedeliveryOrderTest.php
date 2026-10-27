@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Integration\Federation;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Interfaces\Activity\DeleteInterface;
+use OCA\Social\Interfaces\Object\LikeInterface;
 use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
@@ -44,6 +45,7 @@ class RedeliveryOrderTest extends InboxTestCase {
 		parent::setUp();
 		$this->forgetEarlyDelete();
 		$this->forgetEarlyUpdate();
+		$this->forgetEarlyUndo();
 		$this->localPost();
 		$this->remoteActor(self::CAROL, 'carol');
 	}
@@ -51,6 +53,7 @@ class RedeliveryOrderTest extends InboxTestCase {
 	protected function tearDown(): void {
 		$this->forgetEarlyDelete();
 		$this->forgetEarlyUpdate();
+		$this->forgetEarlyUndo();
 		parent::tearDown();
 	}
 
@@ -63,6 +66,13 @@ class RedeliveryOrderTest extends InboxTestCase {
 		Server::get(DurableCache::class)->removeShared(
 			NoteInterface::EARLY_UPDATE_NAMESPACE,
 			'update:' . hash('sha256', self::POST),
+		);
+	}
+
+	private function forgetEarlyUndo(): void {
+		Server::get(DurableCache::class)->removeShared(
+			LikeInterface::EARLY_UNDO_NAMESPACE,
+			hash('sha256', self::CAROL . '#likes/1'),
 		);
 	}
 
@@ -233,11 +243,10 @@ class RedeliveryOrderTest extends InboxTestCase {
 	}
 
 	/**
-	 * An Undo of a like that has not arrived yet finds nothing to undo; the
-	 * like that arrives after it is then counted. Mastodon does the same: it
-	 * remembers early Deletes, not early Undos.
+	 * An Undo of a like that has not arrived yet is remembered, so a late Like
+	 * redelivery cannot restore an interaction its actor already removed.
 	 */
-	public function testAnUndoOfALikeBeforeTheLikeLeavesTheLikeCounted(): void {
+	public function testAnUndoOfALikeBeforeTheLikeKeepsTheLateLikeUndone(): void {
 		$like = [
 			'id' => self::CAROL . '#likes/1', 'type' => 'Like', 'actor' => self::CAROL, 'object' => $this->localPostId(),
 		];
@@ -246,7 +255,7 @@ class RedeliveryOrderTest extends InboxTestCase {
 
 		$this->assertTrue($this->deliver((string)json_encode(['@context' => 'https://www.w3.org/ns/activitystreams'] + $like)));
 
-		$this->assertSame(1, $this->statusEntity($this->localPostId())['favourites_count']);
+		$this->assertSame(0, $this->statusEntity($this->localPostId())['favourites_count']);
 		$this->assertConnectionUsable();
 	}
 

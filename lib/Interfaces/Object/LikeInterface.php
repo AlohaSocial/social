@@ -31,6 +31,7 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Details;
 use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\NotificationService;
 
 /**
@@ -39,12 +40,44 @@ use OCA\Social\Service\NotificationService;
  * @package OCA\Social\Interfaces\Object
  */
 class LikeInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
+	/** Where an Undo that precedes its Like is kept, for the same six hours as an early Delete. */
+	public const EARLY_UNDO_NAMESPACE = 'social.early_undo_like';
+	public const EARLY_UNDO_TTL = 21600;
+
 	public function __construct(
 		private ActionsRequest $actionsRequest,
 		private StreamRequest $streamRequest,
 		private CacheActorService $cacheActorService,
 		private NotificationService $notificationService,
+		private ?DurableCache $durableCache = null,
 	) {
+	}
+
+	/** Whether the same actor already undid this like before it arrived. */
+	public static function undoneBeforeArrival(?DurableCache $durableCache, string $likeId, string $actorId, string $objectId): bool {
+		if ($durableCache === null || $likeId === '' || $actorId === '') {
+			return false;
+		}
+
+		$pending = $durableCache->getShared(self::EARLY_UNDO_NAMESPACE, hash('sha256', $likeId));
+
+		return is_array($pending)
+			&& ($pending['actor'] ?? '') === $actorId
+			&& (($pending['object'] ?? '') === '' || ($pending['object'] ?? '') === $objectId);
+	}
+
+	/** Record an Undo for a Like not yet present locally. */
+	public static function rememberUndoBeforeArrival(?DurableCache $durableCache, string $likeId, string $actorId, string $objectId = ''): void {
+		if ($durableCache === null || $likeId === '' || $actorId === '') {
+			return;
+		}
+
+		$durableCache->setShared(
+			self::EARLY_UNDO_NAMESPACE,
+			hash('sha256', $likeId),
+			['actor' => $actorId, 'object' => $objectId],
+			self::EARLY_UNDO_TTL,
+		);
 	}
 
 	/**
@@ -56,6 +89,9 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 		$like = $item;
 		$like->checkOrigin($like->getId());
 		$like->checkOrigin($like->getActorId());
+		if (self::undoneBeforeArrival($this->durableCache, $like->getId(), $like->getActorId(), $like->getObjectId())) {
+			return;
+		}
 
 		try {
 			$this->save($like);
@@ -73,6 +109,9 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 		if ($activity->getType() === Undo::TYPE) {
 			$activity->checkOrigin($like->getId());
 			$activity->checkOrigin($like->getActorId());
+			self::rememberUndoBeforeArrival(
+				$this->durableCache, $like->getId(), $like->getActorId(), $like->getObjectId()
+			);
 
 			$this->delete($like);
 		}
@@ -100,6 +139,12 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 	 */
 	#[\Override]
 	public function save(ACore $item): void {
+		if (self::undoneBeforeArrival(
+			$this->durableCache, $item->getId(), $item->getActorId(), $item->getObjectId()
+		)) {
+			throw new ItemAlreadyExistsException();
+		}
+
 		try {
 			$this->actionsRequest->getActionFromItem($item);
 			throw new ItemAlreadyExistsException();
@@ -109,6 +154,12 @@ class LikeInterface extends AbstractActivityPubInterface implements IActivityPub
 		// a redelivery overlapping the first copy passes the lookup above
 		// and is refused by the database instead
 		if (!$this->actionsRequest->save($item)) {
+			throw new ItemAlreadyExistsException();
+		}
+		if (self::undoneBeforeArrival(
+			$this->durableCache, $item->getId(), $item->getActorId(), $item->getObjectId()
+		)) {
+			$this->actionsRequest->deleteAction($item->getActorId(), $item->getObjectId(), Like::TYPE);
 			throw new ItemAlreadyExistsException();
 		}
 

@@ -427,8 +427,8 @@ to stop.
   the rows of the first delivery and a usable connection; an Update before
   its Create, two edits in reverse order (caught an older edit overwriting a
   newer one), a Delete before its Create (caught the late Create resurrecting
-  the post), an Undo{Like} before the Like, and a rotated key arriving in an
-  Update{Person} verifying the next signature.
+  the post), an Undo{Like} before the Like (the late Like stays undone), and a
+  rotated key arriving in an Update{Person} verifying the next signature.
 - `Federation/OverlappingRedeliveryTest` — a Follow, Like, Announce and Create
   delivered again while the first copy is still being handled, replayed by
   making the second delivery's lookups miss the way the first copy's did: one

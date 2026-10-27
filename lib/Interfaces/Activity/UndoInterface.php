@@ -14,13 +14,16 @@ use OCA\Social\Exceptions\InvalidOriginException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Interfaces\IActivityPubInterface;
+use OCA\Social\Interfaces\Object\LikeInterface;
 use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Service\DurableCache;
 use Psr\Log\LoggerInterface;
 
 class UndoInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
 	public function __construct(
 		private ActivityObjectResolver $objectResolver,
 		private LoggerInterface $logger,
+		private ?DurableCache $durableCache = null,
 	) {
 	}
 
@@ -35,6 +38,16 @@ class UndoInterface extends AbstractActivityPubInterface implements IActivityPub
 		try {
 			$object = $this->objectResolver->resolve($item);
 		} catch (ItemNotFoundException $e) {
+			if (!$item->hasObject() && $item->getObjectId() !== '' && $item->getActorId() !== '') {
+				// A URI-only Undo can arrive before its Like is known locally. The
+				// object type is not available yet, so remember it by the actor-owned
+				// activity id; a later Like can claim it only with that same actor.
+				$item->checkOrigin($item->getObjectId());
+				$item->checkOrigin($item->getActorId());
+				LikeInterface::rememberUndoBeforeArrival(
+					$this->durableCache, $item->getObjectId(), $item->getActorId()
+				);
+			}
 			$this->logger->notice('Undo refers to an unknown object', [
 				'activity' => $item->getId(),
 				'object' => $item->getObjectId(),
