@@ -45,6 +45,18 @@ the same author arrives, Social applies the newest pending edit through the
 normal author and edit-time checks. If the Create never arrives, the pending
 update expires without creating a standalone post.
 
+### Outbound video representation
+
+A local post with exactly one video attachment is serialized as an ActivityPub
+`Video` for peers identified as PeerTube and as a `Note` with its video
+attachment for peers identified as Pixelfed. This selection uses only a fresh
+NodeInfo result already in the bounded directory cache; publishing does not
+make a discovery request. Unknown or stale peers use the administrator's
+`publish_video_objects` default. Each per-inbox representation is separately
+signed, while the stored post and its ActivityPub IDs remain the same. If a
+video is waiting for conversion, the queued representation is retained when
+the row is released after the cache entry expires.
+
 WebFinger advertises the existing remote-follow confirmation page using the
 FEP-3b86 `Follow` relation for both local users and the instance actor. Opening
 the intent does not follow an account automatically; the person confirms the

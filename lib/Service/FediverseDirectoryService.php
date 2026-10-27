@@ -396,6 +396,25 @@ class FediverseDirectoryService {
 	}
 
 	/**
+	 * Software name from the bounded NodeInfo cache, without doing network I/O.
+	 * An unknown or stale peer is intentionally left to the existing instance-wide
+	 * publishing setting.
+	 */
+	public function knownSoftware(string $host): string {
+		$host = strtolower(trim($host));
+		if ($host === '') {
+			return '';
+		}
+
+		$entry = $this->known()['software'][$host] ?? null;
+		if (!is_array($entry) || (int)($entry['checked'] ?? 0) < time() - self::SOFTWARE_TTL) {
+			return '';
+		}
+
+		return strtolower(trim((string)($entry['name'] ?? '')));
+	}
+
+	/**
 	 * The servers the directory of servers lists whose software one of these
 	 * APIs fits, or none when it does not answer — remembered as empty as
 	 * well, so a directory that is down is asked again tomorrow rather than

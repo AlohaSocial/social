@@ -1779,12 +1779,15 @@ Three things about it worth knowing:
   rather than one file per resolution. A shorter list than PeerTube publishes,
   the same shape, and a reader takes the best playable link it finds.
 
-It is on by default and an admin can turn it off with
-`occ config:app:set social publish_video_objects --value 0`. The switch exists
-because the one thing that cannot be proven from here is whether a
-Mastodon-family server renders a `Video` as well as it rendered the `Note`; what
-*is* proven is the round trip — everything published goes back through the
-reader in the same class, in `PeerTubePublishTest`.
+The default is `Note` and an admin can choose `Video` for unknown peers with
+`occ config:app:set social publish_video_objects --value 1`. Where a fresh
+NodeInfo result is already cached, outbound delivery selects `Video` for
+PeerTube and `Note` for Pixelfed per inbox; it does not make a network lookup in
+the post request. Unknown or stale peers use the configured default. Both
+variants retain the same post and activity IDs, and each changed activity is
+signed again before it enters the delivery queue. The round trip — a published
+`Video` returning through the reader in the same class — is covered by
+`PeerTubePublishTest`.
 
 What is **not** done: `Audio` (Funkwhale), `Article`, `Page` and `Event` are
 still read by `fillNoteLikeContent()` alone — title and link, no media. The
