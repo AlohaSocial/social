@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Integration\Federation;
 use OCA\Social\Db\ActionsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Interfaces\Activity\DeleteInterface;
+use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\LinkedDataSignature;
@@ -42,18 +43,27 @@ class RedeliveryOrderTest extends InboxTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 		$this->forgetEarlyDelete();
+		$this->forgetEarlyUpdate();
 		$this->localPost();
 		$this->remoteActor(self::CAROL, 'carol');
 	}
 
 	protected function tearDown(): void {
 		$this->forgetEarlyDelete();
+		$this->forgetEarlyUpdate();
 		parent::tearDown();
 	}
 
 	/** An early Delete is remembered across requests, so across tests too. */
 	private function forgetEarlyDelete(): void {
 		Server::get(DurableCache::class)->removeShared(DeleteInterface::EARLY_DELETE_NAMESPACE, hash('sha256', self::POST));
+	}
+
+	private function forgetEarlyUpdate(): void {
+		Server::get(DurableCache::class)->removeShared(
+			NoteInterface::EARLY_UPDATE_NAMESPACE,
+			'update:' . hash('sha256', self::POST),
+		);
 	}
 
 	private function note(string $content, string $updated = ''): array {
@@ -142,14 +152,47 @@ class RedeliveryOrderTest extends InboxTestCase {
 		$this->assertConnectionUsable();
 	}
 
-	/** An edit of a post never received has nothing to rewrite; the Create that follows stores the post. */
-	public function testAnUpdateBeforeItsCreateIsDroppedAndTheCreateStillLands(): void {
+	/** An edit that overtakes its Create is applied as soon as that post is stored. */
+	public function testAnUpdateBeforeItsCreateIsAppliedWhenTheCreateArrives(): void {
 		$this->assertTrue($this->deliver($this->update('<p>edited</p>', '2026-05-01T11:00:00Z')));
 		$this->assertNull($this->stored(self::POST));
 
 		$this->assertTrue($this->deliver($this->create()));
 
-		$this->assertSame('<p>first</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('<p>edited</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T11:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	/** Only the newest pre-Create edit is retained, even if an older delivery arrives last. */
+	public function testTheNewestUpdateBeforeItsCreateWins(): void {
+		$this->assertTrue($this->deliver($this->update('<p>newest edit</p>', '2026-05-01T12:00:00Z')));
+		$this->assertTrue($this->deliver($this->update('<p>older edit</p>', '2026-05-01T11:00:00Z')));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertSame('<p>newest edit</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T12:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	/** An undated poll refresh must not replace a dated edit waiting for its Create. */
+	public function testUndatedUpdateDoesNotReplaceDatedUpdateBeforeCreate(): void {
+		$this->assertTrue($this->deliver($this->update('<p>newest edit</p>', '2026-05-01T12:00:00Z')));
+		$this->assertTrue($this->deliver($this->update('<p>poll snapshot</p>', '')));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertSame('<p>newest edit</p>', $this->stored(self::POST)?->getContent());
+		$this->assertSame('2026-05-01T12:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	/** An early Delete must discard an edit so a later Create cannot resurrect either. */
+	public function testDeleteBeforeCreateDiscardsPendingUpdate(): void {
+		$this->assertTrue($this->deliver($this->update('<p>edited</p>', '2026-05-01T11:00:00Z')));
+		$this->assertTrue($this->deliver($this->delete()));
+
+		$this->assertTrue($this->deliver($this->create()));
+
+		$this->assertNull($this->stored(self::POST));
 	}
 
 	/**

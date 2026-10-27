@@ -41,12 +41,18 @@ use OCA\Social\Service\NotificationService;
 use OCA\Social\Service\PollService;
 use OCA\Social\Service\PushService;
 use OCA\Social\Service\ReplyRuleService;
+use OCA\Social\Service\SignatureService;
 use OCA\Social\Service\StatusRevisionService;
 use OCA\Social\Service\StreamQueueService;
 use OCA\Social\Tools\ActivityPubEvent;
 use OCA\Social\Tools\Traits\TArrayTools;
 
 class NoteInterface extends AbstractActivityPubInterface implements IActivityPubInterface {
+	/** An edit may overtake the post it updates: keep it across that gap for one delivery window. */
+	public const EARLY_UPDATE_NAMESPACE = 'social.early_update';
+	public const EARLY_UPDATE_TTL = 21600;
+	private const EARLY_UPDATE_KEY_PREFIX = 'update:';
+
 	use TArrayTools;
 
 	public function __construct(
@@ -93,6 +99,8 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			$item->setAttributedTo($activity->getActorId());
 			$activity->checkOrigin($item->getAttributedTo());
 			if (DeleteInterface::deletedBeforeArrival($this->durableCache, $item->getId(), $activity->getActorId())) {
+				$this->forgetEarlyUpdate($item->getId());
+
 				return;
 			}
 			$item->setActivityId($activity->getId());
@@ -104,6 +112,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 
 			if (!$known) {
 				$this->forwardService->forwardReply($activity, $item);
+			}
+			if ($this->isKnown($item->getId())) {
+				$this->applyEarlyUpdate($item->getId(), $activity->getActorId(), $item->getAttributedTo());
 			}
 		}
 
@@ -123,7 +134,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			try {
 				$stored = $this->getStoredForAuthor($activity, $item->getId());
 			} catch (StreamNotFoundException $e) {
-				return; // an edit of a post never received: nothing to rewrite
+				$this->rememberEarlyUpdate($activity, $item);
+
+				return;
 			}
 			if (self::isOlderEdit($item, $stored)) {
 				return;
@@ -153,6 +166,81 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			$this->revisionService->recordEdit($stored, $item);
 			$this->notificationService->onStatusEdited($item);
 			$this->fileCommentsService->onReplyUpdated($item);
+		}
+	}
+
+	/**
+	 * Remember the latest authenticated edit until its Create arrives.
+	 * Updates are already origin-checked above and must name the actor (or a
+	 * channel they run) whose object they edit before they can be replayed.
+	 */
+	private function rememberEarlyUpdate(ACore $activity, ACore $item): void {
+		if ($this->durableCache === null || $item->getId() === '' || $activity->getActorId() === '') {
+			return;
+		}
+		$author = $item->getAttributedTo();
+		if ($author === '' || ($activity->getActorId() !== $author && !$this->ownsChannel($activity->getActorId(), $author))) {
+			throw new InvalidOriginException('NoteInterface::rememberEarlyUpdate - actor does not own the post');
+		}
+
+		$key = self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $item->getId());
+		$existing = $this->durableCache->getShared(self::EARLY_UPDATE_NAMESPACE, $key);
+		$existingUpdated = is_array($existing) ? strtotime((string)($existing['updated'] ?? '')) : false;
+		$incomingUpdated = $item->getUpdated() !== '' ? strtotime($item->getUpdated()) : false;
+		if ($existingUpdated !== false && ($incomingUpdated === false || $incomingUpdated <= $existingUpdated)) {
+			return;
+		}
+
+		$this->durableCache->setShared(self::EARLY_UPDATE_NAMESPACE, $key, [
+			'actor' => $activity->getActorId(),
+			'author' => $author,
+			'object' => $item->getId(),
+			'origin' => $activity->getRoot()->getOrigin(),
+			'updated' => $item->getUpdated(),
+			'received' => $activity->getRoot()->getOriginCreationTime(),
+			'activity' => $activity->jsonSerialize(),
+		], self::EARLY_UPDATE_TTL);
+	}
+
+	/** Apply a remembered edit once its matching post has been durably created. */
+	private function applyEarlyUpdate(string $objectId, string $actorId, string $authorId): void {
+		if ($this->durableCache === null) {
+			return;
+		}
+		$key = self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $objectId);
+		$pending = $this->durableCache->getShared(self::EARLY_UPDATE_NAMESPACE, $key);
+		if (!is_array($pending)) {
+			return;
+		}
+
+		if (($pending['actor'] ?? '') !== $actorId
+			|| ($pending['author'] ?? '') !== $authorId
+			|| ($pending['object'] ?? '') !== $objectId
+			|| !is_array($pending['activity'] ?? null)
+			|| !is_string($pending['origin'] ?? null)
+			|| $pending['origin'] === '') {
+			$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+
+			return;
+		}
+
+		$update = AP::instance()->getItemFromData($pending['activity'], deferAttachmentDownloads: true);
+		if (!$update instanceof Update || !$update->hasObject() || $update->getActorId() !== $actorId) {
+			$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+
+			return;
+		}
+		$update->setOrigin($pending['origin'], SignatureService::ORIGIN_REQUEST, (int)($pending['received'] ?? 0));
+		$this->activity($update, $update->getObject());
+		$this->durableCache->removeShared(self::EARLY_UPDATE_NAMESPACE, $key);
+	}
+
+	private function forgetEarlyUpdate(string $objectId): void {
+		if ($this->durableCache !== null && $objectId !== '') {
+			$this->durableCache->removeShared(
+				self::EARLY_UPDATE_NAMESPACE,
+				self::EARLY_UPDATE_KEY_PREFIX . hash('sha256', $objectId)
+			);
 		}
 	}
 

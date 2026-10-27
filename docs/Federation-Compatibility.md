@@ -39,6 +39,12 @@ Links, or embedded pages. Relative continuations use the embedded page's own ID
 when it has one. Page links cannot change the outbox origin, carry credentials,
 or point back to the current page indefinitely.
 
+For inbox delivery, a verified `Update` that arrives before its `Create` is held
+in the shared durable cache for up to six hours. When a matching `Create` from
+the same author arrives, Social applies the newest pending edit through the
+normal author and edit-time checks. If the Create never arrives, the pending
+update expires without creating a standalone post.
+
 WebFinger advertises the existing remote-follow confirmation page using the
 FEP-3b86 `Follow` relation for both local users and the instance actor. Opening
 the intent does not follow an account automatically; the person confirms the

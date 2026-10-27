@@ -4414,6 +4414,16 @@ approval state. `StreamRequest::update()` writes local parent columns alongside
 the source snapshot; both parent counts are refreshed before the repository
 batch commits. This uses the same conditional-write lock as other post changes.
 
+### Inbox updates that overtake creates
+
+`NoteInterface` keeps a verified `Update` for six hours in the shared durable
+cache when its post has not arrived yet. The cache is keyed by the object URI,
+and the saved actor and author must match the later `Create`. The newest pending
+`updated` timestamp is replayed through the ordinary update path after the post
+has been stored, so author checks, stale-edit checks, revisions and edit
+notifications stay consistent. A matching early Delete discards the pending
+update; if no Create arrives, the cache entry expires without making a post.
+
 ### Public profile navigation preferences
 
 `Model\ProfileLayout` validates the public default and visible tabs. `AccountService`
