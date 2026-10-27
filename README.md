@@ -49,7 +49,8 @@ For You feed. See the [user guide](docs/User-Guide.md) for the web experience.
 | [Events and Calendar](docs/Events.md) | Event cards, ICS import and supported behavior |
 | [For You](docs/For-You.md) | Recommendation design, privacy and controls |
 | [Architecture](docs/Architecture.md) | Services, storage, queues and protocol flows |
-| [Performance](docs/Performance.md) | Query and scaling notes |
+| [Performance](docs/Performance.md) | Current CI query measurements and benchmark limits |
+| [Technical debt](docs/Technical-Debt.md) | Current maintenance inventory and priorities |
 | [OCC commands](docs/OCC-Commands.md) | Command-line administration and maintenance |
 | [Security policy](SECURITY.md) | Reporting a security issue |
 
@@ -65,8 +66,8 @@ occ social:check:install
 
 For federation, configure a stable public URL, HTTPS, `.well-known` redirects,
 outbound HTTPS access and system cron. For Mastodon clients, configure the
-provided root API/OAuth web-server rules. Bluesky hosting is optional and has
-additional requirements. Follow [Admin.md](docs/Admin.md) before exposing a
+[shipped root API/OAuth web-server rules](contrib/webserver/). Bluesky hosting
+is optional and has additional requirements. Follow [Admin.md](docs/Admin.md) before exposing a
 new instance publicly.
 
 ## Develop

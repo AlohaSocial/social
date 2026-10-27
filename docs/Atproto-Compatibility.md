@@ -4,6 +4,8 @@
 -->
 # Bluesky and AT Protocol compatibility
 
+**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**.
+
 **Current scope:** native AT Protocol hosting is an optional integration in
 Aloha Social. It runs alongside ActivityPub; it does not convert a Fediverse
 account into a Bluesky identity or use an existing Bluesky account as the local
@@ -82,6 +84,53 @@ The codebase includes unit, integration and protocol interoperability tests.
 These do not establish live public relay/AppView indexing. For a production-like
 check, use [Atproto-Live-Test.md](Atproto-Live-Test.md) with test accounts and
 record which service acknowledged each step.
+
+## Account recovery phrase
+
+The account settings can create a twelve-word recovery phrase after password
+confirmation. It is shown once; creating a replacement rotates the recovery
+key, so store the new phrase safely. This key can sign supported PLC rotation
+operations, but the instance key still ranks above it while the account remains
+hosted here. Keep the phrase private and offline.
+
+The words encode 128 bits of entropy using the standard English BIP-39 word
+list and checksum. The private key is the big-endian secp256k1 scalar derived
+as `SHA-256("social.atproto.recovery.v1" || entropy)`. This is **not** the
+standard BIP-39 PBKDF2 wallet derivation. The offline helper is
+[`resources/atproto/recovery-key.py`](../resources/atproto/recovery-key.py),
+with the word list at
+[`resources/atproto/bip39-english.txt`](../resources/atproto/bip39-english.txt).
+
+Reference vector:
+
+- Phrase: `abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about`
+- Secret key hex: `950f8acc1852f1a2562b2851457a04b1ba22541dd0f3b95ab9302d2894f29397`
+- Private-key multibase: `z3vLe2mABz9GSzoARHpVNW8P1rnySJ8rmfg3AKSpyVfHE526`
+- Public `did:key`: `did:key:zQ3shX448VC3xo912wY7zzdUFdMqGifmFTv9GomCodivqkgkt`
+
+The code and offline helper are checked against this vector in
+`tests/Atproto/Identity/MnemonicTest.php`.
+
+## Runtime configuration keys
+
+These persisted keys identify the primary AT Protocol controls and the
+Jetstream listener state. Configure service endpoints and enablement through
+the Bluesky administration card where available; cursor and status keys are
+runtime bookkeeping and should not be edited manually.
+
+| Key | Purpose |
+|---|---|
+| `atproto_enabled` | Enables or disables native AT Protocol hosting. |
+| `atproto_relays` | Configured relay endpoints used for repository synchronization. |
+| `atproto_plc_directory` | PLC directory endpoint used for DID operations. |
+| `atproto_chat` | Configured Bluesky Chat service endpoint. |
+| `atproto_jetstream` | Optional Jetstream source for remote repository events. |
+| `atproto_jetstream_cursor` | Last consumed Jetstream cursor; internal listener state. |
+| `atproto_jetstream_status` | Listener health/status state; internal bookkeeping. |
+
+Other `atproto_*` values may hold credentials, service DIDs, crawl cursors or
+backfill progress. These are operational state, not general user preferences.
+See [Admin.md](Admin.md#bluesky) for setup and secret-handling guidance.
 
 ## Protocol references
 

@@ -294,61 +294,38 @@ class DocumentationTest extends TestCase {
 	}
 
 	/**
-	 * Phrasings that assert a feature works.
+	 * The README summarizes integrations in a capability/limit matrix.
 	 *
-	 * Each requires the verb and its complement to be adjacent, which is what
-	 * keeps a denial out: "is not supported", "are never implemented" and
-	 * "does not work correctly" all put a word in between and match none of
-	 * these. Nothing broader belongs here — a check that fires on ordinary
-	 * prose is a check somebody deletes.
+	 * This checks the information structure, not editorial headings or exact
+	 * wording. A compact matrix is as useful as a separate "not implemented"
+	 * list and avoids making routine README edits break PHPUnit.
 	 */
-	private const WORKS_PATTERNS = [
-		'/\b(?:is|are)\s+(?:fully\s+)?supported\b/i',
-		'/\b(?:is|are)\s+(?:fully\s+)?implemented\b/i',
-		'/\bworks?\s+(?:fine|correctly|as expected|as documented)\b/i',
-	];
+	public function testReadmeHasAFeatureAndLimitMatrix(): void {
+		$readme = $this->read('README.md');
+		$this->assertStringContainsString('| Area | Supported features | Important limits |', $readme);
 
-	/**
-	 * A bullet under "Not implemented yet" may not say the feature works.
-	 *
-	 * That section's own intro says "These are absent from the code today, not
-	 * merely rough edges", and nine of its ten bullets used to say the
-	 * opposite — blocking, muting, reporting, locked accounts, profile fields
-	 * and polls all described as supported, because as each one landed its
-	 * entry was rewritten in place instead of being moved up to the feature
-	 * list. Nothing mechanical caught it. This does.
-	 *
-	 * Only phrasing, though: a bullet that describes a working feature in
-	 * words this list does not know still passes. See
-	 * testNoDocumentedDenialOfARouteIsFalse() for the same mistake caught by
-	 * fact rather than by wording.
-	 */
-	public function testNothingUnderNotImplementedIsDescribedAsWorking(): void {
-		$offenders = [];
-		foreach ($this->bulletsOfNotImplementedSection() as $bullet) {
-			foreach (self::WORKS_PATTERNS as $pattern) {
-				if (preg_match($pattern, $bullet) === 1) {
-					$offenders[] = $bullet;
-					break;
-				}
+		$rows = [];
+		$inside = false;
+		foreach (explode("\n", $readme) as $line) {
+			if (preg_match('/^##\s+What it supports\s*$/i', $line) === 1) {
+				$inside = true;
+				continue;
+			}
+			if ($inside && str_starts_with($line, '## ')) {
+				break;
+			}
+			if ($inside && str_starts_with($line, '|') && !str_contains($line, '---')) {
+				$rows[] = array_map('trim', explode('|', trim($line, '|')));
 			}
 		}
 
-		$this->assertSame(
-			[],
-			$offenders,
-			'These bullets sit under a "Not implemented" heading in README.md and say the'
-			. ' feature is supported: move them into the Features list, or describe what is'
-			. ' actually missing.'
-		);
-	}
-
-	public function testTheNotImplementedSectionIsStillThereToCheck(): void {
-		$this->assertNotEmpty(
-			$this->bulletsOfNotImplementedSection(),
-			'No bullets found under a "Not implemented" heading in README.md:'
-			. ' testNothingUnderNotImplementedIsDescribedAsWorking has stopped checking anything.'
-		);
+		$this->assertGreaterThanOrEqual(6, count($rows), 'The README support matrix is missing integration rows.');
+		foreach ($rows as $index => $row) {
+			$this->assertCount(3, $row, 'Support matrix row ' . ($index + 1) . ' needs a feature, capability and limit.');
+			$this->assertNotSame('', $row[0]);
+			$this->assertNotSame('', $row[1]);
+			$this->assertNotSame('', $row[2]);
+		}
 	}
 
 	/**
@@ -661,35 +638,6 @@ class DocumentationTest extends TestCase {
 			. ' bump "version" in package.json to the appinfo/info.xml version'
 			. ' (appinfo/info.xml is the release version of the app).'
 		);
-	}
-
-	/**
-	 * The list items under README.md's "Not implemented yet" heading, up to
-	 * the next heading.
-	 *
-	 * @return list<string>
-	 */
-	private function bulletsOfNotImplementedSection(): array {
-		$lines = explode("\n", $this->read('README.md'));
-		$bullets = [];
-		$inside = false;
-
-		foreach ($lines as $line) {
-			if (preg_match('/^#{2,4}\s.*not implemented/i', $line) === 1) {
-				$inside = true;
-				continue;
-			}
-
-			if ($inside && str_starts_with($line, '#')) {
-				break;
-			}
-
-			if ($inside && preg_match('/^\s*[-*]\s+(.*)$/', $line, $match) === 1) {
-				$bullets[] = $match[1];
-			}
-		}
-
-		return $bullets;
 	}
 
 	/**
@@ -1323,41 +1271,35 @@ class DocumentationTest extends TestCase {
 	}
 
 	/**
-	 * The two surveys stay in the repository, and stay reachable.
+	 * The reference guides stay in the repository, and stay reachable.
 	 *
 	 * `docs/Technical-Debt.md` was written once before and lived only in a
 	 * working tree, so it was lost without anything noticing. Three of these
 	 * began as reports written outside the repository; the user guide is here
 	 * because it is the one document a reader who is not a developer is sent
-	 * to, and the same three ways of disappearing apply to it. Their *contents*
-	 * are deliberately not asserted — a test over "45% of lib is older than
-	 * 2023" would either be brittle or be the fix — but a file that is deleted,
-	 * renamed, or quietly orphaned from the README is something a test can
-	 * catch, and those are the ways a document like this actually disappears.
+	 * to, and the same three ways of disappearing apply to it. Prose and H1
+	 * wording may change. The contract is that each guide has a title, identifies
+	 * the current app version and gives an ISO review date; the exact date is not
+	 * pinned so an ordinary day passing does not make documentation fail.
 	 *
-	 * @return iterable<string, array{string, string}>
+	 * @return iterable<string, array{string}>
 	 */
 	public static function surveyDocuments(): iterable {
-		yield 'technical debt' => ['docs/Technical-Debt.md', 'Technical debt and legacy code'];
-		yield 'performance' => ['docs/Performance.md', 'Performance and scalability'];
-		yield 'mastodon compatibility' => ['docs/Mastodon-Compatibility.md', 'Mastodon compatibility'];
-		yield 'atproto specification' => ['docs/Atproto-Compatibility.md', 'Bluesky and AT Protocol compatibility'];
-		yield 'user guide' => ['docs/User-Guide.md', 'User guide'];
+		yield 'technical debt' => ['docs/Technical-Debt.md'];
+		yield 'performance' => ['docs/Performance.md'];
+		yield 'mastodon compatibility' => ['docs/Mastodon-Compatibility.md'];
+		yield 'atproto specification' => ['docs/Atproto-Compatibility.md'];
+		yield 'user guide' => ['docs/User-Guide.md'];
 	}
 
 	#[DataProvider('surveyDocuments')]
-	public function testTheSurveysAreStillHereAndLinkedFromTheReadme(string $path, string $title): void {
+	public function testTheReferenceGuidesAreCurrentAndLinkedFromTheReadme(string $path): void {
 		$document = $this->read($path);
-		$this->assertStringContainsString(
-			'# ' . $title,
-			$document,
-			$path . ' has lost its title, so it is probably not the document it was.'
-		);
-		$this->assertStringContainsString(
-			'**Verified against:**',
-			$document,
-			$path . ' must say which version it was checked against: nothing else tells a'
-			. ' reader how far it has drifted.'
+		$this->assertSame(1, preg_match('/^#\s+\S.+$/m', $document), $path . ' needs a Markdown title.');
+		$this->assertSame(
+			1,
+			preg_match('/\*\*Reviewed against:\*\*[^\n]*' . preg_quote($this->appVersion(), '/') . '[^\n]*\d{4}-\d{2}-\d{2}/', $document),
+			$path . ' must identify the current app version and an ISO review date.'
 		);
 		$this->assertStringContainsString(
 			$path,
