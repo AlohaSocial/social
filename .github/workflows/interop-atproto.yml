@@ -102,17 +102,10 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Make a test video
-        timeout-minutes: 10
-        # Use the runner's existing encoder. Mirror outages must not hang a
-        # federation test before it has even generated its two-second fixture.
-        run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            timeout 300s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update -q
-            timeout 300s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y -q --no-install-recommends ffmpeg
-          fi
-          timeout 30s ffmpeg -nostdin -loglevel error -y -f lavfi -i testsrc=duration=2:size=320x240:rate=15 \
-            -filter_threads 1 -threads 2 -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$ATPROTO_VIDEO"
+      - name: Prepare the test video
+        # A two-second synthetic H.264 fixture, generated for this suite and
+        # kept with its tests: no package mirror or runner-specific encoder.
+        run: cp apps/social/tests/Interop/fixtures/atproto-test-video.mp4 "$ATPROTO_VIDEO"
 
       - name: Set up the app's PHP dependencies
         working-directory: apps/social
