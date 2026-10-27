@@ -802,6 +802,10 @@ trait StreamTimelines {
 		} else {
 			$viewer = $qb->getViewer();
 			$qb->selectDestFollowing('sd', '');
+			// The author relation filter below needs the viewer's accepted
+			// Follow/Loopback row as `f`. Keep it as the indexed viewer join,
+			// rather than adding a free-standing follows table to the FROM list.
+			$qb->leftJoinFollowing('f');
 			$followedPosts = $qb->exprStreamDestFollowed($viewer->getId(), 'sd', 'f');
 			// The optimized recipient query adds the viewer's own follower
 			// collection separately. Narrowed home feeds use this join query,
