@@ -26,7 +26,7 @@ profile reads serve the cache and do not start arbitrary remote imports.
 |---|---|
 | `Note`, including image posts | Text, warning, language, tags, mentions, reply/quote metadata and attachment metadata use the inbox parser. Image bytes are cached separately. |
 | `Question` | Poll choices, vote totals, multiple-choice mode and closing time are preserved. |
-| `Article`, `Page` | Titles remain visible above non-empty bodies; link attachments use the same mapping as inbox deliveries, including community link posts. |
+| `Article`, `Page` | Titles remain visible above non-empty bodies and are exposed separately as `article.title` with the original subtype; title edits replace or clear that field. Link attachments use the same mapping as inbox deliveries, including community link posts. |
 | `Audio`, `Video` | The supported object mapping is reused; PeerTube metadata and streamed sources remain available. |
 | `Event` | Event facts are retained for the event card and Calendar import. |
 | `Update` | Existing posts use the inbox handler's author and edit-time checks. An update of a post not cached yet can import its current object. |

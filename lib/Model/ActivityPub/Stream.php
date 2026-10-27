@@ -2701,6 +2701,12 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 			// appears only when the remote object actually is an Event.
 			$result['event'] = ActivityPubEvent::fromStream($this);
 		}
+		if (in_array($this->getSubType(), self::ARTICLE_SUBTYPES, true)) {
+			$title = $this->getDetailsAll()[Details::ARTICLE_TITLE] ?? '';
+			if (is_string($title) && $title !== '') {
+				$result['article'] = ['title' => $title, 'type' => $this->getSubType()];
+			}
+		}
 
 		if ($this->hasActor()) {
 			$actor = $this->getActor();

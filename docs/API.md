@@ -1615,6 +1615,14 @@ post has been updated. Calendar import confirms its outcome through `imported: t
 that copy was updated. See [Events.md](Events.md) for timezone, content-warning,
 import and attendance boundaries.
 
+### Long-form ActivityPub posts
+
+An imported ActivityStreams `Article` or `Page` with a non-empty `name` includes
+`article: { title, type }` in the status response. `type` is `Article` or `Page`;
+`title` is plain text bounded to 500 characters. The title also remains at the top
+of `content` for clients that do not understand this extension. On remote edits,
+the structured title is replaced or removed together with the new source revision.
+
 ### Visual media timeline filter
 
 The Social `media_type` extension accepts `visual` in addition to `image`, `video`

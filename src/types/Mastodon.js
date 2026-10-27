@@ -168,6 +168,7 @@
  * @property {?boolean} [can_hide] - in a conversation: whether the reader is its author and may hide this reply; null elsewhere
  * @property {?object} [video] - PeerTube's metadata for a video post, null for anything else
  * @property {?{name: string, start_time: ?string, end_time: ?string, location: string, status?: string, participation_url?: string}} [event] - schedule and venue for an ActivityStreams Event; participation_url links to an external source flow and is not a federated RSVP
+ * @property {?{title: string, type: ('Article'|'Page')}} [article] - the original heading and ActivityStreams type of an imported long-form post
  * @property {?VideoCard} [video_card] - the same few facts about every video post, for a grid of them; null for anything that is not a video
  * @property {?{position: number, duration: number, updated_at: ?string}} [watch_progress] - where the reader stopped in the video; only on `GET /api/v1/videos/continue`, null elsewhere
  * @property {string} [type] - set when a timeline entry is a notification about the post rather than the post itself

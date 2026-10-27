@@ -156,6 +156,10 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 				// quote state, or other local metadata.
 				$this->streamRequest->updateDetails($item, Details::EVENT);
 			}
+			if (in_array($stored->getSubType(), Stream::ARTICLE_SUBTYPES, true)
+				|| in_array($item->getSubType(), Stream::ARTICLE_SUBTYPES, true)) {
+				$this->streamRequest->updateDetails($item, Details::ARTICLE_TITLE);
+			}
 			if (!$edited) {
 				return;
 			}
@@ -257,6 +261,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	 */
 	private static function isEdit(Stream $stored, Stream $incoming): bool {
 		return $stored->getContent() !== $incoming->getContent()
+			|| ($stored->getDetailsAll()[Details::ARTICLE_TITLE] ?? '') !== ($incoming->getDetailsAll()[Details::ARTICLE_TITLE] ?? '')
 			|| $stored->getSummary() !== $incoming->getSummary()
 			|| $stored->isSensitive() !== $incoming->isSensitive()
 			|| self::attachmentsOf($stored) !== self::attachmentsOf($incoming)

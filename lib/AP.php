@@ -82,6 +82,7 @@ use OCA\Social\Model\ActivityPub\Object\Story;
 use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Details;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PeerTubeService;
 use OCA\Social\Service\ReactionService;
@@ -306,9 +307,16 @@ class AP {
 		if ($name === '') {
 			return;
 		}
+		$type = $this->get('type', $data, '');
+		if (in_array($type, ['Article', 'Page'], true)) {
+			$title = self::articleTitle($name);
+			if ($title !== '') {
+				$item->setDetail(Details::ARTICLE_TITLE, $title);
+			}
+		}
 		$content = $item->getContent();
 		if ($content !== '') {
-			if (in_array($this->get('type', $data, ''), ['Article', 'Page'], true)) {
+			if (in_array($type, ['Article', 'Page'], true)) {
 				$this->prependArticleTitle($item, $name, $content);
 			}
 
@@ -336,6 +344,12 @@ class AP {
 
 		$escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 		$item->setContent('<h2>' . $escapedTitle . '</h2>' . $content);
+	}
+
+	private static function articleTitle(string $title): string {
+		$title = trim(preg_replace('/\\s+/u', ' ', $title) ?? '');
+
+		return mb_substr($title, 0, 500, 'UTF-8');
 	}
 
 	/**
