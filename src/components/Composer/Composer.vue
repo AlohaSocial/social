@@ -1075,6 +1075,7 @@ export default {
 							start_time: this.editTime(this.eventStart),
 							end_time: this.editTime(this.eventEnd),
 							location: this.eventLocation.trim(),
+							...(this.editItem.event.status ? { status: this.editItem.event.status } : {}),
 						} }
 					: {}),
 			}

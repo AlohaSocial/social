@@ -3756,10 +3756,10 @@ describe('Composer', () => {
 		})
 
 		it('uses the event editor and validates dates without throwing while editing', async () => {
-			const { wrapper } = edit({ event: { name: 'Gathering', start_time: '2026-11-03T09:00:00Z', end_time: null, location: 'Old venue' } })
+			const { wrapper } = edit({ event: { name: 'Gathering', start_time: '2026-11-03T09:00:00Z', end_time: null, location: 'Old venue', status: 'cancelled' } })
 			wrapper.vm.eventLocation = 'New venue'
 			await wrapper.vm.createPost()
-			expect(wrapper.emitted('save')[0][0].event).toEqual({ name: 'Gathering', start_time: '2026-11-03T09:00:00.000Z', end_time: null, location: 'New venue' })
+			expect(wrapper.emitted('save')[0][0].event).toEqual({ name: 'Gathering', start_time: '2026-11-03T09:00:00.000Z', end_time: null, location: 'New venue', status: 'cancelled' })
 			wrapper.vm.eventStart = 'invalid'
 			expect(() => wrapper.vm.isEditDirty).not.toThrow()
 			expect(wrapper.vm.canPost).toBe(false)
