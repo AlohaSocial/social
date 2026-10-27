@@ -241,7 +241,7 @@ class ChatPollerTest extends TestCase {
 
 		$this->assertSame(['cursor' => '3k005'], $this->asked[0][1]);
 		$this->assertSame([['received', 'c3/m5'], ['deleted', 'c1/m1']], $this->handed);
-		$this->assertSame('3k009', $this->synced[0][1]);
+		$this->assertSame('3k008', $this->synced[0][1], 'the durable cursor stops at the newest returned and processed log event');
 	}
 
 	public function testWhatTheAccountWroteInABlueskyAppIsHandedWithTheMembersAskedForOnce(): void {
@@ -277,7 +277,7 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([self::ALICE, ChatPoller::INTERVAL * 2, self::TABLE], $this->failed[0]);
 
 		$this->assertSame(1, $poller->pollAccount(self::cursor('3k005')));
-		$this->assertSame('3k007', $this->synced[0][1]);
+		$this->assertSame('3k006', $this->synced[0][1]);
 		$this->assertSame([['received', 'c3/m6']], $this->handed);
 	}
 
@@ -292,7 +292,7 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([], $this->synced, 'no cursor is committed before a durable write');
 
 		$this->assertSame(1, $poller->pollAccount(self::cursor('3k005')));
-		$this->assertSame('3k007', $this->synced[0][1]);
+		$this->assertSame('3k006', $this->synced[0][1]);
 	}
 
 	public function testAConversationReadOnBlueskyIsReadHere(): void {
@@ -317,7 +317,44 @@ class ChatPollerTest extends TestCase {
 			['reaction-added', 'c1/m1/❤️/3k006'],
 			['reaction-removed', 'c1/m1/❤️/3k007'],
 		], $this->handed);
-		$this->assertSame('3k009', $this->synced[0][1]);
+		$this->assertSame('3k007', $this->synced[0][1], 'the cursor commits only through the last processed event, not ahead to the server cursor');
+	}
+
+	public function testAWholeLargeGetLogResponseIsProcessedBeforeItsRevisionIsCommitted(): void {
+		$logs = [];
+		for ($i = 1; $i <= 105; $i++) {
+			$rev = '3k' . str_pad((string)$i, 4, '0', STR_PAD_LEFT);
+			$logs[] = [
+				'$type' => 'chat.bsky.convo.defs#logCreateMessage',
+				'rev' => $rev,
+				'convoId' => 'c-large',
+				'message' => self::message('large-' . $i),
+			];
+		}
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k0105', 'logs' => $logs];
+
+		$this->assertSame(105, $this->poller()->pollAccount(self::cursor('3j999')));
+		$this->assertCount(105, $this->handed);
+		$this->assertSame('3k0105', $this->synced[0][1]);
+		$this->assertCount(1, array_filter($this->asked, static fn (array $call): bool => $call[0] === 'chat.bsky.convo.getLog'));
+	}
+
+	public function testAnIncompleteLogResponseDoesNotAdvanceTheCursor(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k0100'];
+
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame([], $this->synced);
+		$this->assertNotEmpty($this->failed);
+	}
+
+	public function testAnUnknownLogTypeDoesNotAdvanceTheCursor(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k007', 'logs' => [
+			['$type' => 'chat.bsky.convo.defs#logFutureEvent', 'rev' => '3k006'],
+		]];
+
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame([], $this->synced);
+		$this->assertNotEmpty($this->failed);
 	}
 
 	public function testAQuietAccountIsAskedLessOftenButAtLeastEveryHalfHour(): void {

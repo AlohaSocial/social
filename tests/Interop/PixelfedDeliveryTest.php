@@ -27,11 +27,24 @@ use PHPUnit\Framework\TestCase;
 class PixelfedDeliveryTest extends TestCase {
 	use PixelfedPair;
 
+	private string $previousVideoObjectMode = '0';
+	private bool $videoObjectModeChanged = false;
+
 	protected function setUp(): void {
 		$this->setUpPair();
+		$config = \OCP\Server::get(\OCA\Social\Service\ConfigService::class);
+		$this->previousVideoObjectMode = (string)$config->getAppValue(\OCA\Social\Service\ConfigService::SOCIAL_PUBLISH_VIDEO);
+		// Pixelfed accepts a Note with a video attachment; unlike PeerTube it
+		// drops an ActivityPub Video object. Exercise the compatible wire form.
+		$config->setAppValue(\OCA\Social\Service\ConfigService::SOCIAL_PUBLISH_VIDEO, '0');
+		$this->videoObjectModeChanged = true;
 	}
 
 	protected function tearDown(): void {
+		if ($this->videoObjectModeChanged) {
+			\OCP\Server::get(\OCA\Social\Service\ConfigService::class)
+				->setAppValue(\OCA\Social\Service\ConfigService::SOCIAL_PUBLISH_VIDEO, $this->previousVideoObjectMode);
+		}
 		$this->tearDownPair();
 	}
 
@@ -87,6 +100,39 @@ class PixelfedDeliveryTest extends TestCase {
 			$descriptions,
 			'the album did not arrive whole and in order'
 		);
+	}
+
+	/** The Pixelfed-compatible Note form must arrive with a playable video. */
+	public function testAVideoNoteArrivesAndCanBeEditedAndDeleted(): void {
+		$words = $this->words('video');
+		$mediaId = $this->aloha->uploadVideo(__DIR__ . '/fixtures/shorts-landscape.mp4', 'interop video');
+		$ours = $this->aloha->publish([
+			'status' => $words,
+			'media_ids' => [$mediaId],
+			'visibility' => 'public',
+		]);
+		$this->drainQueue();
+
+		$theirs = $this->awaitOnPixelfed($ours);
+		$media = $theirs['media_attachments'] ?? [];
+		$this->assertCount(1, $media, 'Pixelfed did not retain the video attachment');
+		$this->assertSame('video', $media[0]['type'] ?? '', 'Pixelfed did not render the Note as a video');
+		$this->assertNotEmpty($media[0]['url'] ?? '', 'Pixelfed has no playable video URL');
+
+		$changed = $words . ' edited';
+		$this->aloha->put('/api/v1/statuses/' . rawurlencode((string)$ours['id']), ['status' => $changed]);
+		$this->drainQueue();
+		$edited = $this->pixelfed->await(function () use ($theirs, $changed): ?array {
+			$this->drainQueue();
+			$status = $this->pixelfed->status((string)$theirs['id']);
+
+			return $status !== null && str_contains((string)($status['content'] ?? ''), $changed) ? $status : null;
+		});
+		$this->assertNotNull($edited, 'Pixelfed did not apply the video post edit');
+
+		$this->aloha->delete('/api/v1/statuses/' . rawurlencode((string)$ours['id']));
+		$this->drainQueue();
+		$this->assertTrue($this->pixelfed->awaitStatusGone($this->ourIdThere, (string)$theirs['id'], (string)$ours['uri']), 'Pixelfed still serves the deleted video post');
 	}
 
 	/** Hashtags in a caption are what Pixelfed's discovery is built on. */

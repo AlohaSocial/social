@@ -124,4 +124,23 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->assertInstanceOf(\OCA\Social\Model\ActivityPub\Activity\Accept::class, $sent);
 		$this->assertNotEmpty($sent->exportAsActivityPub()['result']);
 	}
+
+	public function testAReplyRequestRefusedByThePostRuleGetsAReject(): void {
+		$this->streams->method('getStreamById')->with(self::LOCAL_POST)->willReturn($this->target(Stream::TYPE_PUBLIC));
+		$this->rules->method('refusal')->willReturn('only followers may reply');
+		$this->actors->method('getFromId')->with(self::BOB)->willReturn($this->person(self::BOB));
+		$sent = null;
+		$this->activities->expects($this->once())->method('request')->willReturnCallback(
+			function (ACore $activity) use (&$sent): string {
+				$sent = $activity;
+
+				return 'token';
+			}
+		);
+
+		$this->handler->processIncomingRequest($this->request());
+
+		$this->assertInstanceOf(Reject::class, $sent);
+		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
+	}
 }

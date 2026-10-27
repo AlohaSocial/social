@@ -47,6 +47,33 @@ class ChatPoller {
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
 	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
 	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
+	/** Log records which affect chat state Aloha does not currently model. */
+	private const IGNORED_LOGS = [
+		'chat.bsky.convo.defs#logBeginConvo',
+		'chat.bsky.convo.defs#logAcceptConvo',
+		'chat.bsky.convo.defs#logLeaveConvo',
+		'chat.bsky.convo.defs#logMuteConvo',
+		'chat.bsky.convo.defs#logUnmuteConvo',
+		'chat.bsky.convo.defs#logReadJoinRequests',
+		'chat.bsky.convo.defs#logAddMember',
+		'chat.bsky.convo.defs#logRemoveMember',
+		'chat.bsky.convo.defs#logMemberJoin',
+		'chat.bsky.convo.defs#logMemberLeave',
+		'chat.bsky.convo.defs#logLockConvo',
+		'chat.bsky.convo.defs#logUnlockConvo',
+		'chat.bsky.convo.defs#logLockConvoPermanently',
+		'chat.bsky.convo.defs#logEditGroup',
+		'chat.bsky.convo.defs#logCreateJoinLink',
+		'chat.bsky.convo.defs#logEditJoinLink',
+		'chat.bsky.convo.defs#logEnableJoinLink',
+		'chat.bsky.convo.defs#logDisableJoinLink',
+		'chat.bsky.convo.defs#logIncomingJoinRequest',
+		'chat.bsky.convo.defs#logApproveJoinRequest',
+		'chat.bsky.convo.defs#logRejectJoinRequest',
+		'chat.bsky.convo.defs#logOutgoingJoinRequest',
+		'chat.bsky.convo.defs#logWithdrawIncomingJoinRequest',
+		'chat.bsky.convo.defs#logWithdrawOutgoingJoinRequest',
+	];
 
 	/** @var array<string, list<string>> the members of the conversations this run asked about, by convo */
 	private array $members = [];
@@ -260,37 +287,53 @@ class ChatPoller {
 	private function since(Identity $identity, string $rev): array {
 		$key = $this->identities->signingKey($identity);
 		$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getLog', ['cursor' => $rev]);
+		if (!is_array($answer['logs'] ?? null)) {
+			throw new \RuntimeException('Bluesky chat log response is missing its log list');
+		}
+		if (isset($answer['cursor']) && !is_string($answer['cursor'])) {
+			throw new \RuntimeException('Bluesky chat log response has an invalid cursor');
+		}
 		$handled = 0;
 		$newest = $rev;
-		foreach (is_array($answer['logs'] ?? null) ? $answer['logs'] : [] as $log) {
-			if (!is_array($log)) {
-				continue;
+		foreach ($answer['logs'] as $log) {
+			if (!is_array($log) || !is_string($log['$type'] ?? null) || !is_string($log['rev'] ?? null) || $log['rev'] === '') {
+				throw new \RuntimeException('Bluesky chat log contains an incomplete event');
 			}
 			$convo = (string)($log['convoId'] ?? '');
 			$type = (string)($log['$type'] ?? '');
 			$message = is_array($log['message'] ?? null) ? $log['message'] : null;
-			if ($convo !== '' && $message !== null) {
+			if (in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE, self::ADD_REACTION, self::REMOVE_REACTION], true)) {
+				if ($convo === '' || $message === null) {
+					throw new \RuntimeException('Bluesky chat log event is missing its conversation or message');
+				}
 				$handled += match ($type) {
 					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
 					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
 					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
 					self::ADD_REACTION => $this->store->reaction(
-						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, (string)($log['rev'] ?? '')
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, $log['rev']
 					) ? 1 : 0,
 					self::REMOVE_REACTION => $this->store->reaction(
-						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, (string)($log['rev'] ?? '')
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, $log['rev']
 					) ? 1 : 0,
-					default => 0,
 				};
+			} elseif (!in_array($type, self::IGNORED_LOGS, true)) {
+				// An unknown future event must not be acknowledged as though this
+				// reader understood it. Known non-message events above are deliberate
+				// no-ops; newer lexicon variants are retried after an update.
+				throw new \RuntimeException('Unsupported Bluesky chat log event: ' . $type);
 			}
-			// Do not let a page cursor jump over an event that was only received
-			// in memory: synced() runs only after every event completed without a
-			// retryable error. Unhandled event types are intentional no-ops.
-			$newest = max($newest, (string)($log['rev'] ?? ''));
+			// The getLog lexicon is revision based, not limit/cursor paginated.
+			// Advance only through events whose processing completed (or whose
+			// known type is deliberately ignored), never to a response cursor that
+			// could be ahead of a truncated or malformed event list.
+			$newest = max($newest, $log['rev']);
 		}
-		$cursor = (string)($answer['cursor'] ?? '');
+		if ($answer['logs'] === []) {
+			$newest = max($newest, (string)($answer['cursor'] ?? ''));
+		}
 
-		return [$handled, max($newest, $cursor)];
+		return [$handled, $newest];
 	}
 
 	/**

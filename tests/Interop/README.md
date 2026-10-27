@@ -248,7 +248,9 @@ Two things are different from the Mastodon job:
 
 `PixelfedDeliveryTest` covers what we send: our `Follow` accepted, a photo
 with its description, an album whole and in order, caption hashtags, a
-content warning, a like counted and notified, a comment threaded, a story — what
+content warning, a video delivered in the Pixelfed-compatible `Note` form and
+then edited and deleted, a like counted and notified, a comment threaded, a
+story — what
 the web client calls a 24-hour short — on Pixelfed's story bar (fetched
 through the bearcap), a profile `Update`, a
 direct message landing in the conversation and not on a profile, a delete
@@ -258,7 +260,10 @@ album, hashtags, a content warning, a like counted and notified, a comment
 threaded under our post, a profile update, a direct message arriving as
 direct, a delete and an unfollow. Every test writes words and pictures of its
 own, polls with a bound instead of sleeping, and makes both follows again
-itself when an earlier test took one away.
+itself when an earlier test took one away. The separate PeerTube suite checks
+the `Video` object form, including its channel, duration, file, edit and
+delete. These are real-server CI scenarios, but do not prove that every
+Pixelfed or PeerTube version accepts every codec or playback URL.
 
 Skipped, with the reason in the test: **collections** (Pixelfed neither sends
 nor ingests them) and **a Pixelfed story arriving here** (Pixelfed fans a
