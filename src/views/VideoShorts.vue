@@ -189,9 +189,23 @@
 							<span class="short__handle">@{{ entry.status.account.acct }}</span>
 						</span>
 					</router-link>
-					<p v-if="entry.text" class="short__text">
+					<p
+						v-if="entry.text"
+						:id="`short-caption-${index}`"
+						class="short__text"
+						:class="{ 'short__text--expanded': expandedCaption === entry.key }"
+						:tabindex="expandedCaption === entry.key ? 0 : undefined">
 						{{ entry.text }}
 					</p>
+					<button
+						v-if="canExpandCaption(entry.text)"
+						type="button"
+						class="short__caption-toggle"
+						:aria-expanded="expandedCaption === entry.key"
+						:aria-controls="`short-caption-${index}`"
+						@click.stop="toggleCaption(entry)">
+						{{ expandedCaption === entry.key ? t('social', 'Show less') : t('social', 'Show more') }}
+					</button>
 					<!-- why For you put it here, as the chip over a post says it -->
 					<p v-if="reasonOf(entry.status)" class="short__reason" :aria-label="reasonOf(entry.status).label">
 						{{ reasonOf(entry.status).text }}
@@ -483,6 +497,7 @@ export default {
 			startAt: '',
 			/** the slide on screen, which the player is over */
 			playing: 0,
+			expandedCaption: '',
 			playerPaused: true,
 			videoFailed: false,
 			/** slide currently loaded by the single video player */
@@ -721,6 +736,7 @@ export default {
 		},
 
 		currentKey() {
+			this.expandedCaption = ''
 			this.videoFailed = false
 			this.playerPaused = true
 			const ratio = this.mediaAspectRatio(this.current?.video)
@@ -794,6 +810,23 @@ export default {
 	},
 
 	methods: {
+		canExpandCaption(text) {
+			return text.length > 120 || text.split('\n').length > 2
+		},
+
+		toggleCaption(entry) {
+			if (entry.key !== this.currentKey) {
+				return
+			}
+			const expanding = this.expandedCaption !== entry.key
+			this.expandedCaption = expanding ? entry.key : ''
+			if (expanding) {
+				// Reading must not race playback; collapsing never starts media unexpectedly.
+				this.held = true
+				this.player()?.pause?.()
+			}
+		},
+
 		t,
 
 		/** @param {object} entry a kept video post @return {boolean} */
@@ -1524,7 +1557,7 @@ export default {
 		onKey(event) {
 			// somebody writing a reply is not paging
 			if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey
-				|| /** @type {Element|null} */ (event.target)?.closest?.('button, a, input, textarea, select, [contenteditable], [role=button], [role=menuitem]')) {
+				|| /** @type {Element|null} */ (event.target)?.closest?.('button, a, input, textarea, select, [contenteditable], [role=button], [role=menuitem], .short__text--expanded')) {
 				return
 			}
 
