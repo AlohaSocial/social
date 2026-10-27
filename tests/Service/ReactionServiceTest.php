@@ -9,9 +9,26 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Service;
 
+use Exception;
+use OCA\Social\AP;
+use OCA\Social\Db\ReactionsRequest;
+use OCA\Social\Db\StreamRequest;
+use OCA\Social\Model\ActivityPub\ACore;
+use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\CustomEmoji;
+use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\CacheActorService;
+use OCA\Social\Service\ConfigService;
+use OCA\Social\Service\EmojiService;
+use OCA\Social\Service\ModerationService;
 use OCA\Social\Service\ReactionService;
+use OCA\Social\Service\SignatureService;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
+use ReflectionClass;
 
 /**
  * What the app will accept as a reaction, and what a reaction bar comes out
@@ -22,6 +39,10 @@ use PHPUnit\Framework\TestCase;
  * arbitrary text and markup are refused.
  */
 class ReactionServiceTest extends TestCase {
+	protected function tearDown(): void {
+		AP::set(null);
+	}
+
 	public static function acceptedProvider(): array {
 		return [
 			'a plain emoji' => ['👍'],
@@ -60,10 +81,68 @@ class ReactionServiceTest extends TestCase {
 		];
 	}
 
-	public function testAOutboundCustomShortcodeIsRefusedWithoutItsEmojiTag(): void {
+	public function testTheUnicodeOnlyOutboundGuardDoesNotAcceptShortcodesWithoutMetadata(): void {
 		$this->assertFalse(ReactionService::isUsableOutboundEmoji(':blobcat:'));
 		$this->assertFalse(ReactionService::isUsableOutboundEmoji(':blobcat@misskey.example:'));
 		$this->assertTrue(ReactionService::isUsableOutboundEmoji('👍'));
+	}
+
+	public function testAnInstanceOwnedCustomEmojiIsPublishedWithItsVerifiedTag(): void {
+		$args = [];
+		foreach ((new ReflectionClass(AP::class))->getConstructor()->getParameters() as $parameter) {
+			$class = $parameter->getType()->getName();
+			$mock = $this->createStub($class);
+			if ($class === ConfigService::class) {
+				$mock->method('getCloudUrl')->willReturn('https://social.example');
+			}
+			$args[] = $mock;
+		}
+		AP::set(new AP(...$args));
+
+		$streams = $this->createMock(StreamRequest::class);
+		$post = new Stream();
+		$post->setId('https://remote.example/posts/1');
+		$post->setAttributedTo('https://remote.example/users/bob');
+		$streams->method('getStreamById')->with($post->getId(), true)->willReturn($post);
+		$reactions = $this->createStub(ReactionsRequest::class);
+		$signature = $this->createMock(SignatureService::class);
+		$signature->expects($this->once())->method('signObject')->willReturnCallback(
+			function (Person $signedBy, ACore $signed): void {
+				$this->assertInstanceOf(Person::class, $signedBy);
+				$this->assertSame(':blobcat:', $signed->getTags()[0]['name'] ?? '');
+			}
+		);
+		$activity = $this->createMock(ActivityService::class);
+		$activity->expects($this->once())->method('request')->willReturn('delivery-token');
+		$actors = $this->createStub(CacheActorService::class);
+		$actors->method('getFromId')->willThrowException(new Exception('use the target actor id as inbox'));
+		$moderation = $this->createStub(ModerationService::class);
+		$emoji = $this->createMock(EmojiService::class);
+		$emoji->expects($this->once())->method('byShortcode')->with('blobcat')->willReturn(
+			(new CustomEmoji('blobcat', 'blobcat.png', 'image/png'))->setUrl('https://social.example/emoji/blobcat')
+		);
+		$service = new ReactionService(
+			$reactions,
+			$streams,
+			$signature,
+			$activity,
+			$actors,
+			$moderation,
+			new NullLogger(),
+			$emoji,
+		);
+		$actor = new Person();
+		$actor->setId('https://social.example/users/alice');
+
+		$reaction = $service->create($actor, $post->getId(), ':blobcat:');
+
+		$this->assertInstanceOf(EmojiReact::class, $reaction);
+		$this->assertSame(':blobcat:', $reaction->getContent());
+		$this->assertSame([[
+			'type' => 'Emoji',
+			'name' => ':blobcat:',
+			'icon' => ['type' => 'Image', 'mediaType' => 'image/png', 'url' => 'https://social.example/emoji/blobcat'],
+		]], $reaction->getTags());
 	}
 
 	#[DataProvider('refusedProvider')]

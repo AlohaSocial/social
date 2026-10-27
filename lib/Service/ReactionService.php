@@ -21,6 +21,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\CustomEmoji;
 use OCA\Social\Model\InstancePath;
 use OCA\Social\Tools\Traits\TStringTools;
 use Psr\Log\LoggerInterface;
@@ -34,9 +35,9 @@ use Psr\Log\LoggerInterface;
  * and that not every emoji a peer might send is one this app will show.
  *
  * Unicode emoji and bounded custom shortcode labels are accepted on input.
- * A custom reaction's remote image is deliberately never fetched or rendered:
- * it could track each reader. Outbound custom reactions are refused until
- * this instance can attach a verified Emoji tag for its own shortcode.
+ * A remote custom reaction's image is deliberately never fetched or rendered:
+ * it could track each reader. Outbound custom reactions are allowed only for
+ * emoji this instance owns, whose locally served Emoji tag is verifiable.
  */
 class ReactionService {
 	use TStringTools;
@@ -60,6 +61,7 @@ class ReactionService {
 		private CacheActorService $cacheActorService,
 		private ModerationService $moderationService,
 		private LoggerInterface $logger,
+		private EmojiService $emojiService,
 	) {
 	}
 
@@ -100,7 +102,7 @@ class ReactionService {
 		return self::isUnicodeEmoji($emoji);
 	}
 
-	/** Custom shortcode metadata is not available here, so never emit a bare shortcode. */
+	/** The metadata-free outbound path accepts Unicode only, never a bare shortcode. */
 	public static function isUsableOutboundEmoji(string $emoji): bool {
 		$emoji = trim($emoji);
 		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH
@@ -125,7 +127,13 @@ class ReactionService {
 		$this->moderationService->assertNotSuspended($actor->getId());
 
 		$emoji = trim($emoji);
+		$customEmoji = null;
 		if (!self::isUsableOutboundEmoji($emoji)) {
+			if (preg_match('/^:([a-z0-9_]{2,64}):$/iD', $emoji, $match) === 1) {
+				$customEmoji = $this->emojiService->byShortcode($match[1]);
+			}
+		}
+		if (!self::isUsableOutboundEmoji($emoji) && !($customEmoji instanceof CustomEmoji)) {
 			throw new ItemUnknownException('not an emoji this app can draw');
 		}
 
@@ -137,6 +145,12 @@ class ReactionService {
 		$reaction->setActor($actor);
 		$reaction->setObjectId($post->getId());
 		$reaction->setContent($emoji);
+		if ($customEmoji instanceof CustomEmoji) {
+			// Only publish a custom shortcode this instance owns. Its verified,
+			// locally served Emoji tag is what lets peers render it without us
+			// fetching or trusting a remote tracking image.
+			$reaction->addTag($customEmoji->asTag());
+		}
 		$reaction->setTo($post->getAttributedTo());
 		$this->assignInstance($reaction, $post);
 

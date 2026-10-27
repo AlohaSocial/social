@@ -76,6 +76,16 @@ instance-owned custom emoji; this avoids sending a shortcode without the
 `Emoji` tag other servers need to render it. Local reaction controls can undo
 either incoming form by the same label.
 
+## Emoji reactions
+
+Misskey `Like` activities carrying `_misskey_reaction` and Akkoma/Pleroma
+`EmojiReact` activities are stored as emoji reactions rather than plain likes.
+Unicode emoji and bounded custom labels are preserved. Remote custom-emoji
+images remain text-only: Aloha does not fetch a peer's image URL when a user
+opens a reaction bar. When reacting with a shortcode that this instance
+publishes, Aloha attaches its own locally served `Emoji` tag, so the receiving
+server can render it without a bare shortcode or a remote image request.
+
 ## Bluesky client writes
 
 The existing PDS surface already supports sessions, OAuth, repository writes,
