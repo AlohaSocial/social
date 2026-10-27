@@ -19,6 +19,7 @@ use OCA\Social\Interfaces\Activity\MoveInterface;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
 use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\Activity\RemoveInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Interfaces\Activity\StoryAnswerInterface;
 use OCA\Social\Interfaces\Activity\UndoInterface;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
@@ -119,6 +120,8 @@ abstract class ActivityPubTestCase extends TestCase {
 	protected $updateInterface;
 	/** @var QuoteRequestInterface&MockObject */
 	protected $quoteRequestInterface;
+	/** @var ReplyRequestInterface&MockObject */
+	protected $replyRequestInterface;
 	protected $storyAnswerInterface;
 
 	protected function setUp(): void {
@@ -151,6 +154,7 @@ abstract class ActivityPubTestCase extends TestCase {
 		$this->undoInterface = $this->createMock(UndoInterface::class);
 		$this->updateInterface = $this->createMock(UpdateInterface::class);
 		$this->quoteRequestInterface = $this->createMock(QuoteRequestInterface::class);
+		$this->replyRequestInterface = $this->createMock(ReplyRequestInterface::class);
 
 		// Every model created through the registry gets the cloud URL; ids generated
 		// locally (the Accept answering a Follow, for instance) are built from it.
@@ -186,6 +190,7 @@ abstract class ActivityPubTestCase extends TestCase {
 			$this->undoInterface,
 			$this->updateInterface,
 			$this->quoteRequestInterface,
+			$this->replyRequestInterface,
 			$this->configService,
 			$this->createMock(\OCA\Social\Interfaces\Activity\ApproveReplyInterface::class),
 			$this->createMock(\OCA\Social\Interfaces\Object\DislikeInterface::class),

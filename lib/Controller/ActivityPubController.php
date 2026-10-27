@@ -30,6 +30,7 @@ use OCA\Social\Exceptions\TooManyRequestsException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Exceptions\UrlCloudException;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Create;
 use OCA\Social\Model\ActivityPub\Activity\Delete;
@@ -37,6 +38,7 @@ use OCA\Social\Model\ActivityPub\Activity\Update;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\QuoteAuthorization;
+use OCA\Social\Model\ActivityPub\Object\ReplyAuthorization;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\OrderedCollectionPage;
 use OCA\Social\Model\ActivityPub\Stream;
@@ -71,6 +73,7 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\IConfig;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
@@ -115,6 +118,7 @@ class ActivityPubController extends Controller {
 		private StoryService $storyService,
 		private FeedService $feedService,
 		private QuoteGrantRequest $quoteGrantRequest,
+		private IConfig $systemConfig,
 		ConfigService $configService,
 		LoggerInterface $logger,
 	) {
@@ -943,6 +947,49 @@ class ActivityPubController extends Controller {
 		$authorization->setAttributedTo($quoted->getAttributedTo());
 		$authorization->setInteractingObject($quoting);
 		$authorization->setInteractionTarget($quotedId);
+
+		return $this->activityPubSuccess($authorization);
+	}
+
+	/**
+	 * The approval of one reply to one of our posts, returned to a peer that
+	 * accepted a GoToSocial ReplyRequest. The signed stamp binds the reply URI
+	 * to this target, so guessing another reply or changing the target cannot
+	 * produce an authorization.
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[FrontpageRoute(verb: 'GET', url: '/@{username}/{token}/reply_authorizations/{stamp}')]
+	public function displayReplyAuthorization(string $username, string $token, string $stamp): Response {
+		$targetId = $this->configService->getSocialUrl() . '@' . $username . '/' . $token;
+		try {
+			$this->assertReadable();
+		} catch (SignatureException $e) {
+			return $this->fail($e, [], Http::STATUS_UNAUTHORIZED);
+		}
+
+		$secret = $this->systemConfig->getSystemValueString('secret', '');
+		$replyId = $secret === '' ? '' : ReplyRequestInterface::replyFromStamp($stamp, $targetId, $secret);
+
+		try {
+			$target = $this->streamService->getStreamById($targetId);
+		} catch (StreamNotFoundException $e) {
+			return $this->fail($e, ['stream' => $targetId], Http::STATUS_NOT_FOUND);
+		}
+
+		if ($replyId === '' || !$target->isLocal() || !$this->isOpenToAnybody($target)) {
+			return $this->fail(
+				new ItemUnknownException('no such reply authorization'),
+				['stream' => $targetId],
+				Http::STATUS_NOT_FOUND
+			);
+		}
+
+		$authorization = new ReplyAuthorization();
+		$authorization->setId($targetId . '/reply_authorizations/' . $stamp);
+		$authorization->setAttributedTo($target->getAttributedTo());
+		$authorization->setInteractingObject($replyId);
+		$authorization->setInteractionTarget($targetId);
 
 		return $this->activityPubSuccess($authorization);
 	}

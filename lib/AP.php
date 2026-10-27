@@ -21,6 +21,7 @@ use OCA\Social\Interfaces\Activity\MoveInterface;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
 use OCA\Social\Interfaces\Activity\RejectInterface;
 use OCA\Social\Interfaces\Activity\RemoveInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Interfaces\Activity\StoryAnswerInterface;
 use OCA\Social\Interfaces\Activity\UndoInterface;
 use OCA\Social\Interfaces\Activity\UpdateInterface;
@@ -53,6 +54,7 @@ use OCA\Social\Model\ActivityPub\Activity\Move;
 use OCA\Social\Model\ActivityPub\Activity\QuoteRequest;
 use OCA\Social\Model\ActivityPub\Activity\Reject;
 use OCA\Social\Model\ActivityPub\Activity\Remove;
+use OCA\Social\Model\ActivityPub\Activity\ReplyRequest;
 use OCA\Social\Model\ActivityPub\Activity\StoryReaction;
 use OCA\Social\Model\ActivityPub\Activity\StoryReply;
 use OCA\Social\Model\ActivityPub\Activity\Undo;
@@ -75,6 +77,7 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Playlist;
 use OCA\Social\Model\ActivityPub\Object\Question;
+use OCA\Social\Model\ActivityPub\Object\ReplyAuthorization;
 use OCA\Social\Model\ActivityPub\Object\Story;
 use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
@@ -151,6 +154,7 @@ class AP {
 		public UndoInterface $undoInterface,
 		public UpdateInterface $updateInterface,
 		public QuoteRequestInterface $quoteRequestInterface,
+		public ReplyRequestInterface $replyRequestInterface,
 		public ConfigService $configService,
 		public ApproveReplyInterface $approveReplyInterface,
 		public DislikeInterface $dislikeInterface,
@@ -509,6 +513,13 @@ class AP {
 				$item = new QuoteRequest();
 				break;
 
+			case ReplyRequest::TYPE:
+				$item = new ReplyRequest();
+				break;
+			case ReplyAuthorization::TYPE:
+				$item = new ReplyAuthorization();
+				break;
+
 			case OrderedCollection::TYPE:
 				$item = new OrderedCollection();
 				break;
@@ -652,6 +663,8 @@ class AP {
 				return $this->updateInterface;
 			case QuoteRequest::TYPE:
 				return $this->quoteRequestInterface;
+			case ReplyRequest::TYPE:
+				return $this->replyRequestInterface;
 			default:
 				// an item built elsewhere than getSimpleItemFromData() can still
 				// carry the wire type; it is handled as the Note it was modelled as

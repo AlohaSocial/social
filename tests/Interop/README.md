@@ -345,13 +345,13 @@ stays direct, an edit, a delete, a favourite and a boost counted and notified,
 and a favourite of an open post of ours given without GoToSocial holding it as
 a request.
 
-Not covered, because this app does not do it yet: a reply from a GoToSocial
-follower to a post of ours whose reply rule names our followers. GoToSocial
-reads our `canReply` naming the followers collection as "approval is
-conditional", sends a polite `ReplyRequest` and holds the reply until an
-`Accept` with a `ReplyAuthorization` comes back; this app takes the request
-in and answers nothing, so the reply never leaves GoToSocial. GoToSocial
-renamed `approvedBy`/`LikeApproval`/`ReplyApproval` to
+Conditional replies from GoToSocial are answered through the ActivityPub
+`ReplyRequest` handshake. Social checks the requested reply against the local
+target post's reply rule, returns `Accept` with a dereferenceable
+`ReplyAuthorization` when permitted, and returns `Reject` when refused. The
+authorization document binds the remote reply URI to that exact local target.
+A live GoToSocial interop run is still needed to verify the flow against a
+running peer. GoToSocial renamed `approvedBy`/`LikeApproval`/`ReplyApproval` to
 `likeAuthorization`/`LikeAuthorization`/`ReplyAuthorization` in 0.20 and
 dropped the old names in 0.21; this job runs the new ones.
 

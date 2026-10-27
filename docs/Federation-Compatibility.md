@@ -95,6 +95,17 @@ taken-down and unsafe destinations. Link icons are not fetched for this view.
   management are not all ordinary-session handlers. Migration has its own
   restricted activation/status flow; Nextcloud owns the account credentials.
 
+## GoToSocial conditional replies
+
+Incoming GoToSocial `ReplyRequest` activities are checked against the local
+target post and its current reply rules. A permitted request receives an
+`Accept` with a dereferenceable `ReplyAuthorization`; a refused request gets a
+`Reject`. The authorization binds the requesting reply URI to the local target
+using an instance-secret signature. This covers the request/authorization
+protocol path; verification against a live GoToSocial instance remains an
+interop check rather than a claim that every GoToSocial interaction policy is
+supported.
+
 These gaps are distinct from an implemented endpoint returning a remote-service
 error. PDS, AppView, Chat, ActivityPub delivery and background jobs require their
 own failure evidence when diagnosing a live instance.

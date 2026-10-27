@@ -58,6 +58,7 @@ use OCA\Social\Tools\Exceptions\RequestNetworkException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -123,6 +124,8 @@ class ActivityPubControllerTest extends TestCase {
 	private $inboxLimiter;
 	/** @var QuoteGrantRequest&MockObject */
 	private $quoteGrantRequest;
+	/** @var IConfig&Stub */
+	private $systemConfig;
 	/** @var LoggerInterface&MockObject */
 	private $logger;
 	private AsyncFreeActivityPubController $controller;
@@ -152,6 +155,8 @@ class ActivityPubControllerTest extends TestCase {
 
 		$this->storyService = $this->createMock(StoryService::class);
 		$this->quoteGrantRequest = $this->createMock(QuoteGrantRequest::class);
+		$this->systemConfig = $this->createStub(IConfig::class);
+		$this->systemConfig->method('getSystemValueString')->with('secret', '')->willReturn('test-secret');
 
 		$this->authorizedFetchService = $this->createStub(AuthorizedFetchService::class);
 		$this->authorizedFetchService->method('reader')->willReturnCallback(
@@ -184,6 +189,7 @@ class ActivityPubControllerTest extends TestCase {
 			$this->storyService,
 			$this->createStub(\OCA\Social\Service\FeedService::class),
 			$this->quoteGrantRequest,
+			$this->systemConfig,
 			$this->configService,
 			$this->logger
 		);
