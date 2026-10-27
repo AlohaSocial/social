@@ -201,27 +201,35 @@ class InboundCorpusTest extends TestCase {
 	}
 
 	/**
-	 * A Lemmy link post: the title becomes the content only when there is
-	 * none, and the `Link` attachment is appended as a link.
+	 * A Lemmy link post keeps its title, body and `Link` attachment.
 	 */
 	public function testALemmyPageKeepsItsLinkAndBody(): void {
 		/** @var Note $note */
 		$note = $this->read('lemmy-create-page')->getObject();
 
-		$this->assertStringStartsWith('<p>Looking for suggestions.</p>', $note->getContent());
+		$this->assertStringStartsWith('<h2>Best tomato varieties for a cold summer?</h2><p>Looking for suggestions.</p>', $note->getContent());
 		$this->assertStringContainsString('<a href="https://seeds.example/tomatoes">', $note->getContent());
-		$this->assertStringNotContainsString('Best tomato varieties', $note->getContent(), 'the title is dropped when there is a body');
 	}
 
-	/** Same for an Article with a body: the title is not shown, the body is. */
-	public function testAnArticleWithABodyLosesItsTitle(): void {
+	/** An Article with a body keeps its title above the body. */
+	public function testAnArticleWithABodyKeepsItsTitle(): void {
 		/** @var Note $note */
 		$note = $this->read('wordpress-create-article')->getObject();
 
-		$this->assertSame('<h2>Pots</h2><p>Use big ones.</p>', $note->getContent());
+		$this->assertSame('<h2>How I grow tomatoes on a balcony</h2><h2>Pots</h2><p>Use big ones.</p>', $note->getContent());
 		$this->assertSame('https://blog.example/2026/04/05/tomatoes/', $note->getUrl());
 		$this->assertCount(1, $note->getAttachments());
 		$this->assertSame(['gardening'], $note->getHashtags());
+	}
+
+	public function testAnArticleTitleAlreadyAtTheTopIsNotDuplicated(): void {
+		$data = self::fixture('wordpress-create-article');
+		$data['object']['name'] = 'Tomatoes';
+		$data['object']['content'] = '<h2>Tomatoes</h2><p>Use big ones.</p>';
+		/** @var Note $note */
+		$note = AP::instance()->getItemFromData($data)->getObject();
+
+		$this->assertSame('<h2>Tomatoes</h2><p>Use big ones.</p>', $note->getContent());
 	}
 
 	public function testAMastodonPollAndItsUpdateCarryTheCounts(): void {

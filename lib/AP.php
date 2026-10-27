@@ -107,8 +107,8 @@ class AP {
 	 *
 	 * They are therefore modelled as a `Note`, which is the shape everything
 	 * downstream (storage, the client API, the timeline queries) understands;
-	 * the type as it arrived on the wire is kept in `subtype` so nothing is
-	 * lost.
+	 * the type as it arrived on the wire is kept in `subtype`. Article and Page
+	 * titles are rendered as an escaped heading before a non-empty body.
 	 */
 	public const NOTE_LIKE_TYPES = ['Video', 'Article', 'Page', 'Event', 'Audio'];
 
@@ -285,12 +285,16 @@ class AP {
 	}
 
 	private function fillTitle(Note $item, array $data): void {
-		if ($item->getContent() !== '') {
-			return;
-		}
-
 		$name = trim($this->get('name', $data, ''));
 		if ($name === '') {
+			return;
+		}
+		$content = $item->getContent();
+		if ($content !== '') {
+			if (in_array($this->get('type', $data, ''), ['Article', 'Page'], true)) {
+				$this->prependArticleTitle($item, $name, $content);
+			}
+
 			return;
 		}
 
@@ -303,6 +307,18 @@ class AP {
 		}
 
 		$item->setContent($content);
+	}
+
+	private function prependArticleTitle(Note $item, string $title, string $content): void {
+		if (preg_match('/^\s*<(h[1-6]|p)\b[^>]*>(.*?)<\/\1>/is', $content, $matches) === 1) {
+			$firstBlock = html_entity_decode(strip_tags($matches[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			if (trim($firstBlock) === $title) {
+				return;
+			}
+		}
+
+		$escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+		$item->setContent('<h2>' . $escapedTitle . '</h2>' . $content);
 	}
 
 	/**
