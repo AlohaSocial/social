@@ -2297,6 +2297,18 @@ among the conversation's 100 newest (`getMessages`) before sending it
 again, as its first attempt may have sent it without recording it. Opening
 Messages wakes the account's next read (`ConversationService::getPage()`).
 
+On the first sync, the poller follows the cursors from `listConvos` and
+`getMessages` until it has found the conversation's reported `unreadCount`
+of incoming messages. Messages sent by the account in that range are retained
+too; deleted-message views count toward the unread boundary but are not
+recreated as content. An incomplete page, failed local write, or unavailable
+sender/member leaves the initial cursor uncommitted so the idempotent backfill
+can retry. Incremental `getLog` is a revision-based batch, not a paged API:
+each returned event is processed before its revision is committed, and an
+unknown or incomplete event prevents advancement. The Chat lexicon does not
+expose a read cursor per conversation, so the initial boundary is derived from
+sender identities and the reported unread count.
+
 What the account writes in a Bluesky app arrives in the same log and is
 stored as its own direct message to the conversation's other members, saved
 with `StreamRequest::save()` alone — the stream row and its recipient rows,

@@ -27,11 +27,13 @@ use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Exceptions\TooManyRequestsException;
 use OCA\Social\Exceptions\UnauthorizedFediverseException;
 use OCA\Social\Interfaces\Activity\QuoteRequestInterface;
+use OCA\Social\Interfaces\Activity\ReplyRequestInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\InstanceActor;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\QuoteAuthorization;
+use OCA\Social\Model\ActivityPub\Object\ReplyAuthorization;
 use OCA\Social\Model\ActivityPub\Object\Story as ApStory;
 use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\OrderedCollectionPage;
@@ -1589,6 +1591,36 @@ class ActivityPubControllerTest extends TestCase {
 			array_keys(end($exported['@context'])),
 			'the document names a type no reader can resolve without the FEP-044f terms'
 		);
+	}
+
+	// displayReplyAuthorization(): the URL accepted in a ReplyRequest must be
+	// fetchable by GoToSocial, and a private post must not disclose an approval.
+
+	public function testReplyAuthorizationUriAcceptedByTheHandlerIsDereferenceable(): void {
+		$target = $this->quotablePost();
+		$reply = 'https://remote.example/users/bob/statuses/reply-7';
+		$stamp = ReplyRequestInterface::authorizationStamp($reply, $target->getId(), 'test-secret');
+		$authorizationUrl = $target->getId() . '/reply_authorizations/' . $stamp;
+
+		$response = $this->controller->displayReplyAuthorization('alice', 'abc123', $stamp);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(self::LD_JSON, $response->getHeaders()['Content-Type']);
+		$this->assertInstanceOf(ReplyAuthorization::class, $response->getData());
+		$this->assertSame($authorizationUrl, $response->getData()->getId());
+		$this->assertSame($reply, $response->getData()->getInteractingObject());
+		$this->assertSame($target->getId(), $response->getData()->getInteractionTarget());
+	}
+
+	public function testReplyAuthorizationIsNotDereferenceableForRestrictedPosts(): void {
+		$post = $this->quotablePost();
+		$post->setVisibility(Stream::TYPE_FOLLOWERS);
+		$reply = 'https://remote.example/users/bob/statuses/reply-7';
+		$stamp = ReplyRequestInterface::authorizationStamp($reply, $post->getId(), 'test-secret');
+
+		$response = $this->controller->displayReplyAuthorization('alice', 'abc123', $stamp);
+
+		$this->assertFailure($response, ItemUnknownException::class, Http::STATUS_NOT_FOUND);
 	}
 
 	// authorized fetch, and secure mode

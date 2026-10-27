@@ -72,6 +72,14 @@ abstract class ApiClient {
 		return $this->request('PATCH', $this->baseUrl . $path, $body) ?? [];
 	}
 
+	/**
+	 * @param array<string, mixed> $body
+	 * @return array<mixed>
+	 */
+	public function put(string $path, array $body = []): array {
+		return $this->request('PUT', $this->baseUrl . $path, $body) ?? [];
+	}
+
 	/** @return array<mixed> */
 	public function delete(string $path): array {
 		return $this->request('DELETE', $this->baseUrl . $path) ?? [];

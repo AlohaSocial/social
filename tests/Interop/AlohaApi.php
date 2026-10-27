@@ -86,6 +86,17 @@ class AlohaApi extends ApiClient {
 		return $id;
 	}
 
+	/** Uploads one video through the same media route a client uses. */
+	public function uploadVideo(string $file, string $description): string {
+		$media = $this->upload('/api/v2/media', $file, 'video/mp4', ['description' => $description]);
+		$id = (string)($media['id'] ?? '');
+		if ($id === '') {
+			throw new RuntimeException('the video upload was refused: ' . json_encode($media));
+		}
+
+		return $id;
+	}
+
 	/**
 	 * Writes a status through `POST /api/v1/statuses`.
 	 *
