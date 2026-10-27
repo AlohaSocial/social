@@ -330,7 +330,7 @@ class ChatPoller {
 			$newest = max($newest, $log['rev']);
 		}
 		if ($answer['logs'] === []) {
-			$newest = max($newest, (string)($answer['cursor'] ?? ''));
+			$newest = max($newest, $answer['cursor'] ?? '');
 		}
 
 		return [$handled, $newest];

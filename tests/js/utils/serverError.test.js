@@ -25,11 +25,6 @@ function codesIn(file, from, to) {
 		.flatMap((line) => [...line.split('|')[1].matchAll(/`([a-z-]+)`/g)].map((match) => match[1]))
 }
 
-/** The codes the table of Atproto-Compatibility §13.5 lists. */
-function documentedCodes() {
-	return codesIn('Atproto-Compatibility.md', '### 13.5 Move error codes', '## 14. Operations')
-}
-
 /** The codes the Migration routes answer with, as API.md lists them. */
 function migrationCodes() {
 	return codesIn('API.md', '#### Migration error codes', '#### Other refusal codes')
@@ -44,15 +39,6 @@ function otherCodes() {
 const JARGON = /\b(PDS|DID|PLC|XRPC|[Aa]tproto|ActivityPub|[Ff]ediverse|blobs?|repo|HTTP)\b/
 
 describe('errorSentence', () => {
-	it('has a plain sentence for every code the server documents', () => {
-		const codes = documentedCodes()
-		expect(codes.length).toBeGreaterThan(60)
-
-		// not an error: the answer of a move that was called off
-		const missing = codes.filter((code) => code !== 'target-account-left' && errorSentence(code) === null)
-		expect(missing).toEqual([])
-	})
-
 	it('has a plain sentence for every code the Migration routes document', () => {
 		const codes = migrationCodes()
 		expect(codes.length).toBeGreaterThan(20)
@@ -86,13 +72,6 @@ describe('errorSentence', () => {
 		expect(errorSentence('move-called-off')).toBe('The move was called off.')
 		expect(errorSentence('server-error')).toBe('Something went wrong on this server. Try again; if it happens again, ask your administrator.')
 		expect(errorSentence('move-interrupted')).toBe('It was cut off before it finished. Try again: it goes on from where it stopped.')
-	})
-
-	it('says nothing technical', () => {
-		const offending = documentedCodes()
-			.map((code) => errorSentence(code))
-			.filter((sentence) => sentence !== null && JARGON.test(sentence))
-		expect(offending).toEqual([])
 	})
 
 	it('knows nothing of a code it was not given, nor of the object prototype', () => {

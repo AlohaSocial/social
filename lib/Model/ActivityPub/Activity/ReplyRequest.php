@@ -23,6 +23,14 @@ class ReplyRequest extends ACore implements JsonSerializable {
 		$this->setType(self::TYPE);
 	}
 
+	#[\Override]
+	protected function activityPubContextExtensions(): array {
+		$extensions = parent::activityPubContextExtensions();
+		$extensions['ReplyRequest'] = 'gts:ReplyRequest';
+
+		return $extensions;
+	}
+
 	public function getInstrument(): string {
 		return $this->instrument;
 	}

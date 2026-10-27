@@ -98,8 +98,6 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 		'gts' => 'https://gotosocial.org/ns#',
 		'interactionPolicy' => ['@id' => 'gts:interactionPolicy', '@type' => '@id'],
 		'canQuote' => ['@id' => 'gts:canQuote', '@type' => '@id'],
-		'ReplyRequest' => 'gts:ReplyRequest',
-		'ReplyAuthorization' => 'gts:ReplyAuthorization',
 		'automaticApproval' => ['@id' => 'gts:automaticApproval', '@type' => '@id'],
 		'manualApproval' => ['@id' => 'gts:manualApproval', '@type' => '@id'],
 	];
