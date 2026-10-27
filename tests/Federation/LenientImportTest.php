@@ -196,7 +196,7 @@ class LenientImportTest extends TestCase {
 		$note = AP::instance()->getItemFromData($this->lemmyPage());
 
 		$this->assertInstanceOf(Note::class, $note);
-		$this->assertSame('<p>body</p><p><a href="https://news.example/story">https://news.example/story</a></p>', $note->getContent());
+		$this->assertSame('<h2>A headline</h2><p>body</p><p><a href="https://news.example/story">https://news.example/story</a></p>', $note->getContent());
 	}
 
 	public function testALemmyLinkPostWithoutABodyIsItsTitleAndItsLink(): void {
@@ -216,7 +216,7 @@ class LenientImportTest extends TestCase {
 
 		$this->assertInstanceOf(Note::class, $linked);
 		$this->assertInstanceOf(Note::class, $unsafe);
-		$this->assertSame('<p><a href="https://news.example/story" rel="nofollow noopener noreferrer" target="_blank">story</a></p>', $linked->getContent());
+		$this->assertSame('<h2>A headline</h2><p><a href="https://news.example/story" rel="nofollow noopener noreferrer" target="_blank">story</a></p>', $linked->getContent());
 		$this->assertSame('<p>body</p>', $unsafe->getContent());
 	}
 	public function testADisplayNameWithALessThanSignIsKeptWhole(): void {

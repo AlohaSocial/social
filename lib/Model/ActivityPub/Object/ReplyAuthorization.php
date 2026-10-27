@@ -27,6 +27,7 @@ class ReplyAuthorization extends ACore implements JsonSerializable {
 	#[\Override]
 	protected function activityPubContextExtensions(): array {
 		$extensions = parent::activityPubContextExtensions();
+		$extensions['ReplyAuthorization'] = 'gts:ReplyAuthorization';
 		$extensions['interactingObject'] = ['@id' => 'gts:interactingObject', '@type' => '@id'];
 		$extensions['interactionTarget'] = ['@id' => 'gts:interactionTarget', '@type' => '@id'];
 		return $extensions;

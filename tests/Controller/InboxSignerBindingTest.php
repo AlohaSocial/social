@@ -138,7 +138,7 @@ class InboxSignerBindingTest extends TestCase {
 		$config = $this->createStub(ConfigService::class);
 		$config->method('getCloudHost')->willReturn(self::CLOUD_HOST);
 
-		$this->controller = new class($request, $this->createStub(SocialPubController::class), $fediverse, $cacheActorService, $this->signatureService, $queue, $this->importService, $limiter, $this->createStub(AccountService::class), $this->createStub(FollowService::class), $this->createStub(StreamService::class), $this->createStub(StreamRequest::class), $this->createStub(PinService::class), $this->createStub(InstanceActorService::class), $this->createStub(AuthorizedFetchService::class), $this->createStub(StoryService::class), $this->createStub(FeedService::class), $this->createStub(QuoteGrantRequest::class), $config, new NullLogger()) extends ActivityPubController {
+		$this->controller = new class($request, $this->createStub(SocialPubController::class), $fediverse, $cacheActorService, $this->signatureService, $queue, $this->importService, $limiter, $this->createStub(AccountService::class), $this->createStub(FollowService::class), $this->createStub(StreamService::class), $this->createStub(StreamRequest::class), $this->createStub(PinService::class), $this->createStub(InstanceActorService::class), $this->createStub(AuthorizedFetchService::class), $this->createStub(StoryService::class), $this->createStub(FeedService::class), $this->createStub(QuoteGrantRequest::class), $this->createStub(\OCP\IConfig::class), $config, new NullLogger()) extends ActivityPubController {
 			public function async(string $result = ''): void {
 			}
 		};
