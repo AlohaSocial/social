@@ -21,7 +21,6 @@ use OCA\Social\Service\ActivityService;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ReplyRuleService;
 use OCP\IConfig;
-use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -30,7 +29,7 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		private StreamRequest $streams,
 		private ReplyRuleService $replyRules,
 		private CacheActorService $actors,
-		private ?ContainerInterface $container,
+		private ActivityService $activities,
 		private IConfig $config,
 		private LoggerInterface $logger,
 	) {
@@ -174,11 +173,7 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		}
 		$answer->addInstancePath(new InstancePath($inbox, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_TOP));
 		try {
-			$activities = $this->container?->get(ActivityService::class);
-			if (!$activities instanceof ActivityService) {
-				throw new \RuntimeException('Activity service is unavailable');
-			}
-			$activities->request($answer);
+			$this->activities->request($answer);
 		} catch (Throwable $e) {
 			$this->logger->error('Could not send the GoToSocial ReplyRequest answer', [
 				'activity' => $request->getId(),

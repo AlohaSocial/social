@@ -45,6 +45,7 @@ use OCA\Social\Tools\Exceptions\RequestResultSizeException;
 use OCA\Social\Tools\Exceptions\RequestServerException;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\AppFramework\Http;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -90,9 +91,11 @@ class ActivityService {
 		private HostBreakerRequest $hostBreakerRequest,
 		private LoggerInterface $logger,
 		private StreamRequest $streamRequest,
-		private ?FediverseDirectoryService $fediverseDirectoryService = null,
+		private ?ContainerInterface $container = null,
 	) {
 	}
+
+	private ?FediverseDirectoryService $fediverseDirectoryService = null;
 
 	/**
 	 * @param Person $actor
@@ -494,6 +497,14 @@ class ActivityService {
 
 	/** A cached peer classification; unknown peers keep the configured default. */
 	private function videoRepresentationForHost(string $host): ?bool {
+		if ($this->fediverseDirectoryService === null && $this->container !== null) {
+			try {
+				$service = $this->container->get(FediverseDirectoryService::class);
+				$this->fediverseDirectoryService = $service instanceof FediverseDirectoryService ? $service : null;
+			} catch (\Throwable) {
+				// A missing optional directory cache must not prevent video delivery.
+			}
+		}
 		$software = $this->fediverseDirectoryService?->knownSoftware($host) ?? '';
 
 		return match ($software) {
