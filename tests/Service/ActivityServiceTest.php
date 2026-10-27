@@ -58,6 +58,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 
@@ -1177,11 +1178,13 @@ class ActivityServiceTest extends TestCase {
 		$directory->method('knownSoftware')->willReturnCallback(function (string $host) use (&$software): string {
 			return $software[$host] ?? '';
 		});
+		$container = $this->createStub(ContainerInterface::class);
+		$container->method('get')->with(FediverseDirectoryService::class)->willReturn($directory);
 		$service = new ActivityService(
 			$this->followsRequest, $this->cacheActorsRequest, $this->signatureService,
 			$this->requestQueueService, $this->curlService, $this->configService,
 			$this->actorsRequest, $this->relayRequest, $this->hostBreakerRequest,
-			$this->logger, $this->streamRequest, $directory
+			$this->logger, $this->streamRequest, $container
 		);
 		$channel = $this->createStub(ChannelService::class);
 		$channel->method('attributionOf')->willReturn([

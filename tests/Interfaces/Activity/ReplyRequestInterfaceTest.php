@@ -24,7 +24,6 @@ use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
-use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 
 require_once __DIR__ . '/../ActivityPubTestCase.php';
@@ -48,11 +47,9 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->rules = $this->createMock(ReplyRuleService::class);
 		$this->actors = $this->createMock(CacheActorService::class);
 		$this->activities = $this->createMock(ActivityService::class);
-		$container = $this->createStub(ContainerInterface::class);
-		$container->method('get')->with(ActivityService::class)->willReturn($this->activities);
 		$config = $this->createStub(IConfig::class);
 		$config->method('getSystemValueString')->with('secret', '')->willReturn('test-secret');
-		$this->handler = new ReplyRequestInterface($this->streams, $this->rules, $this->actors, $container, $config, new NullLogger());
+		$this->handler = new ReplyRequestInterface($this->streams, $this->rules, $this->actors, $this->activities, $config, new NullLogger());
 	}
 
 	private function target(string $visibility): Note {
