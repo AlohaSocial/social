@@ -18,10 +18,12 @@ use OCA\Social\Exceptions\ItemAlreadyExistsException;
 use OCA\Social\Exceptions\ItemNotFoundException;
 use OCA\Social\Interfaces\Activity\AbstractActivityPubInterface;
 use OCA\Social\Interfaces\IActivityPubInterface;
+use OCA\Social\Interfaces\Object\LikeInterface;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Service\ReactionService;
+use OCA\Social\Service\DurableCache;
 
 /**
  * Reactions arriving from a peer, and going away again.
@@ -45,6 +47,7 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 	public function __construct(
 		private ReactionsRequest $reactionsRequest,
 		private StreamRequest $streamRequest,
+		private ?DurableCache $durableCache = null,
 	) {
 	}
 
@@ -57,6 +60,11 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		$reaction = $item;
 		$reaction->checkOrigin($reaction->getId());
 		$reaction->checkOrigin($reaction->getActorId());
+		if (LikeInterface::undoneBeforeArrival(
+			$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
+		)) {
+			return;
+		}
 
 		try {
 			$this->save($reaction);
@@ -74,6 +82,9 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		if ($activity->getType() === Undo::TYPE) {
 			$activity->checkOrigin($reaction->getId());
 			$activity->checkOrigin($reaction->getActorId());
+			LikeInterface::rememberUndoBeforeArrival(
+				$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
+			);
 
 			$this->delete($reaction);
 		}

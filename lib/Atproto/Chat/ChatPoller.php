@@ -19,6 +19,7 @@ use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AppViewNotFoundException;
 use OCA\Social\Model\ActivityPub\Actor\Person;
+use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -45,8 +46,11 @@ class ChatPoller {
 	private const READ = 'chat.bsky.convo.defs#logReadConvo';
 	/** the older name of `logReadConvo`, which a chat service may still send */
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
+	private const FIRST_IMPORT_CACHE = 'social.atproto.chat.first-import';
+	private const FIRST_IMPORT_TTL = 604800;
 	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
 	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
+	private const FIRST_IMPORT_PAGE_BUDGET = 10;
 	/** Log records which affect chat state Aloha does not currently model. */
 	private const IGNORED_LOGS = [
 		'chat.bsky.convo.defs#logBeginConvo',
@@ -87,6 +91,7 @@ class ChatPoller {
 		private ITimeFactory $time,
 		private LoggerInterface $logger,
 		private ChatDeclaration $declaration,
+		private DurableCache $durableCache,
 	) {
 	}
 
@@ -209,61 +214,16 @@ class ChatPoller {
 				if ($unread === 0 || $id === '') {
 					continue;
 				}
-				$members = self::dids($convo['members'] ?? null);
+				$members = $this->allMembers($identity, $key, $id, self::dids($convo['members'] ?? null));
 				$this->members[$id] = $members;
-				$messageCursor = '';
-				$unreadIncoming = 0;
-				$messagesToStore = [];
-				$seenMessageCursors = [];
-				do {
-					// unreadCount counts unread messages from other members, not the
-					// number of newest messages. Own messages may be interleaved, and
-					// deleted-message views still count toward that unread total.
-					$messageParams = ['convoId' => $id, 'limit' => self::PAGE];
-					if ($messageCursor !== '') {
-						$messageParams['cursor'] = $messageCursor;
-					}
-					$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', $messageParams);
-					if (!is_array($page['messages'] ?? null)) {
-						throw new \RuntimeException('Bluesky chat message response is missing its message list');
-					}
-					/** @var list<array<array-key, mixed>> $list */
-					$list = array_values(array_filter($page['messages'], 'is_array'));
-					if ($list === []) {
-						throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
-					}
-					foreach ($list as $message) {
-						$sender = (string)($message['sender']['did'] ?? '');
-						if ($sender !== '' && $sender !== $identity->did) {
-							$unreadIncoming++;
-						}
-						$messagesToStore[] = $message;
-					}
-					if ($unreadIncoming >= $unread) {
-						break;
-					}
-					$nextMessageCursor = (string)($page['cursor'] ?? '');
-					if ($nextMessageCursor === '') {
-						throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
-					}
-					if ($nextMessageCursor === $messageCursor || isset($seenMessageCursors[$nextMessageCursor])) {
-						throw new \RuntimeException('Bluesky chat message pagination did not advance');
-					}
-					$seenMessageCursors[$nextMessageCursor] = true;
-					$messageCursor = $nextMessageCursor;
-				} while ($unreadIncoming < $unread);
-				// Pages and messages are newest first. Store the complete unread range
-				// oldest first so local conversation reply links remain chronological.
-				foreach (array_reverse($messagesToStore) as $message) {
-					if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
-						// A tombstone proves an unread message existed, but has no
-						// content to import. It is deliberately not made into a post.
-						continue;
-					}
-					if ($this->store->received($identity, $id, $message, $members)) {
-						$handled++;
-					}
+				$imported = $this->backfillConversation($identity, $key, $id, $unread, $members);
+				$handled += $imported['handled'];
+				if (!$imported['complete']) {
+					// Do not advance the account cursor until every unread window has
+					// been durably imported. The conversation checkpoint resumes it.
+					return [$handled, ''];
 				}
+
 			}
 			$nextConvoCursor = (string)($answer['cursor'] ?? '');
 			if ($nextConvoCursor === '') {
@@ -277,6 +237,125 @@ class ChatPoller {
 		} while (true);
 
 		return [$handled, $rev];
+	}
+
+	/**
+	 * Fetch a conversation's unread window into bounded durable pages, then
+	 * store those pages oldest-first. The state survives cron time limits and
+	 * process restarts without advancing the account log cursor.
+	 *
+	 * @param list<string> $members
+	 * @return array{handled: int, complete: bool}
+	 */
+	private function backfillConversation(Identity $identity, PrivateKey $key, string $convo, int $unread, array $members): array {
+		$baseKey = hash('sha256', $identity->did . "\0" . $convo);
+		$state = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $baseKey);
+		if (!is_array($state) || (int)($state['unread'] ?? -1) !== $unread) {
+			$state = ['unread' => $unread, 'incoming' => 0, 'pages' => 0, 'cursor' => '', 'storing' => false, 'storePage' => -1];
+		}
+
+		if (!$state['storing']) {
+			for ($batch = 0; $batch < self::FIRST_IMPORT_PAGE_BUDGET; $batch++) {
+				$params = ['convoId' => $convo, 'limit' => self::PAGE];
+				if ($state['cursor'] !== '') {
+					$params['cursor'] = $state['cursor'];
+				}
+				$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', $params);
+				if (!is_array($page['messages'] ?? null)) {
+					throw new \RuntimeException('Bluesky chat message response is missing its message list');
+				}
+				$list = array_values(array_filter($page['messages'], 'is_array'));
+				if ($list === []) {
+					throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
+				}
+				$kept = [];
+				foreach ($list as $message) {
+					$kept[] = $message;
+					$sender = (string)($message['sender']['did'] ?? '');
+					if ($sender !== '' && $sender !== $identity->did) {
+						$state['incoming']++;
+						if ($state['incoming'] >= $unread) {
+							$state['storing'] = true;
+							break;
+						}
+					}
+				}
+				$pageIndex = (int)$state['pages'];
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $pageIndex, $kept, self::FIRST_IMPORT_TTL);
+				$state['pages']++;
+				$next = (string)($page['cursor'] ?? '');
+				if (!$state['storing'] && ($next === '' || $next === $state['cursor'])) {
+					$this->clearBackfill($baseKey, (int)$state['pages']);
+					throw new \RuntimeException('Bluesky chat pagination ended before all unread messages were found');
+				}
+				$state['cursor'] = $next;
+				if ($state['storing']) {
+					$state['storePage'] = (int)$state['pages'] - 1;
+				}
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey, $state, self::FIRST_IMPORT_TTL);
+				if ($state['storing']) {
+					break;
+				}
+			}
+			if (!$state['storing']) {
+				return ['handled' => 0, 'complete' => false];
+			}
+		}
+
+		$handled = 0;
+		for ($batch = 0; $batch < self::FIRST_IMPORT_PAGE_BUDGET && $state['storePage'] >= 0; $batch++) {
+			$messages = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $state['storePage']);
+			if (!is_array($messages)) {
+				throw new \RuntimeException('A staged Bluesky chat page expired before import completed');
+			}
+			foreach (array_reverse($messages) as $message) {
+				if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
+					continue;
+				}
+				$handled += $this->store->received($identity, $convo, $message, $members) ? 1 : 0;
+			}
+			$state['storePage']--;
+			$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey, $state, self::FIRST_IMPORT_TTL);
+		}
+		if ($state['storePage'] >= 0) {
+			return ['handled' => $handled, 'complete' => false];
+		}
+		$this->clearBackfill($baseKey, (int)$state['pages']);
+
+		return ['handled' => $handled, 'complete' => true];
+	}
+
+	private function clearBackfill(string $baseKey, int $pages): void {
+		$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $baseKey);
+		for ($page = 0; $page < $pages; $page++) {
+			$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $page);
+		}
+	}
+
+	/** Fetch the complete participant list, including paginated group members. @param list<string> $summary */
+	private function allMembers(Identity $identity, PrivateKey $key, string $convo, array $summary): array {
+		$members = $summary;
+		$cursor = '';
+		$seen = [];
+		do {
+			$params = ['convoId' => $convo, 'limit' => self::PAGE];
+			if ($cursor !== '') {
+				$params['cursor'] = $cursor;
+			}
+			$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvoMembers', $params);
+			if (!is_array($page['members'] ?? null)) {
+				throw new \RuntimeException('Bluesky chat member response is missing its member list');
+			}
+			$members = [...$members, ...self::dids($page['members'])];
+			$next = (string)($page['cursor'] ?? '');
+			if ($next !== '' && ($next === $cursor || isset($seen[$next]))) {
+				throw new \RuntimeException('Bluesky chat member pagination did not advance');
+			}
+			$seen[$next] = true;
+			$cursor = $next;
+		} while ($cursor !== '');
+
+		return array_values(array_unique($members));
 	}
 
 	/**
@@ -351,7 +430,7 @@ class ChatPoller {
 				if (!is_array($members)) {
 					throw new \RuntimeException('Bluesky chat conversation response did not include members');
 				}
-				$this->members[$convo] = self::dids($members);
+				$this->members[$convo] = $this->allMembers($identity, $key, $convo, self::dids($members));
 			} catch (Throwable $e) {
 				$this->logger->notice('Members of a Bluesky conversation not read', ['convo' => $convo, 'exception' => $e]);
 				// Leave the log cursor before this event. The next poll retries the

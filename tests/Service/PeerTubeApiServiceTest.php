@@ -155,7 +155,7 @@ class PeerTubeApiServiceTest extends TestCase {
 		$config = $this->service->config();
 
 		$this->assertSame(PeerTubeApiService::PEERTUBE_VERSION, $config['serverVersion']);
-		$this->assertSame('nextcloud-social', $config['software']['name']);
+		$this->assertSame('aloha-social', $config['software']['name']);
 	}
 
 	public function testTheInstanceNameIsTheOneThemingHolds(): void {

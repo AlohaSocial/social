@@ -115,6 +115,20 @@ class ExternalSignupService {
 		];
 	}
 
+	/** Whether somebody without an invitation may start a Social-only signup. */
+	public function acceptsPublicRegistrations(): bool {
+		return $this->externalUserService->hasRoom()
+			&& $this->externalUserService->mode() !== ExternalUserService::MODE_INVITE;
+	}
+
+	public function requiresRegistrationApproval(): bool {
+		return $this->externalUserService->mode() === ExternalUserService::MODE_APPROVAL;
+	}
+
+	public function invitationsEnabled(): bool {
+		return $this->externalUserService->usersMayInvite();
+	}
+
 	/**
 	 * Whether an account made here is on Bluesky too, and the host its
 	 * handle is issued under (`HandleMapper`), for the page to preview it.

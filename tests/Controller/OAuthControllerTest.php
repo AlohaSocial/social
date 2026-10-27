@@ -33,6 +33,7 @@ use OCA\Social\Service\CheckService;
 use OCA\Social\Service\ClientService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\DeviceAuthorizationService;
+use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\InstanceService;
 use OCA\Social\Service\VapidService;
 use OCP\AppFramework\Http;
@@ -83,6 +84,7 @@ class OAuthControllerTest extends TestCase {
 	/** @var IRequest&MockObject */
 	private $request;
 	private OAuthController $controller;
+	private ExternalSignupService $externalSignupService;
 
 	protected function setUp(): void {
 		$this->atprotoOAuth = $this->createMock(AuthorizationServer::class);
@@ -96,6 +98,8 @@ class OAuthControllerTest extends TestCase {
 		$this->checkService = $this->createStub(CheckService::class);
 		$this->initialState = $this->createMock(IInitialState::class);
 		$this->request = $this->createMock(IRequest::class);
+		$this->externalSignupService = $this->createStub(ExternalSignupService::class);
+		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturn(true);
 
 		$this->controller = $this->controllerWith($this->clientService);
 	}
@@ -118,6 +122,7 @@ class OAuthControllerTest extends TestCase {
 			$this->createMock(DpopNonce::class),
 			$this->vapidService(),
 			$deviceAuthorization ?? $this->createStub(DeviceAuthorizationService::class),
+			$this->externalSignupService,
 			null,
 			null,
 		);
@@ -185,7 +190,7 @@ class OAuthControllerTest extends TestCase {
 			'version' => '2.0',
 			// the schema wants ^[a-z0-9-]+$ here, and crawlers group instances
 			// by it; the human title goes to metadata.nodeName
-			'software' => ['name' => 'nextcloud-social', 'version' => '0.10.1'],
+			'software' => ['name' => 'aloha-social', 'version' => '0.10.1'],
 			'protocols' => ['activitypub'],
 			'services' => ['inbound' => [], 'outbound' => []],
 			// the schema names every top-level key and allows no other, so the
@@ -206,7 +211,7 @@ class OAuthControllerTest extends TestCase {
 
 		$this->assertSame('2.1', $data['version']);
 		$this->assertSame([
-			'name' => 'nextcloud-social',
+			'name' => 'aloha-social',
 			'version' => '0.10.1',
 			'repository' => 'https://github.com/alohasocial/social',
 			'homepage' => 'https://github.com/alohasocial/social',
@@ -217,18 +222,30 @@ class OAuthControllerTest extends TestCase {
 
 	public function testNodeinfo2FallsBackToAppDefaultsWithoutAnInstance(): void {
 		$this->instanceService->method('getLocal')->willThrowException(new InstanceDoesNotExistException());
+		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturn(false);
 		$this->configService->method('getAppValue')->with('installed_version')->willReturn('0.10.1');
 		$this->urlGenerator->method('linkToRouteAbsolute')->willReturn('https://cloud.example/apps/social/');
 
 		$data = $this->controller->nodeinfo2()->getData();
 
-		$this->assertSame(['name' => 'nextcloud-social', 'version' => '0.10.1'], $data['software']);
+		$this->assertSame(['name' => 'aloha-social', 'version' => '0.10.1'], $data['software']);
 		$this->assertSame('Aloha Social', $data['metadata']['nodeName']);
 		$this->assertSame(
 			'{"users":{}}', json_encode($data['usage']),
 			'an object with the users member the NodeInfo schema requires, not an empty list'
 		);
 		$this->assertFalse($data['openRegistrations']);
+	}
+
+	public function testNodeinfoRegistrationStatusUsesSocialSignupInsteadOfNextcloudSignup(): void {
+		$instance = new Instance();
+		$instance->setTitle('Aloha')->setVersion('0.10.1')->setUsage(['users' => ['total' => 1]])->setRegistrations(false);
+		$this->instanceService->method('getLocal')->willReturn($instance);
+		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturn(true);
+
+		$data = $this->controller->nodeinfo2()->getData();
+
+		$this->assertTrue($data['openRegistrations']);
 	}
 
 	// apps()

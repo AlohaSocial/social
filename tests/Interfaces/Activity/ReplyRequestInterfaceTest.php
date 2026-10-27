@@ -104,6 +104,34 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
 	}
 
+	public function testUriOnlyInstrumentGetsAnExplicitReject(): void {
+		$this->streams->method('getStreamById')->with(self::LOCAL_POST)->willReturn($this->target(Stream::TYPE_PUBLIC));
+		$this->actors->method('getFromId')->with(self::BOB)->willReturn($this->person(self::BOB));
+		$sent = null;
+		$this->activities->expects($this->once())->method('request')->willReturnCallback(
+			function (ACore $activity) use (&$sent): string {
+				$sent = $activity;
+
+				return 'token';
+			}
+		);
+		$request = new ReplyRequest();
+		$request->import([
+			'id' => self::REMOTE_URL . '/reply_requests/uri-only',
+			'type' => ReplyRequest::TYPE,
+			'actor' => self::BOB,
+			'to' => [self::ALICE],
+			'object' => self::LOCAL_POST,
+			'instrument' => self::REMOTE_REPLY,
+		]);
+		$request->setOrigin('remote.example', SignatureService::ORIGIN_HEADER, time());
+
+		$this->handler->processIncomingRequest($request);
+
+		$this->assertInstanceOf(Reject::class, $sent);
+		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
+	}
+
 	public function testAReplyAuthorizationCanBeIssuedForAnUnlistedPost(): void {
 		$post = $this->target(Stream::TYPE_UNLISTED);
 		$post->setToArray([self::LOCAL_URL . '/users/alice/followers']);

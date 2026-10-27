@@ -82,7 +82,7 @@ class InboundCorpusTest extends TestCase {
 	public static function activities(): iterable {
 		$ms = 'https://mastodon.example/users/carol';
 		yield 'Misskey Note' => ['misskey-create-note', 'Create', 'https://misskey.example/users/9fq0a1b2c3', 'https://misskey.example/notes/9fq0z1y2x3', 'Note', ''];
-		yield 'Misskey reaction' => ['misskey-like-reaction', 'Like', 'https://misskey.example/users/9fq0a1b2c3', self::LOCAL_POST, '', ''];
+		yield 'Misskey reaction' => ['misskey-like-reaction', 'EmojiReact', 'https://misskey.example/users/9fq0a1b2c3', self::LOCAL_POST, '', ''];
 		yield 'GoToSocial reply' => ['gotosocial-create-note', 'Create', 'https://gts.example/users/erin', 'https://gts.example/users/erin/statuses/01J0GTS0000000000000000001', 'Note', ''];
 		yield 'Akkoma reaction' => ['akkoma-emoji-react', 'EmojiReact', 'https://akkoma.example/users/frank', self::LOCAL_POST, '', ''];
 		yield 'Friendica Note' => ['friendica-create-note', 'Create', 'https://friendica.example/profile/gina', 'https://friendica.example/objects/a1b2c3d4-0001-4567-89ab-cdef01234567', 'Note', ''];
@@ -174,6 +174,7 @@ class InboundCorpusTest extends TestCase {
 
 		$this->assertInstanceOf(EmojiReact::class, $reaction);
 		$this->assertSame('🍅', $reaction->getContent());
+		$this->assertInstanceOf(\OCA\Social\Interfaces\Object\EmojiReactInterface::class, AP::instance()->getInterfaceForItem($reaction));
 	}
 
 	/** Akkoma's custom-emoji reaction keeps the shortcode as its content. */

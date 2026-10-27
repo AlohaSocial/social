@@ -253,6 +253,7 @@ class AP {
 		if ($type === Like::TYPE && is_string($misskeyReaction)
 			&& ReactionService::isUsableEmoji($misskeyReaction)) {
 			$type = EmojiReact::TYPE;
+			$data['type'] = $type;
 			$data['content'] = $misskeyReaction;
 		}
 		$item = $this->getItemFromType($type);

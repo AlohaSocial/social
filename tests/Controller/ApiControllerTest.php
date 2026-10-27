@@ -62,6 +62,7 @@ use OCA\Social\Service\CurlService;
 use OCA\Social\Service\DeliveryService;
 use OCA\Social\Service\DocumentService;
 use OCA\Social\Service\EmojiService;
+use OCA\Social\Service\ExternalSignupService;
 use OCA\Social\Service\FediverseService;
 use OCA\Social\Service\FeedDisplayService;
 use OCA\Social\Service\FileCommentsService;
@@ -142,6 +143,7 @@ class ApiControllerTest extends TestCase {
 	private $userSession;
 	/** @var InstanceService&MockObject */
 	private $instanceService;
+	private ExternalSignupService $externalSignupService;
 	/** @var ClientService&MockObject */
 	private $clientService;
 	/** @var AccountService&MockObject */
@@ -259,6 +261,7 @@ class ApiControllerTest extends TestCase {
 	private string $pathParam = '';
 	/** the request headers the controller under construction will see */
 	private array $headers = [];
+	private bool $socialSignupsOpen = false;
 
 	protected function setUp(): void {
 		$this->blockedBy = $this->createMock(\OCA\Social\Service\BlockedBy\BlockedByService::class);
@@ -289,6 +292,10 @@ class ApiControllerTest extends TestCase {
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->userSession = $this->createStub(IUserSession::class);
 		$this->instanceService = $this->createMock(InstanceService::class);
+		$this->externalSignupService = $this->createStub(ExternalSignupService::class);
+		$this->externalSignupService->method('acceptsPublicRegistrations')->willReturnCallback(fn (): bool => $this->socialSignupsOpen);
+		$this->externalSignupService->method('requiresRegistrationApproval')->willReturn(false);
+		$this->externalSignupService->method('invitationsEnabled')->willReturn(false);
 		$this->clientService = $this->createMock(ClientService::class);
 		$this->accountService = $this->createMock(AccountService::class);
 		// what an account posts with when the client names no visibility
@@ -442,6 +449,7 @@ class ApiControllerTest extends TestCase {
 			'userSession' => $this->userSession,
 			'logger' => $logger ?? new NullLogger(),
 			'instanceService' => $this->instanceService,
+			'externalSignupService' => $this->externalSignupService,
 			'atprotoIdentities' => (function () {
 				$identities = $this->createStub(\OCA\Social\Atproto\Identity\IdentityService::class);
 				$identities->method('getByActorId')->willThrowException(new \OCA\Social\Exceptions\AtprotoIdentityNotFoundException());
@@ -4760,6 +4768,18 @@ class ApiControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		$this->assertSame('cloud.example', $response->getData()['domain']);
+	}
+
+	public function testMastodonInstanceMetadataReflectsSocialSignups(): void {
+		$this->socialSignupsOpen = true;
+		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours');
+		$this->instanceService->method('getLocal')->willReturn($instance);
+
+		$v1 = $this->controller()->instance()->getData();
+		self::assertTrue($v1->isRegistrations());
+
+		$v2 = $this->controller()->instanceV2()->getData();
+		self::assertTrue($v2['registrations']->enabled);
 	}
 
 	// search

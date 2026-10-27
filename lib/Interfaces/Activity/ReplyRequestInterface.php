@@ -45,7 +45,27 @@ class ReplyRequestInterface extends AbstractActivityPubInterface {
 		$targetId = $item->getObjectId();
 		$reply = $item->getInstrumentObject();
 		$actor = $item->getActorId();
-		if ($replyId === '' || $targetId === '' || $actor === '' || $reply === []) {
+		if ($replyId === '' || $targetId === '' || $actor === '') {
+			return;
+		}
+
+		if ($reply === []) {
+			// A URI-only instrument cannot be checked against its author and
+			// inReplyTo fields. Resolve no arbitrary remote URL here: if this is
+			// a request for one of our posts, explicitly reject it so the sender
+			// does not wait forever for a decision that will never arrive.
+			$item->checkOrigin($replyId);
+			$item->checkOrigin($actor);
+			try {
+				$target = $this->streams->getStreamById($targetId);
+			} catch (StreamNotFoundException) {
+				return;
+			}
+			$recipients = array_merge($item->getToAll(), $item->getCcArray(), $item->getBccArray());
+			if ($target->isLocal() && in_array($target->getAttributedTo(), $recipients, true)) {
+				$this->answer($item, $target, false, '');
+			}
+
 			return;
 		}
 

@@ -21,7 +21,7 @@ use OCP\Server;
  * row that was stored and the Mastodon entity a client is served.
  *
  * What is pinned is today's behaviour, including what is dropped: a Misskey
- * reaction is stored as a plain Like with its emoji gone, an Akkoma custom
+ * reaction is stored as an EmojiReact, an Akkoma custom
  * emoji reaction is not stored at all, a WordPress excerpt becomes a content
  * warning, and a Lemmy community's boost of a post is queued for a fetch
  * rather than taken in. A Move is not here: its target is always fetched
@@ -67,14 +67,14 @@ class InboundCorpusTest extends InboxTestCase {
 		$this->assertSame(['LinkPreview'], $this->queued($id));
 	}
 
-	/** Misskey's reaction is a Like with the emoji in `content`: stored as a plain like, the emoji gone. */
-	public function testAMisskeyReactionIsStoredAsAPlainLike(): void {
+	/** Misskey's reaction is dispatched to the EmojiReact handler and stored with its emoji. */
+	public function testAMisskeyReactionIsStoredAsAnEmojiReaction(): void {
 		$this->receive('misskey-like-reaction', 'yuki');
 
-		$likes = $this->rows(CoreRequestBuilder::TABLE_ACTIONS, 'actor_id', 'https://misskey.example/');
-		$this->assertSame(['Like'], array_column($likes, 'type'));
-		$this->assertSame(1, $this->statusEntity($this->localPostId())['favourites_count']);
-		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://misskey.example/'));
+		$reactions = $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://misskey.example/');
+		$this->assertSame(['🍅'], array_column($reactions, 'emoji'));
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_ACTIONS, 'actor_id', 'https://misskey.example/'));
+		$this->assertSame(0, $this->statusEntity($this->localPostId())['favourites_count']);
 	}
 
 	public function testAGoToSocialReplyIsStoredUnderThePostItAnswers(): void {

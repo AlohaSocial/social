@@ -74,6 +74,10 @@ class RedeliveryOrderTest extends InboxTestCase {
 			LikeInterface::EARLY_UNDO_NAMESPACE,
 			hash('sha256', self::CAROL . '#likes/1'),
 		);
+		Server::get(DurableCache::class)->removeShared(
+			LikeInterface::EARLY_UNDO_NAMESPACE,
+			hash('sha256', 'https://akkoma.example/activities/0d1e2f3a-4b5c-4d6e-8f70-819293a4b5c6'),
+		);
 	}
 
 	private function note(string $content, string $updated = ''): array {
@@ -127,7 +131,7 @@ class RedeliveryOrderTest extends InboxTestCase {
 	public static function redeliveries(): iterable {
 		yield 'a post' => ['misskey-create-note', 'misskey.example', CoreRequestBuilder::TABLE_STREAM, 'id'];
 		yield 'a reply' => ['gotosocial-create-note', 'gts.example', CoreRequestBuilder::TABLE_STREAM, 'id'];
-		yield 'a like' => ['misskey-like-reaction', 'misskey.example', CoreRequestBuilder::TABLE_ACTIONS, 'actor_id'];
+		yield 'a like' => ['misskey-like-reaction', 'misskey.example', CoreRequestBuilder::TABLE_REACTIONS, 'actor_id'];
 		yield 'a dislike' => ['peertube-dislike', 'peertube.example', CoreRequestBuilder::TABLE_ACTIONS, 'actor_id'];
 		yield 'a block' => ['mastodon-block', 'mastodon.example', CoreRequestBuilder::TABLE_ACTOR_RELATION, 'object_id'];
 		yield 'a quote request' => ['mastodon-quote-request', 'mastodon.example', CoreRequestBuilder::TABLE_QUOTE_GRANTS, 'actor_id'];
@@ -256,6 +260,28 @@ class RedeliveryOrderTest extends InboxTestCase {
 		$this->assertTrue($this->deliver((string)json_encode(['@context' => 'https://www.w3.org/ns/activitystreams'] + $like)));
 
 		$this->assertSame(0, $this->statusEntity($this->localPostId())['favourites_count']);
+		$this->assertConnectionUsable();
+	}
+
+	/** A reaction Undo delivered first must also suppress the late reaction. */
+	public function testAnUndoOfAnEmojiReactionBeforeTheReactionKeepsItUndone(): void {
+		$reaction = json_decode($this->fixture('akkoma-emoji-react'), true);
+		$reaction['content'] = '🍅';
+		unset($reaction['tag']);
+		$this->remoteActor($reaction['actor'], 'frank');
+
+		$this->assertTrue($this->deliver((string)json_encode([
+			'@context' => 'https://www.w3.org/ns/activitystreams',
+			'id' => $reaction['id'] . '/undo',
+			'type' => 'Undo',
+			'actor' => $reaction['actor'],
+			'object' => $reaction['id'],
+		])));
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'));
+
+		$this->assertTrue($this->deliver((string)json_encode($reaction)));
+
+		$this->assertSame([], $this->rows(CoreRequestBuilder::TABLE_REACTIONS, 'actor_id', 'https://akkoma.example/'));
 		$this->assertConnectionUsable();
 	}
 

@@ -22,6 +22,7 @@ use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
 use OCA\Social\Exceptions\AtprotoException;
+use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
@@ -62,6 +63,8 @@ class ChatPollerTest extends TestCase {
 	private string $state = Identity::STATE_ACTIVE;
 	/** @var list<string> the DIDs whose cursor was dropped */
 	private array $removed = [];
+	/** @var array<string, mixed> durable cache values, shared across poller instances */
+	private array $durable = [];
 	private bool $failReceivedOnce = false;
 	private bool $failGetConvoOnce = false;
 
@@ -83,6 +86,9 @@ class ChatPollerTest extends TestCase {
 			$cursor = (string)($params['cursor'] ?? '');
 			if (isset($this->cursorAnswers[$method][$cursor])) {
 				return $this->cursorAnswers[$method][$cursor];
+			}
+			if ($method === 'chat.bsky.convo.getConvoMembers') {
+				return $this->answers[$method] ?? ['members' => [['did' => self::ALICE], ['did' => self::BOB]]];
 			}
 
 			return $this->answers[$method] ?? throw new AtprotoException('chat service down');
@@ -133,8 +139,24 @@ class ChatPollerTest extends TestCase {
 		});
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
+		$durableCache = $this->createMock(DurableCache::class);
+		$durableCache->method('getShared')->willReturnCallback(fn (string $namespace, string $key): mixed => $this->durable[$key] ?? null);
+		$durableCache->method('setShared')->willReturnCallback(function (string $namespace, string $key, mixed $value): void {
+			$this->durable[$key] = $value;
+		});
+		$durableCache->method('removeShared')->willReturnCallback(function (string $namespace, string $key): void {
+			unset($this->durable[$key]);
+		});
 
-		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration);
+		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache);
+	}
+
+	/** @return list<array> */
+	private function askedFor(string $method): array {
+		return array_values(array_map(
+			static fn (array $call): array => $call[1],
+			array_filter($this->asked, static fn (array $call): bool => $call[0] === $method),
+		));
 	}
 
 	private static function cursor(string $rev, int $lastSync = 0, int $nextSync = 0): Watch {
@@ -161,6 +183,44 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([self::ALICE], $this->declared, 'who may write is seen to on the first read');
 	}
 
+	public function testFirstReadStopsWithinThePageAtItsUnreadBoundary(): void {
+		$messages = [self::message('unread')];
+		for ($i = 0; $i < 99; $i++) {
+			$messages[] = self::message('read-' . $i, self::ALICE);
+		}
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k010', 'unreadCount' => 1, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => $messages];
+
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([['received', 'c1/unread']], $this->handed);
+	}
+
+	public function testLargeFirstReadResumesFromDurablePagesAfterItsPerRunBudget(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c-large', 'rev' => '3k100', 'unreadCount' => 1001, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		for ($page = 0; $page < 11; $page++) {
+			$messages = [];
+			for ($i = 0; $i < 100; $i++) {
+				$messages[] = self::message('p' . $page . '-' . $i);
+			}
+			$cursor = $page === 0 ? '' : 'cursor-' . $page;
+			$this->cursorAnswers['chat.bsky.convo.getMessages'][$cursor] = [
+				'messages' => $messages,
+				'cursor' => $page < 10 ? 'cursor-' . ($page + 1) : '',
+			];
+		}
+
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame('', $this->synced[0][1], 'the account cursor stays at the start while the backfill is partial');
+		$this->assertSame(901, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame(100, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertCount(1001, $this->handed);
+		$this->assertSame('3k100', $this->synced[2][1]);
+	}
+
 	public function testTheInitialReadFollowsConversationAndUnreadMessagePages(): void {
 		$convos = [];
 		for ($i = 0; $i < 20; $i++) {
@@ -185,9 +245,14 @@ class ChatPollerTest extends TestCase {
 			$this->handed,
 		));
 		$this->assertSame([self::ALICE, '3k021', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
-		$this->assertSame(['convoId' => 'c0', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
-		$this->assertSame(['convoId' => 'c0', 'limit' => ChatPoller::PAGE, 'cursor' => 'messages-next'], $this->asked[2][1]);
-		$this->assertSame(['limit' => ChatPoller::PAGE, 'cursor' => 'convos-next'], $this->asked[3][1]);
+		$this->assertSame([
+			['convoId' => 'c0', 'limit' => ChatPoller::PAGE],
+			['convoId' => 'c0', 'limit' => ChatPoller::PAGE, 'cursor' => 'messages-next'],
+		], $this->askedFor('chat.bsky.convo.getMessages'));
+		$this->assertSame([
+			['limit' => ChatPoller::PAGE],
+			['limit' => ChatPoller::PAGE, 'cursor' => 'convos-next'],
+		], $this->askedFor('chat.bsky.convo.listConvos'));
 	}
 
 	public function testTheInitialBackfillCountsUnreadIncomingMessagesAcrossOwnAndDeletedMessagesAndPages(): void {
@@ -211,8 +276,10 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame(ChatPoller::PAGE, $this->poller()->pollAccount(self::cursor('')));
 
 		$this->assertSame('3k022', $this->synced[0][1], 'the log cursor is set only after the unread boundary was found');
-		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
-		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE, 'cursor' => 'older'], $this->asked[2][1]);
+		$this->assertSame([
+			['convoId' => 'c1', 'limit' => ChatPoller::PAGE],
+			['convoId' => 'c1', 'limit' => ChatPoller::PAGE, 'cursor' => 'older'],
+		], $this->askedFor('chat.bsky.convo.getMessages'));
 		$this->assertCount(ChatPoller::PAGE, $this->handed, 'own messages are imported, while the deleted placeholder is not');
 		$this->assertSame('received', $this->handed[0][0]);
 		$this->assertStringEndsWith('/incoming-1', $this->handed[0][1], 'the imported range is stored oldest first');
@@ -228,6 +295,38 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
 		$this->assertSame([], $this->synced, 'an incomplete backfill must be retried instead of cursor-committed');
 		$this->assertNotEmpty($this->failed);
+	}
+
+	public function testTheInitialReadLoadsAllPagedGroupMembersForOwnMessages(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [[
+			'id' => 'group',
+			'rev' => '3k050',
+			'unreadCount' => 1,
+			'members' => [['did' => self::ALICE], ['did' => self::BOB]],
+		]]];
+		$firstMembers = [['did' => self::ALICE], ['did' => self::BOB]];
+		for ($i = 2; $i < 100; $i++) {
+			$firstMembers[] = ['did' => 'did:plc:member' . $i];
+		}
+		$this->cursorAnswers['chat.bsky.convo.getConvoMembers'][''] = [
+			'members' => $firstMembers,
+			'cursor' => 'members-next',
+		];
+		$this->cursorAnswers['chat.bsky.convo.getConvoMembers']['members-next'] = [
+			'members' => [['did' => 'did:plc:member100'], ['did' => 'did:plc:member101']],
+		];
+		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => [
+			self::message('own', self::ALICE),
+			self::message('incoming'),
+		]];
+
+		$this->assertSame(2, $this->poller()->pollAccount(self::cursor('')));
+		self::assertCount(102, $this->members['own']);
+		self::assertContains('did:plc:member101', $this->members['own']);
+		self::assertSame([
+			['convoId' => 'group', 'limit' => ChatPoller::PAGE],
+			['convoId' => 'group', 'limit' => ChatPoller::PAGE, 'cursor' => 'members-next'],
+		], $this->askedFor('chat.bsky.convo.getConvoMembers'));
 	}
 
 	public function testTheLogSaysWhatWasSentAndDeletedSinceTheLastRead(): void {

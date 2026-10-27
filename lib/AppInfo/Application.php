@@ -95,7 +95,14 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'social';
 	/** what NodeInfo announces this app as, and what a peer is recognised as this app by */
-	public const SOFTWARE_NAME = 'nextcloud-social';
+	public const SOFTWARE_NAME = 'aloha-social';
+	/** The identifier published before Aloha Social acquired its own name. */
+	public const LEGACY_SOFTWARE_NAME = 'nextcloud-social';
+
+	/** Recognise peers that have not yet upgraded their published NodeInfo name. */
+	public static function isSocialSoftwareName(string $name): bool {
+		return in_array($name, [self::SOFTWARE_NAME, self::LEGACY_SOFTWARE_NAME], true);
+	}
 	public const APP_NAME = 'Social';
 	public const APP_SUBJECT = 'http://nextcloud.com/';
 	public const APP_REL = 'https://apps.nextcloud.com/apps/social';
