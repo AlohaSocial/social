@@ -162,8 +162,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install ffmpeg
-        # shorts.spec.mjs makes its videos with ffmpeg, and the server measures them with ffprobe
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+        # The server measures the checked-in Shorts fixtures with ffprobe.
+        # The runner image already has apt indexes; avoid a slow apt-get update.
+        run: sudo apt-get install -y -qq --no-install-recommends ffmpeg
 
       - name: Start PostgreSQL
         # the image phpunit-pgsql.yml uses
