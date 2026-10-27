@@ -19,7 +19,7 @@ here can be taken back from the network, only deleted or deactivated.
 
 ## 1. Before
 
-- The host meets [§14.1 of the specification](Atproto-Compatibility.md#141-requirements):
+- The host meets [§14.1 of the specification](Atproto-Compatibility.md):
   - HTTPS on the host;
   - a wildcard DNS record `*.<host>` and a wildcard certificate;
   - the root rules from `contrib/webserver`, including the firehose proxy;

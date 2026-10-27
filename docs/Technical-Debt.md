@@ -4,14 +4,12 @@ What in this app is old, borrowed or load-bearing in a way nobody would choose
 today, what is simply dead, and what it would cost to change. Written for
 whoever has to decide where refactoring effort goes.
 
-**Verified against:** app version 0.17.0, 2026-09-12, after the wave described
-in [What has been done](#what-has-been-done), with the migration, repair-step,
-table, class, controller, import and `src/` file counts re-measured on 0.19.49
-on 2026-09-14. **Re-checked on 0.26.239 (2026-10-13):** the sections that say
-so at their top were re-measured on that tree; every other section carries a
-one-line note that its numbers are historical. Between the two the app grew
-by the Bluesky stack, Shorts, the imports and eighteen more background jobs,
-so a historical number is a lower bound at best.
+This is a **dated engineering record**, not a current inventory or endorsement
+of every item as still open. Its measurements were gathered across app versions
+0.17.0–0.26.239 in September and October 2026; each section notes its own
+measurement point where available. Re-run the documented commands before
+quoting counts or prioritizing current work. The app has changed since those
+snapshots, so historical sizes and risks may no longer describe this checkout.
 [Reproducing the measurements](#reproducing-the-measurements) gives the command
 for each.
 
@@ -20,7 +18,7 @@ the repository holds them: the PHPUnit, lint and appstore workflows read the PHP
 and Nextcloud ranges out of that file, through
 `icewind1991/nextcloud-version-matrix` and a direct `grep php min-version`, so
 changing two attributes there changes what CI tests against. They now say **PHP
-8.3–8.5 and Nextcloud 35–36**, and `composer.json`, `psalm.xml` and the server
+8.3–8.5 and Nextcloud 34–36**, and `composer.json`, `psalm.xml` and the server
 API stubs agree with them rather than contradicting them.
 
 Like [Performance.md](Performance.md), this file is **not** enforced by

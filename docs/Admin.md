@@ -1153,12 +1153,12 @@ settings page, which validates the ranges given here; every one can be set with
 | `section_photos` | `1` | Whether the Photos section is offered in the sidebar: the same posts read through one filter. Turning it off hides the section and stops it being offered; the posts are not touched, and turning it back on shows them again. Set from the Sections card. |
 | `section_videos` | `1` | The same for the Videos section. |
 | `group_lists` | `[]` | Which Nextcloud groups become lists for their members, as a JSON array of group ids; at most 100. Empty is no groups, which is the default: every group a person was in used to become a list, which tells everybody in a group who else is in it. A group that no longer exists is dropped when the setting is read, not written back. Set from the Sections card. |
-| `interests` | `1` | Whether For you — the feed that learns which hashtags a reader lingers on — exists on this instance at all. Off, the feed and its settings are gone and what was learned is kept for the day it is switched back on. See [For-You.md](For-You.md). |
-| `interests_default` | `1` | What a reader who never touched their own *learn from my reading* switch gets. `0` makes learning opt-in. |
-| `interests_half_life` | `30` | Days until a learned tag's score has halved. The For you card accepts 7–180; a value set with `occ` outside 1–365 is clamped when read. |
-| `interests_threshold` | `3` | The score a learned tag needs before it is listed as an interest, 0.5–20. |
-| `interests_cap` | `30` | How many interests are listed, 5–100. |
-| `interests_window` | `7` | How many days back the For you feed looks for posts, 1–30. |
+| `interests` | `1` | Legacy hashtag-interest timeline switch and fallback configuration. The ranked web For You feed is controlled separately by `rec_v4_enabled`; see [For-You.md](For-You.md). |
+| `interests_default` | `1` | Legacy learning default used by the compatibility interest endpoints. It does not grant consent to the separate ranked-feed behavioral learning system. |
+| `interests_half_life` | `30` | Legacy hashtag score decay, in days. Used only by the compatibility interest system. |
+| `interests_threshold` | `3` | Legacy threshold for listing learned hashtag interests. |
+| `interests_cap` | `30` | Legacy limit for the number of listed hashtag interests. |
+| `interests_window` | `7` | Legacy compatibility timeline lookback window, in days. |
 | `cache_actor_days` | `180` | Days to keep a cached remote account nobody here refers to any more — not followed, not following, no post stored, no relation pending — before `Cron\Cache` evicts it with its avatar. `0` disables the sweep. |
 | `atproto_oauth_trusted` | `[]` | The Bluesky apps an administrator vouches for, by OAuth client id, as a JSON array: the Bluesky sign-in consent page shows those apps' own name and logo, which it never takes from an app on its own word. Set from the Bluesky card. |
 
@@ -1460,7 +1460,15 @@ of this costs on the hardware in front of you.
   with the moderator who took it.
 # Ranked For You recommendations switch
 
-Administration → Social → For you includes an independent **Ranked For You recommendations** switch. It is off by default and is separate from the legacy hashtag For You setting below it. Enabling it makes the automatically ranked timeline available; readers cannot select topics or request topic-specific feeds. It does not enable any discovery, behavioral learning, analytics or experiments. Turn it off to immediately disable the ranked timeline and learning controls. Legacy preference storage remains only for migration compatibility and is not exposed by the API.
+Administration → Social → For You includes an independent **Ranked For You
+recommendations** switch. It is off by default. Enabling it makes the ranked
+timeline available; it does not automatically opt readers into behavioral
+learning. The feed can draw on learned signals, post content, freshness, follows
+and discovery, so it does not require readers to choose topics. Readers cannot
+currently add topics manually or request a topic-specific feed. That is a
+separate product capability and should not be implied by the ranking switch.
+Turn the switch off to disable the ranked timeline. See
+[For-You.md](For-You.md) for the data and consent model.
 
 ## Empty application after installing development dependencies
 
@@ -1485,12 +1493,3 @@ Do not leave that development autoloader active in a shared running Nextcloud.
 
 Afterward verify `/status.php`, `occ status`, and the Social page in a browser.
 A successful Webpack build alone does not exercise Nextcloud bootstrap.
-
-### Local verification on 26 October 2026
-
-The installed checkout was verified on Nextcloud 35.0.0 RC3 with Social and
-Calendar enabled, maintenance off and no pending database upgrade. After the
-production autoloader repair, `status.php` returned 200 and the public Social
-timeline rendered posts in Chromium without JavaScript errors or failed network
-responses. The user also confirmed their frontend was working again. This does
-not verify public Bluesky indexing or all remote servers.

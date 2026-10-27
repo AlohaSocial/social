@@ -1,14 +1,18 @@
 # Performance and scalability
 
-A survey of the query and scalability behaviour of this app, and of what the
-browser has to download before any of it is on screen: what costs what, what is
-bounded, and what is still known to be wrong. Every claim below was checked
-against the code rather than carried over from a previous survey.
+A historical survey of query and scalability behavior, including measurements
+from a seeded instance. Its dated findings are kept as an engineering record;
+this page is not a current capacity guarantee.
 
-**Verified against:** app version 0.19.14, `master`, 2026-09-13 — the queries
-re-measured end to end on a seeded instance (22,642 posts, 65,014 recipient
-rows, 916 follows, 435 cached actors) after the read-path wave below, and the
-bundle sizes measured from `npm run build` on this version.
+## Historical benchmark snapshot
+
+The measurements below were collected on app version 0.19.14 on 2026-09-13
+using a seeded instance (22,642 posts, 65,014 recipient rows, 916 follows,
+435 cached actors) and that version's production build. They are useful as a
+before/after record for the changes described here, **not as current performance
+measurements** for later versions or another installation. Re-run the commands
+and record database, PHP, cache and dataset details before using them to make
+current capacity decisions.
 
 This file is **not** enforced by `tests/DocumentationTest.php` — its claims are
 about behaviour rather than about routes or schema rows, and a test that tried
