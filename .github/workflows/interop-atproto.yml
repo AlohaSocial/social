@@ -103,13 +103,13 @@ jobs:
           node-version: '22'
 
       - name: Make a test video
-        timeout-minutes: 5
+        timeout-minutes: 10
         # Use the runner's existing encoder. Mirror outages must not hang a
         # federation test before it has even generated its two-second fixture.
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            timeout 120s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update -q
-            timeout 120s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y -q --no-install-recommends ffmpeg
+            timeout 300s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update -q
+            timeout 300s sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 install -y -q --no-install-recommends ffmpeg
           fi
           timeout 30s ffmpeg -nostdin -loglevel error -y -f lavfi -i testsrc=duration=2:size=320x240:rate=15 \
             -filter_threads 1 -threads 2 -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$ATPROTO_VIDEO"

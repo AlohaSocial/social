@@ -797,10 +797,10 @@ trait StreamTimelines {
 		$qb->filterType(SocialAppNotification::TYPE);
 		$qb->paginate($options);
 		$this->filterKind($qb, $options);
-		$viewer = $qb->getViewer();
-		if ($viewer === null) {
+		if (!$qb->hasViewer()) {
 			$qb->limitToViewer('sd', 'f', false);
 		} else {
+			$viewer = $qb->getViewer();
 			$qb->selectDestFollowing('sd', '');
 			$followedPosts = $qb->exprStreamDestFollowed($viewer->getId(), 'sd', 'f');
 			// The optimized recipient query adds the viewer's own follower
