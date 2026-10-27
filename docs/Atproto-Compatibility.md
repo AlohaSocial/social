@@ -22,14 +22,14 @@ checklist is [Atproto-Live-Test.md](Atproto-Live-Test.md).
 | Area | Implemented behavior | Boundary |
 |---|---|---|
 | Identity | Local accounts can have a `did:plc`; assigned and verified custom handles are resolved; profiles and ordered profile links are served | PLC directory and DNS/HTTPS handle proofs must be reachable and valid. ActivityPub identity remains separate. |
-| Repository | Signed local repositories, commits, records and blobs; repository export/import and account moves | Writes are deliberately allow-listed; this is not arbitrary storage for every AT Protocol Lexicon. |
+| Repository | Signed local repositories, commits, records and blobs; repository export/import and account moves | Social records are projected into Aloha's social model. Other valid collections are retained as opaque records; without a vendored Lexicon their schema cannot be checked locally. |
 | Posts | Public posts, replies, embeds, images/galleries, video, self-labels, edits, deletes and supported reply/quote rules | The social model and publication pipeline define supported post records. Long text or unsupported embeds may be mapped or refused; inspect the specific write path. |
 | Other records | Supported profile links, lists and list items, starter packs, feed records, thread gates and post gates can be retained or processed | Keeping a record does not mean Aloha provides a native editor or operates the referenced feed generator. |
 | Client authentication | PDS sessions, app passwords and OAuth are available for supported clients and permissions | OAuth scopes and permission sets are checked. General Nextcloud account password/email administration is not delegated to XRPC. |
 | XRPC | PDS methods are handled locally; supported `app.bsky.*` and `chat.bsky.*` methods not hosted locally are proxied to configured services | Proxying depends on AppView/Chat service authentication and availability. A successful response does not prove feed indexing. |
 | Reading | Profiles, author feeds, threads, custom feeds, lists, starter packs, search/discovery and interactions are available through supported local and proxied paths | AppView results can lag behind the PDS or omit content according to its policies. |
 | Synchronization | Relay firehose, background polling and optional Jetstream listening can ingest remote activity | Cron, relay configuration and optional daemons must be running. A stopped or delayed source can leave the local view stale. |
-| Chat and notifications | Supported Bluesky chat methods are proxied; inbound messages, messages sent in Bluesky clients, unread backfill, read state, and inbound emoji reactions are synchronized where implemented. Reactions use the existing local message reaction summaries; a reaction cannot be displayed if its message is not stored locally. The first backfill paginates until it has found the conversation's reported number of unread incoming messages, retains own messages in that range, and counts deleted-message placeholders without importing them as content. If history ends before the boundary is found, no initial cursor is committed and the backfill is retried. Incremental `getLog` is revision-based and has no page-size or page-cursor parameter; Aloha processes the returned batch before committing the last processed revision, and refuses incomplete or unknown event records. | The Chat lexicon exposes `unreadCount` but no per-conversation read cursor in `convoView`, so the boundary is derived from sender identities and the count. `getLog` is not a multi-page endpoint; pagination applies to `listConvos` and `getMessages`. A structurally valid but incomplete `getLog` batch cannot be detected if the service does not report an error. The Chat service is separate from the PDS and requires its own service-auth configuration. Verify live behavior with the checklist. |
+| Chat and notifications | Supported Bluesky chat methods are proxied; inbound messages, messages sent in Bluesky clients, unread backfill, read state, and emoji reactions in both directions are synchronized where a message has a known local-to-remote mapping. Reactions use the existing local message reaction summaries; a reaction cannot be displayed if its message is not stored locally. The first backfill paginates until it has found the conversation's reported number of unread incoming messages, retains own messages in that range, and counts deleted-message placeholders without importing them as content. If history ends before the boundary is found, no initial cursor is committed and the backfill is retried. Incremental `getLog` is revision-based and has no page-size or page-cursor parameter; Aloha processes the returned batch before committing the last processed revision, and refuses incomplete or unknown event records. | The Chat lexicon exposes `unreadCount` but no per-conversation read cursor in `convoView`, so the boundary is derived from sender identities and the count. `getLog` is not a multi-page endpoint; pagination applies to `listConvos` and `getMessages`. A structurally valid but incomplete `getLog` batch cannot be detected if the service does not report an error. The Chat service is separate from the PDS and requires its own service-auth configuration. Group membership and invitation management have no complete native UI. Verify live behavior with the checklist. |
 | Moderation | Supported labels, blocks/mutes, reports and moderation-list behavior are integrated with local controls | Labeler and AppView decisions remain external; not every moderation method has a local UI. |
 | Account migration | Supported flows can bring an account and repository here or move one away, including supported Bridgy Fed twins | Migration is a multi-step protocol operation. Follow the UI/commands and keep backups; it is not a generic identity takeover. |
 
@@ -41,12 +41,17 @@ records, delivery, deletion and indexing behavior. ActivityPub visibility
 choices that are not public are not published as public Bluesky posts.
 
 Bluesky clients can write through `com.atproto.repo.createRecord`,
-`putRecord`, `deleteRecord` and `applyWrites` for supported collections.
+`putRecord`, `deleteRecord` and `applyWrites`. Social records are projected
+into Aloha's model where a corresponding action exists. Other collections are
+kept as protocol-native records and are not converted to ActivityPub posts or
+other Social objects. A vendored Lexicon receives full schema validation;
+an unknown Lexicon is bounded by structural, DAG-CBOR and record-size checks
+but cannot be validated against its application schema. The explicit list
+block collection remains unsupported.
 Conditional writes are checked against the repository under its write lock.
 Post updates preserve the record URI where supported. External link embeds,
 record embeds, combined media and supported profile-link records are mapped
-explicitly; unsupported record types are not accepted as if they were valid
-social posts. The supported collection and embed handling is defined in
+explicitly. The collection mapping is defined in
 `lib/Atproto/Client/WriteService.php` and
 `lib/Atproto/Publisher/RecordMapper.php`.
 
@@ -57,11 +62,13 @@ the earlier step. Use the live checklist to distinguish those states.
 
 ## Deliberate limits
 
-- Aloha Social does not accept arbitrary Lexicon records for arbitrary apps.
-  It stores a defined set of social records and proxies selected service APIs.
-- Native Bluesky draft synchronization, arbitrary application data storage,
-  Live Now profile controls, full starter-pack editing, and a hosted custom-feed
-  generator are not represented as complete features here.
+- Opaque record storage does not make Aloha a native client for every ATProto
+  application: unknown Lexicons have no app-specific validation or UI here.
+- Native Bluesky draft synchronization, Live Now profile controls,
+  full starter-pack editing, and a hosted custom-feed generator are not
+  represented as complete features here. Opaque repository storage allows
+  other apps to persist records, but does not provide their native UI or
+  app-specific validation when their Lexicons are not vendored.
 - Bluesky account activation/deactivation, deletion, email and password
   management are not a replacement for Nextcloud account administration.
 - A Bluesky app can use supported APIs while a local web feature is absent; API

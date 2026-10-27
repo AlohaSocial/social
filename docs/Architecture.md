@@ -578,6 +578,15 @@ profile lexicon's grapheme and byte limits before writing the shared field
 row. `RecordMapper` uses that same pronoun limit when publishing the local
 profile back to Bluesky.
 
+Repository writes for social collections are projected through their native
+Social services. Other valid NSID collections are stored as protocol-native
+records by `WriteService`; the signed repository, CAR export and firehose carry
+them without converting them into ActivityPub objects. Vendored Lexicons are
+schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
+size validation, but their application-specific schema and semantics are not
+known to Aloha Social. OAuth collection scopes and own-repository checks still
+apply to each write.
+
 ### Resuming Bluesky synchronization
 
 `Cron\AtprotoSync` runs once a minute and spends its 45-second budget on

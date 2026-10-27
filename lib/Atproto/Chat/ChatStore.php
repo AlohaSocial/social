@@ -54,6 +54,8 @@ class ChatStore {
 	private const CONVO = 'social.chat.convo';
 	/** a message sent from here: the message here, by its Bluesky id */
 	private const SENT = 'social.chat.sent';
+	/** a message here: its Bluesky conversation and remote message id */
+	private const LOCATION = 'social.chat.location';
 	/** a message on its way out: when it was first attempted */
 	private const ATTEMPT = 'social.chat.attempt';
 	/** how long an attempt is remembered, past the last retry of `Cron\AtprotoPublish` */
@@ -77,6 +79,10 @@ class ChatStore {
 	 */
 	public static function messageId(string $senderDid, string $convoId, string $messageId): string {
 		return BlueskyIds::actorId($senderDid) . '/convo/' . rawurlencode($convoId) . '/' . rawurlencode($messageId);
+	}
+
+	public static function messageLocationLooksLikeBluesky(string $noteId): bool {
+		return preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/[^/]+/[^/]+$#', $noteId) === 1;
 	}
 
 	/**
@@ -126,6 +132,7 @@ class ChatStore {
 		if (!$known) {
 			throw new \RuntimeException('Bluesky direct message was not durably stored');
 		}
+		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		$this->storeMessageReactions($identity, $convoId, $message);
 		$this->remember($identity->did, $convoId, $noteId);
 
@@ -146,6 +153,7 @@ class ChatStore {
 			return false;
 		}
 		$noteId = self::messageId($identity->did, $convoId, $id);
+		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		if ($this->posts->isKnown($noteId)) {
 			$this->remember($identity->did, $convoId, $noteId);
 
@@ -208,6 +216,7 @@ class ChatStore {
 		$noteId = self::messageId($sender, $convoId, $id);
 		if ($sender !== $identity->did) {
 			$deleted = $this->posts->delete($noteId);
+			$this->durableCache->removeShared(self::LOCATION, $identity->did . "\0" . $noteId);
 			if (!$deleted && $this->posts->isKnown($noteId)) {
 				throw new \RuntimeException('Bluesky direct message deletion was not durably stored');
 			}
@@ -222,6 +231,7 @@ class ChatStore {
 			return false;
 		}
 		$this->streams->deleteById($noteId, Note::TYPE);
+		$this->durableCache->removeShared(self::LOCATION, $identity->did . "\0" . $noteId);
 
 		return true;
 	}
@@ -334,6 +344,7 @@ class ChatStore {
 		}
 		// last: a message whose conversation is known is recorded in full (`ChatSender`)
 		$this->durableCache->setShared(self::CONVO, $noteId, $convoId, self::KEPT);
+		$this->rememberLocation($did, $convoId, $messageId, $noteId);
 		$this->durableCache->removeShared(self::ATTEMPT, $noteId);
 	}
 
@@ -378,6 +389,34 @@ class ChatStore {
 		$convo = $this->durableCache->getShared(self::CONVO, $noteId);
 
 		return is_string($convo) ? $convo : '';
+	}
+
+	/**
+	 * The remote message identifiers for a message stored in one account's
+	 * Bluesky chat, or null if this message has no durable Bluesky mapping.
+	 *
+	 * @return array{convoId: string, messageId: string}|null
+	 */
+	public function messageLocation(string $did, string $noteId): ?array {
+		$location = $this->durableCache->getShared(self::LOCATION, $did . "\0" . $noteId);
+		if (is_array($location) && is_string($location['convoId'] ?? null) && is_string($location['messageId'] ?? null)
+			&& $location['convoId'] !== '' && $location['messageId'] !== '') {
+			return ['convoId' => $location['convoId'], 'messageId' => $location['messageId']];
+		}
+		if (preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/([^/]+)/([^/]+)$#', $noteId, $match) === 1) {
+			return ['convoId' => rawurldecode($match[1]), 'messageId' => rawurldecode($match[2])];
+		}
+
+		return null;
+	}
+
+	private function rememberLocation(string $did, string $convoId, string $messageId, string $noteId): void {
+		if ($convoId !== '' && $messageId !== '' && $noteId !== '') {
+			$this->durableCache->setShared(self::LOCATION, $did . "\0" . $noteId, [
+				'convoId' => $convoId,
+				'messageId' => $messageId,
+			], self::KEPT);
+		}
 	}
 
 	/**

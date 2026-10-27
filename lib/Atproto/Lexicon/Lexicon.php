@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Lexicon;
 
 use OCA\Social\Atproto\Protocol\Bytes;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Protocol\Tid;
 
@@ -28,8 +29,11 @@ class Lexicon {
 
 	/** a type and a subtype of at most 127 characters each (RFC 6838 §4.2), and the slash */
 	private const MAX_MIME_TYPE = 255;
+	private const MAX_OPAQUE_RECORD_BYTES = 1_000_000;
+	private const MAX_OPAQUE_RECORD_VALUES = 20_000;
+	private const MAX_OPAQUE_RECORD_DEPTH = 64;
 
-	/** @var array<string, array> loaded documents by NSID */
+	/** @var array<string, array|null> loaded documents by NSID */
 	private array $documents = [];
 
 	/**
@@ -51,7 +55,16 @@ class Lexicon {
 		if (!is_string($type) || !Syntax::isNsid($type)) {
 			throw new LexiconException('A record needs a $type that is an NSID');
 		}
-		$definition = $this->definition($type . '#main');
+		$document = $this->document($type);
+		if ($document === null) {
+			$this->validateOpaqueRecord($record);
+
+			return;
+		}
+		$definition = $document['defs']['main'] ?? null;
+		if (!is_array($definition)) {
+			throw new LexiconException('No record definition for ' . $type);
+		}
 		if (($definition['type'] ?? '') !== 'record') {
 			throw new LexiconException($type . ' is not a record type');
 		}
@@ -98,10 +111,8 @@ class Lexicon {
 	 */
 	private function definition(string $ref): array {
 		[$nsid, $fragment] = array_pad(explode('#', $ref, 2), 2, 'main');
-		if (!isset($this->documents[$nsid])) {
-			$this->documents[$nsid] = $this->load($nsid);
-		}
-		$definition = $this->documents[$nsid]['defs'][$fragment] ?? null;
+		$document = $this->document($nsid);
+		$definition = $document['defs'][$fragment] ?? null;
 		if (!is_array($definition)) {
 			throw new LexiconException('Unknown lexicon ' . $ref);
 		}
@@ -109,18 +120,67 @@ class Lexicon {
 		return $definition;
 	}
 
-	private function load(string $nsid): array {
+	private function document(string $nsid): ?array {
+		if (array_key_exists($nsid, $this->documents)) {
+			return $this->documents[$nsid];
+		}
 		foreach ($this->directories as $directory) {
 			$path = $directory . '/' . $nsid . '.json';
 			if (is_file($path)) {
 				$document = json_decode((string)file_get_contents($path), true);
 				if (is_array($document) && ($document['id'] ?? null) === $nsid && is_array($document['defs'] ?? null)) {
-					return $document;
+					return $this->documents[$nsid] = $document;
 				}
 			}
 		}
 
-		throw new LexiconException('No lexicon document for ' . $nsid);
+		return $this->documents[$nsid] = null;
+	}
+
+	/**
+	 * Opaque records remain protocol-native and are never projected into Social
+	 * objects. Without a vendored Lexicon, bound their DAG-CBOR shape and size.
+	 *
+	 * @throws LexiconException
+	 */
+	private function validateOpaqueRecord(array $record): void {
+		$count = 0;
+		$this->checkOpaqueValue($record, 0, $count);
+		try {
+			if (strlen(DagCbor::encode($record)) > self::MAX_OPAQUE_RECORD_BYTES) {
+				throw new LexiconException('Opaque record is larger than one megabyte');
+			}
+		} catch (\InvalidArgumentException $e) {
+			throw new LexiconException('Opaque record is not valid DAG-CBOR data');
+		}
+	}
+
+	private function checkOpaqueValue(mixed $value, int $depth, int &$count): void {
+		if ($depth > self::MAX_OPAQUE_RECORD_DEPTH || ++$count > self::MAX_OPAQUE_RECORD_VALUES) {
+			throw new LexiconException('Opaque record exceeds structural limits');
+		}
+		if (is_string($value)) {
+			if (strlen($value) > self::MAX_OPAQUE_RECORD_BYTES) {
+				throw new LexiconException('Opaque record contains an oversized string');
+			}
+			return;
+		}
+		if ($value === null || is_bool($value) || is_int($value) || $value instanceof Bytes || $value instanceof Cid) {
+			return;
+		}
+		if ($value instanceof \stdClass) {
+			$value = get_object_vars($value);
+		}
+		if (!is_array($value)) {
+			throw new LexiconException('Opaque record contains a value that DAG-CBOR cannot store');
+		}
+		$isList = array_is_list($value);
+		foreach ($value as $key => $item) {
+			if (!$isList && !is_string($key)) {
+				throw new LexiconException('Opaque record map keys must be strings');
+			}
+			$this->checkOpaqueValue($item, $depth + 1, $count);
+		}
 	}
 
 	/**

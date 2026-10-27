@@ -11,9 +11,10 @@ namespace OCA\Social\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
-use OCA\Social\Exceptions\ItemNotFoundException;
+use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\ItemUnknownException;
 use OCA\Social\Exceptions\StreamNotFoundException;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -62,6 +63,7 @@ class ReactionService {
 		private ModerationService $moderationService,
 		private LoggerInterface $logger,
 		private EmojiService $emojiService,
+		private ChatSender $chatSender,
 	) {
 	}
 
@@ -138,6 +140,14 @@ class ReactionService {
 		}
 
 		$post = $this->streamRequest->getStreamById($postId, true);
+		if ($this->chatSender->react($actor, $post, $emoji, true) === true) {
+			$reaction = $this->localReaction($actor, $post, $emoji);
+			if (!$this->reactionsRequest->save($reaction)) {
+				return $this->reactionsRequest->getReaction($actor->getId(), $post->getId(), $emoji);
+			}
+
+			return $reaction;
+		}
 
 		/** @var EmojiReact $reaction */
 		$reaction = AP::instance()->getItemFromType(EmojiReact::TYPE);
@@ -178,6 +188,23 @@ class ReactionService {
 	public function delete(Person $actor, string $postId, string $emoji, string &$token = ''): ACore {
 		$emoji = trim($emoji);
 		$post = $this->streamRequest->getStreamById($postId, true);
+		if ($this->chatSender->react($actor, $post, $emoji, false) === true) {
+			try {
+				$reaction = $this->reactionsRequest->getReaction($actor->getId(), $post->getId(), $emoji);
+				$this->reactionsRequest->delete($reaction);
+			} catch (ActionDoesNotExistException) {
+				$reaction = null;
+			}
+			$undo = new Undo();
+			$undo->setActor($actor);
+			if ($reaction instanceof EmojiReact) {
+				$undo->setId($reaction->getId() . '/undo');
+				$undo->setObject($reaction);
+			}
+			$undo->setPublished(date('c'));
+
+			return $undo;
+		}
 
 		$undo = new Undo();
 		$undo->setActor($actor);
@@ -193,7 +220,7 @@ class ReactionService {
 
 			$this->reactionsRequest->delete($reaction);
 			$token = $this->activityService->request($undo);
-		} catch (ItemNotFoundException $e) {
+		} catch (ActionDoesNotExistException $e) {
 		} catch (Exception $e) {
 			$this->logger->warning('could not undo a reaction', [
 				'postId' => $postId, 'exception' => $e,
@@ -219,5 +246,17 @@ class ReactionService {
 				)
 			);
 		}
+	}
+
+	private function localReaction(Person $actor, Stream $post, string $emoji): EmojiReact {
+		$reaction = new EmojiReact();
+		$reaction->setId($actor->getId() . '#emojireact/' . $this->uuid(8));
+		$reaction->setActor($actor);
+		$reaction->setObjectId($post->getId());
+		$reaction->setContent($emoji);
+		$reaction->setTo($post->getAttributedTo());
+		$reaction->setPublished(date('c'));
+
+		return $reaction;
 	}
 }

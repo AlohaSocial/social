@@ -74,26 +74,38 @@ use Throwable;
  * follow, a profile record the profile — and the record the publisher then
  * writes for it is the answer. The app shows what it gets back; the text may
  * differ where Social's mapping does (a long post cut with a link, say).
- * Lists, starter packs, feed generators and gates are kept as written
- * (`KEPT_AS_WRITTEN`); a curate list and its members are the person's list
- * here as well (`BlueskyListImport`). Who may send the person direct
+ * Lists, starter packs, feed generators and gates, and collections without a
+ * local Social projection, are kept as written. A curate list and its members
+ * are the person's list here as well (`BlueskyListImport`). Who may send the person direct
  * messages (`chat.bsky.actor.declaration`) is the setting here, which
- * writes the record (`ChatDeclaration`). Anything else —
- * blocks and list blocks (D16) among it — is refused, and a post can only be
- * public: that is what goes to Bluesky (D8).
+ * writes the record (`ChatDeclaration`). Blocks are handled as account
+ * relationships, list blocks are refused, and a post can only be public:
+ * that is what goes to Bluesky (D8).
  */
 class WriteService {
 	/**
-	 * Records an app writes that are kept as the app wrote them, checked
-	 * against their lexicon — lists and their members, starter packs, feed
-	 * generators, reply and quote gates. A list block is a block, and
-	 * refused (D16).
+	 * Records an app writes that are kept as the app wrote them. Known Lexicons
+	 * are schema-checked; unknown ones are bounded DAG-CBOR data. A list block
+	 * is a block, and refused (D16).
 	 */
 	public const KEPT_AS_WRITTEN = [
 		ProfileLinks::COLLECTION,
 		'app.bsky.graph.list', 'app.bsky.graph.listitem', 'app.bsky.graph.starterpack',
 		'app.bsky.feed.generator', 'app.bsky.feed.threadgate', RecordMapper::POSTGATE,
 	];
+
+	/** Whether a collection is retained in the repository without a Social projection. */
+	public static function keepsAsWritten(string $collection): bool {
+		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+			return true;
+		}
+
+		return Syntax::isNsid($collection) && !in_array($collection, [
+			RecordMapper::POST, RecordMapper::LIKE, RecordMapper::REPOST, RecordMapper::FOLLOW,
+			RecordMapper::PROFILE, ChatDeclaration::COLLECTION, BlueskyBlocks::COLLECTION,
+			'app.bsky.graph.listblock',
+		], true);
+	}
 	/** the records whose key is the key of the post they gate */
 	private const GATES = ['app.bsky.feed.threadgate', RecordMapper::POSTGATE];
 
@@ -158,7 +170,7 @@ class WriteService {
 			RecordMapper::REPOST => $this->repost($actor, $record),
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
 			BlueskyBlocks::COLLECTION => $this->block($session, $actor, $record),
-			default => in_array($collection, self::KEPT_AS_WRITTEN, true)
+			default => self::keepsAsWritten($collection)
 				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record)
 				: throw $this->unsupported($collection),
 		};
@@ -256,7 +268,7 @@ class WriteService {
 		if ($collection === RecordMapper::POST) {
 			return $this->updatePostRecord($session, $body);
 		}
-		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+		if (self::keepsAsWritten($collection)) {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
 			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record));
@@ -700,7 +712,7 @@ class WriteService {
 			// already gone: what the app asked for is the case
 			return ['commit' => $this->commit($session)];
 		}
-		if (in_array($collection, self::KEPT_AS_WRITTEN, true)) {
+		if (self::keepsAsWritten($collection)) {
 			$this->writeRaw($session, RepoWrite::delete($collection, $rkey));
 			$this->listChanged($session, $record, true);
 
@@ -736,7 +748,7 @@ class WriteService {
 			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
 		}
 		if ($writes !== [] && count(array_filter($writes, static fn (mixed $write): bool => is_array($write)
-			&& in_array((string)($write['collection'] ?? ''), self::KEPT_AS_WRITTEN, true))) === count($writes)) {
+			&& self::keepsAsWritten((string)($write['collection'] ?? '')))) === count($writes)) {
 			return $this->applyKept($session, $writes, $swapCommit);
 		}
 		foreach ($writes as $write) {
@@ -1445,6 +1457,9 @@ class WriteService {
 			$rkey = $gated['rkey'];
 		}
 		$rkey = $rkey !== '' ? $rkey : Tid::next();
+		if (!Mst::isValidKey($collection . '/' . $rkey)) {
+			throw XrpcException::invalidRequest('The record path is not valid');
+		}
 		if ($collection === ProfileLinks::COLLECTION && !Tid::isValid($rkey)) {
 			throw XrpcException::invalidRequest('A profile link record key must be a TID');
 		}
