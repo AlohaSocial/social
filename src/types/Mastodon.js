@@ -220,9 +220,10 @@
  * Misskey-family servers and their clients use, and it is what this app's own
  * API answers — see docs/API.md.
  *
- * @property {string} name - the emoji itself; always a unicode emoji, never a `:shortcode:`
+ * @property {string} name - a Unicode emoji or a custom emoji label
  * @property {number} count - how many accounts used it
  * @property {boolean} me - whether the reader is one of them; false when anonymous
+ * @property {string} [url] - a locally served image, only when this instance owns the custom emoji
  */
 
 /**
