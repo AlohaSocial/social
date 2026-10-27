@@ -11,10 +11,10 @@
 		     above the composer: it is read before anything is written, and it
 		     is only here at all while something in it is unread. Not on a
 		     single post's page, which the reader navigated to for that post -->
-		<Announcements v-if="type !== 'single-post' && type !== 'direct'" />
+		<Announcements v-if="type !== 'single-post' && type !== 'direct'" class="feed-notice" />
 
 		<!-- said once, on the pages where the reading it describes happens -->
-		<InterestsNotice v-if="showInterestsNotice" />
+		<InterestsNotice v-if="showInterestsNotice" class="feed-notice" />
 
 		<!-- the three timelines that are the same place seen from three
 		     distances: switching between them is something a reader does while
@@ -28,16 +28,16 @@
 			v-if="scopeDescription"
 			:dismissKey="'feed-help-v1:' + scope"
 			:title="t('social', 'About this feed')"
-			class="timeline-scope-description">
+			class="timeline-scope-description feed-notice">
 			<p>{{ scopeDescription }}</p>
 		</InfoCard>
 
-		<InterestsLearningBanner v-if="type === 'interests' && hasInterestsTab" />
+		<InterestsLearningBanner v-if="type === 'interests' && hasInterestsTab" class="feed-notice" />
 		<InfoCard
 			v-if="showRecommendationCoverageNote"
 			dismissKey="recommendation-coverage-v1"
 			:title="t('social', 'Available recommendations')"
-			class="timeline-recommendation-coverage">
+			class="timeline-recommendation-coverage feed-notice">
 			{{ t('social', 'Only a few posts are available in this feed right now. For you limits repeated stories and may show more as new posts arrive.') }}
 		</InfoCard>
 
@@ -81,7 +81,7 @@
 		<!-- said once to an account that existed before the policy did: it
 		     can now choose who reaches it. Gone for good when put away, or
 		     once the policy has been saved -->
-		<div v-if="type === 'notifications' && notificationsStore.policyNotice" class="policy-notice" role="note">
+		<div v-if="type === 'notifications' && notificationsStore.policyNotice" class="policy-notice feed-notice" role="note">
 			<IconBellCogOutline :size="20" class="policy-notice__icon" />
 			<p class="policy-notice__text">
 				{{ t('social', 'You can now choose who reaches your notifications — new accounts and people you don\'t follow can wait for your review.') }}
@@ -90,6 +90,7 @@
 				</RouterLink>
 			</p>
 			<NcButton
+				class="policy-notice__close"
 				variant="tertiary"
 				:aria-label="t('social', 'Close')"
 				@click="notificationsStore.dismissPolicyNotice()">
@@ -102,7 +103,7 @@
 		<!-- the people the notification policy is holding back: how many,
 		     and the list itself on Review. Here, because this is where
 		     somebody wonders why a mention never arrived -->
-		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests">
+		<div v-if="type === 'notifications' && pendingRequests > 0" class="held-requests feed-notice">
 			<div class="held-requests__row">
 				<IconInboxOutline :size="20" />
 				<button
@@ -124,7 +125,7 @@
 		     happens rather than something anybody did: this says how much
 		     there is, and gives the reader a way to say they are done with it
 		     without reading down to the bottom of the list. -->
-		<div v-if="type === 'notifications' && unreadActivities > 0" class="new-activities">
+		<div v-if="type === 'notifications' && unreadActivities > 0" class="new-activities feed-notice">
 			<span class="new-activities__count">
 				{{ n('social', '%n new activity', '%n new activities', unreadActivities) }}
 			</span>
@@ -943,6 +944,121 @@ export default {
 	max-width: var(--social-column);
 	margin: 0 auto;
 	padding: 0;
+}
+
+/* Information cards share one calm, centered layout across every feed. */
+.social__wrapper > :deep(.feed-notice) {
+	position: relative;
+	box-sizing: border-box;
+	width: min(100%, 760px);
+	margin: 8px auto 12px;
+	padding: 12px 16px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	text-align: center;
+}
+
+:deep(.feed-notice .info-card__header) {
+	position: relative;
+	min-height: 32px;
+	justify-content: center;
+	padding-inline: 32px;
+}
+
+:deep(.feed-notice .info-card__header > button),
+:deep(.feed-notice .interests-banner > button),
+:deep(.feed-notice.interests-banner > button),
+:deep(.feed-notice .policy-notice__close) {
+	position: absolute;
+	inset-block-start: 0;
+	inset-inline-end: 0;
+}
+
+:deep(.feed-notice .info-card__header h2),
+:deep(.feed-notice .announcements__title) {
+	font-size: 15px;
+	font-weight: 600;
+}
+
+:deep(.feed-notice .info-card__body),
+:deep(.feed-notice .interests-notice__text),
+:deep(.feed-notice .interests-banner__text),
+:deep(.feed-notice .policy-notice__text),
+:deep(.feed-notice .announcement__text) {
+	max-width: 68ch;
+	margin-inline: auto;
+	text-align: center;
+}
+
+:deep(.feed-notice.interests-notice),
+:deep(.feed-notice .interests-notice),
+:deep(.feed-notice.interests-banner),
+:deep(.feed-notice .interests-banner),
+:deep(.feed-notice.policy-notice),
+:deep(.feed-notice .policy-notice) {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	padding: 0 32px;
+	border: 0;
+	background: transparent;
+}
+
+:deep(.feed-notice .interests-notice__actions),
+:deep(.feed-notice .announcement__actions),
+:deep(.feed-notice .held-requests__row) {
+	justify-content: center;
+	margin-inline: auto;
+}
+
+:deep(.feed-notice .announcement__meta) {
+	justify-content: center;
+}
+
+:deep(.feed-notice .announcements__header) {
+	justify-content: center;
+}
+
+:deep(.feed-notice .announcements__earlier) {
+	display: flex;
+	margin: 8px auto 0;
+}
+
+:deep(.feed-notice .interests-banner > button),
+:deep(.feed-notice.interests-banner > button),
+:deep(.feed-notice .policy-notice__close) {
+	inset-block-start: -4px;
+	inset-inline-end: -8px;
+}
+
+:deep(.feed-notice .held-requests__toggle) {
+	flex: 0 1 auto;
+	text-align: center;
+}
+
+:deep(.feed-notice .new-activities__count) {
+	text-align: center;
+}
+
+@media (max-width: 600px) {
+	.social__wrapper > :deep(.feed-notice) {
+		width: calc(100% - 16px);
+		padding: 10px 12px;
+	}
+
+	:deep(.feed-notice.interests-notice),
+	:deep(.feed-notice .interests-notice),
+	:deep(.feed-notice.interests-banner),
+	:deep(.feed-notice .interests-banner),
+	:deep(.feed-notice.policy-notice),
+	:deep(.feed-notice .policy-notice) {
+		padding-inline: 24px;
+	}
 }
 
 .photo-compose-actions {

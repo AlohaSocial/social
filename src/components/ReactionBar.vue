@@ -97,10 +97,11 @@ export default {
 		},
 
 		/**
-		 * The bar as the server sent it: `{name, count, me}` each.
+		 * The bar as the server sent it: `{name, count, me}`, with a local
+		 * emoji image URL when this instance owns that custom emoji.
 		 */
 		modelValue: {
-			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean}>>} */ (Array),
+			type: /** @type {import('vue').PropType<Array<{name: string, count: number, me: boolean, url?: string}>>} */ (Array),
 			default: () => [],
 		},
 
@@ -130,7 +131,7 @@ export default {
 	},
 
 	computed: {
-		/** @return {Array<{name: string, count: number, me: boolean}>} */
+		/** @return {Array<{name: string, count: number, me: boolean, url?: string}>} */
 		reactions() {
 			return Array.isArray(this.modelValue) ? this.modelValue : []
 		},
@@ -146,7 +147,7 @@ export default {
 		 * here, and the useful part is how many people chose it and whether
 		 * pressing this takes the reader's own back.
 		 *
-		 * @param {{name: string, count: number, me: boolean}} reaction one entry
+		 * @param {{name: string, count: number, me: boolean, url?: string}} reaction one entry
 		 * @return {string} the label
 		 */
 		labelFor(reaction) {

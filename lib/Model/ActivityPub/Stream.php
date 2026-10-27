@@ -533,7 +533,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	/**
 	 * The emoji reactions on this post, attached by ReactionService.
 	 *
-	 * @var list<array{name: string, count: int, me: bool}>
+	 * @var list<array{name: string, count: int, me: bool, url?: string}>
 	 */
 	private array $reactions = [];
 
@@ -1634,7 +1634,7 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 
 	/**
 	 * The emoji reactions on this post: `{name, count, me}` each, most used
-	 * first.
+	 * first. Locally owned custom emoji also carry their locally served `url`.
 	 *
 	 * Local, derived data attached by ReactionService the way a card is, and
 	 * never part of the wire object — an `EmojiReact` is its own activity, and
@@ -1644,14 +1644,14 @@ class Stream extends ACore implements IQueryRow, JsonSerializable {
 	 * tell "no reactions" from "this server does not do reactions", and a post
 	 * nobody has reacted to answers `[]`.
 	 *
-	 * @return list<array{name: string, count: int, me: bool}>
+	 * @return list<array{name: string, count: int, me: bool, url?: string}>
 	 */
 	public function getReactions(): array {
 		return $this->reactions;
 	}
 
 	/**
-	 * @param list<array{name: string, count: int, me: bool}> $reactions
+	 * @param list<array{name: string, count: int, me: bool, url?: string}> $reactions
 	 */
 	public function setReactions(array $reactions): Stream {
 		$this->reactions = $reactions;
