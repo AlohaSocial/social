@@ -1602,15 +1602,18 @@ keeps cached posts while checking, stops automatic profile polls after their
 bounded window, and offers a first-page recheck without clearing or duplicating
 those posts. A stalled check is not a declaration that the remote account is empty.
 
-### Event card status metadata
+### Event card metadata
 
 The optional event extension includes lowercase `status` (`confirmed`, `tentative`,
 `cancelled`) when the source supplied a recognized iCalendar or Schema.org status.
-Unknown values are omitted. ICS downloads include the corresponding STATUS and a
-valid LAST-MODIFIED when the post has been updated. Calendar import confirms its
-outcome through `imported: true`; `already_imported: true` identifies an existing
-stable-UID copy and does not mean that copy was updated. See [Events.md](Events.md)
-for timezone, content-warning, import and attendance boundaries.
+Unknown values are omitted. For an ActivityStreams event with `joinMode: external`,
+the validated `externalParticipationUrl` is exposed as `event.participation_url`.
+It is a link to the source's participation page and does not send a federated RSVP.
+ICS downloads include the corresponding STATUS and a valid LAST-MODIFIED when the
+post has been updated. Calendar import confirms its outcome through `imported: true`;
+`already_imported: true` identifies an existing stable-UID copy and does not mean
+that copy was updated. See [Events.md](Events.md) for timezone, content-warning,
+import and attendance boundaries.
 
 ### Visual media timeline filter
 

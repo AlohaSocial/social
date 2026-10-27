@@ -37,6 +37,14 @@
 				{{ t('social', 'Download calendar file') }}
 			</a>
 			<a
+				v-if="safeParticipationUrl"
+				class="post-event__calendar"
+				:href="safeParticipationUrl"
+				target="_blank"
+				rel="noopener noreferrer">
+				{{ t('social', 'Respond on the event website') }}
+			</a>
+			<a
 				v-if="safeOriginalUrl"
 				class="post-event__calendar"
 				:href="safeOriginalUrl"
@@ -129,6 +137,15 @@ export default {
 		safeOriginalUrl() {
 			try {
 				const url = new URL(this.originalUrl)
+				return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''
+			} catch {
+				return ''
+			}
+		},
+
+		safeParticipationUrl() {
+			try {
+				const url = new URL(this.event.participation_url)
 				return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : ''
 			} catch {
 				return ''

@@ -20,8 +20,13 @@ Recognized `ical:status` values are CONFIRMED, TENTATIVE and CANCELLED. Schema.o
 EventCancelled/EventScheduled URLs are also normalized. Unknown statuses are
 ignored. The API exposes the optional lowercase `event.status`; ActivityPub export
 retains `ical:status`. ICS exports preserve the status and valid LAST-MODIFIED.
-Mobilizon documents its iCalendar extension in its
-[ActivityPub vocabulary](https://docs.mobilizon.org/5.%20Interoperability/1.activity_pub/).
+For Mobilizon events with `joinMode: external`, Social also retains a validated
+HTTP(S) `externalParticipationUrl` as `event.participation_url`. The event card
+offers a separate link to that page. This opens the source's participation flow;
+it does not send a federated response from Social. Other join modes continue to
+use the original event page. See Mobilizon's
+[ActivityPub vocabulary](https://docs.mobilizon.org/5.%20Interoperability/1.activity_pub/)
+for `joinMode` and `externalParticipationUrl`.
 
 ## Import is not attendance
 
