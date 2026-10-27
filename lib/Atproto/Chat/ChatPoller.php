@@ -45,6 +45,8 @@ class ChatPoller {
 	private const READ = 'chat.bsky.convo.defs#logReadConvo';
 	/** the older name of `logReadConvo`, which a chat service may still send */
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
+	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
+	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
 
 	/** @var array<string, list<string>> the members of the conversations this run asked about, by convo */
 	private array $members = [];
@@ -255,6 +257,12 @@ class ChatPoller {
 					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
 					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
 					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
+					self::ADD_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, (string)($log['rev'] ?? '')
+					) ? 1 : 0,
+					self::REMOVE_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, (string)($log['rev'] ?? '')
+					) ? 1 : 0,
 					default => 0,
 				};
 			}

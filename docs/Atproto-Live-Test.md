@@ -109,6 +109,7 @@ The development network has no chat service, so these lines are the only test of
 
 - [ ] The tester follows alice and alice follows the tester. Alice writes the tester a direct message from Messages here. It arrives in the tester's Bluesky chat, without the `@` address, its link clickable.
 - [ ] The tester answers in the Bluesky app. Within two minutes the answer is in alice's Messages, in the same conversation, with a notification.
+- [ ] The tester adds an emoji reaction to a message in the Bluesky app. The reaction appears on the same message here; removing it in Bluesky removes it here after the next chat sync.
 - [ ] The tester deletes a message in the Bluesky app. It is gone here after the next read.
 - [ ] The tester follows bob. Bob, here, writes one message to the tester and to a Mastodon account. The tester gets it on Bluesky, the Mastodon account over ActivityPub.
 - [ ] Alice, signed in to a Bluesky app here, writes the tester from that app. Within two minutes the message is in alice's Messages here, as hers, in the same conversation, and the tester gets it once.

@@ -121,6 +121,11 @@ class ChatPollerTest extends TestCase {
 
 			return true;
 		});
+		$store->method('reaction')->willReturnCallback(function (Identity $identity, string $convo, array $message, array $reaction, bool $added, string $revision): bool {
+			$this->handed[] = [$added ? 'reaction-added' : 'reaction-removed', $convo . '/' . $message['id'] . '/' . $reaction['value'] . '/' . $revision];
+
+			return true;
+		});
 		$store->method('sentHere')->willReturnCallback(fn (string $did, string $id): string => $this->sentHere[$id] ?? '');
 		$declaration = $this->createMock(ChatDeclaration::class);
 		$declaration->method('ensure')->willReturnCallback(function (Identity $identity): void {
@@ -259,6 +264,20 @@ class ChatPollerTest extends TestCase {
 
 		$this->assertSame(2, $this->poller()->pollAccount(self::cursor('3k005')));
 		$this->assertSame([['read', 'c1/m1'], ['read', 'c2/m2']], $this->handed);
+	}
+
+	public function testChatReactionLogEventsAreAppliedBeforeTheCursorAdvances(): void {
+		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
+			['$type' => 'chat.bsky.convo.defs#logAddReaction', 'rev' => '3k006', 'convoId' => 'c1', 'message' => self::message('m1'), 'reaction' => ['value' => '❤️', 'sender' => ['did' => self::ALICE]]],
+			['$type' => 'chat.bsky.convo.defs#logRemoveReaction', 'rev' => '3k007', 'convoId' => 'c1', 'message' => self::message('m1'), 'reaction' => ['value' => '❤️', 'sender' => ['did' => self::ALICE]]],
+		]];
+
+		$this->assertSame(2, $this->poller()->pollAccount(self::cursor('3k005')));
+		$this->assertSame([
+			['reaction-added', 'c1/m1/❤️/3k006'],
+			['reaction-removed', 'c1/m1/❤️/3k007'],
+		], $this->handed);
+		$this->assertSame('3k009', $this->synced[0][1]);
 	}
 
 	public function testAQuietAccountIsAskedLessOftenButAtLeastEveryHalfHour(): void {
