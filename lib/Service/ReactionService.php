@@ -33,14 +33,11 @@ use Psr\Log\LoggerInterface;
  * for it. What is different is that the emoji has to survive the round trip,
  * and that not every emoji a peer might send is one this app will show.
  *
- * **Unicode only, outbound and in.** The Misskey family also sends custom
- * emoji, as a `:shortcode:` in `content` with the image in a `tag` entry.
- * Accepting those would mean drawing a picture from somebody else's server
- * inside a reaction bar — a per-post, per-reaction request to an arbitrary
- * host, which is a tracking pixel in everything but name, and an image this
- * instance neither moderates nor caches. A shortcode from a peer is therefore
- * dropped rather than shown as a word nobody can read: `:blobcat:` in a
- * reaction bar means nothing to somebody who has never seen the picture.
+ * Unicode emoji and bounded custom shortcode labels are accepted. A custom
+ * reaction's remote image is deliberately never fetched or rendered: it
+ * could track each reader, and this instance neither moderates nor caches
+ * that image. Keeping its shortcode preserves a text label and the fact that
+ * the reaction happened.
  */
 class ReactionService {
 	use TStringTools;
@@ -70,17 +67,19 @@ class ReactionService {
 	/**
 	 * Whether this is something the app will store and draw.
 	 *
-	 * The test is "does this string consist of emoji", not "is this in a list
-	 * of emoji": a list would be a list to maintain, and would be wrong again
-	 * with every Unicode release. Anything carrying a letter, a digit or
-	 * punctuation is text — which is what a `:shortcode:` is, and what an
-	 * attempt to put a sentence in a reaction bar is.
+	 * Unicode emoji are accepted without a fixed list, so new Unicode releases
+	 * do not need code changes. A custom shortcode is accepted only in its
+	 * bounded ASCII label form; arbitrary text, markup and whitespace remain
+	 * invalid.
 	 */
 	public static function isUsableEmoji(string $emoji): bool {
 		$emoji = trim($emoji);
 
 		if ($emoji === '' || strlen($emoji) > self::MAX_LENGTH) {
 			return false;
+		}
+		if (preg_match('/^:[A-Za-z0-9_+-]{1,48}:$/D', $emoji) === 1) {
+			return true;
 		}
 
 		// no letters, digits, punctuation or whitespace anywhere in it

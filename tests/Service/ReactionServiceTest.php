@@ -17,10 +17,9 @@ use PHPUnit\Framework\TestCase;
  * What the app will accept as a reaction, and what a reaction bar comes out
  * looking like.
  *
- * The emoji test is the important one. It decides what a peer may put in a
- * reaction bar on somebody's timeline, and getting it wrong in either
- * direction is bad: too loose and a remote server writes text into the bar,
- * too tight and ordinary emoji from ordinary servers are dropped.
+ * The input test decides what a peer may put in a reaction bar on somebody's
+ * timeline: Unicode emoji and a bounded shortcode label are allowed, while
+ * arbitrary text and markup are refused.
  */
 class ReactionServiceTest extends TestCase {
 	public static function acceptedProvider(): array {
@@ -32,11 +31,12 @@ class ReactionServiceTest extends TestCase {
 			'a zero-width-joiner family' => ['👨‍👩‍👧'],
 			'a rainbow flag, joiner and all' => ['🏳️‍🌈'],
 			'space around it is trimmed' => [' 🎉 '],
+			'a bounded custom emoji label' => [':blobcat:'],
 		];
 	}
 
 	#[DataProvider('acceptedProvider')]
-	public function testAnEmojiIsAccepted(string $emoji): void {
+	public function testAReactionLabelIsAccepted(string $emoji): void {
 		$this->assertTrue(ReactionService::isUsableEmoji($emoji));
 	}
 
@@ -44,8 +44,8 @@ class ReactionServiceTest extends TestCase {
 		return [
 			'nothing at all' => [''],
 			'only space' => ['   '],
-			// the whole reason the check is "is this emoji" and not "is this short"
-			'a custom emoji shortcode' => [':blobcat:'],
+			'an empty shortcode' => ['::'],
+			'a shortcode with a space' => [':blob cat:'],
 			'a word' => ['nice'],
 			'a single letter' => ['a'],
 			'a digit' => ['7'],

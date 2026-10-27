@@ -166,16 +166,14 @@ class InboundCorpusTest extends TestCase {
 	}
 
 	/**
-	 * A Misskey reaction is a `Like` with the emoji in `content` and
-	 * `_misskey_reaction`. The Like model has nowhere to keep either: it is
-	 * read as a plain like, the emoji is dropped.
+	 * Misskey sends its emoji as an ordinary `Like` plus `_misskey_reaction`;
+	 * the parser maps it into the shared reaction model.
 	 */
-	public function testAMisskeyReactionIsReadAsAPlainLike(): void {
-		$like = $this->read('misskey-like-reaction');
+	public function testAMisskeyReactionKeepsItsEmoji(): void {
+		$reaction = $this->read('misskey-like-reaction');
 
-		$this->assertSame('Like', $like->getType());
-		$this->assertNotInstanceOf(EmojiReact::class, $like);
-		$this->assertStringNotContainsString('🍅', (string)json_encode($like->exportAsActivityPub(), JSON_UNESCAPED_UNICODE));
+		$this->assertInstanceOf(EmojiReact::class, $reaction);
+		$this->assertSame('🍅', $reaction->getContent());
 	}
 
 	/** Akkoma's custom-emoji reaction keeps the shortcode as its content. */

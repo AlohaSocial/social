@@ -50,6 +50,16 @@ FEP-3b86 `Follow` relation for both local users and the instance actor. Opening
 the intent does not follow an account automatically; the person confirms the
 action in Social.
 
+## Emoji reactions
+
+Misskey's `Like` activities carrying `_misskey_reaction` are mapped to the
+same reaction model as Akkoma/Pleroma `EmojiReact` activities, preserving the
+chosen Unicode emoji instead of counting it as a plain like. Unicode emoji
+and bounded `:shortcode:` labels are stored and shown as text. Remote custom
+emoji image tags are ignored: opening a post never fetches an arbitrary
+reaction image or exposes each reader to that host. Local reaction controls
+can undo either form by the same label.
+
 ## Bluesky client writes
 
 The existing PDS surface already supports sessions, OAuth, repository writes,

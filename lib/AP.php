@@ -84,6 +84,7 @@ use OCA\Social\Model\ActivityPub\OrderedCollection;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\PeerTubeService;
+use OCA\Social\Service\ReactionService;
 use OCA\Social\Tools\Traits\TArrayTools;
 use OCP\Server;
 
@@ -241,6 +242,18 @@ class AP {
 
 	public function getSimpleItemFromData(array $data, array $atprotoStreamedBlobs = [], bool $deferAttachmentDownloads = false): Acore {
 		$type = $this->get('type', $data, '');
+		// Misskey represents an emoji reaction as an ordinary Like plus its
+		// `_misskey_reaction` extension. Keep ordinary Likes unchanged, but
+		// preserve actual reactions in the shared EmojiReact model.
+		$misskeyReaction = $data['_misskey_reaction']
+			?? $data['misskey:_misskey_reaction']
+			?? $data['https://misskey-hub.net/ns#_misskey_reaction']
+			?? null;
+		if ($type === Like::TYPE && is_string($misskeyReaction)
+			&& ReactionService::isUsableEmoji($misskeyReaction)) {
+			$type = EmojiReact::TYPE;
+			$data['content'] = $misskeyReaction;
+		}
 		$item = $this->getItemFromType($type);
 		if ($item instanceof Stream) {
 			$item->setDeferAttachmentDownloads($deferAttachmentDownloads);

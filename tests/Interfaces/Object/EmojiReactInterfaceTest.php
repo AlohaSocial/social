@@ -34,8 +34,8 @@ require_once __DIR__ . '/../ActivityPubTestCase.php';
  * Reactions arriving from a peer.
  *
  * The three things that matter: an activity a server had no business sending
- * is refused, a redelivery is not counted twice, and nothing a peer sends can
- * put text — or a picture from their server — into somebody's reaction bar.
+ * is refused, a redelivery is not counted twice, and a peer cannot load a
+ * remote picture into somebody's reaction bar.
  */
 #[AllowMockObjectsWithoutExpectations]
 class EmojiReactInterfaceTest extends ActivityPubTestCase {
@@ -119,14 +119,16 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 	}
 
 	/**
-	 * A `:shortcode:` is what the Misskey family sends for a custom emoji, with
-	 * the picture in a `tag` entry. Taking it would mean either drawing an
-	 * image from their server inside the bar or showing a word nobody here can
-	 * read; both are worse than dropping it.
+	 * A `:shortcode:` from a peer is kept as a bounded text label. Its `tag`
+	 * picture is ignored, so viewing the reaction cannot contact the remote
+	 * emoji host.
 	 */
-	public function testACustomEmojiShortcodeIsDropped(): void {
+	public function testACustomEmojiShortcodeIsStoredWithoutFetchingItsImage(): void {
 		$this->thePostExists();
-		$this->reactionsRequest->expects($this->never())->method('save');
+		$this->reactionsRequest->expects($this->once())
+			->method('save')
+			->with($this->callback(static fn (EmojiReact $reaction): bool => $reaction->getContent() === ':blobcat:'))
+			->willReturn(true);
 
 		$this->handler->processIncomingRequest($this->aReaction(':blobcat:'));
 	}

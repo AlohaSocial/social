@@ -63,9 +63,8 @@ import { showError } from '../services/toast.js'
  * refused — an emoji the server will not take, a suspended account — and a
  * count that jumped and then jumped back is worse than one that waits a moment.
  *
- * Unicode emoji only. The picker offers nothing else, and the server refuses
- * anything else, for the reason ReactionService gives: a custom `:shortcode:`
- * means drawing a picture from somebody else's server inside the bar.
+ * The picker offers Unicode emoji. Bounded remote `:shortcode:` labels can
+ * also appear, but their images are never fetched or drawn.
  */
 export default {
 	name: 'ReactionBar',

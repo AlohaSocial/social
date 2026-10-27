@@ -25,8 +25,7 @@ use OCA\Social\Model\ActivityPub\ACore;
  * agree on: a single unicode emoji, or a shortcode like `:blobcat:` for a
  * custom one, with the picture in a `tag` entry. This app reads the shortcode
  * and ignores the picture — see ReactionService for why — so a custom emoji
- * from a peer is shown as the word between the colons rather than as somebody
- * else's image loaded from their server.
+ * from a peer is kept as a text label rather than loaded from their server.
  *
  * A reaction with no `content` is the receiving implementation's problem to
  * name; Pleroma treats it as a plain Like. Here it is refused, because a
