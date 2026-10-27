@@ -18,13 +18,17 @@ use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\FacetRenderer;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
+use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Exceptions\StreamNotFoundException;
+use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Service\CacheActorService;
 use OCA\Social\Service\ConversationService;
 use OCA\Social\Service\DurableCache;
+use OCA\Social\Service\ReactionService;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -64,6 +68,7 @@ class ChatStore {
 		private StreamRequest $streams,
 		private CacheActorService $cacheActors,
 		private ConversationService $conversations,
+		private ReactionsRequest $reactions,
 	) {
 	}
 
@@ -87,7 +92,10 @@ class ChatStore {
 		$sender = (string)($message['sender']['did'] ?? '');
 		$id = (string)($message['id'] ?? '');
 		if ($sender === $identity->did) {
-			return $this->own($identity, $convoId, $message, $members);
+			$stored = $this->own($identity, $convoId, $message, $members);
+			$this->storeMessageReactions($identity, $convoId, $message);
+
+			return $stored;
 		}
 		if (!Syntax::isDid($sender) || $id === '' || $this->blocklist->isBlockedDid($sender)) {
 			return false;
@@ -118,6 +126,7 @@ class ChatStore {
 		if (!$known) {
 			throw new \RuntimeException('Bluesky direct message was not durably stored');
 		}
+		$this->storeMessageReactions($identity, $convoId, $message);
 		$this->remember($identity->did, $convoId, $noteId);
 
 		return $stored;
@@ -215,6 +224,79 @@ class ChatStore {
 		$this->streams->deleteById($noteId, Note::TYPE);
 
 		return true;
+	}
+
+	/**
+	 * A reaction in a Bluesky chat log, or one attached to a backfilled message.
+	 * Reactions use the existing local EmojiReact table so direct conversations
+	 * expose the same summaries as other messages.
+	 *
+	 * An old message may not be present here (the initial import is deliberately
+	 * limited to unread messages). Such a reaction cannot be displayed and is
+	 * intentionally ignored; database failures still propagate so
+	 * the chat cursor can retry them.
+	 *
+	 * @param array $message a `messageView` or `deletedMessageView`
+	 * @param array $reaction a `reactionView`
+	 */
+	public function reaction(Identity $identity, string $convoId, array $message, array $reaction, bool $added, string $revision = ''): bool {
+		$sender = (string)($message['sender']['did'] ?? '');
+		$messageId = (string)($message['id'] ?? '');
+		$actorDid = (string)($reaction['sender']['did'] ?? '');
+		$emoji = trim((string)($reaction['value'] ?? ''));
+		if (!Syntax::isDid($sender) || $messageId === '' || !Syntax::isDid($actorDid)
+			|| !ReactionService::isUsableEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {
+			return false;
+		}
+		if ($added && $this->blocklist->isBlockedDid($actorDid)) {
+			return false;
+		}
+
+		$objectId = $this->sentHere($sender, $messageId);
+		$objectId = $objectId !== '' ? $objectId : self::messageId($sender, $convoId, $messageId);
+		$actorId = $actorDid === $identity->did ? $identity->actorId : BlueskyIds::actorId($actorDid);
+		if (!$added) {
+			$this->reactions->deleteReaction($actorId, $objectId, $emoji);
+
+			return true;
+		}
+
+		try {
+			$this->streams->getStreamById($objectId);
+		} catch (StreamNotFoundException) {
+			return false;
+		}
+		try {
+			$this->reactions->getReaction($actorId, $objectId, $emoji);
+			return false;
+		} catch (ActionDoesNotExistException) {
+			// Not yet in the local reaction summary.
+		}
+
+		$createdAt = (string)($reaction['createdAt'] ?? '');
+		$eventKey = $revision !== '' ? $revision : hash('sha256', $createdAt . '\\0' . $emoji);
+		$record = new EmojiReact();
+		$record->setId(
+			$actorId . '/convo/' . rawurlencode($convoId) . '/' . rawurlencode($messageId)
+			. '/reaction/' . rawurlencode($eventKey)
+		);
+		$record->setActorId($actorId);
+		$record->setObjectId($objectId);
+		$record->setContent($emoji);
+		if ($createdAt !== '') {
+			$record->setPublished($createdAt);
+		}
+
+		return $this->reactions->save($record);
+	}
+
+	/** Stores the reactions Bluesky includes in a message view. */
+	private function storeMessageReactions(Identity $identity, string $convoId, array $message): void {
+		foreach (is_array($message['reactions'] ?? null) ? $message['reactions'] : [] as $reaction) {
+			if (is_array($reaction)) {
+				$this->reaction($identity, $convoId, $message, $reaction, true);
+			}
+		}
 	}
 
 	/**

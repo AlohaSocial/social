@@ -45,6 +45,8 @@ class ChatPoller {
 	private const READ = 'chat.bsky.convo.defs#logReadConvo';
 	/** the older name of `logReadConvo`, which a chat service may still send */
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
+	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
+	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
 	/** Log records which affect chat state Aloha does not currently model. */
 	private const IGNORED_LOGS = [
 		'chat.bsky.convo.defs#logBeginConvo',
@@ -300,7 +302,7 @@ class ChatPoller {
 			$convo = (string)($log['convoId'] ?? '');
 			$type = (string)($log['$type'] ?? '');
 			$message = is_array($log['message'] ?? null) ? $log['message'] : null;
-			if (in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE], true)) {
+			if (in_array($type, [self::CREATE, self::DELETE, self::READ, self::READ_MESSAGE, self::ADD_REACTION, self::REMOVE_REACTION], true)) {
 				if ($convo === '' || $message === null) {
 					throw new \RuntimeException('Bluesky chat log event is missing its conversation or message');
 				}
@@ -308,12 +310,14 @@ class ChatPoller {
 					self::CREATE => $this->create($identity, $key, $convo, $message) ? 1 : 0,
 					self::DELETE => $this->store->deleted($identity, $convo, $message) ? 1 : 0,
 					self::READ, self::READ_MESSAGE => $this->store->read($identity, $convo, $message) ? 1 : 0,
+					self::ADD_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], true, $log['rev']
+					) ? 1 : 0,
+					self::REMOVE_REACTION => $this->store->reaction(
+						$identity, $convo, $message, is_array($log['reaction'] ?? null) ? $log['reaction'] : [], false, $log['rev']
+					) ? 1 : 0,
 				};
-			} elseif (!in_array($type, self::IGNORED_LOGS, true)
-				&& !in_array($type, [
-					'chat.bsky.convo.defs#logAddReaction',
-					'chat.bsky.convo.defs#logRemoveReaction',
-				], true)) {
+			} elseif (!in_array($type, self::IGNORED_LOGS, true)) {
 				// An unknown future event must not be acknowledged as though this
 				// reader understood it. Known non-message events above are deliberate
 				// no-ops; newer lexicon variants are retried after an update.
