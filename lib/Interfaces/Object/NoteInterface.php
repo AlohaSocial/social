@@ -175,7 +175,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 	 * channel they run) whose object they edit before they can be replayed.
 	 */
 	private function rememberEarlyUpdate(ACore $activity, ACore $item): void {
-		if ($this->durableCache === null || $item->getId() === '' || $activity->getActorId() === '') {
+		if (!$item instanceof Stream || $this->durableCache === null || $item->getId() === '' || $activity->getActorId() === '') {
 			return;
 		}
 		$author = $item->getAttributedTo();

@@ -92,7 +92,7 @@ export default {
 		deleteButtons() {
 			return [
 				{ label: t('social', 'Cancel'), callback: () => { this.deleteDialogOpen = false } },
-				{ label: t('social', 'Delete draft'), variant: 'error', callback: () => {
+				{ label: t('social', 'Delete draft'), variant: /** @type {'error'} */ ('error'), callback: () => {
 					this.deleteDialogOpen = false
 					this.delete(this.deleteContext)
 				} },

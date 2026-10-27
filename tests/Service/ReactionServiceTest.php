@@ -32,6 +32,7 @@ class ReactionServiceTest extends TestCase {
 			'a rainbow flag, joiner and all' => ['🏳️‍🌈'],
 			'space around it is trimmed' => [' 🎉 '],
 			'a bounded custom emoji label' => [':blobcat:'],
+			'a remote custom emoji label qualified by its host' => [':blobcat@misskey.example:'],
 		];
 	}
 
@@ -46,6 +47,7 @@ class ReactionServiceTest extends TestCase {
 			'only space' => ['   '],
 			'an empty shortcode' => ['::'],
 			'a shortcode with a space' => [':blob cat:'],
+			'a malformed remote shortcode host' => [':blobcat@-misskey.example:'],
 			'a word' => ['nice'],
 			'a single letter' => ['a'],
 			'a digit' => ['7'],
@@ -56,6 +58,12 @@ class ReactionServiceTest extends TestCase {
 			'an html fragment' => ['<b>'],
 			'longer than the column' => [str_repeat('👍', 20)],
 		];
+	}
+
+	public function testAOutboundCustomShortcodeIsRefusedWithoutItsEmojiTag(): void {
+		$this->assertFalse(ReactionService::isUsableOutboundEmoji(':blobcat:'));
+		$this->assertFalse(ReactionService::isUsableOutboundEmoji(':blobcat@misskey.example:'));
+		$this->assertTrue(ReactionService::isUsableOutboundEmoji('👍'));
 	}
 
 	#[DataProvider('refusedProvider')]

@@ -35,11 +35,17 @@ use OCA\Social\Model\ActivityPub\Object\Like;
 use OCA\Social\Model\ActivityPub\Object\Note;
 use OCA\Social\Model\ActivityPub\Object\Tombstone;
 use OCA\Social\Model\ActivityPub\Stream;
+use OCA\Social\Model\Client\AttachmentMeta;
+use OCA\Social\Model\Client\AttachmentMetaDim;
+use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\InstancePath;
+use OCA\Social\Model\LinkedDataSignature;
 use OCA\Social\Model\RequestQueue;
 use OCA\Social\Service\ActivityService;
+use OCA\Social\Service\ChannelService;
 use OCA\Social\Service\ConfigService;
 use OCA\Social\Service\CurlService;
+use OCA\Social\Service\FediverseDirectoryService;
 use OCA\Social\Service\RequestQueueService;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tools\Exceptions\RequestContentException;
@@ -136,6 +142,7 @@ class ActivityServiceTest extends TestCase {
 
 	protected function tearDown(): void {
 		AP::set(null);
+		\OC::$server->reset();
 	}
 
 	/**
@@ -1162,6 +1169,111 @@ class ActivityServiceTest extends TestCase {
 		$this->assertSame('video/mp4', $sent['object']['attachment'][0]['mediaType']);
 		$this->assertSame('https://social.example/media/new.mp4', $sent['object']['attachment'][0]['url']);
 		$this->assertStringNotContainsString('quicktime', $bodies[0]);
+	}
+
+	private function releaseVideoVariantsAfterNodeInfoChange(array $softwareAtRelease): array {
+		$software = ['pixelfed.example' => 'pixelfed', 'peertube.example' => 'peertube'];
+		$directory = $this->createStub(FediverseDirectoryService::class);
+		$directory->method('knownSoftware')->willReturnCallback(function (string $host) use (&$software): string {
+			return $software[$host] ?? '';
+		});
+		$service = new ActivityService(
+			$this->followsRequest, $this->cacheActorsRequest, $this->signatureService,
+			$this->requestQueueService, $this->curlService, $this->configService,
+			$this->actorsRequest, $this->relayRequest, $this->hostBreakerRequest,
+			$this->logger, $this->streamRequest, $directory
+		);
+		$channel = $this->createStub(ChannelService::class);
+		$channel->method('attributionOf')->willReturn([
+			['type' => 'Group', 'id' => 'https://social.example/@alice_channel'],
+			['type' => 'Person', 'id' => self::ALICE_ID],
+		]);
+		\OC::$server->register(ChannelService::class, $channel);
+
+		$note = $this->note();
+		$note->setLocal(true);
+		$note->setInstancePaths([
+			new InstancePath('https://pixelfed.example/inbox', InstancePath::TYPE_INBOX, InstancePath::PRIORITY_LOW),
+			new InstancePath('https://peertube.example/inbox', InstancePath::TYPE_INBOX, InstancePath::PRIORITY_LOW),
+		]);
+		$attachmentMeta = new AttachmentMeta();
+		$attachmentMeta->setDuration(60);
+		$dimensions = new AttachmentMetaDim([1280, 720]);
+		$dimensions->setDuration(60);
+		$attachmentMeta->setOriginal($dimensions);
+		$attachmentMeta->setSmall(new AttachmentMetaDim([640, 360]));
+		$attachment = (new MediaAttachment())
+			->setId('7')->setType('video')->setMediaType('video/mp4')
+			->setUrl('https://social.example/media/video.mp4')
+			->setPreviewUrl('https://social.example/media/poster.jpg')
+			->setDescription('Video description')
+			->setSizeBytes(1_048_576)->setMeta($attachmentMeta);
+		$note->setAttachments([$attachment]);
+		$create = new Create();
+		$create->setId(self::NOTE_ID . '/activity');
+		$create->setObject($note);
+		$create->setActor($this->alice());
+		$create->setToArray([ACore::CONTEXT_PUBLIC]);
+		$create->setInstancePaths($note->getInstancePaths());
+
+		$variants = [];
+		$this->signatureService->expects($this->exactly(4))->method('signObject')
+			->willReturnCallback(function (Person $actor, ACore $activity): void {
+				$activity->setSignature((new LinkedDataSignature())
+					->setType('RsaSignature2017')
+					->setCreator($actor->getId() . '#main-key')
+					->setCreated('2026-10-27T00:00:00Z')
+					->setSignatureValue('test-signature'));
+			});
+		$this->requestQueueService->expects($this->once())->method('generateRequestQueueWithVariants')
+			->willReturnCallback(function (array $paths, string $default, array $perInbox) use (&$variants): string {
+				$variants = $perInbox;
+				foreach ($perInbox as $body) {
+					$this->assertNotEmpty(json_decode($body, true)['signature']['signatureValue'] ?? '');
+				}
+				return self::TOKEN;
+			});
+		$this->assertSame(self::TOKEN, $service->request($create, time() + 600));
+		$this->assertSame('Note', json_decode($variants['https://pixelfed.example/inbox'], true)['object']['type']);
+		$this->assertSame('Video', json_decode($variants['https://peertube.example/inbox'], true)['object']['type']);
+
+		$software = $softwareAtRelease;
+		$rows = [];
+		foreach ($variants as $inbox => $body) {
+			$row = new RequestQueue($body, new InstancePath($inbox, InstancePath::TYPE_INBOX, InstancePath::PRIORITY_LOW), self::ALICE_ID);
+			$row->setToken(self::TOKEN);
+			$rows[] = $row;
+		}
+		$this->requestQueueService->method('getHeld')->with(self::NOTE_ID)->willReturn($rows);
+		$this->streamRequest->method('getStreamById')->with(self::NOTE_ID)->willReturn($note);
+		$this->actorsRequest->method('getFromId')->with(self::ALICE_ID)->willReturn($this->alice());
+		$bodies = [];
+		$this->requestQueueService->expects($this->exactly(2))->method('releaseRequest')
+			->willReturnCallback(function (RequestQueue $queue, string $body) use (&$bodies): bool {
+				$bodies[$queue->getInstance()->getAddress()] = $body;
+				return true;
+			});
+		$this->curlService->expects($this->once())->method('asyncWithToken')->with(self::TOKEN);
+		$this->assertSame(2, $service->releaseHeld(self::NOTE_ID));
+		foreach ($bodies as $body) {
+			$this->assertNotEmpty(json_decode($body, true)['signature']['signatureValue'] ?? '');
+		}
+
+		return array_map(static fn (string $body): string => json_decode($body, true)['object']['type'], $bodies);
+	}
+
+	public function testDelayedVideoVariantsKeepTheirSignedRepresentationWhenNodeInfoExpires(): void {
+		$this->assertSame(
+			['pixelfed.example' => 'Note', 'peertube.example' => 'Video'],
+			$this->releaseVideoVariantsAfterNodeInfoChange([])
+		);
+	}
+
+	public function testDelayedVideoVariantsFollowUpdatedNodeInfoAndAreResigned(): void {
+		$this->assertSame(
+			['pixelfed.example' => 'Video', 'peertube.example' => 'Note'],
+			$this->releaseVideoVariantsAfterNodeInfoChange(['pixelfed.example' => 'peertube', 'peertube.example' => 'pixelfed'])
+		);
 	}
 
 	/** An edit made while the post waited goes out rebuilt too, as an Update. */
