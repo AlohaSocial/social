@@ -333,6 +333,18 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame([], $this->records);
 	}
 
+	public function testCreateRecordCannotOverwriteAnExistingOpaqueRecord(): void {
+		$collection = 'com.example.notes.entry';
+		$this->records[] = $this->record($collection, 'first', '');
+		$this->repositories->expects($this->never())->method('write');
+		$this->expectException(XrpcException::class);
+		$this->expectExceptionMessage('A record already exists');
+		$this->writes->create($this->session, [
+			'repo' => self::DID, 'collection' => $collection, 'rkey' => 'first',
+			'record' => ['$type' => $collection, 'title' => 'Replacement'],
+		]);
+	}
+
 	public function testApplyWritesCanAtomicallyStoreCustomCollections(): void {
 		$collection = 'com.example.notes.entry';
 		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
@@ -352,6 +364,22 @@ class WriteServiceTest extends TestCase {
 		$this->assertCount(2, $answer['results']);
 		$this->assertSame('valid', $answer['results'][1]['validationStatus']);
 		$this->assertSame(['cid' => Cid::forRaw('custom batch')->toString(), 'rev' => '3kcustom'], $answer['commit']);
+	}
+
+	public function testOpaqueRecordCreationChecksTheExpectedCommitAtomically(): void {
+		$expected = Cid::forRaw('previous commit')->toString();
+		$this->repositories->expects($this->once())->method('write')
+			->with(self::DID, $this->anything(), $this->callback(static fn (array $writes): bool => $writes[0]->action === RepoWrite::CREATE), $expected)
+			->willThrowException(new InvalidSwapException('The repository changed'));
+		try {
+			$this->writes->create($this->session, [
+				'repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first',
+				'record' => ['$type' => 'com.example.notes.entry', 'title' => 'Entry'], 'swapCommit' => $expected,
+			]);
+			$this->fail('A stale commit must refuse record creation');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
 	}
 
 	public function testAnAppCanCreateAProfileLinkAndSelectItInTheProfile(): void {

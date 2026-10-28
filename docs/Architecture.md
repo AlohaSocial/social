@@ -586,6 +586,10 @@ schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
 size validation, but their application-specific schema and semantics are not
 known to Aloha Social. OAuth collection scopes and own-repository checks still
 apply to each write.
+For records retained as written, `createRecord` always uses a repository create
+operation and refuses an existing key, including under concurrent writes.
+Its optional `swapCommit` is checked under the repository lock; `putRecord`
+continues to create or replace records with its existing conditional guards.
 
 ### Resuming Bluesky synchronization
 

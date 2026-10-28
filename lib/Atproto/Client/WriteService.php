@@ -153,6 +153,10 @@ class WriteService {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
 		$postRkey = null;
 		if ($collection === RecordMapper::POST && array_key_exists('rkey', $body)) {
 			if (!is_string($body['rkey']) || !Tid::isValid($body['rkey']) || !Mst::isValidKey($collection . '/' . $body['rkey'])) {
@@ -171,7 +175,7 @@ class WriteService {
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
 			BlueskyBlocks::COLLECTION => $this->block($session, $actor, $record),
 			default => self::keepsAsWritten($collection)
-				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record)
+				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, false, $swapCommit)
 				: throw $this->unsupported($collection),
 		};
 
@@ -1445,7 +1449,7 @@ class WriteService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function keep(ClientSession $session, string $collection, string $rkey, array $record): StoredRecord {
+	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null): StoredRecord {
 		// links, bytes and empty maps as the repository models them
 		$record = DagCbor::fromLexJson($record);
 		$did = $session->identity->did;
@@ -1468,10 +1472,13 @@ class WriteService {
 		}
 		$record['$type'] = $collection;
 		$was = $this->repositories->getRecord($did, $collection, $rkey);
+		if (!$replace && $was !== null) {
+			throw XrpcException::invalidRequest('A record already exists at ' . $collection . '/' . $rkey);
+		}
 		// a record replaced stands for what it stood for before
-		$this->writeRaw($session, $was === null
+		$this->writeRaw($session, !$replace || $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
-			: RepoWrite::update($collection, $rkey, $record, $was->localId));
+			: RepoWrite::update($collection, $rkey, $record, $was->localId), $swapCommit);
 
 		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
@@ -1517,9 +1524,14 @@ class WriteService {
 	/**
 	 * @throws XrpcException
 	 */
-	private function writeRaw(ClientSession $session, RepoWrite $write): void {
+	private function writeRaw(ClientSession $session, RepoWrite $write, ?string $swapCommit = null): void {
+		if ($swapCommit !== null && $this->repositories->batchActive()) {
+			throw XrpcException::invalidRequest('Conditional record creation cannot be nested inside another repository batch');
+		}
 		try {
-			$this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), [$write]);
+			$this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), [$write], $swapCommit);
+		} catch (InvalidSwapException $e) {
+			throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
 		} catch (AtprotoException $e) {
 			throw XrpcException::invalidRequest($e->getMessage());
 		}
