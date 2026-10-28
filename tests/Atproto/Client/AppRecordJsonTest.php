@@ -20,6 +20,7 @@ use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Cid;
+use OCA\Social\Atproto\Protocol\DagCbor;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoEventRequest;
@@ -106,6 +107,28 @@ class AppRecordJsonTest extends TestCase {
 		$this->assertSame(bin2hex($expected), bin2hex((string)$stored?->bytes));
 		$this->assertSame(Cid::forDagCbor($expected)->toString(), $answer['cid']);
 		$this->assertSame('unknown', $answer['validationStatus']);
+	}
+
+	public function testNumericKeyObjectsRemainMapsAcrossEveryWriteOperation(): void {
+		$record = '{"$type":"com.example.notes.entry","metadata":{"0":"first"},"list":["first"]}';
+		$body = '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"numeric","record":' . $record . '}';
+		$created = $this->call('com.atproto.repo.createRecord', $body);
+		$updated = $this->call('com.atproto.repo.putRecord', $body);
+		$this->assertSame($created['cid'], $updated['cid']);
+		$batch = $this->call('com.atproto.repo.applyWrites', '{"repo":"' . self::DID . '","writes":[{"$type":"com.atproto.repo.applyWrites#create","collection":"com.example.notes.entry","rkey":"numeric-batch","value":' . $record . '}]}');
+		$this->assertSame($created['cid'], $batch['results'][0]['cid']);
+
+		foreach (['numeric', 'numeric-batch'] as $key) {
+			$stored = $this->store->getRecord(self::DID, 'com.example.notes.entry', $key);
+			$this->assertNotNull($stored);
+			$this->assertStringContainsString("\xa1\x610\x65first", $stored->bytes);
+			$decoded = $stored->value();
+			$this->assertInstanceOf(\stdClass::class, $decoded['metadata']);
+			$this->assertSame(['first'], $decoded['list']);
+			$this->assertSame($stored->bytes, DagCbor::encode($decoded));
+			$this->assertEquals(json_decode($record, true), json_decode(json_encode(DagCbor::toLexJson($decoded), JSON_THROW_ON_ERROR), true));
+			$this->assertStringContainsString('"metadata":{"0":"first"}', json_encode(DagCbor::toLexJson($decoded), JSON_THROW_ON_ERROR));
+		}
 	}
 
 	public function testExplicitValidationRejectsAnUnknownLexicon(): void {

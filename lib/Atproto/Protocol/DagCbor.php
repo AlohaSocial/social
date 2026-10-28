@@ -80,7 +80,7 @@ final class DagCbor {
 		if ($value instanceof stdClass) {
 			$properties = get_object_vars($value);
 
-			return $properties === [] ? new stdClass() : self::toLexJson($properties);
+			return (object)self::toLexJson($properties);
 		}
 		if ($value instanceof Cid) {
 			return ['$link' => $value->toString()];
@@ -108,6 +108,7 @@ final class DagCbor {
 	 * @throws InvalidArgumentException when a $link is not a CID or $bytes not base64
 	 */
 	public static function fromLexJson(mixed $value): mixed {
+		$objectMap = $value instanceof stdClass;
 		if ($value instanceof stdClass) {
 			$value = get_object_vars($value);
 			if ($value === []) {
@@ -142,7 +143,7 @@ final class DagCbor {
 			$out[$key] = self::fromLexJson($item);
 		}
 
-		return $out;
+		return $objectMap && array_filter(array_keys($out), 'is_int') !== [] ? (object)$out : $out;
 	}
 
 	private static function encodeValue(mixed $value, int $depth): string {
@@ -281,7 +282,7 @@ final class DagCbor {
 					$map[$key] = self::decodeValue($bytes, $offset, $depth + 1);
 				}
 
-				return $map === [] ? new stdClass() : $map;
+				return ($map === [] || array_filter(array_keys($map), 'is_int') !== []) ? (object)$map : $map;
 			case self::MAJOR_TAG:
 				if ($argument !== self::TAG_CID) {
 					throw new InvalidArgumentException('CBOR tag not allowed: ' . $argument);

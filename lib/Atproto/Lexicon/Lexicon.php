@@ -175,7 +175,8 @@ class Lexicon {
 		if ($value === null || is_bool($value) || is_int($value) || $value instanceof Bytes || $value instanceof Cid) {
 			return;
 		}
-		if ($value instanceof \stdClass) {
+		$objectMap = $value instanceof \stdClass;
+		if ($objectMap) {
 			$value = get_object_vars($value);
 		}
 		if (!is_array($value)) {
@@ -183,7 +184,7 @@ class Lexicon {
 		}
 		$isList = array_is_list($value);
 		foreach ($value as $key => $item) {
-			if (!$isList && !is_string($key)) {
+			if (!$objectMap && !$isList && !is_string($key)) {
 				throw new LexiconException('Opaque record map keys must be strings');
 			}
 			$this->checkOpaqueValue($item, $depth + 1, $count);

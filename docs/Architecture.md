@@ -586,7 +586,9 @@ them without converting them into ActivityPub objects. Vendored Lexicons are
 schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
 size validation, but their application-specific schema and semantics are not
 known to Aloha Social. OAuth collection scopes and own-repository checks still
-apply to each write.
+apply to each write. Empty objects and objects with numeric string keys retain
+their map identity through XRPC JSON parsing, DAG-CBOR storage and readback;
+JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
 `validate: true` requires a known schema; `false` keeps protocol structural
 checks but skips schema validation; omission validates known schemas and
 retains unknown ones structurally. The mode travels with each `RepoWrite` into
