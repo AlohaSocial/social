@@ -228,7 +228,7 @@ the old one. One run takes about twenty minutes.
 beside the Mastodon one rather than after it, and it runs when that one
 does: nightly, on demand, and on a pull request that touches the federation
 code or carries the `interop` or the `full-ci` label. It stands up
-the official Pixelfed image (`ghcr.io/pixelfed/pixelfed`, pinned by tag and
+the official Pixelfed v0.15.2 image (`ghcr.io/pixelfed/pixelfed`, pinned by tag and
 digest) with MySQL, Redis and a second container running Horizon — every
 delivery, fetch and fan-out on Pixelfed is a queued job, so without Horizon
 nothing leaves it.
@@ -482,3 +482,13 @@ Run it by hand with PostgreSQL and Redis at `DB_POSTGRES_URL` and
 with `SOCIAL_URL` set to the instance and `NODE_EXTRA_CA_CERTS` to its CA when
 the certificate is private, then `ATPROTO_NETWORK_FILE=/tmp/atproto-network.json
 composer run test:interop -- --filter AtprotoVisibleTest`.
+
+### Pixelfed video-edit rendering regression
+
+Pixelfed v0.14.4 stored incoming caption edits but left its separate `rendered`
+HTML unchanged. The API could therefore acknowledge an edit and show its new
+`edited_at` while continuing to display the old post. The current official
+v0.15.2 image updates both fields. The delivery test still requires the new
+text in the client-visible `content`, followed by deletion; it is not replaced
+by a delivery-status or database-only assertion. Failed runs print both stored
+caption/rendered values and the remote update-worker jobs for diagnosis.

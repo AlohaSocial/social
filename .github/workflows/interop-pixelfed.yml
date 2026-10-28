@@ -60,9 +60,9 @@ jobs:
 
     env:
       APP_NAME: social
-      # Pixelfed v0.14.4, the official image, pinned by digest: a moved tag
+      # Pixelfed v0.15.2, the official image, pinned by digest: a moved tag
       # would change what is being tested without a commit here saying so
-      PIXELFED_IMAGE: ghcr.io/pixelfed/pixelfed:v0.14.4@sha256:7d96925cb75c763878ab72a4e1a37c09fe64fffa8a0ad5ae68f90a3bacbab69e
+      PIXELFED_IMAGE: ghcr.io/pixelfed/pixelfed:v0.15.2@sha256:f1237913ef0d392a5afef1dab8e3dd01234435ea90314a3a7221a2ea00932132
       PIXELFED_HOST: pixelfed.test
       PIXELFED_BASE_URL: https://pixelfed.test
       PIXELFED_USER: interop

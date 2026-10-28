@@ -52,7 +52,7 @@ and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-
 
 ### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
 
-The pinned Pixelfed v0.14.4 interop run accepts the video Update and stores its
+The interop run against Pixelfed v0.14.4 accepts the video Update and stores its
 new caption and `edited_at`, but its API continues to render the original HTML.
 The upstream [update pipeline](https://github.com/pixelfed/pixelfed/blob/v0.14.4/app/Jobs/StatusPipeline/StatusRemoteUpdatePipeline.php)
 changes `caption` without updating `rendered`, which the
@@ -60,7 +60,11 @@ changes `caption` without updating `rendered`, which the
 prefers over the caption. The real-peer edit assertion remains enforced;
 successful delivery or an updated database caption is not counted as successful
 user-visible editing. Failure diagnostics include the peer's worker jobs and
-stored caption/edit state. A peer fix or verified newer version is still needed.
+stored caption/edit state. CI now pins official Pixelfed v0.15.2, whose
+[update pipeline](https://github.com/pixelfed/pixelfed/blob/v0.15.2/app/Jobs/StatusPipeline/StatusRemoteUpdatePipeline.php)
+updates `rendered` as well. The unchanged visible-edit assertion must pass on
+that image before this compatibility path is considered verified. Older
+Pixelfed installations can still exhibit the rendering defect.
 
 ### Compatibility surfaces must be maintained deliberately
 
