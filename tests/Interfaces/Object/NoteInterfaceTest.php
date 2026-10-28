@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Social\Tests\Interfaces\Object;
 
+use OCA\Social\AP;
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\CacheActorDoesNotExistException;
@@ -31,6 +32,7 @@ use OCA\Social\Model\ActivityPub\Stream;
 use OCA\Social\Model\Client\MediaAttachment;
 use OCA\Social\Model\Details;
 use OCA\Social\Model\StreamQueue;
+use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\FileCommentsService;
 use OCA\Social\Service\ForwardService;
 use OCA\Social\Service\LinkPreviewService;
@@ -725,6 +727,33 @@ class NoteInterfaceTest extends ActivityPubTestCase {
 			->with($this->identicalTo($stored), $this->identicalTo($note));
 
 		$this->handler->activity($this->wrap(Update::TYPE, $note), $note);
+	}
+
+	public function testEarlyEventUpdatePreservesItsOriginalFieldsForReplay(): void {
+		$data = [
+			'type' => 'Update', 'id' => self::NOTE . '/updates/1', 'actor' => $this->bob->getId(),
+			'object' => [
+				'type' => 'Event', 'id' => self::NOTE, 'attributedTo' => $this->bob->getId(),
+				'name' => 'Changed event', 'content' => '<p>New description</p>',
+				'startTime' => '2026-11-02T10:00:00Z', 'endTime' => '2026-11-02T12:00:00Z',
+				'location' => ['type' => 'Place', 'name' => 'New venue'],
+				'ical:status' => 'CANCELLED', 'updated' => '2026-10-28T10:00:00Z',
+			],
+		];
+		$activity = AP::instance()->getItemFromData($data);
+		$activity->setOrigin(self::REMOTE_HOST, SignatureService::ORIGIN_HEADER, time());
+		$this->streamRequest->method('getStreamById')->willThrowException(new StreamNotFoundException());
+		$cache = $this->createMock(DurableCache::class);
+		$cache->expects($this->once())->method('setShared')->willReturnCallback(function (string $namespace, string $key, array $pending, int $ttl) use ($data): void {
+			$this->assertSame($data, $pending['activity']);
+			$replayed = AP::instance()->getItemFromData($pending['activity']);
+			$this->assertSame('Event', $replayed->getObject()->getSubType());
+			$this->assertSame('New venue', $replayed->getObject()->getDetailsAll()[Details::EVENT]['location']);
+			$this->assertSame('cancelled', $replayed->getObject()->getDetailsAll()[Details::EVENT]['status']);
+		});
+		(new \ReflectionProperty(NoteInterface::class, 'durableCache'))->setValue($this->handler, $cache);
+
+		$this->handler->activity($activity, $activity->getObject());
 	}
 
 	public function testEventMetadataUpdateIsStoredAndRecordsARevision(): void {

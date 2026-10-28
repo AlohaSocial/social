@@ -195,6 +195,9 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			return;
 		}
 
+		$source = json_decode($activity->getSource(), true);
+		$replay = is_array($source) && ($source['type'] ?? '') === Update::TYPE
+			? $source : $activity->jsonSerialize();
 		$this->durableCache->setShared(self::EARLY_UPDATE_NAMESPACE, $key, [
 			'actor' => $activity->getActorId(),
 			'author' => $author,
@@ -202,7 +205,7 @@ class NoteInterface extends AbstractActivityPubInterface implements IActivityPub
 			'origin' => $activity->getRoot()->getOrigin(),
 			'updated' => $item->getUpdated(),
 			'received' => $activity->getRoot()->getOriginCreationTime(),
-			'activity' => $activity->jsonSerialize(),
+			'activity' => $replay,
 		], self::EARLY_UPDATE_TTL);
 	}
 

@@ -16,6 +16,7 @@ use OCA\Social\Interfaces\Object\LikeInterface;
 use OCA\Social\Interfaces\Object\NoteInterface;
 use OCA\Social\Model\ActivityPub\Object\Announce;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Model\Details;
 use OCA\Social\Model\LinkedDataSignature;
 use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\SignatureService;
@@ -175,6 +176,34 @@ class RedeliveryOrderTest extends InboxTestCase {
 
 		$this->assertSame('<p>edited</p>', $this->stored(self::POST)?->getContent());
 		$this->assertSame('2026-05-01T11:00:00Z', $this->stored(self::POST)?->getUpdated());
+	}
+
+	public function testAnEarlyEventUpdatePreservesDatesVenueAndCancellationAfterCreate(): void {
+		$original = array_replace($this->note('<p>Original event</p>'), [
+			'type' => 'Event', 'name' => 'Original name',
+			'startTime' => '2026-11-01T10:00:00Z',
+			'location' => ['type' => 'Place', 'name' => 'Original venue'],
+		]);
+		$edited = array_replace($original, [
+			'name' => 'Changed name', 'content' => '<p>Cancelled event</p>',
+			'startTime' => '2026-11-02T10:00:00Z', 'endTime' => '2026-11-02T12:00:00Z',
+			'location' => ['type' => 'Place', 'name' => 'Changed venue'],
+			'ical:status' => 'CANCELLED', 'updated' => '2026-05-01T11:00:00Z',
+		]);
+		$this->assertTrue($this->deliver($this->activity('Update', self::POST . '#updates/event', $edited)));
+		$this->assertNull($this->stored(self::POST));
+		$this->assertTrue($this->deliver($this->activity('Create', self::POST . '/activity', $original)));
+
+		$post = $this->stored(self::POST);
+		$this->assertNotNull($post);
+		$this->assertSame('Event', $post->getSubType());
+		$this->assertSame('<p>Cancelled event</p>', $post->getContent());
+		$event = $post->getDetailsAll()[Details::EVENT];
+		$this->assertSame('Changed name', $event['name']);
+		$this->assertSame('2026-11-02T10:00:00Z', $event['start_time']);
+		$this->assertSame('2026-11-02T12:00:00Z', $event['end_time']);
+		$this->assertSame('Changed venue', $event['location']);
+		$this->assertSame('cancelled', $event['status']);
 	}
 
 	/** Only the newest pre-Create edit is retained, even if an older delivery arrives last. */
