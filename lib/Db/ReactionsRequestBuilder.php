@@ -21,13 +21,6 @@ use OCA\Social\Tools\Traits\TArrayTools;
 class ReactionsRequestBuilder extends CoreRequestBuilder {
 	use TArrayTools;
 
-	protected function getReactionsInsertSql(): SocialQueryBuilder {
-		$qb = $this->getQueryBuilder();
-		$qb->insert(self::TABLE_REACTIONS);
-
-		return $qb;
-	}
-
 	protected function getReactionsSelectSql(): SocialQueryBuilder {
 		$qb = $this->getQueryBuilder();
 

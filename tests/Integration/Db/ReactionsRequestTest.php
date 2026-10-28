@@ -12,6 +12,7 @@ namespace OCA\Social\Tests\Integration\Db;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
+use OCP\IDBConnection;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -60,6 +61,24 @@ class ReactionsRequestTest extends TestCase {
 
 		$this->assertCount(2, $this->reactions->getByObjectId(self::POST));
 		$this->assertSame("\u{1F525}", $this->reactions->getReaction(self::ALICE, self::POST, "\u{1F525}")->getContent());
+	}
+
+	public function testDuplicateReactionsDoNotAbortTheSurroundingTransaction(): void {
+		$connection = Server::get(IDBConnection::class);
+		$connection->beginTransaction();
+		try {
+			$this->assertTrue($this->react(self::ALICE, self::POST, '👍'));
+			$this->assertFalse($this->react(self::ALICE, self::POST, '👍'));
+			$first = $this->reactions->getReaction(self::ALICE, self::POST, '👍');
+			$duplicate = clone $first;
+			$duplicate->setId(self::ALICE . '#overlapping-copy');
+			$this->assertFalse($this->reactions->save($duplicate));
+			$this->assertSame($first->getId(), $this->reactions->getReaction(self::ALICE, self::POST, '👍')->getId());
+			$this->assertTrue($this->react(self::ALICE, self::POST, '🔥'));
+			$this->assertCount(2, $this->reactions->getByObjectId(self::POST));
+		} finally {
+			$connection->rollBack();
+		}
 	}
 
 	public function testManyPostsAreReadAtOnceKeyedByTheirHash(): void {
