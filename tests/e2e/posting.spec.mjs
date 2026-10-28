@@ -120,7 +120,7 @@ test.describe('posting, and acting on a post', () => {
 		await openApp(page, `/@${OTHER_USER}/${parent.id}`)
 		await postWith(page, question).getByRole('button', { name: 'Reply', exact: true }).click()
 		// The common modal receives the reply context before its lazy editor loads.
-		const composer = page.locator('.new-post').filter({ hasText: `@${OTHER_USER}` }).first()
+		const composer = page.locator('.modal-composer .new-post').filter({ hasText: `@${OTHER_USER}` })
 		await expect(composer).toBeVisible()
 		// pressing Reply puts the caret in the box, after the mention
 		await expect(composer.locator('.message')).toBeFocused()

@@ -601,6 +601,9 @@ known to Aloha Social. OAuth collection scopes and own-repository checks still
 apply to each write. Empty objects and objects with numeric string keys retain
 their map identity through XRPC JSON parsing, DAG-CBOR storage and readback;
 JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
+Record reads with an explicit `cid` return only that version of the named
+record, or `RecordNotFound` when it is not retained. Omitting `cid` reads the
+current version; an invalid CID is rejected before the record lookup.
 `validate: true` requires a known schema; `false` keeps protocol structural
 checks but skips schema validation; omission validates known schemas and
 retains unknown ones structurally. The mode travels with each `RepoWrite` into
@@ -4526,7 +4529,10 @@ clears only when it still holds that unchanged draft. Another reply context or
 newly typed words remain intact. The post page hides its compact reply with
 `v-show` while the modal is open, preserving the draft snapshot and event
 listener; opening a reply directly from the post also records that snapshot.
-Failed submissions and closing the modal do not acknowledge publication. Automatically inserted mention avatars are
+Failed submissions and closing the modal do not acknowledge publication.
+When the compact draft changed after handoff, its saved copy is restored after
+the modal's reset watchers finish, so publishing an older modal draft cannot
+remove newer words from browser storage. Automatically inserted mention avatars are
 decorative beside the visible handle and carry an empty alternative text.
 
 The indexed visual-feed candidate window expands `visual` into the stored

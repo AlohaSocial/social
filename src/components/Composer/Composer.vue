@@ -1592,6 +1592,9 @@ export default {
 			if (this.oneLine && context === this.draftContext && this.handedOffDraft !== null) {
 				if (this.handedOffDraft === JSON.stringify(this.draft)) {
 					this.clearComposer()
+				} else {
+					// The modal's reset watcher clears the shared key in this tick.
+					this.$nextTick(() => this.rememberDraft())
 				}
 				this.handedOffDraft = null
 			}
