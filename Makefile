@@ -63,6 +63,7 @@ check-pr:
 	composer run psalm
 	composer run test:unit
 	npm run lint
+	npm run typecheck
 	npm run stylelint
 	npm test
 	npm run build
