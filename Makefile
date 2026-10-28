@@ -56,6 +56,18 @@ test-watch:
 test-coverage:
 	npm run test:coverage
 
+# Optional complete local checks before requesting a final CI run.
+.PHONY: check-pr
+check-pr:
+	composer run cs:check
+	composer run psalm
+	composer run test:unit
+	npm run lint
+	npm run stylelint
+	npm test
+	npm run build
+	@test -z "$$(git status --porcelain -- js/)" || { echo 'Commit the rebuilt js/ files and run check-pr again.'; exit 1; }
+
 # Linting
 lint:
 	npm run lint

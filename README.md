@@ -104,6 +104,10 @@ npm run stylelint
 npm run typecheck
 ```
 
+`make check-pr` optionally runs the local PHP/JavaScript checks and rebuilds
+the shipped bundles, then checks that the generated `js/` files are committed.
+Database integration and real-peer interoperability remain separate CI checks.
+
 Integration and browser tests require a running Nextcloud instance; see
 [`tests/Integration/README.md`](tests/Integration/README.md) and
 [`tests/e2e/`](tests/e2e/). To build a release archive, run `make appstore`.
