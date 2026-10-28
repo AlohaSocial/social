@@ -282,6 +282,7 @@ class WriteService {
 			} catch (InvalidSwapException $e) {
 				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
 			}
+			$this->activities->beginDeferredDeliveries();
 		}
 		try {
 			$current = $this->repositories->getRecord($session->identity->did, $collection, $rkey);
@@ -293,11 +294,13 @@ class WriteService {
 			if ($ownsBatch) {
 				$this->repositories->commitBatch();
 				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
 			}
 
 			return $result;
 		} catch (Throwable $e) {
 			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
 				// A reviewed post is intentionally kept in the moderation queue
 				// before XRPC returns an error. Commit that queue entry even though
 				// no repository record is written.

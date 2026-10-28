@@ -404,6 +404,9 @@ class WriteServiceTest extends TestCase {
 		$this->repositories->expects($this->once())->method('rollbackBatch');
 		$this->repositories->expects($this->once())->method('write')->willThrowException(new \RuntimeException('repository unavailable'));
 
+		$this->activities->expects($this->once())->method('beginDeferredDeliveries');
+		$this->activities->expects($this->once())->method('discardDeferredDeliveries');
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
 		$this->expectException(\RuntimeException::class);
 		$this->writes->put($this->session, [
 			'repo' => self::DID,
@@ -411,6 +414,33 @@ class WriteServiceTest extends TestCase {
 			'rkey' => '3kznmn7xqxl22',
 			'record' => ['$type' => 'app.bsky.graph.list', 'purpose' => 'app.bsky.graph.defs#curatelist', 'name' => 'Friends', 'createdAt' => '2026-10-09T10:00:00.000Z'],
 		]);
+	}
+
+	public function testPutRecordStartsDeliveryOnlyAfterTheRepositoryCommit(): void {
+		$events = [];
+		$this->activities->method('beginDeferredDeliveries')->willReturnCallback(static function () use (&$events): void {
+			$events[] = 'defer';
+		});
+		$this->repositories->method('write')->willReturnCallback(function (string $did, $key, array $writes) use (&$events): ?CommitResult {
+			$events[] = 'write';
+			$write = $writes[0];
+			$bytes = DagCbor::encode($write->record);
+			$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, '', 0);
+			return null;
+		});
+		$this->repositories->expects($this->once())->method('commitBatch')->willReturnCallback(static function () use (&$events): ?CommitResult {
+			$events[] = 'commit';
+			return null;
+		});
+		$this->activities->expects($this->once())->method('releaseDeferredDeliveries')->willReturnCallback(static function () use (&$events): void {
+			$events[] = 'deliver';
+		});
+		$this->activities->expects($this->never())->method('discardDeferredDeliveries');
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => 'com.example.notes.entry', 'rkey' => 'first',
+			'record' => ['$type' => 'com.example.notes.entry', 'text' => 'Updated']]);
+
+		$this->assertSame(['defer', 'write', 'commit', 'deliver'], $events);
 	}
 
 	public function testCreateOnlyPermissionCannotReplaceAnExistingRecordWithPutRecord(): void {

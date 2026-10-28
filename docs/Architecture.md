@@ -584,6 +584,9 @@ Social services. Projected `createRecord` operations lock the repository and
 check `swapCommit` before changing Social state, reject an occupied requested
 key, and commit the projection and repository together. Their queued
 federation delivery starts only after commit and is discarded on rollback.
+`putRecord` uses the same delivery deferral around its transaction, including
+when it creates a missing post, so a rolled-back edit cannot escape over
+ActivityPub before the repository accepts it.
 Other valid NSID collections are stored as protocol-native
 records by `WriteService`; the signed repository, CAR export and firehose carry
 them without converting them into ActivityPub objects. Vendored Lexicons are
