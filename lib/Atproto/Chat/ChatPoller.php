@@ -39,18 +39,17 @@ class ChatPoller {
 	public const MAX_BACKOFF = 1800;
 	public const BATCH = 50;
 	/** the upstream maximum page size for both chat conversation and message queries */
-	public const PAGE = 100;
+	public const PAGE = ChatBackfill::PAGE;
 	private const TABLE = CoreRequestBuilder::TABLE_ATPROTO_CHAT_CURSOR;
 	private const CREATE = 'chat.bsky.convo.defs#logCreateMessage';
 	private const DELETE = 'chat.bsky.convo.defs#logDeleteMessage';
 	private const READ = 'chat.bsky.convo.defs#logReadConvo';
 	/** the older name of `logReadConvo`, which a chat service may still send */
 	private const READ_MESSAGE = 'chat.bsky.convo.defs#logReadMessage';
-	private const FIRST_IMPORT_CACHE = 'social.atproto.chat.first-import';
-	private const FIRST_IMPORT_TTL = 604800;
+	private const FIRST_IMPORT_CACHE = ChatBackfill::CACHE;
+	private const FIRST_IMPORT_TTL = ChatBackfill::TTL;
 	private const ADD_REACTION = 'chat.bsky.convo.defs#logAddReaction';
 	private const REMOVE_REACTION = 'chat.bsky.convo.defs#logRemoveReaction';
-	private const FIRST_IMPORT_PAGE_BUDGET = 10;
 	/** Log records which affect chat state Aloha does not currently model. */
 	private const IGNORED_LOGS = [
 		'chat.bsky.convo.defs#logBeginConvo',
@@ -92,6 +91,7 @@ class ChatPoller {
 		private LoggerInterface $logger,
 		private ChatDeclaration $declaration,
 		private DurableCache $durableCache,
+		private ChatBackfill $backfill,
 	) {
 	}
 
@@ -230,7 +230,7 @@ class ChatPoller {
 				}
 				$members = $this->allMembers($identity, $key, $id, self::dids($convo['members'] ?? null));
 				$this->members[$id] = $members;
-				$imported = $this->backfillConversation($identity, $key, $id, $unread, $members);
+				$imported = $this->backfill->import($identity, $key, $id, $unread, $members);
 				$handled += $imported['handled'];
 				if (!$imported['complete']) {
 					// Do not advance the account cursor until every unread window has
@@ -254,100 +254,6 @@ class ChatPoller {
 		$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $snapshotKey);
 
 		return [$handled, $rev];
-	}
-
-	/**
-	 * Fetch a conversation's unread window into bounded durable pages, then
-	 * store those pages oldest-first. The state survives cron time limits and
-	 * process restarts without advancing the account log cursor.
-	 *
-	 * @param list<string> $members
-	 * @return array{handled: int, complete: bool}
-	 */
-	private function backfillConversation(Identity $identity, PrivateKey $key, string $convo, int $unread, array $members): array {
-		$baseKey = hash('sha256', $identity->did . "\0" . $convo);
-		$state = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $baseKey);
-		if (!is_array($state)) {
-			$state = ['unread' => $unread, 'incoming' => 0, 'pages' => 0, 'cursor' => '', 'storing' => false, 'storePage' => -1];
-		}
-		$unread = (int)$state['unread'];
-
-		if (!$state['storing']) {
-			for ($batch = 0; $batch < self::FIRST_IMPORT_PAGE_BUDGET; $batch++) {
-				$params = ['convoId' => $convo, 'limit' => self::PAGE];
-				if ($state['cursor'] !== '') {
-					$params['cursor'] = $state['cursor'];
-				}
-				$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', $params);
-				if (!is_array($page['messages'] ?? null)) {
-					throw new \RuntimeException('Bluesky chat message response is missing its message list');
-				}
-				$list = array_values(array_filter($page['messages'], 'is_array'));
-				if ($list === []) {
-					throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
-				}
-				$kept = [];
-				foreach ($list as $message) {
-					$kept[] = $message;
-					$sender = (string)($message['sender']['did'] ?? '');
-					if ($sender !== '' && $sender !== $identity->did) {
-						$state['incoming']++;
-						if ($state['incoming'] >= $unread) {
-							$state['storing'] = true;
-							break;
-						}
-					}
-				}
-				$pageIndex = (int)$state['pages'];
-				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $pageIndex, $kept, self::FIRST_IMPORT_TTL);
-				$state['pages']++;
-				$next = (string)($page['cursor'] ?? '');
-				if (!$state['storing'] && ($next === '' || $next === $state['cursor'])) {
-					$this->clearBackfill($baseKey, (int)$state['pages']);
-					throw new \RuntimeException('Bluesky chat pagination ended before all unread messages were found');
-				}
-				$state['cursor'] = $next;
-				if ($state['storing']) {
-					$state['storePage'] = (int)$state['pages'] - 1;
-				}
-				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey, $state, self::FIRST_IMPORT_TTL);
-				if ($state['storing']) {
-					break;
-				}
-			}
-			if (!$state['storing']) {
-				return ['handled' => 0, 'complete' => false];
-			}
-		}
-
-		$handled = 0;
-		for ($batch = 0; $batch < self::FIRST_IMPORT_PAGE_BUDGET && $state['storePage'] >= 0; $batch++) {
-			$messages = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $state['storePage']);
-			if (!is_array($messages)) {
-				throw new \RuntimeException('A staged Bluesky chat page expired before import completed');
-			}
-			foreach (array_reverse($messages) as $message) {
-				if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
-					continue;
-				}
-				$handled += $this->store->received($identity, $convo, $message, $members) ? 1 : 0;
-			}
-			$state['storePage']--;
-			$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $baseKey, $state, self::FIRST_IMPORT_TTL);
-		}
-		if ($state['storePage'] >= 0) {
-			return ['handled' => $handled, 'complete' => false];
-		}
-		$this->clearBackfill($baseKey, (int)$state['pages']);
-
-		return ['handled' => $handled, 'complete' => true];
-	}
-
-	private function clearBackfill(string $baseKey, int $pages): void {
-		$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $baseKey);
-		for ($page = 0; $page < $pages; $page++) {
-			$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $baseKey . ':' . $page);
-		}
 	}
 
 	/** Fetch the complete participant list, including paginated group members. @param list<string> $summary */

@@ -148,7 +148,7 @@ class ChatPollerTest extends TestCase {
 			unset($this->durable[$key]);
 		});
 
-		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache);
+		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfill($appView, $store, $durableCache));
 	}
 
 	/** @return list<array> */

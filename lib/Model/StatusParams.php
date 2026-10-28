@@ -31,7 +31,7 @@ interface StatusParams {
 	/** @return array<string, mixed>|null */
 	public function paramPoll(): ?array;
 
-	/** @return array{name:string,start_time:?string,end_time:?string,location:string,status?:string}|null */
+	/** @return array{name:string,start_time:?string,end_time:?string,location:string,status?:string,participation_url?:string}|null */
 	public function paramEvent(): ?array;
 
 	/** @return int[] */

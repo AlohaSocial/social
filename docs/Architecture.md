@@ -608,6 +608,10 @@ continues to create or replace records with its existing conditional guards.
 
 ### Resuming Bluesky synchronization
 
+`ChatPoller` coordinates account snapshots and incremental logs. `ChatBackfill`
+handles the bounded durable history pages and imports them oldest-first;
+its checkpoint namespace remains compatible with in-progress imports.
+
 `Cron\AtprotoSync` runs once a minute and spends its 45-second budget on
 notifications before feeds and direct messages, so a slow feed cannot keep
 likes, reposts and replies to local posts waiting behind it. Notification
