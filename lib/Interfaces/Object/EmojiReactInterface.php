@@ -114,6 +114,11 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 	public function save(ACore $item): void {
 		/** @var EmojiReact $reaction */
 		$reaction = $item;
+		if (LikeInterface::undoneBeforeArrival(
+			$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
+		)) {
+			throw new ItemAlreadyExistsException();
+		}
 
 		// a reaction to a post this instance does not hold is nothing it can
 		// draw, and storing it would be a row that is never read
@@ -130,6 +135,12 @@ class EmojiReactInterface extends AbstractActivityPubInterface implements IActiv
 		if (!$this->reactionsRequest->save($reaction)) {
 			// already stored: the Fediverse redelivers, and the unique index
 			// is what makes that harmless
+			throw new ItemAlreadyExistsException();
+		}
+		if (LikeInterface::undoneBeforeArrival(
+			$this->durableCache, $reaction->getId(), $reaction->getActorId(), $reaction->getObjectId()
+		)) {
+			$this->delete($reaction);
 			throw new ItemAlreadyExistsException();
 		}
 	}

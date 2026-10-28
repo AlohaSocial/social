@@ -22,6 +22,7 @@ use OCA\Social\Model\ActivityPub\Activity\Undo;
 use OCA\Social\Model\ActivityPub\Actor\Person;
 use OCA\Social\Model\ActivityPub\Object\EmojiReact;
 use OCA\Social\Model\ActivityPub\Object\Note;
+use OCA\Social\Service\DurableCache;
 use OCA\Social\Service\SignatureService;
 use OCA\Social\Tests\Interfaces\ActivityPubTestCase;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -87,6 +88,35 @@ class EmojiReactInterfaceTest extends ActivityPubTestCase {
 			->willReturn(true);
 
 		$this->handler->processIncomingRequest($this->aReaction());
+	}
+
+	public function testAnUndoArrivingDuringInsertionCannotRestoreTheReaction(): void {
+		$this->thePostExists();
+		$reaction = $this->aReaction();
+		$pending = null;
+		$cache = $this->createMock(DurableCache::class);
+		$cache->method('getShared')->willReturnCallback(static function () use (&$pending): mixed {
+			return $pending;
+		});
+		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, $cache);
+		$this->reactionsRequest->expects($this->once())->method('save')->willReturnCallback(static function () use (&$pending, $reaction): bool {
+			$pending = ['actor' => $reaction->getActorId(), 'object' => $reaction->getObjectId()];
+			return true;
+		});
+		$this->reactionsRequest->expects($this->once())->method('delete')->with($reaction);
+
+		$handler->processIncomingRequest($reaction);
+	}
+
+	public function testDirectSaveAlsoRejectsAnAlreadyUndoneReaction(): void {
+		$reaction = $this->aReaction();
+		$cache = $this->createMock(DurableCache::class);
+		$cache->method('getShared')->willReturn(['actor' => $reaction->getActorId(), 'object' => $reaction->getObjectId()]);
+		$handler = new EmojiReactInterface($this->reactionsRequest, $this->streamRequest, $cache);
+		$this->reactionsRequest->expects($this->never())->method('save');
+		$this->expectException(ItemAlreadyExistsException::class);
+
+		$handler->save($reaction);
 	}
 
 	/**
