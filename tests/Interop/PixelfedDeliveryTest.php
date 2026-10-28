@@ -122,13 +122,18 @@ class PixelfedDeliveryTest extends TestCase {
 		$changed = $words . ' edited';
 		$this->aloha->put('/api/v1/statuses/' . rawurlencode((string)$ours['id']), ['status' => $changed]);
 		$this->drainQueue();
-		$edited = $this->pixelfed->await(function () use ($theirs, $changed): ?array {
+		$lastStatus = null;
+		$edited = $this->pixelfed->await(function () use ($theirs, $changed, &$lastStatus): ?array {
 			$this->drainQueue();
 			$status = $this->pixelfed->status((string)$theirs['id']);
+			$lastStatus = $status;
 
 			return $status !== null && str_contains((string)($status['content'] ?? ''), $changed) ? $status : null;
 		});
-		$this->assertNotNull($edited, 'Pixelfed did not apply the video post edit');
+		$this->assertNotNull($edited, 'Pixelfed did not render the video post edit: ' . json_encode([
+			'content' => substr((string)($lastStatus['content'] ?? ''), 0, 300),
+			'edited_at' => $lastStatus['edited_at'] ?? null,
+		]));
 
 		$this->aloha->delete('/api/v1/statuses/' . rawurlencode((string)$ours['id']));
 		$this->drainQueue();

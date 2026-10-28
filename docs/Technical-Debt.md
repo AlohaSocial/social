@@ -43,11 +43,24 @@ CI compatibility matrix.
 
 ### PDS blob lifecycle (feature-branch review, 2026-10-28)
 
-Concurrent blob registration and repository-byte accounting are deduplicated,
-but upload still uses the Social media pipeline. A protocol-native temporary
-blob state, reference-aware availability and last-reference cleanup remain
+Concurrent blob registration and repository-byte accounting are deduplicated.
+ATProto uploads now preserve their original bytes through the shared storage
+policy instead of using Social's image conversion pipeline. A protocol-native
+temporary blob state, reference-aware availability and last-reference cleanup remain
 unimplemented. Completing these requires coordinated write, read, migration
 and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-lifecycle-boundary).
+
+### Pixelfed remote edit rendering (feature-branch review, 2026-10-28)
+
+The pinned Pixelfed v0.14.4 interop run accepts the video Update and stores its
+new caption and `edited_at`, but its API continues to render the original HTML.
+The upstream [update pipeline](https://github.com/pixelfed/pixelfed/blob/v0.14.4/app/Jobs/StatusPipeline/StatusRemoteUpdatePipeline.php)
+changes `caption` without updating `rendered`, which the
+[remote-status transformer](https://github.com/pixelfed/pixelfed/blob/v0.14.4/app/Transformer/Api/StatusStatelessTransformer.php)
+prefers over the caption. The real-peer edit assertion remains enforced;
+successful delivery or an updated database caption is not counted as successful
+user-visible editing. Failure diagnostics include the peer's worker jobs and
+stored caption/edit state. A peer fix or verified newer version is still needed.
 
 ### Compatibility surfaces must be maintained deliberately
 

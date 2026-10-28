@@ -366,7 +366,7 @@ jobs:
           docker logs pixelfed-horizon 2>&1 | grep -E "StatusRemoteUpdatePipeline|HandleUpdateActivity" | cut -c1-700 | tail -80 || true
           echo '--- Pixelfed remote status edits ---'
           mysql -h 127.0.0.1 -u pixelfed -ppixelfed pixelfed -e \
-            "select id, profile_id, object_url, left(caption,300) as caption, edited_at from statuses where object_url is not null order by id desc limit 20" 2>&1 || true
+            "select id, profile_id, object_url, left(caption,300) as caption, left(rendered,300) as rendered, edited_at from statuses where object_url is not null order by id desc limit 20" 2>&1 || true
           echo '--- Pixelfed failed jobs ---'
           docker exec pixelfed php artisan queue:failed 2>&1 | tail -40 || true
           echo '--- Pixelfed log files ---'
