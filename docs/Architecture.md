@@ -4495,3 +4495,18 @@ tab links remain authoritative. Public page state carries the configured cloud
 address without running signed-in setup, and local public lookups use bare
 usernames rather than generated remote handles. Guest views do not use private
 read-marker endpoints.
+
+
+### Compact composer and visual-feed consistency
+
+The compact composer records the draft it hands to the full modal. A successful
+publication emits `composer-published` with the draft context; the compact editor
+clears only when it still holds that unchanged draft. Another reply context or
+newly typed words remain intact. Failed submissions and closing the modal do
+not acknowledge publication. Automatically inserted mention avatars are
+decorative beside the visible handle and carry an empty alternative text.
+
+The indexed visual-feed candidate window expands `visual` into the stored
+`image`, `video`, `gifv` and `mixed` kinds. The ordinary viewer-aware query still
+filters those candidates, so the optimized Home and public Photos paths match
+the attachment-based path used before media-index backfill completes.

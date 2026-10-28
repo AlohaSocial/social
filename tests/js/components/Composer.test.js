@@ -1084,6 +1084,28 @@ describe('Composer', () => {
 			expect(typed(wrapper)).toBe('')
 		})
 
+		it('clears the unchanged compact draft after the full modal publishes it', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'Move to the modal')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			eventBus.emit('composer-published', { context: '' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('')
+		})
+
+		it('keeps newly typed words and other reply contexts when a modal publishes', async () => {
+			const { wrapper } = mountComposer({ oneLine: true, listenForIntents: false })
+			await setContent(wrapper, 'Move to the modal')
+			await wrapper.find('.composer-line__expand').trigger('click')
+			eventBus.emit('composer-published', { context: 'reply.somewhere-else' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('Move to the modal')
+			await setContent(wrapper, 'A new thought')
+			eventBus.emit('composer-published', { context: '' })
+			await flushPromises()
+			expect(typed(wrapper)).toBe('A new thought')
+		})
+
 		it('keeps a refused quick post and hands its draft to the full modal', async () => {
 			const { wrapper, store } = mountComposer({ oneLine: true, listenForIntents: false })
 			store.post.mockResolvedValueOnce(undefined)

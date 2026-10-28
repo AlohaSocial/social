@@ -1054,6 +1054,8 @@ export default {
 			onComposerQuote: null,
 			onComposerRedraft: null,
 			onComposerFocus: null,
+			onComposerPublished: null,
+			handedOffDraft: null,
 			onOutsideInteraction: null,
 			onBeforeUnload: null,
 			stopLeaveGuard: null,
@@ -1580,6 +1582,16 @@ export default {
 			eventBus.on('shortcut:compose', this.onComposerFocus)
 		}
 
+		this.onComposerPublished = ({ context }) => {
+			if (this.oneLine && context === this.draftContext && this.handedOffDraft !== null) {
+				if (this.handedOffDraft === JSON.stringify(this.draft)) {
+					this.clearComposer()
+				}
+				this.handedOffDraft = null
+			}
+		}
+		eventBus.on('composer-published', this.onComposerPublished)
+
 		// before the mention prefill, which declines to overwrite a non-empty
 		// composer: whatever the last attempt left is what the reader wants back
 		const existingDraft = this.editItem ? null : loadDraft(this.draftContext)
@@ -1651,6 +1663,7 @@ export default {
 		eventBus.off('composer-quote', this.onComposerQuote)
 		eventBus.off('composer-redraft', this.onComposerRedraft)
 		eventBus.off('shortcut:compose', this.onComposerFocus)
+		eventBus.off('composer-published', this.onComposerPublished)
 	},
 
 	methods: {
@@ -1719,6 +1732,7 @@ export default {
 				return
 			}
 			this.rememberDraft()
+			this.handedOffDraft = JSON.stringify(this.draft)
 			eventBus.emit('composer-open', { reply: this.inReplyTo, files: Array.isArray(files) ? files : [], draft: this.draft })
 		},
 
@@ -2378,6 +2392,7 @@ export default {
 			}
 
 			const wasScheduled = statusData.scheduled_at !== undefined
+			const publishedContext = this.draftContext
 
 			this.replyTo = this.inReplyTo
 			this.quoteOf = null
@@ -2393,6 +2408,7 @@ export default {
 			// the sidebar's modal has no other way of knowing: it cleared the
 			// box and stayed open, which reads as if nothing had happened
 			this.$emit('posted')
+			eventBus.emit('composer-published', { context: publishedContext })
 
 			if (wasScheduled) {
 				// nothing is on any timeline yet, so there is nothing to

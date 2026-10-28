@@ -1701,6 +1701,8 @@ trait StreamTimelines {
 
 		if ($options->isOnlyShort()) {
 			$kinds = ['short_kind' => [Stream::SHORT_KIND_SHORT]];
+		} elseif ($options->getMediaType() === 'visual') {
+			$kinds = ['media_kind' => ['image', 'video', 'gifv', Stream::MEDIA_KIND_MIXED]];
 		} elseif ($options->isOnlyVideo() || $options->getMediaType() === 'video') {
 			$kinds = ['media_kind' => ['video', Stream::MEDIA_KIND_MIXED]];
 		} elseif ($options->getMediaType() !== '') {
