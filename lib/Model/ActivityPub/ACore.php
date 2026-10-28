@@ -309,6 +309,7 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	/** Remove a signature before signing a changed wire representation. */
 	public function clearSignature(): self {
 		$this->signature = null;
+		unset($this->entries['signature']);
 
 		return $this;
 	}

@@ -1172,6 +1172,41 @@ class ActivityServiceTest extends TestCase {
 		$this->assertStringNotContainsString('quicktime', $bodies[0]);
 	}
 
+	public function testVideoEditsRetainTheirIdentityAndContentInTheSignedPixelfedNote(): void {
+		$directory = $this->createStub(FediverseDirectoryService::class);
+		$directory->method('knownSoftware')->with('pixelfed.example')->willReturn('pixelfed');
+		$container = $this->createStub(ContainerInterface::class);
+		$container->method('get')->with(FediverseDirectoryService::class)->willReturn($directory);
+		$service = new ActivityService(
+			$this->followsRequest, $this->cacheActorsRequest, $this->signatureService,
+			$this->requestQueueService, $this->curlService, $this->configService,
+			$this->actorsRequest, $this->relayRequest, $this->hostBreakerRequest,
+			$this->logger, $this->streamRequest, $container
+		);
+		$note = $this->convertedNote();
+		$note->setLocal(true);
+		$note->setContent('<p>Edited video caption</p>');
+		$note->setUpdated('2026-10-28T12:00:00Z');
+		$note->setInstancePaths([new InstancePath('https://pixelfed.example/inbox', InstancePath::TYPE_INBOX, InstancePath::PRIORITY_LOW)]);
+		$this->signatureService->method('signObject')->willReturnCallback(static function (Person $actor, ACore $activity): void {
+			$activity->setSignature((new LinkedDataSignature())->setSignatureValue('signed-edit'));
+		});
+		$this->requestQueueService->expects($this->once())->method('generateRequestQueueWithVariants')
+			->willReturnCallback(function (array $paths, string $default, array $variants): string {
+				$sent = json_decode($variants['https://pixelfed.example/inbox'], true);
+				$this->assertSame('Update', $sent['type']);
+				$this->assertSame('Note', $sent['object']['type']);
+				$this->assertSame(self::NOTE_ID, $sent['object']['id']);
+				$this->assertSame('<p>Edited video caption</p>', $sent['object']['content']);
+				$this->assertSame('2026-10-28T12:00:00Z', $sent['object']['updated']);
+				$this->assertSame('video/mp4', $sent['object']['attachment'][0]['mediaType']);
+				$this->assertSame('signed-edit', $sent['signature']['signatureValue']);
+				return self::TOKEN;
+			});
+
+		$this->assertSame(self::TOKEN, $service->updateActivity($this->alice(), $note, time() + 600));
+	}
+
 	private function releaseVideoVariantsAfterNodeInfoChange(array $softwareAtRelease): array {
 		$software = ['pixelfed.example' => 'pixelfed', 'peertube.example' => 'peertube'];
 		$directory = $this->createStub(FediverseDirectoryService::class);
