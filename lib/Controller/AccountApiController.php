@@ -827,6 +827,7 @@ class AccountApiController extends MastodonApiController {
 
 			$profileFilling = false;
 			$remoteProfileFilling = false;
+			$syncState = null;
 			$remoteProfile = !$local->isLocal() && !BlueskyActorService::isBluesky($local);
 			// Bluesky profiles have no ActivityPub outbox. Read their public
 			// author feed into the shared stream before the ordinary profile
@@ -842,8 +843,8 @@ class AccountApiController extends MastodonApiController {
 				// which is where new posts appear, and in the background, at most
 				// once a quarter-hour per account: this page answers with what is
 				// stored, and the next look has what the sync found.
-				$this->remoteFetchQueue->syncTimeline($local);
-				$remoteProfileFilling = $this->remoteFetchQueue->isTimelinePending($local->getId());
+				$syncState = $this->remoteFetchQueue->refreshTimelineState($local);
+				$remoteProfileFilling = in_array($syncState, ['queued', 'pending'], true);
 				$profileFilling = $remoteProfileFilling;
 			}
 
@@ -917,8 +918,8 @@ class AccountApiController extends MastodonApiController {
 				$response->addHeader('X-Social-Remote-Profile-Filling', '1');
 			}
 			if ($remoteProfile && $this->viewer !== null) {
-				$syncState = $this->remoteFetchQueue->timelineSyncFailed($local->getId())
-					? 'failed' : ($profileFilling ? 'pending' : 'idle');
+				$syncState ??= $this->remoteFetchQueue->timelineSyncFailed($local->getId()) ? 'failed' : 'idle';
+				$syncState = $syncState === 'failed' ? 'failed' : ($profileFilling ? 'pending' : 'idle');
 				$response->addHeader('X-Social-Profile-Sync-State', $syncState);
 			}
 

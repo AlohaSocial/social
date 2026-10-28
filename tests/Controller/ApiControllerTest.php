@@ -3669,8 +3669,9 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->with('bob@remote.example')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->once())->method('syncTimeline')->with($actor);
-		$this->remoteFetchQueue->expects($this->once())->method('isTimelinePending')->with($actor->getId())->willReturn(true);
+		$this->remoteFetchQueue->expects($this->once())->method('refreshTimelineState')->with($actor)->willReturn('queued');
+		$this->remoteFetchQueue->expects($this->never())->method('isTimelinePending');
+		$this->remoteFetchQueue->expects($this->never())->method('timelineSyncFailed');
 		$this->captureTimelineOptions(['p']);
 
 		$response = $this->controller()->accountStatuses('bob@remote.example');
@@ -3685,7 +3686,7 @@ class ApiControllerTest extends TestCase {
 		$actor = $this->createStub(Person::class);
 		$actor->method('getId')->willReturn(BlueskyIds::actorId('did:plc:z72i7hdynmk6r22z27h6tvur'));
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->blueskyFeeds->expects($this->once())
 			->method('authorPage')
 			->with($actor, '123456', 15, null)
@@ -3722,7 +3723,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->captureTimelineOptions([]);
 
 		$this->controller()->accountStatuses('bob@remote.example', 20, 40);
@@ -3859,7 +3860,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->streamService->expects($this->never())->method('getTimeline');
 		$this->pinService->expects($this->once())->method('getPinnedPosts')
 			->with('https://remote.example/users/bob')->willReturn(['pinned']);
@@ -4476,7 +4477,7 @@ class ApiControllerTest extends TestCase {
 		$actor->method('getId')->willReturn('https://remote.example/users/bob');
 		$this->cacheActorService->method('getFromAccount')->willReturn($actor);
 		$this->streamService->expects($this->never())->method('syncRemoteTimeline');
-		$this->remoteFetchQueue->expects($this->never())->method('syncTimeline');
+		$this->remoteFetchQueue->expects($this->never())->method('refreshTimelineState');
 		$this->captureTimelineOptions([]);
 
 		$this->controller()->accountStatuses('bob@remote.example');

@@ -74,6 +74,20 @@ class RemoteFetchQueueTest extends TestCase {
 		$this->assertTrue($this->queue->syncTimeline($this->remote()));
 	}
 
+	public function testRefreshReturnsQueuedPendingIdleAndFailedWithoutLosingBackoff(): void {
+		$actor = $this->remote();
+		$this->jobList->method('has')->willReturn(false);
+		$this->jobList->expects($this->exactly(2))->method('add');
+		$this->assertSame('queued', $this->queue->refreshTimelineState($actor));
+		$this->assertSame('pending', $this->queue->refreshTimelineState($actor));
+		$this->queue->finishTimelinePage($actor->getId(), true, null);
+		$this->assertSame('idle', $this->queue->refreshTimelineState($actor));
+		$this->now += RemoteFetchQueue::TIMELINE_SYNC_INTERVAL + 1;
+		$this->assertSame('queued', $this->queue->refreshTimelineState($actor));
+		$this->queue->finishTimelinePage($actor->getId(), false, null);
+		$this->assertSame('failed', $this->queue->refreshTimelineState($actor));
+	}
+
 	public function testEachAccountHasItsOwnInterval(): void {
 		$this->jobList->method('has')->willReturn(false);
 		$this->jobList->expects($this->exactly(2))->method('add');

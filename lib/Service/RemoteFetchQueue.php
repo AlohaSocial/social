@@ -102,14 +102,25 @@ class RemoteFetchQueue {
 	 * @return bool whether a sync was asked for
 	 */
 	public function syncTimeline(Person $actor): bool {
+		return $this->refreshTimelineState($actor) === 'queued';
+	}
+
+	/**
+	 * Refresh once and return the state already read while deciding whether to queue.
+	 * @return 'queued'|'pending'|'failed'|'idle'
+	 */
+	public function refreshTimelineState(Person $actor): string {
 		if ($actor->isLocal() || $actor->getId() === '') {
-			return false;
+			return 'idle';
 		}
 
 		$key = md5($actor->getId());
 		try {
-			if ($this->isTimelinePending($actor->getId()) || $this->timelineSyncFailed($actor->getId())) {
-				return false;
+			if ($this->isTimelinePending($actor->getId())) {
+				return 'pending';
+			}
+			if ($this->timelineSyncFailed($actor->getId())) {
+				return 'failed';
 			}
 		} catch (Throwable $e) {
 			$this->logger->info('[RemoteFetchQueue] could not read timeline sync state', [
@@ -119,7 +130,7 @@ class RemoteFetchQueue {
 
 		try {
 			if ($this->durableCache->getShared(self::TIMELINE_SYNCED, $key) !== null) {
-				return false;
+				return 'idle';
 			}
 			$this->durableCache->setShared(self::TIMELINE_SYNCED, $key, 1, self::TIMELINE_SYNC_INTERVAL);
 		} catch (Throwable $e) {
@@ -139,15 +150,15 @@ class RemoteFetchQueue {
 			$this->logger->info('[RemoteFetchQueue] could not mark timeline sync pending', [
 				'actor' => $actor->getId(), 'exception' => $e,
 			]);
-			return false;
+			return 'failed';
 		}
 		if (!$this->queue(SyncRemoteTimeline::class, $argument)) {
 			$this->finishTimelinePage($actor->getId(), false, null, false);
 
-			return false;
+			return 'failed';
 		}
 
-		return true;
+		return 'queued';
 	}
 
 	/**
