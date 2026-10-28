@@ -25,6 +25,7 @@ class ChatBackfill {
 		private AppViewClient $appView,
 		private ChatStore $store,
 		private DurableCache $durableCache,
+		private ChatBackfillPages $pages,
 	) {
 	}
 
@@ -79,7 +80,7 @@ class ChatBackfill {
 				}
 				$state['storing'] = $state['incoming'] >= $unread;
 				$pageIndex = (int)$state['pages'];
-				$this->durableCache->setShared(self::CACHE, $baseKey . ':' . $pageIndex, $kept, self::TTL);
+				$this->pages->save($baseKey . ':' . $pageIndex, $kept);
 				$state['pages']++;
 				$next = $page['cursor'] ?? '';
 				if (!$state['storing'] && ($next === '' || $next === $state['cursor'])) {
@@ -102,10 +103,7 @@ class ChatBackfill {
 
 		$handled = 0;
 		for ($batch = 0; $batch < self::PAGE_BUDGET && $state['storePage'] >= 0; $batch++) {
-			$messages = $this->durableCache->getShared(self::CACHE, $baseKey . ':' . $state['storePage']);
-			if (!is_array($messages)) {
-				throw new \RuntimeException('A staged Bluesky chat page expired before import completed');
-			}
+			$messages = $this->pages->read($baseKey . ':' . $state['storePage']);
 			foreach (array_reverse($messages) as $message) {
 				if (($message['$type'] ?? '') === 'chat.bsky.convo.defs#deletedMessageView') {
 					continue;
@@ -126,7 +124,7 @@ class ChatBackfill {
 	private function clearBackfill(string $baseKey, int $pages): void {
 		$this->durableCache->removeShared(self::CACHE, $baseKey);
 		for ($page = 0; $page < $pages; $page++) {
-			$this->durableCache->removeShared(self::CACHE, $baseKey . ':' . $page);
+			$this->pages->remove($baseKey . ':' . $page);
 		}
 	}
 

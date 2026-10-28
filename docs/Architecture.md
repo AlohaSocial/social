@@ -617,6 +617,13 @@ continues to create or replace records with its existing conditional guards.
 
 ### Resuming Bluesky synchronization
 
+`ChatBackfillPages` keeps small staged history pages in the existing format and
+splits larger pages into base64 blocks whose JSON representation stays below
+the MySQL TEXT limit. A manifest is published after all blocks are written;
+its SHA-256 is checked before any message on that page is imported. Missing or
+corrupt blocks leave the import checkpoint untouched, and cleanup removes the
+manifest and its blocks.
+
 `ChatPoller` coordinates account snapshots and incremental logs. `ChatBackfill`
 handles the bounded durable history pages and imports them oldest-first;
 its checkpoint namespace remains compatible with in-progress imports.

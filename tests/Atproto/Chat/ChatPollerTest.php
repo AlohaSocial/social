@@ -143,13 +143,16 @@ class ChatPollerTest extends TestCase {
 		$durableCache = $this->createMock(DurableCache::class);
 		$durableCache->method('getShared')->willReturnCallback(fn (string $namespace, string $key): mixed => $this->durable[$key] ?? null);
 		$durableCache->method('setShared')->willReturnCallback(function (string $namespace, string $key, mixed $value): void {
+			if (strlen(json_encode($value, JSON_THROW_ON_ERROR)) > 65535) {
+				throw new \LengthException('Durable cache TEXT row exceeded');
+			}
 			$this->durable[$key] = $value;
 		});
 		$durableCache->method('removeShared')->willReturnCallback(function (string $namespace, string $key): void {
 			unset($this->durable[$key]);
 		});
 
-		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfill($appView, $store, $durableCache));
+		return new ChatPoller($config, $identities, $cursors, $appView, $store, $time, new NullLogger(), $declaration, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfill($appView, $store, $durableCache, new \OCA\Social\Atproto\Chat\ChatBackfillPages($durableCache)));
 	}
 
 	/** @return list<array> */
@@ -182,6 +185,24 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame(['convoId' => 'c1', 'limit' => ChatPoller::PAGE], $this->asked[1][1]);
 		$this->assertSame([self::ALICE, '3k005', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
 		$this->assertSame([self::ALICE], $this->declared, 'who may write is seen to on the first read');
+	}
+
+	public function testAFullPageOfLongMessagesFitsTheCacheAndCommitsOnlyAfterImport(): void {
+		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c1', 'rev' => '3k100', 'unreadCount' => 100, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		]];
+		$messages = [];
+		for ($id = 0; $id < 100; $id++) {
+			$message = self::message('long-' . $id);
+			$message['text'] = str_repeat('😀/', 1500);
+			$messages[] = $message;
+		}
+		$this->answers['chat.bsky.convo.getMessages'] = ['messages' => $messages];
+
+		$this->assertSame(100, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertCount(100, $this->handed);
+		$this->assertSame('3k100', $this->synced[0][1]);
+		$this->assertSame([], $this->failed);
 	}
 
 	public function testFirstReadStopsWithinThePageAtItsUnreadBoundary(): void {
