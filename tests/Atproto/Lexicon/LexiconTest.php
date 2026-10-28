@@ -128,9 +128,26 @@ class LexiconTest extends TestCase {
 		]);
 	}
 
-	public function testAnUnknownTypeIsRefused(): void {
+	public function testUnknownRecordTypesAreAcceptedAsBoundedOpaqueData(): void {
+		$record = [
+			'$type' => 'com.example.notes.entry',
+			'title' => 'A private app record',
+			'content' => 'Stored without a Social projection',
+			'emptyObject' => new \stdClass(),
+			'items' => [['position' => 1, 'enabled' => true]],
+		];
+		$this->lexicon->validateRecord($record);
+		$this->addToAssertionCount(1);
+	}
+
+	public function testOpaqueRecordsRejectValuesDagCborCannotRepresent(): void {
 		$this->expectException(LexiconException::class);
-		$this->lexicon->validateRecord(['$type' => 'com.example.nothing']);
+		$this->lexicon->validateRecord(['$type' => 'com.example.notes.entry', 'unsupported' => 1.5]);
+	}
+
+	public function testARecordWithoutAValidNsidTypeIsRefused(): void {
+		$this->expectException(LexiconException::class);
+		$this->lexicon->validateRecord(['$type' => 'not-an-nsid']);
 	}
 
 	public function testAFirehoseCommitFrameFits(): void {

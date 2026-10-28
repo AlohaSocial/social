@@ -97,6 +97,16 @@ class AppRecordJsonTest extends TestCase {
 		$this->assertSame($answer['cid'], $stored?->cid->toString());
 	}
 
+	public function testAnOpaqueApplicationRecordKeepsItsExactJsonShape(): void {
+		$recordJson = '{"$type":"com.example.notes.entry","extra":{},"tags":[]}';
+		$expected = "\xa3\x64tags\x80\x65\$type\x77com.example.notes.entry\x65extra\xa0";
+		$answer = $this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"com.example.notes.entry","rkey":"first","record":' . $recordJson . '}');
+
+		$stored = $this->store->getRecord(self::DID, 'com.example.notes.entry', 'first');
+		$this->assertSame(bin2hex($expected), bin2hex((string)$stored?->bytes));
+		$this->assertSame(Cid::forDagCbor($expected)->toString(), $answer['cid']);
+	}
+
 	public function testPutRecordAndApplyWritesKeepItToo(): void {
 		$this->call('com.atproto.repo.createRecord', '{"repo":"' . self::DID . '","collection":"app.bsky.graph.list","rkey":"3kznmn7xqxl22","record":' . self::LIST_JSON . '}');
 		$renamed = str_replace('"Friends"', '"Family"', self::LIST_JSON);

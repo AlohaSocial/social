@@ -301,4 +301,34 @@ class ChatSenderTest extends TestCase {
 	public function testTheRecipientsAreThePeopleOnBluesky(): void {
 		$this->assertSame([self::BOB], ChatSender::recipients(self::message('')));
 	}
+
+	public function testAReactionOnALocallyKnownMessageIsSentToTheChatService(): void {
+		$this->store()->sent(self::ALICE, 'convo1', 'msg42', self::NOTE);
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$this->assertTrue($this->sender()->react($actor, self::message('Hello'), '🔥', true));
+		$this->assertSame(['chat.bsky.convo.addReaction', [], [
+			'convoId' => 'convo1', 'messageId' => 'msg42', 'value' => '🔥',
+		]], $this->calls[0]);
+	}
+
+	public function testRemovingAReactionUsesTheChatServiceAndWakesThePoller(): void {
+		$this->store()->sent(self::ALICE, 'convo1', 'msg42', self::NOTE);
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$this->assertTrue($this->sender()->react($actor, self::message('Hello'), '🔥', false));
+		$this->assertSame('chat.bsky.convo.removeReaction', $this->calls[0][0]);
+		$this->assertSame(['convoId' => 'convo1', 'messageId' => 'msg42', 'value' => '🔥'], $this->calls[0][2]);
+		$this->assertSame([self::ALICE], $this->woken);
+	}
+
+	public function testAnUnmappedPostIsNotSentAsAChatReaction(): void {
+		$actor = new Person();
+		$actor->setId('https://social.test/users/alice');
+
+		$this->assertNull($this->sender()->react($actor, self::message('Hello'), '🔥', true));
+		$this->assertSame([], $this->calls);
+	}
 }

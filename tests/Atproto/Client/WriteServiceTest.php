@@ -315,6 +315,45 @@ class WriteServiceTest extends TestCase {
 		$this->assertSame([], $this->records);
 	}
 
+	public function testAnUnknownLexiconRecordCanBeCreatedReplacedAndDeletedWithoutSocialProjection(): void {
+		$this->keepWrites();
+		$collection = 'com.example.notes.entry';
+		$record = ['$type' => $collection, 'title' => 'First', 'metadata' => new \stdClass()];
+		$made = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => $collection, 'record' => $record]);
+		$rkey = substr($made['uri'], (int)strrpos($made['uri'], '/') + 1);
+		$this->assertSame($collection, $this->records[0]->collection);
+		$this->assertInstanceOf(\stdClass::class, DagCbor::decode($this->records[0]->bytes)['metadata']);
+
+		$this->writes->put($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => $rkey, 'record' => [
+			'$type' => $collection, 'title' => 'Updated', 'metadata' => new \stdClass(),
+		]]);
+		$this->assertSame('Updated', DagCbor::decode($this->records[0]->bytes)['title']);
+
+		$this->writes->delete($this->session, ['repo' => self::DID, 'collection' => $collection, 'rkey' => $rkey]);
+		$this->assertSame([], $this->records);
+	}
+
+	public function testApplyWritesCanAtomicallyStoreCustomCollections(): void {
+		$collection = 'com.example.notes.entry';
+		$this->repositories->expects($this->once())->method('write')->willReturnCallback(function (string $did, $key, array $writes): CommitResult {
+			$this->assertCount(2, $writes);
+			foreach ($writes as $write) {
+				$bytes = DagCbor::encode($write->record);
+				$this->records[] = new StoredRecord($did, $write->collection, $write->rkey, Cid::forDagCbor($bytes), $bytes, $write->localId, 0);
+			}
+
+			return new CommitResult($did, Cid::forRaw('custom batch'), '3kcustom', 2, []);
+		});
+		$answer = $this->writes->apply($this->session, ['repo' => self::DID, 'writes' => [
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'first', 'value' => ['$type' => $collection, 'title' => 'One']],
+			['$type' => 'com.atproto.repo.applyWrites#create', 'collection' => $collection, 'rkey' => 'second', 'value' => ['$type' => $collection, 'title' => 'Two']],
+		]]);
+
+		$this->assertCount(2, $answer['results']);
+		$this->assertSame('valid', $answer['results'][1]['validationStatus']);
+		$this->assertSame(['cid' => Cid::forRaw('custom batch')->toString(), 'rev' => '3kcustom'], $answer['commit']);
+	}
+
 	public function testAnAppCanCreateAProfileLinkAndSelectItInTheProfile(): void {
 		$this->keepWrites();
 		$link = ['$type' => 'app.bsky.actor.link', 'url' => 'https://alice.example', 'title' => 'My website', 'createdAt' => '2026-10-26T10:00:00Z'];

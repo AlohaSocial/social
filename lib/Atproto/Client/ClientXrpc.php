@@ -463,7 +463,7 @@ class ClientXrpc {
 	private static function writeBody(string $raw): array {
 		$body = self::json($raw);
 		$objects = json_decode($raw);
-		$kept = static fn (mixed $collection): bool => in_array($collection, WriteService::KEPT_AS_WRITTEN, true);
+		$kept = static fn (mixed $collection): bool => is_string($collection) && WriteService::keepsAsWritten($collection);
 		if (isset($body['record']) && $kept($body['collection'] ?? null) && $objects instanceof \stdClass) {
 			$body['record'] = self::keepingEmptyMaps($objects->record);
 		}

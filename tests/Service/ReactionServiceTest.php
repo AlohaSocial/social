@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Service;
 
 use Exception;
 use OCA\Social\AP;
+use OCA\Social\Atproto\Chat\ChatSender;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
@@ -130,6 +131,7 @@ class ReactionServiceTest extends TestCase {
 			$moderation,
 			new NullLogger(),
 			$emoji,
+			$this->createStub(ChatSender::class),
 		);
 		$actor = new Person();
 		$actor->setId('https://social.example/users/alice');
@@ -143,6 +145,38 @@ class ReactionServiceTest extends TestCase {
 			'name' => ':blobcat:',
 			'icon' => ['type' => 'Image', 'mediaType' => 'image/png', 'url' => 'https://social.example/emoji/blobcat'],
 		]], $reaction->getTags());
+	}
+
+	public function testAChatReactionUsesTheChatServiceAndIsNotFederatedAsActivityPub(): void {
+		$actor = new Person();
+		$actor->setId('https://social.example/users/alice');
+		$post = new Stream();
+		$post->setId('https://bsky.app/profile/did:plc:ewvi7nxzyoun6zhxrhs64oiz/convo/c1/m1');
+		$post->setAttributedTo('https://bsky.app/profile/did:plc:z72i7hdynmk6r22z27h6tvur');
+		$streams = $this->createMock(StreamRequest::class);
+		$streams->method('getStreamById')->with($post->getId(), true)->willReturn($post);
+		$chat = $this->createMock(ChatSender::class);
+		$chat->expects($this->once())->method('react')->with($actor, $post, '🔥', true)->willReturn(true);
+		$reactions = $this->createMock(ReactionsRequest::class);
+		$reactions->expects($this->once())->method('save')->with($this->callback(static fn (EmojiReact $reaction): bool => $reaction->getContent() === '🔥'))->willReturn(true);
+		$activity = $this->createMock(ActivityService::class);
+		$activity->expects($this->never())->method('request');
+		$service = new ReactionService(
+			$reactions,
+			$streams,
+			$this->createStub(SignatureService::class),
+			$activity,
+			$this->createStub(CacheActorService::class),
+			$this->createStub(ModerationService::class),
+			new NullLogger(),
+			$this->createStub(EmojiService::class),
+			$chat,
+		);
+
+		$result = $service->create($actor, $post->getId(), '🔥');
+
+		$this->assertInstanceOf(EmojiReact::class, $result);
+		$this->assertSame('🔥', $result->getContent());
 	}
 
 	#[DataProvider('refusedProvider')]
