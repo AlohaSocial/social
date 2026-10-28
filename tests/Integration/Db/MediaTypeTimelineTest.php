@@ -11,6 +11,7 @@ namespace OCA\Social\Tests\Integration\Db;
 
 use OCA\Social\Db\CacheActorsRequest;
 use OCA\Social\Db\CoreRequestBuilder;
+use OCA\Social\Db\FollowsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Model\ActivityPub\ACore;
 use OCA\Social\Model\ActivityPub\Actor\Person;
@@ -67,6 +68,7 @@ class MediaTypeTimelineTest extends TestCase {
 		foreach (self::SUFFIXES as $suffix) {
 			$this->streamRequest->deleteById(self::BASE . '/notes/' . $suffix, Note::TYPE);
 		}
+		Server::get(FollowsRequest::class)->deleteRelatedId(self::AUTHOR);
 		$this->cacheActorsRequest->deleteCacheById(self::AUTHOR);
 	}
 
@@ -101,7 +103,7 @@ class MediaTypeTimelineTest extends TestCase {
 		$note->setId(self::BASE . '/notes/' . $suffix);
 		$note->setAttributedTo(self::AUTHOR);
 		$note->setTo(ACore::CONTEXT_PUBLIC);
-		$note->setCc(self::AUTHOR . '/followers');
+		$note->addCc(self::AUTHOR . '/followers');
 		$note->setContent('<p>' . ($content === '' ? $suffix : $content) . '</p>');
 		$note->setAttachments($attachments);
 		$note->setPublishedTime(time());
@@ -166,7 +168,9 @@ class MediaTypeTimelineTest extends TestCase {
 		$this->useHomeFastPath($filled);
 		Server::get(ConfigService::class)->setAppValue(ConfigService::SOCIAL_STREAM_MEDIA_KIND_FILLED, $filled ? '1' : '0');
 		(new ReflectionProperty(CoreRequestBuilder::class, 'mediaKindFilled'))->setValue($this->streamRequest, null);
-		$this->streamRequest->setViewer($this->cacheActorsRequest->getFromId(self::AUTHOR));
+		$viewer = $this->cacheActorsRequest->getFromId(self::AUTHOR);
+		Server::get(FollowsRequest::class)->generateLoopbackAccount($viewer);
+		$this->streamRequest->setViewer($viewer);
 		foreach ([ProbeOptions::HOME, ProbeOptions::PUBLIC] as $probe) {
 			$options = (new ProbeOptions())->setFormat(ACore::FORMAT_ACTIVITYPUB)
 				->setProbe($probe)->setLimit(50)->setOnlyMedia(true)->setMediaType('visual');

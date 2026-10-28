@@ -532,13 +532,29 @@ memcache — APCu as `memcache.local`, and Redis as `memcache.distributed` and
 `memcache.locking` — because code that caches takes other paths on a server
 that has one.
 
-**Locally**, point the bootstrap at an installed server (the app directory may be
-a symlink into it):
+**Locally**, use a disposable Nextcloud installation and database. The tests
+create users, run repairs and temporarily change app configuration as well as
+writing test rows. Cleanup is not a guarantee after an interrupted run; do not
+point the suite at a production database or your everyday development data.
+The app directory may be a symlink into the test installation:
 
-    NEXTCLOUD_ROOT=/var/www/nextcloud vendor/bin/phpunit -c tests/Integration/phpunit.xml
+    NEXTCLOUD_ROOT=/path/to/test-nextcloud vendor/bin/phpunit -c tests/Integration/phpunit.xml
 
-All rows the tests create carry unique test-only ids and are removed in
-tearDown, so the suite is safe to run against an instance that holds other data.
+An existing Nextcloud core can also serve an isolated test installation through
+`NEXTCLOUD_CONFIG_DIR`. Create a separate configuration directory, SQLite data
+directory and `apps_paths` entry pointing to the candidate Social checkout;
+install Nextcloud and enable Social using that same configuration. Give it its
+own CLI URL, distinct from the running application. Verify `occ app:getpath
+social` resolves to the candidate before starting:
+
+    NEXTCLOUD_CONFIG_DIR=/path/to/test-config php /path/to/nextcloud/occ app:getpath social
+    NEXTCLOUD_CONFIG_DIR=/path/to/test-config NEXTCLOUD_ROOT=/path/to/nextcloud \
+        vendor/bin/phpunit -c tests/Integration/phpunit.xml
+
+Nextcloud's `tests/config/`, when present, takes precedence over
+`NEXTCLOUD_CONFIG_DIR` during PHPUnit execution. In that case use a separate
+server checkout with its own test configuration. A passing isolated SQLite run
+does not replace the MySQL/PostgreSQL matrix or real-peer interoperability tests.
 
 **Two servers.** `UserMigration/AccountRoundTripTest` imports on its own server
 by default. To import on a really fresh one, install a second server with the
