@@ -4543,6 +4543,13 @@ the modal's reset watchers finish, so publishing an older modal draft cannot
 remove newer words from browser storage. Automatically inserted mention avatars are
 decorative beside the visible handle and carry an empty alternative text.
 
+Feed notices keep their outer card margin, border and background; only nested
+notice content has its inner box reset. Text in stacked notices keeps its
+natural height instead of a row-layout flex basis. Profile synchronization and
+feed failures share the same responsive state-card layout, with a heading,
+explanatory text and the existing retry action. Cached profile posts remain
+visible during synchronization, and failure is not presented as an empty feed.
+
 The indexed visual-feed candidate window expands `visual` into the stored
 `image`, `video`, `gifv` and `mixed` kinds. The ordinary viewer-aware query still
 filters those candidates, so the optimized Home and public Photos paths match

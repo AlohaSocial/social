@@ -950,7 +950,7 @@ export default {
 .social__wrapper > :deep(.feed-notice) {
 	position: relative;
 	box-sizing: border-box;
-	width: min(100%, 760px);
+	width: min(calc(100% - 2 * var(--social-column-gutter, 12px)), 760px);
 	margin: 8px auto 12px;
 	padding: 12px 16px;
 	border: 1px solid var(--color-border);
@@ -988,8 +988,10 @@ export default {
 :deep(.feed-notice .policy-notice__text),
 :deep(.feed-notice .announcement__text) {
 	max-width: 68ch;
+	flex: 0 1 auto;
 	margin-inline: auto;
 	text-align: center;
+	overflow-wrap: anywhere;
 }
 
 :deep(.feed-notice.interests-notice),
@@ -1003,10 +1005,30 @@ export default {
 	flex-direction: column;
 	align-items: center;
 	gap: 8px;
+}
+
+:deep(.feed-notice .interests-notice),
+:deep(.feed-notice .interests-banner),
+:deep(.feed-notice .policy-notice) {
 	margin: 0;
 	padding: 0 32px;
 	border: 0;
 	background: transparent;
+}
+
+:deep(.feed-notice.interests-banner),
+:deep(.feed-notice.policy-notice) {
+	padding-inline: 44px;
+}
+
+:deep(.feed-notice.interests-banner > button),
+:deep(.feed-notice.policy-notice .policy-notice__close) {
+	inset-block-start: 8px;
+	inset-inline-end: 8px;
+}
+
+:deep(.feed-notice .interests-banner__link) {
+	white-space: normal;
 }
 
 :deep(.feed-notice .interests-notice__actions),

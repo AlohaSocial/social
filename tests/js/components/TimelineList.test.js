@@ -179,6 +179,7 @@ describe('TimelineList', () => {
 			store.profileSyncState = state
 			await nextTick()
 			expect(wrapper.find('.profile-sync-notice').exists()).toBe(true)
+			expect(wrapper.find('.profile-sync-notice h2').text()).toBe(state === 'pending' ? 'Updating this profile' : 'Profile update incomplete')
 			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
 			expect(wrapper.find('.profile-sync-notice button').exists()).toBe(state !== 'pending')
 		})
@@ -1096,6 +1097,7 @@ describe('TimelineList', () => {
 			expect(wrapper.findComponent(EmptyContent).exists()).toBe(false)
 			expect(wrapper.find('.timeline-error').text()).toContain('The posts could not be loaded.')
 			expect(wrapper.find('.timeline-error').attributes('role')).toBe('alert')
+			expect(wrapper.find('.timeline-error h2').text()).toBe('Could not load posts')
 		})
 
 		it('stops the sentinel asking after a failure, until the retry is pressed', async () => {
@@ -1233,6 +1235,7 @@ describe('TimelineList', () => {
 			await flushPromises()
 
 			expect(wrapper.find('.timeline-error').text()).toContain('No more posts could be loaded.')
+			expect(wrapper.find('.timeline-error h2').text()).toBe('Could not load more posts')
 		})
 	})
 
