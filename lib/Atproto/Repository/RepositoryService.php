@@ -493,7 +493,7 @@ class RepositoryService {
 				$records[$rkey] = $record;
 			}
 		}
-		$records = array_filter($records, fn (StoredRecord $record): bool => $cursor === '' || ($reverse ? $record->rkey > $cursor : $record->rkey < $cursor));
+		$records = array_filter($records, fn (StoredRecord $record): bool => $cursor === '' || ($reverse ? strcmp($record->rkey, $cursor) > 0 : strcmp($record->rkey, $cursor) < 0));
 		usort($records, static fn (StoredRecord $left, StoredRecord $right): int => $reverse ? strcmp($left->rkey, $right->rkey) : strcmp($right->rkey, $left->rkey));
 
 		return array_slice($records, 0, $limit);

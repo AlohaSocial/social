@@ -100,6 +100,31 @@ class RepositoryIntegrationTest extends TestCase {
 		$this->assertCount(1, $this->repoRequest->getBlockCids(self::DID, AtprotoRepoRequest::BLOCK_COMMIT));
 	}
 
+	public function testNumericRecordKeyPaginationMatchesTheStoredAndStagedViews(): void {
+		$collection = 'com.example.notes.entry';
+		$record = ['$type' => $collection, 'text' => 'numeric key'];
+		$this->repositories->write(self::DID, $this->key, [
+			RepoWrite::create($collection, $record, '', '10'),
+			RepoWrite::create($collection, $record, '', '2'),
+		]);
+		$keys = fn (string $cursor, bool $reverse): array => array_map(
+			static fn ($item): string => $item->rkey,
+			$this->repositories->listRecords(self::DID, $collection, 10, $cursor, $reverse),
+		);
+		$this->assertSame(['10'], $keys('2', false));
+		$this->assertSame(['2'], $keys('10', true));
+		$this->repositories->beginBatch(self::DID, $this->key);
+		try {
+			$this->repositories->write(self::DID, $this->key, [RepoWrite::create($collection, $record, '', '20')]);
+			$this->assertSame(['2', '20'], $keys('10', true));
+			$this->assertSame(['10'], $keys('2', false));
+		} finally {
+			$this->repositories->rollbackBatch();
+		}
+		$this->assertNull($this->repositories->getRecord(self::DID, $collection, '20'));
+		$this->assertSame([], $this->repositories->verify(self::DID, $this->key->publicKey()));
+	}
+
 	public function testHealthProbeSelectsTheNewestPostOnlyFromAnActiveIdentity(): void {
 		$this->identityRequest->create(self::ACTOR, self::DID, 'atproto-integration.nextcloud.test', 'sealed', 'did:key:zQ3sh', '', Identity::STATE_PENDING);
 		$this->repositories->write(self::DID, $this->key, [
