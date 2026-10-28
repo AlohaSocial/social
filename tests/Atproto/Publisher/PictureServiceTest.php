@@ -64,8 +64,9 @@ class PictureServiceTest extends TestCase {
 		$blobRequest = $this->createMock(AtprotoBlobRequest::class);
 		$blobRequest->method('getByDocument')->willReturnCallback(fn (string $did, string $documentId): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->documentId === $documentId))[0] ?? null);
 		$blobRequest->method('get')->willReturnCallback(fn (string $did, string $cid): ?BlobRef => array_values(array_filter($this->blobs, static fn (BlobRef $b): bool => $b->cid->toString() === $cid))[0] ?? null);
-		$blobRequest->method('put')->willReturnCallback(function (BlobRef $blob): void {
+		$blobRequest->method('put')->willReturnCallback(function (BlobRef $blob): bool {
 			$this->blobs[] = $blob;
+			return true;
 		});
 		$file = $this->createMock(ISimpleFile::class);
 		$file->method('getContent')->willReturn($bytes);

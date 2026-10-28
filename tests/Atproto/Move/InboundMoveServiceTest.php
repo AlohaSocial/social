@@ -143,8 +143,9 @@ class InboundMoveServiceTest extends TestCase {
 		$repoRequest->method('getBlockCids')->willReturn([]);
 		$blobs = $this->createMock(AtprotoBlobRequest::class);
 		$blobs->method('get')->willReturnCallback(fn (string $did, string $cid): ?BlobRef => $this->stored[$cid] ?? null);
-		$blobs->method('put')->willReturnCallback(function (BlobRef $blob): void {
+		$blobs->method('put')->willReturnCallback(function (BlobRef $blob): bool {
 			$this->stored[$blob->cid->toString()] = $blob;
+			return true;
 		});
 		$documents = $this->createMock(DocumentService::class);
 		$documents->method('storeAsIs')->willReturnCallback(function (Person $actor, string $path): Document {

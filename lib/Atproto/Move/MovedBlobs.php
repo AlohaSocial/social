@@ -213,8 +213,9 @@ class MovedBlobs {
 				@unlink($blob['path']);
 			}
 		}
-		$this->blobs->put(new BlobRef($move->did, Cid::parse($cid), $document->getId(), BlobRef::servableType($document->getMimeType()), $blob['size']));
-		$this->repoRequest->addBlobBytes($move->did, $blob['size']);
+		if ($this->blobs->put(new BlobRef($move->did, Cid::parse($cid), $document->getId(), BlobRef::servableType($document->getMimeType()), $blob['size']))) {
+			$this->repoRequest->addBlobBytes($move->did, $blob['size']);
+		}
 
 		return $blob['size'];
 	}

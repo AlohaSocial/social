@@ -33,6 +33,21 @@ checklist is [Atproto-Live-Test.md](Atproto-Live-Test.md).
 | Moderation | Supported labels, blocks/mutes, reports and moderation-list behavior are integrated with local controls | Labeler and AppView decisions remain external; not every moderation method has a local UI. |
 | Account migration | Supported flows can bring an account and repository here or move one away, including supported Bridgy Fed twins | Migration is a multi-step protocol operation. Follow the UI/commands and keep backups; it is not a generic identity takeover. |
 
+## Blob lifecycle boundary
+
+Blob CIDs identify the bytes served by `getBlob`, and duplicate registration is
+scoped to the account DID. Concurrent duplicate registration preserves the
+first document mapping and does not count its repository bytes again.
+
+The general blob lifecycle is still incomplete. `uploadBlob` uses Social's
+media processing and restrictions, so uploaded images can be transformed;
+this is not a general byte-preserving storage path for arbitrary applications.
+Registered blobs currently have no separate temporary/unreferenced state:
+`getBlob` and `listBlobs` read their registrations directly. Reference-aware
+publication, temporary-upload expiry and removal after the last record
+reference are remaining work against the [ATProto blob specification](https://atproto.com/specs/blob).
+Generic record storage does not by itself establish full blob-lifecycle parity.
+
 ## How posting works
 
 Public local posts can be published to the ActivityPub network and the native

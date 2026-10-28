@@ -161,8 +161,9 @@ class PictureService {
 		}
 
 		$blob = new BlobRef($identity->did, $cid, $storedId, $mime, strlen($bytes));
-		$this->blobRequest->put($blob);
-		$this->repoRequest->addBlobBytes($identity->did, $blob->size);
+		if ($this->blobRequest->put($blob)) {
+			$this->repoRequest->addBlobBytes($identity->did, $blob->size);
+		}
 
 		return ['blob' => $blob, 'width' => $width, 'height' => $height];
 	}

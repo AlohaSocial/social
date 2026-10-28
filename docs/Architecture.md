@@ -579,6 +579,11 @@ profile lexicon's grapheme and byte limits before writing the shared field
 row. `RecordMapper` uses that same pronoun limit when publishing the local
 profile back to Bluesky.
 
+Blob registration uses a conflict-skipping insert per DID and CID. Concurrent
+registrations keep the first document mapping and report whether a new mapping
+was inserted; image/video publishers and both migration paths increment
+repository blob-byte accounting only for that winning insert.
+
 Repository writes for social collections are projected through their native
 Social services. Projected `createRecord` operations lock the repository and
 check `swapCommit` before changing Social state, reject an occupied requested

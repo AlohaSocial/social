@@ -41,6 +41,14 @@ CI compatibility matrix.
 
 ## Maintenance items with ongoing cost
 
+### PDS blob lifecycle (feature-branch review, 2026-10-28)
+
+Concurrent blob registration and repository-byte accounting are deduplicated,
+but upload still uses the Social media pipeline. A protocol-native temporary
+blob state, reference-aware availability and last-reference cleanup remain
+unimplemented. Completing these requires coordinated write, read, migration
+and cleanup behavior; see [ATProto compatibility](Atproto-Compatibility.md#blob-lifecycle-boundary).
+
 ### Compatibility surfaces must be maintained deliberately
 
 Aloha Social exposes its own Nextcloud API, a broad but partial Mastodon client
