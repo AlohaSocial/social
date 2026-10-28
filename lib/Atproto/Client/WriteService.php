@@ -25,7 +25,6 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
-use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
@@ -124,7 +123,6 @@ class WriteService {
 		private DocumentService $documents,
 		private Publisher $publisher,
 		private PictureService $pictures,
-		private VideoBlobService $videos,
 		private InteractionPublisher $interactions,
 		private RepositoryService $repositories,
 		private LocalRecordResolver $local,
@@ -143,6 +141,7 @@ class WriteService {
 		private StreamActionService $streamActions,
 		private IRecommendationSignalRecorder $recommendationSignals,
 		private Lexicon $lexicon,
+		private BlobUploadService $uploads,
 	) {
 	}
 
@@ -954,11 +953,8 @@ class WriteService {
 
 	/**
 	 * `com.atproto.repo.uploadBlob`, from the file the body was copied to:
-	 * stored as any upload is, and named by the CID of what was stored.
-	 * Storing takes a picture's camera metadata off and may re-encode it to
-	 * fit Bluesky, so the bytes the app sent are not the bytes `getBlob`
-	 * serves, and the answer names the stored ones. A video is stored as it
-	 * came.
+	 * kept byte for byte and named by its original CID. Normal Social uploads
+	 * still use their own metadata removal and publishing conversions.
 	 *
 	 * @param string $mime what the app said it is; what is stored is sniffed
 	 * @throws XrpcException
@@ -969,19 +965,12 @@ class WriteService {
 		}
 		$actor = $this->actor($session);
 		try {
-			$document = $this->documents->storeLocalAttachment($actor, $path);
+			$blob = $this->uploads->store($session->identity, $actor, $path);
 		} catch (Throwable $e) {
 			$this->logger->notice('Blob from a Bluesky app refused', ['mime' => $mime, 'exception' => $e]);
 
-			throw XrpcException::invalidRequest('This file type is not accepted');
+			throw XrpcException::invalidRequest('This file is not accepted by this server');
 		}
-		$blob = str_starts_with($document->getMimeType(), 'video/')
-			? $this->videos->blobFor($session->identity, $document)
-			: ($this->pictures->blobFor($session->identity, $actor, $document)['blob'] ?? null);
-		if ($blob === null) {
-			throw XrpcException::invalidRequest('This file cannot be shown on Bluesky');
-		}
-
 		return ['blob' => [
 			'$type' => 'blob',
 			'ref' => ['$link' => $blob->cid->toString()],

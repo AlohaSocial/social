@@ -39,10 +39,15 @@ Blob CIDs identify the bytes served by `getBlob`, and duplicate registration is
 scoped to the account DID. Concurrent duplicate registration preserves the
 first document mapping and does not count its repository bytes again.
 
-The general blob lifecycle is still incomplete. `uploadBlob` uses Social's
-media processing and restrictions, so uploaded images can be transformed;
-this is not a general byte-preserving storage path for arbitrary applications.
-Registered blobs currently have no separate temporary/unreferenced state:
+`uploadBlob` stores accepted files byte for byte, including image metadata,
+without resizing or transcoding. The returned CID and size describe the original
+upload. Type, size, quota and blocked-media checks still use the shared storage
+policy; this does not accept every possible file format. Normal Social uploads
+continue to remove image metadata and prepare media for publishing. ATProto
+clients must remove unwanted metadata before uploading.
+
+The general blob lifecycle is still incomplete. Registered blobs currently have
+no separate temporary/unreferenced state:
 `getBlob` and `listBlobs` read their registrations directly. Reference-aware
 publication, temporary-upload expiry and removal after the last record
 reference are remaining work against the [ATProto blob specification](https://atproto.com/specs/blob).

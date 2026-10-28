@@ -604,6 +604,14 @@ JSON arrays remain lists, so decoding and re-encoding preserve record CIDs.
 Record reads with an explicit `cid` return only that version of the named
 record, or `RecordNotFound` when it is not retained. Omitting `cid` reads the
 current version; an invalid CID is rejected before the record lookup.
+`BlobUploadService` hashes and stores XRPC uploads without changing their bytes,
+using `DocumentService::storeAsIs(..., false)` with the existing type, size,
+quota and moderation checks. Duplicate CIDs reuse their registered document.
+Registration and repository-byte accounting share a database transaction.
+Social's ordinary upload and publisher conversion paths remain separate, so
+native ATProto uploads retain metadata that Social uploads normally remove.
+The ordinary Social media route is not made public by this storage call;
+XRPC's temporary/unreferenced availability remains a documented lifecycle gap.
 `validate: true` requires a known schema; `false` keeps protocol structural
 checks but skips schema validation; omission validates known schemas and
 retains unknown ones structurally. The mode travels with each `RepoWrite` into

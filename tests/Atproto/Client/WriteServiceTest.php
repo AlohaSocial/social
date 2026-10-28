@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Social\Tests\Atproto\Client;
 
 use OCA\Social\Atproto\Chat\ChatDeclaration;
+use OCA\Social\Atproto\Client\BlobUploadService;
 use OCA\Social\Atproto\Client\ClientSession;
 use OCA\Social\Atproto\Client\WriteService;
 use OCA\Social\Atproto\Crypto\Curve;
@@ -27,7 +28,6 @@ use OCA\Social\Atproto\Publisher\InteractionPublisher;
 use OCA\Social\Atproto\Publisher\PictureService;
 use OCA\Social\Atproto\Publisher\Publisher;
 use OCA\Social\Atproto\Publisher\RecordMapper;
-use OCA\Social\Atproto\Publisher\VideoBlobService;
 use OCA\Social\Atproto\Reader\BlueskyListImport;
 use OCA\Social\Atproto\Reader\LocalRecordResolver;
 use OCA\Social\Atproto\Reader\PostStore;
@@ -99,8 +99,7 @@ class WriteServiceTest extends TestCase {
 	private AtprotoBlobRequest $blobs;
 	/** @var PictureService&MockObject */
 	private PictureService $pictures;
-	/** @var VideoBlobService&MockObject */
-	private VideoBlobService $videos;
+	private BlobUploadService $uploads;
 	/** @var DocumentService&MockObject */
 	private DocumentService $documents;
 	/** @var LocalRecordResolver&MockObject */
@@ -157,8 +156,8 @@ class WriteServiceTest extends TestCase {
 		$this->postStore = $this->createMock(PostStore::class);
 		$this->publisher = $this->createMock(Publisher::class);
 		$this->pictures = $this->createMock(PictureService::class);
+		$this->uploads = $this->createMock(BlobUploadService::class);
 		$this->blobs = $this->createMock(AtprotoBlobRequest::class);
-		$this->videos = $this->createMock(VideoBlobService::class);
 		$this->documents = $this->createMock(DocumentService::class);
 		$this->local = $this->createMock(LocalRecordResolver::class);
 		$this->local->method('postId')->willReturnCallback(static fn (string $uri): string => match ($uri) {
@@ -178,11 +177,11 @@ class WriteServiceTest extends TestCase {
 		$this->writes = new WriteService(
 			$accounts, $this->posts, $this->review, $this->createMock(ModerationService::class), $this->streams, $this->likes, $this->boosts, $this->createMock(FollowService::class),
 			$this->cacheActors, $this->createMock(ReportService::class), $this->documents,
-			$this->publisher, $this->pictures, $this->videos, $this->interactions, $this->repositories, $this->local, $this->postStore,
+			$this->publisher, $this->pictures, $this->interactions, $this->repositories, $this->local, $this->postStore,
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
 			$this->relationships, $this->blocks, $this->declaration, $this->listImport,
 			$this->activities,
-			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(),
+			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(), $this->uploads,
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -904,40 +903,29 @@ class WriteServiceTest extends TestCase {
 		}
 	}
 
-	public function testAnUploadIsNamedByTheCidOfWhatWasStored(): void {
-		$stored = new Document();
-		$stored->setId('https://social.test/documents/local/1');
-		$this->documents->expects($this->once())->method('storeLocalAttachment')->with($this->alice)->willReturn($stored);
-		$cid = Cid::forRaw('the stored bytes, metadata removed');
-		$this->pictures->expects($this->once())->method('blobFor')->with($this->session->identity, $this->alice, $stored)
-			->willReturn(['blob' => new BlobRef(self::DID, $cid, $stored->getId(), 'image/jpeg', 34), 'width' => 10, 'height' => 10]);
-
-		$answer = $this->writes->upload($this->session, $this->file('the bytes the app sent, with GPS'), 'image/jpeg');
-
-		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => 34], $answer['blob']);
+	public function testAnUploadIsKeptByTheOriginalBlobStoragePath(): void {
+		$bytes = 'the original bytes, including metadata';
+		$cid = Cid::forRaw($bytes);
+		$this->uploads->expects($this->once())->method('store')->with($this->session->identity, $this->alice)
+			->willReturn(new BlobRef(self::DID, $cid, 'https://social.test/documents/1', 'image/jpeg', strlen($bytes)));
+		$this->pictures->expects($this->never())->method('blobFor');
+		$this->documents->expects($this->never())->method('storeLocalAttachment');
+		$answer = $this->writes->upload($this->session, $this->file($bytes), 'image/jpeg');
+		$this->assertSame(['$type' => 'blob', 'ref' => ['$link' => $cid->toString()], 'mimeType' => 'image/jpeg', 'size' => strlen($bytes)], $answer['blob']);
 	}
 
-	public function testAnUploadBlueskyCannotShowIsRefused(): void {
-		$this->documents->method('storeLocalAttachment')->willReturn(new Document());
-		$this->pictures->method('blobFor')->willReturn(null);
-
+	public function testAnUploadRefusedByTheServerStoragePolicyIsAnXrpcError(): void {
+		$this->uploads->method('store')->willThrowException(new \RuntimeException('quota exhausted'));
 		$this->expectException(XrpcException::class);
-		$this->expectExceptionMessage('cannot be shown on Bluesky');
+		$this->expectExceptionMessage('not accepted by this server');
 		$this->writes->upload($this->session, $this->file('bytes'), 'application/pdf');
 	}
 
-	public function testAVideoUploadIsStoredAsItCame(): void {
-		$stored = new Document();
-		$stored->setId('https://social.test/documents/local/2');
-		$stored->setMimeType('video/mp4');
-		$this->documents->method('storeLocalAttachment')->willReturn($stored);
+	public function testAVideoUploadDoesNotUseTheBlueskyPublishingConversion(): void {
 		$cid = Cid::forRaw('a video');
-		$this->videos->expects($this->once())->method('blobFor')->with($this->session->identity, $stored)
-			->willReturn(new BlobRef(self::DID, $cid, $stored->getId(), 'video/mp4', 7));
+		$this->uploads->method('store')->willReturn(new BlobRef(self::DID, $cid, 'https://social.test/documents/2', 'video/mp4', 7));
 		$this->pictures->expects($this->never())->method('blobFor');
-
 		$answer = $this->writes->upload($this->session, $this->file('a video'), 'video/mp4');
-
 		$this->assertSame($cid->toString(), $answer['blob']['ref']['$link']);
 		$this->assertSame('video/mp4', $answer['blob']['mimeType']);
 	}
