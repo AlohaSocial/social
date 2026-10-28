@@ -580,7 +580,11 @@ row. `RecordMapper` uses that same pronoun limit when publishing the local
 profile back to Bluesky.
 
 Repository writes for social collections are projected through their native
-Social services. Other valid NSID collections are stored as protocol-native
+Social services. Projected `createRecord` operations lock the repository and
+check `swapCommit` before changing Social state, reject an occupied requested
+key, and commit the projection and repository together. Their queued
+federation delivery starts only after commit and is discarded on rollback.
+Other valid NSID collections are stored as protocol-native
 records by `WriteService`; the signed repository, CAR export and firehose carry
 them without converting them into ActivityPub objects. Vendored Lexicons are
 schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and

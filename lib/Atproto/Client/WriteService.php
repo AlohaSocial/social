@@ -154,6 +154,56 @@ class WriteService {
 	public function create(ClientSession $session, array $body): array {
 		$this->assertOwnRepo($session, $body);
 		$collection = (string)($body['collection'] ?? '');
+		if (self::keepsAsWritten($collection)) {
+			return $this->createInBatch($session, $body);
+		}
+		$swapCommit = $body['swapCommit'] ?? null;
+		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {
+			throw XrpcException::invalidRequest('swapCommit must be a valid commit CID');
+		}
+		$ownsBatch = !$this->repositories->batchActive();
+		if (!$ownsBatch && $swapCommit !== null) {
+			throw XrpcException::invalidRequest('Conditional createRecord checks cannot be nested inside another repository batch');
+		}
+		try {
+			if ($ownsBatch) {
+				$this->repositories->beginBatch($session->identity->did, $this->identities->signingKey($session->identity), $swapCommit);
+				$this->activities->beginDeferredDeliveries();
+			}
+			$rkey = $body['rkey'] ?? null;
+			if (is_string($rkey) && $rkey !== '' && $this->repositories->getRecord($session->identity->did, $collection, $rkey) !== null) {
+				throw XrpcException::invalidRequest('A record already exists at this record key');
+			}
+			unset($body['swapCommit']);
+			$result = $this->createInBatch($session, $body);
+			if ($ownsBatch) {
+				$this->repositories->commitBatch();
+				$result['commit'] = $this->commit($session);
+				$this->activities->releaseDeferredDeliveries();
+			}
+			return $result;
+		} catch (Throwable $e) {
+			if ($ownsBatch) {
+				$this->activities->discardDeferredDeliveries();
+			}
+			if ($ownsBatch && $this->repositories->batchActive()) {
+				if ($e instanceof XrpcException && str_starts_with($e->getMessage(), 'This post is waiting for a moderator')) {
+					$this->repositories->commitBatch();
+				} else {
+					$this->repositories->rollbackBatch();
+				}
+			}
+			if ($e instanceof InvalidSwapException) {
+				throw new XrpcException(400, 'InvalidSwap', $e->getMessage());
+			}
+			throw $e;
+		}
+	}
+
+	/** The create after the projected Social action and repository have entered one write scope. */
+	private function createInBatch(ClientSession $session, array $body): array {
+		$this->assertOwnRepo($session, $body);
+		$collection = (string)($body['collection'] ?? '');
 		$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 		$swapCommit = $body['swapCommit'] ?? null;
 		if (array_key_exists('swapCommit', $body) && (!is_string($swapCommit) || !Cid::isValid($swapCommit))) {

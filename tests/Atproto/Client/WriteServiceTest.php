@@ -496,6 +496,7 @@ class WriteServiceTest extends TestCase {
 	}
 
 	public function testMixedBatchRollsBackWhenALaterSocialWriteFails(): void {
+		$this->repositories->method('batchActive')->willReturn(true);
 		$this->repositories->expects($this->once())->method('beginBatch');
 		$this->repositories->expects($this->never())->method('commitBatch');
 		$this->repositories->expects($this->once())->method('rollbackBatch');
@@ -632,17 +633,16 @@ class WriteServiceTest extends TestCase {
 	/** Who may send direct messages, as an app sets it: the setting here, which writes the record the app gets back. */
 	public function testAnAppsChatDeclarationIsTheSettingHere(): void {
 		$record = ['$type' => ChatDeclaration::COLLECTION, 'allowIncoming' => 'none'];
-		$this->declaration->expects($this->exactly(2))->method('fromApp')->with($this->session, 'self', $record)->willReturnCallback(function () use ($record): void {
+		$this->declaration->expects($this->once())->method('fromApp')->with($this->session, 'self', $record)->willReturnCallback(function () use ($record): void {
 			$bytes = DagCbor::encode($record);
 			$this->records = [new StoredRecord(self::DID, ChatDeclaration::COLLECTION, 'self', Cid::forDagCbor($bytes), $bytes, '', 0)];
 		});
 		$this->repositories->expects($this->never())->method('write');
 
 		$put = $this->writes->put($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
-		$created = $this->writes->create($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
-
 		$this->assertSame('at://' . self::DID . '/' . ChatDeclaration::COLLECTION . '/self', $put['uri']);
-		$this->assertSame($put['uri'], $created['uri']);
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => ChatDeclaration::COLLECTION, 'rkey' => 'self', 'record' => $record]);
 	}
 
 	public function testAListBlockIsABlockAndRefused(): void {
@@ -650,6 +650,48 @@ class WriteServiceTest extends TestCase {
 
 		$this->expectException(XrpcException::class);
 		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => ['$type' => 'app.bsky.graph.listblock', 'subject' => 'at://x', 'createdAt' => '2026-10-09T10:00:00.000Z']]);
+	}
+
+	public function testProjectedPostCreationChecksSwapCommitBeforeCreatingSocialState(): void {
+		$expected = Cid::forDagCbor(DagCbor::encode(['head' => 'previous']))->toString();
+		$this->repositories->expects($this->once())->method('beginBatch')->with(self::DID, $this->anything(), $expected)
+			->willThrowException(new InvalidSwapException('Stale repository head'));
+		$this->posts->expects($this->never())->method('createPost');
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+				'swapCommit' => $expected, 'record' => ['$type' => RecordMapper::POST, 'text' => 'New post']]);
+			$this->fail('A stale repository head must prevent Social-side changes');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidSwap', $e->error);
+		}
+	}
+
+	public function testProjectedPostCreationCannotReplaceAnExistingRequestedKey(): void {
+		$rkey = Tid::next();
+		$existing = $this->record(RecordMapper::POST, $rkey, 'https://social.test/@alice/original');
+		$this->records = [$existing];
+		$this->posts->expects($this->never())->method('createPost');
+		try {
+			$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+				'rkey' => $rkey, 'record' => ['$type' => RecordMapper::POST, 'text' => 'Replacement']]);
+			$this->fail('An existing key must not create a replacement Social post');
+		} catch (XrpcException $e) {
+			$this->assertSame('InvalidRequest', $e->error);
+			$this->assertSame([$existing], $this->records);
+		}
+	}
+
+	public function testProjectedCreationRollsBackWhenCreatingTheSocialPostFails(): void {
+		$this->repositories->method('batchActive')->willReturnOnConsecutiveCalls(false, true);
+		$this->repositories->expects($this->once())->method('beginBatch');
+		$this->repositories->expects($this->once())->method('rollbackBatch');
+		$this->repositories->expects($this->never())->method('commitBatch');
+		$this->posts->method('createPost')->willThrowException(new \RuntimeException('Temporary storage failure'));
+		$this->activities->expects($this->once())->method('discardDeferredDeliveries');
+		$this->activities->expects($this->never())->method('releaseDeferredDeliveries');
+		$this->expectException(XrpcException::class);
+		$this->writes->create($this->session, ['repo' => self::DID, 'collection' => RecordMapper::POST,
+			'record' => ['$type' => RecordMapper::POST, 'text' => 'New post']]);
 	}
 
 	public function testAPostFromAnAppIsASocialPostAndTheAnswerIsItsRecord(): void {
