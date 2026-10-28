@@ -25,6 +25,7 @@ use OCA\Social\Exceptions\AtprotoException;
 use OCA\Social\Service\DurableCache;
 use OCP\AppFramework\Utility\ITimeFactory;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
@@ -66,7 +67,7 @@ class ChatPollerTest extends TestCase {
 	/** @var array<string, mixed> durable cache values, shared across poller instances */
 	private array $durable = [];
 	private bool $failReceivedOnce = false;
-	private bool $failGetConvoOnce = false;
+	private bool $failGetMembersOnce = false;
 
 	private function poller(): ChatPoller {
 		$config = $this->createMock(AtprotoConfig::class);
@@ -79,8 +80,8 @@ class ChatPollerTest extends TestCase {
 		$appView = $this->createMock(AppViewClient::class);
 		$appView->method('chatAs')->willReturnCallback(function (string $did, PrivateKey $key, string $method, array $params = []): array {
 			$this->asked[] = [$method, $params];
-			if ($method === 'chat.bsky.convo.getConvo' && $this->failGetConvoOnce) {
-				$this->failGetConvoOnce = false;
+			if ($method === 'chat.bsky.convo.getConvoMembers' && $this->failGetMembersOnce) {
+				$this->failGetMembersOnce = false;
 				throw new AtprotoException('temporary conversation lookup failure');
 			}
 			$cursor = (string)($params['cursor'] ?? '');
@@ -313,7 +314,7 @@ class ChatPollerTest extends TestCase {
 			'id' => 'group',
 			'rev' => '3k050',
 			'unreadCount' => 1,
-			'members' => [['did' => self::ALICE], ['did' => self::BOB]],
+			'members' => [['did' => self::ALICE], ['did' => self::BOB], ['did' => 'did:plc:former-member']],
 		]]];
 		$firstMembers = [['did' => self::ALICE], ['did' => self::BOB]];
 		for ($i = 2; $i < 100; $i++) {
@@ -334,10 +335,44 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame(2, $this->poller()->pollAccount(self::cursor('')));
 		self::assertCount(102, $this->members['own']);
 		self::assertContains('did:plc:member101', $this->members['own']);
+		self::assertNotContains('did:plc:former-member', $this->members['own']);
 		self::assertSame([
 			['convoId' => 'group', 'limit' => ChatPoller::PAGE],
 			['convoId' => 'group', 'limit' => ChatPoller::PAGE, 'cursor' => 'members-next'],
 		], $this->askedFor('chat.bsky.convo.getConvoMembers'));
+	}
+
+	public static function malformedChatPages(): array {
+		return [
+			'non-object message' => ['chat.bsky.convo.getMessages', ['messages' => [self::message('m1'), 'broken']]],
+			'non-list messages' => ['chat.bsky.convo.getMessages', ['messages' => ['message' => self::message('m1')]]],
+			'invalid message cursor' => ['chat.bsky.convo.getMessages', ['messages' => [self::message('m1')], 'cursor' => []]],
+			'non-object conversation' => ['chat.bsky.convo.listConvos', ['convos' => ['broken']]],
+			'missing conversation id' => ['chat.bsky.convo.listConvos', ['convos' => [['rev' => '3k010', 'unreadCount' => 1]]]],
+			'non-object member' => ['chat.bsky.convo.getConvoMembers', ['members' => [['did' => self::ALICE], 'broken']]],
+			'missing member did' => ['chat.bsky.convo.getConvoMembers', ['members' => [['handle' => 'bob.test']]]],
+			'invalid member did' => ['chat.bsky.convo.getConvoMembers', ['members' => [['did' => 'invalid']]]],
+			'invalid member cursor' => ['chat.bsky.convo.getConvoMembers', ['members' => [['did' => self::BOB]], 'cursor' => []]],
+		];
+	}
+
+	#[DataProvider('malformedChatPages')]
+	public function testMalformedInitialPagesAreRetriedWithoutCommittingTheCursor(string $method, array $response): void {
+		$valid = [
+			'chat.bsky.convo.listConvos' => ['convos' => [['id' => 'c1', 'rev' => '3k010', 'unreadCount' => 1]]],
+			'chat.bsky.convo.getMessages' => ['messages' => [self::message('m1')]],
+			'chat.bsky.convo.getConvoMembers' => ['members' => [['did' => self::ALICE], ['did' => self::BOB]]],
+		];
+		$this->answers = $valid;
+		$this->answers[$method] = $response;
+		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame([], $this->synced);
+		$this->assertSame([], $this->handed);
+		$this->assertCount(1, $this->failed);
+
+		$this->answers[$method] = $valid[$method];
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame('3k010', $this->synced[0][1]);
 	}
 
 	public function testTheLogSaysWhatWasSentAndDeletedSinceTheLastRead(): void {
@@ -355,7 +390,6 @@ class ChatPollerTest extends TestCase {
 	}
 
 	public function testWhatTheAccountWroteInABlueskyAppIsHandedWithTheMembersAskedForOnce(): void {
-		$this->answers['chat.bsky.convo.getConvo'] = ['convo' => ['id' => 'c3', 'members' => [['did' => self::ALICE], ['did' => self::BOB]]]];
 		$this->sentHere['m8'] = 'https://social.test/users/alice/statuses/7';
 		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k009', 'logs' => [
 			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c3', 'message' => self::message('m6', self::ALICE)],
@@ -370,16 +404,15 @@ class ChatPollerTest extends TestCase {
 		$this->assertSame([self::ALICE, self::BOB], $this->members['m7']);
 		$this->assertSame([], $this->members['m8'], 'one sent from here needs nobody');
 		$this->assertSame([], $this->members['m9'], 'nor does one somebody else wrote');
-		$this->assertCount(1, array_filter($this->asked, static fn (array $call): bool => $call[0] === 'chat.bsky.convo.getConvo'));
+		$this->assertCount(1, array_filter($this->asked, static fn (array $call): bool => $call[0] === 'chat.bsky.convo.getConvoMembers'));
 		$this->assertSame([], $this->declared, 'only the first read sees to the declaration');
 	}
 
 	public function testAConversationLookupFailureDoesNotAdvanceTheLogCursorAndRetries(): void {
-		$this->answers['chat.bsky.convo.getConvo'] = ['convo' => ['id' => 'c3', 'members' => [['did' => self::ALICE], ['did' => self::BOB]]]];
 		$this->answers['chat.bsky.convo.getLog'] = ['cursor' => '3k007', 'logs' => [
 			['$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k006', 'convoId' => 'c3', 'message' => self::message('m6', self::ALICE)],
 		]];
-		$this->failGetConvoOnce = true;
+		$this->failGetMembersOnce = true;
 		$poller = $this->poller();
 
 		$this->assertSame(0, $poller->pollAccount(self::cursor('3k005')));

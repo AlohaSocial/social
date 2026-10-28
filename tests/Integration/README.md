@@ -17,6 +17,8 @@ to stop.
   Request classes and asserts what each timeline returns: home via the follow
   join, direct-message isolation, favourites/bookmarks via the action join,
   hashtags, account visibility and id-based pagination.
+- `Db/AtprotoChatMessageTest` — durable Bluesky DM mappings: idempotent writes,
+  account isolation and removal through the message deletion cascade.
 - `Db/UndoFollowCountTest` — an incoming `Undo{Follow}` moves the follower
   count only when the stored follow it names is the row removed; one naming a
   follow id that is not stored changes nothing.

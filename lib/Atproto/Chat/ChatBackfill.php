@@ -51,10 +51,18 @@ class ChatBackfill {
 					$params['cursor'] = $state['cursor'];
 				}
 				$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getMessages', $params);
-				if (!is_array($page['messages'] ?? null)) {
+				if (!is_array($page['messages'] ?? null) || !array_is_list($page['messages'])) {
 					throw new \RuntimeException('Bluesky chat message response is missing its message list');
 				}
-				$list = array_values(array_filter($page['messages'], 'is_array'));
+				if (isset($page['cursor']) && !is_string($page['cursor'])) {
+					throw new \RuntimeException('Bluesky chat message response has an invalid cursor');
+				}
+				$list = $page['messages'];
+				foreach ($list as $message) {
+					if (!is_array($message)) {
+						throw new \RuntimeException('Bluesky chat message response contains an invalid message');
+					}
+				}
 				if ($list === []) {
 					throw new \RuntimeException('Bluesky chat history ended before all unread messages were found');
 				}
@@ -73,7 +81,7 @@ class ChatBackfill {
 				$pageIndex = (int)$state['pages'];
 				$this->durableCache->setShared(self::CACHE, $baseKey . ':' . $pageIndex, $kept, self::TTL);
 				$state['pages']++;
-				$next = (string)($page['cursor'] ?? '');
+				$next = $page['cursor'] ?? '';
 				if (!$state['storing'] && ($next === '' || $next === $state['cursor'])) {
 					$this->clearBackfill($baseKey, (int)$state['pages']);
 					throw new \RuntimeException('Bluesky chat pagination ended before all unread messages were found');

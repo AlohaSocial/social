@@ -30,6 +30,7 @@ class StreamDeletionTest extends TestCase {
 
 	/** every table that keys on a post, and the column it keys on */
 	private const RELATED = [
+		[CoreRequestBuilder::TABLE_ATPROTO_CHAT_MESSAGE, 'stream_id_prim'],
 		[CoreRequestBuilder::TABLE_STREAM_DEST, 'stream_id'],
 		[CoreRequestBuilder::TABLE_STREAM_TAGS, 'stream_id'],
 		[CoreRequestBuilder::TABLE_STREAM_ACTIONS, 'stream_id_prim'],

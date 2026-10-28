@@ -14,6 +14,7 @@ use OCA\Social\Atproto\Crypto\PrivateKey;
 use OCA\Social\Atproto\Identity\IdentityService;
 use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Model\Watch;
+use OCA\Social\Atproto\Protocol\Syntax;
 use OCA\Social\Atproto\Service\AtprotoConfig;
 use OCA\Social\Db\AtprotoWatchRequest;
 use OCA\Social\Db\CoreRequestBuilder;
@@ -203,8 +204,18 @@ class ChatPoller {
 				$params['cursor'] = $convoCursor;
 			}
 			$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.listConvos', $params);
-			if (!is_array($answer['convos'] ?? null)) {
+			if (!is_array($answer['convos'] ?? null) || !array_is_list($answer['convos'])) {
 				throw new \RuntimeException('Bluesky chat conversation response is missing its conversation list');
+			}
+			if (isset($answer['cursor']) && !is_string($answer['cursor'])) {
+				throw new \RuntimeException('Bluesky chat conversation response has an invalid cursor');
+			}
+			foreach ($answer['convos'] as $convo) {
+				if (!is_array($convo) || !is_string($convo['id'] ?? null) || $convo['id'] === ''
+					|| !is_string($convo['rev'] ?? null) || $convo['rev'] === ''
+					|| !is_int($convo['unreadCount'] ?? null) || $convo['unreadCount'] < 0) {
+					throw new \RuntimeException('Bluesky chat response contains an incomplete conversation');
+				}
 			}
 			if (!is_string($snapshotRevision)) {
 				foreach ($answer['convos'] as $convo) {
@@ -216,9 +227,6 @@ class ChatPoller {
 				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $snapshotKey, $rev, self::FIRST_IMPORT_TTL);
 			}
 			foreach ($answer['convos'] as $convo) {
-				if (!is_array($convo)) {
-					continue;
-				}
 				$unread = max(0, (int)($convo['unreadCount'] ?? 0));
 				$id = (string)($convo['id'] ?? '');
 				if ($unread === 0 || $id === '') {
@@ -228,7 +236,7 @@ class ChatPoller {
 				if ($this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $completeKey) === $snapshotRevision) {
 					continue;
 				}
-				$members = $this->allMembers($identity, $key, $id, self::dids($convo['members'] ?? null));
+				$members = $this->allMembers($identity, $key, $id);
 				$this->members[$id] = $members;
 				$imported = $this->backfill->import($identity, $key, $id, $unread, $members);
 				$handled += $imported['handled'];
@@ -240,7 +248,7 @@ class ChatPoller {
 				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $completeKey, $snapshotRevision, self::FIRST_IMPORT_TTL);
 
 			}
-			$nextConvoCursor = (string)($answer['cursor'] ?? '');
+			$nextConvoCursor = $answer['cursor'] ?? '';
 			if ($nextConvoCursor === '') {
 				break;
 			}
@@ -256,9 +264,9 @@ class ChatPoller {
 		return [$handled, $rev];
 	}
 
-	/** Fetch the complete participant list, including paginated group members. @param list<string> $summary */
-	private function allMembers(Identity $identity, PrivateKey $key, string $convo, array $summary): array {
-		$members = $summary;
+	/** Fetch the authoritative participant list, including paginated group members. */
+	private function allMembers(Identity $identity, PrivateKey $key, string $convo): array {
+		$members = [];
 		$cursor = '';
 		$seen = [];
 		do {
@@ -267,11 +275,19 @@ class ChatPoller {
 				$params['cursor'] = $cursor;
 			}
 			$page = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvoMembers', $params);
-			if (!is_array($page['members'] ?? null)) {
+			if (!is_array($page['members'] ?? null) || !array_is_list($page['members'])) {
 				throw new \RuntimeException('Bluesky chat member response is missing its member list');
 			}
+			if (isset($page['cursor']) && !is_string($page['cursor'])) {
+				throw new \RuntimeException('Bluesky chat member response has an invalid cursor');
+			}
+			foreach ($page['members'] as $member) {
+				if (!is_array($member) || !is_string($member['did'] ?? null) || !Syntax::isDid($member['did'])) {
+					throw new \RuntimeException('Bluesky chat member response contains an invalid member');
+				}
+			}
 			$members = [...$members, ...self::dids($page['members'])];
-			$next = (string)($page['cursor'] ?? '');
+			$next = $page['cursor'] ?? '';
 			if ($next !== '' && ($next === $cursor || isset($seen[$next]))) {
 				throw new \RuntimeException('Bluesky chat member pagination did not advance');
 			}
@@ -349,12 +365,7 @@ class ChatPoller {
 			&& $this->store->sentHere($identity->did, (string)($message['id'] ?? '')) === '';
 		if ($own && !isset($this->members[$convo])) {
 			try {
-				$answer = $this->appView->chatAs($identity->did, $key, 'chat.bsky.convo.getConvo', ['convoId' => $convo]);
-				$members = $answer['convo']['members'] ?? null;
-				if (!is_array($members)) {
-					throw new \RuntimeException('Bluesky chat conversation response did not include members');
-				}
-				$this->members[$convo] = $this->allMembers($identity, $key, $convo, self::dids($members));
+				$this->members[$convo] = $this->allMembers($identity, $key, $convo);
 			} catch (Throwable $e) {
 				$this->logger->notice('Members of a Bluesky conversation not read', ['convo' => $convo, 'exception' => $e]);
 				// Leave the log cursor before this event. The next poll retries the
