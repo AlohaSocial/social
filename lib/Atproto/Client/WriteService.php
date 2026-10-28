@@ -11,6 +11,7 @@ namespace OCA\Social\Atproto\Client;
 
 use OCA\Social\Atproto\Chat\ChatDeclaration;
 use OCA\Social\Atproto\Identity\IdentityService;
+use OCA\Social\Atproto\Lexicon\Lexicon;
 use OCA\Social\Atproto\Model\StoredRecord;
 use OCA\Social\Atproto\Profile\ProfileLinks;
 use OCA\Social\Atproto\Protocol\Cid;
@@ -141,6 +142,7 @@ class WriteService {
 		private ActivityService $activities,
 		private StreamActionService $streamActions,
 		private IRecommendationSignalRecorder $recommendationSignals,
+		private Lexicon $lexicon,
 	) {
 	}
 
@@ -175,11 +177,11 @@ class WriteService {
 			RecordMapper::FOLLOW => $this->follow($session, $actor, $record),
 			BlueskyBlocks::COLLECTION => $this->block($session, $actor, $record),
 			default => self::keepsAsWritten($collection)
-				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, false, $swapCommit)
+				? $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, false, $swapCommit, $body['validate'] ?? null)
 				: throw $this->unsupported($collection),
 		};
 
-		return $this->created($session, $written);
+		return $this->created($session, $written, self::keepsAsWritten($collection) ? ($body['validate'] ?? null) : null);
 	}
 
 	/**
@@ -275,7 +277,7 @@ class WriteService {
 		if (self::keepsAsWritten($collection)) {
 			$record = is_array($body['record'] ?? null) ? $body['record'] : [];
 
-			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record));
+			return $this->created($session, $this->keep($session, $collection, (string)($body['rkey'] ?? ''), $record, true, null, $body['validate'] ?? null), $body['validate'] ?? null);
 		}
 		if ($collection === ChatDeclaration::COLLECTION) {
 			return $this->created($session, $this->declared($session, (string)($body['rkey'] ?? ''), is_array($body['record'] ?? null) ? $body['record'] : []));
@@ -753,7 +755,7 @@ class WriteService {
 		}
 		if ($writes !== [] && count(array_filter($writes, static fn (mixed $write): bool => is_array($write)
 			&& self::keepsAsWritten((string)($write['collection'] ?? '')))) === count($writes)) {
-			return $this->applyKept($session, $writes, $swapCommit);
+			return $this->applyKept($session, $writes, $swapCommit, $body['validate'] ?? null);
 		}
 		foreach ($writes as $write) {
 			if (!is_array($write) || !in_array(($write['$type'] ?? null), [
@@ -770,7 +772,7 @@ class WriteService {
 			$this->activities->beginDeferredDeliveries();
 			foreach ($writes as $write) {
 				$type = $write['$type'];
-				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []];
+				$one = ['repo' => $session->identity->did, 'collection' => $write['collection'], 'rkey' => $write['rkey'] ?? '', 'record' => $write['value'] ?? []] + array_intersect_key($body, ['validate' => true]);
 				if ($type === 'com.atproto.repo.applyWrites#create') {
 					$results[] = ['$type' => 'com.atproto.repo.applyWrites#createResult'] + array_intersect_key($this->create($session, $one), ['uri' => 1, 'cid' => 1, 'validationStatus' => 1]);
 				} elseif ($type === 'com.atproto.repo.applyWrites#delete') {
@@ -808,7 +810,7 @@ class WriteService {
 	 * @param array<array<string, mixed>> $writes
 	 * @throws XrpcException
 	 */
-	private function applyKept(ClientSession $session, array $writes, ?string $swapCommit): array {
+	private function applyKept(ClientSession $session, array $writes, ?string $swapCommit, ?bool $validate = null): array {
 		$repoWrites = [];
 		$results = [];
 		/** @var list<array{record: ?StoredRecord, collection: string, rkey: string, deleted: bool, resultIndex: ?int}> $sync */
@@ -869,7 +871,7 @@ class WriteService {
 		$committed = null;
 		if ($repoWrites !== []) {
 			try {
-				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), $repoWrites, $swapCommit);
+				$commit = $this->repositories->write($session->identity->did, $this->identities->signingKey($session->identity), array_map(static fn (RepoWrite $write): RepoWrite => $write->withValidation($validate), $repoWrites), $swapCommit);
 				if ($commit !== null) {
 					$committed = ['cid' => $commit->commitCid->toString(), 'rev' => $commit->rev];
 				}
@@ -888,7 +890,7 @@ class WriteService {
 					$this->listChanged($session, $stored, true);
 				} elseif ($entry['resultIndex'] !== null) {
 					$results[$entry['resultIndex']]['cid'] = $stored->cid->toString();
-					$results[$entry['resultIndex']]['validationStatus'] = 'valid';
+					$results[$entry['resultIndex']]['validationStatus'] = $this->validationStatus($stored, $validate);
 					$this->listChanged($session, $stored, false);
 				}
 			}
@@ -1449,7 +1451,7 @@ class WriteService {
 	 *
 	 * @throws XrpcException
 	 */
-	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null): StoredRecord {
+	private function keep(ClientSession $session, string $collection, string $rkey, array $record, bool $replace = true, ?string $swapCommit = null, ?bool $validate = null): StoredRecord {
 		// links, bytes and empty maps as the repository models them
 		$record = DagCbor::fromLexJson($record);
 		$did = $session->identity->did;
@@ -1476,9 +1478,10 @@ class WriteService {
 			throw XrpcException::invalidRequest('A record already exists at ' . $collection . '/' . $rkey);
 		}
 		// a record replaced stands for what it stood for before
-		$this->writeRaw($session, !$replace || $was === null
+		$write = !$replace || $was === null
 			? RepoWrite::create($collection, $record, '', $rkey)
-			: RepoWrite::update($collection, $rkey, $record, $was->localId), $swapCommit);
+			: RepoWrite::update($collection, $rkey, $record, $was->localId);
+		$this->writeRaw($session, $write->withValidation($validate), $swapCommit);
 
 		$kept = $this->repositories->getRecord($did, $collection, $rkey)
 			?? throw new XrpcException(500, 'InternalServerError', 'The record was not written');
@@ -1537,8 +1540,12 @@ class WriteService {
 		}
 	}
 
-	private function created(ClientSession $session, StoredRecord $record): array {
-		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => 'valid'];
+	private function created(ClientSession $session, StoredRecord $record, ?bool $validate = null): array {
+		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'commit' => $this->commit($session), 'validationStatus' => $this->validationStatus($record, $validate)];
+	}
+
+	private function validationStatus(StoredRecord $record, ?bool $validate): string {
+		return $validate !== false && $this->lexicon->hasRecordSchema($record->collection) ? 'valid' : 'unknown';
 	}
 
 	private function commit(ClientSession $session): array {
@@ -1555,8 +1562,8 @@ class WriteService {
 		if ($repo !== $session->identity->did && $repo !== $session->identity->handle) {
 			throw new XrpcException(403, 'InvalidRequest', 'You can only write to your own repository');
 		}
-		if (isset($body['validate']) && $body['validate'] === false) {
-			throw XrpcException::invalidRequest('Records are always validated here');
+		if (array_key_exists('validate', $body) && !is_bool($body['validate'])) {
+			throw XrpcException::invalidRequest('validate must be a boolean');
 		}
 	}
 

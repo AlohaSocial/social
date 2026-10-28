@@ -29,7 +29,7 @@ Aloha Social is a federated social networking app built on the W3C ActivityPub s
 **App ID:** `social`  
 **Namespace:** `OCA\Social`  
 **License:** AGPL-3.0-or-later  
-**App version:** 0.26.279
+**App version:** 0.26.280
 **Supported Nextcloud versions:** 34 – 36  
 **Supported PHP versions:** 8.3 – 8.5  
 
@@ -227,6 +227,7 @@ The tables are created by `lib/Migration/Version1000Date20221118000002.php` — 
 | `social_announce_react` | The emoji accounts have put on an announcement, unique on (announcement, account, emoji) |
 | `social_emoji` | The custom emoji this instance publishes: `shortcode` (unique), the appdata file behind it, its media type, its picker category and whether a picker offers it |
 | `social_stream_card` | The link-preview card of a status (url, title, description, image, provider), one row per stream |
+| `social_atp_chat_message` | Persistent local-to-Bluesky chat message identifiers, removed with their local message |
 | `social_reaction` | Who reacted to which post with which emoji; unique on (actor, post, emoji), so a redelivered `EmojiReact` is refused rather than counted twice |
 | `social_gif` | The instance's shared picture library the composer offers, unique on the slug; the bytes live in appdata beside the custom emoji |
 | `social_followed_tag` | The hashtags an account follows: one row per (actor, lowercased tag), unique on the pair; `filled` is when the tag's posts were last read from beyond this server (`FollowedTagsFill`, Unix time, 0 for never), indexed with the tag (`Version1000Date20261009000710`) |
@@ -586,6 +587,20 @@ schema-validated. Unknown Lexicons receive bounded DAG-CBOR structural and
 size validation, but their application-specific schema and semantics are not
 known to Aloha Social. OAuth collection scopes and own-repository checks still
 apply to each write.
+`validate: true` requires a known schema; `false` keeps protocol structural
+checks but skips schema validation; omission validates known schemas and
+retains unknown ones structurally. The mode travels with each `RepoWrite` into
+the repository transaction. Responses report `valid` only for schema-checked
+records and `unknown` for opaque or explicitly unvalidated records.
+
+`social_atp_chat_message` retains each account's local-to-Bluesky message
+identifiers without expiry. `StreamDeletion` removes these rows when their
+local messages are deleted, including author and batch deletion. Existing
+unexpired cache mappings are promoted on lookup. Unrecoverable old mappings
+fail closed rather than falling back to ActivityPub reaction delivery.
+An interrupted initial chat backfill retains its original unread window and
+log revision while new messages arrive; subsequent log synchronization picks
+up activity beyond that revision.
 For records retained as written, `createRecord` always uses a repository create
 operation and refuses an existing key, including under concurrent writes.
 Its optional `swapCommit` is checked under the repository lock; `putRecord`

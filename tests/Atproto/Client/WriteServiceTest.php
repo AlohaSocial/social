@@ -182,7 +182,7 @@ class WriteServiceTest extends TestCase {
 			$this->blobs, $this->createMock(IURLGenerator::class), new NullLogger(), $this->avatars, $this->banners, $identities,
 			$this->relationships, $this->blocks, $this->declaration, $this->listImport,
 			$this->activities,
-			$this->streamActions, $this->recommendationSignals,
+			$this->streamActions, $this->recommendationSignals, new \OCA\Social\Atproto\Lexicon\Lexicon(),
 		);
 		$this->session = new ClientSession('alice', new Identity(1, $this->alice->getId(), self::DID, 'alice.social.test', 'sealed', '', '', Identity::STATE_ACTIVE, '', 0), 'jti');
 	}
@@ -362,7 +362,7 @@ class WriteServiceTest extends TestCase {
 		]]);
 
 		$this->assertCount(2, $answer['results']);
-		$this->assertSame('valid', $answer['results'][1]['validationStatus']);
+		$this->assertSame('unknown', $answer['results'][1]['validationStatus']);
 		$this->assertSame(['cid' => Cid::forRaw('custom batch')->toString(), 'rev' => '3kcustom'], $answer['commit']);
 	}
 
@@ -1305,7 +1305,7 @@ class WriteServiceTest extends TestCase {
 			[['repo' => self::BOB, 'collection' => RecordMapper::POST, 'record' => []], 'another repository'],
 			[['repo' => self::DID, 'collection' => 'app.bsky.graph.block', 'record' => ['subject' => self::BOB]], 'Blocks stay on this server'],
 			[['repo' => self::DID, 'collection' => 'app.bsky.graph.listblock', 'record' => []], 'does not write app.bsky.graph.listblock'],
-			[['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [], 'validate' => false], 'always validated'],
+			[['repo' => self::DID, 'collection' => RecordMapper::POST, 'record' => [], 'validate' => 'invalid'], 'validate must be a boolean'],
 		] as [$body, $why]) {
 			try {
 				$this->writes->create($this->session, $body);

@@ -191,7 +191,7 @@ class RepositoryService {
 		foreach ($writes as $write) {
 			if ($write->record !== null) {
 				try {
-					$this->lexicon->validateRecord($write->record);
+					$this->lexicon->validateRecord($write->record, $write->validate);
 				} catch (LexiconException $e) {
 					throw new AtprotoException('Record ' . $write->path() . ' does not fit its lexicon: ' . $e->getMessage(), 0, $e);
 				}

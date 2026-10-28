@@ -199,6 +199,7 @@ class ChatPollerTest extends TestCase {
 
 	public function testLargeFirstReadResumesFromDurablePagesAfterItsPerRunBudget(): void {
 		$this->answers['chat.bsky.convo.listConvos'] = ['convos' => [
+			['id' => 'c-small', 'rev' => '3k099', 'unreadCount' => 1, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
 			['id' => 'c-large', 'rev' => '3k100', 'unreadCount' => 1001, 'members' => [['did' => self::ALICE], ['did' => self::BOB]]],
 		]];
 		for ($page = 0; $page < 11; $page++) {
@@ -213,12 +214,22 @@ class ChatPollerTest extends TestCase {
 			];
 		}
 
-		$this->assertSame(0, $this->poller()->pollAccount(self::cursor('')));
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('')));
 		$this->assertSame('', $this->synced[0][1], 'the account cursor stays at the start while the backfill is partial');
+		$this->answers['chat.bsky.convo.listConvos']['convos'][1]['unreadCount'] = 1002;
+		$this->answers['chat.bsky.convo.listConvos']['convos'][1]['rev'] = '3k101';
 		$this->assertSame(901, $this->poller()->pollAccount(self::cursor('')));
 		$this->assertSame(100, $this->poller()->pollAccount(self::cursor('')));
-		$this->assertCount(1001, $this->handed);
+		$this->assertCount(1002, $this->handed);
+		$this->assertCount(1, array_filter($this->askedFor('chat.bsky.convo.getMessages'), static fn (array $params): bool => $params['convoId'] === 'c-small'));
 		$this->assertSame('3k100', $this->synced[2][1]);
+		$this->answers['chat.bsky.convo.getLog'] = ['logs' => [[
+			'$type' => 'chat.bsky.convo.defs#logCreateMessage', 'rev' => '3k101',
+			'convoId' => 'c-large', 'message' => self::message('arrived-during-backfill'),
+		]]];
+		$this->assertSame(1, $this->poller()->pollAccount(self::cursor('3k100')));
+		$this->assertSame('3k101', $this->synced[3][1]);
+		$this->assertSame(['received', 'c-large/arrived-during-backfill'], $this->handed[1002]);
 	}
 
 	public function testTheInitialReadFollowsConversationAndUnreadMessagePages(): void {
@@ -244,7 +255,7 @@ class ChatPollerTest extends TestCase {
 			static fn (array $message): int => (int)substr($message[1], strrpos($message[1], 'm') + 1),
 			$this->handed,
 		));
-		$this->assertSame([self::ALICE, '3k021', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
+		$this->assertSame([self::ALICE, '3k009', ChatPoller::INTERVAL, self::TABLE], $this->synced[0]);
 		$this->assertSame([
 			['convoId' => 'c0', 'limit' => ChatPoller::PAGE],
 			['convoId' => 'c0', 'limit' => ChatPoller::PAGE, 'cursor' => 'messages-next'],

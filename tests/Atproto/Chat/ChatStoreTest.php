@@ -111,7 +111,7 @@ class ChatStoreTest extends TestCase {
 		$time = $this->createStub(ITimeFactory::class);
 		$time->method('getTime')->willReturn(1790000000);
 
-		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions);
+		return new ChatStore($posts, $actors, $blocklist, new DurableCache($factory, new InMemoryDurableCacheRequest(), $time), new NullLogger(), $streams, $cacheActors, $conversations, $reactions, $this->createMock(\OCA\Social\Db\AtprotoChatMessageRequest::class));
 	}
 
 	private function alice(): Identity {

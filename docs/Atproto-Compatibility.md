@@ -4,7 +4,7 @@
 -->
 # Bluesky and AT Protocol compatibility
 
-**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.280** on **2026-10-27**.
 
 **Current scope:** native AT Protocol hosting is an optional integration in
 Aloha Social. It runs alongside ActivityPub; it does not convert a Fediverse
@@ -46,7 +46,11 @@ into Aloha's model where a corresponding action exists. Other collections are
 kept as protocol-native records and are not converted to ActivityPub posts or
 other Social objects. A vendored Lexicon receives full schema validation;
 an unknown Lexicon is bounded by structural, DAG-CBOR and record-size checks
-but cannot be validated against its application schema. The explicit list
+but cannot be validated against its application schema. Explicit `validate: true`
+refuses unknown schemas, `false` skips schema checks, and omission validates
+known schemas. Single and batch responses distinguish `valid` from `unknown`.
+Social adapters still enforce their action, ownership and representation
+constraints regardless of schema validation. The explicit list
 block collection remains unsupported.
 Conditional writes are checked against the repository under its write lock.
 Post updates preserve the record URI where supported. External link embeds,

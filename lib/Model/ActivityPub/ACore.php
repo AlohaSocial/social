@@ -1065,7 +1065,12 @@ class ACore extends Item implements JsonSerializable, IQueryRow {
 	 * @return array<string, mixed>
 	 */
 	protected function activityPubContextExtensions(): array {
-		return self::CONTEXT_EXTENSIONS;
+		$extensions = self::CONTEXT_EXTENSIONS;
+		if ($this->getObject() instanceof \OCA\Social\Model\ActivityPub\Activity\ReplyRequest) {
+			$extensions['ReplyRequest'] = 'gts:ReplyRequest';
+		}
+
+		return $extensions;
 	}
 
 	/**

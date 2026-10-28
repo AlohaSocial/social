@@ -18,6 +18,7 @@ use OCA\Social\Atproto\Reader\BlueskyIds;
 use OCA\Social\Atproto\Reader\FacetRenderer;
 use OCA\Social\Atproto\Reader\PostMapper;
 use OCA\Social\Atproto\Reader\PostStore;
+use OCA\Social\Db\AtprotoChatMessageRequest;
 use OCA\Social\Db\ReactionsRequest;
 use OCA\Social\Db\StreamRequest;
 use OCA\Social\Exceptions\ActionDoesNotExistException;
@@ -71,6 +72,7 @@ class ChatStore {
 		private CacheActorService $cacheActors,
 		private ConversationService $conversations,
 		private ReactionsRequest $reactions,
+		private AtprotoChatMessageRequest $messages,
 	) {
 	}
 
@@ -153,8 +155,8 @@ class ChatStore {
 			return false;
 		}
 		$noteId = self::messageId($identity->did, $convoId, $id);
-		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		if ($this->posts->isKnown($noteId)) {
+			$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 			$this->remember($identity->did, $convoId, $noteId);
 
 			return false;
@@ -195,6 +197,7 @@ class ChatStore {
 			$this->logger->warning('Own Bluesky direct message not stored', ['id' => $noteId, 'exception' => $e]);
 			throw $e;
 		}
+		$this->rememberLocation($identity->did, $convoId, $id, $noteId);
 		$this->remember($identity->did, $convoId, $noteId);
 
 		return true;
@@ -343,8 +346,8 @@ class ChatStore {
 			$this->durableCache->setShared(self::SENT, $did . "\0" . $messageId, $noteId, self::KEPT);
 		}
 		// last: a message whose conversation is known is recorded in full (`ChatSender`)
-		$this->durableCache->setShared(self::CONVO, $noteId, $convoId, self::KEPT);
 		$this->rememberLocation($did, $convoId, $messageId, $noteId);
+		$this->durableCache->setShared(self::CONVO, $noteId, $convoId, self::KEPT);
 		$this->durableCache->removeShared(self::ATTEMPT, $noteId);
 	}
 
@@ -398,9 +401,14 @@ class ChatStore {
 	 * @return array{convoId: string, messageId: string}|null
 	 */
 	public function messageLocation(string $did, string $noteId): ?array {
+		$persisted = $this->messages->location($did, $noteId);
+		if ($persisted !== null) {
+			return $persisted;
+		}
 		$location = $this->durableCache->getShared(self::LOCATION, $did . "\0" . $noteId);
 		if (is_array($location) && is_string($location['convoId'] ?? null) && is_string($location['messageId'] ?? null)
 			&& $location['convoId'] !== '' && $location['messageId'] !== '') {
+			$this->messages->remember($did, $noteId, $location['convoId'], $location['messageId']);
 			return ['convoId' => $location['convoId'], 'messageId' => $location['messageId']];
 		}
 		if (preg_match('#^https://bsky\.app/profile/did:[a-z]+:[A-Za-z0-9._:%-]+/convo/([^/]+)/([^/]+)$#', $noteId, $match) === 1) {
@@ -412,6 +420,7 @@ class ChatStore {
 
 	private function rememberLocation(string $did, string $convoId, string $messageId, string $noteId): void {
 		if ($convoId !== '' && $messageId !== '' && $noteId !== '') {
+			$this->messages->remember($did, $noteId, $convoId, $messageId);
 			$this->durableCache->setShared(self::LOCATION, $did . "\0" . $noteId, [
 				'convoId' => $convoId,
 				'messageId' => $messageId,

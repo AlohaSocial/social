@@ -124,9 +124,18 @@ class ChatSenderTest extends TestCase {
 			$table->setShared($namespace, $key, $value, $ttl);
 		});
 
+		$storedMessages = [];
+		$messages = $this->createMock(\OCA\Social\Db\AtprotoChatMessageRequest::class);
+		$messages->method('remember')->willReturnCallback(static function (string $did, string $noteId, string $convoId, string $messageId) use (&$storedMessages): void {
+			$storedMessages[$did . $noteId] = ['convoId' => $convoId, 'messageId' => $messageId];
+		});
+		$messages->method('location')->willReturnCallback(static function (string $did, string $noteId) use (&$storedMessages): ?array {
+			return $storedMessages[$did . $noteId] ?? null;
+		});
+
 		return $this->store = new ChatStore(
 			$this->createMock(PostStore::class), $this->createMock(BlueskyActorService::class), $this->createMock(Blocklist::class),
-			$cache, new NullLogger(), $this->createMock(StreamRequest::class), $this->createMock(CacheActorService::class), $this->createMock(ConversationService::class), $this->createMock(ReactionsRequest::class),
+			$cache, new NullLogger(), $this->createMock(StreamRequest::class), $this->createMock(CacheActorService::class), $this->createMock(ConversationService::class), $this->createMock(ReactionsRequest::class), $messages,
 		);
 	}
 
@@ -196,6 +205,7 @@ class ChatSenderTest extends TestCase {
 			'the conversation\'s newest message' => ['social.chat'],
 			'the message by its Bluesky id' => ['social.chat.sent'],
 			'the conversation of the message' => ['social.chat.convo'],
+			'the remote location of the message' => ['social.chat.location'],
 		];
 	}
 
@@ -304,6 +314,7 @@ class ChatSenderTest extends TestCase {
 
 	public function testAReactionOnALocallyKnownMessageIsSentToTheChatService(): void {
 		$this->store()->sent(self::ALICE, 'convo1', 'msg42', self::NOTE);
+		$this->now += 91 * 86400;
 		$actor = new Person();
 		$actor->setId('https://social.test/users/alice');
 
@@ -328,7 +339,15 @@ class ChatSenderTest extends TestCase {
 		$actor = new Person();
 		$actor->setId('https://social.test/users/alice');
 
-		$this->assertNull($this->sender()->react($actor, self::message('Hello'), '🔥', true));
+		$post = self::message('Hello');
+		$post->setToArray(['https://mastodon.test/users/carol']);
+		$this->assertNull($this->sender()->react($actor, $post, '🔥', true));
 		$this->assertSame([], $this->calls);
+	}
+
+	public function testALostLegacyBlueskyMappingCannotFallBackToActivityPub(): void {
+		$actor = (new Person())->setId('https://social.test/users/alice');
+		$this->expectException(\OCA\Social\Exceptions\ItemUnknownException::class);
+		$this->sender()->react($actor, self::message('Hello'), '🔥', true);
 	}
 }

@@ -50,13 +50,16 @@ class Lexicon {
 	 * @param array<string, mixed> $record
 	 * @throws LexiconException
 	 */
-	public function validateRecord(array $record): void {
+	public function validateRecord(array $record, ?bool $validate = null): void {
 		$type = $record['$type'] ?? null;
 		if (!is_string($type) || !Syntax::isNsid($type)) {
 			throw new LexiconException('A record needs a $type that is an NSID');
 		}
 		$document = $this->document($type);
-		if ($document === null) {
+		if ($document === null && $validate === true) {
+			throw new LexiconException('No lexicon document for ' . $type);
+		}
+		if ($document === null || $validate === false) {
 			$this->validateOpaqueRecord($record);
 
 			return;
@@ -69,6 +72,10 @@ class Lexicon {
 			throw new LexiconException($type . ' is not a record type');
 		}
 		$this->check($record, $definition['record'] ?? [], $type, '');
+	}
+
+	public function hasRecordSchema(string $type): bool {
+		return ($this->document($type)['defs']['main']['type'] ?? '') === 'record';
 	}
 
 	/**

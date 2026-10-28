@@ -155,12 +155,15 @@ class ChatSender {
 		}
 		$identity = $this->identities->forActor($actor, false);
 		if ($identity === null || !$identity->isActive()) {
-			return ChatStore::messageLocationLooksLikeBluesky($post->getId())
+			return (ChatStore::messageLocationLooksLikeBluesky($post->getId()) || self::recipients($post) !== [])
 				? throw new ItemUnknownException('Link an active Bluesky identity before reacting to this message')
 				: null;
 		}
 		$location = $this->store->messageLocation($identity->did, $post->getId());
 		if ($location === null) {
+			if (self::recipients($post) !== []) {
+				throw new ItemUnknownException('The Bluesky message mapping is unavailable; this reaction cannot be delivered');
+			}
 			return null;
 		}
 		if (!ReactionService::isUsableOutboundEmoji($emoji) || preg_match('/^\\X$/u', $emoji) !== 1) {

@@ -192,7 +192,9 @@ class ChatPoller {
 		$this->declaration->ensure($identity);
 		$key = $this->identities->signingKey($identity);
 		$handled = 0;
-		$rev = '';
+		$snapshotKey = 'revision:' . $identity->did;
+		$snapshotRevision = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $snapshotKey);
+		$rev = is_string($snapshotRevision) ? $snapshotRevision : '';
 		$convoCursor = '';
 		$seenConvoCursors = [];
 		do {
@@ -204,14 +206,26 @@ class ChatPoller {
 			if (!is_array($answer['convos'] ?? null)) {
 				throw new \RuntimeException('Bluesky chat conversation response is missing its conversation list');
 			}
+			if (!is_string($snapshotRevision)) {
+				foreach ($answer['convos'] as $convo) {
+					if (is_array($convo)) {
+						$rev = max($rev, (string)($convo['rev'] ?? ''));
+					}
+				}
+				$snapshotRevision = $rev;
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $snapshotKey, $rev, self::FIRST_IMPORT_TTL);
+			}
 			foreach ($answer['convos'] as $convo) {
 				if (!is_array($convo)) {
 					continue;
 				}
-				$rev = max($rev, (string)($convo['rev'] ?? ''));
 				$unread = max(0, (int)($convo['unreadCount'] ?? 0));
 				$id = (string)($convo['id'] ?? '');
 				if ($unread === 0 || $id === '') {
+					continue;
+				}
+				$completeKey = 'complete:' . hash('sha256', $identity->did . "\0" . $id);
+				if ($this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $completeKey) === $snapshotRevision) {
 					continue;
 				}
 				$members = $this->allMembers($identity, $key, $id, self::dids($convo['members'] ?? null));
@@ -223,6 +237,7 @@ class ChatPoller {
 					// been durably imported. The conversation checkpoint resumes it.
 					return [$handled, ''];
 				}
+				$this->durableCache->setShared(self::FIRST_IMPORT_CACHE, $completeKey, $snapshotRevision, self::FIRST_IMPORT_TTL);
 
 			}
 			$nextConvoCursor = (string)($answer['cursor'] ?? '');
@@ -235,6 +250,8 @@ class ChatPoller {
 			$seenConvoCursors[$nextConvoCursor] = true;
 			$convoCursor = $nextConvoCursor;
 		} while (true);
+
+		$this->durableCache->removeShared(self::FIRST_IMPORT_CACHE, $snapshotKey);
 
 		return [$handled, $rev];
 	}
@@ -250,9 +267,10 @@ class ChatPoller {
 	private function backfillConversation(Identity $identity, PrivateKey $key, string $convo, int $unread, array $members): array {
 		$baseKey = hash('sha256', $identity->did . "\0" . $convo);
 		$state = $this->durableCache->getShared(self::FIRST_IMPORT_CACHE, $baseKey);
-		if (!is_array($state) || (int)($state['unread'] ?? -1) !== $unread) {
+		if (!is_array($state)) {
 			$state = ['unread' => $unread, 'incoming' => 0, 'pages' => 0, 'cursor' => '', 'storing' => false, 'storePage' => -1];
 		}
+		$unread = (int)$state['unread'];
 
 		if (!$state['storing']) {
 			for ($batch = 0; $batch < self::FIRST_IMPORT_PAGE_BUDGET; $batch++) {

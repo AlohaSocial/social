@@ -47,7 +47,7 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->rules = $this->createMock(ReplyRuleService::class);
 		$this->actors = $this->createMock(CacheActorService::class);
 		$this->activities = $this->createMock(ActivityService::class);
-		$config = $this->createStub(IConfig::class);
+		$config = $this->createMock(IConfig::class);
 		$config->method('getSystemValueString')->with('secret', '')->willReturn('test-secret');
 		$this->handler = new ReplyRequestInterface($this->streams, $this->rules, $this->actors, $this->activities, $config, new NullLogger());
 	}
@@ -101,6 +101,7 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($this->request());
 
 		$this->assertInstanceOf(Reject::class, $sent);
+		$this->assertSame('gts:ReplyRequest', $sent->exportAsActivityPub()['@context'][1]['ReplyRequest']);
 		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
 	}
 
@@ -129,6 +130,7 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($request);
 
 		$this->assertInstanceOf(Reject::class, $sent);
+		$this->assertSame('gts:ReplyRequest', $sent->exportAsActivityPub()['@context'][1]['ReplyRequest']);
 		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
 	}
 
@@ -151,6 +153,7 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 
 		$this->assertInstanceOf(\OCA\Social\Model\ActivityPub\Activity\Accept::class, $sent);
 		$this->assertNotEmpty($sent->exportAsActivityPub()['result']);
+		$this->assertSame('gts:ReplyRequest', $sent->exportAsActivityPub()['@context'][1]['ReplyRequest']);
 	}
 
 	public function testAReplyRequestRefusedByThePostRuleGetsAReject(): void {
@@ -169,6 +172,7 @@ class ReplyRequestInterfaceTest extends ActivityPubTestCase {
 		$this->handler->processIncomingRequest($this->request());
 
 		$this->assertInstanceOf(Reject::class, $sent);
+		$this->assertSame('gts:ReplyRequest', $sent->exportAsActivityPub()['@context'][1]['ReplyRequest']);
 		$this->assertArrayNotHasKey('result', $sent->exportAsActivityPub());
 	}
 }

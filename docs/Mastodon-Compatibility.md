@@ -4,7 +4,7 @@
 -->
 # Mastodon client and federation compatibility
 
-**Reviewed against:** Aloha Social **0.26.279** on **2026-10-27**.
+**Reviewed against:** Aloha Social **0.26.280** on **2026-10-27**.
 
 Aloha Social implements a broad portion of the Mastodon client API and speaks
 ActivityPub to Mastodon and other Fediverse servers. It is **not a drop-in
@@ -49,6 +49,9 @@ the push provider. Nextcloud's own notification channel is a separate feature.
 
 - Registration and core account credentials belong to Nextcloud. Social does
   not replace Mastodon's full sign-up, email or password-management system.
+  Mastodon instance API registration flags remain disabled while
+  `POST /api/v1/accounts` cannot register accounts. NodeInfo independently
+  advertises the actual availability of Social's web registration flow.
 - Mastodon-specific endpoints may be absent or return a documented partial
   result. `API.md` is the source of truth for the current route surface; a
   route being registered does not guarantee identical Mastodon semantics.

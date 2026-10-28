@@ -4770,16 +4770,16 @@ class ApiControllerTest extends TestCase {
 		$this->assertSame('cloud.example', $response->getData()['domain']);
 	}
 
-	public function testMastodonInstanceMetadataReflectsSocialSignups(): void {
+	public function testWebSignupsDoNotAdvertiseUnsupportedMastodonApiRegistration(): void {
 		$this->socialSignupsOpen = true;
 		$instance = (new Instance())->setUri('cloud.example')->setTitle('Ours');
 		$this->instanceService->method('getLocal')->willReturn($instance);
 
 		$v1 = $this->controller()->instance()->getData();
-		self::assertTrue($v1->isRegistrations());
+		self::assertFalse($v1->isRegistrations());
 
 		$v2 = $this->controller()->instanceV2()->getData();
-		self::assertTrue($v2['registrations']->enabled);
+		self::assertFalse($v2['registrations']->enabled);
 	}
 
 	// search

@@ -4,7 +4,7 @@
 -->
 # Technical debt and current maintenance status
 
-**Reviewed against:** Aloha Social **0.26.279** (`appinfo/info.xml`) on **2026-10-27**; source
+**Reviewed against:** Aloha Social **0.26.280** (`appinfo/info.xml`) on **2026-10-27**; source
 branch `main` at `33935993`. Counts below were measured from
 that checkout. They describe code size and maintenance boundaries; they are not
 a quality score, a claim that every test is green, or a production audit.
@@ -83,7 +83,7 @@ A nightly benchmark now seeds 100,000 posts and times timeline/search queries
 on MySQL and PostgreSQL. The most recent successful run available during this
 review is dated 2026-10-27 and is documented in
 [Performance.md](Performance.md). It uses app version 0.26.278, one patch before
-this checkout's 0.26.279. The benchmark does not measure remote delivery,
+this checkout's 0.26.280. The benchmark does not measure remote delivery,
 AppView indexing, background queue delay, real user profiles, populated direct
 messages or browser rendering. Treat the figures as a repeatable query baseline,
 not a production service-level objective.

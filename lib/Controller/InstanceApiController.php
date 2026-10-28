@@ -95,9 +95,11 @@ class InstanceApiController extends MastodonApiController {
 	}
 
 	private function applySocialSignupState(Instance $instance): void {
-		$instance->setRegistrations($this->externalSignupService->acceptsPublicRegistrations());
-		$instance->setApprovalRequired($this->externalSignupService->requiresRegistrationApproval());
-		$instance->setInvitesEnabled($this->externalSignupService->invitationsEnabled());
+		// The web signup flow is advertised by NodeInfo. These flags describe
+		// registration through POST /api/v1/accounts, which is unsupported.
+		$instance->setRegistrations(false);
+		$instance->setApprovalRequired(false);
+		$instance->setInvitesEnabled(false);
 	}
 
 	/**
