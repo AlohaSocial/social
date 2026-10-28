@@ -85,7 +85,7 @@ class XrpcService {
 			'com.atproto.sync.listRepos' => $this->listRepos(self::limit($params, 500, 1000), self::string($params, 'cursor', false)),
 			'com.atproto.sync.subscribeRepos' => throw new XrpcException(426, 'UpgradeRequired', 'subscribeRepos is a WebSocket; this URL answers only an upgrade request'),
 			'com.atproto.repo.describeRepo' => $this->describeRepo(self::string($params, 'repo')),
-			'com.atproto.repo.getRecord' => $this->getRecord(self::string($params, 'repo'), self::string($params, 'collection'), self::string($params, 'rkey')),
+			'com.atproto.repo.getRecord' => $this->getRecord(self::string($params, 'repo'), self::string($params, 'collection'), self::string($params, 'rkey'), array_key_exists('cid', $params) ? self::string($params, 'cid') : null),
 			'com.atproto.repo.listRecords' => $this->listRecords(self::string($params, 'repo'), self::string($params, 'collection'), self::limit($params, 50), self::string($params, 'cursor', false), self::string($params, 'reverse', false) === 'true'),
 			default => throw XrpcException::notImplemented($method),
 		};
@@ -437,9 +437,15 @@ class XrpcService {
 		];
 	}
 
-	private function getRecord(string $repo, string $collection, string $rkey): array {
+	private function getRecord(string $repo, string $collection, string $rkey, ?string $cid): array {
+		if ($cid !== null && !Cid::isValid($cid)) {
+			throw XrpcException::invalidRequest('Not a CID');
+		}
 		$identity = $this->repoIdentity($repo);
 		$record = $this->storedRecord($identity, $collection, $rkey);
+		if ($cid !== null && $record->cid->toString() !== $cid) {
+			throw new XrpcException(404, 'RecordNotFound', 'Could not locate the requested record version');
+		}
 
 		return ['uri' => $record->uri(), 'cid' => $record->cid->toString(), 'value' => DagCbor::toLexJson($record->value())];
 	}

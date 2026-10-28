@@ -17,6 +17,8 @@ use OCA\Social\Atproto\Model\Identity;
 use OCA\Social\Atproto\Protocol\Car;
 use OCA\Social\Atproto\Repository\RepositoryService;
 use OCA\Social\Atproto\Repository\RepoWrite;
+use OCA\Social\Atproto\Xrpc\XrpcException;
+use OCA\Social\Atproto\Xrpc\XrpcService;
 use OCA\Social\Db\AtprotoBlobRequest;
 use OCA\Social\Db\AtprotoClientRequest;
 use OCA\Social\Db\AtprotoEventRequest;
@@ -24,6 +26,7 @@ use OCA\Social\Db\AtprotoIdentityRequest;
 use OCA\Social\Db\AtprotoPlcLogRequest;
 use OCA\Social\Db\AtprotoRepoRequest;
 use OCA\Social\Exceptions\AtprotoIdentityNotFoundException;
+use OCA\Social\Service\ConfigService;
 use OCP\Server;
 use PHPUnit\Framework\TestCase;
 
@@ -123,6 +126,36 @@ class RepositoryIntegrationTest extends TestCase {
 		}
 		$this->assertNull($this->repositories->getRecord(self::DID, $collection, '20'));
 		$this->assertSame([], $this->repositories->verify(self::DID, $this->key->publicKey()));
+	}
+
+	public function testVersionQualifiedRecordReadsCannotReturnDifferentBytesAfterAnEdit(): void {
+		$this->identityRequest->create(self::ACTOR, self::DID, 'atproto-integration.nextcloud.test', 'sealed', 'did:key:zQ3sh', '', Identity::STATE_ACTIVE);
+		$config = Server::get(ConfigService::class);
+		$enabledBefore = $config->getAppValue(ConfigService::ATPROTO_ENABLED);
+		$config->setAppValue(ConfigService::ATPROTO_ENABLED, '1');
+		try {
+			$collection = 'com.example.notes.entry';
+			$first = $this->repositories->write(self::DID, $this->key, [RepoWrite::create($collection, ['$type' => $collection, 'text' => 'first'], '', 'first')]);
+			$oldCid = $first->cidOf($collection . '/first')->toString();
+			$params = ['repo' => self::DID, 'collection' => $collection, 'rkey' => 'first'];
+			$xrpc = Server::get(XrpcService::class);
+			$this->assertSame('first', $xrpc->query('com.atproto.repo.getRecord', $params + ['cid' => $oldCid])['value']['text']);
+			$second = $this->repositories->write(self::DID, $this->key, [RepoWrite::update($collection, 'first', ['$type' => $collection, 'text' => 'second'])]);
+			try {
+				$xrpc->query('com.atproto.repo.getRecord', $params + ['cid' => $oldCid]);
+				$this->fail('An unavailable older version must not answer with newer bytes');
+			} catch (XrpcException $e) {
+				$this->assertSame('RecordNotFound', $e->error);
+			}
+			$newCid = $second->cidOf($collection . '/first')->toString();
+			$latest = $xrpc->query('com.atproto.repo.getRecord', $params);
+			$this->assertSame($newCid, $latest['cid']);
+			$this->assertSame('second', $latest['value']['text']);
+			$this->assertSame($latest, $xrpc->query('com.atproto.repo.getRecord', $params + ['cid' => $newCid]));
+			$this->assertSame($second->commitCid->toString(), $this->repositories->getHead(self::DID)?->commitCid);
+		} finally {
+			$config->setAppValue(ConfigService::ATPROTO_ENABLED, $enabledBefore);
+		}
 	}
 
 	public function testHealthProbeSelectsTheNewestPostOnlyFromAnActiveIdentity(): void {

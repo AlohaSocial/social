@@ -67,6 +67,10 @@ known schemas. Single and batch responses distinguish `valid` from `unknown`.
 Social adapters still enforce their action, ownership and representation
 constraints regardless of schema validation. The explicit list
 block collection remains unsupported.
+`com.atproto.repo.getRecord` honors an optional `cid`: a matching current
+version is returned, while a different version answers `RecordNotFound` rather
+than silently returning the latest bytes. Older record revisions are not
+retained as a historical read API. An omitted CID reads the latest version.
 Conditional writes are checked against the repository under its write lock.
 Post updates preserve the record URI where supported. External link embeds,
 record embeds, combined media and supported profile-link records are mapped
