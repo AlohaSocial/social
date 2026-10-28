@@ -150,20 +150,23 @@ class ReactionsRequest extends ReactionsRequestBuilder {
 		return $byPost;
 	}
 
-	/** Removes one reaction. */
+	/** Removes only the named reaction, leaving a newer use of the same emoji intact. */
 	public function delete(EmojiReact $reaction): void {
 		$this->deleteReaction(
-			$reaction->getActorId(), $reaction->getObjectId(), $reaction->getContent()
+			$reaction->getActorId(), $reaction->getObjectId(), $reaction->getContent(), $reaction->getId()
 		);
 	}
 
-	public function deleteReaction(string $actorId, string $objectId, string $emoji): void {
+	public function deleteReaction(string $actorId, string $objectId, string $emoji, ?string $reactionId = null): void {
 		$qb = $this->getReactionsDeleteSql();
 		$expr = $qb->expr();
 
 		$qb->where($expr->eq('actor_id_prim', $qb->createNamedParameter($qb->prim($actorId))));
 		$qb->andWhere($expr->eq('object_id_prim', $qb->createNamedParameter($qb->prim($objectId))));
 		$qb->andWhere($expr->eq('emoji', $qb->createNamedParameter($emoji)));
+		if ($reactionId !== null) {
+			$qb->andWhere($expr->eq('id_prim', $qb->createNamedParameter($qb->prim($reactionId))));
+		}
 
 		$qb->executeStatement();
 	}
